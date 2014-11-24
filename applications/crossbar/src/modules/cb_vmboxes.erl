@@ -193,7 +193,61 @@ load_vmbox_summary(Context) ->
 %%--------------------------------------------------------------------
 -spec validate_request('undefined' | ne_binary(), #cb_context{}) -> #cb_context{}.
 validate_request(VMBoxId, Context) ->
+	update_user_creds(VMBoxId, Context),
     validate_unique_vmbox(VMBoxId, Context).
+    
+%% Update voicemail PIN at the same time as a password update
+update_user_creds(VMBoxId, #cb_context{db_name=AccountDb, req_data=ReqData}) ->
+	lager:info("Updating password after PIN change"),
+	if VMBoxId == 'undefined' ->
+		lager:info("New voicemail box"),
+		'ok';
+	true ->
+		{'ok', VMJObj} = couch_mgr:open_doc(AccountDb, VMBoxId),
+		OwnerId = wh_json:get_value(<<"owner_id">>, VMJObj),
+	
+		if OwnerId == 'undefined' ->
+			lager:info("Voicemail does not have an owner"),
+			'ok';
+		true ->
+			case AccountDb of
+				'undefined' ->
+					lager:error("The AccountDb supplied wasn't correct when additionally updating voicemail creds");
+				_ ->
+					lager:info("Detected user doc with id: ~p", [OwnerId]),
+					{'ok', UserFullDoc} = couch_mgr:open_doc(AccountDb, OwnerId),
+		
+					case should_update_user_creds(UserFullDoc) of
+						false ->
+							'ok';
+						true ->
+							Username = wh_json:get_value(<<"username">>, UserFullDoc),
+							Pin = wh_json:get_value(<<"pin">>, ReqData),
+							{MD5, SHA1} = cb_modules_util:pass_hashes(Username, Pin),
+							couch_mgr:save_doc(AccountDb,
+								wh_json:set_values([{<<"pvt_md5_auth">>, MD5}, {<<"pvt_sha1_auth">>, SHA1}],
+								UserFullDoc
+							))
+					end
+			end
+		end
+	end.	
+			
+should_update_user_creds(UserFullDoc) ->
+	try
+		_ = list_to_integer(binary_to_list(wh_json:get_value(<<"username">>, UserFullDoc))),
+		
+		case {UserFullDoc, wh_json:get_value(<<"priv_level">>, UserFullDoc)} of
+			{'undefined', _} -> lager:info("Could not find user"),
+				false;
+			{_, <<"user">>} -> true;
+			{_, _} -> lager:info("Did not save user PIN as pass because they are not priv_level user"),
+				false
+		end
+	catch error:badarg ->
+		lager:info("Did not save user PIN as pass because they do not have an extension username"),
+		false
+	end.
 
 validate_unique_vmbox(VMBoxId, #cb_context{db_name=undefined}=Context) ->
     check_vmbox_schema(VMBoxId, Context);

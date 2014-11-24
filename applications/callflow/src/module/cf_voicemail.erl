@@ -816,6 +816,31 @@ change_pin(#mailbox{mailbox_id=Id
         AccountDb = whapps_call:account_db(Call),
 
         {'ok', JObj} = couch_mgr:open_doc(AccountDb, Id),
+        
+        % Start of Daniel's code
+        {'ok', UserObj} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"owner_id">>, JObj)),
+        PrivLevel = wh_json:get_value(<<"priv_level">>, UserObj),
+        
+        UsernameIsInteger = try
+			_ = list_to_integer(binary_to_list(wh_json:get_value(<<"username">>, UserObj))),
+			true
+		catch error:badarg ->
+			false
+		end,
+        
+        case { PrivLevel, UsernameIsInteger } of
+        	{<<"user">>, true} ->
+        		Username = wh_json:get_value(<<"username">>, UserObj),
+				{MD5, SHA1} = cb_modules_util:pass_hashes(Username, Pin),
+                couch_mgr:save_doc(AccountDb,
+                	wh_json:set_values([{<<"pvt_md5_auth">>, MD5}, {<<"pvt_sha1_auth">>, SHA1}],
+                    UserObj
+                ));
+            {_, false} -> lager:info("Did not save user PIN as pass because they do not have an extension username");
+        	{_, _} -> lager:info("Did not save user PIN as pass because they are not priv_level user")
+        end,
+        % End of Daniel's code
+        
         {'ok', _} = couch_mgr:save_doc(AccountDb, wh_json:set_value(<<"pin">>, Pin, JObj)),
         {'ok', _} = whapps_call_command:b_prompt(<<"vm-pin_set">>, Call),
         lager:info("updated mailbox pin number"),
