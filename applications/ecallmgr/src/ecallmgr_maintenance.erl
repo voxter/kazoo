@@ -83,6 +83,7 @@
          ,registrar_details/1
          ,registrar_details/2
         ]).
+-export([check_sync/2]).
 -export([flush_authn/0
          ,flush_util/0
          ,enable_authz/0, enable_local_resource_authz/0
@@ -477,6 +478,11 @@ registrar_details(Realm) ->
 -spec registrar_details(text(), text()) -> 'no_return'.
 registrar_details(Username, Realm) ->
     ecallmgr_registrar:details(Username, Realm),
+    'no_return'.
+    
+-spec check_sync(text(), text()) -> 'no_return'.
+check_sync(Username, Realm) ->
+    ecallmgr_fs_notify:check_sync(Username, Realm),
     'no_return'.
 
 -spec flush_authn() -> 'ok'.

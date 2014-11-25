@@ -66,6 +66,8 @@ handle_bridge_failure(Cause, Code, Call) ->
 build_offnet_request(Data, Call) ->
     {ECIDNum, ECIDName} = cf_attributes:caller_id(<<"emergency">>, Call),
     {CIDNumber, CIDName} = get_caller_id(Data, Call),
+    TODid = get_to_did(Data, Call),
+    lager:info("You are trying to call DID ~s", [TODid]),
     props:filter_undefined([{<<"Resource-Type">>, <<"audio">>}
                             ,{<<"Application-Name">>, <<"bridge">>}
                             ,{<<"Emergency-Caller-ID-Name">>, ECIDName}

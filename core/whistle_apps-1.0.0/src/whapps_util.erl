@@ -26,6 +26,7 @@
         ]).
 -export([get_account_by_realm/1
          ,get_accounts_by_name/1
+         ,get_account_by_id/1
         ]).
 -export([get_master_account_id/0]).
 -export([get_account_name/1]).
