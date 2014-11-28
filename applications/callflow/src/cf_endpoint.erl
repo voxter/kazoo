@@ -546,7 +546,7 @@ try_create_endpoint(Routine, Endpoints, Endpoint, Properties, Call) when is_func
                                        wh_json:object() |
                                        {'error', 'call_forward_not_appropriate'}.
 maybe_create_fwd_endpoint(Endpoint, Properties, Call) ->
-    case is_call_forward_enabled(Endpoint, Properties) of
+    case is_call_forward_enabled(Endpoint, Properties) andalso is_follow_me_on(Endpoint) of
         'false' -> {'error', 'call_forward_not_appropriate'};
         'true' ->
             lager:info("creating call forwarding endpoint"),
@@ -557,11 +557,12 @@ maybe_create_fwd_endpoint(Endpoint, Properties, Call) ->
                                    wh_json:object() |
                                    {'error', 'call_forward_substitute'}.
 maybe_create_endpoint(Endpoint, Properties, Call) ->
-    case is_call_forward_enabled(Endpoint, Properties)
-        andalso wh_json:is_true([<<"call_forward">>, <<"substitute">>], Endpoint)
+    case {is_call_forward_enabled(Endpoint, Properties) andalso wh_json:is_true([<<"call_forward">>, <<"substitute">>], Endpoint),
+        is_follow_me_on(Endpoint)}
     of
-        'true' -> {'error', 'call_forward_substitute'};
-        'false' ->
+        {'true', _} -> {'error', 'call_forward_substitute'};
+        {'false', false} -> {'error', 'follow_me_not_on'};
+        {'false', _} ->
             EndpointType = get_endpoint_type(Endpoint),
             maybe_create_endpoint(EndpointType, Endpoint, Properties, Call)
     end.
@@ -576,6 +577,17 @@ is_call_forward_enabled(Endpoint, Properties) ->
         andalso (wh_json:is_false(<<"direct_calls_only">>, CallForwarding, 'true')
                  orelse
                    (not lists:member(Source, ?NON_DIRECT_MODULES))).
+    
+-spec is_follow_me_on(wh_json:object()) -> true | false.
+is_follow_me_on(Endpoint) ->
+	% Turns out endpoints are just devices
+    case wh_json:get_value(<<"follow_me">>, Endpoint) of
+		false ->
+			lager:info("Device follow me is off. Not including in routing."),
+			false;
+		_ ->
+			true
+	end.
 
 -spec maybe_create_endpoint(ne_binary(), wh_json:object(), wh_json:object(), whapps_call:call()) ->
                                    wh_json:object() | {'error', ne_binary()}.
