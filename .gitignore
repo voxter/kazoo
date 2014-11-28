@@ -1,5 +1,6 @@
 .eunit
 .erlang.cookie
+.Xauthority
 *~
 .#*
 *.log*
@@ -43,6 +44,7 @@ deps/rabbitmq_client-*
 !deps/rabbitmq_server-*/plugins-src/erlang-rfc4627-wrapper/erlang-rfc4627-git/ebin/rfc4627_jsonrpc.app
 !deps/rabbitmq_server-*/plugins-src/webmachine-wrapper/webmachine-git/ebin/webmachine.app
 applications/*/priv/archive_data/*
+applications/*/priv/ssl
 /deps/rabbitmq_server-3.2.0/plugins-src/rabbitmq-amqp1.0/include/rabbit_amqp1_0_framing.hrl
 /deps/rabbitmq_server-3.2.0/plugins-src/rabbitmq-amqp1.0/src/rabbit_amqp1_0_framing0.erl
 /.edts
