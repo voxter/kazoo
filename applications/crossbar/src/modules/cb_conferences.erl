@@ -97,7 +97,7 @@ validate_conference(Context, Id, ?HTTP_POST) ->
 validate_conference(Context, Id, ?HTTP_DELETE) ->
     load_conference(Id, Context).
     
-validate(Context, ConfId, <<"details">>, ?HTTP_GET) ->
+validate(Context, ConfId, <<"details">>) ->
     conference_details(Context, ConfId).
     
 %%
@@ -223,7 +223,7 @@ delete(Context, _) ->
 -spec load_conference_summary(cb_context:context()) -> cb_context:context().
 load_conference_summary(Context) ->
 	log_context(Context),
-	log_nouns(Nouns),
+	log_nouns(cb_context:req_nouns(Context)),
     case lists:nth(2, cb_context:req_nouns(Context)) of
         {<<"users">>, [UserId]} ->
             Filter = fun(J, A) ->
