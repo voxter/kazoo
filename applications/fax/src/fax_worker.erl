@@ -416,11 +416,12 @@ attempt_to_acquire_job(Id, Q) ->
         {'ok', JObj} ->
             case wh_json:get_value(<<"pvt_job_status">>, JObj) of
                 <<"pending">> ->
+                    Opts = [{'rev', wh_json:get_first_defined([<<"_rev">>, <<"rev">>], JObj)}],
                     couch_mgr:save_doc(?WH_FAXES, wh_json:set_values([{<<"pvt_job_status">>, <<"processing">>}
                                                                       ,{<<"pvt_job_node">>, wh_util:to_binary(node())}
                                                                       ,{<<"pvt_modified">>, wh_util:current_tstamp()}
                                                                       ,{<<"pvt_queue">>, Q}
-                                                                     ],JObj));
+                                                                     ],JObj), Opts);
                 _Else ->
                     lager:debug("job not in an available status: ~s", [_Else]),
                     {'error', 'job_not_available'}
@@ -809,6 +810,7 @@ send_fax(JobId, JObj, Q) ->
     ToNumber = wh_util:to_binary(wh_json:get_value(<<"to_number">>, JObj)),
     ToName = wh_util:to_binary(wh_json:get_value(<<"to_name">>, JObj, ToNumber)),
     CallId = wh_util:rand_hex_binary(8),
+    ETimeout = wh_util:to_binary(whapps_config:get_integer(?CONFIG_CAT, <<"endpoint_timeout">>, 10)),
     Request = props:filter_undefined(
                 [{<<"Outbound-Caller-ID-Name">>, wh_json:get_value(<<"from_name">>, JObj)}
                  ,{<<"Outbound-Caller-ID-Number">>, wh_json:get_value(<<"from_number">>, JObj)}
@@ -829,6 +831,7 @@ send_fax(JobId, JObj, Q) ->
                  ,{<<"SIP-Headers">>, wh_json:get_value(<<"custom_sip_headers">>, JObj)}
                  ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>]}
                  ,{<<"Application-Name">>, <<"fax">>}
+                 ,{<<"Timeout">>,ETimeout}
                  ,{<<"Application-Data">>, get_proxy_url(JobId)}
                  ,{<<"Outbound-Call-ID">>, CallId}
                  ,{<<"Bypass-E164">>, wh_json:is_true(<<"bypass_e164">>, JObj)}

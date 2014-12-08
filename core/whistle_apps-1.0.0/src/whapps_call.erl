@@ -330,7 +330,7 @@ from_json(JObj, #whapps_call{ccvs=OldCCVs}=Call) ->
       ,owner_id = wh_json:get_ne_value(<<"Owner-ID">>, JObj, owner_id(Call))
       ,fetch_id = wh_json:get_ne_value(<<"Fetch-ID">>, JObj, fetch_id(Call))
       ,bridge_id = wh_json:get_ne_value(<<"Bridge-ID">>, JObj, bridge_id(Call))
-      ,language = language(Call)
+      ,language = wh_json:get_ne_value(<<"Language">>, JObj, language(Call))
       ,app_name = wh_json:get_ne_value(<<"App-Name">>, JObj, application_name(Call))
       ,app_version = wh_json:get_ne_value(<<"App-Version">>, JObj, application_version(Call))
       ,ccvs = CCVs
@@ -414,7 +414,7 @@ is_call(_) -> 'false'.
 
 -spec exec(exec_funs(), call()) -> call().
 exec(Funs, #whapps_call{}=Call) ->
-    lists:foldr(fun exec_fold/2, Call, Funs).
+    lists:foldl(fun exec_fold/2, Call, Funs).
 
 -spec exec_fold(exec_fun(), call()) -> call().
 exec_fold({F, K, V}, C) when is_function(F, 3) -> F(K, V, C);
