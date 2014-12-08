@@ -12,6 +12,7 @@
 *.o
 *.pid
 *.dump
+*.orig
 core/*/test
 deps/*/test
 applications/*/test
