@@ -210,6 +210,7 @@ to_props(Channel) ->
        ,{<<"to_tag">>, Channel#channel.to_tag}
        ,{<<"from_tag">>, Channel#channel.from_tag}
        ,{<<"elapsed_s">>, wh_util:elapsed_s(Channel#channel.timestamp)}
+       ,{<<"caller_id">>, Channel#channel.caller_id}
       ]).
 
 -spec to_api_json(channel()) -> wh_json:object().
@@ -325,6 +326,9 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info({'event', [UUID | Props]}, #state{node=Node}=State) ->
+	lager:debug("Channel with UUID: ~p has been established", [UUID]),
+	lager:debug("Available properties:"),
+	lists:foreach(fun(H) -> lager:debug("~p", [H]) end, Props),
     _ = spawn(?MODULE, 'process_event', [UUID, Props, Node, self()]),
     {'noreply', State};
 handle_info({'fetch', 'channels', <<"channel">>, <<"uuid">>, UUID, FetchId, _}, #state{node=Node}=State) ->
@@ -525,6 +529,7 @@ props_to_record(Props, Node) ->
              ,handling_locally=handling_locally(Props)
              ,to_tag=props:get_value(<<"variable_sip_to_tag">>, Props)
              ,from_tag=props:get_value(<<"variable_sip_from_tag">>, Props)
+             %,caller_id=pr
             }.
 
 -spec handling_locally(wh_proplist()) -> boolean().
@@ -571,6 +576,7 @@ props_to_update(Props) ->
                             ,{#channel.dialplan, props:get_value(<<"Caller-Dialplan">>, Props)}
                             ,{#channel.to_tag, props:get_value(<<"variable_sip_to_tag">>, Props)}
                             ,{#channel.from_tag, props:get_value(<<"variable_sip_from_tag">>, Props)}
+                            ,{#channel.caller_id, props:get_value(<<"Caller-Caller-ID-Name">>, Props)}
                            ]).
 
 get_other_leg(UUID, Props) ->

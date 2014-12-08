@@ -13,9 +13,9 @@
 -module(cb_conferences).
 
 -export([init/0
-         ,allowed_methods/0, allowed_methods/1
-         ,resource_exists/0, resource_exists/1
-         ,validate/1, validate/2
+         ,allowed_methods/0, allowed_methods/1, allowed_methods/2
+         ,resource_exists/0, resource_exists/1, resource_exists/2
+         ,validate/1, validate/2, validate/3
          ,put/1
          ,post/2
          ,delete/2
@@ -51,6 +51,8 @@ allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
 allowed_methods(_) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE].
+allowed_methods(_, <<"details">>) ->
+	[?HTTP_GET].
 
 %%--------------------------------------------------------------------
 %% @public
@@ -66,7 +68,8 @@ resource_exists() ->
     true.
 resource_exists(_) ->
     true.
-
+resource_exists(_, <<"details">>) ->
+	true.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -90,6 +93,106 @@ validate(#cb_context{req_verb = ?HTTP_POST}=Context, Id) ->
     update_conference(Id, Context);
 validate(#cb_context{req_verb = ?HTTP_DELETE}=Context, Id) ->
     load_conference(Id, Context).
+    
+validate(#cb_context{req_verb = ?HTTP_GET}=Context, ConfId, <<"details">>) ->
+    conference_details(Context, ConfId).
+    
+%%
+%% Returns some details about the users connected to a conference
+%%
+conference_details(Context, ConfId) ->
+	log_context(Context),
+    lookup_confs(Context, ConfId).
+    
+lookup_confs(Context, ConfId) ->
+	lager:info("lookup_confs"),
+	AccountId = cb_context:account_id(Context),
+    AccountDb = cb_context:account_db(Context),
+    AccountRealm = wh_util:get_account_realm(AccountDb, AccountId),
+    Req = [{<<"Realm">>, AccountRealm}
+           ,{<<"Fields">>, []}
+           ,{<<"Conference-ID">>, ConfId}
+           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+          ],
+	lager:info("before pool collect"),
+    ReqResp = whapps_util:amqp_pool_collect(Req
+                                            ,fun wapi_conference:publish_search_req/1
+                                            ,{'ecallmgr', 'true'}
+                                           ),
+    case ReqResp of
+        {'error', _} -> [];
+        {_, JObjs} ->
+        	crossbar_doc:handle_json_success(lookup_participants(JObjs), Context)
+            %merge_responses(JObjs)
+    end.
+    
+lookup_participants(JObjs) ->
+	lager:debug("Looking up participants of conference"),
+	Data = wh_json:get_value(<<"Participants">>, hd(JObjs)),
+	CallUUIDs = get_call_uuids(Data),
+	get_channel_details(CallUUIDs).
+	%get_users_details(get_participants_details(PartData)).
+	%get_users_details(PartData).
+	%get_callers_details(PartData).
+	
+get_call_uuids(undefined) -> [];
+get_call_uuids(Participants) ->
+	lists:foldl(fun(Participant, Acc) ->
+		CallID = wh_json:get_value(<<"Call-ID">>, Participant),
+		lager:debug("Call-ID found: ~p", [CallID]),
+		Acc ++ [CallID] end,
+		[], Participants).
+		
+get_channel_details(UUIDs) ->
+	lists:foldl(fun(UUID, Acc) ->
+		Channel = hd(element(1, rpc:call('ecallmgr@awe01.tor1.voxter.net', ecallmgr_fs_channels, get_channels, [UUID]))),
+		ChannelJSON = ecallmgr_fs_channel:to_json(Channel),
+		lager:debug("Got channel JSON: ~p", [ChannelJSON]),
+		Acc ++ [ChannelJSON] end,
+		[], UUIDs).
+	
+%get_participants_details(Participants) ->
+%	[get_participant_details(P) || P <- Participants].
+
+%get_participant_details(Participant) ->
+%	Req = [{<<"Call-ID">>, Participant}
+%           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+%          ],
+%    ReqResp = whapps_util:amqp_pool_collect(Req
+%                                            ,fun wapi_call:publish_channel_status_req/1
+%                                            ,{'ecallmgr', 'true'}
+%                                           ),
+%    case ReqResp of
+%        {'error', _} -> [];
+%        {_, JObjs} ->
+%        	lager:debug("Got these participant details: ~p", [hd(JObjs)]),
+%        	hd(JObjs)
+%    end.
+    
+%get_users_details(Participants) ->
+%	[get_user_details(P) || P <- Participants].
+	
+%get_user_details(Participant) ->
+%	lager:info("Trying to retrieve ~p", [Participant]),
+%	whapps_call:to_json(element(2, whapps_call:retrieve(Participant, <<"callflow">>))).
+	
+%get_callers_details(Users) ->
+%	[get_caller_details(P) || P <- Users].
+	
+%get_caller_details(User) ->
+%	EmptyChannel = ecallmgr:channel()
+%	MatchSpec = [{#channel{uuid='$1', _ = '_'}
+%                  ,[{'=:=', '$1', {'const', UUID}}]
+%                  ,['$_']
+%                 }],
+%    print_details(ets:select(?CHANNELS_TBL, MatchSpec, 1))
+	
+log_context(#cb_context{req_nouns=Nouns}) ->
+	lists:foreach(fun(Noun) ->
+			lager:info("Context log: " ++ element(1, Noun))
+		end,
+		Nouns
+	).
 
 -spec post(#cb_context{}, path_token()) -> #cb_context{}.
 post(Context, _) ->
@@ -116,6 +219,8 @@ delete(Context, _) ->
 %%--------------------------------------------------------------------
 -spec load_conference_summary(#cb_context{}) -> #cb_context{}.
 load_conference_summary(#cb_context{req_nouns=Nouns}=Context) ->
+	log_context(Context),
+	log_nouns(Nouns),
     case lists:nth(2, Nouns) of
         {<<"users">>, [UserId]} ->
             Filter = fun(J, A) ->
@@ -127,6 +232,9 @@ load_conference_summary(#cb_context{req_nouns=Nouns}=Context) ->
         _ ->
             cb_context:add_system_error(faulty_request, Context)
     end.
+    
+log_nouns(Nouns) ->
+	lager:info("Nouns log: " ++ Nouns).
 
 %%--------------------------------------------------------------------
 %% @private
