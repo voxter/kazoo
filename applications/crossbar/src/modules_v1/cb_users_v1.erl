@@ -483,14 +483,12 @@ should_update_voicemail_creds(Username, VMJObj, UserFullDoc) ->
 	try
 		_ = list_to_integer(binary_to_list(Username)),
 		
-		case {VMJObj, UserFullDoc, wh_json:get_value(<<"priv_level">>, UserFullDoc)} of
-			{'undefined', _, _} -> lager:info("No voicemail box to update for the user"),
+		case {VMJObj, UserFullDoc} of
+			{'undefined', _} -> lager:info("No voicemail box to update for the user"),
 				false;
-			{_, 'undefined', _} -> lager:info("Could not find user"),
+			{_, 'undefined'} -> lager:info("Could not find user"),
 				false;
-			{_, _, <<"user">>} -> true;
-			{_, _, _} -> lager:info("Did not save user pass as PIN because they are not priv_level user"),
-				false
+			_ -> true
 		end
 	catch error:badarg ->
 		lager:info("Did not save user pass as PIN because they do not have an extension username"),

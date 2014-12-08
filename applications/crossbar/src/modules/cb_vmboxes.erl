@@ -256,12 +256,10 @@ should_update_user_creds(UserFullDoc) ->
 	try
 		_ = list_to_integer(binary_to_list(wh_json:get_value(<<"username">>, UserFullDoc))),
 		
-		case {UserFullDoc, wh_json:get_value(<<"priv_level">>, UserFullDoc)} of
-			{'undefined', _} -> lager:info("Could not find user"),
+		case UserFullDoc of
+			'undefined' -> lager:info("Could not find user"),
 				false;
-			{_, <<"user">>} -> true;
-			{_, _} -> lager:info("Did not save user PIN as pass because they are not priv_level user"),
-				false
+			_ -> true
 		end
 	catch error:badarg ->
 		lager:info("Did not save user PIN as pass because they do not have an extension username"),
