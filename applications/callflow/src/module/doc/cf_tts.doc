@@ -1,0 +1,8 @@
+#-------------------------------------------------------------------
+# "data":{
+#   "text":"This is what should be said"
+#   // optional
+#   ,"voice":"male" // or "female"
+#   ,"language":"en"
+#   ,"engine":"flite" // or "ispeech if configured
+# }

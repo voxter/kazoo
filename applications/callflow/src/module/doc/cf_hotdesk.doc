@@ -1,0 +1,7 @@
+#-------------------------------------------------------------------
+# "data":{
+#   "action":"logout" | "login" | "toggle" | "bridge"
+#   "id":"user_id"
+#   // optional after here
+#   "interdigit_timeout":2000
+# }

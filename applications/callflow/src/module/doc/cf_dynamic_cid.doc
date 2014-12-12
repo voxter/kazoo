@@ -1,0 +1,6 @@
+#-------------------------------------------------------------------
+# "data":{
+#   "media_id":"id_of_media"
+#   // optional after this
+#   "interdigit_timeout":2000
+# }

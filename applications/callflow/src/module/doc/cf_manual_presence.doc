@@ -1,0 +1,5 @@
+#-------------------------------------------------------------------
+# "data":{
+#   "presence_id":"foo" // for "foo@bar.com"
+#   ,"status":"idle" //"idle", "ringing", "busy"
+# }

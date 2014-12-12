@@ -1,0 +1,9 @@
+#-------------------------------------------------------------------
+#
+# data:{
+#   "duration":2 // how long to delay for
+#   "unit":"s" // optional unit of time, defaults to seconds
+# }
+#
+# unit can be one of: "ms", "s", "m", "h"
+#
