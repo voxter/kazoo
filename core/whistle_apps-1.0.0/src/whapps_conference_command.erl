@@ -30,9 +30,14 @@
 
 -export([send_command/2]).
 
--spec search(whapps_conference:conference()) ->
+-spec search(whapps_conference:conference() | api_binary() | string()) ->
                     {'ok', wh_json:object()} |
                     {'error', _}.
+search(ConferenceId) when is_list(ConferenceId) ->
+	search(list_to_binary(ConferenceId));
+search(ConferenceId) when is_binary(ConferenceId) ->
+	Conference = whapps_conference:new(),
+	search(whapps_conference:set_id(ConferenceId, Conference));
 search(Conference) ->
     AppName = whapps_conference:application_name(Conference),
     AppVersion = whapps_conference:application_version(Conference),

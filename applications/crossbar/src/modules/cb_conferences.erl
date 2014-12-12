@@ -13,9 +13,9 @@
 -module(cb_conferences).
 
 -export([init/0
-         ,allowed_methods/0, allowed_methods/1, allowed_methods/2
-         ,resource_exists/0, resource_exists/1, resource_exists/2
-         ,validate/1, validate/2, validate/3
+         ,allowed_methods/0, allowed_methods/1, allowed_methods/2, allowed_methods/3
+         ,resource_exists/0, resource_exists/1, resource_exists/2, resource_exists/3
+         ,validate/1, validate/2, validate/3, validate/4
          ,put/1
          ,post/2
          ,delete/2
@@ -53,6 +53,8 @@ allowed_methods(_) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE].
 allowed_methods(_, <<"details">>) ->
 	[?HTTP_GET].
+allowed_methods(_, _, _) ->
+	[?HTTP_GET].
 
 %%--------------------------------------------------------------------
 %% @public
@@ -67,6 +69,7 @@ allowed_methods(_, <<"details">>) ->
 resource_exists() -> 'true'.
 resource_exists(_) -> 'true'.
 resource_exists(_, <<"details">>) -> 'true'.
+resource_exists(_, _, _) -> 'true'.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -98,16 +101,25 @@ validate_conference(Context, Id, ?HTTP_DELETE) ->
     load_conference(Id, Context).
     
 validate(Context, ConfId, <<"details">>) ->
-    conference_details(Context, ConfId).
+    crossbar_doc:handle_json_success(lookup_participants(conference_details(Context, ConfId)), Context).
+validate(Context, ConfId, Action, ParticipantId) ->
+	Conference = whapps_conference:set_id(ConfId, whapps_conference:new()),
+	crossbar_doc:handle_json_success(wh_json:set_value(<<"resp">>, perform_conference_action(Conference, Action, ParticipantId), wh_json:new()), Context).
+	
+%%
+%% Perform conference kick/mute/unmute via API
+%%
+perform_conference_action(Conference, <<"mute">>, ParticipantId) ->
+	whapps_conference_command:mute_participant(ParticipantId, Conference);
+perform_conference_action(Conference, <<"unmute">>, ParticipantId) ->
+	whapps_conference_command:unmute_participant(ParticipantId, Conference);
+perform_conference_action(Conference, <<"kick">>, ParticipantId) ->
+	whapps_conference_command:kick(ParticipantId, Conference).
     
 %%
 %% Returns some details about the users connected to a conference
 %%
 conference_details(Context, ConfId) ->
-	log_context(Context),
-    lookup_confs(Context, ConfId).
-    
-lookup_confs(Context, ConfId) ->
 	lager:info("lookup_confs"),
 	AccountId = cb_context:account_id(Context),
     AccountDb = cb_context:account_db(Context),
@@ -125,77 +137,35 @@ lookup_confs(Context, ConfId) ->
     case ReqResp of
         {'error', _} -> [];
         {_, JObjs} ->
-        	crossbar_doc:handle_json_success(lookup_participants(JObjs), Context)
-            %merge_responses(JObjs)
+        	hd(JObjs)
     end.
     
 lookup_participants(JObjs) ->
 	lager:debug("Looking up participants of conference"),
-	Data = wh_json:get_value(<<"Participants">>, hd(JObjs)),
-	CallUUIDs = get_call_uuids(Data),
-	get_channel_details(CallUUIDs).
-	%get_users_details(get_participants_details(PartData)).
-	%get_users_details(PartData).
-	%get_callers_details(PartData).
+	Data = wh_json:get_value(<<"Participants">>, JObjs),
+	Details = participant_details(Data),
+	channel_details(Details).
 	
-get_call_uuids(undefined) -> [];
-get_call_uuids(Participants) ->
+participant_details(undefined) -> [];
+participant_details(Participants) ->
 	lists:foldl(fun(Participant, Acc) ->
-		CallID = wh_json:get_value(<<"Call-ID">>, Participant),
-		lager:debug("Call-ID found: ~p", [CallID]),
-		Acc ++ [CallID] end,
+		CallId = wh_json:get_value(<<"Call-ID">>, Participant),
+		ParticipantId = wh_json:get_value(<<"Participant-ID">>, Participant),
+		Mute = not wh_json:get_value(<<"Speak">>, Participant),
+		lager:debug("Call-ID found: ~p", [CallId]),
+		lager:debug("Participant-ID found: ~p", [Participant]),
+		Acc ++ [{CallId, ParticipantId, Mute}] end,
 		[], Participants).
 		
-get_channel_details(UUIDs) ->
-	lists:foldl(fun(UUID, Acc) ->
+channel_details(Details) ->
+	lists:foldl(fun({UUID, ParticipantId, Mute}, Acc) ->
 		Channel = hd(element(1, rpc:call('ecallmgr@awe01.tor1.voxter.net', ecallmgr_fs_channels, get_channels, [UUID]))),
-		ChannelJSON = ecallmgr_fs_channel:to_json(Channel),
+		ChannelJSON = wh_json:set_values(
+			[{<<"participant_id">>, ParticipantId}, {<<"mute">>, Mute}],
+			ecallmgr_fs_channel:to_json(Channel)),
 		lager:debug("Got channel JSON: ~p", [ChannelJSON]),
 		Acc ++ [ChannelJSON] end,
-		[], UUIDs).
-	
-%get_participants_details(Participants) ->
-%	[get_participant_details(P) || P <- Participants].
-
-%get_participant_details(Participant) ->
-%	Req = [{<<"Call-ID">>, Participant}
-%           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-%          ],
-%    ReqResp = whapps_util:amqp_pool_collect(Req
-%                                            ,fun wapi_call:publish_channel_status_req/1
-%                                            ,{'ecallmgr', 'true'}
-%                                           ),
-%    case ReqResp of
-%        {'error', _} -> [];
-%        {_, JObjs} ->
-%        	lager:debug("Got these participant details: ~p", [hd(JObjs)]),
-%        	hd(JObjs)
-%    end.
-    
-%get_users_details(Participants) ->
-%	[get_user_details(P) || P <- Participants].
-	
-%get_user_details(Participant) ->
-%	lager:info("Trying to retrieve ~p", [Participant]),
-%	whapps_call:to_json(element(2, whapps_call:retrieve(Participant, <<"callflow">>))).
-	
-%get_callers_details(Users) ->
-%	[get_caller_details(P) || P <- Users].
-	
-%get_caller_details(User) ->
-%	EmptyChannel = ecallmgr:channel()
-%	MatchSpec = [{#channel{uuid='$1', _ = '_'}
-%                  ,[{'=:=', '$1', {'const', UUID}}]
-%                  ,['$_']
-%                 }],
-%    print_details(ets:select(?CHANNELS_TBL, MatchSpec, 1))
-	
-log_context(#cb_context{req_nouns=Nouns}) ->
-	lists:foreach(fun(Noun) ->
-			lager:info("Context log: " ++ element(1, Noun))
-		end,
-		Nouns
-	).
+		[], Details).
 
 -spec post(cb_context:context(), path_token()) -> cb_context:context().
 post(Context, _) ->
@@ -222,7 +192,6 @@ delete(Context, _) ->
 %%--------------------------------------------------------------------
 -spec load_conference_summary(cb_context:context()) -> cb_context:context().
 load_conference_summary(Context) ->
-	log_context(Context),
 	log_nouns(cb_context:req_nouns(Context)),
     case lists:nth(2, cb_context:req_nouns(Context)) of
         {<<"users">>, [UserId]} ->
