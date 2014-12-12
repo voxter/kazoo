@@ -120,7 +120,7 @@ details(UUID) when not is_binary(UUID) ->
 details(UUID) ->
 	print_details(get_conferences(UUID)).
 
-get_conferences(UUID)
+get_conferences(UUID) ->
     MatchSpec = [{#conference{uuid=UUID, _ = '_'}
                   ,[{'=:=', '$1', {'const', UUID}}]
                   ,['$_']
