@@ -326,9 +326,6 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info({'event', [UUID | Props]}, #state{node=Node}=State) ->
-	lager:debug("Channel with UUID: ~p has been established", [UUID]),
-	lager:debug("Available properties:"),
-	lists:foreach(fun(H) -> lager:debug("~p", [H]) end, Props),
     _ = spawn(?MODULE, 'process_event', [UUID, Props, Node, self()]),
     {'noreply', State};
 handle_info({'fetch', 'channels', <<"channel">>, <<"uuid">>, UUID, FetchId, _}, #state{node=Node}=State) ->
