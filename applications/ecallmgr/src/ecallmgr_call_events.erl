@@ -500,7 +500,6 @@ process_channel_event(Props) ->
     EventName = get_event_name(Props),
     ApplicationName = get_application_name(Props),
     Masqueraded = is_masquerade(Props),
-    lager:debug("Event Name: ~p, Application Name: ~p, Masqueraded: ~p", [EventName, ApplicationName, Masqueraded]),
     case should_publish(EventName, ApplicationName, Masqueraded) of
         'false' ->
             Action = props:get_value(<<"Action">>, Props),

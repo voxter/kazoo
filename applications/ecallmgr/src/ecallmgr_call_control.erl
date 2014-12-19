@@ -300,8 +300,7 @@ handle_cast({'usurp_control', _}, State) ->
 handle_cast({'update_node', Node}, #state{node=OldNode}=State) ->
     lager:debug("channel has moved from ~s to ~s", [OldNode, Node]),
     {'noreply', State#state{node=Node}};
-handle_cast({'dialplan', JObj}, #state{current_app=CurrentApp}=State) ->
-	lager:debug("Current App: ~p", [CurrentApp]),
+handle_cast({'dialplan', JObj}, State) ->
     {'noreply', handle_dialplan(JObj, State)};
 handle_cast({'event_execute_complete', CallId, AppName, JObj}
             ,#state{callid=CallId}=State) ->
@@ -943,7 +942,6 @@ queue_insert_fun('tail') ->
                     lager:debug("inserting at the tail of the control queue call command ~s(~s)", [AppName, MsgId]),
                     queue:in(JObj, Q);
                 AppName ->
-                	try throw(42) catch 42 -> wh_util:log_stacktrace() end,
                     lager:debug("inserting at the tail of the control queue call command ~s", [AppName]),
                     queue:in(JObj, Q)
             end

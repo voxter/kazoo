@@ -914,7 +914,6 @@ convert_whistle_app_name(App) ->
                           {'ok', ne_binary()} |
                           {'error', _}.
 lookup_media(MediaName, CallId, JObj, Type) ->
-	try throw(42) catch 42 -> wh_util:log_stacktrace() end,
     case wh_cache:fetch_local(?ECALLMGR_UTIL_CACHE
                               ,?ECALLMGR_PLAYBACK_MEDIA_KEY(MediaName)
                              )
