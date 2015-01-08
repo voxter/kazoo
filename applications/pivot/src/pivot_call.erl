@@ -143,7 +143,7 @@ init([Call, JObj]) ->
     ReqFormat = wh_json:get_value(<<"Request-Format">>, JObj, <<"twiml">>),
     BaseParams = wh_json:from_list(req_params(ReqFormat, Call)),
 
-    lager:debug("starting pivot req to ~s to ~s", [Method, VoiceUri]),
+    lager:debug("starting pivot req to ~s to ~s with Request-Format ~s", [Method, VoiceUri, ReqFormat]),
 
     ?MODULE:new_request(self(), VoiceUri, Method, BaseParams),
 
