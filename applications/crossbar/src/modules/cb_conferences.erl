@@ -103,8 +103,17 @@ validate_conference(Context, Id, ?HTTP_DELETE) ->
 validate(Context, ConfId, <<"details">>) ->
     crossbar_doc:handle_json_success(lookup_participants(conference_details(Context, ConfId)), Context).
 validate(Context, ConfId, Action, ParticipantId) ->
-	Conference = whapps_conference:set_id(ConfId, whapps_conference:new()),
-	crossbar_doc:handle_json_success(wh_json:set_value(<<"resp">>, perform_conference_action(Conference, Action, ParticipantId), wh_json:new()), Context).
+	AuthDoc = cb_context:auth_doc(Context),
+	ConfDoc = cb_context:doc(load_conference(ConfId, Context)),
+	ConfOwnerId = wh_json:get_value(<<"owner_id">>, ConfDoc),
+	AuthOwnerId = wh_json:get_value(<<"owner_id">>, AuthDoc),
+	% Abort if the user is not room owner
+	if ConfOwnerId =/= AuthOwnerId ->
+		crossbar_doc:handle_json_success(wh_json:set_value(<<"resp">>, <<"user_not_owner">>, wh_json:new()), Context);
+	true ->
+		Conference = whapps_conference:set_id(ConfId, whapps_conference:new()),
+		crossbar_doc:handle_json_success(wh_json:set_value(<<"resp">>, perform_conference_action(Conference, Action, ParticipantId), wh_json:new()), Context)
+	end.
 	
 %%
 %% Perform conference kick/mute/unmute via API
@@ -136,13 +145,24 @@ conference_details(Context, ConfId) ->
                                            ),
     case ReqResp of
         {'error', _} -> [];
-        {_, JObjs} ->
-        	hd(JObjs)
+        {_, JObjs} -> JObjs
     end.
+    
+successful_participant_resp([H|T]=ReqResp) when is_list(ReqResp) ->
+	CheckedResp = successful_participant_resp(H),
+	if CheckedResp == undefined ->
+		successful_participant_resp(T);
+	true ->
+		CheckedResp
+	end;
+successful_participant_resp(ReqResp) ->
+	wh_json:get_value(<<"Participants">>, ReqResp).
     
 lookup_participants(JObjs) ->
 	lager:debug("Looking up participants of conference"),
-	Data = wh_json:get_value(<<"Participants">>, JObjs),
+	lager:info("ConferenceObject: ~p", [JObjs]),
+	Data = successful_participant_resp(JObjs),
+	lager:info("SuccessfulResp: ~p", [Data]),
 	Details = participant_details(Data),
 	channel_details(Details).
 	
@@ -159,7 +179,7 @@ participant_details(Participants) ->
 		
 channel_details(Details) ->
 	lists:foldl(fun({UUID, ParticipantId, Mute}, Acc) ->
-		Channel = hd(element(1, rpc:call('ecallmgr@awe01.tor1.voxter.net', ecallmgr_fs_channels, get_channels, [UUID]))),
+		Channel = hd(element(1, rpc:call('ecallmgr@awe01.van1.voxter.net', ecallmgr_fs_channels, get_channels, [UUID]))),
 		ChannelJSON = wh_json:set_values(
 			[{<<"participant_id">>, ParticipantId}, {<<"mute">>, Mute}],
 			ecallmgr_fs_channel:to_json(Channel)),
