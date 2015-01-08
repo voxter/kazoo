@@ -57,6 +57,7 @@
 -export([set_fetch_id/2, fetch_id/1]).
 -export([set_bridge_id/2, bridge_id/1]).
 -export([set_language/2, language/1]).
+-export([ccvs/1]).
 -export([set_to_tag/2, to_tag/1]).
 -export([set_from_tag/2, from_tag/1]).
 
@@ -714,6 +715,9 @@ bridge_id(#whapps_call{bridge_id=BridgeId}) -> BridgeId.
 -spec set_language(ne_binary(), call()) -> call().
 set_language(Language, #whapps_call{}=Call) when is_binary(Language) ->
     Call#whapps_call{language=Language}.
+
+ccvs(#whapps_call{ccvs=CCVs}) -> 
+	CCVs.
 
 -spec language(call()) -> api_binary().
 language(#whapps_call{language='undefined', account_id=AccountId}) ->

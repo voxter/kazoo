@@ -51,7 +51,7 @@ req_params(Call) ->
        ,{<<"To">>, whapps_call:to_user(Call)}
        ,{<<"ToRealm">>, whapps_call:to_realm(Call)}
        ,{<<"Call-Status">>, kzt_util:get_call_status(Call)}
-       ,{<<"ApiVersion">>, <<"2013-05-01">>}
+       ,{<<"ApiVersion">>, <<"2015-01-06">>}
        ,{<<"Direction">>, <<"inbound">>}
        ,{<<"Caller-ID-Name">>, whapps_call:caller_id_name(Call)}
        ,{<<"Caller-ID-Number">>, whapps_call:caller_id_number(Call)}
@@ -64,4 +64,6 @@ req_params(Call) ->
        ,{<<"Transcription-Text">>, kzt_util:get_transcription_text(Call)}
        ,{<<"Transcription-Status">>, kzt_util:get_transcription_status(Call)}
        ,{<<"Transcription-Url">>, kzt_util:get_transcription_url(Call)}
+       ,{<<"Language">>, whapps_call:language(Call)}
+       ,{<<"Custom-KVS">>, cf_kvs_set:get_kvs_collection(Call)}
       ]).
