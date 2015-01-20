@@ -66,7 +66,6 @@
 -define(REG_QUEUE_NAME, <<>>).
 -define(REG_QUEUE_OPTIONS, []).
 -define(REG_CONSUME_OPTIONS, []).
--define(SUMMARY_REGEX, <<"^.*?:.*@([0-9.:]*)(?:;fs_path=.*?:([0-9.:]*))*">>).
 
 -record(state, {started = wh_util:current_tstamp()}).
 
@@ -997,14 +996,15 @@ print_summary({[#registration{username=Username
               ,Count) ->
     User = <<Username/binary, "@", Realm/binary>>,
     Remaining = (LastRegistration + Expires) - wh_util:current_tstamp(),
-    _ = case re:run(Contact, ?SUMMARY_REGEX, [{'capture', 'all_but_first', 'binary'}]) of
-            {'match', [Host, Path]} ->
+    Props = breakup_contact(Contact),
+    Hostport = props:get_first_defined(['received', 'hostport'], Props),
+    _ = case props:get_value('fs_path', Props) of
+            'undefined' ->
                 io:format("| ~-45s | ~-22s | ~-22s | ~-32s | ~-4B |~n"
-                          ,[User, Host, Path, CallId, Remaining]);
-            {'match', [Host]} ->
+                          ,[User, Hostport, <<>>, CallId, Remaining]);
+            Path ->
                 io:format("| ~-45s | ~-22s | ~-22s | ~-32s | ~-4B |~n"
-                          ,[User, Host, <<>>, CallId, Remaining]);
-            _Else -> 'ok'
+                         ,[User, Hostport, Path, CallId, Remaining])
         end,
     print_summary(ets:select(Continuation), Count + 1).
 
@@ -1031,3 +1031,88 @@ print_property(<<"Expires">> =Key, Value, #registration{expires=Expires
     io:format("~-19s: ~b/~s~n", [Key, Remaining, wh_util:to_binary(Value)]);
 print_property(Key, Value, _) ->
     io:format("~-19s: ~s~n", [Key, wh_util:to_binary(Value)]).
+
+-type contact_param() :: {'uri', ne_binary()} |
+                         {'hostport', ne_binary()} |
+                         {'transport', ne_binary()} |
+                         {'fs_path', ne_binary()} |
+                         {'received', ne_binary()}.
+-type contact_params() :: [contact_param(),...] | [].
+
+-spec breakup_contact(text()) -> contact_params().
+breakup_contact(Contact) when is_binary(Contact) ->
+    C = binary:replace(Contact, [<<$'>>, <<$<>>, <<$>>>, <<"sip:">>], <<>>, ['global']),
+    [Uri|Parameters] = binary:split(C, <<";">>, ['global']),
+    Hostport = get_contact_hostport(Uri),
+    find_contact_parameters(Parameters, [{'uri', Uri}, {'hostport', Hostport}]);
+breakup_contact(Contact) ->
+    breakup_contact(wh_util:to_binary(Contact)).
+
+-spec find_contact_parameters(ne_binaries(), wh_proplist()) -> wh_proplist().
+find_contact_parameters([], Props) -> Props;
+find_contact_parameters([<<"transport=", Transport/binary>>|Parameters], Props) ->
+    find_contact_parameters(Parameters, [{'transport', wh_util:to_lower_binary(Transport)}|Props]);
+find_contact_parameters([<<"fs_path=", FsPath/binary>>|Parameters], Props) ->
+    find_contact_parameters(Parameters, [{'fs_path', FsPath}|Props]);
+find_contact_parameters([<<"received=", Received/binary>>|Parameters], Props) ->
+    find_contact_parameters(Parameters, [{'received', Received}|Props]);
+find_contact_parameters([_|Parameters], Props) ->
+     find_contact_parameters(Parameters, Props).
+
+-spec get_contact_hostport(ne_binary()) -> ne_binary().
+get_contact_hostport(Uri) ->
+    case binary:split(Uri, <<"@">>) of
+        [_, Hostport] -> Hostport;
+        _Else -> Uri
+    end.
+
+-ifdef(TEST).
+
+-include_lib("eunit/include/eunit.hrl").
+
+-define(CONTACTS
+        ,[{<<"sip:user_0tbp@1.1.1.1:55274;fs_path=sip:2.2.2.2:5060;lr;received='sip:1.1.1.1:55274;transport=udp'">>
+           ,[{'transport', <<"udp">>}
+             ,{'received', <<"1.1.1.1:55274">>}
+             ,{'fs_path', <<"2.2.2.2:5060">>}
+             ,{'uri', <<"user_0tbp@1.1.1.1:55274">>}
+             ,{'hostport', <<"1.1.1.1:55274">>}
+            ]
+          }
+          ,{<<"<sip:5519@2.2.2.2:55061;transport=TLS;ob;fs_path=<sip:1.1.1.1:5061;lr;received='sip:1.1.1.1:55061;transport=tls'>>">>
+            ,[{'transport', <<"tls">>}
+              ,{'received', <<"1.1.1.1:55061">>}
+              ,{'fs_path', <<"1.1.1.1:5061">>}
+              ,{'uri', <<"5519@2.2.2.2:55061">>}
+              ,{'hostport', <<"2.2.2.2:55061">>}
+             ]
+           }
+          ,{<<"<sip:User_2pnrza@3.3.3.3:64967;ob;fs_path=<sip:1.1.1.1:5060;lr;received='sip:3.3.3.3:64967;transport=udp'>>">>
+            ,[{'transport', <<"udp">>}
+              ,{'received', <<"3.3.3.3:64967">>}
+              ,{'fs_path', <<"1.1.1.1:5060">>}
+              ,{'uri', <<"User_2pnrza@3.3.3.3:64967">>}
+              ,{'hostport', <<"3.3.3.3:64967">>}
+             ]
+           }
+          ,{<<"<sip:5520@78.25.120.237:26070;transport=TLS;rinstance=e6b1e5bda0fcfd30;fs_path=<sip:94.125.5.31:5061;lr;received='sip:78.25.120.237:26070;transport=tls'>>">>
+            ,[{'transport', <<"tls">>}
+              ,{'received', <<"78.25.120.237:26070">>}
+              ,{'fs_path', <<"94.125.5.31:5061">>}
+              ,{'uri', <<"5520@78.25.120.237:26070">>}
+              ,{'hostport', <<"78.25.120.237:26070">>}
+             ]
+           }
+         ]).
+
+registrar_summary_test() ->
+    lists:foreach(fun contact_props/1, ?CONTACTS).
+
+contact_props({Contact, Ps}) ->
+    Props = breakup_contact(Contact),
+
+    lists:foreach(fun({K, V}) ->
+                          ?assertEqual(V, props:get_value(K, Props))
+                  end, Ps).
+
+-endif.
