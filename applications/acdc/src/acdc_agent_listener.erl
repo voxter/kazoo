@@ -1025,6 +1025,7 @@ maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
               ,{<<"Outbound-Caller-ID-Number">>, whapps_call:caller_id_number(Call)}
               ,{<<"Existing-Call-ID">>, whapps_call:call_id(Call)}
               ,{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
+              ,{<<"Ignore-Early-Media">>, <<"true">>}
               | wh_api:default_headers(MyQ, ?APP_NAME, ?APP_VERSION)
              ]),
 
