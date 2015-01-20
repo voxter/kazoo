@@ -265,11 +265,22 @@ handle_query_channels(JObj, _Props) ->
     Fields = wh_json:get_value(<<"Fields">>, JObj, []),
     CallId = wh_json:get_value(<<"Call-ID">>, JObj),
 
-    Resp = [{<<"Channels">>, query_channels(Fields, CallId)}
-            ,{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, JObj)}
-            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-           ],
-    wapi_call:publish_query_channels_resp(wh_json:get_value(<<"Server-ID">>, JObj), Resp).
+    maybe_send_query_channels_resp(JObj, query_channels(Fields, CallId)).
+
+-spec maybe_send_query_channels_resp(wh_json:object(), wh_json:objects()) -> 'ok'.
+maybe_send_query_channels_resp(JObj, Channels) ->
+    case wh_util:is_empty(Channels) and
+        wh_json:is_true(<<"Active-Only">>, JObj, 'false')
+    of
+        'true' ->
+            lager:debug("not sending query_channels resp due to active-only=true");
+        'false' ->
+            Resp = [{<<"Channels">>, Channels}
+                   ,{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, JObj)}
+                    | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                   ],
+            wapi_call:publish_query_channels_resp(wh_json:get_value(<<"Server-ID">>, JObj), Resp)
+    end.
 
 -spec handle_channel_status(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_channel_status(JObj, _Props) ->
