@@ -256,7 +256,32 @@ validate_media_binary(Context, MediaId, ?HTTP_POST, [{_Filename, FileObj}]) ->
     lager:debug("loaded media meta for '~s'", [MediaId]),
     case cb_context:resp_status(Context1) of
         'success' ->
-            maybe_normalize_upload(Context1, MediaId, FileObj);
+            Context2 = maybe_normalize_upload(Context1, MediaId, FileObj),
+            AccountDb = cb_context:account_db(Context2),
+            AccountId = cb_context:account_id(Context2),
+            Node = "ecallmgr",
+   			{'ok', Host} = inet:gethostname(),
+   			{'ok', {_, FQDN, _, _, _, _}} = inet:gethostbyname(Host),
+    		Target = list_to_atom(Node ++ "@" ++ FQDN),
+            case rpc:call(Target, 'ecallmgr_config', 'flush',
+            	[{'playback_media', <<$/, AccountDb/binary, $/, MediaId/binary>>}]) of
+            	{badrpc, {'EXIT',{undef, _}}} ->
+                    lager:debug("Invalid command or wrong number of arguments, please try again~n");
+                {badrpc, Reason} ->
+                    lager:debug("Command failed: ~p~n", [Reason]);
+                Result ->
+                	lager:debug("Result: ~p", [Result])
+            end,
+            case rpc:call(Target, 'ecallmgr_config', 'flush',
+            	[{'playback_media', <<$/, AccountId/binary, $/, MediaId/binary>>}]) of
+            	{badrpc, {'EXIT',{undef, _}}} ->
+                    lager:debug("Invalid command or wrong number of arguments, please try again~n");
+                {badrpc, Reason2} ->
+                    lager:debug("Command failed: ~p~n", [Reason2]);
+                Result2 ->
+                	lager:debug("Result: ~p", [Result2])
+            end,
+            Context2;
         _Status -> Context1
     end;
 validate_media_binary(Context, _MediaId, ?HTTP_POST, _Files) ->
