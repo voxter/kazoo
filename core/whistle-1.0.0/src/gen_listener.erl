@@ -30,6 +30,7 @@
 
 -export([start_link/3
          ,start_link/4
+         ,start_link/5
         ]).
 
 -export([queue_name/1
@@ -186,13 +187,33 @@
 -callback code_change(term() | {'down', term()}, module_state(), term()) ->
     {'ok', module_state()} | {'error', term()}.
 
-  -spec start_link(atom(), start_params(), list()) -> startlink_ret().
-start_link(Module, Params, InitArgs) ->
+-spec start_link(atom(), start_params(), list()) -> startlink_ret().
+start_link(Module, Params, InitArgs) when is_atom(Module),
+                                          is_list(Params),
+                                          is_list(InitArgs)
+                                          ->
     gen_server:start_link(?MODULE, [Module, Params, InitArgs], []).
 
--spec start_link({'local', atom()} | {'global', term()}, atom(), start_params(), list()) -> startlink_ret().
-start_link(Name, Module, Params, InitArgs) ->
+-spec start_link(gen_server_name() | atom(), atom() | start_params(), start_params() | list(), gen_server_options() | list()) -> startlink_ret().
+start_link(Module, Params, InitArgs, Options) when is_atom(Module),
+                                                   is_list(Params),
+                                                   is_list(InitArgs),
+                                                   is_list(Options)
+                                                   ->
+    gen_server:start_link(?MODULE, [Module, Params, InitArgs], Options);
+start_link(Name, Module, Params, InitArgs) when is_atom(Module),
+                                                is_list(Params),
+                                                is_list(InitArgs)
+                                                ->
     gen_server:start_link(Name, ?MODULE, [Module, Params, InitArgs], []).
+
+-spec start_link(gen_server_name(), atom(), start_params(), list(), gen_server_options()) -> startlink_ret().
+start_link(Name, Module, Params, InitArgs, Options) when is_atom(Module),
+                                                         is_list(Params),
+                                                         is_list(InitArgs),
+                                                         is_list(Options)
+                                                         ->
+    gen_server:start_link(Name, ?MODULE, [Module, Params, InitArgs], Options).
 
 -spec queue_name(server_ref()) -> ne_binary().
 queue_name(Srv) -> gen_server:call(Srv, 'queue_name').
@@ -735,11 +756,15 @@ handle_callback_info(Message, #state{module=Module
 format_status(_Opt, [_PDict, #state{module=Module
                                     ,module_state=ModuleState
                                    }=State]) ->
-    [{'data', [{"Module State", ModuleState}
-               ,{"Module", Module}
-              ]}
-     ,{'data', [{"Listener State", State}]}
-    ].
+    case erlang:function_exported(Module, format_status, 2) of
+        'true' -> Module:format_status(_Opt, [_PDict, ModuleState]);
+        'false' -> [{'data', [{"Module State", ModuleState}
+                              ,{"Module", Module}
+                              ,{"Listener State", State}
+                             ]
+                    }]
+    end.
+
 
 -spec distribute_event(wh_json:object(), basic_deliver(), state()) -> 'ok'.
 distribute_event(JObj, BasicDeliver, State) ->
