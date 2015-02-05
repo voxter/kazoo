@@ -86,7 +86,7 @@
 %% datetime_to_gregorian_seconds({date(),time()}) - ?UNIX_EPOCH_IN_GREGORIAN.
 -define(UNIX_EPOCH_IN_GREGORIAN, 62167219200).
 
--type wh_now() :: erlang:timestamp().
+-type wh_now() :: os:timestamp().
 -type wh_year() :: non_neg_integer().
 -type wh_month() :: 1..12.
 -type wh_day() :: 1..31.
