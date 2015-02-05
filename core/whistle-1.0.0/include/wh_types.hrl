@@ -147,6 +147,15 @@
 
 -type server_ref() :: atom() | {atom(), atom()} | {'global', term()} | {'via', atom(), term()} | pid().
 
+
+-type gen_server_name() :: {'local', atom()} |
+                           {'global', term()} |
+                           {'via', atom(), term()}.
+-type gen_server_option() :: {'debug', list()} |
+                             {'timeout', non_neg_integer()} |
+                             {'spawn_opt', list()}.
+-type gen_server_options() :: [gen_server_option(),...] | [].
+
 %% Ibrowse-related types
 -type ibrowse_error() :: {'error', 'req_timedout'
                           | 'sel_conn_closed'
@@ -184,6 +193,7 @@
          ,<<"DETECTED_TONE">>,<<"DTMF">>
          ,<<"LEG_CREATED">>, <<"LEG_DESTROYED">>
          ,<<"RECORD_START">>,<<"RECORD_STOP">>
+         ,<<"dialplan">> %% errors are sent with this
         ]).
 
 -type xml_thing() :: xml_el() | xml_text().
