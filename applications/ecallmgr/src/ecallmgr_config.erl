@@ -9,7 +9,7 @@
 %%%-------------------------------------------------------------------
 -module(ecallmgr_config).
 
--export([flush/0, flush/1, flush/2, flush/3
+-export([flush/0, flush/1, flush/2
          ,flush_default/0, flush_default/1
         ]).
 -export([get/1, get/2, get/3
@@ -42,10 +42,6 @@ flush(Key) ->
 -spec flush(api_binary(), atom() | ne_binary()) -> 'ok'.
 flush(Key, 'undefined') ->
     flush(Key);
-flush(Key, Node) when not is_binary(Node) ->
-    flush(Key, wh_util:to_binary(Node));
-flush({'playback_media', _}=Key, Node) ->
-	flush(Key, Node, true);
 flush(Key, Node) when not is_binary(Key), Key =/= 'undefined' ->
     flush(wh_util:to_binary(Key), Node);
 flush(Key, Node) ->
@@ -61,42 +57,6 @@ flush(Key, Node) ->
     wh_amqp_worker:cast(props:filter_undefined(Req)
                         ,fun wapi_sysconf:publish_flush_req/1
                        ).
-                       
-flush({'playback_media', _}=Key, _, Federate) ->
-	lager:debug("flushing ~p from ecallmgr_config", [Key]),
-	wh_cache:erase_local(?ECALLMGR_UTIL_CACHE, Key),
-	
-	if Federate ->
-		Peers = lists:delete(atom_to_list(node()), get_ecallmgr_nodes(filter_whapps_nodes(nodes()))),
-		federate_to_nodes(Peers, [Key, 'undefined', false]);
-	true ->
-		'ok'
-	end.
-	
-filter_whapps_nodes(List) ->
-	lists:foldl(fun(Elem, Acc) ->
-		Node = atom_to_list(Elem),
-		case string:str(Node, "whistle_apps") of
-			1 ->
-				Acc ++ [Node];
-			_ ->
-				Acc
-		end end, [], List).
-		
-get_ecallmgr_nodes(WhappsNodes) ->
-	lists:foldl(fun(Elem, Acc) ->
-		Acc ++ ["ecallmgr@" ++ string:substr(Elem, string:len("whistle_apps@") + 1)] end, [], WhappsNodes).
-		
-federate_to_nodes(Nodes, Params) ->
-	lists:foreach(fun(Target) ->
-		case rpc:call(list_to_atom(Target), 'ecallmgr_config', 'flush', Params) of
-			{badrpc, {'EXIT',{undef, _}}} ->
-				lager:debug("Invalid command or wrong number of arguments, please try again~n");
-			{badrpc, Reason} ->
-				lager:debug("Command failed: ~p~n", [Reason]);
-			Result ->
-				lager:debug("Result: ~p", [Result])
-		end end, Nodes).
 
 -spec flush_default() -> 'ok'.
 -spec flush_default(api_binary()) -> 'ok'.
