@@ -5,6 +5,7 @@
 
 -export([handle/2]).
 -export([add_kvs_to_props/2]).
+-export([format_json/1]).
 
 -include("../callflow.hrl").
 
@@ -60,12 +61,62 @@ set_collection(Collection, Key, Value, Call) ->
 add_kvs_to_props(Props, Call) ->
     case wh_json:get_value(<<"kvs_mode">>, get_collection(?COLLECTION_MODE, Call), undefined) of
         <<"json">> ->
-            CustomKVs = get_kvs_collection(Call),
-            Keys = wh_json:get_keys(CustomKVs),
+            Collection = get_kvs_collection(Call),
+            Keys = wh_json:get_keys(Collection),
             
             lists:foldl(fun(Key, Props2) ->
-                [{Key, list_to_binary(mochiweb_util:urlencode(wh_json:to_proplist(wh_json:get_value(Key, CustomKVs))))}] ++ Props2 end,
-                Props, Keys);
+                [{Key, list_to_binary(format_json(wh_json:get_value(Key, Collection)))}] ++ Props2
+                end, Props, Keys);
         _ ->
             [{<<"Custom-KVS">>, get_kvs_collection(Call)}] ++ Props
     end.
+    
+format_json(Data) ->
+    Proplist = case wh_json:is_json_object(Data) of
+        true ->
+            wh_json:to_proplist(Data);
+        _ ->
+            Data
+    end,
+    
+    format_json_rec(Proplist).
+    
+format_json_rec(Proplist) ->
+    format_json_rec(Proplist, []).
+    
+format_json_rec([{K,V}], []) ->
+    "{" ++ format_json_rec({K, V}) ++ "}";
+    
+format_json_rec([{K,V}], _) ->
+    format_json_rec({K, V}) ++ "}";
+    
+format_json_rec([{K,V}=KV|Others], []) ->
+    "{" ++ format_json_rec({K, V}) ++ "," ++ format_json_rec(Others, [KV]);
+    
+format_json_rec([{K,V}=KV|Others], Done) ->
+    format_json_rec({K, V}) ++ "," ++ format_json_rec(Others, Done ++ KV);
+    
+format_json_rec({K, V}, _) ->
+    "\"" ++ binary_to_list(K) ++ "\":" ++ format_json_rec(V, []);
+    
+format_json_rec([Prim], []) ->
+    "[" ++ format_type(Prim) ++ "]";
+    
+format_json_rec([Prim], _) ->
+    format_type(Prim) ++ "]";
+    
+format_json_rec([Prim|Others], []) ->
+    "[" ++ format_type(Prim) ++ "," ++ format_json_rec(Others, [Prim]);
+    
+format_json_rec([Prim|Others], _) ->
+    format_type(Prim) ++ "," ++ format_json_rec(Others, [Prim]);
+
+format_json_rec(V, _) ->
+    "\"" ++ binary_to_list(V) ++ "\"".
+    
+format_type(Data) when not is_binary(Data) ->
+    wh_util:to_list(Data);
+    
+format_type(<<Data/binary>>) ->
+    "\"" ++ binary_to_list(Data) ++ "\"".
+    
