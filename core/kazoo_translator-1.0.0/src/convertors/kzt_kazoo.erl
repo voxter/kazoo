@@ -43,8 +43,8 @@ req_params(Call) ->
                  [OwnerId] -> OwnerId;
                  [_|_]=IDs -> IDs
              end,
-    props:filter_undefined(
-      [{<<"Call-ID">>, whapps_call:call_id(Call)}
+             
+    Props = [{<<"Call-ID">>, whapps_call:call_id(Call)}
        ,{<<"Account-ID">>, whapps_call:account_id(Call)}
        ,{<<"From">>, whapps_call:from_user(Call)}
        ,{<<"FromRealm">>, whapps_call:from_realm(Call)}
@@ -65,5 +65,6 @@ req_params(Call) ->
        ,{<<"Transcription-Status">>, kzt_util:get_transcription_status(Call)}
        ,{<<"Transcription-Url">>, kzt_util:get_transcription_url(Call)}
        ,{<<"Language">>, whapps_call:language(Call)}
-       ,{<<"Custom-KVS">>, cf_kvs_set:get_kvs_collection(Call)}
-      ]).
+      ],
+             
+    props:filter_undefined(cf_kvs_set:add_kvs_to_props(Props, Call)).
