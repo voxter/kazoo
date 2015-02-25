@@ -167,7 +167,9 @@ post(Context, AgentId, ?STATUS_PATH_TOKEN) ->
         <<"login">> -> publish_update(Context, AgentId, fun wapi_acdc_agent:publish_login/1);
         <<"logout">> -> publish_update(Context, AgentId, fun wapi_acdc_agent:publish_logout/1);
         <<"pause">> -> publish_update(Context, AgentId, fun wapi_acdc_agent:publish_pause/1);
-        <<"resume">> -> publish_update(Context, AgentId, fun wapi_acdc_agent:publish_resume/1)
+        <<"resume">> -> publish_update(Context, AgentId, fun wapi_acdc_agent:publish_resume/1);
+        <<"queue_login">> -> publish_queue_update(cb_context:account_id(Context), AgentId, cb_context:req_value(Context, <<"queue_id">>), fun wapi_acdc_agent:publish_login_queue/1);
+        <<"queue_logout">> -> publish_queue_update(cb_context:account_id(Context), AgentId, cb_context:req_value(Context, <<"queue_id">>), fun wapi_acdc_agent:publish_logout_queue/1)
     end,
     crossbar_util:response(<<"status update sent">>, Context).
 
@@ -182,6 +184,15 @@ publish_update(Context, AgentId, PubFun) ->
                 | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
                ]),
     PubFun(Update).
+    
+publish_queue_update(AccountId, AgentId, QueueId, PubFun) ->
+    Prop = props:filter_undefined(
+             [{<<"Account-ID">>, AccountId}
+              ,{<<"Agent-ID">>, AgentId}
+              ,{<<"Queue-ID">>, QueueId}
+              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+             ]),
+    PubFun(Prop).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -448,7 +459,7 @@ validate_status_change(Context) ->
             check_for_status_error(Context, cb_context:req_value(Context, <<"status">>))
     end.
 
--define(STATUS_CHANGES, [<<"login">>, <<"logout">>, <<"pause">>, <<"resume">>]).
+-define(STATUS_CHANGES, [<<"login">>, <<"logout">>, <<"pause">>, <<"resume">>, <<"queue_login">>, <<"queue_logout">>]).
 -spec validate_status_change(cb_context:context(), api_binary()) -> cb_context:context().
 validate_status_change(Context, S) ->
     case lists:member(S, ?STATUS_CHANGES) of
