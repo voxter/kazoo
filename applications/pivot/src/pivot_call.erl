@@ -232,7 +232,7 @@ handle_cast({'cdr', JObj}, #state{cdr_uri=Url
                                  }=State) ->
     JObj1 = wh_json:delete_key(<<"Custom-Channel-Vars">>, JObj),
     Body =  wh_json:to_querystring(wh_api:remove_defaults(JObj1)),
-    Headers = [{"Content-Type", "application/x-www-form-urlencoded"}, "Accept", "application/xml,application/xhtml+xml,text/html;q=0.9, text/plain;q=0.8,image/png,*/*;q=0.5"}],
+    Headers = [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "application/xml,application/xhtml+xml,text/html;q=0.9, text/plain;q=0.8,image/png,*/*;q=0.5"}],
 
     maybe_debug_req(Call, Url, 'post', Headers, Body, Debug),
 
@@ -427,7 +427,7 @@ send_req(Call, Uri, 'get', BaseParams, Debug) ->
     UserParams = kzt_translator:get_user_vars(Call),
     Params = wh_json:set_values(BaseParams, UserParams),
     UpdatedCall = whapps_call:kvs_erase(<<"digits_collected">>, Call),
-    send(UpdatedCall, uri(Uri, wh_json:to_querystring(Params)), 'get', [{"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}, {"Accept-Language", binary_to_list(whapps_call:language(Call))}, [], Debug);
+    send(UpdatedCall, uri(Uri, wh_json:to_querystring(Params)), 'get', [{"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}, {"Accept-Language", binary_to_list(whapps_call:language(Call))}], [], Debug);
 send_req(Call, Uri, 'post', BaseParams, Debug) ->
     UserParams = kzt_translator:get_user_vars(Call),
     Params = wh_json:set_values(BaseParams, UserParams),
