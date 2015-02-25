@@ -444,27 +444,7 @@ subscription_to_json(#omnip_subscription{user=User
          ,{<<"version">>, Version}
         ])).
 
--spec subscription_from_json(wh_json:object()) -> subscription().
-subscription_from_json(JObj) ->
-    User = wh_json:get_value(<<"user">>, JObj),
-    From = wh_json:get_value(<<"from">>, JObj),
-    #omnip_subscription{user=User
-                        ,from=From
-                        ,normalized_user=wh_util:to_lower_binary(User)
-                        ,normalized_from=wh_util:to_lower_binary(From)
-                        ,stalker=wh_json:get_value(<<"stalker">>, JObj)
-                        ,expires=wh_json:get_value(<<"expires">>, JObj)
-                        ,timestamp=wh_json:get_value(<<"timestamp">>, JObj)
-                        ,protocol=wh_json:get_value(<<"protocol">>, JObj)
-                        ,username=wh_json:get_value(<<"username">>, JObj)
-                        ,realm=wh_json:get_value(<<"realm">>, JObj)
-                        ,event=wh_json:get_value(<<"event">>, JObj)
-                        ,contact=wh_json:get_value(<<"contact">>, JObj)
-                        ,call_id=wh_json:get_value(<<"call_id">>, JObj)
-                        ,subscription_id=wh_json:get_value(<<"subscription_id">>, JObj)
-                        ,proxy_route=wh_json:get_value(<<"proxy_route">>, JObj)
-                        ,version=wh_json:get_value(<<"version">>, JObj)
-                       }.
+
 
 -spec start_expire_ref() -> reference().
 start_expire_ref() ->
@@ -568,26 +548,7 @@ find_user_subscriptions(Event, User) when is_binary(User) ->
 get_subscriptions(Event, User) ->
     case find_subscriptions(Event, User) of
         {'ok', Subs} -> {'ok', Subs};
-        {'error', 'not_found'} ->
-            [Username, Realm] = binary:split(User, <<"@">>),
-            Payload = [{<<"Realm">>, Realm}
-                       ,{<<"Username">>, Username}
-                       ,{<<"Event-Package">>, Event}
-                       | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-                      ],
-            Resp = wh_amqp_worker:call(Payload
-                                       ,fun wapi_presence:publish_search_req/1
-                                       ,fun wapi_presence:search_resp_v/1
-                                       ,500
-                                      ),
-            case Resp of
-                {'ok', JObj} ->
-                    Subs = [subscription_from_json(WSub)
-                            || WSub <- wh_json:get_value(<<"Subscriptions">>, JObj, [])
-                           ],
-                    {'ok', Subs};
-                _ ->   {'error', 'not_found'}
-            end
+        _Else -> _Else
     end.
 
 -spec dedup(subscriptions()) -> subscriptions().

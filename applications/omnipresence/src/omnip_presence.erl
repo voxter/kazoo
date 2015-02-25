@@ -98,24 +98,24 @@ handle_cast({'gen_listener',{'created_queue',_Queue}}, State) ->
     {'noreply', State};
 handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
     {'noreply', State};
-handle_cast({'omnipresence',{'subscribe_notify', <<"presence">>, User, #omnip_subscription{}=_Subscription}}, State) ->
-    [Username, Realm] = binary:split(User, <<"@">>),
-    Props = [{<<"Username">>, Username}
-             ,{<<"Realm">>, Realm}
-             ,{<<"Event-Package">>, <<"presence">>}
-             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-            ],
-    wh_amqp_worker:cast(Props, fun wapi_presence:publish_probe/1),
-    {'noreply', State};
-handle_cast({'omnipresence',{'resubscribe_notify', <<"presence">>, User, #omnip_subscription{}=_Subscription}}, State) ->
-    [Username, Realm] = binary:split(User, <<"@">>),
-    Props = [{<<"Username">>, Username}
-             ,{<<"Realm">>, Realm}
-             ,{<<"Event-Package">>, <<"presence">>}
-             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-            ],
-    wh_amqp_worker:cast(Props, fun wapi_presence:publish_probe/1),
-    {'noreply', State};
+%handle_cast({'omnipresence',{'subscribe_notify', <<"presence">>, User, #omnip_subscription{}=_Subscription}}, State) ->
+%    [Username, Realm] = binary:split(User, <<"@">>),
+%    Props = [{<<"Username">>, Username}
+%             ,{<<"Realm">>, Realm}
+%             ,{<<"Event-Package">>, <<"presence">>}
+%             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+%            ],
+%    wh_amqp_worker:cast(Props, fun wapi_presence:publish_probe/1),
+%    {'noreply', State};
+%handle_cast({'omnipresence',{'resubscribe_notify', <<"presence">>, User, #omnip_subscription{}=_Subscription}}, State) ->
+%    [Username, Realm] = binary:split(User, <<"@">>),
+%    Props = [{<<"Username">>, Username}
+%             ,{<<"Realm">>, Realm}
+%             ,{<<"Event-Package">>, <<"presence">>}
+%             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+%            ],
+%    wh_amqp_worker:cast(Props, fun wapi_presence:publish_probe/1),
+%    {'noreply', State};
 handle_cast({'omnipresence',{'presence_update', JObj}}, State) ->
     spawn(fun() -> presence_event(JObj) end),
     {'noreply', State};
