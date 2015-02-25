@@ -30,13 +30,20 @@ get_oauth_provider(ProviderId) ->
     end.
 
 oauth_provider_from_jobj(ProviderId, JObj) ->
-    #oauth_provider{name=ProviderId
+    case wh_json:get_value(<<"oauth_version">>, JObj, <<"2.0">>) of
+        <<"2.0">> ->
+            #oauth_provider{name=ProviderId
                     ,auth_url= wh_json:get_value(<<"oauth_url">>, JObj)
                     ,tokeninfo_url= wh_json:get_value(<<"tokeninfo_url">>, JObj)
                     ,profile_url= wh_json:get_value(<<"profile_url">>, JObj)
                     ,servers= wh_json:get_value(<<"servers">>, JObj)
                     ,scopes= wh_json:get_value(<<"scopes">>, JObj)
-                   }.
+                   };
+        <<"1.0a">> ->
+            #oauth_provider{name=ProviderId
+                    ,auth_url= wh_json:get_value(<<"oauth_url">>, JObj)
+                   }
+    end.
 
 get_oauth_app(AppId) ->
     case couch_mgr:open_doc(?KZ_OAUTH_DB, AppId) of

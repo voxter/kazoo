@@ -197,11 +197,13 @@ handle_cast({'request', Uri, Method, Params}, #state{call=Call
                                                      ,debug=Debug
                                                     }=State) ->
     Call1 = kzt_util:set_voice_uri(Uri, Call),
+    
+    Params2 = maybe_add_oauth_params(whapps_call:account_db(Call), whapps_call:account_id(Call), Params),
 
-    {'ok', ReqId, Call2} = send_req(Call1, Uri, Method, Params, Debug),
+    {'ok', ReqId, Call2} = send_req(Call1, Uri, Method, Params2, Debug),
     lager:debug("sent request ~p to '~s' via '~s'", [ReqId, Uri, Method]),
     {'noreply', State#state{request_id=ReqId
-                            ,request_params=Params
+                            ,request_params=Params2
                             ,response_content_type = <<>>
                             ,response_body = <<>>
                             ,method=Method
@@ -457,6 +459,23 @@ send(Call, Uri, Method, ReqHdrs, ReqBody, Debug) ->
         {'error', _Reason} ->
             lager:debug("error with req: ~p", [_Reason]),
             {'stop', Call}
+    end.
+    
+maybe_add_oauth_params(AccountDb, AccountId, Params) ->
+    {ok, AccountDoc} = couch_mgr:open_doc(AccountDb, AccountId),
+    
+    ConsumerKey = wh_json:get_value(<<"pvt_oauth_consumer_key">>, AccountDoc, undefined),
+    ConsumerSecret = wh_json:get_value(<<"pvt_oauth_consumer_secret">>, AccountDoc, undefined),
+    Provider = wh_json:get_value(<<"pvt_oauth_provider">>, AccountDoc, undefined),
+    
+    case {ConsumerKey, Provider} of
+        {undefined, _} ->
+            Params;
+        {_, undefined} ->
+            Params;
+        {_, _} ->
+            kazoo_oauth_service:service_token(Provider, {ConsumerKey, ConsumerSecret}, <<"1.0a">>),
+            Params
     end.
 
 -spec normalize_resp_headers(wh_proplist()) -> wh_proplist().
