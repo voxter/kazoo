@@ -50,11 +50,11 @@ handle_specific_event(<<"connect_req">>, EventJObj) ->
         "\n\n">>,
     
     gen_listener:cast(blackhole_ami_amqp, {out, Payload});
-handle_specific_event(<<"login">>, EventJObj) ->
+handle_specific_event(<<"login">>, _EventJObj) ->
 %
 %
 %
 %
-    ok.
+    ok;
 handle_specific_event(_, _EventJObj) ->
     lager:debug("AMI: unhandled acdc event").

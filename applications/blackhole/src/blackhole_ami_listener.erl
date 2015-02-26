@@ -7,7 +7,10 @@
 -include("blackhole.hrl").
          
 -record(state, {
-    socket
+    socket,
+    accept_socket,
+    status,
+    account_id
 }).
  
 start_link(Socket) ->
@@ -22,16 +25,16 @@ handle_call(Request, _From, State) ->
     lager:debug("AMI: unhandled call"),
     {stop, {unknown_call, Request}, State}.
 
+%% Start the listener waiting for socket accept
 handle_cast(accept, #state{socket=Socket}=State) ->
     case gen_tcp:accept(Socket) of
         {ok, AcceptSocket} ->
+            %% Add another listener to the pool to keep up responsiveness
             blackhole_ami_sup:start_ami_listener(),
             lager:debug("AMI: Client accepted for socket"),
-    
-            % Create AMQP listener
-            blackhole_ami_amqp:start_link(AcceptSocket),
-    
-            {noreply, State#state{socket=AcceptSocket}};
+            
+            %% Need to wait for login now
+            {noreply, State#state{accept_socket=AcceptSocket, status=login}};
         {error, closed} ->
             {stop, normal, State};
         {_, _} ->
@@ -41,25 +44,43 @@ handle_cast(accept, #state{socket=Socket}=State) ->
 handle_cast(_Event, State) ->
     lager:debug("AMI: unhandled cast"),
     {noreply, State}.
+    
+%% Need to perform a login prior to sending/receiving anything
+handle_info({tcp, _Socket, Data}, #state{status=login, accept_socket=AcceptSocket}=State) ->
+    AccountId = blackhole_ami_commander:login(Data),
+    case AccountId of
+        {ok, _} ->
+            %% Start the AMQP service
+            blackhole_ami_amqp:start_link(AcceptSocket),
+            %% Status moves to active so that AMI commands can be received
+            {noreply, State#state{account_id=AccountId, status=active}};
+        _ ->
+            {stop, normal, State}
+    end;
 
-handle_info({tcp, _Socket, Data}, State) ->
-    lager:debug("AMI: received data: ~p", [Data]),
+handle_info({tcp, _Socket, Data}, #state{status=active, account_id=AccountId}=State) ->
+    blackhole_ami_commander:handle(Data, AccountId),
     {noreply, State};
 handle_info({tcp_closed, _Socket}, State) ->
     lager:debug("AMI: Disconnected client"),
-    gen_tcp:close(State#state.socket),
     {stop, normal, State};
 handle_info({tcp_error, _Socket, _}, State) ->
     lager:debug("AMI: tcp_error"),
     {stop, normal, State};
 handle_info(Info, State) ->
-    io:format("AMI: unexpected info: ~p~n", [Info]),
+    lager:debug("AMI: unexpected info: ~p~n", [Info]),
     {noreply, State}.
 
-terminate(_Reason, State) ->
+terminate(_Reason, #state{accept_socket=AcceptSocket}) ->
+    % TODO: actually close these accept sockets on restart
     lager:debug("AMI: terminating"),
-    gen_tcp:close(State#state.socket),
-    ok.
+    case AcceptSocket of
+        undefined ->
+            ok;
+        _ ->
+            gen_tcp:close(AcceptSocket),
+            ok
+    end.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
