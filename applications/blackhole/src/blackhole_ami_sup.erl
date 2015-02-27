@@ -24,12 +24,12 @@ init([ListenSocket]) ->
     spawn_link(fun start_ami_listeners/0),
     {'ok', {
         {simple_one_for_one, 60, 3600}, [{
-            blackhole_ami_listener, {
-                blackhole_ami_listener, start_link, [ListenSocket]
+            blackhole_ami_comm, {
+                blackhole_ami_comm, start_link, [ListenSocket]
             },
             temporary,
             1000,
             worker,
-            [blackhole_ami_listener]
+            [blackhole_ami_comm]
         }]
     }}.

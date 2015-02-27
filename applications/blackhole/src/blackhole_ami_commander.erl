@@ -1,54 +1,78 @@
 -module(blackhole_ami_commander).
 
--export([login/1, handle/2]).
+-export([login/1, handle/2, filter_empty/1]).
 
 -include("blackhole.hrl").
 
 -define(AMI_DB, <<"ami">>).
     
 %% Essentially handles payload for start-of-connect auth
-login(Payload) ->
-    Parameters = parse_payload(Payload),
-    handle_event(Parameters).
+%login(Payload) ->
+%    Parameters = parse_payload(Payload),
+%    handle_event(Parameters).
 
 %% Handle a payload sent as an AMI command
 handle(Payload, AccountId) ->
-    Parameters = parse_payload(Payload),
-    UpdatedParams = [<<"Account: ", AccountId/binary>>] ++ Parameters,
-    handle_event(UpdatedParams).
+    Props = blackhole_ami_util:parse_payload(Payload),
+    UpdatedProps = [{<<"Account">>, AccountId}] ++ Props,
+    handle_event(UpdatedProps).
     
-%% AMI commands broken up by newlines
-parse_payload(Payload) ->
-    binary:split(Payload, <<"\r\n">>).
-    
-handle_event(Parameters) ->
-    Props = lists:foldl(fun(Parameter, Acc) ->
-        {K,V} = binary:split(Parameter, <<":">>),
-        Prop = {K, binary:replace(V, <<" ">>, <<>>)},
-        Prop ++ Acc
-        end, [], Parameters),
-    handle_event(proplists:get_value(<<"Action">>, Props), Props).
+handle_event(Props) ->
+    %lager:debug("AMI event params: ~p", [Parameters]),
+    Action = string:to_lower(wh_util:to_list(proplists:get_value(<<"Action">>, Props))),
+    handle_event(Action, Props).
     
 % TODO: add AMI username lookup db initialization
-handle_event(<<"Login">>, Props) ->
+% TODO: validate md5 key on login
+% TODO: validate secret mode login (secret in TCP payload)
+handle_event("login", Props) ->
     Username = proplists:get_value(<<"Username">>, Props),
-    Secret = proplists:get_value(<<"Secret">>, Props),
-    AMIDoc = couch_mgr:open_doc(?AMI_DB, Username),
-    case wh_json:get_value(<<"Secret">>, AMIDoc) of
-        Secret ->
+    %Secret = proplists:get_value(<<"Secret">>, Props),
+    Secret = undefined,
+    ActionID = proplists:get_value(<<"ActionID">>, Props),
+    _AMIDoc = couch_mgr:open_doc(?AMI_DB, Username),
+    %case wh_json:get_value(<<"Secret">>, AMIDoc) of
+    case Secret of
+        undefined ->
             %% Successful login
-            {ok, wh_json:get_value(<<"account_id">>, AMIDoc)};
+            %{ok, wh_json:get_value(<<"account_id">>, AMIDoc)};
+            Payload = [
+                {<<"Response">>, <<"Success">>},
+                {<<"ActionID">>, ActionID},
+                {<<"Message">>, <<"Authentication accepted">>}
+            ],
+            {ok, {Payload, broken}};
+            
+            % TODO trigger a FullyBooted event
         _ ->
             %% Failed login
-            {error, invalid_creds}
+            Payload = [
+                {<<"Response">>, <<"Error">>},
+                {<<"ActionID">>, ActionID},
+                {<<"Message">>, <<"Authentication failed">>}
+            ],
+            {ok, {Payload, n}}
     end;
-handle_event(<<"Originate">>, Props) ->
+handle_event("challenge", Props) ->
+    Challenge = random:uniform(899999999) + 100000000,
+    ActionID = proplists:get_value(<<"ActionID">>, Props),
+    Payload = [
+        {<<"Asterisk Call Manager/1.1">>},
+        {<<"Response">>, <<"Success">>},
+        {<<"Challenge">>, Challenge},
+        {<<"ActionID">>, ActionID}
+    ],
+    {ok, Payload};
+handle_event("originate", Props) ->
     case proplists:get_value(<<"Channel">>, Props) of
         undefined ->
             {error, channel_not_specified};
         _ ->
             originate(Props)
-    end.
+    end;
+handle_event(undefined, Props) ->
+    lager:debug("AMI commander undefined action with props ~p", [Props]),
+    {error, no_action}.
     
 originate(Props) ->
     CCVs = [{<<"Account-ID">>, proplists:get_value(<<"Account">>, Props)}
