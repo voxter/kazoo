@@ -23,11 +23,11 @@ publish_events(Events, Socket) ->
 %% It looks like sometimes, Asterisk sends the messages broken up by newlines...  
 publish_event({Props, broken}, Socket) ->
     lists:foreach(fun(Part) ->
-        gen_tcp:send(Socket, format_prop(Part))
+        gen_tcp:send(Socket, blackhole_ami_util:format_prop(Part))
         end, Props),
     gen_tcp:send(Socket, <<"\r\n">>);
 publish_event({Props, _}, Socket) ->
-    gen_tcp:send(Socket, format_binary(Props)).
+    gen_tcp:send(Socket, blackhole_ami_util:format_binary(Props)).
 
 init(Socket) ->
     process_flag(trap_exit, true),

@@ -14,10 +14,6 @@
          ,code_change/3
         ]).
 
--record(state, {
-    socket
-}).
-
 -include("blackhole.hrl").
 -include_lib("rabbitmq_server/include/rabbit_framing.hrl").
 
@@ -26,6 +22,14 @@
 -define(QUEUE_NAME, <<>>).
 -define(QUEUE_OPTIONS, []).
 -define(CONSUME_OPTIONS, []).
+
+-define(HANDLER_MODULES, [
+    blackhole_ami_call,
+    blackhole_ami_acdc
+]).
+
+-record(state, {
+}).
 
 start_link(Socket) ->
     gen_listener:start_link({'local', ?MODULE}
@@ -37,38 +41,37 @@ start_link(Socket) ->
                             ,{'consume_options', ?CONSUME_OPTIONS} % optional to include
                             ], [Socket]).
 
+%% Event handlers for calls are registered in blackhole_bindings,
+%% mapped to blackhole_ami_call
 handle_amqp_event(EventJObj, Props, #'basic.deliver'{routing_key=RoutingKey}) ->
     handle_amqp_event(EventJObj, Props, RoutingKey);
 handle_amqp_event(EventJObj, _Props, <<_/binary>> = RoutingKey) ->
     %lager:debug("AMI: handling amqp event of type ~p (routing key ~s)", [wh_util:get_event_type(EventJObj), RoutingKey]),
     blackhole_bindings:map(RoutingKey, EventJObj).
     
+%% Possibly legacy handling code, may remove later
 handle_event(undefined, EventJObj) ->
     lager:debug("AMI: handling event ~p", [EventJObj]),
     %gen_tcp:send(Socket, io_lib:format("~p", [EventJObj])),
     ok.
-    %wh_util:put_callid(EventJObj),
-    %lager:debug("AMI: handle_event fired for ~s ~s", [bh_context:account_id(Context), bh_context:websocket_session_id(Context)]),
-    %blackhole_data_emitter:emit(bh_context:websocket_pid(Context), event_name(EventJObj), EventJObj).
 
-init([Socket]) ->
-    lager:debug("AMI: amqp sniffer init with socket"),
+init([]) ->
+    lager:debug("AMI: amqp sniffer init"),
     gen_listener:cast(?MODULE, register_bindings),
-    {ok, #state{socket=Socket}}.
+    {ok, #state{}}.
 
 handle_call(_Request, _From, State) ->
     lager:debug("AMI: unhandled call"),
     {reply, {error, not_implemented}, State}.
 
+%% Register bindings of handler modules for varying event types
 handle_cast(register_bindings, State) ->
-    blackhole_ami_translator:init(),
+    lists:foreach(fun(Module) ->
+        Module:init_bindings() end, ?HANDLER_MODULES),
     {noreply, State};
 handle_cast({add_call_binding, AccountId}, State) ->
     lager:debug("AMI: Registering for call bindings on account: ~p", [AccountId]),
     wh_hooks:register(AccountId),
-    {noreply, State};
-handle_cast({out, Message}, #state{socket=Socket}=State) ->
-    gen_tcp:send(Socket, Message),
     {noreply, State};
 handle_cast({gen_listener, {created_queue, _QueueName}}, State) ->
     {noreply, State};

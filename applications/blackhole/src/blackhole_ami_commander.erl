@@ -1,16 +1,11 @@
 -module(blackhole_ami_commander).
 
--export([login/1, handle/2, filter_empty/1]).
+-export([handle/2]).
 
 -include("blackhole.hrl").
 
 -define(AMI_DB, <<"ami">>).
     
-%% Essentially handles payload for start-of-connect auth
-%login(Payload) ->
-%    Parameters = parse_payload(Payload),
-%    handle_event(Parameters).
-
 %% Handle a payload sent as an AMI command
 handle(Payload, AccountId) ->
     Props = blackhole_ami_util:parse_payload(Payload),

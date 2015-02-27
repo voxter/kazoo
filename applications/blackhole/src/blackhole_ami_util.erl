@@ -15,6 +15,7 @@ parse_payload(Payload) ->
         [Prop] ++ Acc
         end, [], Lines).
     
+%% Eliminates trailing lines from client payload
 filter_empty(Parameters) ->
     lists:foldl(fun(Param, Acc) ->
         case Param of
@@ -24,6 +25,7 @@ filter_empty(Parameters) ->
                 [Param] ++ Acc
         end end, [], Parameters).
 
+%% Recursive proplist formatting for writes to socket
 format_prop({V}) ->
     <<(wh_util:to_binary(V))/binary, "\r\n">>;
 format_prop({K, V}) ->
