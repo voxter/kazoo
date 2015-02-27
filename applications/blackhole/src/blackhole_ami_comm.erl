@@ -17,8 +17,10 @@
 start_link(Socket) ->
     gen_server:start_link(?MODULE, Socket, []).
     
-publish_events(Events, Socket) ->
-    [publish_event(Event, Socket) || Event <- Events].
+publish_events([[_]|_]=Events, Socket) ->
+    [publish_event(Event, Socket) || Event <- Events];
+publish_events(Event, Socket) ->
+    publish_event(Event, Socket).
   
 %% It looks like sometimes, Asterisk sends the messages broken up by newlines...  
 publish_event({Props, broken}, Socket) ->

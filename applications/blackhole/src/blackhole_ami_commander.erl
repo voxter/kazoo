@@ -57,7 +57,7 @@ handle_event("challenge", Props) ->
         {<<"Challenge">>, Challenge},
         {<<"ActionID">>, ActionID}
     ],
-    {ok, Payload};
+    {ok, {Payload, n}};
 handle_event("originate", Props) ->
     case proplists:get_value(<<"Channel">>, Props) of
         undefined ->
@@ -65,8 +65,8 @@ handle_event("originate", Props) ->
         _ ->
             originate(Props)
     end;
-handle_event(undefined, Props) ->
-    lager:debug("AMI commander undefined action with props ~p", [Props]),
+handle_event(Event, Props) ->
+    lager:debug("AMI: commander no ~p action handler with props ~p", [Event, Props]),
     {error, no_action}.
     
 originate(Props) ->
