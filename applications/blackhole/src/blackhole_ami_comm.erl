@@ -17,18 +17,19 @@
 start_link(Socket) ->
     gen_server:start_link(?MODULE, Socket, []).
     
-publish_events([[_]|_]=Events, Socket) ->
-    [publish_event(Event, Socket) || Event <- Events];
-publish_events(Event, Socket) ->
-    publish_event(Event, Socket).
+publish_events({[Event|_]=Events, Mode}, Socket) when is_list(Event) ->
+    [publish_event(Event2, Mode, Socket) || Event2 <- Events];
+publish_events({Event, Mode}, Socket) ->
+    publish_event(Event, Mode, Socket).
   
 %% It looks like sometimes, Asterisk sends the messages broken up by newlines...  
-publish_event({Props, broken}, Socket) ->
+publish_event(Props, broken, Socket) ->
     lists:foreach(fun(Part) ->
         gen_tcp:send(Socket, blackhole_ami_util:format_prop(Part))
         end, Props),
     gen_tcp:send(Socket, <<"\r\n">>);
-publish_event({Props, _}, Socket) ->
+publish_event(Props, _, Socket) ->
+    lager:debug("AMI: publish ~p", [Props]),
     gen_tcp:send(Socket, blackhole_ami_util:format_binary(Props)).
 
 init(Socket) ->
