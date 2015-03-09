@@ -11,22 +11,26 @@
     accept_socket,
     account_id = <<>>,
     %% A collection of data packets that represent a single command
-    bundle = <<>>
+    bundle = <<>>,
+    originator_pid
 }).
  
 start_link(Socket) ->
     gen_server:start_link(?MODULE, Socket, []).
     
-publish_events(Events, Socket) ->
-    [publish_event(Event, Socket) || Event <- Events].
+publish_events({[Event|_]=Events, Mode}, Socket) when is_list(Event) ->
+    [publish_event(Event2, Mode, Socket) || Event2 <- Events];
+publish_events({Event, Mode}, Socket) ->
+    publish_event(Event, Mode, Socket).
   
 %% It looks like sometimes, Asterisk sends the messages broken up by newlines...  
-publish_event({Props, broken}, Socket) ->
+publish_event(Props, broken, Socket) ->
     lists:foreach(fun(Part) ->
         gen_tcp:send(Socket, blackhole_ami_util:format_prop(Part))
         end, Props),
     gen_tcp:send(Socket, <<"\r\n">>);
-publish_event({Props, _}, Socket) ->
+publish_event(Props, _, Socket) ->
+    %lager:debug("AMI: publish ~p", [Props]),
     gen_tcp:send(Socket, blackhole_ami_util:format_binary(Props)).
 
 init(Socket) ->
@@ -37,6 +41,8 @@ init(Socket) ->
     gen_server:cast(self(), accept),
     {ok, #state{socket=Socket}}.
 
+handle_call(account_id, _, #state{account_id=AcctId}=State) ->
+    {reply, AcctId, State};
 handle_call(Request, _From, State) ->
     lager:debug("AMI: unhandled call"),
     {stop, {unknown_call, Request}, State}.
@@ -57,6 +63,12 @@ handle_cast(accept, #state{socket=Socket}=State) ->
             lager:debug("AMI: accept exception"),
             {noreply, State}
     end;
+handle_cast({login, AccountId}, State) ->
+    {ok, OriginatorPid} = blackhole_ami_originator:start_link(),
+    {noreply, State#state{account_id=AccountId,originator_pid=OriginatorPid}};
+handle_cast({originator, Action, Props}, #state{originator_pid=OriginatorPid}=State) ->
+    gen_listener:cast(OriginatorPid, {Action, Props}),
+    {noreply, State};
 %% Synchronously publish AMI events to socket
 handle_cast({publish, Events}, #state{accept_socket=AcceptSocket}=State) ->
     publish_events(Events, AcceptSocket),
@@ -71,7 +83,6 @@ handle_info({tcp, _Socket, Data}, #state{bundle=Bundle,
     %% Received commands are buffered until a flush (data containing only \r\n)
     case list_to_binary(Data) of
         <<"\r\n">> ->
-            lager:debug("AMI: flush command ~p", [Bundle]),
             maybe_send_response(blackhole_ami_commander:handle(Bundle, AccountId)),
             {noreply, State#state{bundle = <<>>}};
         NewData ->

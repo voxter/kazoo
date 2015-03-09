@@ -2,7 +2,8 @@
 
 -include("blackhole.hrl").
 
--export([parse_payload/1, format_prop/1, format_binary/1]).
+-export([parse_payload/1, format_prop/1, format_binary/1, format_json_events/1, whapps_call/1,
+    endpoint_name/2, find_id_number/2]).
 
 %% AMI commands broken up by newlines
 parse_payload(Payload) ->
@@ -37,3 +38,84 @@ format_binary([KV|Rest]) ->
     <<Head/binary, Tail/binary>>;
 format_binary([]) ->
     <<"\r\n">>.
+
+%% Format a set of events for publishing to AMQP
+format_json_events(Events) ->
+    format_json_events(Events, []).
+
+format_json_events([], Acc) ->
+    Acc;
+format_json_events([{_K, _V}|_Other]=KVs, _Acc) ->
+    [{KVs}];
+format_json_events([Event|Events], Acc) ->
+    format_json_events(Events, Acc ++ [{Event}]).
+
+whapps_call(EventJObj) ->
+    Call = whapps_call:from_json(EventJObj),
+    CCVs = whapps_call:ccvs(Call),
+    Call2 = case wh_json:get_value(<<"Authorizing-ID">>, CCVs) of
+        undefined ->
+            Call;
+        AuthId ->
+            whapps_call:set_authorizing_id(AuthId, Call)
+    end,
+    case wh_json:get_value(<<"Account-ID">>, CCVs) of
+        undefined ->
+            Call2;
+        AccountId ->
+            AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
+            whapps_call:set_account_id(AccountId, whapps_call:set_account_db(AccountDb, Call2))
+    end.
+
+endpoint_name(AcctDb, Endpoint) ->
+    case wh_json:get_value(<<"pvt_type">>, Endpoint) of
+        <<"device">> ->
+            {ok, EndpointDevice} = couch_mgr:open_doc(AcctDb, wh_json:get_value(<<"_id">>, Endpoint)),
+            wh_json:get_value(<<"name">>, EndpointDevice);
+        _ ->
+            wh_json:get_value(<<"name">>, Endpoint)
+    end.
+
+find_id_number(Id, AccountDb) ->
+    {ok, Results} = couch_mgr:get_results(AccountDb, <<"callflows/crossbar_listing">>),
+    maybe_id_in_callflows(Id, Results, AccountDb).
+
+maybe_id_in_callflows(_, [], _) ->
+    {error, not_found};
+maybe_id_in_callflows(Id, [Result|Results], AccountDb) ->
+    CFId = wh_json:get_value(<<"id">>, Result),
+    case maybe_id_in_callflow(Id, CFId, AccountDb) of
+        false ->
+            maybe_id_in_callflows(Id, Results, AccountDb);
+        Number ->
+            {ok, Number}
+    end.
+
+maybe_id_in_callflow(Id, CFId, AccountDb) ->
+    {ok, CFDoc} = couch_mgr:open_doc(AccountDb, CFId),
+    case maybe_id_in_callflow(Id, wh_json:get_value(<<"flow">>, CFDoc)) of
+        false ->
+            false;
+        true ->
+            hd(wh_json:get_value(<<"numbers">>, CFDoc))
+    end.
+    
+maybe_id_in_callflow(Id, Flow) ->
+    Data = wh_json:get_value(<<"data">>, Flow),
+    case wh_json:get_value(<<"id">>, Data) of
+        Id ->
+            true;
+        _ ->
+            Children = wh_json:get_value(<<"children">>, Flow),
+            case wh_json:get_value(<<"_">>, Children) of
+                undefined ->
+                    false;
+                SubFlow ->
+                    maybe_id_in_callflow(Id, SubFlow)
+            end
+    end.
+
+
+
+
+
