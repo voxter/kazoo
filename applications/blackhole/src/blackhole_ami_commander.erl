@@ -85,6 +85,33 @@ handle_event("ping", _Props) ->
        {<<"Timestamp">>, Timestamp}
    ],
    {ok, {Payload, n}};
+
+%% Handle AMI Status action - INCOMPLETE
+% handle_event("status", Props) ->
+%     AccountId = proplists:get_value(<<"Account">>, Props),
+%     AllCalls = ecallmgr_maintenance:channel_details(),
+%     FilteredCalls = lists:filter(fun(Call) ->  
+%         case proplists:get_value(<<"account_id">>, Call) of
+%             AccountId -> true;
+%             _ -> false
+%         end
+%     end, AllCalls),
+%     FormattedCalls = lists:foldl(fun(Call, List) -> 
+%         case {proplists:is_defined(<<"other_leg">>), proplists:is_defined(<<"username">>)} of
+%             {true, true} -> List ++ ami_channel_status(Call, bridged_extension);
+%             {true, false} -> List ++ ami_channel_status(Call, bridged);
+%             {false, true} -> List ++ ami_channel_status(Call, extension);
+%             {_, _} -> lager:debug("AMI: undefined channel status format for call ~p", [Call]),
+%         end
+%     end, [], FilteredCalls),
+%     Payload = [[
+%         {<<"Response">>, <<"Success">>},
+%         {<<"Message">>, <<"Channel status will follow">>}
+%         ]] ++ FormattedCalls ++ [[
+%         {<<"Event">>, <<"StatusComplete">>},
+%         {<<"Items">>, length(FormattedCalls)}
+%     ]],
+%     {ok, {Payload, n}};
 handle_event("queuestatus", Props) ->
     Payload = [[
         {<<"Response">>, <<"Success">>},
@@ -291,7 +318,7 @@ agent_status(AgentId, AcctId, QueueDetails) ->
     AgentListener = acdc_agent_sup:listener(acdc_agents_sup:find_agent_supervisor(AcctId, AgentId)),
     LastCall = gen_listener:call(AgentListener, last_connect),
     
-    %% Agent status payload
+	%% Agent status payload
     [
         {<<"Event">>, <<"QueueMember">>},
         {<<"Queue">>, proplists:get_value(<<"QueueNumber">>, QueueDetails)},
@@ -316,3 +343,42 @@ translate_status(Status) ->
         _ ->
             5
     end.
+
+%% Kazoo chan. status to AMI status translator - INCOMPLETE
+% ami_channel_status(Call, Schema) ->
+%     AMI_Status_Header = [
+%         {<<"Event">>, <<"Status">>},
+%         {<<"Priviledge">>, <<"Call">>}
+%     ],
+%     AMI_Status_Body = case Schema of
+%         bridged_extension -> [
+%             {<<"Channel">>, <<"SIP/", proplists:get_value(<<"username">>, Call)/binary, "@", proplists:get_value(<<"context">>, Call)/binary, ";1">>}
+%             {<<"CallerIDNum">>, proplists:get_value(<<"destination">>, Call)},
+%             {<<"CallerIDName">>, proplists:get_value(<<"account_id">>, Call)},
+%             {<<"ConnectedLineNum">>, proplists:get_value(<<"account_id">>, Call)},
+%             {<<"ConnectedLineName">>, proplists:get_value(<<"account_id">>, Call)},
+%             {<<"Accountcode">>, proplists:get_value(<<"account_id">>, Call)},
+%             {<<"ChannelState">>, <<"6">>}, % Numeric channel state
+%             {<<"ChannelStateDesc">>, <<"Up">>}, % Check for "answered": true/false
+%             {<<"Context">>, proplists:get_value(<<"context">>, Call)},
+%             {<<"Extension">>, proplists:get_value(<<"username">>, Call)},
+%             {<<"Priority">>, <<"12">>},
+%             {<<"Seconds">>, proplists:get_value(<<"elapsed_s">>, Call)},
+%             {<<"BridgedChannel">>, proplists:get_value(<<"other_leg">>, Call)},
+%             {<<"BridgedUniqueid">>, proplists:get_value(<<"other_leg">>, Call)}
+%         ];
+%         extension -> [
+%         [
+%             {<<"Accountcode">>, proplists:get_value(<<"account_id">>, Call)}
+%         ];
+%         bridged -> [
+%             {<<"Account">>, proplists:get_value(<<"account_id">>, Call)},
+%             {<<"BridgedChannel">>, proplists:get_value(<<"uuid">>, Call)},
+%             {<<"BridgedUniqueid">>, proplists:get_value(<<"other_leg">>, Call)}
+%         ];
+%         _ -> []
+%     end,
+%     AMI_Status_Footer = [
+%         {<<"Uniqueid">>, proplists:get_value(<<"uuid">>, Call)}
+%     ],
+%     AMI_Status_Header ++ AMI_Status_Body ++ AMI_Status_Footer.
