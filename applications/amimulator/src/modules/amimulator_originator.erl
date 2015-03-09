@@ -1,4 +1,4 @@
--module(blackhole_ami_originator).
+-module(amimulator_originator).
 -behaviour(gen_listener).
 
 -export([start_link/0]).
@@ -11,7 +11,7 @@
          ,code_change/3
         ]).
 
--include("blackhole.hrl").
+-include("../amimulator.hrl").
 
 -record(state, {
 }).

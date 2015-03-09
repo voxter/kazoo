@@ -1,13 +1,13 @@
--module(blackhole_ami_comm).
+-module(amimulator_comm).
 -behaviour(gen_server).
 
 -export([start_link/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
          
--include("blackhole.hrl").
+-include("amimulator.hrl").
          
 -record(state, {
-    socket,
+    listen_socket,
     accept_socket,
     account_id = <<>>,
     %% A collection of data packets that represent a single command
@@ -26,12 +26,12 @@ publish_events({Event, Mode}, Socket) ->
 %% It looks like sometimes, Asterisk sends the messages broken up by newlines...  
 publish_event(Props, broken, Socket) ->
     lists:foreach(fun(Part) ->
-        gen_tcp:send(Socket, blackhole_ami_util:format_prop(Part))
+        gen_tcp:send(Socket, amimulator_util:format_prop(Part))
         end, Props),
     gen_tcp:send(Socket, <<"\r\n">>);
 publish_event(Props, _, Socket) ->
     %lager:debug("AMI: publish ~p", [Props]),
-    gen_tcp:send(Socket, blackhole_ami_util:format_binary(Props)).
+    gen_tcp:send(Socket, amimulator_util:format_binary(Props)).
 
 init(Socket) ->
     process_flag(trap_exit, true),
@@ -39,28 +39,28 @@ init(Socket) ->
     <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
     random:seed({A,B,C}),
     gen_server:cast(self(), accept),
-    {ok, #state{socket=Socket}}.
+    {ok, #state{listen_socket=Socket}}.
 
 handle_call(account_id, _, #state{account_id=AcctId}=State) ->
     {reply, AcctId, State};
 handle_call(Request, _From, State) ->
-    lager:debug("AMI: unhandled call"),
+    lager:debug("unhandled call"),
     {stop, {unknown_call, Request}, State}.
 
 %% Start the listener waiting for socket accept
-handle_cast(accept, #state{socket=Socket}=State) ->
+handle_cast(accept, #state{listen_socket=Socket}=State) ->
     case gen_tcp:accept(Socket) of
         {ok, AcceptSocket} ->
             %% Add another listener to the pool to keep up responsiveness
-            blackhole_ami_sup:start_ami_listener(),
-            lager:debug("AMI: Client accepted for socket"),
+            amimulator_sup:start_listener(),
+            lager:debug("Client accepted for socket"),
             
             %% Need to wait for login now
             {noreply, State#state{accept_socket=AcceptSocket}};
         {error, closed} ->
             {stop, normal, State};
         {_, _} ->
-            lager:debug("AMI: accept exception"),
+            lager:debug("accept exception"),
             {noreply, State}
     end;
 handle_cast({login, AccountId}, State) ->
@@ -74,7 +74,7 @@ handle_cast({publish, Events}, #state{accept_socket=AcceptSocket}=State) ->
     publish_events(Events, AcceptSocket),
     {noreply, State};
 handle_cast(_Event, State) ->
-    lager:debug("AMI: unhandled cast"),
+    lager:debug("unhandled cast"),
     {noreply, State}.
     
 %% Need to perform a login prior to sending/receiving anything
@@ -83,19 +83,19 @@ handle_info({tcp, _Socket, Data}, #state{bundle=Bundle,
     %% Received commands are buffered until a flush (data containing only \r\n)
     case list_to_binary(Data) of
         <<"\r\n">> ->
-            maybe_send_response(blackhole_ami_commander:handle(Bundle, AccountId)),
+            maybe_send_response(amimulator_commander:handle(Bundle, AccountId)),
             {noreply, State#state{bundle = <<>>}};
         NewData ->
             {noreply, State#state{bundle = <<Bundle/binary, NewData/binary>>}}
     end;
 handle_info({tcp_closed, _Socket}, State) ->
-    lager:debug("AMI: Disconnected client"),
+    lager:debug("Disconnected client"),
     {stop, normal, State};
 handle_info({tcp_error, _Socket, _}, State) ->
-    lager:debug("AMI: tcp_error"),
+    lager:debug("tcp_error"),
     {stop, normal, State};
 handle_info(Info, State) ->
-    lager:debug("AMI: unexpected info: ~p~n", [Info]),
+    lager:debug("unexpected info: ~p~n", [Info]),
     {noreply, State}.
     
 maybe_send_response(HandleResp) ->
@@ -108,7 +108,7 @@ maybe_send_response(HandleResp) ->
 
 terminate(_Reason, #state{accept_socket=AcceptSocket}) ->
     % TODO: actually close these accept sockets on restart
-    lager:debug("AMI: terminating"),
+    lager:debug("terminating"),
     case AcceptSocket of
         undefined ->
             ok;

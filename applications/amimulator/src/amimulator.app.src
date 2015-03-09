@@ -1,0 +1,12 @@
+{application, amimulator,
+ [
+  {description, "AMI event/action translator for Kazoo"},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, {amimulator_app, []}},
+  {env, []}
+ ]}.

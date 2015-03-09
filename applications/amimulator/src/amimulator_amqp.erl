@@ -1,4 +1,4 @@
--module(blackhole_ami_amqp).
+-module(amimulator_amqp).
 
 -behaviour(gen_listener).
 
@@ -15,15 +15,15 @@
          ,code_change/3
         ]).
 
--include("blackhole.hrl").
+-include("amimulator.hrl").
 -include_lib("rabbitmq_server/include/rabbit_framing.hrl").
 
 -define(BINDINGS, [{'self', []}]).
--define(RESPONDERS, [{{blackhole_ami_amqp, handle_amqp_event}
-                      ,[{<<"blackhole-ami">>, <<"*">>}]
+-define(RESPONDERS, [{{amimulator_amqp, handle_amqp_event}
+                      ,[{<<"amimulator">>, <<"*">>}]
                      }
                     ]).
--define(QUEUE_NAME, <<"blackhole-ami-test">>).
+-define(QUEUE_NAME, <<"amimulator-queue">>).
 -define(QUEUE_OPTIONS, []).
 -define(CONSUME_OPTIONS, []).
 
@@ -31,8 +31,8 @@
 -define(TYPE_AMI, <<"topic">>).
 
 -define(HANDLER_MODULES, [
-    blackhole_ami_call,
-    blackhole_ami_acdc
+    amimulator_call,
+    amimulator_acdc
 ]).
 
 -record(state, {
@@ -57,7 +57,7 @@ handle_amqp_event(EventJObj, Props, #'basic.deliver'{routing_key=_RoutingKey}) -
                 Acc ++ [Event]
             end, [], Events)
     end,
-    lager:debug("AMI published on AMQP ~p", [ParsedEvents]),
+    %lager:debug("AMI published on AMQP ~p", [ParsedEvents]),
     case wh_json:get_value(<<"RequestType">>, EventJObj) of
         <<"publish">> ->
             gen_server:cast(props:get_value(<<"comm_pid">>, Props), {publish, {ParsedEvents, n}});
@@ -69,9 +69,9 @@ publish_amqp_event({publish, Events}=_Req) ->
     {ok, Payload} = wh_api:prepare_api_payload(
         [{<<"RequestType">>, <<"publish">>},
          {<<"Events">>, blackhole_ami_util:format_json_events(Events)} |
-         wh_api:default_headers(<<"blackhole-ami">>, <<"events">>, ?APP_NAME, ?APP_VERSION)],
+         wh_api:default_headers(<<"amimulator">>, <<"events">>, ?APP_NAME, ?APP_VERSION)],
          [], fun amqp_event/1),
-    amqp_util:basic_publish(?EXCHANGE_AMI, <<"blackhole-ami.events.test">>, Payload).
+    amqp_util:basic_publish(?EXCHANGE_AMI, <<"amimulator.events.test">>, Payload).
     
 -define(OPTIONAL_HEADERS, [<<"RequestType">>, <<"Events">>]).
 amqp_event(Prop) when is_list(Prop) ->
@@ -81,7 +81,7 @@ init([Pid]) ->
     lager:debug("AMI: AMQP listener started with pid ~p", [self()]),
     amqp_util:new_exchange(?EXCHANGE_AMI, ?TYPE_AMI),
     amqp_util:new_queue(?QUEUE_NAME),
-    amqp_util:bind_q_to_exchange(?QUEUE_NAME, <<"blackhole-ami.events.test">>, ?EXCHANGE_AMI),
+    amqp_util:bind_q_to_exchange(?QUEUE_NAME, <<"amimulator.events.test">>, ?EXCHANGE_AMI),
     gen_listener:cast(self(), register_bindings),
     {ok, #state{comm_pid=Pid}}.
 

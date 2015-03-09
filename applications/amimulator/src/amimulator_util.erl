@@ -1,6 +1,6 @@
--module(blackhole_ami_util).
+-module(amimulator_util).
 
--include("blackhole.hrl").
+-include("amimulator.hrl").
 
 -export([parse_payload/1, format_prop/1, format_binary/1, format_json_events/1, whapps_call/1,
     endpoint_name/2, find_id_number/2]).

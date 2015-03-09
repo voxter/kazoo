@@ -1,15 +1,15 @@
--module(blackhole_ami_commander).
+-module(amimulator_commander).
 
 -export([handle/2]).
 -export([queue_stats/2]).
 
--include("blackhole.hrl").
+-include("amimulator.hrl").
 
 -define(AMI_DB, <<"ami">>).
     
 %% Handle a payload sent as an AMI command
 handle(Payload, AccountId) ->
-    Props = blackhole_ami_util:parse_payload(Payload),
+    Props = amimulator_util:parse_payload(Payload),
     handle_event(update_props(Props, AccountId)).
 
 update_props(Props, AccountId) ->
@@ -42,9 +42,9 @@ handle_event("login", Props) ->
     case Secret of
         undefined ->
             %% Successful login
-            lager:debug("AMI: successful login, starting event listener"),
+            lager:debug("successful login, starting event listener"),
             gen_server:cast(self(), {login, wh_json:get_value(<<"account_id">>, AMIDoc)}),
-            blackhole_ami_amqp:start_link(self()),
+            amimulator_amqp:start_link(self()),
             
             Payload = [[
                 {<<"Response">>, <<"Success">>},
@@ -85,7 +85,6 @@ handle_event("ping", _Props) ->
        {<<"Timestamp">>, Timestamp}
    ],
    {ok, {Payload, n}};
-
 %% Handle AMI Status action - INCOMPLETE
 % handle_event("status", Props) ->
 %     AccountId = proplists:get_value(<<"Account">>, Props),
@@ -185,7 +184,7 @@ handle_event("originate", Props) ->
             gen_server:cast(self(), {originator, "originate", Props})
     end;
 handle_event(Event, _Props) ->
-    lager:debug("AMI: no handler defined for event ~p", [Event]),
+    lager:debug("no handler defined for event ~p", [Event]),
     {error, no_action}.
     
 queues_status(Props) ->
@@ -233,7 +232,7 @@ format_queue_status(QueueDetails, AgentsStatus) ->
 queue_details(QueueId, AcctId) ->
     AcctDb = wh_util:format_account_id(AcctId, encoded),
     {ok, QueueDoc} = couch_mgr:open_doc(AcctDb, QueueId),
-    {ok, QueueNumber} = blackhole_ami_util:find_id_number(QueueId, AcctDb),
+    {ok, QueueNumber} = amimulator_util:find_id_number(QueueId, AcctDb),
     [
         {<<"QueueNumber">>, QueueNumber},
         {<<"Queue">>, wh_json:get_value(<<"name">>, QueueDoc)},
@@ -316,9 +315,10 @@ agent_status(AgentId, AcctId, QueueDetails) ->
     end,
     
     AgentListener = acdc_agent_sup:listener(acdc_agents_sup:find_agent_supervisor(AcctId, AgentId)),
-    LastCall = gen_listener:call(AgentListener, last_connect),
+    {MegaSecs, Secs, MicroSecs} = gen_listener:call(AgentListener, last_connect),
+    LastCall = MegaSecs * 1000000 + Secs + MicroSecs / 1000000,
     
-	%% Agent status payload
+    %% Agent status payload
     [
         {<<"Event">>, <<"QueueMember">>},
         {<<"Queue">>, proplists:get_value(<<"QueueNumber">>, QueueDetails)},

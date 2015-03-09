@@ -35,7 +35,7 @@
 %%--------------------------------------------------------------------
 -spec start_link() -> startlink_ret().
 start_link() ->
-    _Dispatch = cowboy_router:compile([
+    Dispatch = cowboy_router:compile([
                                       {'_', [{"/socket.io/1/[...]"
                                              ,'socketio_handler'
                                              ,[socketio_session:configure([{'heartbeat', 5000}
@@ -47,13 +47,9 @@ start_link() ->
                                             ]
                                       }
                                      ]),
-    _Port = whapps_config:get_integer(<<"blackhole">>, <<"port">>, 5555),
-    %{'ok', _} = cowboy:start_http('socketio_http_listener', 100, [{'port', Port}],
-    %                              [{'env', [{'dispatch', Dispatch}]}]),
-    %Ret = supervisor:start_link({'local', ?MODULE}, ?MODULE, []),
-    
-    % Spawn separate server for operating AMI stream
-    supervisor:start_link(?MODULE, ami).
+    {'ok', _} = cowboy:start_http('socketio_http_listener', 100, [{'port', Port}],
+                                  [{'env', [{'dispatch', Dispatch}]}]),
+    supervisor:start_link({'local', ?MODULE}, ?MODULE, []).
 
 %% ===================================================================
 %% Supervisor callbacks
@@ -68,19 +64,6 @@ start_link() ->
 %% specifications.
 %% @end
 %%--------------------------------------------------------------------
-init(ami) ->
-    {'ok', {
-        {one_for_one, 1, 60}, [{
-            blackhole_ami_serv, {
-                blackhole_ami_serv, start_link, []
-            },
-            permanent,
-            10000,
-            worker,
-            [blackhole_ami_serv]
-        }]
-    }};
-    
 init([]) ->
     lager:debug("Loading blackhole children"),
     RestartStrategy = 'one_for_one',

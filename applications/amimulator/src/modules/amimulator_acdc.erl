@@ -1,8 +1,8 @@
--module(blackhole_ami_acdc).
+-module(amimulator_acdc).
 
 -export([init_bindings/1, handle_event/2]).
 
--include("blackhole.hrl").
+-include("../amimulator.hrl").
 
 init_bindings(CommPid) ->
     AccountId = gen_server:call(CommPid, account_id),
@@ -36,7 +36,7 @@ init_queue_bindings(QueueSup) ->
     Manager = acdc_queue_sup:manager(QueueSup),
     gen_listener:add_responder(
         Manager,
-        {blackhole_ami_acdc, handle_event},
+        {amimulator_acdc, handle_event},
         [
             {<<"member">>, <<"call">>},
             {<<"member">>, <<"call_cancel">>}
@@ -57,7 +57,7 @@ handle_specific_event(<<"call">>, EventJObj) ->
     CallerIdNum = wh_json:get_value(<<"Caller-ID-Number">>, EventData),
     CallerIdName = wh_json:get_value(<<"Caller-ID-Name">>, EventData),
 
-    Call = blackhole_ami_util:whapps_call(EventData),
+    Call = amimulator_util:whapps_call(EventData),
     Payload = case cf_endpoint:get(Call) of
         {error, _E} ->
             [
@@ -74,7 +74,7 @@ handle_specific_event(<<"call">>, EventJObj) ->
                 {<<"Uniqueid">>, CallId}
             ];
         {ok, Endpoint} ->
-            EndpointName = blackhole_ami_util:endpoint_name(whapps_call:account_db(Call), Endpoint),
+            EndpointName = amimulator_util:endpoint_name(whapps_call:account_db(Call), Endpoint),
             [
                 {<<"Event">>, <<"Join">>},
                 {<<"Privilege">>, <<"call,all">>},
@@ -89,9 +89,9 @@ handle_specific_event(<<"call">>, EventJObj) ->
                 {<<"Uniqueid">>, CallId}
             ]
     end,
-    blackhole_ami_amqp:publish_amqp_event({publish, Payload});
+    amimulator_amqp:publish_amqp_event({publish, Payload});
 handle_specific_event(<<"call_cancel">>, EventJObj) ->
-    %lager:debug("AMI: member call cancel event ~p", [EventJObj]),
+    lager:debug("AMI: member call cancel event ~p", [EventJObj]),
     CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
     ToUser = wh_json:get_value(<<"To-User">>, EventJObj),
 
@@ -112,7 +112,7 @@ handle_specific_event(<<"call_cancel">>, EventJObj) ->
         {<<"Position">>, 1},
         {<<"Uniqueid">>, CallId}
     ]],
-    blackhole_ami_amqp:publish_amqp_event({publish, Payload});
+    amimulator_amqp:publish_amqp_event({publish, Payload});
 handle_specific_event(<<"connect_req">>, EventJObj) ->
     AgentChannelId = wh_json:get_value(<<"Call-ID">>, EventJObj),
     %CallerId = wh_json:get_value(<<"Caller-ID-Number">>, EventJObj),
@@ -130,7 +130,7 @@ handle_specific_event(<<"connect_req">>, EventJObj) ->
         "\nPriority: ",
         "\n\n">>,
     
-    gen_listener:cast(blackhole_ami_amqp, {out, Payload});
+    gen_listener:cast(amimulator_amqp, {out, Payload});
 handle_specific_event(<<"login">>, _EventJObj) ->
 %
 %

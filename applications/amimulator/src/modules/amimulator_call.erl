@@ -1,8 +1,8 @@
--module(blackhole_ami_call).
+-module(amimulator_call).
 
 -export([init_bindings/1, handle_event/1, handle_event/2]).
 
--include("blackhole.hrl").
+-include("../amimulator.hrl").
 
 -define(STATUS_AVAILABLE, <<"0">>).
 -define(STATUS_RING, <<"4">>).
@@ -28,15 +28,9 @@ init_bindings(_CommPid) ->
         ?CALL_BINDING(<<"DTMF">>)
     ),
     
-    % TODO: CHANNEL_EXECUTE
-    blackhole_bindings:bind(<<"call.CHANNEL_CREATE.*">>, ?MODULE, handle_event),
-    blackhole_bindings:bind(<<"call.CHANNEL_ANSWER.*">>, ?MODULE, handle_event),
-    blackhole_bindings:bind(<<"call.CHANNEL_DESTROY.*">>, ?MODULE, handle_event),
-    blackhole_bindings:bind(<<"call.DTMF.*">>, ?MODULE, handle_event),
-    
     gen_listener:add_responder(
         wh_hooks_listener,
-        {'blackhole_ami_call', 'handle_event'},
+        {'amimulator_call', 'handle_event'},
         [{<<"call_event">>, <<"*">>}]
     ).
 
@@ -109,7 +103,7 @@ handle_specific_event(<<"CHANNEL_DESTROY">>, EventJObj) ->
                 {<<"Cause-txt">>, CauseText}
             ],
 
-            blackhole_ami_amqp:publish_amqp_event({publish, Payload})
+            amimulator_amqp:publish_amqp_event({publish, Payload})
     end;
     
 handle_specific_event(<<"DTMF">>, EventJObj) ->
@@ -128,7 +122,7 @@ handle_specific_event(<<"DTMF">>, EventJObj) ->
     ],
     % TODO: Also need to do this with begin/end reversed
     
-    blackhole_ami_amqp:publish_amqp_event({publish, Payload});
+    amimulator_amqp:publish_amqp_event({publish, Payload});
     
 handle_specific_event(EventName, _EventJObj) ->
     lager:debug("AMI: unhandled call event ~p", [EventName]).
@@ -183,7 +177,7 @@ new_channel(EventJObj) ->
         _ ->
             lager:debug("AMI: unexpected Call-Direction in new channel")
     end,
-    blackhole_ami_amqp:publish_amqp_event({publish, Payload}).
+    amimulator_amqp:publish_amqp_event({publish, Payload}).
 
 ringing_state(EventJObj) ->
     %lager:debug("AMI: ringing ~p", [EventJObj]),
@@ -230,7 +224,7 @@ ringing_state(EventJObj) ->
         _ ->
             lager:debug("AMI: unexpected Call-Direction in new channel")
     end,
-    blackhole_ami_amqp:publish_amqp_event({publish, Payload}).
+    amimulator_amqp:publish_amqp_event({publish, Payload}).
 
 busy_state(EventJObj) ->
     lager:debug("AMI: busy state ~p", [EventJObj]),
@@ -259,7 +253,7 @@ busy_state(EventJObj) ->
         {<<"ConnectedLineName">>, <<"">>},
         {<<"Uniqueid">>, Channel}
     ],
-    blackhole_ami_amqp:publish_amqp_event({publish, Payload}).
+    amimulator_amqp:publish_amqp_event({publish, Payload}).
     
 extension_status_ringing(_EventJObj) ->
     Payload = [
@@ -274,4 +268,4 @@ extension_status_ringing(_EventJObj) ->
         {<<"Status">>, ?STATUS_RINGING}
     ],
     
-    blackhole_ami_amqp:publish_amqp_event({publish, Payload}).
+    amimulator_amqp:publish_amqp_event({publish, Payload}).
