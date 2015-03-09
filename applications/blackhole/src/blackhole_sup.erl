@@ -47,6 +47,7 @@ start_link() ->
                                             ]
                                       }
                                      ]),
+    Port = whapps_config:get_integer(<<"blackhole">>, <<"port">>, 5555),
     {'ok', _} = cowboy:start_http('socketio_http_listener', 100, [{'port', Port}],
                                   [{'env', [{'dispatch', Dispatch}]}]),
     supervisor:start_link({'local', ?MODULE}, ?MODULE, []).
@@ -64,8 +65,8 @@ start_link() ->
 %% specifications.
 %% @end
 %%--------------------------------------------------------------------
+-spec init([]) -> sup_init_ret().
 init([]) ->
-    lager:debug("Loading blackhole children"),
     RestartStrategy = 'one_for_one',
     MaxRestarts = 5,
     MaxSecondsBetweenRestarts = 10,
