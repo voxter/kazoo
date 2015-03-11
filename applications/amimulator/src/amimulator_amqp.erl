@@ -68,7 +68,7 @@ handle_amqp_event(EventJObj, Props, #'basic.deliver'{routing_key=_RoutingKey}) -
 publish_amqp_event({publish, Events}=_Req) ->
     {ok, Payload} = wh_api:prepare_api_payload(
         [{<<"RequestType">>, <<"publish">>},
-         {<<"Events">>, blackhole_ami_util:format_json_events(Events)} |
+         {<<"Events">>, amimulator_util:format_json_events(Events)} |
          wh_api:default_headers(<<"amimulator">>, <<"events">>, ?APP_NAME, ?APP_VERSION)],
          [], fun amqp_event/1),
     amqp_util:basic_publish(?EXCHANGE_AMI, <<"amimulator.events.test">>, Payload).
@@ -102,8 +102,11 @@ handle_cast(_Msg, State) ->
     lager:debug("AMI: unhandled cast"),
     {noreply, State}.
 
+handle_info(?HOOK_EVT(_AccountId, _EventType, JObj), State) ->
+    spawn(amimulator_call, 'handle_event', [JObj]),
+    {noreply, State};
 handle_info(_Info, State) ->
-    lager:debug("AMI: unhandled info"),
+    lager:debug("unhandled info"),
     {noreply, State}.
     
 handle_event(_JObj, #state{comm_pid=Pid}) ->

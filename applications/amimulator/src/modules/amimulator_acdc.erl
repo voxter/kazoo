@@ -1,6 +1,6 @@
 -module(amimulator_acdc).
 
--export([init_bindings/1, handle_event/2]).
+-export([init_bindings/1, handle_event/2, handle_specific_event/2]).
 
 -include("../amimulator.hrl").
 
@@ -15,29 +15,31 @@ init_bindings(CommPid) ->
     ok.
 
 init_queue_bindings(QueueSup) ->
-    Manager = acdc_queue_sup:manager(QueueSup),
-    gen_listener:add_responder(
-        Manager,
-        {amimulator_acdc, handle_event},
-        [
-            {<<"member">>, <<"call">>},
-            {<<"member">>, <<"call_cancel">>}
-        ]
-    ).
+    _Manager = acdc_queue_sup:manager(QueueSup),
+    ok.
+    %gen_listener:add_responder(
+    %    Manager,
+    %    {amimulator_acdc, handle_event},
+    %    [
+    %        {<<"member">>, <<"call">>},
+    %        {<<"member">>, <<"call_cancel">>}
+    %    ]
+    %).
 
 init_agent_bindings() ->
-    gen_listener:add_responder(
-        acdc_agent_manager,
-        {amimulator_acdc, handle_event},
-        [
-            {<<"agent">>, <<"login">>},
-            {<<"agent">>, <<"logout">>},
-            {<<"agent">>, <<"queue_login">>},
-            {<<"agent">>, <<"queue_logout">>}
-            %{<<"agent">>, <<"pause">>},
-            %{<<"agent">>, <<"resume">>}
-        ]
-    ).
+    ok.
+    %gen_listener:add_responder(
+    %    acdc_agent_manager,
+    %    {amimulator_acdc, handle_event},
+    %    [
+    %        {<<"agent">>, <<"login">>},
+    %        {<<"agent">>, <<"logout">>},
+    %        {<<"agent">>, <<"queue_login">>},
+    %        {<<"agent">>, <<"queue_logout">>}
+    %        %{<<"agent">>, <<"pause">>},
+    %        %{<<"agent">>, <<"resume">>}
+    %    ]
+    %).
 
 handle_event(EventJObj, _Props) ->
     %lager:debug("AMI: got event ~p", [EventJObj]),

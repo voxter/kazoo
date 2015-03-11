@@ -3,8 +3,9 @@
 -include("amimulator.hrl").
 
 -export([parse_payload/1, format_prop/1, format_binary/1, format_json_events/1, whapps_call/1,
-    maybe_get_exten/1, maybe_get_endpoint_name/1, endpoint_name/2, find_id_number/2]).
--export([queue_for_number/2]).
+    maybe_get_exten/1, maybe_get_endpoint_name/1, endpoint_name/2, maybe_get_cid_name/1,
+    find_id_number/2, queue_for_number/2,
+    filter_registered_events/4]).
 
 %% AMI commands broken up by newlines
 parse_payload(Payload) ->
@@ -108,9 +109,10 @@ ecallmgr_rpc(Mod, Fun, Params) ->
 
 maybe_get_exten(Call) ->
     case cf_endpoint:get(Call) of
+        %% An external endpoint
         {error, _E} ->
-            % TODO: find out proper value for this EndpointName
-            <<"external">>;
+            whapps_call:callee_id_name(Call);
+        %% Some internal extension
         {ok, Endpoint} ->
             endpoint_name(whapps_call:account_db(Call), Endpoint)
     end.
@@ -126,6 +128,27 @@ endpoint_name(AcctDb, Endpoint) ->
             wh_json:get_value(<<"name">>, EndpointDevice);
         _ ->
             wh_json:get_value(<<"name">>, Endpoint)
+    end.
+
+maybe_get_cid_name(Call) ->
+    case cf_endpoint:get(Call) of
+        %% An external endpoint
+        {error, _E} ->
+            whapps_call:callee_id_name(Call);
+        %% Some internal extension
+        {ok, Endpoint} ->
+            cid_name(whapps_call:account_db(Call), Endpoint)
+    end.
+
+cid_name(AcctDb, Endpoint) ->
+    case wh_json:get_value(<<"owner_id">>, Endpoint) of
+        undefined ->
+            wh_json:get_value(<<"name">>, Endpoint);
+        OwnerId ->
+            {ok, Owner} = couch_mgr:open_doc(AcctDb, OwnerId),
+            <<(wh_json:get_value(<<"first_name">>, Owner))/binary, " ",
+                (wh_json:get_value(<<"last_name">>, Owner))/binary, " <",
+                (wh_json:get_value(<<"username">>, Owner))/binary, ">">>
     end.
 
 find_id_number(Id, AccountDb) ->
@@ -154,17 +177,23 @@ maybe_id_in_callflow(Id, CFId, AccountDb) ->
     
 maybe_id_in_callflow(Id, Flow) ->
     Data = wh_json:get_value(<<"data">>, Flow),
-    case wh_json:get_value(<<"id">>, Data) of
-        Id ->
+    %% Skipping queue login and queue logout possibilities
+    case {wh_json:get_value(<<"id">>, Data), wh_json:get_value(<<"module">>, Flow)} of
+        {_, <<"acdc_queue">>} ->
+            recurse_to_child_callflow(Id, Flow);
+        {Id, _} ->
             true;
         _ ->
-            Children = wh_json:get_value(<<"children">>, Flow),
-            case wh_json:get_value(<<"_">>, Children) of
-                undefined ->
-                    false;
-                SubFlow ->
-                    maybe_id_in_callflow(Id, SubFlow)
-            end
+            recurse_to_child_callflow(Id, Flow)
+    end.
+
+recurse_to_child_callflow(Id, Flow) ->
+    Children = wh_json:get_value(<<"children">>, Flow),
+    case wh_json:get_value(<<"_">>, Children) of
+        undefined ->
+            false;
+        SubFlow ->
+            maybe_id_in_callflow(Id, SubFlow)
     end.
 
 queue_for_number(Number, AccountDb) ->
@@ -194,10 +223,22 @@ maybe_queue_in_flow(Flow) ->
             end
     end.
 
-
-
-
-
-
-
-
+%% Ensures the message belongs to the current listener process
+%% and publishes it to the Mod:handle_specific_event/2 function
+%% in the Mod supplied
+filter_registered_events(EventName, EventJObj, CommPid, Mod) ->
+    AccountId = gen_server:call(CommPid, account_id),
+    case wh_json:get_value(
+        [<<"Custom-Channel-Vars">>, <<"Account-ID">>],
+        EventJObj
+    ) of
+        %% Maybe sometimes, the events come in via different formats
+        undefined ->
+            lager:debug("May need to add additional account id check for event! ~p", [EventJObj]);
+        %% Event is destined to be published!
+        AccountId ->
+            Mod:handle_specific_event(EventName, EventJObj);
+        %% Event does not belong to this listener
+        _ ->
+            ok
+    end.

@@ -247,16 +247,24 @@ queues_status(Props) ->
     AcctId = proplists:get_value(<<"Account">>, Props),
     AcctSupers = acdc_queues_sup:find_acct_supervisors(AcctId),
     lists:foldl(fun(Super, Results) ->
-        queue_status(Super) ++ Results
-        end, [], AcctSupers).
+    	case queue_status(Super) of
+    		{ok, Status} ->
+    			Status ++ Results;
+    		{error, _E} ->
+    			Results
+    	end end, [], AcctSupers).
     
 queue_status(Super) ->
     Manager = acdc_queue_sup:manager(Super),
     {AcctId, QueueId} = acdc_queue_manager:config(Manager),
-    QueueDetails = queue_details(QueueId, AcctId),
-    Agents = acdc_queue_manager:status(Manager),
-    AgentsStatus = agents_status(Agents, [], AcctId, QueueDetails),
-    format_queue_status(QueueDetails, AgentsStatus).
+    case queue_details(QueueId, AcctId) of
+    	{ok, QueueDetails} ->
+		    Agents = acdc_queue_manager:status(Manager),
+		    AgentsStatus = agents_status(Agents, [], AcctId, QueueDetails),
+		    {ok, format_queue_status(QueueDetails, AgentsStatus)};
+		{error, E} ->
+			{error, E}
+	end.
     
 format_queue_status(QueueDetails, AgentsStatus) ->
     {Calls, Holdtime, TalkTime, Completed, Abandoned} = proplists:get_value(<<"QueueStats">>, QueueDetails),
@@ -286,14 +294,21 @@ format_queue_status(QueueDetails, AgentsStatus) ->
 queue_details(QueueId, AcctId) ->
     AcctDb = wh_util:format_account_id(AcctId, encoded),
     {ok, QueueDoc} = couch_mgr:open_doc(AcctDb, QueueId),
-    {ok, QueueNumber} = amimulator_util:find_id_number(QueueId, AcctDb),
-    [
-        {<<"QueueNumber">>, QueueNumber},
-        {<<"Queue">>, wh_json:get_value(<<"name">>, QueueDoc)},
-        {<<"Max">>, wh_json:get_value(<<"max_queue_size">>, QueueDoc)},
-        {<<"Strategy">>, translate_strat(wh_json:get_value(<<"strategy">>, QueueDoc))},
-        {<<"QueueStats">>, queue_stats(QueueId, AcctId)}
-    ].
+    case amimulator_util:find_id_number(QueueId, AcctDb) of
+    	{ok, QueueNumber} ->
+    		{ok, [
+		        {<<"QueueNumber">>, QueueNumber},
+		        {<<"Queue">>, wh_json:get_value(<<"name">>, QueueDoc)},
+		        {<<"Max">>, wh_json:get_value(<<"max_queue_size">>, QueueDoc)},
+		        {<<"Strategy">>, translate_strat(wh_json:get_value(<<"strategy">>, QueueDoc))},
+		        {<<"QueueStats">>, queue_stats(QueueId, AcctId)}
+		    ]};
+		{error, not_found} ->
+			lager:debug("Extension for queue ~p not found", [QueueId]),
+			{error, not_found};
+		{error, E} ->
+			{error, E}
+	end.
         
 translate_strat(Strat) ->
     % TODO: actually translate the strategy names

@@ -14,21 +14,13 @@
                                         ,'federate'
                                        ]}).
 
-init_bindings(_CommPid) ->
-    gen_listener:add_binding(
-        wh_hooks_listener,
-        ?CALL_BINDING(<<"DTMF">>)
-    ),
-    
-    gen_listener:add_responder(
-        wh_hooks_listener,
-        {'amimulator_call', 'handle_event'},
-        [{<<"call_event">>, <<"*">>}]
-    ).
+init_bindings(CommPid) ->
+    AccountId = gen_server:call(CommPid, account_id),
+    wh_hooks:register(AccountId).%,
+    %wh_hooks:register(AccountId, <<"DTMF">>).
 
 handle_event(EventJObj) ->
-    {_EventType, EventName} = wh_util:get_event_type(EventJObj),
-    handle_specific_event(EventName, EventJObj).
+    handle_event(EventJObj, []).
     
 handle_event(EventJObj, _Props) ->
     {_EventType, EventName} = wh_util:get_event_type(EventJObj),
@@ -110,7 +102,8 @@ new_inbound_channel(EventJObj) ->
     DestExten = hd(binary:split(wh_json:get_value(<<"To">>, EventJObj), <<"@">>)),
     Call = amimulator_util:whapps_call(EventJObj),
     CallId = whapps_call:call_id(Call),
-    SourceExten = amimulator_util:maybe_get_exten(Call),
+    _SourceExten = amimulator_util:maybe_get_exten(Call),
+    SourceCID = amimulator_util:maybe_get_cid_name(Call),
     EndpointName = amimulator_util:maybe_get_endpoint_name(Call),
     Payload = [
         {<<"Event">>, <<"Newchannel">>},
@@ -118,8 +111,8 @@ new_inbound_channel(EventJObj) ->
         {<<"Channel">>, EndpointName},
         {<<"ChannelState">>, 0},
         {<<"ChannelStateDesc">>, <<"Down">>},
-        {<<"CallerIDNum">>, SourceExten},
-        {<<"CallerIDName">>, SourceExten},
+        {<<"CallerIDNum">>, SourceCID},
+        {<<"CallerIDName">>, SourceCID},
         {<<"AccountCode">>, <<"">>}, %% Always blank
         {<<"Exten">>, DestExten},
         {<<"Context">>, <<"from-internal">>},
@@ -130,7 +123,8 @@ new_inbound_channel(EventJObj) ->
 new_outbound_channel(EventJObj) ->
     Call = amimulator_util:whapps_call(EventJObj),
     CallId = whapps_call:call_id(Call),
-    SourceExten = amimulator_util:maybe_get_exten(Call),
+    _SourceExten = amimulator_util:maybe_get_exten(Call),
+    SourceCID = amimulator_util:maybe_get_cid_name(Call),
     EndpointName = amimulator_util:maybe_get_endpoint_name(Call),
     Payload = [
         {<<"Event">>, <<"Newchannel">>},
@@ -138,8 +132,8 @@ new_outbound_channel(EventJObj) ->
         {<<"Channel">>, EndpointName},
         {<<"ChannelState">>, 0},
         {<<"ChannelStateDesc">>, <<"Down">>},
-        {<<"CallerIDNum">>, SourceExten},
-        {<<"CallerIDName">>, SourceExten},
+        {<<"CallerIDNum">>, SourceCID},
+        {<<"CallerIDName">>, SourceCID},
         {<<"AccountCode">>, <<"">>}, %% Always blank
         {<<"Exten">>, <<"">>},
         {<<"Context">>, <<"from-internal">>},
@@ -156,9 +150,11 @@ new_state(<<"CHANNEL_CREATE">>, EventJObj) ->
     end.
 
 ring_state(EventJObj) ->
+    DestExten = hd(binary:split(wh_json:get_value(<<"To">>, EventJObj), <<"@">>)),
+    %% TODO dest CID
     Call = amimulator_util:whapps_call(EventJObj),
     CallId = whapps_call:call_id(Call),
-    SourceExten = amimulator_util:maybe_get_exten(Call),
+    _SourceExten = amimulator_util:maybe_get_exten(Call),
     EndpointName = amimulator_util:maybe_get_endpoint_name(Call),
     Payload = [
         {<<"Event">>, <<"Newstate">>},
@@ -166,8 +162,8 @@ ring_state(EventJObj) ->
         {<<"Channel">>, EndpointName},
         {<<"ChannelState">>, 4},
         {<<"ChannelStateDesc">>, <<"Ring">>},
-        {<<"CallerIDNum">>, SourceExten},
-        {<<"CallerIDName">>, SourceExten},
+        {<<"CallerIDNum">>, DestExten},
+        {<<"CallerIDName">>, DestExten},
         {<<"ConnectedLineNum">>, <<"">>},
         {<<"ConnectedLineName">>, <<"">>},
         {<<"Uniqueid">>, CallId}
@@ -177,20 +173,22 @@ ring_state(EventJObj) ->
 ringing_state(EventJObj) ->
     Call = amimulator_util:whapps_call(EventJObj),
     CallId = whapps_call:call_id(Call),
-    SourceExten = amimulator_util:maybe_get_exten(Call),
+    _SourceExten = amimulator_util:maybe_get_exten(Call),
+    SourceCID = amimulator_util:maybe_get_cid_name(Call),
     EndpointName = amimulator_util:maybe_get_endpoint_name(Call),
     OtherCall = amimulator_util:whapps_call(whapps_call:other_leg_call_id(Call)),
-    DestExten = amimulator_util:maybe_get_exten(OtherCall),
+    _DestExten = amimulator_util:maybe_get_exten(OtherCall),
+    DestCID = amimulator_util:maybe_get_cid_name(OtherCall),
     Payload = [
         {<<"Event">>, <<"Newstate">>},
         {<<"Privilege">>, <<"call,all">>},
         {<<"Channel">>, EndpointName},
         {<<"ChannelState">>, 5},
         {<<"ChannelStateDesc">>, <<"Ringing">>},
-        {<<"CallerIDNum">>, SourceExten},
-        {<<"CallerIDName">>, SourceExten},
-        {<<"ConnectedLineNum">>, DestExten},
-        {<<"ConnectedLineName">>, DestExten},
+        {<<"CallerIDNum">>, SourceCID},
+        {<<"CallerIDName">>, SourceCID},
+        {<<"ConnectedLineNum">>, DestCID},
+        {<<"ConnectedLineName">>, DestCID},
         {<<"Uniqueid">>, CallId}
     ],
     amimulator_amqp:publish_amqp_event({publish, Payload}).
@@ -199,14 +197,16 @@ busy_state(EventJObj) ->
     %lager:debug("AMI: busy state ~p", [EventJObj]),
     Call = amimulator_util:whapps_call(EventJObj),
     CallId = whapps_call:call_id(Call),
-    Exten = amimulator_util:maybe_get_exten(Call),
+    _Exten = amimulator_util:maybe_get_exten(Call),
+    CID = amimulator_util:maybe_get_cid_name(Call),
     EndpointName = amimulator_util:maybe_get_endpoint_name(Call),
-    OtherExten = case wh_json:get_value(<<"Call-Direction">>, EventJObj) of
+    {_OtherExten, OtherCID} = case wh_json:get_value(<<"Call-Direction">>, EventJObj) of
         <<"inbound">> ->
-            hd(binary:split(wh_json:get_value(<<"To">>, EventJObj), <<"@">>));
+            To = hd(binary:split(wh_json:get_value(<<"To">>, EventJObj), <<"@">>)),
+            {To, To};
         <<"outbound">> ->
             OtherCall = amimulator_util:whapps_call(whapps_call:other_leg_call_id(Call)),
-            amimulator_util:maybe_get_exten(OtherCall)
+            {amimulator_util:maybe_get_exten(OtherCall), amimulator_util:maybe_get_cid_name(OtherCall)}
     end,
     Payload = [
         {<<"Event">>, <<"Newstate">>},
@@ -214,10 +214,10 @@ busy_state(EventJObj) ->
         {<<"Channel">>, EndpointName},
         {<<"ChannelState">>, ?STATE_UP},
         {<<"ChannelStateDesc">>, <<"Up">>},
-        {<<"CallerIDNum">>, Exten},
-        {<<"CallerIDName">>, Exten},
-        {<<"ConnectedLineNum">>, OtherExten},
-        {<<"ConnectedLineName">>, OtherExten},
+        {<<"CallerIDNum">>, CID},
+        {<<"CallerIDName">>, CID},
+        {<<"ConnectedLineNum">>, OtherCID},
+        {<<"ConnectedLineName">>, OtherCID},
         {<<"Uniqueid">>, CallId}
     ],
     amimulator_amqp:publish_amqp_event({publish, Payload}).
@@ -238,7 +238,7 @@ in_use_status(EventJObj) ->
         {<<"Privilege">>, <<"call,all">>},
         {<<"Extension">>, SourceExten},
         {<<"Context">>, <<"ext-local">>},
-        {<<"Hint">>, <<"SIP", SourceExten/binary, ",CustomPresence:", SourceExten/binary>>},
+        {<<"Hint">>, <<"SIP/", SourceExten/binary, ",CustomPresence:", SourceExten/binary>>},
         {<<"Status">>, 1}
     ],
     amimulator_amqp:publish_amqp_event({publish, Payload}).
@@ -251,7 +251,7 @@ ringing_status(EventJObj) ->
         {<<"Privilege">>, <<"call,all">>},
         {<<"Extension">>, SourceExten},
         {<<"Context">>, <<"ext-local">>},
-        {<<"Hint">>, <<"SIP", SourceExten/binary, ",CustomPresence:", SourceExten/binary>>},
+        {<<"Hint">>, <<"SIP/", SourceExten/binary, ",CustomPresence:", SourceExten/binary>>},
         {<<"Status">>, 8}
     ],
     amimulator_amqp:publish_amqp_event({publish, Payload}).
@@ -268,19 +268,22 @@ dial_event(EventJObj) ->
     Call = amimulator_util:whapps_call(EventJObj),
     CallId = whapps_call:call_id(Call),
     Exten = amimulator_util:maybe_get_exten(Call),
+    CID = amimulator_util:maybe_get_cid_name(Call),
     EndpointName = amimulator_util:maybe_get_endpoint_name(Call),
     OtherCall = amimulator_util:whapps_call(whapps_call:other_leg_call_id(Call)),
-    OtherExten = amimulator_util:maybe_get_exten(OtherCall),
+    _OtherExten = amimulator_util:maybe_get_exten(OtherCall),
+    OtherCID = amimulator_util:maybe_get_cid_name(OtherCall),
+    OtherEndpointName = amimulator_util:maybe_get_endpoint_name(OtherCall),
     Payload = [
         {<<"Event">>, <<"Dial">>},
         {<<"Privilege">>, <<"call,all">>},
         {<<"SubEvent">>, <<"Begin">>},
-        {<<"Channel">>, <<"SIP/", OtherExten/binary, "-00000000">>},
+        {<<"Channel">>, OtherEndpointName},
         {<<"Destination">>, EndpointName},
-        {<<"CallerIDNum">>, OtherExten},
-        {<<"CallerIDName">>, OtherExten},
-        {<<"ConnectedLineNum">>, Exten},
-        {<<"ConnectedLineName">>, Exten},
+        {<<"CallerIDNum">>, OtherCID},
+        {<<"CallerIDName">>, OtherCID},
+        {<<"ConnectedLineNum">>, CID},
+        {<<"ConnectedLineName">>, CID},
         {<<"UniqueID">>, whapps_call:other_leg_call_id(Call)},
         {<<"DestUniqueid">>, CallId},
         {<<"Dialstring">>, Exten}
