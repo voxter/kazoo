@@ -1,7 +1,7 @@
 -module(amimulator_commander).
 
 -export([handle/2]).
--export([queue_stats/2]).
+-export([queues_status/1]).
 
 -include("amimulator.hrl").
 
@@ -176,6 +176,62 @@ handle_event("queuepause", Props) ->
             ]],
             {ok, {Payload, n}}
     end;
+handle_event("queueadd", Props) ->
+    Interface = proplists:get_value(<<"Interface">>, Props),
+    Exten = hd(binary:split(binary:replace(Interface, <<"Local/">>, <<"">>), <<"@">>)),
+    AccountId = proplists:get_value(<<"Account">>, Props),
+    AccountDb = proplists:get_value(<<"AccountDb">>, Props),
+
+    %% Load agent doc having the Exten given as name
+    {ok, [Result]} = couch_mgr:get_results(AccountDb,
+        <<"users/list_by_username">>,
+        [{key, Exten}]
+    ),
+    AgentId = wh_json:get_value(<<"id">>, Result),
+    {ok, QueueDoc} = amimulator_util:queue_for_number(proplists:get_value(<<"Queue">>, Props), AccountDb),
+    QueueId = wh_json:get_value(<<"_id">>, QueueDoc),
+
+    Prop = props:filter_undefined(
+     [{<<"Account-ID">>, AccountId}
+      ,{<<"Agent-ID">>, AgentId}
+      ,{<<"Queue-ID">>, QueueId}
+      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+     ]),
+    wapi_acdc_agent:publish_login_queue(Prop),
+
+    Payload = [
+        {<<"Response">>, <<"Success">>},
+        {<<"Message">>, <<"Added interface to queue">>}
+    ],
+    {ok, {Payload, n}};
+handle_event("queueremove", Props) ->
+    Interface = proplists:get_value(<<"Interface">>, Props),
+    Exten = hd(binary:split(binary:replace(Interface, <<"Local/">>, <<"">>), <<"@">>)),
+    AccountId = proplists:get_value(<<"Account">>, Props),
+    AccountDb = proplists:get_value(<<"AccountDb">>, Props),
+
+    %% Load agent doc having the Exten given as name
+    {ok, [Result]} = couch_mgr:get_results(AccountDb,
+        <<"users/list_by_username">>,
+        [{key, Exten}]
+    ),
+    AgentId = wh_json:get_value(<<"id">>, Result),
+    {ok, QueueDoc} = amimulator_util:queue_for_number(proplists:get_value(<<"Queue">>, Props), AccountDb),
+    QueueId = wh_json:get_value(<<"_id">>, QueueDoc),
+
+    Prop = props:filter_undefined(
+     [{<<"Account-ID">>, AccountId}
+      ,{<<"Agent-ID">>, AgentId}
+      ,{<<"Queue-ID">>, QueueId}
+      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+     ]),
+    wapi_acdc_agent:publish_logout_queue(Prop),
+
+    Payload = [
+        {<<"Response">>, <<"Success">>},
+        {<<"Message">>, <<"Removed interface from queue">>}
+    ],
+    {ok, {Payload, n}};
 handle_event("originate", Props) ->
     case proplists:get_value(<<"Channel">>, Props) of
         undefined ->
@@ -199,9 +255,7 @@ queue_status(Super) ->
     {AcctId, QueueId} = acdc_queue_manager:config(Manager),
     QueueDetails = queue_details(QueueId, AcctId),
     Agents = acdc_queue_manager:status(Manager),
-    AgentsStatus = lists:foldl(fun(Agent, Results) ->
-        [agent_status(Agent, AcctId, QueueDetails)] ++ Results
-        end, [], Agents),
+    AgentsStatus = agents_status(Agents, [], AcctId, QueueDetails),
     format_queue_status(QueueDetails, AgentsStatus).
     
 format_queue_status(QueueDetails, AgentsStatus) ->
@@ -286,6 +340,16 @@ count_stats([Stat|Stats], {Calls, Holdtime, TalkTime, Completed, Abandoned}) ->
         <<"processed">> ->
             count_stats(Stats, {Calls, Holdtime, TalkTime, Completed+1, Abandoned})
     end.
+
+agents_status([], Statuses, _AccountId, _QueueDetails) ->
+    Statuses;
+agents_status([Agent|Agents], Statuses, AccountId, QueueDetails) ->
+    case agent_status(Agent, AccountId, QueueDetails) of
+        {error, _E} ->
+            agents_status(Agents, Statuses, AccountId, QueueDetails);
+        {ok, Status} ->
+            agents_status(Agents, Statuses ++ [Status], AccountId, QueueDetails)
+    end.
         
 agent_status(AgentId, AcctId, QueueDetails) ->
     AcctDb = wh_util:format_account_id(AcctId, encoded),
@@ -313,25 +377,34 @@ agent_status(AgentId, AcctId, QueueDetails) ->
         _ ->
             0
     end,
-    
-    AgentListener = acdc_agent_sup:listener(acdc_agents_sup:find_agent_supervisor(AcctId, AgentId)),
-    {MegaSecs, Secs, MicroSecs} = gen_listener:call(AgentListener, last_connect),
-    LastCall = MegaSecs * 1000000 + Secs + MicroSecs / 1000000,
-    
-    %% Agent status payload
-    [
-        {<<"Event">>, <<"QueueMember">>},
-        {<<"Queue">>, proplists:get_value(<<"QueueNumber">>, QueueDetails)},
-        {<<"Name">>, <<FirstName/binary, " ", LastName/binary>>},
-        {<<"Location">>, <<"Local/", Username/binary, "@from-queue/n">>},
-        %% Membership static is also possible
-        {<<"Membership">>, <<"dynamic">>},
-        {<<"Penalty">>, 0},
-        %% CallsTaken handled by count_stats function
-        {<<"LastCall">>, LastCall},
-        {<<"Status">>, translate_status(Status)},
-        {<<"Paused">>, Paused}
-    ].
+
+    case acdc_agents_sup:find_agent_supervisor(AcctId, AgentId) of
+        undefined ->
+            {error, not_logged_in};
+        AgentSup ->
+            AgentListener = acdc_agent_sup:listener(AgentSup),
+            LastCall = case gen_listener:call(AgentListener, last_connect) of
+                undefined ->
+                    0;
+                {MegaSecs, Secs, MicroSecs} ->
+                    MegaSecs * 1000000 + Secs + MicroSecs / 1000000
+            end,
+            
+            %% Agent status payload
+            {ok, [
+                {<<"Event">>, <<"QueueMember">>},
+                {<<"Queue">>, proplists:get_value(<<"QueueNumber">>, QueueDetails)},
+                {<<"Name">>, <<FirstName/binary, " ", LastName/binary>>},
+                {<<"Location">>, <<"Local/", Username/binary, "@from-queue/n">>},
+                %% Membership static is also possible
+                {<<"Membership">>, <<"dynamic">>},
+                {<<"Penalty">>, 0},
+                %% CallsTaken handled by count_stats function
+                {<<"LastCall">>, LastCall},
+                {<<"Status">>, translate_status(Status)},
+                {<<"Paused">>, Paused}
+            ]}
+    end.
     
 translate_status(Status) ->
     % TODO: properly translate statuses
