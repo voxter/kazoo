@@ -20,6 +20,8 @@
          ,queue_name/0
          ,bindings/0, bindings/1
          ,originate/1
+
+         ,fsms/0, metaflows/0
         ]).
 
 -export([init/1
@@ -45,7 +47,9 @@
 %% By convention, we put the options here in macros, but not required.
 -define(BINDINGS, [{'self', []}]).
 -define(RESPONDERS, [{{?MODULE, 'handle_call_event'}
-                      ,[{<<"call_event">>, <<"*">>}]
+                      ,[{<<"call_event">>, <<"*">>}
+                        ,{<<"error">>, <<"*">>}
+                       ]
                      }
                      ,{{?MODULE, 'handle_originate_event'}
                        ,[{<<"resource">>, <<"*">>}
@@ -63,9 +67,9 @@
 -define(QUEUE_OPTIONS, []).
 -define(CONSUME_OPTIONS, []).
 
--define(TRACKED_CALL_EVENTS, [<<"DTMF">>
+-define(TRACKED_CALL_EVENTS, [<<"DTMF">>, <<"CHANNEL_ANSWER">>
                               ,<<"CHANNEL_BRIDGE">>, <<"CHANNEL_DESTROY">>
-                              ,<<"CHANNEL_TRANSFEREE">>
+                              ,<<"CHANNEL_TRANSFEREE">>, <<"CHANNEL_REPLACED">>
                              ]).
 
 -define(DYN_BINDINGS(CallId), {'call', [{'restrict_to', ?TRACKED_CALL_EVENTS}
@@ -85,7 +89,7 @@
                                              ,{'restrict_to', ['transferred']}
                                             ]
                                  }).
--define(KONAMI_REG(CallId), {'p', 'l', {'event', CallId}}).
+-define(KONAMI_REG(CallId), {'p', 'l', {'konami_event', CallId}}).
 
 %%%===================================================================
 %%% API
@@ -139,8 +143,8 @@ add_call_binding('undefined') -> 'ok';
 add_call_binding(CallId) when is_binary(CallId) ->
     lager:debug("add fsm binding for call ~s: ~p", [CallId, ?TRACKED_CALL_EVENTS]),
     catch gproc:reg(?KONAMI_REG({'fsm', CallId})),
-    gen_listener:add_binding(?MODULE, ?DYN_BINDINGS(CallId, ?TRACKED_CALL_EVENTS)),
-    gen_listener:add_binding(?MODULE, ?META_BINDINGS(CallId));
+    gen_listener:b_add_binding(?MODULE, ?DYN_BINDINGS(CallId, ?TRACKED_CALL_EVENTS)),
+    gen_listener:b_add_binding(?MODULE, ?META_BINDINGS(CallId));
 add_call_binding(Call) ->
     gen_listener:cast(?MODULE, {'add_account_events', whapps_call:account_id(Call)}),
     catch gproc:reg(?KONAMI_REG({'fsm', whapps_call:account_id(Call)})),
@@ -150,8 +154,8 @@ add_call_binding('undefined', _) -> 'ok';
 add_call_binding(CallId, Events) when is_binary(CallId) ->
     lager:debug("add pid binding for call ~s: ~p", [CallId, Events]),
     catch gproc:reg(?KONAMI_REG({'pid', CallId})),
-    gen_listener:add_binding(?MODULE, ?DYN_BINDINGS(CallId, Events)),
-    gen_listener:add_binding(?MODULE, ?META_BINDINGS(CallId));
+    gen_listener:b_add_binding(?MODULE, ?DYN_BINDINGS(CallId, Events)),
+    gen_listener:b_add_binding(?MODULE, ?META_BINDINGS(CallId));
 add_call_binding(Call, Events) ->
     gen_listener:cast(?MODULE, {'add_account_events', whapps_call:account_id(Call)}),
     catch gproc:reg(?KONAMI_REG({'fsm', whapps_call:account_id(Call)})),
@@ -160,6 +164,7 @@ add_call_binding(Call, Events) ->
 -spec rm_call_binding(api_binary() | whapps_call:call()) -> 'ok'.
 rm_call_binding('undefined') -> 'ok';
 rm_call_binding(CallId) ->
+    catch gproc:unreg(?KONAMI_REG({'fsm', CallId})),
     case call_has_listeners(CallId) of
         'true' -> 'ok';
         'false' -> really_remove_call_bindings(CallId)
@@ -168,6 +173,7 @@ rm_call_binding(CallId) ->
 -spec rm_call_binding(api_binary(), ne_binaries()) -> 'ok'.
 rm_call_binding('undefined', _Evts) -> 'ok';
 rm_call_binding(CallId, Events) ->
+    catch gproc:unreg(?KONAMI_REG({'pid', CallId})),
     case call_has_listeners(CallId) of
         'true' -> 'ok';
         'false' -> really_remove_call_bindings(CallId, Events)
@@ -195,16 +201,19 @@ really_remove_call_bindings(CallId, Events) ->
 
 -spec handle_call_event(wh_json:object(), wh_proplist()) -> any().
 handle_call_event(JObj, Props) ->
-    'true' = wapi_call:event_v(JObj),
+    'true' = wapi_call:event_v(JObj)
+        orelse wapi_dialplan:error_v(JObj),
     wh_util:put_callid(JObj),
-    handle_call_event(JObj, Props, wh_json:get_value(<<"Event-Name">>, JObj)).
+    handle_call_event(JObj, Props, kz_call_event:event_name(JObj)).
+
 handle_call_event(JObj, _Props, <<"CHANNEL_DESTROY">> = Event) ->
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
-    rm_call_binding(CallId),
+    CallId = kz_call_event:call_id(JObj),
     relay_to_pids(CallId, JObj),
-    relay_to_fsms(CallId, Event, JObj);
+    relay_to_fsms(CallId, Event, JObj),
+    rm_call_binding(CallId);
 handle_call_event(JObj, _Props, Event) ->
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    CallId = kz_call_event:call_id(JObj),
+
     relay_to_fsms(CallId, Event, JObj),
     relay_to_pids(CallId, JObj).
 
@@ -217,10 +226,14 @@ handle_originate_event(JObj, _Props) ->
 handle_metaflow_req(JObj, _Props) ->
     'true' = wapi_metaflow:req_v(JObj),
 
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    CallId = kz_call_event:call_id(JObj),
     Evt = wh_json:from_list(
             [{<<"module">>, wh_json:get_value(<<"Action">>, JObj)}
-             ,{<<"data">>, wh_json:set_value(<<"dtmf_leg">>, CallId, wh_json:get_value(<<"Data">>, JObj, wh_json:new()))}
+             ,{<<"data">>, wh_json:set_value(<<"dtmf_leg">>
+                                             ,CallId
+                                             ,wh_json:get_value(<<"Data">>, JObj, wh_json:new())
+                                            )
+              }
             ]),
     relay_to_fsm(CallId, <<"metaflow_exe">>, Evt).
 
@@ -243,9 +256,22 @@ relay_to_fsms(CallId, Event, JObj) ->
      || FSM <- fsms_for_callid(CallId)
     ].
 
--spec fsms_for_callid(ne_binary()) -> pids().
+-spec fsms_for_callid(ne_binary() | '_') -> pids().
 fsms_for_callid(CallId) ->
-    gproc:lookup_pids(?KONAMI_REG({'fsm', CallId})).
+    %% {{'p', 'l', Key}, PidToMatch, ValueToMatch}
+    MatchHead = {?KONAMI_REG({'fsm', CallId}), '$1', '_'},
+    Guard = [],
+    Result = '$1',
+
+    gproc:select('p', [{MatchHead, Guard, [Result]}]).
+
+-spec fsms() -> pids().
+fsms() ->
+    fsms_for_callid('_').
+
+-spec metaflows() -> pids().
+metaflows() ->
+    pids_for_callid('_').
 
 -spec relay_to_fsm(ne_binary(), ne_binary(), wh_json:object()) -> any().
 relay_to_fsm(CallId, Event, JObj) ->
@@ -254,13 +280,21 @@ relay_to_fsm(CallId, Event, JObj) ->
 
 -spec relay_to_pids(ne_binary(), wh_json:object()) -> any().
 relay_to_pids(CallId, JObj) ->
-    [whapps_call_command:relay_event(Pid, JObj)
+    [begin
+         whapps_call_command:relay_event(Pid, JObj),
+         lager:debug("relaying ~p to ~p", [wh_util:get_event_type(JObj), Pid])
+     end
      || Pid <- pids_for_callid(CallId)
     ].
 
--spec pids_for_callid(ne_binary()) -> pids().
+-spec pids_for_callid(ne_binary() | '_') -> pids().
 pids_for_callid(CallId) ->
-    gproc:lookup_pids(?KONAMI_REG({'pid', CallId})).
+    %% {{'p', 'l', Key}, PidToMatch, ValueToMatch}
+    MatchHead = {?KONAMI_REG({'pid', CallId}), '$1', '_'},
+    Guard = [],
+    Result = '$1',
+
+    gproc:select('p', [{MatchHead, Guard, [Result]}]).
 
 -spec originate(api_terms()) -> 'ok'.
 originate(Req) ->
@@ -338,7 +372,7 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(?HOOK_EVT(AccountId, EventName, Event), State) ->
+handle_info(?HOOK_EVT(AccountId, <<"CHANNEL_ANSWER">> = EventName, Event), State) ->
     relay_to_fsms(AccountId, EventName, Event),
     {'noreply', State};
 handle_info({'timeout', Ref, _Msg}, #state{cleanup_ref=Ref}=State) ->
@@ -404,5 +438,6 @@ maybe_remove_binding(Srv, Binding, Props, CallId) ->
         {[], []} ->
             lager:debug("~p: no pids for call-id '~s', removing binding '~s'", [Srv, CallId, Binding]),
             gen_listener:rm_binding(Srv, Binding, Props);
-        {_, _} -> 'ok'
+        {_FSMs, _Pids} ->
+            lager:debug("binding ~p still has FSMs: ~p and pids: ~p", [Binding, _FSMs, _Pids])
     end.

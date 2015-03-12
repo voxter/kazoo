@@ -1,6 +1,6 @@
 {
   "_id": "clicktocall",
-  "$schema": "http://json-schema.org/draft-04/schema#",
+  "$schema": "http://json-schema.org/draft-03/schema#",
   "type": "object",
   "required": true,
   "name": "Click-to-Call",
@@ -43,6 +43,12 @@
       "required": false,
       "name": "Rate Limit",
       "description": "The rate that this click to call can be invoked"
+    },
+    "caller_id_number": {
+      "type": "string",
+      "required": false,
+      "name": "Keep Original Caller ID?",
+      "description": "Explicitly set caller id number"
     }
   }
 }

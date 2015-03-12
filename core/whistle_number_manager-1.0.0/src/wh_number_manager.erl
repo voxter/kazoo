@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2015, 2600Hz INC
 %%% @doc
 %%%
 %%% Handle client requests for phone_number documents
@@ -32,6 +32,10 @@
 -export([track_assignment/2]).
 
 -include("wnm.hrl").
+
+-export_type([number_property/0
+              ,number_properties/0
+             ]).
 
 -define(SERVER, ?MODULE).
 
@@ -226,7 +230,7 @@ check_account(#number{assigned_to=AssignedTo}=N) ->
         'true' -> {'ok', AssignedTo, number_options(N)}
     end.
 
--spec number_options(wnm_number()) -> wh_proplist().
+-spec number_options(wnm_number()) -> number_properties().
 number_options(#number{state=State
                        ,features=Features
                        ,module_name=Module
@@ -242,8 +246,9 @@ number_options(#number{state=State
       }
      ,{'ringback_media', find_early_ringback(Number)}
      ,{'transfer_media', find_transfer_ringback(Number)}
-     ,{'number', Num }
+     ,{'number', Num}
      ,{'account_id', AssignedTo}
+     ,{'prepend', prepend(Number)}
     ].
 
 %% Checks the carrier module for whether to lookup CNAM on this number
@@ -280,6 +285,17 @@ find_early_ringback(#number{number_doc=JObj}) ->
 find_transfer_ringback(#number{number_doc=JObj}) ->
     wh_json:get_ne_value([<<"ringback">>, <<"transfer">>], JObj).
 
+-spec prepend(wnm_number()) -> api_binary().
+prepend(#number{number_doc=JObj, features=Features}) ->
+    case
+        sets:is_element(<<"prepend">>, Features)
+        andalso wh_json:is_true([<<"prepend">>, <<"enabled">>], JObj)
+    of
+        'false' -> 'undefined';
+        'true' ->
+             wh_json:get_ne_value([<<"prepend">>, <<"name">>], JObj)
+    end.
+
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
@@ -312,7 +328,10 @@ ported(Number) ->
                          {'ok', wh_json:public_fields(JObj)}
                  end
                ],
-    lists:foldl(fun(F, J) -> catch F(J) end, catch wnm_number:get(Number), Routines).
+    lists:foldl(fun(F, J) -> catch F(J) end
+                ,catch wnm_number:get(Number)
+                ,Routines
+               ).
 
 -spec check_ports(wnm_number()) -> operation_return().
 check_ports(#number{number=MaybePortNumber}=Number) ->
@@ -391,35 +410,45 @@ create_number(Number, AssignTo, AuthBy, PublicFields, DryRun, ModuleName) ->
     lists:foldl(fun(F, J) -> catch F(J) end, 'ok', Routines).
 
 -spec create_not_found_number(ne_binary(), api_binary(), 'system' | ne_binary(), wh_json:object(), wnm_number(), api_binary()) ->
-                                     operation_return().
+                                     wnm_number().
 create_not_found_number(Number, AssignTo, AuthBy, PublicFields, N, ModuleName) ->
-    AccountId = wh_util:format_account_id(AuthBy, 'raw'),
-    AccountDb = wh_util:format_account_id(AuthBy, 'encoded'),
-    try
-        {'ok', JObj} = couch_mgr:open_cache_doc(AccountDb, AccountId),
-        'true' = wh_json:is_true(<<"pvt_wnm_allow_additions">>, JObj),
-        lager:debug("number doesnt exist but account ~s is authorized to create it", [AuthBy]),
-        case wnm_number:find_port_in_number(N) of
-            {'ok', _Doc} ->
-                lager:debug("number is being ported in for account ~s"
-                            ,[wh_json:get_value(<<"pvt_account_id">>, _Doc)]
-                           ),
-                wnm_number:error_number_is_porting(N);
-            {'error', 'not_found'} ->
-                lager:debug("number is not in a port request"),
-                NewNumber = N#number{number=Number
-                                     ,assign_to=AssignTo
-                                     ,auth_by=AuthBy
-                                     ,number_doc=PublicFields
-                                     ,module_name=ModuleName
-                                    },
-                wnm_number:create_available(NewNumber)
-        end
-    catch
-        'error':{'badmatch', Error} ->
-            lager:debug("account is not authorized to create a new number: ~p", [Error]),
+    case account_can_create_number(AuthBy) of
+        'true' ->
+            lager:debug("number doesnt exist but account ~s is authorized to create it", [AuthBy]),
+            case is_number_porting(N) of
+                'true' ->
+                    lager:debug("number is being ported in, not creating"),
+                    wnm_number:error_number_is_porting(N);
+                'false' ->
+                    lager:debug("number is not in a port request"),
+                    NewNumber = N#number{number=Number
+                                         ,assign_to=AssignTo
+                                         ,auth_by=AuthBy
+                                         ,number_doc=PublicFields
+                                         ,module_name=ModuleName
+                                        },
+                    wnm_number:create_available(NewNumber)
+            end;
+        'false' ->
+            lager:debug("account is not authorized to create a new number"),
             wnm_number:error_unauthorized(N)
     end.
+
+-spec is_number_porting(wnm_number()) -> boolean().
+is_number_porting(N) ->
+    case wnm_number:find_port_in_number(N) of
+        {'ok', _Doc} -> 'true';
+        {'error', 'not_found'} -> 'false'
+    end.
+
+-spec account_can_create_number(ne_binary() | 'system') -> boolean().
+account_can_create_number('system') -> 'true';
+account_can_create_number(Account) ->
+    AccountId = wh_util:format_account_id(Account, 'raw'),
+    AccountDb = wh_util:format_account_id(Account, 'encoded'),
+
+    {'ok', JObj} = couch_mgr:open_cache_doc(AccountDb, AccountId),
+    wh_json:is_true(<<"pvt_wnm_allow_additions">>, JObj).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -588,9 +617,9 @@ reserve_number(Number, AssignTo, AuthBy, PublicFields, DryRun) ->
                              ,services=Services
                              ,activations=ActivationCharges
                             }) ->
-                            {'dry_run', [{'services', Services}
-                                         ,{'activation_charges', ActivationCharges}
-                                        ]};
+                         {'dry_run', [{'services', Services}
+                                      ,{'activation_charges', ActivationCharges}
+                                     ]};
                     (#number{number_doc=JObj}) ->
                          lager:debug("reserve successfully completed"),
                          {'ok', wh_json:public_fields(JObj)}
@@ -885,9 +914,9 @@ set_public_fields(Number, PublicFields, AuthBy, DryRun) ->
                              ,services=Services
                              ,activations=ActivationCharges
                             }) ->
-                            {'dry_run', [{'services', Services}
-                                         ,{'activation_charges', ActivationCharges}
-                                        ]};
+                         {'dry_run', [{'services', Services}
+                                      ,{'activation_charges', ActivationCharges}
+                                     ]};
                     (#number{number_doc=JObj}) ->
                          lager:debug("set public fields successfully completed"),
                          {'ok', wh_json:public_fields(JObj)}
@@ -896,62 +925,15 @@ set_public_fields(Number, PublicFields, AuthBy, DryRun) ->
     lists:foldl(fun(F, J) -> catch F(J) end, wnm_number:get(Number, PublicFields), Routines).
 
 
--spec track_assignment(ne_binary(), wh_proplist()) ->
-                              'ok' | 'error'.
--spec track_assignment(ne_binary(), wh_proplist(), integer()) ->
-                              'ok' | 'error'.
+-spec track_assignment(ne_binary(), wh_proplist()) -> 'ok'.
 track_assignment(Account, Props) ->
-    track_assignment(Account, Props, 5).
-
-track_assignment(Account, Props, Try) when Try > 0 ->
-    AccountDb = wh_util:format_account_id(Account, 'encoded'),
-    case couch_mgr:open_doc(AccountDb, <<"phone_numbers">>) of
-        {'error', _E} ->
-            lager:error("could not open phone_numbers doc in ~p: ~p ", [AccountDb ,_E]),
-            track_assignment(Account, Props, Try-1);
-        {'ok', JObj} ->
-            update_assignment(AccountDb, JObj, Props, Try)
-    end;
-track_assignment(Account, _Props, _) ->
-    lager:error("too many attempt on ~p phone_numbers doc", [Account]),
-    'error'.
-
--spec update_assignment(ne_binary(), wh_json:object(), wh_proplist(), integer()) ->
-                               'ok' | 'error'.
-update_assignment(AccountDb, JObj, Props, Try) ->
-    UpdatedDoc =
-        lists:foldl(
-            fun({Num, Assignment}, {Updated, Acc}) ->
-                case wh_json:get_value(Num, Acc) of
-                    'undefined' -> {Updated, Acc};
-                    NumJobj ->
-                        NumJobj1 = wh_json:set_value(<<"used_by">>, Assignment, NumJobj),
-                        {'true', wh_json:set_value(Num, NumJobj1, Acc)}
-                end
-            end
-            ,{'false', JObj}
-            ,Props
-        ),
-    case UpdatedDoc of
-        {'false', _} ->
-            lager:debug("no need to update phone_numbers in ~p", [AccountDb]),
-            'ok';
-        {'true', Doc} ->
-            save_assignment(AccountDb, Doc, Props, Try)
-    end.
-
--spec save_assignment(ne_binary(), wh_json:object(), wh_proplist(), integer()) ->
-                             'ok' | 'error'.
-save_assignment(AccountDb, Updated, Props, Try) ->
-    case couch_mgr:save_doc(AccountDb, Updated) of
-        {'error', 'conflict'} ->
-            lager:warning("could not save phone_numbers doc in ~p: conflict retrying...", [AccountDb]),
-            track_assignment(AccountDb, Props, Try-1);
-        {'error', _E} ->
-            lager:error("could not save phone_numbers doc in ~p: ~p retrying...", [AccountDb ,_E]),
-            track_assignment(AccountDb, Props, Try-1);
-        {'ok', _R} -> 'ok'
-    end.
+    lager:debug("tracking number assignment for account ~s", [Account]),
+    lists:foreach(
+      fun({Number, Assignment}) ->
+              wnm_number:used_by(Number, Assignment)
+      end
+      ,Props
+     ).
 
 %%--------------------------------------------------------------------
 %% @private

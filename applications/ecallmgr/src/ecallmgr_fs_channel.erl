@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2014, 2600Hz
+%%% @copyright (C) 2013-2015, 2600Hz
 %%% @doc
 %%% Track the FreeSWITCH channel information, and provide accessors
 %%% @end
@@ -141,8 +141,8 @@ is_bridged(UUID) ->
                   ,['$2']}
                 ],
     case ets:select(?CHANNELS_TBL, MatchSpec) of
-        ['undefined'] -> lager:debug("not bridged: undefined"), 'false';
-        [Bin] when is_binary(Bin) -> lager:debug("bridged: ~s", [Bin]), 'true';
+        ['undefined'] -> lager:debug("channel is not bridged"), 'false';
+        [Bin] when is_binary(Bin) -> lager:debug("is bridged to: ~s", [Bin]), 'true';
         _E -> lager:debug("not bridged: ~p", [_E]), 'false'
     end.
 

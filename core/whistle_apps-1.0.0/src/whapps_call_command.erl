@@ -35,6 +35,7 @@
         ]).
 -export([redirect/2
          ,redirect/3
+         ,redirect_to_node/3
         ]).
 -export([answer/1, answer_now/1
          ,hangup/1, hangup/2
@@ -182,7 +183,7 @@
 -export([get_inbound_t38_settings/1, get_inbound_t38_settings/2]).
 
 -type audio_macro_prompt() :: {'play', binary()} | {'play', binary(), binaries()} |
-                              {'prompt', binary()} | {'prompt', binary(), binary()} |
+                              {'prompt', binary()} | {'prompt', binary(), ne_binaries()} |
                               {'say', binary()} | {'say', binary(), binary()} |
                               {'say', binary(), binary(), binary()} |
                               {'say', binary(), binary(), binary(), binary()} |
@@ -191,7 +192,9 @@
                               {'tts', ne_binary(), ne_binary()} |
                               {'tts', ne_binary(), ne_binary(), ne_binary()}.
 -type audio_macro_prompts() :: [audio_macro_prompt(),...] | [].
--export_type([audio_macro_prompt/0]).
+-export_type([audio_macro_prompt/0
+              ,audio_macro_prompts/0
+             ]).
 
 -define(CONFIG_CAT, <<"call_command">>).
 
@@ -612,6 +615,23 @@ redirect(Contact, Server, Call) ->
     'ok'.
 
 %%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Create a redirect request to Node
+%% @end
+%%--------------------------------------------------------------------
+-spec redirect_to_node(ne_binary(), api_binary(), whapps_call:call()) -> 'ok'.
+redirect_to_node(Contact, Node, Call) ->
+    lager:debug("redirect ~s to ~s", [Contact, Node]),
+    Command = [{<<"Redirect-Contact">>, Contact}
+               ,{<<"Redirect-Node">>, Node}
+               ,{<<"Application-Name">>, <<"redirect">>}
+              ],
+    send_command(Command, Call),
+    timer:sleep(2000),
+    'ok'.
+
+%%--------------------------------------------------------------------
 %% @public
 %% @doc
 %% @end
@@ -874,7 +894,7 @@ page(Endpoints, Timeout, CIDName, CIDNumber, SIPHeaders, Call) ->
                ,{<<"Timeout">>, Timeout}
                ,{<<"Caller-ID-Name">>, CIDName}
                ,{<<"Caller-ID-Number">>, CIDNumber}
-               ,{<<"SIP-Headers">>, SIPHeaders}
+               ,{<<"Custom-SIP-Headers">>, SIPHeaders}
               ],
     send_command(Command, Call).
 
@@ -931,9 +951,9 @@ bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHead
      ,{<<"Endpoints">>, Endpoints}
      ,{<<"Timeout">>, Timeout}
      ,{<<"Ignore-Early-Media">>, IgnoreEarlyMedia}
-     ,{<<"Ringback">>, cf_util:correct_media_path(Ringback, Call)}
+     ,{<<"Ringback">>, wh_media_util:media_path(Ringback, Call)}
      ,{<<"Dial-Endpoint-Method">>, Strategy}
-     ,{<<"SIP-Headers">>, SIPHeaders}
+     ,{<<"Custom-SIP-Headers">>, SIPHeaders}
     ].
 
 bridge(Endpoints, Call) ->
@@ -2060,7 +2080,7 @@ handle_collect_digit_event(_JObj, _NoopId, _EventType) ->
 %% @public
 %% @doc
 %% Low level function to consume call events, looping until a specific
-%% one occurs.  If the channel is hungup or no call events are recieved
+%% one occurs.  If the channel is hungup or no call events are received
 %% for the optional timeout period then errors are returned.
 %% @end
 %%--------------------------------------------------------------------
@@ -2692,7 +2712,7 @@ wait_for_fax_detection(Timeout, Call) ->
 %% @public
 %% @doc
 %% Low level function to consume call events, looping until a specific
-%% one occurs.  If the channel is hungup or no call events are recieved
+%% one occurs.  If the channel is hungup or no call events are received
 %% for the optional timeout period then errors are returned.
 %% @end
 %%--------------------------------------------------------------------

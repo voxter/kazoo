@@ -42,7 +42,9 @@
 -export([owner_ids_by_sip_username/2]).
 -export([apply_dialplan/2]).
 -export([encryption_method_map/2]).
--export([maybe_start_metaflows/2]).
+-export([maybe_start_metaflow/2
+         ,maybe_start_metaflows/2
+        ]).
 -export([sip_users_from_device_ids/2]).
 
 -export([caller_belongs_to_group/2
@@ -151,7 +153,7 @@ manual_presence_resp(Username, Realm, JObj) ->
         State ->
             PresenceUpdate = [{<<"Presence-ID">>, PresenceId}
                               ,{<<"State">>, State}
-                              ,{<<"Call-ID">>, wh_util:to_hex_binary(crypto:md5(PresenceId))}
+                              ,{<<"Call-ID">>, wh_util:to_hex_binary(crypto:hash(md5, PresenceId))}
                               | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
                              ],
             whapps_util:amqp_pool_send(PresenceUpdate, fun wapi_presence:publish_update/1)
@@ -186,7 +188,9 @@ mwi_query(JObj) ->
         _Else -> 'ok'
     end.
 
--spec mwi_resp(ne_binary(), ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
+-spec mwi_resp(api_binary(), api_binary(), ne_binary(), wh_json:object()) -> 'ok'.
+mwi_resp('undefined', _Realm, _AccountDb, _JObj) -> 'ok';
+mwi_resp(_Username, 'undefined', _AccountDb, _JObj) -> 'ok';
 mwi_resp(Username, Realm, AccountDb, JObj) ->
     case owner_ids_by_sip_username(AccountDb, Username) of
         {'ok', [OwnerId]} ->
@@ -402,7 +406,9 @@ owner_ids_by_sip_username(AccountDb, Username) ->
             get_owner_ids_by_sip_username(AccountDb, Username)
     end.
 
--spec get_owner_ids_by_sip_username(ne_binary(), ne_binary()) -> {'ok', ne_binaries()} | {'error', _}.
+-spec get_owner_ids_by_sip_username(ne_binary(), ne_binary()) ->
+                                           {'ok', ne_binaries()} |
+                                           {'error', _}.
 get_owner_ids_by_sip_username(AccountDb, Username) ->
     ViewOptions = [{'key', Username}],
     case couch_mgr:get_results(AccountDb, <<"cf_attributes/sip_username">>, ViewOptions) of
@@ -461,7 +467,8 @@ get_endpoint_id_by_sip_username(AccountDb, Username) ->
 %%
 %% @end
 %%-----------------------------------------------------------------------------
--spec get_operator_callflow(ne_binary()) -> wh_jobj_return().
+-spec get_operator_callflow(ne_binary()) -> {'ok', wh_json:object()} |
+                                            couch_mgr:couchbeam_error().
 get_operator_callflow(Account) ->
     AccountDb = wh_util:format_account_id(Account, 'encoded'),
     Options = [{'key', ?OPERATOR_KEY}, 'include_docs'],
@@ -728,34 +735,34 @@ encryption_method_map(JObj, [Method|Methods]) ->
     case props:get_value(Method, ?ENCRYPTION_MAP, []) of
         [] -> encryption_method_map(JObj, Methods);
         Values ->
-            encryption_method_map(wh_json:set_values(Values , JObj), Method)
+            encryption_method_map(wh_json:set_values(Values, JObj), Method)
     end;
 encryption_method_map(JObj, Endpoint) ->
-    encryption_method_map(
-      JObj
-      ,wh_json:get_value([<<"media">>
-                          ,<<"encryption">>
-                          ,<<"methods">>
-                         ], Endpoint, [])).
+    encryption_method_map(JObj
+                          ,wh_json:get_value([<<"media">>
+                                              ,<<"encryption">>
+                                              ,<<"methods">>
+                                             ]
+                                             ,Endpoint
+                                             ,[]
+                                            )
+                         ).
 
 -spec maybe_start_metaflows(whapps_call:call(), wh_json:objects()) -> 'ok'.
 -spec maybe_start_metaflow(whapps_call:call(), wh_json:object()) -> 'ok'.
-
 maybe_start_metaflows(Call, Endpoints) ->
     [maybe_start_metaflow(Call, Endpoint) || Endpoint <- Endpoints],
     'ok'.
 
 maybe_start_metaflow(Call, Endpoint) ->
-    case wh_json:get_value(<<"Metaflows">>, Endpoint) of
+    case wh_json:get_first_defined([<<"metaflows">>, <<"Metaflows">>], Endpoint) of
         'undefined' -> 'ok';
         ?EMPTY_JSON_OBJECT -> 'ok';
         JObj ->
+            Id = wh_json:get_first_defined([<<"_id">>, <<"Endpoint-ID">>], Endpoint),
             API = props:filter_undefined(
-                    [{<<"Endpoint-ID">>, wh_json:get_value(<<"Endpoint-ID">>, Endpoint)}
-                     ,{<<"Call">>, whapps_call:to_json(
-                                     set_callee(Call, Endpoint)
-                                    )
-                      }
+                    [{<<"Endpoint-ID">>, Id}
+                     ,{<<"Call">>, whapps_call:to_json(Call)}
                      ,{<<"Numbers">>, wh_json:get_value(<<"numbers">>, JObj)}
                      ,{<<"Patterns">>, wh_json:get_value(<<"patterns">>, JObj)}
                      ,{<<"Binding-Digit">>, wh_json:get_value(<<"binding_digit">>, JObj)}
@@ -764,18 +771,12 @@ maybe_start_metaflow(Call, Endpoint) ->
                      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
                     ]),
             lager:debug("sending metaflow for endpoint: ~s: ~s"
-                        ,[wh_json:get_value(<<"Endpoint-ID">>, Endpoint), wh_json:get_value(<<"listen_on">>, JObj)]
+                        ,[Id
+                          ,wh_json:get_value(<<"listen_on">>, JObj)
+                         ]
                        ),
             whapps_util:amqp_pool_send(API, fun wapi_dialplan:publish_metaflow/1)
     end.
-
--spec set_callee(whapps_call:call(), wh_json:object()) -> whapps_call:call().
-set_callee(Call, Endpoint) ->
-    whapps_call:exec([{fun whapps_call:set_callee_id_name/2, wh_json:get_value(<<"Callee-ID-Name">>, Endpoint)}
-                      ,{fun whapps_call:set_callee_id_number/2, wh_json:get_value(<<"Callee-ID-Number">>, Endpoint)}
-                     ]
-                     ,Call
-                    ).
 
 -spec caller_belongs_to_group(ne_binary(), whapps_call:call()) -> boolean().
 caller_belongs_to_group(GroupId, Call) ->
