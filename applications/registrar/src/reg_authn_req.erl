@@ -9,10 +9,20 @@
 %%%-------------------------------------------------------------------
 -module(reg_authn_req).
 
--export([init/0, handle_req/2]).
+-export([init/0
+         ,handle_req/2
+         ,lookup_account_by_ip/1
+        ]).
 
 -include("reg.hrl").
 
+-define(ENCRYPTION_MAP, [{<<"srtp">>, [{<<"RTP-Secure-Media">>, 'true'}]}
+                        ,{<<"zrtp">>, [{<<"ZRTP-Secure-Media">>, 'true'}
+                                       ,{<<"ZRTP-Enrollment">>, 'true'}
+                                      ]}
+                        ]).
+
+-spec init() -> 'ok'.
 init() -> 'ok'.
 
 -spec handle_req(wh_json:object(), wh_proplist()) -> 'ok'.
@@ -91,10 +101,11 @@ create_ccvs(#auth_user{}=AuthUser) ->
              ,{<<"Authorizing-ID">>, AuthUser#auth_user.authorizing_id}
              ,{<<"Authorizing-Type">>, AuthUser#auth_user.authorizing_type}
              ,{<<"Owner-ID">>, AuthUser#auth_user.owner_id}
-             ,{<<"Account-Realm">>, AuthUser#auth_user.account_realm}
+             ,{<<"Account-Realm">>, AuthUser#auth_user.account_normalized_realm}
              ,{<<"Account-Name">>, AuthUser#auth_user.account_name}
              ,{<<"Presence-ID">>, maybe_get_presence_id(AuthUser)}
-             | create_specific_ccvs(AuthUser, AuthUser#auth_user.method)
+             | (create_specific_ccvs(AuthUser, AuthUser#auth_user.method)
+                 ++ generate_security_ccvs(AuthUser))
             ],
     wh_json:from_list(props:filter_undefined(Props)).
 
@@ -102,14 +113,14 @@ create_ccvs(#auth_user{}=AuthUser) ->
 maybe_get_presence_id(#auth_user{account_db=AccountDb
                                  ,authorizing_id=DeviceId
                                  ,owner_id=OwnerId
-                                 ,username=Username
-                                 ,account_realm=Realm
-                                }) ->
+                                 ,account_realm=AccountRealm
+                                }
+                     ) ->
     case get_presence_id(AccountDb, DeviceId, OwnerId) of
-        'undefined' -> <<Username/binary, "@", Realm/binary>>;
+        'undefined' -> 'undefined';
         PresenceId ->
             case binary:match(PresenceId, <<"@">>) of
-                'nomatch' -> <<PresenceId/binary, "@", Realm/binary>>;
+                'nomatch' -> <<PresenceId/binary, "@", AccountRealm/binary>>;
                 _ -> PresenceId
             end
     end.
@@ -143,7 +154,7 @@ get_device_presence_id(AccountDb, DeviceId) ->
 -spec create_specific_ccvs(auth_user(), ne_binary()) -> wh_proplist().
 create_specific_ccvs(#auth_user{}=AuthUser, ?GSM_ANY_METHOD) ->
     [{<<"Caller-ID">>, AuthUser#auth_user.msisdn}
-     ,{<<"variable_effective_caller_id_number">>, AuthUser#auth_user.msisdn}
+     ,{<<"Caller-ID-Number">>, AuthUser#auth_user.msisdn}
     ];
 create_specific_ccvs(_, _) -> [].
 
@@ -248,6 +259,58 @@ get_auth_user_in_account(Username, Realm, AccountDB) ->
             lager:debug("~s@~s found in account db: ~s", [Username, Realm, AccountDB]),
             {'ok', User}
     end.
+
+%%-----------------------------------------------------------------------------
+%% @private
+%% @doc
+%% lookup auth by IP in cache/database and return the result
+%% @end
+%%-----------------------------------------------------------------------------
+-spec lookup_account_by_ip(ne_binary()) ->
+                                  {'ok', wh_proplist()} |
+                                  couch_mgr:couchbeam_error().
+lookup_account_by_ip(IP) ->
+    lager:debug("looking up IP: ~s in db ~s", [IP, ?WH_SIP_DB]),
+    case wh_cache:peek_local(?REG_CACHE, ip_cache_key(IP)) of
+        {'ok', _AccountCCVs}=OK -> OK;
+        {'error', 'not_found'} -> fetch_account_by_ip(IP)
+    end.
+
+-spec fetch_account_by_ip(ne_binary()) ->
+                                 {'ok', wh_proplist()} |
+                                 couch_mgr:couchbeam_error().
+fetch_account_by_ip(IP) ->
+    case couch_mgr:get_results(?WH_SIP_DB, <<"credentials/lookup_by_ip">>, [{'key', IP}]) of
+        {'ok', []} ->
+            lager:debug("no entry in ~s for IP: ~s", [?WH_SIP_DB, IP]),
+            {'error', 'not_found'};
+        {'ok', [Doc|_]} ->
+            lager:debug("found IP ~s in db ~s (~s)", [IP, ?WH_SIP_DB, wh_json:get_value(<<"id">>, Doc)]),
+            AccountCCVs = account_ccvs_from_ip_auth(Doc),
+            wh_cache:store_local(?REG_CACHE, ip_cache_key(IP), AccountCCVs),
+            {'ok', AccountCCVs};
+        {'error', _E} = Error ->
+            lager:debug("error looking up by IP: ~s: ~p", [IP, _E]),
+            Error
+    end.
+
+-spec ip_cache_key(ne_binary()) -> {'auth_ip', ne_binary()}.
+ip_cache_key(IP) ->
+    {'auth_ip', IP}.
+
+-spec account_ccvs_from_ip_auth(wh_json:object()) -> wh_proplist().
+account_ccvs_from_ip_auth(Doc) ->
+    AccountID = wh_json:get_value([<<"value">>, <<"account_id">>], Doc),
+    OwnerID = wh_json:get_value([<<"value">>, <<"owner_id">>], Doc),
+    AuthType = wh_json:get_value([<<"value">>, <<"authorizing_type">>], Doc, <<"anonymous">>),
+
+    props:filter_undefined(
+      [{<<"Account-ID">>, AccountID}
+       ,{<<"Owner-ID">>, OwnerID}
+       ,{<<"Authorizing-ID">>, wh_json:get_value(<<"id">>, Doc)}
+       ,{<<"Inception">>, <<"on-net">>}
+       ,{<<"Authorizing-Type">>, AuthType}
+      ]).
 
 %%-----------------------------------------------------------------------------
 %% @private
@@ -365,7 +428,8 @@ add_account_name(#auth_user{account_id=AccountId}=AuthUser, AccountDb) ->
         {'error', _} -> AuthUser;
         {'ok', Account} ->
             AuthUser#auth_user{account_name=wh_json:get_value(<<"name">>, Account)
-                               ,account_realm=wh_json:get_lower_binary(<<"realm">>, Account)
+                               ,account_realm=wh_json:get_value(<<"realm">>, Account)
+                               ,account_normalized_realm=wh_json:get_lower_binary(<<"realm">>, Account)
                               }
     end.
 
@@ -379,7 +443,6 @@ get_auth_method(JObj) ->
                               ,JObj
                               ,<<"password">>
                              ).
-
 
 -spec maybe_auth_method(auth_user(), wh_json:object(), wh_json:object(), ne_binary()) ->
                                {'ok', auth_user()} |
@@ -516,3 +579,50 @@ get_account_db(JObj) ->
 -spec remove_dashes(ne_binary()) -> ne_binary().
 remove_dashes(Bin) ->
     << <<B>> || <<B>> <= Bin, B =/= $->>.
+
+-spec encryption_method_map(wh_proplist(), api_binaries() | wh_json:object()) -> wh_proplist().
+encryption_method_map(Props, []) -> Props;
+encryption_method_map(Props, [Method|Methods]) ->
+    case props:get_value(Method, ?ENCRYPTION_MAP, []) of
+        [] -> encryption_method_map(Props, Methods);
+        Values ->
+            encryption_method_map(props:set_values(Values, Props), Methods)
+    end;
+encryption_method_map(Props, JObj) ->
+    encryption_method_map(Props
+                          ,wh_json:get_value([<<"media">>
+                                              ,<<"encryption">>
+                                              ,<<"methods">>
+                                             ]
+                                             ,JObj
+                                             ,[]
+                                            )
+                         ).
+
+-spec generate_security_ccvs(auth_user()) -> wh_proplist().
+-spec generate_security_ccvs(auth_user(), wh_proplist()) -> wh_proplist().
+
+generate_security_ccvs(#auth_user{}=User) ->
+    generate_security_ccvs(User, []).
+
+generate_security_ccvs(#auth_user{}=User, Acc0) ->
+    CCVFuns = [fun maybe_enforce_security/1
+               ,fun maybe_set_encryption_flags/1
+              ],
+    {_, Acc} = lists:foldl(fun(F, Acc) -> F(Acc) end, {User, Acc0}, CCVFuns),
+    Acc.
+
+-spec maybe_enforce_security({auth_user(), wh_proplist()}) -> {auth_user(), wh_proplist()}.
+maybe_enforce_security({#auth_user{doc=JObj}=User, Acc}) ->
+    case wh_json:is_true([<<"media">>
+                          ,<<"encryption">>
+                          ,<<"enforce_security">>
+                         ], JObj, 'false') 
+    of        
+        'true' -> {User, [{<<"Media-Encryption-Enforce-Security">>, 'true'} | Acc]};
+        'false' -> {User, Acc}
+    end.
+        
+-spec maybe_set_encryption_flags({auth_user(), wh_proplist()}) -> {auth_user(), wh_proplist()}.
+maybe_set_encryption_flags({#auth_user{doc=JObj}=User, Acc}) ->
+    {User, encryption_method_map(Acc, JObj)}.

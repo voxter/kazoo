@@ -11,8 +11,8 @@
 -behaviour(gen_listener).
 -export([start_link/1, start_link/2]).
 -export([presence_probe/2]).
--export([mwi_update/2]).
 -export([check_sync/2]).
+-export([mwi_update/2]).
 -export([register_overwrite/2]).
 -export([init/1
          ,handle_call/3
@@ -96,11 +96,35 @@ resp_to_probe(State, User, Realm) ->
     PresenceId = <<User/binary, "@", Realm/binary>>,
     PresenceUpdate = [{<<"Presence-ID">>, PresenceId}
                       ,{<<"State">>, State}
-                      ,{<<"Call-ID">>, wh_util:to_hex_binary(crypto:md5(PresenceId))}
+                      ,{<<"Call-ID">>, wh_util:to_hex_binary(crypto:hash(md5, PresenceId))}
                       | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
                      ],
-    io:format("resp_to_probe: ~p~n", [PresenceUpdate]),
     wh_amqp_worker:cast(PresenceUpdate, fun wapi_presence:publish_update/1).
+
+-spec check_sync(ne_binary(), ne_binary()) -> 'ok'.
+check_sync(Username, Realm) ->
+    lager:info("looking up registration information for ~s@~s", [Username, Realm]),
+    case ecallmgr_registrar:lookup_contact(Realm, Username) of
+        {'error', 'not_found'} ->
+            lager:warning("failed to find contact for ~s@~s, not sending check-sync", [Username, Realm]);
+        {'ok', Contact} ->
+            [Node|_] = wh_util:shuffle_list(ecallmgr_fs_nodes:connected()),
+            lager:info("calling check sync on ~s for ~s@~s and contact ~s", [Node, Username, Realm, Contact]),
+            send_check_sync(Node, Username, Realm, Contact)
+    end.
+
+-spec send_check_sync(atom(), ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+send_check_sync(Node, Username, Realm, Contact) ->
+    Headers = [{"profile", ?DEFAULT_FS_PROFILE}
+               ,{"contact", Contact}
+               ,{"contact-uri", Contact}
+               ,{"to-uri", <<"sip:", Username/binary, "@", Realm/binary>>}
+               ,{"from-uri", <<"sip:", Username/binary, "@", Realm/binary>>}
+               ,{"event-string", "check-sync"}
+               ,{"content-type", "application/simple-message-summary"}
+              ],
+    Resp = freeswitch:sendevent(Node, 'NOTIFY', Headers),
+    lager:info("send check-sync to '~s@~s' via ~s: ~p", [Username, Realm, Node, Resp]).
 
 -spec mwi_update(wh_json:object(), wh_proplist()) -> no_return().
 mwi_update(JObj, Props) ->
@@ -135,6 +159,7 @@ send_mwi_update(JObj, Node, Registration) ->
                         ]),
     Headers = [{"profile", ?DEFAULT_FS_PROFILE}
                ,{"contact", Contact}
+               ,{"contact-uri", Contact}
                ,{"to-uri", To}
                ,{"from-uri", From}
                ,{"event-str", "message-summary"}
@@ -159,6 +184,7 @@ register_overwrite(JObj, Props) ->
     NewBody = wh_util:to_list(<<"Overwrote:", PrevContact/binary>>),
     PrevContactHeaders = [{"profile", ?DEFAULT_FS_PROFILE}
                           ,{"contact", PrevContact}
+                          ,{"contact-uri", PrevContact}
                           ,{"to-uri", SipUri}
                           ,{"from-uri", SipUri}
                           ,{"event-str", "registration-overwrite"}
@@ -168,6 +194,7 @@ register_overwrite(JObj, Props) ->
                          ],
     NewContactHeaders = [{"profile", ?DEFAULT_FS_PROFILE}
                          ,{"contact", NewContact}
+                         ,{"contact-uri", NewContact}
                          ,{"to-uri", SipUri}
                          ,{"from-uri", SipUri}
                          ,{"event-str", "registration-overwrite"}
@@ -182,30 +209,6 @@ register_overwrite(JObj, Props) ->
                   ,NewContact
                   ,Node
                  ]).
-                 
-%%% check-sync
--spec check_sync(text(), text()) -> no_return().
-check_sync(Username, Realm) ->
-    lager:info("looking up registration information for ~s@~s", [Username, Realm]),
-    case ecallmgr_registrar:lookup_contact(Realm, Username) of
-        {'error', 'not_found'} ->
-            lager:warning("failed to find contact for ~s@~s, not sending check-sync", [Username, Realm]);
-        {'ok', Contact} ->
-            [Node|_] = wh_util:shuffle_list(ecallmgr_fs_nodes:connected()),
-            lager:info("calling check sync on ~s for ~s@~s and contact ~s", [Node, Username, Realm, Contact]),
-            send_check_sync(Node, Username, Realm, Contact)
-    end.
-
-send_check_sync(Node, Username, Realm, Contact) ->
-    Headers = [{"profile", ?DEFAULT_FS_PROFILE}
-               ,{"contact", Contact}
-               ,{"to-uri", <<"sip:", Username/binary, "@", Realm/binary>>}
-               ,{"from-uri", <<"sip:", Username/binary, "@", Realm/binary>>}
-               ,{"event-string", "check-sync"}
-               ,{"content-type", "application/simple-message-summary"}
-              ],
-    Resp = freeswitch:sendevent(Node, 'NOTIFY', Headers),
-    lager:info("send check-sync to '~s@~s' via ~s: ~p", [Username, Realm, Node, Resp]).
 
 %%%===================================================================
 %%% gen_server callbacks

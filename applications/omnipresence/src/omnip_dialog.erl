@@ -40,7 +40,6 @@
 start_link() ->
     gen_server:start_link({'local', ?MODULE}, ?MODULE, [], []).
 
-
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -94,12 +93,12 @@ handle_cast({'gen_listener',{'created_queue',_Queue}}, State) ->
     {'noreply', State};
 handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
     {'noreply', State};
-%handle_cast({'omnipresence',{'subscribe_notify', <<"dialog">>, User, #omnip_subscription{}=_Subscription}}, State) ->
-%    spawn(fun() -> initial_update(User) end),
-%    {'noreply', State};
-%handle_cast({'omnipresence',{'resubscribe_notify', <<"dialog">>, User, #omnip_subscription{}=_Subscription}}, State) ->
-%    spawn(fun() -> initial_update(User) end),
-%    {'noreply', State};
+handle_cast({'omnipresence',{'x_subscribe_notify', <<"dialog">>, User, #omnip_subscription{}=_Subscription}}, State) ->
+    spawn(fun() -> initial_update(User) end),
+    {'noreply', State};
+handle_cast({'omnipresence',{'x_resubscribe_notify', <<"dialog">>, User, #omnip_subscription{}=_Subscription}}, State) ->
+    spawn(fun() -> initial_update(User) end),
+    {'noreply', State};
 handle_cast({'omnipresence',{'channel_event', JObj}}, State) ->
     EventType = wh_json:get_value(<<"Event-Name">>, JObj),
     spawn(fun() -> channel_event(EventType, JObj) end),
@@ -208,13 +207,13 @@ handle_disconnected_channel(JObj) ->
 handle_connected_channel(_JObj) ->
     'ok'.
 
-%-spec initial_update(ne_binary()) -> any().
-%initial_update(User) ->
-%    Headers = [{<<"From">>, User}
-%               ,{<<"To">>, User}
-%               ,{<<"Call-ID">>, wh_util:rand_hex_binary(16)}
-%              ],
-%    handle_update(wh_json:from_list(Headers), ?PRESENCE_HANGUP).
+-spec initial_update(ne_binary()) -> any().
+initial_update(User) ->
+    Headers = [{<<"From">>, User}
+               ,{<<"To">>, User}
+               ,{<<"Call-ID">>, wh_util:rand_hex_binary(16)}
+              ],
+    handle_update(wh_json:from_list(Headers), ?PRESENCE_HANGUP).
 
 -spec presence_event(wh_json:object()) -> 'ok'.
 presence_event(JObj) ->
@@ -225,16 +224,15 @@ presence_event(JObj) ->
 maybe_handle_presence_state(_JObj, <<"online">>) -> 'ok';
 maybe_handle_presence_state(_JObj, <<"offline">>) -> 'ok';
 maybe_handle_presence_state(JObj, ?PRESENCE_HANGUP=State) ->
-    handle_update(JObj, State, 1);
+    handle_update(JObj, State, 10);
 maybe_handle_presence_state(JObj, ?PRESENCE_RINGING=State) ->
-    handle_update(JObj, State, 1);
+    handle_update(JObj, State, 0);
 maybe_handle_presence_state(JObj, State) ->
-    handle_update(JObj, State, 1).
-
+    handle_update(JObj, State, 0).
 
 -spec handle_update(wh_json:object(), ne_binary()) -> any().
 handle_update(JObj, ?PRESENCE_HANGUP) ->
-    handle_update(JObj, ?PRESENCE_HANGUP, 1);
+    handle_update(JObj, ?PRESENCE_HANGUP, 10);
 handle_update(JObj, ?PRESENCE_RINGING) ->
     handle_update(JObj, ?PRESENCE_RINGING, 120);
 handle_update(JObj, ?PRESENCE_ANSWERED) ->
@@ -243,6 +241,16 @@ handle_update(_JObj, _State) -> 'ok'.
 
 -spec handle_update(wh_json:object(), ne_binary(), integer()) -> 'ok'.
 handle_update(JObj, State, Expires) ->
+    To = wh_json:get_first_defined([<<"To">>, <<"Presence-ID">>], JObj),
+    From = wh_json:get_first_defined([<<"From">>, <<"Presence-ID">>], JObj),
+
+    case omnip_util:are_valid_uris([To, From]) of
+        'true' -> handle_update(JObj, State, From, To, Expires);
+        'false' -> lager:warning("dialog handler ignoring update from ~s to ~s", [From, To])
+    end.
+
+-spec handle_update(wh_json:object(), ne_binary(), ne_binary(), ne_binary(), integer()) -> any().
+handle_update(JObj, State, From, To, Expires) ->
     To = wh_json:get_first_defined([<<"To">>, <<"Presence-ID">>], JObj),
     From = wh_json:get_first_defined([<<"From">>, <<"Presence-ID">>], JObj),
     [ToUsername, ToRealm] = binary:split(To, <<"@">>),
@@ -262,11 +270,11 @@ handle_update(JObj, State, Expires) ->
                          [{<<"From">>, <<"sip:", From/binary>>}
                           ,{<<"From-User">>, FromUsername}
                           ,{<<"From-Realm">>, FromRealm}
-                          ,{<<"From-Tag">>, wh_json:get_value(<<"From-Tag">>, JObj)}
+                          ,{<<"From-Tag">>, wh_json:get_value(<<"To-Tag">>, JObj)}
                           ,{<<"To">>, <<"sip:", To/binary>>}
                           ,{<<"To-User">>, ToUsername}
                           ,{<<"To-Realm">>, ToRealm}
-                          ,{<<"To-Tag">>, wh_json:get_value(<<"To-Tag">>, JObj)}
+                          ,{<<"To-Tag">>, wh_json:get_value(<<"From-Tag">>, JObj)}
                           ,{<<"State">>, State}
                           ,{<<"Expires">>, Expires}
                           ,{<<"Flush-Level">>, wh_json:get_value(<<"Flush-Level">>, JObj)}
@@ -279,18 +287,19 @@ handle_update(JObj, State, Expires) ->
                           ,{<<"user">>, FromUsername}
                           ,{<<"realm">>, FromRealm}
                           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-                         ])};
+                         ])
+                };
             'false' ->
                 {To, props:filter_undefined(
                        [{<<"From">>, <<"sip:", To/binary>>}
                         ,{<<"From-User">>, ToUsername}
                         ,{<<"From-Realm">>, ToRealm}
-                        ,{<<"From-Tag">>, wh_json:get_value(<<"To-Tag">>, JObj)}
+                        ,{<<"From-Tag">>, wh_json:get_value(<<"From-Tag">>, JObj)}
                         ,{<<"To">>, ToURI}
                         ,{<<"To-URI">>, ToURI}
                         ,{<<"To-User">>, FromUsername}
                         ,{<<"To-Realm">>, FromRealm}
-                        ,{<<"To-Tag">>, wh_json:get_value(<<"From-Tag">>, JObj)}
+                        ,{<<"To-Tag">>, wh_json:get_value(<<"To-Tag">>, JObj)}
                         ,{<<"State">>, State}
                         ,{<<"Expires">>, Expires}
                         ,{<<"Flush-Level">>, wh_json:get_value(<<"Flush-Level">>, JObj)}
@@ -303,7 +312,8 @@ handle_update(JObj, State, Expires) ->
                         ,{<<"user">>, ToUsername}
                         ,{<<"realm">>, ToRealm}
                         | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-                       ])}
+                       ])
+                }
         end,
     maybe_send_update(User, Props).
 
@@ -325,16 +335,23 @@ send_update(User, Props, Subscriptions) ->
 -spec send_update(ne_binary(), ne_binary(), wh_proplist(), subscriptions()) -> 'ok'.
 send_update(_, _User, _Props, []) -> 'ok';
 send_update(<<"amqp">>, _User, Props, Subscriptions) ->
+    lager:debug("sending AMQP dialog update: ~p", [Props]),
     Stalkers = lists:usort([St || #omnip_subscription{stalker=St} <- Subscriptions]),
-    [whapps_util:amqp_pool_send(Props
-                               ,fun(P) -> wapi_omnipresence:publish_update(S, P) end
-                              ) || S <- Stalkers];
+    {'ok', Worker} = wh_amqp_worker:checkout_worker(),
+    [wh_amqp_worker:cast(Props
+                         ,fun(P) -> wapi_omnipresence:publish_update(S, P) end
+                         , Worker
+                        )
+     || S <- Stalkers
+    ],
+    wh_amqp_worker:checkin_worker(Worker);
 send_update(<<"sip">>, User, Props, Subscriptions) ->
+    lager:debug("building SIP dialog update: ~p", [Props]),
     Body = build_body(User, Props),
     Options = [{'body', Body}
                ,{'content_type', <<"application/dialog-info+xml">>}
                ,{'subscription_state', 'active'}
-               ],
+              ],
     [nksip_uac:notify(SubscriptionId
                       ,[{'contact', Contact}
                         ,{'route', [Proxy]}
@@ -355,7 +372,7 @@ get_user_channels(User) ->
                ,{<<"Realm">>, Realm}
                ,{<<"Active-Only">>, 'false'}
                | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-          ],
+              ],
     case whapps_util:amqp_pool_request(Payload
                                        ,fun wapi_call:publish_query_user_channels_req/1
                                        ,fun wapi_call:query_user_channels_resp_v/1
@@ -433,7 +450,7 @@ reset_blf(User) ->
     Headers = [{<<"From">>, User}
                ,{<<"To">>, User}
                ,{<<"Flush-Level">>, 1}
-               ,{<<"Call-ID">>, wh_util:to_hex_binary(crypto:md5(User))}
+               ,{<<"Call-ID">>, wh_util:to_hex_binary(crypto:hash(md5, User))}
               ],
     handle_update(wh_json:from_list(Headers), ?PRESENCE_HANGUP).
 
@@ -441,6 +458,6 @@ reset_blf(User) ->
 reset_user_blf(User) ->
     case omnip_subscriptions:find_user_subscriptions(?DIALOG_EVENT, User) of
         {'ok', Subs} ->
-            [ reset_blf(SubUser) || #omnip_subscription{user=SubUser} <- Subs];
+            [reset_blf(SubUser) || #omnip_subscription{user=SubUser} <- Subs];
         _ -> 'ok'
     end.
