@@ -4,9 +4,9 @@
 %%%
 %%% @end
 %%% @contributors
-%%% Daniel Finke
+%%% Daniel Finke, Lucas Bussey
 %%%-------------------------------------------------------------------
--module(amimulator_app).
+-module(quilt_app).
 
 -behaviour(application).
 
@@ -24,7 +24,7 @@
                    {'ok', pid()} |
                    {'error', startlink_err()}.
 start(_Type, _Args) ->
-    amimulator:start_link().
+    quilt:start_link().
 
 %%--------------------------------------------------------------------
 %% @public
@@ -34,4 +34,4 @@ start(_Type, _Args) ->
 %%--------------------------------------------------------------------
 -spec stop(term()) -> 'ok'.
 stop(_State) ->
-    amimulator:stop().
+    quilt:stop().
