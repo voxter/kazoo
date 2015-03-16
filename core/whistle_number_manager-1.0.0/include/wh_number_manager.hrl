@@ -34,6 +34,17 @@
 
 -type wnm_number() :: #number{}.
 
+-type number_property() :: {'force_outbound', boolean()} |
+                           {'pending_port', boolean()} |
+                           {'local', boolean()} |
+                           {'inbound_cnam', boolean()} |
+                           {'ringback_media', api_binary()} |
+                           {'transfer_media', api_binary()} |
+                           {'number', api_binary()} |
+                           {'account_id', api_binary()} |
+                           {'prepend', 'false' | api_binary()}.
+-type number_properties() :: [number_property(),...] | [].
+
 -define(WNM_NUMBER_STATUS, [<<"discovery">>, <<"available">>, <<"reserved">>, <<"released">>
                                 ,<<"port_in">> ,<<"in_service">>, <<"disconnected">>, <<"port_out">>
                            ]).
@@ -44,7 +55,7 @@
 
 -define(WNM_DEAFULT_CARRIER_MODULES, [<<"wnm_local">>]).
 -define(WNM_DEAFULT_PROVIDER_MODULES, [<<"cnam_notifier">>, <<"port_notifier">>
-                                           ,<<"failover">>
+                                       ,<<"failover">> ,<<"prepend">>
                                       ]).
 
 -define(WNM_DB_PREFIX, <<"numbers/">>).
@@ -72,7 +83,7 @@
                         api_binary().
 
 -type operation_return() :: {'ok', wh_json:object()} |
-                            {wnm_failures(), wh_json:object()}.
+                            {wnm_failures(), api_object()}.
 
 %%% NUMBER STATES
 %%% discovery    - The number was discovered via a carrier lookup but has not been reserved or purchased.

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2014, 2600Hz
+%%% @copyright (C) 2013-2015, 2600Hz
 %%% @doc
 %%% Implementation of a token bucket as gen_server
 %%%   https://en.wikipedia.org/wiki/Token_bucket#The_token_bucket_algorithm
@@ -26,6 +26,7 @@
          ,credit/2
          ,tokens/1
          ,set_name/2
+         ,default_fill_time/0, default_fill_time/1
         ]).
 
 %% gen_server callbacks
@@ -39,6 +40,8 @@
 
 -include("kz_buckets.hrl").
 
+-define(FILL_TIME, whapps_config:get_binary(?APP_NAME, <<"tokens_fill_time">>, <<"second">>)).
+-define(FILL_TIME(App), whapps_config:get(?APP_NAME, [App, <<"tokens_fill_time">>], ?FILL_TIME)).
 -define(TOKEN_FILL_TIME, 'fill_er_up').
 
 -type fill_rate_time() :: 'second' | 'minute' | 'hour' | 'day'.
@@ -67,18 +70,18 @@
 -spec start_link(pos_integer(), pos_integer()) -> startlink_ret().
 -spec start_link(pos_integer(), pos_integer(), boolean()) -> startlink_ret().
 start_link(Max, FillRate) -> start_link(Max, FillRate, 'true').
-start_link(Max, FillRate, FillBlock) ->
-    start_link(Max, FillRate, FillBlock, 'second').
-start_link(Max, FillRate, FillBlock, FillTime) when is_integer(FillRate), FillRate > 0,
+start_link(Max, FillRate, FillAsBlock) ->
+    start_link(Max, FillRate, FillAsBlock, default_fill_time()).
+start_link(Max, FillRate, FillAsBlock, FillTime) when is_integer(FillRate), FillRate > 0,
                                                     is_integer(Max), Max > 0,
-                                                    is_boolean(FillBlock),
+                                                    is_boolean(FillAsBlock),
                                                     (FillTime =:= 'second'
                                                      orelse FillTime =:= 'minute'
                                                      orelse FillTime =:= 'hour'
                                                      orelse FillTime =:= 'day'
                                                     )
                                                     ->
-    gen_server:start_link(?MODULE, [Max, FillRate, FillBlock, FillTime], []).
+    gen_server:start_link(?MODULE, [Max, FillRate, FillAsBlock, FillTime], []).
 
 -spec stop(pid()) -> 'ok'.
 stop(Srv) ->
@@ -103,8 +106,21 @@ credit(Srv, Tokens) when is_integer(Tokens) andalso Tokens > 0 ->
 -spec tokens(pid()) -> non_neg_integer().
 tokens(Srv) -> gen_server:call(Srv, {'tokens'}).
 
--spec set_name(pid(), ne_binary()) -> 'ok'.
+-spec set_name(pid(), {ne_binary(), ne_binary()}) -> 'ok'.
 set_name(Srv, Name) -> gen_server:cast(Srv, {'name', Name}).
+
+-spec default_fill_time() -> fill_rate_time().
+-spec default_fill_time(ne_binary()) -> fill_rate_time().
+default_fill_time() ->
+    default_fill_time(?DEFAULT_APP).
+default_fill_time(App) ->
+    normalize_fill_time(?FILL_TIME(App)).
+
+-spec normalize_fill_time(ne_binary()) -> fill_rate_time().
+normalize_fill_time(<<"day">>) -> 'day';
+normalize_fill_time(<<"hour">>) -> 'hour';
+normalize_fill_time(<<"minute">>) -> 'minute';
+normalize_fill_time(_) -> 'second'.
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -121,19 +137,19 @@ set_name(Srv, Name) -> gen_server:cast(Srv, {'name', Name}).
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([Max, FillRate, FillBlock, FillTime]) ->
+init([Max, FillRate, FillAsBlock, FillTime]) ->
     wh_util:put_callid(?MODULE),
     lager:debug("starting token bucket with ~b max, filling at ~b/~s, in a block: ~s"
-                ,[Max, FillRate,FillTime, FillBlock]
+                ,[Max, FillRate,FillTime, FillAsBlock]
                ),
     {'ok', #state{max_tokens=Max
                   ,fill_rate=FillRate
                   ,fill_rate_time=FillTime
-                  ,fill_ref=start_fill_timer(FillRate, FillBlock, FillTime)
-                  ,fill_as_block=FillBlock
+                  ,fill_ref=start_fill_timer(FillRate, FillAsBlock, FillTime)
+                  ,fill_as_block=FillAsBlock
                   ,tokens=Max
                  }
-     ,?INACTIVITY_TIMEOUT_MS
+     ,?INACTIVITY_TIMEOUT_S * 1000
     }.
 
 %%--------------------------------------------------------------------
@@ -154,25 +170,25 @@ handle_call({'consume', Req}, _From, #state{tokens=Current}=State) ->
     case Current - Req of
         N when N >= 0 ->
             lager:debug("consumed ~p, ~p left", [Req, N]),
-            {'reply', 'true', State#state{tokens=N}, ?INACTIVITY_TIMEOUT_MS};
+            {'reply', 'true', State#state{tokens=N}, ?INACTIVITY_TIMEOUT_S * 1000};
         _ ->
             lager:debug("not enough tokens (~p) to consume ~p", [Current, Req]),
-            {'reply', 'false', State, ?INACTIVITY_TIMEOUT_MS}
+            {'reply', 'false', State, ?INACTIVITY_TIMEOUT_S * 1000}
     end;
 handle_call({'consume_until', Req}, _From, #state{tokens=Current}=State) ->
     case Current - Req of
         N when N >= 0 ->
             lager:debug("consumed ~p, ~p left", [Req, N]),
-            {'reply', 'true', State#state{tokens=N}, ?INACTIVITY_TIMEOUT_MS};
+            {'reply', 'true', State#state{tokens=N}, ?INACTIVITY_TIMEOUT_S * 1000};
         _N ->
             lager:debug("not enough tokens (~p) to consume ~p, zeroing out tokens", [Current, Req]),
-            {'reply', 'false', State#state{tokens=0}, ?INACTIVITY_TIMEOUT_MS}
+            {'reply', 'false', State#state{tokens=0}, ?INACTIVITY_TIMEOUT_S * 1000}
     end;
 handle_call({'tokens'}, _From, #state{tokens=Current}=State) ->
-    {'reply', Current, State, ?INACTIVITY_TIMEOUT_MS};
+    {'reply', Current, State, ?INACTIVITY_TIMEOUT_S * 1000};
 handle_call(_Request, _From, State) ->
     lager:debug("unhandled call: ~p", [_Request]),
-    {'reply', 'ok', State, ?INACTIVITY_TIMEOUT_MS}.
+    {'reply', 'ok', State, ?INACTIVITY_TIMEOUT_S * 1000}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -190,21 +206,21 @@ handle_cast({'credit', Req}, #state{tokens=Current
     case Current + Req of
         N when N > Max ->
             lager:debug("credit of ~p tokens overfills, setting to ~p", [Req, Max]),
-            {'noreply', State#state{tokens=Max}, ?INACTIVITY_TIMEOUT_MS};
+            {'noreply', State#state{tokens=Max}, ?INACTIVITY_TIMEOUT_S * 1000};
         N ->
             lager:debug("crediting ~p tokens, now at ~p", [Req, N]),
-            {'noreply', State#state{tokens=N}, ?INACTIVITY_TIMEOUT_MS}
+            {'noreply', State#state{tokens=N}, ?INACTIVITY_TIMEOUT_S * 1000}
     end;
 handle_cast({'name', Name}, State) ->
     wh_util:put_callid(Name),
-    lager:debug("updated name to ~s", [Name]),
-    {'noreply', State, ?INACTIVITY_TIMEOUT_MS};
+    lager:debug("updated name to ~p", [Name]),
+    {'noreply', State, ?INACTIVITY_TIMEOUT_S * 1000};
 handle_cast('stop', State) ->
     lager:debug("asked to stop"),
     {'stop', 'normal', State};
 handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p", [_Msg]),
-    {'noreply', State, ?INACTIVITY_TIMEOUT_MS}.
+    {'noreply', State, ?INACTIVITY_TIMEOUT_S * 1000}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -224,17 +240,17 @@ handle_info({'timeout', Ref, ?TOKEN_FILL_TIME}, #state{max_tokens=Max
                                                        ,fill_rate=FillRate
                                                        ,fill_rate_time=FillTime
                                                        ,fill_ref=Ref
-                                                       ,fill_as_block=FillBlock
+                                                       ,fill_as_block=FillAsBlock
                                                      }=State) ->
     {'noreply'
-     ,State#state{tokens=add_tokens(Max, Current, FillRate, FillBlock, FillTime)
-                  ,fill_ref=start_fill_timer(FillRate, FillBlock, FillTime)
+     ,State#state{tokens=add_tokens(Max, Current, FillRate, FillAsBlock, FillTime)
+                  ,fill_ref=start_fill_timer(FillRate, FillAsBlock, FillTime)
                  }
-     ,?INACTIVITY_TIMEOUT_MS
+     ,?INACTIVITY_TIMEOUT_S * 1000
     };
 handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
-    {'noreply', State, ?INACTIVITY_TIMEOUT_MS}.
+    {'noreply', State, ?INACTIVITY_TIMEOUT_S * 1000}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -273,7 +289,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%   Maxes out at 1ms
 
 -spec fill_time_in_ms(fill_rate_time() | pos_integer()) -> pos_integer().
-fill_time_in_ms('second') -> 1000;
+fill_time_in_ms('second') -> ?MILLISECONDS_IN_SECOND;
 fill_time_in_ms('minute') -> ?MILLISECONDS_IN_MINUTE;
 fill_time_in_ms('hour') -> ?MILLISECONDS_IN_HOUR;
 fill_time_in_ms('day') -> ?MILLISECONDS_IN_DAY;

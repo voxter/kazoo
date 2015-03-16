@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2015, 2600Hz INC
 %%% @doc
 %%% Routing requests, responses, and wins!
 %%% @end
@@ -47,6 +47,7 @@
                                      ,<<"SIP-Request-Host">>, <<"Message-ID">>
                                      ,<<"Body">>
                                      ,<<"From-Tag">>, <<"To-Tag">>
+                                     ,<<"Prepend-CID-Name">>
                                     ]).
 -define(ROUTE_REQ_VALUES, [{<<"Event-Category">>, ?EVENT_CATEGORY}
                            ,{<<"Event-Name">>, ?ROUTE_REQ_EVENT_NAME}
@@ -69,8 +70,8 @@
                           ,{<<"Cost-Parameters">>, fun(JObj) ->
                                                            wh_json:is_json_object(JObj)
                                                                andalso lists:all(fun({K, _V}) ->
-                                                                                 lists:member(K, ?ROUTE_REQ_COST_PARAMS)
-                                                                         end, wh_json:to_proplist(JObj))
+                                                                                         lists:member(K, ?ROUTE_REQ_COST_PARAMS)
+                                                                                 end, wh_json:to_proplist(JObj))
                                                    end}
                           ,{<<"Custom-Channel-Vars">>, fun wh_json:is_json_object/1}
                           ,{<<"Custom-SIP-Headers">>, fun wh_json:is_json_object/1}
@@ -82,8 +83,9 @@
                                             ,<<"Proxy-Via">>, <<"Media">>, <<"Auth-User">>
                                             ,<<"Auth-Password">>, <<"Codecs">>, <<"Progress-Timeout">>
                                             ,<<"Caller-ID-Name">>, <<"Caller-ID-Number">>, <<"Caller-ID-Type">>
-                                            ,<<"Rate">>, <<"Rate-Increment">>, <<"Rate-Minimum">>, <<"Surcharge">>
-                                            ,<<"SIP-Headers">>, <<"Custom-Channel-Vars">>
+                                            ,<<"Rate">>, <<"Rate-Increment">>, <<"Rate-Minimum">>
+                                            ,<<"Surcharge">>, <<"Rate-NoCharge-Time">>
+                                            ,<<"Custom-SIP-Headers">>, <<"Custom-Channel-Vars">>
                                             ,<<"Weight-Cost">>, <<"Weight-Location">>
                                            ]).
 -define(ROUTE_RESP_ROUTE_VALUES, [{<<"Media">>, [<<"process">>, <<"bypass">>, <<"auto">>]}
@@ -94,7 +96,7 @@
                                  ,{<<"Route">>, fun is_binary/1}
                                  ,{<<"To-User">>, fun is_binary/1}
                                  ,{<<"To-Realm">>, fun is_binary/1}
-                                 ,{<<"SIP-Headers">>, fun wh_json:is_json_object/1}
+                                 ,{<<"Custom-SIP-Headers">>, fun wh_json:is_json_object/1}
                                  ,{<<"Custom-Channel-Vars">>, fun wh_json:is_json_object/1}
                                 ]).
 

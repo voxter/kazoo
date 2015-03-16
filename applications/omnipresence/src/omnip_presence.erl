@@ -9,8 +9,7 @@
 
 -behaviour(gen_server).
 
--export([start_link/0
-        ]).
+-export([start_link/0]).
 -export([init/1
          ,handle_call/3
          ,handle_cast/2
@@ -43,7 +42,6 @@
 %%--------------------------------------------------------------------
 start_link() ->
     gen_server:start_link({'local', ?MODULE}, ?MODULE, [], []).
-
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -98,30 +96,30 @@ handle_cast({'gen_listener',{'created_queue',_Queue}}, State) ->
     {'noreply', State};
 handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
     {'noreply', State};
-%handle_cast({'omnipresence',{'subscribe_notify', <<"presence">>, User, #omnip_subscription{}=_Subscription}}, State) ->
-%    [Username, Realm] = binary:split(User, <<"@">>),
-%    Props = [{<<"Username">>, Username}
-%             ,{<<"Realm">>, Realm}
-%             ,{<<"Event-Package">>, <<"presence">>}
-%             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-%            ],
-%    wh_amqp_worker:cast(Props, fun wapi_presence:publish_probe/1),
-%    {'noreply', State};
-%handle_cast({'omnipresence',{'resubscribe_notify', <<"presence">>, User, #omnip_subscription{}=_Subscription}}, State) ->
-%    [Username, Realm] = binary:split(User, <<"@">>),
-%    Props = [{<<"Username">>, Username}
-%             ,{<<"Realm">>, Realm}
-%             ,{<<"Event-Package">>, <<"presence">>}
-%             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-%            ],
-%    wh_amqp_worker:cast(Props, fun wapi_presence:publish_probe/1),
-%    {'noreply', State};
+handle_cast({'omnipresence',{'subscribe_notify', <<"presence">>, User, #omnip_subscription{}=_Subscription}}, State) ->
+    [Username, Realm] = binary:split(User, <<"@">>),
+    Props = [{<<"Username">>, Username}
+             ,{<<"Realm">>, Realm}
+             ,{<<"Event-Package">>, <<"presence">>}
+             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+            ],
+    wh_amqp_worker:cast(Props, fun wapi_presence:publish_probe/1),
+    {'noreply', State};
+handle_cast({'omnipresence',{'x_resubscribe_notify', <<"presence">>, User, #omnip_subscription{}=_Subscription}}, State) ->
+    [Username, Realm] = binary:split(User, <<"@">>),
+    Props = [{<<"Username">>, Username}
+             ,{<<"Realm">>, Realm}
+             ,{<<"Event-Package">>, <<"presence">>}
+             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+            ],
+    wh_amqp_worker:cast(Props, fun wapi_presence:publish_probe/1),
+    {'noreply', State};
 handle_cast({'omnipresence',{'presence_update', JObj}}, State) ->
-    spawn(fun() -> presence_event(JObj) end),
+    _ = spawn(fun() -> presence_event(JObj) end),
     {'noreply', State};
 handle_cast({'omnipresence',{'channel_event', JObj}}, State) ->
     EventType = wh_json:get_value(<<"Event-Name">>, JObj),
-    spawn(fun() -> channel_event(EventType, JObj) end),
+    _ = spawn(fun() -> channel_event(EventType, JObj) end),
     {'noreply', State};
 handle_cast({'omnipresence', _}, State) ->
     {'noreply', State};
@@ -231,26 +229,34 @@ presence_event(JObj) ->
 
 -spec maybe_handle_presence_state(wh_json:object(), api_binary()) -> 'ok'.
 maybe_handle_presence_state(JObj, <<"online">>=State) ->
-    handle_update(JObj, State, 1);
+    handle_update(JObj, State, 0);
 maybe_handle_presence_state(JObj, <<"offline">>=State) ->
-    handle_update(JObj, State, 1);
+    handle_update(JObj, State, 0);
 maybe_handle_presence_state(JObj, State) ->
     handle_update(wh_json:delete_keys([<<"From">>, <<"To">>], JObj), State, 0).
 
 -spec handle_update(wh_json:object(), ne_binary()) -> any().
 handle_update(JObj, ?PRESENCE_HANGUP) ->
-    handle_update(JObj, ?PRESENCE_HANGUP, 1);
+    handle_update(JObj, ?PRESENCE_HANGUP, 0);
 handle_update(JObj, ?PRESENCE_RINGING) ->
     handle_update(JObj, ?PRESENCE_RINGING, 120);
 handle_update(JObj, ?PRESENCE_ANSWERED) ->
     handle_update(JObj, ?PRESENCE_ANSWERED, 36000);
 handle_update(JObj, State) ->
-    handle_update(JObj, State, 1).
+    handle_update(JObj, State, 0).
 
 -spec handle_update(wh_json:object(), ne_binary(), integer()) -> any().
 handle_update(JObj, State, Expires) ->
     To = wh_json:get_first_defined([<<"To">>, <<"Presence-ID">>], JObj),
     From = wh_json:get_first_defined([<<"From">>, <<"Presence-ID">>], JObj),
+
+    case omnip_util:are_valid_uris([To, From]) of
+        'true' -> handle_update(JObj, State, From, To, Expires);
+        'false' -> lager:warning("presence handler ignoring update from ~s to ~s", [From, To])
+    end.
+
+-spec handle_update(wh_json:object(), ne_binary(), ne_binary(), ne_binary(), integer()) -> any().
+handle_update(JObj, State, From, To, Expires) ->
     [ToUsername, ToRealm] = binary:split(To, <<"@">>),
     [FromUsername, FromRealm] = binary:split(From, <<"@">>),
     Direction = wh_json:get_lower_binary(<<"Call-Direction">>, JObj),
@@ -258,47 +264,48 @@ handle_update(JObj, State, Expires) ->
         case Direction =:= <<"inbound">> of
             'true' ->
                 {From, props:filter_undefined(
-                   [{<<"From">>, <<"sip:", From/binary>>}
-                    ,{<<"From-User">>, FromUsername}
-                    ,{<<"From-Realm">>, FromRealm}
-                    ,{<<"To">>, <<"sip:", To/binary>>}
-                    ,{<<"To-User">>, ToUsername}
-                    ,{<<"To-Realm">>, ToRealm}
-                    ,{<<"State">>, State}
-                    ,{<<"Expires">>, Expires}
-                    ,{<<"Direction">>, <<"initiator">>}
-                    ,{<<"Call-ID">>, ?FAKE_CALLID(From)}
-                    ,{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, JObj)}
-                    ,{<<"Event-Package">>, <<"presence">>}
-                    ,{<<"destination">>, ToUsername}
-                    ,{<<"uuid">>, wh_json:get_value(<<"Call-ID">>, JObj)}
-                    ,{<<"user">>, FromUsername}
-                    ,{<<"realm">>, FromRealm}
-                    | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-                   ])};
+                         [{<<"From">>, <<"sip:", From/binary>>}
+                          ,{<<"From-User">>, FromUsername}
+                          ,{<<"From-Realm">>, FromRealm}
+                          ,{<<"To">>, <<"sip:", To/binary>>}
+                          ,{<<"To-User">>, ToUsername}
+                          ,{<<"To-Realm">>, ToRealm}
+                          ,{<<"State">>, State}
+                          ,{<<"Expires">>, Expires}
+                          ,{<<"Direction">>, <<"initiator">>}
+                          ,{<<"Call-ID">>, ?FAKE_CALLID(From)}
+                          ,{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, JObj)}
+                          ,{<<"Event-Package">>, <<"presence">>}
+                          ,{<<"destination">>, ToUsername}
+                          ,{<<"uuid">>, wh_json:get_value(<<"Call-ID">>, JObj)}
+                          ,{<<"user">>, FromUsername}
+                          ,{<<"realm">>, FromRealm}
+                          | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                         ])
+                };
             'false' ->
                 {To, props:filter_undefined(
-                   [{<<"From">>, <<"sip:", To/binary>>}
-                    ,{<<"From-User">>, ToUsername}
-                    ,{<<"From-Realm">>, ToRealm}
-                    ,{<<"To">>, <<"sip:", From/binary>>}
-                    ,{<<"To-User">>, FromUsername}
-                    ,{<<"To-Realm">>, FromRealm}
-                    ,{<<"To">>, <<"sip:", From/binary>>}
-                    ,{<<"State">>, State}
-                    ,{<<"Expires">>, Expires}
-                    ,{<<"Direction">>, <<"recipient">>}
-                    ,{<<"Call-ID">>, ?FAKE_CALLID(To)}
-                    ,{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, JObj)}
-                    ,{<<"Event-Package">>, <<"presence">>}
-                    ,{<<"destination">>, FromUsername}
-                    ,{<<"uuid">>, wh_json:get_value(<<"Call-ID">>, JObj)}
-                    ,{<<"user">>, ToUsername}
-                    ,{<<"realm">>, ToRealm}
-                    | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-                   ])}
+                       [{<<"From">>, <<"sip:", To/binary>>}
+                        ,{<<"From-User">>, ToUsername}
+                        ,{<<"From-Realm">>, ToRealm}
+                        ,{<<"To">>, <<"sip:", From/binary>>}
+                        ,{<<"To-User">>, FromUsername}
+                        ,{<<"To-Realm">>, FromRealm}
+                        ,{<<"To">>, <<"sip:", From/binary>>}
+                        ,{<<"State">>, State}
+                        ,{<<"Expires">>, Expires}
+                        ,{<<"Direction">>, <<"recipient">>}
+                        ,{<<"Call-ID">>, ?FAKE_CALLID(To)}
+                        ,{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, JObj)}
+                        ,{<<"Event-Package">>, <<"presence">>}
+                        ,{<<"destination">>, FromUsername}
+                        ,{<<"uuid">>, wh_json:get_value(<<"Call-ID">>, JObj)}
+                        ,{<<"user">>, ToUsername}
+                        ,{<<"realm">>, ToRealm}
+                        | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                       ])
+                }
         end,
-
     maybe_send_update(User, Props).
 
 -spec maybe_send_update(ne_binary(), wh_proplist()) -> 'ok'.
@@ -320,13 +327,18 @@ send_update(User, Props, Subscriptions) ->
 -spec send_update(ne_binary(), ne_binary(), wh_proplist(), subscriptions()) -> 'ok'.
 send_update(_, _User, _Props, []) -> 'ok';
 send_update(<<"amqp">>, _User, Props, Subscriptions) ->
+    lager:debug("building SIP presence update: ~p", [Props]),
     Stalkers = lists:usort([St || #omnip_subscription{stalker=St} <- Subscriptions]),
-    [whapps_util:amqp_pool_send(Props
-                                ,fun(P) -> wapi_omnipresence:publish_update(S, P) end
-                               )
+    {'ok', Worker} = wh_amqp_worker:checkout_worker(),
+    [wh_amqp_worker:cast(Props
+                         ,fun(P) -> wapi_omnipresence:publish_update(S, P) end
+                         ,Worker
+                        )
      || S <- Stalkers
-    ];
+    ],
+    wh_amqp_worker:checkin_worker(Worker);
 send_update(<<"sip">>, User, Props, Subscriptions) ->
+    lager:debug("building SIP presence update: ~p", [Props]),
     Options = [{'body', build_body(User, Props)}
                ,{'content_type', <<"application/pidf+xml">>}
                ,{'subscription_state', 'active'}

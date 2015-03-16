@@ -23,7 +23,7 @@
 
 -define(DEFAULT_MIGRATE_OPTIONS, []).
 -define(OVERRIDE_DOCS, ['override_existing_document']).
-       
+
 -spec migrate() -> 'ok'.
 migrate() ->
     Accounts = whapps_util:get_all_accounts(),
@@ -49,7 +49,7 @@ migrate([], _) -> 'ok';
 migrate(Accounts, <<"override_existing_documents">>) ->
     migrate(Accounts, ?OVERRIDE_DOCS);
 migrate(Accounts, Option) when is_binary(Option)->
-    migrate(Accounts, ?DEFAULT_MIGRATE_OPTIONS);    
+    migrate(Accounts, ?DEFAULT_MIGRATE_OPTIONS);
 migrate([Account|Accounts], Options) when is_list(Options) ->
     _ = migrate_faxes(Account, Options),
     migrate(Accounts, Options);
@@ -94,8 +94,8 @@ migrate_private_media(Account) ->
 
 maybe_migrate_private_media(AccountDb, JObj) ->
     DocId = wh_json:get_value(<<"id">>, JObj),
-    case couch_mgr:open_doc(AccountDb, DocId) of 
-        {'ok', Doc } -> 
+    case couch_mgr:open_doc(AccountDb, DocId) of
+        {'ok', Doc } ->
             MediaType = wh_json:get_value(<<"media_type">>, Doc),
             migrate_private_media(AccountDb, Doc, MediaType);
         {'error', Error} ->
@@ -103,7 +103,7 @@ maybe_migrate_private_media(AccountDb, JObj) ->
     end.
 
 migrate_private_media(AccountDb, Doc, <<"tiff">>) ->
-    _ = couch_mgr:save_doc(AccountDb, wh_json:set_value(<<"pvt_type">>, <<"fax">>, Doc)),
+    {'ok', _} = couch_mgr:ensure_saved(AccountDb, wh_json:set_value(<<"pvt_type">>, <<"fax">>, Doc)),
     'ok';
 migrate_private_media(_AccountDb, _JObj, _MediaType) -> 'ok'.
 
@@ -134,7 +134,7 @@ maybe_recover_private_media(AccountDb, JObj) ->
 recover_private_media(_AccountDb, _Doc, <<"tiff">>) ->
     'ok';
 recover_private_media(AccountDb, Doc, _MediaType) ->
-    _ = couch_mgr:save_doc(AccountDb, wh_json:set_value(<<"pvt_type">>, <<"private_media">>, Doc)),
+    {'ok', _ } = couch_mgr:ensure_saved(AccountDb, wh_json:set_value(<<"pvt_type">>, <<"private_media">>, Doc)),
     'ok'.
 
 -spec migrate_faxes_to_modb(ne_binary(),  wh_proplist()) -> 'ok'.
@@ -208,11 +208,11 @@ account_jobs(AccountId, State) ->
     io:format("+--------------------------------+-------------------+-----------------+----------------------------------+----------------------------------+----------------------+----------------------+~n", []),
     FormatString = "| ~-30s | ~-17s | ~-15s | ~-32s | ~-32s | ~-20s | ~-20s |~n",
     io:format(FormatString, [<<"Job">>, <<"Date">>, <<"State">>, <<"Account">>, <<"Faxbox">>, <<"From">>, <<"To">>]),
-    io:format("+================================+===================+=================+==================================+==================================+======================+======================+~n", []),    
+    io:format("+================================+===================+=================+==================================+==================================+======================+======================+~n", []),
     ViewOptions = [{'startkey', [AccountId, State]}
                    ,{'endkey', [AccountId, State, wh_json:new()]}
                    ],
-    
+
     case couch_mgr:get_results(?WH_FAXES, <<"faxes/list_by_account_state">>, ViewOptions) of
         {'ok', Jobs} ->
             [io:format(FormatString, [wh_json:get_value([<<"value">>, <<"id">>], JObj)
@@ -224,7 +224,7 @@ account_jobs(AccountId, State) ->
                                       ,wh_json:get_value([<<"value">>, <<"from">>], JObj)
                                       ,wh_json:get_value([<<"value">>, <<"to">>], JObj)
                                      ]) || JObj <- Jobs];
-        {'error', _Reason} ->            
+        {'error', _Reason} ->
             io:format("Error getting faxes~n", [])
     end,
     io:format("+--------------------------------+-------------------+-----------------+----------------------------------+----------------------------------+----------------------+----------------------+~n", []),
@@ -237,11 +237,11 @@ faxbox_jobs(FaxboxId, State) ->
     io:format("+--------------------------------+-------------------+-----------------+----------------------------------+----------------------------------+----------------------+----------------------+~n", []),
     FormatString = "| ~-30s | ~-17s | ~-15s | ~-32s | ~-32s | ~-20s | ~-20s |~n",
     io:format(FormatString, [<<"Job">>, <<"Date">>, <<"State">>, <<"Account">>, <<"Faxbox">>, <<"From">>, <<"To">>]),
-    io:format("+================================+===================+=================+==================================+==================================+======================+======================+~n", []),    
+    io:format("+================================+===================+=================+==================================+==================================+======================+======================+~n", []),
     ViewOptions = [{'startkey', [FaxboxId, State]}
                    ,{'endkey', [FaxboxId, State, wh_json:new()]}
                    ],
-    
+
     case couch_mgr:get_results(?WH_FAXES, <<"faxes/list_by_faxbox_state">>, ViewOptions) of
         {'ok', Jobs} ->
             [io:format(FormatString, [wh_json:get_value([<<"value">>, <<"id">>], JObj)
@@ -253,7 +253,7 @@ faxbox_jobs(FaxboxId, State) ->
                                       ,wh_json:get_value([<<"value">>, <<"from">>], JObj)
                                       ,wh_json:get_value([<<"value">>, <<"to">>], JObj)
                                      ]) || JObj <- Jobs];
-        {'error', _Reason} ->            
+        {'error', _Reason} ->
             io:format("Error getting faxes~n", [])
     end,
     io:format("+--------------------------------+-------------------+-----------------+----------------------------------+----------------------------------+----------------------+----------------------+~n", []),
@@ -264,7 +264,7 @@ pending_jobs() ->
     io:format("+--------------------------------+-------------------+----------------------------------+----------------------------------+----------------------+----------------------+~n", []),
     FormatString = "| ~-30s | ~-17s | ~-32s | ~-32s | ~-20s | ~-20s |~n",
     io:format(FormatString, [<<"Job">>, <<"Date">>, <<"Account">>, <<"Faxbox">>, <<"From">>, <<"To">>]),
-    io:format("+================================+===================+==================================+==================================+======================+======================+~n", []),    
+    io:format("+================================+===================+==================================+==================================+======================+======================+~n", []),
     case couch_mgr:get_results(?WH_FAXES, <<"faxes/jobs">>) of
         {'ok', Jobs} ->
             [io:format(FormatString, [wh_json:get_value([<<"value">>, <<"id">>], JObj)
@@ -275,18 +275,18 @@ pending_jobs() ->
                                       ,wh_json:get_value([<<"value">>, <<"from">>], JObj)
                                       ,wh_json:get_value([<<"value">>, <<"to">>], JObj)
                                      ]) || JObj <- Jobs];
-        {'error', _Reason} ->            
+        {'error', _Reason} ->
             io:format("Error getting faxes~n", [])
     end,
     io:format("+--------------------------------+-------------------+----------------------------------+----------------------------------+----------------------+----------------------+~n", []),
     'no_return'.
-    
+
 -spec active_jobs() -> 'no_return'.
 active_jobs() ->
     io:format("+--------------------------------+--------------------------------+-------------------+----------------------------------+----------------------------------+----------------------+----------------------+~n", []),
     FormatString = "| ~-30s | ~-30s | ~-17s | ~-32s | ~-32s | ~-20s | ~-20s |~n",
     io:format(FormatString, [<<"Node">>, <<"Job">>, <<"Date">>, <<"Account">>, <<"From">>, <<"To">>]),
-    io:format("+================================+================================+===================+==================================+==================================+======================+======================+~n", []),    
+    io:format("+================================+================================+===================+==================================+==================================+======================+======================+~n", []),
     case couch_mgr:get_results(?WH_FAXES, <<"faxes/processing_by_node">>) of
         {'ok', Jobs} ->
             [io:format(FormatString, [wh_json:get_value([<<"value">>, <<"node">>], JObj)
@@ -298,7 +298,7 @@ active_jobs() ->
                                       ,wh_json:get_value([<<"value">>, <<"from">>], JObj)
                                       ,wh_json:get_value([<<"value">>, <<"to">>], JObj)
                                      ]) || JObj <- Jobs];
-        {'error', _Reason} ->            
+        {'error', _Reason} ->
             io:format("Error getting faxes~n", [])
     end,
     io:format("+--------------------------------+--------------------------------+-------------------+----------------------------------+----------------------------------+----------------------+----------------------+~n", []),
@@ -307,7 +307,7 @@ active_jobs() ->
 -spec restart_job(binary()) -> 'no_return'.
 restart_job(JobID) ->
     update_job(JobID, <<"pending">>).
-    
+
 -spec update_job(binary(), binary()) -> 'ok' | {'error', any()}.
 update_job(JobID, State) ->
     case couch_mgr:open_doc(?WH_FAXES, JobID) of

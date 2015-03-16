@@ -49,6 +49,7 @@
                 ,response_event_handlers = [] :: pids()
                 ,response_ref :: reference() %% monitor ref for the pid
                 ,debug = 'false' :: boolean()
+                ,requester_queue :: api_binary()
                }).
 -type state() :: #state{}.
 
@@ -152,6 +153,7 @@ init([Call, JObj]) ->
              ,call=Call
              ,request_format=ReqFormat
              ,debug=wh_json:is_true(<<"Debug">>, JObj, 'false')
+             ,requester_queue = whapps_call:controller_queue(Call)
             }
      ,'hibernate'
     }.
@@ -195,21 +197,29 @@ handle_cast({'request', Uri, Method}, #state{call=Call
     handle_cast({'request', Uri, Method, req_params(ReqFormat, Call)}, State);
 handle_cast({'request', Uri, Method, Params}, #state{call=Call
                                                      ,debug=Debug
+                                                     ,requester_queue=Q
                                                     }=State) ->
     Call1 = kzt_util:set_voice_uri(Uri, Call),
-    
-    Params2 = maybe_add_oauth_params(whapps_call:account_db(Call), whapps_call:account_id(Call), Params),
 
-    {'ok', ReqId, Call2} = send_req(Call1, Uri, Method, Params2, Debug),
-    lager:debug("sent request ~p to '~s' via '~s'", [ReqId, Uri, Method]),
-    {'noreply', State#state{request_id=ReqId
-                            ,request_params=Params2
-                            ,response_content_type = <<>>
-                            ,response_body = <<>>
-                            ,method=Method
-                            ,voice_uri=Uri
-                            ,call=Call2
-                           }};
+	Params2 = maybe_add_oauth_params(whapps_call:account_db(Call), whapps_call:account_id(Call), Params),
+
+	case send_req(Call1, Uri, Method, Params2, Debug) of
+        {'ok', ReqId, Call2} ->
+            lager:debug("sent request ~p to '~s' via '~s'", [ReqId, Uri, Method]),
+            {'noreply', State#state{request_id=ReqId
+                                    ,request_params=Params
+                                    ,response_content_type = <<>>
+                                    ,response_body = <<>>
+                                    ,method=Method
+                                    ,voice_uri=Uri
+                                    ,call=Call2
+                                   }};
+        _ ->
+            wapi_pivot:publish_failed(Q, [{<<"Call-ID">>,whapps_call:call_id(Call)}
+                                          | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                         ]),
+            {'stop', 'normal', State}
+    end;
 
 handle_cast({'updated_call', Call}, State) ->
     {'noreply', State#state{call=Call}};
@@ -234,7 +244,7 @@ handle_cast({'cdr', JObj}, #state{cdr_uri=Url
                                  }=State) ->
     JObj1 = wh_json:delete_key(<<"Custom-Channel-Vars">>, JObj),
     Body =  wh_json:to_querystring(wh_api:remove_defaults(JObj1)),
-    Headers = [{"Content-Type", "application/x-www-form-urlencoded"}, "Accept", "application/xml,application/xhtml+xml,text/html;q=0.9, text/plain;q=0.8,image/png,*/*;q=0.5"}],
+    Headers = [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "application/xml,application/xhtml+xml,text/html;q=0.9, text/plain;q=0.8,image/png,*/*;q=0.5"}],
 
     maybe_debug_req(Call, Url, 'post', Headers, Body, Debug),
 
@@ -397,10 +407,7 @@ handle_event(_JObj, #state{response_pid=Pid
 %% @end
 %%--------------------------------------------------------------------
 -spec terminate(term(), state()) -> 'ok'.
-terminate(_Reason, #state{call=Call
-                          ,response_pid=Pid
-                         }) ->
-    _ = whapps_call_command:hangup(Call),
+terminate(_Reason, #state{response_pid=Pid}) ->
     exit(Pid, 'kill'),
     lager:info("pivot call terminating: ~p", [_Reason]).
 
@@ -429,7 +436,7 @@ send_req(Call, Uri, 'get', BaseParams, Debug) ->
     UserParams = kzt_translator:get_user_vars(Call),
     Params = wh_json:set_values(BaseParams, UserParams),
     UpdatedCall = whapps_call:kvs_erase(<<"digits_collected">>, Call),
-    send(UpdatedCall, uri(Uri, wh_json:to_querystring(Params)), 'get', [{"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}, {"Accept-Language", binary_to_list(whapps_call:language(Call))}, [], Debug);
+    send(UpdatedCall, uri(Uri, wh_json:to_querystring(Params)), 'get', [{"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}, {"Accept-Language", binary_to_list(whapps_call:language(Call))}], [], Debug);
 send_req(Call, Uri, 'post', BaseParams, Debug) ->
     UserParams = kzt_translator:get_user_vars(Call),
     Params = wh_json:set_values(BaseParams, UserParams),
