@@ -21,7 +21,7 @@
 -spec start_link() -> startlink_ret().
 start_link() ->
     _ = start_deps(),
-    quilt_serv:start_link().
+    quilt_sup:start_link().
 
 %%--------------------------------------------------------------------
 %% @public
@@ -31,7 +31,6 @@ start_link() ->
 %%--------------------------------------------------------------------
 -spec stop() -> 'ok'.
 stop() ->
-    exit(whereis('quilt'), 'shutdown'),
     'ok'.
 
 %%--------------------------------------------------------------------
