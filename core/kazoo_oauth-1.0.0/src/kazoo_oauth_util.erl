@@ -17,6 +17,7 @@
         ]).
 -export([jwt/2, jwt/3]).
 -export([authorization_header/1]).
+-export([oauth_header/6]).
 
 -spec authorization_header(oauth_token()) -> api_binary().
 authorization_header(#oauth_token{type=Type,token=Token}) ->
@@ -222,3 +223,63 @@ refresh_token(#oauth_app{name=ClientId
             lager:debug("unable to get new oauth token: ~p", [Else]),
             {'error', Else}
     end.
+
+oauth_header(URL, CustomParams, ConsumerKey, ConsumerSecret, AccessToken, AccessSecret) ->
+    OAuthParams = oauth_params(ConsumerKey, ConsumerSecret, AccessToken, AccessSecret),
+    BaseParams = lists:keysort(1, OAuthParams ++ include_other_params(CustomParams)),
+
+    NormalizedParams = lists:foldl(fun({K,V}, Acc) ->
+        [{wh_util:uri_encode(K), wh_util:uri_encode(V)}] ++ Acc end,
+        [], BaseParams),
+    ParamsString = wh_util:uri_encode(string:join(lists:foldl(fun({K,V}, Acc) ->
+        [K ++ "=" ++ V] ++ Acc end,
+        [], NormalizedParams), "&")),
+    SigBaseString = "POST&" ++ wh_util:to_list(wh_util:uri_encode(URL)) ++ "&" ++ ParamsString,
+    Signature = base64:encode(crypto:sha_mac(binary_to_list(ConsumerSecret) ++ "&" ++ binary_to_list(AccessSecret), SigBaseString)),
+    
+    SendParams = lists:keysort(1, [{"oauth_signature", binary_to_list(Signature)}] ++ OAuthParams),
+    AuthString = "OAuth " ++ string:join(lists:foldl(fun({K, V}, Acc) ->
+        Acc ++ [K ++ "=\"" ++ V ++ "\""]
+        end, [], SendParams
+    ), ","),
+    {"Authorization", AuthString}.
+
+oauth_params(_ConsumerKey, _ConsumerSecret, _AccessToken, _AccessSecret) ->
+    Nonce = binary_to_list(base64:encode(crypto:rand_bytes(32))),
+    {MegaSecs, Secs, _} = os:timestamp(),
+    Timestamp = integer_to_list(MegaSecs * 1000000 + Secs),
+
+    [
+        {"oauth_consumer_key", wh_util:to_list(ConsumerKey)},
+        %{"oauth_consumer_key", "9d246288c58349d89804c30c42d2c1ef"},
+        {"oauth_nonce", Nonce},
+        %{"oauth_nonce", "ymWhNPPWZnjPNpU"},
+        {"oauth_signature_method", "HMAC-SHA1"},
+        {"oauth_timestamp", Timestamp},
+        %{"oauth_timestamp", "1425507164"},
+        {"oauth_token", wh_util:to_list(AccessToken)},
+        %{"oauth_token", "2199121f4e424d9ca5a720f4b2d59f7d"},
+        {"oauth_version", "1.0"}
+    ].
+
+include_other_params(OtherParams) ->
+    lists:foldl(fun(Key, Acc) ->
+        Value = wh_json:get_value(Key, OtherParams),
+        case wh_json:is_json_object(Value) of
+            true ->
+                url_param_array(Key, Value) ++ Acc;
+            false ->
+                [{wh_util:to_list(Key), wh_util:to_list(Value)}] ++ Acc
+        end
+    end, [], wh_json:get_keys(OtherParams)).
+
+url_param_array(BaseKey, JsonValue) ->
+    lists:foldl(fun(Key, Acc) ->
+        Value = wh_json:get_value(Key, JsonValue),
+        case wh_json:is_json_object(Value) of
+            true ->
+                url_param_array(<<BaseKey/binary, "[", Key/binary, "]">>, Value) ++ Acc;
+            false ->
+                [{wh_util:to_list(BaseKey) ++ "[" ++ wh_util:to_list(Key) ++ "]", wh_util:to_list(Value)}] ++ Acc
+        end
+    end, [], wh_json:get_keys(JsonValue)).
