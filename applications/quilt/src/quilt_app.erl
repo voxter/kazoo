@@ -1,10 +1,10 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2015, Voxter Communications
+%%% @copyright (C) 2015, Voxter Communications Inc
 %%% @doc
-%%%
+%%% Asterisk queue_log translator for Kazoo
 %%% @end
 %%% @contributors
-%%% Daniel Finke, Lucas Bussey
+%%%   Lucas Bussey
 %%%-------------------------------------------------------------------
 -module(quilt_app).
 
@@ -23,8 +23,7 @@
 -spec start(term(), term()) ->
                    {'ok', pid()} |
                    {'error', startlink_err()}.
-start(_Type, _Args) ->
-    quilt:start_link().
+start(_Type, _Args) -> quilt:start_link().
 
 %%--------------------------------------------------------------------
 %% @public
@@ -33,5 +32,4 @@ start(_Type, _Args) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec stop(term()) -> 'ok'.
-stop(_State) ->
-    quilt:stop().
+stop(_State) -> quilt:stop().

@@ -1,16 +1,19 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2015, Voxter Communications
+%%% @copyright (C) 2015, Voxter Communications Inc
 %%% @doc
-%%%
+%%% Asterisk queue_log translator for Kazoo
 %%% @end
 %%% @contributors
-%%% Daniel Finke, Lucas Bussey
+%%%   Lucas Bussey
 %%%-------------------------------------------------------------------
 -module(quilt).
 
 -include_lib("whistle/include/wh_types.hrl").
 
--export([start_link/0, stop/0]).
+-export([start_link/0
+         ,start/0
+         ,stop/0
+        ]).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -26,12 +29,21 @@ start_link() ->
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
+%% Starts the application
+%% @end
+%%--------------------------------------------------------------------
+-spec start() -> 'ok' | {'error', _}.
+start() ->
+    application:start(?MODULE).
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
 %% Stop the app
 %% @end
 %%--------------------------------------------------------------------
 -spec stop() -> 'ok'.
-stop() ->
-    'ok'.
+stop() -> 'ok'.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -48,10 +60,6 @@ start_deps() ->
                                                ,'whistle_amqp'
                                                ,'whistle_couch'
                                                ,'kazoo_bindings'
-                                               ,'ranch'
-                                               ,'cowboy'
-                                               ,'public_key'
-                                               ,'ssl'
-                                               ,'socketio'
+                                               ,'acdc'
                                                ]],
     'ok'.

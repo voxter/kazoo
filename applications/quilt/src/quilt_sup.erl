@@ -1,3 +1,11 @@
+%%%-------------------------------------------------------------------
+%%% @copyright (C) 2015, Voxter Communications Inc
+%%% @doc
+%%% Asterisk queue_log translator for Kazoo
+%%% @end
+%%% @contributors
+%%%   Lucas Bussey
+%%%-------------------------------------------------------------------
 -module(quilt_sup).
 -behaviour(supervisor).
 
@@ -7,13 +15,14 @@
 -include("quilt.hrl").
 
 %% Helper macro for declaring children of supervisor
--define(CHILDREN, [?WORKER('quilt_log')]).
+-define(CHILDREN, [?WORKER('quilt_listener')]).
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+    %supervisor:start_child(?MODULE, []).
 
 init([]) ->
-    RestartStrategy = 'simple_one_for_one',
+    RestartStrategy = 'one_for_one',
     MaxRestarts = 5,
     MaxSecondsBetweenRestarts = 10,
 

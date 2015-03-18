@@ -1,3 +1,11 @@
+%%%-------------------------------------------------------------------
+%%% @copyright (C) 2015, Voxter Communications Inc
+%%% @doc
+%%% Asterisk queue_log translator for Kazoo
+%%% @end
+%%% @contributors
+%%%   Lucas Bussey
+%%%-------------------------------------------------------------------
 -ifndef(QUILT_HRL).
 
 %% Typical includes needed
@@ -8,9 +16,6 @@
 
 -define(APP_NAME, <<"quilt">>).
 -define(APP_VERSION, <<"1.0.0">>).
--define(QUILT_CONFIG_CAT, <<"quilt">>).
-
--define(DEFAULT_MODULES, ['bh_token_auth']).
 
 -define(VERSION_SUPPORTED, [<<"v1">>]).
 
