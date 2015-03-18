@@ -5,7 +5,7 @@
 -export([parse_payload/1, format_prop/1, format_binary/1, format_json_events/1, whapps_call/1,
     maybe_get_exten/1, maybe_get_endpoint_name/1, endpoint_name/2, maybe_get_cid_name/1,
     find_id_number/2, queue_for_number/2,
-    filter_registered_events/4]).
+    filter_registered_events/4, whapps_call_from_cf_exe/1, channel_tail/1]).
 
 %% AMI commands broken up by newlines
 parse_payload(Payload) ->
@@ -119,7 +119,7 @@ maybe_get_exten(Call) ->
 
 maybe_get_endpoint_name(Call) ->
     Exten = maybe_get_exten(Call),
-    <<"SIP/", Exten/binary, "-00000000">>.
+    <<"SIP/", Exten/binary, "-", (channel_tail(whapps_call:call_id(Call)))/binary>>.
 
 endpoint_name(AcctDb, Endpoint) ->
     case wh_json:get_value(<<"pvt_type">>, Endpoint) of
@@ -242,3 +242,45 @@ filter_registered_events(EventName, EventJObj, CommPid, Mod) ->
         _ ->
             ok
     end.
+
+%% Look through active calls and find the cf_exe process with the desired call ID
+whapps_call_from_cf_exe(CallId) ->
+    whapps_call_from_cf_exe(CallId, cf_exe_sup:workers()).
+
+whapps_call_from_cf_exe(_CallId, []) ->
+    not_found;
+whapps_call_from_cf_exe(CallId, [Worker|Workers]) ->
+    case cf_exe:get_call(Worker) of
+        {ok, Call} ->
+            Call;
+        _ ->
+            whapps_call_from_cf_exe(CallId, Workers)
+    end.
+
+%% Returns an 8-digit tail for channels for AMI calls
+channel_tail(CallId) ->
+    HeadLength = (byte_size(CallId)-8)*8,
+    <<_:HeadLength, Tail:64>> = CallId,
+    tail_convert(binary_to_list(<<Tail:64>>), []).
+
+tail_convert([], Acc) ->
+    wh_util:to_binary(Acc);
+tail_convert([Char|Chars], Acc) when Char < 58, Char > 47 ->
+    tail_convert(Chars, [Char] ++ Acc);
+tail_convert([Char|Chars], Acc) when Char < 91, Char > 64 ->
+    tail_convert(Chars, [((Char - 17) rem 10) + 48] ++ Acc);
+tail_convert([Char|Chars], Acc) when Char < 123, Char > 96 ->
+    tail_convert(Chars, [((Char - 49) rem 10) + 48] ++ Acc);
+tail_convert([_Char|Chars], Acc) ->
+    tail_convert(Chars, [48] ++ Acc).
+
+
+
+
+
+
+
+
+
+
+

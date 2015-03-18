@@ -22,6 +22,8 @@ init([]) ->
     
     amimulator_sup:start_link(ListenSocket),
     amimulator_sup:start_listeners(),
+    amimulator_hook_map:start_link(),
+    amimulator_store:start_link(),
     
     {ok, #state{listen_socket = ListenSocket}}.
     

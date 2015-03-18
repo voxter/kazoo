@@ -2,21 +2,10 @@
 
 -behaviour(gen_listener).
 
--export([start_link/1,
-        handle_amqp_event/3,
-        publish_amqp_event/1
-        ]).
--export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,handle_event/2
-         ,terminate/2
-         ,code_change/3
-        ]).
+-export([start_link/2, handle_amqp_event/3, publish_amqp_event/1]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, handle_event/2, terminate/2, code_change/3]).
 
 -include("amimulator.hrl").
--include_lib("rabbitmq_server/include/rabbit_framing.hrl").
 
 -define(BINDINGS, [{'self', []}]).
 -define(RESPONDERS, [{{amimulator_amqp, handle_amqp_event}
@@ -39,14 +28,14 @@
     comm_pid
 }).
 
-start_link(Pid) ->
+start_link(AccountId, Pid) ->
     gen_listener:start_link(?MODULE
                            ,[{'bindings', ?BINDINGS}
                             ,{'responders', ?RESPONDERS}
                             ,{'queue_name', ?QUEUE_NAME}       % optional to include
                             ,{'queue_options', ?QUEUE_OPTIONS} % optional to include
                             ,{'consume_options', ?CONSUME_OPTIONS} % optional to include
-                            ], [Pid]).
+                            ], [AccountId, Pid]).
 
 handle_amqp_event(EventJObj, Props, #'basic.deliver'{routing_key=_RoutingKey}) ->
     ParsedEvents = case wh_json:get_value(<<"Events">>, EventJObj) of
@@ -77,29 +66,36 @@ publish_amqp_event({publish, Events}=_Req) ->
 amqp_event(Prop) when is_list(Prop) ->
     wh_api:build_message(Prop, [], ?OPTIONAL_HEADERS).
 
-init([Pid]) ->
-    lager:debug("AMI: AMQP listener started with pid ~p", [self()]),
+init([AccountId, Pid]) ->
+    lager:debug("AMQP listener started with pid ~p", [self()]),
     amqp_util:new_exchange(?EXCHANGE_AMI, ?TYPE_AMI),
     amqp_util:new_queue(?QUEUE_NAME),
     amqp_util:bind_q_to_exchange(?QUEUE_NAME, <<"amimulator.events.test">>, ?EXCHANGE_AMI),
-    gen_listener:cast(self(), register_bindings),
+    gen_listener:cast(self(), {register_bindings, AccountId}),
     {ok, #state{comm_pid=Pid}}.
 
 handle_call(_Request, _From, State) ->
-    lager:debug("AMI: unhandled call"),
+    lager:debug("unhandled call"),
     {reply, {error, not_implemented}, State}.
 
 %% Register bindings of handler modules for varying event types
-handle_cast(register_bindings, #state{comm_pid=CommPid}=State) ->
-    lists:foreach(fun(Module) ->
-        Module:init_bindings(CommPid) end, ?HANDLER_MODULES),
+handle_cast({register_bindings, AccountId}, State) ->
+    Responders = lists:foldl(fun(Module, Acc) ->
+        Module:get_bindings(AccountId) ++ Acc end,
+        [], ?HANDLER_MODULES
+    ),
+    lager:debug("Registering events in amimulator_hook_map"),
+    amimulator_hook_map:register_all(Responders, AccountId, self()),
+    {noreply, State};
+handle_cast({handle, Mod, Fun, Params}, State) ->
+    Mod:Fun(Params),
     {noreply, State};
 handle_cast({gen_listener, {created_queue, _QueueName}}, State) ->
     {noreply, State};
 handle_cast({gen_listener, {is_consuming, _IsConsuming}}, State) ->
     {noreply, State};
 handle_cast(_Msg, State) ->
-    lager:debug("AMI: unhandled cast"),
+    lager:debug("unhandled cast"),
     {noreply, State}.
 
 handle_info(?HOOK_EVT(_AccountId, _EventType, JObj), State) ->
@@ -113,7 +109,7 @@ handle_event(_JObj, #state{comm_pid=Pid}) ->
     {reply, [{<<"comm_pid">>, Pid}]}.
 
 terminate(Reason, _State) ->
-    lager:debug("AMI: AMQP listener on pid ~p terminating: ~p", [self(), Reason]).
+    lager:debug("AMQP listener on pid ~p terminating: ~p", [self(), Reason]).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.

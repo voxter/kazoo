@@ -44,7 +44,6 @@ handle_event("login", Props) ->
             %% Successful login
             lager:debug("successful login, starting event listener"),
             gen_server:cast(self(), {login, wh_json:get_value(<<"account_id">>, AMIDoc)}),
-            amimulator_amqp:start_link(self()),
             
             Payload = [[
                 {<<"Response">>, <<"Success">>},
@@ -121,89 +120,9 @@ handle_event("queuestatus", Props) ->
     ]],
     {ok, {Payload, n}};
 handle_event("queuepause", Props) ->
-    Interface = proplists:get_value(<<"Interface">>, Props),
-    Exten = hd(binary:split(binary:replace(Interface, <<"Local/">>, <<"">>), <<"@">>)),
-    AccountDb = proplists:get_value(<<"AccountDb">>, Props),
-
-    %% Load agent doc having the Exten given as name
-    {ok, [Result]} = couch_mgr:get_results(AccountDb,
-        <<"users/list_by_username">>,
-        [{key, Exten}]
-    ),
-    AgentId = wh_json:get_value(<<"id">>, Result),
-    {ok, AgentDoc} = couch_mgr:open_doc(AccountDb, AgentId),
-    AgentName = <<(wh_json:get_value(<<"first_name">>, AgentDoc))/binary, " ",
-        (wh_json:get_value(<<"last_name">>, AgentDoc))/binary
-    >>,
-    AgentFsm = acdc_agent_sup:fsm(acdc_agents_sup:find_agent_supervisor(
-        proplists:get_value(<<"Account">>, Props),
-        AgentId
-    )),
-
-    %% Found the FSM, now pause/unpause the agent
-    case proplists:get_value(<<"Paused">>, Props) of
-        <<"0">> ->
-            acdc_agent_fsm:resume(AgentFsm),
-
-            %% Respond with pause/unpause success
-            Payload = [[
-                {<<"Response">>, <<"Success">>},
-                {<<"Message">>, <<"Interface unpaused successfully">>}
-            ],[
-                {<<"Event">>, <<"QueueMemberPaused">>},
-                {<<"Privilege">>, <<"agent,all">>},
-                {<<"Queue">>, proplists:get_value(<<"Queue">>, Props)},
-                {<<"Location">>, Interface},
-                {<<"MemberName">>, AgentName},
-                {<<"Paused">>, 0}
-            ]],
-            {ok, {Payload, n}};
-        <<"1">> ->
-            %% For some reason, infinity doesn't work here despite the spec saying so
-            acdc_agent_fsm:pause(AgentFsm, 600000),
-
-            %% Respond with pause/unpause success
-            Payload = [[
-                {<<"Response">>, <<"Success">>},
-                {<<"Message">>, <<"Interface paused successfully">>}
-            ],[
-                {<<"Event">>, <<"QueueMemberPaused">>},
-                {<<"Privilege">>, <<"agent,all">>},
-                {<<"Queue">>, proplists:get_value(<<"Queue">>, Props)},
-                {<<"Location">>, Interface},
-                {<<"MemberName">>, AgentName},
-                {<<"Paused">>, 1}
-            ]],
-            {ok, {Payload, n}}
-    end;
+    queue_pause(Props);
 handle_event("queueadd", Props) ->
-    Interface = proplists:get_value(<<"Interface">>, Props),
-    Exten = hd(binary:split(binary:replace(Interface, <<"Local/">>, <<"">>), <<"@">>)),
-    AccountId = proplists:get_value(<<"Account">>, Props),
-    AccountDb = proplists:get_value(<<"AccountDb">>, Props),
-
-    %% Load agent doc having the Exten given as name
-    {ok, [Result]} = couch_mgr:get_results(AccountDb,
-        <<"users/list_by_username">>,
-        [{key, Exten}]
-    ),
-    AgentId = wh_json:get_value(<<"id">>, Result),
-    {ok, QueueDoc} = amimulator_util:queue_for_number(proplists:get_value(<<"Queue">>, Props), AccountDb),
-    QueueId = wh_json:get_value(<<"_id">>, QueueDoc),
-
-    Prop = props:filter_undefined(
-     [{<<"Account-ID">>, AccountId}
-      ,{<<"Agent-ID">>, AgentId}
-      ,{<<"Queue-ID">>, QueueId}
-      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-     ]),
-    wapi_acdc_agent:publish_login_queue(Prop),
-
-    Payload = [
-        {<<"Response">>, <<"Success">>},
-        {<<"Message">>, <<"Added interface to queue">>}
-    ],
-    {ok, {Payload, n}};
+    queue_add(Props);
 handle_event("queueremove", Props) ->
     Interface = proplists:get_value(<<"Interface">>, Props),
     Exten = hd(binary:split(binary:replace(Interface, <<"Local/">>, <<"">>), <<"@">>)),
@@ -237,8 +156,17 @@ handle_event("originate", Props) ->
         undefined ->
             {error, channel_not_specified};
         _ ->
-            gen_server:cast(self(), {originator, "originate", Props})
+            case proplists:get_value(<<"Application">>, Props) of
+                <<"ChanSpy">> ->
+                    gen_server:cast(self(), {originator, "eavesdrop", Props});
+                _ ->
+                    gen_server:cast(self(), {originator, "originate", Props})
+            end
     end;
+handle_event("hangup", Props) ->
+    CallId = amimulator_store:retrieve(<<"channel-", (proplists:get_value(<<"Channel">>, Props))/binary>>),
+    Call = amimulator_util:whapps_call_from_cf_exe(CallId),
+    whapps_call_command:hangup(Call);
 handle_event(Event, _Props) ->
     lager:debug("no handler defined for event ~p", [Event]),
     {error, no_action}.
@@ -431,6 +359,119 @@ translate_status(Status) ->
         _ ->
             5
     end.
+
+queue_add(Props) ->
+    Interface = proplists:get_value(<<"Interface">>, Props),
+    Exten = hd(binary:split(binary:replace(Interface, <<"Local/">>, <<"">>), <<"@">>)),
+    AccountId = proplists:get_value(<<"Account">>, Props),
+    AccountDb = proplists:get_value(<<"AccountDb">>, Props),
+
+    %% Load agent doc having the Exten given as name
+    case couch_mgr:get_results(
+        AccountDb,
+        <<"users/list_by_username">>,
+        [{key, Exten}]
+    ) of
+        {ok, [Result]} ->
+            queue_add(AccountId, AccountDb, Result, Props);
+        _ ->
+            %% Error, could not find user
+            {error, not_a_user}
+    end.
+
+queue_add(AccountId, AccountDb, Result, Props) ->
+    AgentId = wh_json:get_value(<<"id">>, Result),
+    {ok, QueueDoc} = amimulator_util:queue_for_number(proplists:get_value(<<"Queue">>, Props), AccountDb),
+    QueueId = wh_json:get_value(<<"_id">>, QueueDoc),
+
+    Prop = props:filter_undefined(
+     [{<<"Account-ID">>, AccountId}
+      ,{<<"Agent-ID">>, AgentId}
+      ,{<<"Queue-ID">>, QueueId}
+      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+     ]),
+    wapi_acdc_agent:publish_login_queue(Prop),
+
+    Payload = [
+        {<<"Response">>, <<"Success">>},
+        {<<"Message">>, <<"Added interface to queue">>}
+    ],
+    {ok, {Payload, n}}.
+
+queue_pause(Props) ->
+    Interface = proplists:get_value(<<"Interface">>, Props),
+    Exten = hd(binary:split(binary:replace(Interface, <<"Local/">>, <<"">>), <<"@">>)),
+    AccountDb = proplists:get_value(<<"AccountDb">>, Props),
+
+    %% Load agent doc having the Exten given as name
+    case couch_mgr:get_results(
+        AccountDb,
+        <<"users/list_by_username">>,
+        [{key, Exten}]
+    ) of
+        {ok, [Result]} ->
+            pause_exten(Interface, AccountDb, Result, Props);
+        _ ->
+            %% Error, could not find user
+            {error, not_a_user}
+    end.
+
+pause_exten(Interface, AccountDb, Result, Props) ->
+    AgentId = wh_json:get_value(<<"id">>, Result),
+    {ok, AgentDoc} = couch_mgr:open_doc(AccountDb, AgentId),
+    AgentName = <<(wh_json:get_value(<<"first_name">>, AgentDoc))/binary, " ",
+        (wh_json:get_value(<<"last_name">>, AgentDoc))/binary
+    >>,
+
+    case acdc_agents_sup:find_agent_supervisor(
+        proplists:get_value(<<"Account">>, Props),
+        AgentId
+    ) of
+        undefined ->
+            %% Pause error message
+            {error, not_an_agent};
+        Pid ->
+            AgentFsm = acdc_agent_sup:fsm(Pid),
+
+            %% Found the FSM, now pause/unpause the agent
+            case proplists:get_value(<<"Paused">>, Props) of
+                <<"0">> ->
+                    acdc_agent_fsm:resume(AgentFsm),
+
+                    %% Respond with pause/unpause success
+                    Payload = [[
+                        {<<"Response">>, <<"Success">>},
+                        {<<"Message">>, <<"Interface unpaused successfully">>}
+                    ],[
+                        {<<"Event">>, <<"QueueMemberPaused">>},
+                        {<<"Privilege">>, <<"agent,all">>},
+                        {<<"Queue">>, proplists:get_value(<<"Queue">>, Props)},
+                        {<<"Location">>, Interface},
+                        {<<"MemberName">>, AgentName},
+                        {<<"Paused">>, 0}
+                    ]],
+                    {ok, {Payload, n}};
+                <<"1">> ->
+                    %% For some reason, infinity doesn't work here despite the spec saying so
+                    acdc_agent_fsm:pause(AgentFsm, 600000),
+
+                    %% Respond with pause/unpause success
+                    Payload = [[
+                        {<<"Response">>, <<"Success">>},
+                        {<<"Message">>, <<"Interface paused successfully">>}
+                    ],[
+                        {<<"Event">>, <<"QueueMemberPaused">>},
+                        {<<"Privilege">>, <<"agent,all">>},
+                        {<<"Queue">>, proplists:get_value(<<"Queue">>, Props)},
+                        {<<"Location">>, Interface},
+                        {<<"MemberName">>, AgentName},
+                        {<<"Paused">>, 1}
+                    ]],
+                    {ok, {Payload, n}}
+            end
+    end.
+
+    
 
 %% Kazoo chan. status to AMI status translator - INCOMPLETE
 % ami_channel_status(Call, Schema) ->

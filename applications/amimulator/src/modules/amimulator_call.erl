@@ -1,23 +1,15 @@
 -module(amimulator_call).
 
--export([init_bindings/1, handle_event/1, handle_event/2]).
+-export([get_bindings/1, handle_event/1, handle_event/2]).
+-export([maybe_internal_cid/1]).
 
 -include("../amimulator.hrl").
 
--define(STATUS_AVAILABLE, <<"0">>).
--define(STATUS_RING, <<"4">>).
--define(STATUS_RINGING, <<"5">>).
--define(STATUS_BUSY, <<"7">>).
 -define(STATE_UP, 6).
 
--define(CALL_BINDING(Event), {'call', [{'restrict_to', [Event]}
-                                        ,'federate'
-                                       ]}).
-
-init_bindings(CommPid) ->
-    AccountId = gen_server:call(CommPid, account_id),
-    wh_hooks:register(AccountId).%,
-    %wh_hooks:register(AccountId, <<"DTMF">>).
+get_bindings(AccountId) ->
+    wh_hooks:register(AccountId),
+    [].
 
 handle_event(EventJObj) ->
     handle_event(EventJObj, []).
@@ -36,37 +28,7 @@ handle_specific_event(<<"CHANNEL_ANSWER">>, EventJObj) ->
     busy_state(EventJObj);
     
 handle_specific_event(<<"CHANNEL_DESTROY">>, EventJObj) ->
-    %lager:debug("AMI: channel destroy ~p", [EventJObj]),
-    Call = amimulator_util:whapps_call(EventJObj),
-    CallId = whapps_call:call_id(Call),
-    
-    {Cause, CauseText} = case wh_json:get_value(<<"Hangup-Cause">>, EventJObj) of
-        <<"NORMAL_CLEARING">> ->
-            {<<"16">>, <<"Normal Clearing">>};
-        _ ->
-            {<<"0">>, <<"Not Defined">>}
-    end,
-
-    case cf_endpoint:get(Call) of
-        {error, _E} -> ok;
-        {ok, _Endpoint} ->
-            SourceExten = amimulator_util:maybe_get_exten(Call),
-            EndpointName = amimulator_util:maybe_get_endpoint_name(Call),
-            Payload = [
-                {<<"Event">>, <<"Hangup">>},
-                {<<"Privilege">>, <<"call,all">>},
-                {<<"Channel">>, EndpointName},
-                {<<"Uniqueid">>, CallId},
-                {<<"CallerIDNum">>, SourceExten},
-                {<<"CallerIDName">>, SourceExten},
-                {<<"ConnectedLineNum">>, <<"1">>},
-                {<<"ConnectedLineName">>, <<"device">>},
-                {<<"Cause">>, Cause},
-                {<<"Cause-txt">>, CauseText}
-            ],
-
-            amimulator_amqp:publish_amqp_event({publish, Payload})
-    end;
+    destroy_channel(EventJObj);
     
 handle_specific_event(<<"DTMF">>, EventJObj) ->
     CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
@@ -90,7 +52,7 @@ handle_specific_event(EventName, _EventJObj) ->
     lager:debug("AMI: unhandled call event ~p", [EventName]).
 
 new_channel(EventJObj) ->
-    %lager:debug("AMI: new channel ~p", [EventJObj]),
+    lager:debug("AMI: new channel ~p", [EventJObj]),
     case wh_json:get_value(<<"Call-Direction">>, EventJObj) of
         <<"inbound">> ->
             new_inbound_channel(EventJObj);
@@ -105,6 +67,10 @@ new_inbound_channel(EventJObj) ->
     _SourceExten = amimulator_util:maybe_get_exten(Call),
     SourceCID = amimulator_util:maybe_get_cid_name(Call),
     EndpointName = amimulator_util:maybe_get_endpoint_name(Call),
+
+    amimulator_store:store(<<"call-", CallId/binary>>, Call),
+    amimulator_store:store(<<"channel-", EndpointName/binary>>, CallId),
+
     Payload = [
         {<<"Event">>, <<"Newchannel">>},
         {<<"Privilege">>, <<"call,all">>},
@@ -126,6 +92,10 @@ new_outbound_channel(EventJObj) ->
     _SourceExten = amimulator_util:maybe_get_exten(Call),
     SourceCID = amimulator_util:maybe_get_cid_name(Call),
     EndpointName = amimulator_util:maybe_get_endpoint_name(Call),
+
+    amimulator_store:store(<<"call-", CallId/binary>>, Call),
+    amimulator_store:store(<<"channel-", EndpointName/binary>>, CallId),
+
     Payload = [
         {<<"Event">>, <<"Newchannel">>},
         {<<"Privilege">>, <<"call,all">>},
@@ -150,8 +120,7 @@ new_state(<<"CHANNEL_CREATE">>, EventJObj) ->
     end.
 
 ring_state(EventJObj) ->
-    DestExten = hd(binary:split(wh_json:get_value(<<"To">>, EventJObj), <<"@">>)),
-    %% TODO dest CID
+    OtherCID = maybe_internal_cid(EventJObj),
     Call = amimulator_util:whapps_call(EventJObj),
     CallId = whapps_call:call_id(Call),
     _SourceExten = amimulator_util:maybe_get_exten(Call),
@@ -162,13 +131,52 @@ ring_state(EventJObj) ->
         {<<"Channel">>, EndpointName},
         {<<"ChannelState">>, 4},
         {<<"ChannelStateDesc">>, <<"Ring">>},
-        {<<"CallerIDNum">>, DestExten},
-        {<<"CallerIDName">>, DestExten},
+        {<<"CallerIDNum">>, OtherCID},
+        {<<"CallerIDName">>, OtherCID},
         {<<"ConnectedLineNum">>, <<"">>},
         {<<"ConnectedLineName">>, <<"">>},
         {<<"Uniqueid">>, CallId}
     ],
     amimulator_amqp:publish_amqp_event({publish, Payload}).
+
+maybe_internal_cid(EventJObj) ->
+    Call = amimulator_util:whapps_call(EventJObj),
+    Number = hd(binary:split(wh_json:get_value(<<"To">>, EventJObj), <<"@">>)),
+    case user_for_number(Number, whapps_call:account_db(Call)) of
+        {error, _E} ->
+            Number;
+        {ok, UserDoc} ->
+            <<(wh_json:get_value(<<"first_name">>, UserDoc))/binary, " ",
+                (wh_json:get_value(<<"last_name">>, UserDoc))/binary, " <",
+                (wh_json:get_value(<<"username">>, UserDoc))/binary, ">">>
+    end.
+
+user_for_number(Number, AccountDb) ->
+    case couch_mgr:get_results(AccountDb, <<"callflow/listing_by_number">>, [{key, Number}]) of
+        {ok, []} ->
+            {error, number_not_found};
+        {ok, [Result]} ->
+            {ok, CFDoc} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, Result)),
+            case maybe_user_in_flow(wh_json:get_value(<<"flow">>, CFDoc)) of
+                {error, E} ->
+                    {error, E};
+                {ok, UserId} ->
+                    couch_mgr:open_doc(AccountDb, UserId)
+            end
+    end.
+    
+maybe_user_in_flow(Flow) ->
+    case wh_json:get_value(<<"module">>, Flow) of
+        <<"user">> ->
+            {ok, wh_json:get_value(<<"id">>, wh_json:get_value(<<"data">>, Flow))};
+        _ ->
+            case wh_json:get_value(<<"_">>, wh_json:get_value(<<"flow">>, Flow)) of
+                undefined ->
+                    {error, invalid_user_extension};
+                SubFlow ->
+                    maybe_user_in_flow(SubFlow)
+            end
+    end.
 
 ringing_state(EventJObj) ->
     Call = amimulator_util:whapps_call(EventJObj),
@@ -200,13 +208,13 @@ busy_state(EventJObj) ->
     _Exten = amimulator_util:maybe_get_exten(Call),
     CID = amimulator_util:maybe_get_cid_name(Call),
     EndpointName = amimulator_util:maybe_get_endpoint_name(Call),
-    {_OtherExten, OtherCID} = case wh_json:get_value(<<"Call-Direction">>, EventJObj) of
+    OtherCID = case wh_json:get_value(<<"Call-Direction">>, EventJObj) of
         <<"inbound">> ->
-            To = hd(binary:split(wh_json:get_value(<<"To">>, EventJObj), <<"@">>)),
-            {To, To};
+            inbound_cid(EventJObj);
         <<"outbound">> ->
-            OtherCall = amimulator_util:whapps_call(whapps_call:other_leg_call_id(Call)),
-            {amimulator_util:maybe_get_exten(OtherCall), amimulator_util:maybe_get_cid_name(OtherCall)}
+            OtherCall = amimulator_store:retrieve(<<"call-", (whapps_call:other_leg_call_id(Call))/binary>>),
+            %OtherCall = amimulator_util:whapps_call(whapps_call:other_leg_call_id(Call)),
+            amimulator_util:maybe_get_cid_name(OtherCall)
     end,
     Payload = [
         {<<"Event">>, <<"Newstate">>},
@@ -221,6 +229,17 @@ busy_state(EventJObj) ->
         {<<"Uniqueid">>, CallId}
     ],
     amimulator_amqp:publish_amqp_event({publish, Payload}).
+
+inbound_cid(EventJObj) ->
+    case wh_json:get_value(<<"Callee-ID-Name">>, EventJObj) of
+        undefined ->
+            inbound_to(EventJObj);
+        CalleeIdName ->
+            <<CalleeIdName/binary, " <", (inbound_to(EventJObj))/binary, ">">>
+    end.
+
+inbound_to(EventJObj) ->
+    hd(binary:split(wh_json:get_value(<<"To">>, EventJObj), <<"@">>)).
 
 extension_status(EventJObj) ->
     case wh_json:get_value(<<"Call-Direction">>, EventJObj) of
@@ -267,7 +286,7 @@ maybe_dial_event(EventJObj) ->
 dial_event(EventJObj) ->
     Call = amimulator_util:whapps_call(EventJObj),
     CallId = whapps_call:call_id(Call),
-    Exten = amimulator_util:maybe_get_exten(Call),
+    _Exten = amimulator_util:maybe_get_exten(Call),
     CID = amimulator_util:maybe_get_cid_name(Call),
     EndpointName = amimulator_util:maybe_get_endpoint_name(Call),
     OtherCall = amimulator_util:whapps_call(whapps_call:other_leg_call_id(Call)),
@@ -286,9 +305,43 @@ dial_event(EventJObj) ->
         {<<"ConnectedLineName">>, CID},
         {<<"UniqueID">>, whapps_call:other_leg_call_id(Call)},
         {<<"DestUniqueid">>, CallId},
-        {<<"Dialstring">>, Exten}
+        {<<"Dialstring">>, CID}
     ],
     amimulator_amqp:publish_amqp_event({publish, Payload}).
 
+destroy_channel(EventJObj) ->
+    Call = amimulator_util:whapps_call(EventJObj),
+    CallId = whapps_call:call_id(Call),
+    amimulator_store:delete(<<"call-", CallId/binary>>),
+    
+    {Cause, CauseText} = case wh_json:get_value(<<"Hangup-Cause">>, EventJObj) of
+        <<"NORMAL_CLEARING">> ->
+            {<<"16">>, <<"Normal Clearing">>};
+        _ ->
+            {<<"0">>, <<"Not Defined">>}
+    end,
 
+    case cf_endpoint:get(Call) of
+        {error, _E} -> ok;
+        {ok, _Endpoint} ->
+            SourceExten = amimulator_util:maybe_get_exten(Call),
+            EndpointName = amimulator_util:maybe_get_endpoint_name(Call),
+
+            amimulator_store:delete(<<"channel-", EndpointName/binary>>),
+
+            Payload = [
+                {<<"Event">>, <<"Hangup">>},
+                {<<"Privilege">>, <<"call,all">>},
+                {<<"Channel">>, EndpointName},
+                {<<"Uniqueid">>, CallId},
+                {<<"CallerIDNum">>, SourceExten},
+                {<<"CallerIDName">>, SourceExten},
+                {<<"ConnectedLineNum">>, <<"1">>},
+                {<<"ConnectedLineName">>, <<"device">>},
+                {<<"Cause">>, Cause},
+                {<<"Cause-txt">>, CauseText}
+            ],
+
+            amimulator_amqp:publish_amqp_event({publish, Payload})
+    end.
     

@@ -33,6 +33,9 @@ handle_call(_Request, _From, State) ->
 handle_cast({"originate", Props}, State) ->
 	first_leg(Props),
 	{noreply, State};
+handle_cast({"eavesdrop", Props}, State) ->
+    eavesdrop_req(Props),
+    {noreply, State};
 handle_cast({gen_listener, {created_queue, _QueueName}}, State) ->
     {noreply, State};
 handle_cast({gen_listener, {is_consuming, _IsConsuming}}, State) ->
@@ -85,6 +88,71 @@ first_leg(Props) ->
               
     lager:debug("AMI: originate request ~p", [Request]),
     wapi_resource:publish_originate_req(props:filter_undefined(Request)).
+
+eavesdrop_req(Props) ->
+    UpdatedProps = update_props(Props),
+    Call = create_call_from_props(UpdatedProps),
+
+    SourceEndpoints = get_endpoints(UpdatedProps, Call),
+
+    AccountId = proplists:get_value(<<"Account">>, UpdatedProps),
+    CCVs = props:filter_undefined([{<<"Account-ID">>, AccountId}]),
+    MsgId = case proplists:get_value(<<"ActionID">>, UpdatedProps) of
+        undefined -> wh_util:rand_hex_binary(16);
+        ActionID -> ActionID
+    end,
+
+    Channel = <<(hd(binary:split(proplists:get_value(<<"Data">>, Props), <<",">>)))/binary, "-", (amimulator_util:channel_tail(whapps_call:call_id(Call)))/binary>>,
+    lager:debug("channel ~p", [Channel]),
+    EavesdropCallId = amimulator_store:retrieve(<<"channel-", Channel/binary>>),
+    lager:debug("eavesdropping on call id ~p", [EavesdropCallId]),
+
+    Prop = wh_json:set_values(props:filter_undefined([
+        {<<"Msg-ID">>, MsgId},
+        {<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)},
+        {<<"Timeout">>, <<"30">>},
+        {<<"Endpoints">>, SourceEndpoints},
+        {<<"Export-Custom-Channel-Vars">>, [
+            <<"Account-ID">>,
+            <<"Retain-CID">>,
+            <<"Authorizing-ID">>,
+            <<"Authorizing-Type">>
+        ]},
+        {<<"Account-ID">>, AccountId},
+        {<<"Resource-Type">>, <<"originate">>},
+        {<<"Application-Name">>, <<"eavesdrop">>},
+        {<<"Eavesdrop-Call-ID">>, EavesdropCallId},
+        {<<"Eavesdrop-Group-ID">>, undefined},
+        {<<"Eavesdrop-Mode">>, <<"listen">>}
+        | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+    ]), wh_json:new()),
+              
+    lager:debug("sending eavesdrop request"),
+    case whapps_util:amqp_pool_collect(Prop
+                                       ,fun wapi_resource:publish_originate_req/1
+                                       ,fun until_callback/1
+                                       ,5000
+                                      ) of
+        {'ok', [OrigJObj|_]} ->
+            lager:debug("originate is ready to execute"),
+            send_originate_execute(OrigJObj, wh_json:get_value(<<"Server-ID">>, OrigJObj));
+        {'error', E} ->
+            lager:debug("error originating: ~p", [E]);
+        {'timeout', _} ->
+            lager:debug("error originating: timeout")
+    end.
+
+-spec until_callback(wh_json:objects()) -> boolean().
+until_callback([JObj | _]) ->
+    wapi_dialplan:originate_ready_v(JObj).
+
+-spec send_originate_execute(wh_json:object(), ne_binary()) -> 'ok'.
+send_originate_execute(JObj, Q) ->
+    Prop = [{<<"Call-ID">>, wh_json:get_value(<<"Call-ID">>, JObj)}
+            ,{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, JObj)}
+            | wh_api:default_headers(Q, ?APP_NAME, ?APP_VERSION)
+           ],
+    wapi_dialplan:publish_originate_execute(wh_json:get_value(<<"Server-ID">>, JObj), Prop).
 
 %% Augment props received via AMI with additional data for call origination
 update_props(Props) ->

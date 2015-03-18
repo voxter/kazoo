@@ -65,6 +65,7 @@ handle_cast(accept, #state{listen_socket=Socket}=State) ->
     end;
 handle_cast({login, AccountId}, State) ->
     {ok, OriginatorPid} = amimulator_originator:start_link(),
+    amimulator_amqp:start_link(AccountId, self()),
     {noreply, State#state{account_id=AccountId,originator_pid=OriginatorPid}};
 handle_cast({originator, Action, Props}, #state{originator_pid=OriginatorPid}=State) ->
     gen_listener:cast(OriginatorPid, {Action, Props}),
