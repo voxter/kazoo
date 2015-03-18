@@ -18,8 +18,8 @@
 -define(CHILDREN, [?WORKER('quilt_listener')]).
 
 start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
-    %supervisor:start_child(?MODULE, []).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []),
+    supervisor:start_child(?MODULE, []).
 
 init([]) ->
     RestartStrategy = 'one_for_one',
