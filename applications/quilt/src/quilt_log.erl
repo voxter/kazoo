@@ -13,5 +13,5 @@
 -include("quilt.hrl").
 
 handle_event(JObj, Props) ->
-	lager:debug("QUILT: unhandled event: ~p", JObj),
-	lager:debug("QUILT: unhandled event props: ~p", Props).
+	lager:debug("QUILT: unhandled event: ~p", [JObj]),
+	lager:debug("QUILT: unhandled event props: ~p", [Props]).

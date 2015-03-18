@@ -22,7 +22,7 @@ start_link() ->
     supervisor:start_child(?MODULE, []).
 
 init([]) ->
-    RestartStrategy = 'one_for_one',
+    RestartStrategy = 'simple_one_for_one',
     MaxRestarts = 5,
     MaxSecondsBetweenRestarts = 10,
 

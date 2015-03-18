@@ -39,7 +39,7 @@ init([]) ->
 	{'ok', #state{}}.
 
 init_queue_bindings(QueueSup) ->
-	lager:debug("QUILT: adding responder to acdc queue sup"),
+	lager:debug("QUILT: adding responder to acdc queue sup: ~p", [QueueSup]),
     Manager = acdc_queue_sup:manager(QueueSup),
     gen_listener:add_responder(
        Manager,
@@ -69,11 +69,11 @@ handle_call(_Request, _From, State) ->
     {reply, {error, not_implemented}, State}.
 
 handle_cast(Msg, State) ->
-    lager:debug("QUILT: unhandled cast: ~p", Msg),
+    lager:debug("QUILT: unhandled cast: ~p", [Msg]),
     {noreply, State}.
 
 handle_info(Info, State) ->
-    lager:debug("QUILT: unhandled info: ~p", Info),
+    lager:debug("QUILT: unhandled info: ~p", [Info]),
     {noreply, State}.
 
 handle_event(JObj, State) ->
