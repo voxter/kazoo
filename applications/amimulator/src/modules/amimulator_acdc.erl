@@ -126,7 +126,7 @@ handle_specific_event(<<"connect_accepted">>, EventJObj) ->
     Call = amimulator_store:retrieve(<<"call-", CallId/binary>>),
 
     ToUser = hd(binary:split(whapps_call:to(Call), <<"@">>)),
-    lager:debug("touser ~p, to ~p", [ToUser, whapps_call:to(Call)]),
+    %lager:debug("touser ~p, to ~p", [ToUser, whapps_call:to(Call)]),
     Payload = case cf_endpoint:get(Call) of
         {error, _E} ->
             [
