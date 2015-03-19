@@ -200,8 +200,9 @@ handle_cast({'request', Uri, Method, Params}, #state{call=Call
                                                      ,requester_queue=Q
                                                     }=State) ->
     Call1 = kzt_util:set_voice_uri(Uri, Call),
+    Headers = maybe_oauth_headers(whapps_call:account_id(Call), Uri, Params),
 
-	case send_req(Call1, Uri, Method, maybe_add_oauth_headers(whapps_call:account_id(Call), Uri, Params), Params, Debug) of
+	case send_req(Call1, Uri, Method, Headers, Params, Debug) of
         {'ok', ReqId, Call2} ->
             lager:debug("sent request ~p to '~s' via '~s'", [ReqId, Uri, Method]),
             {'noreply', State#state{request_id=ReqId
@@ -442,7 +443,12 @@ send_req(Call, Uri, 'post', Headers, BaseParams, Debug) ->
     UserParams = kzt_translator:get_user_vars(Call),
     Params = wh_json:set_values(BaseParams, UserParams),
     UpdatedCall = whapps_call:kvs_erase(<<"digits_collected">>, Call),
-    send(UpdatedCall, Uri, 'post', Headers ++ [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}], wh_json:to_querystring(Params), Debug).
+    case Headers of
+        [] ->
+            send(UpdatedCall, Uri, 'post', [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}], wh_json:to_querystring(Params), Debug);
+        _ ->
+            send(UpdatedCall, Uri, 'post', Headers, wh_json:to_querystring(Params), Debug)
+    end.
 
 -spec send(whapps_call:call(), iolist(), atom(), wh_proplist(), iolist(), boolean()) ->
                   'ok' |
@@ -469,7 +475,7 @@ send(Call, Uri, Method, ReqHdrs, ReqBody, Debug) ->
             {'stop', Call}
     end.
     
-maybe_add_oauth_headers(AccountId, URL, Params) ->
+maybe_oauth_headers(AccountId, URL, Params) ->
     {ok, AccountDoc} = couch_mgr:open_doc(<<"accounts">>, AccountId),
     
     ConsumerKey = wh_json:get_value(<<"pvt_oauth_consumer_key">>, AccountDoc),
@@ -484,7 +490,12 @@ maybe_add_oauth_headers(AccountId, URL, Params) ->
         {_, undefined} ->
             [];
         {_, _} ->
-            [kazoo_oauth_util:oauth_header(URL, Params, ConsumerKey, ConsumerSecret, AccessToken, AccessSecret)],
+            [
+                {"Content-Type", "application/x-www-form-urlencoded"},
+                {"Accept", "application/json"},
+                {"Accept-Language", "en-us"},
+                kazoo_oauth_util:oauth_header(URL, Params, ConsumerKey, ConsumerSecret, AccessToken, AccessSecret)
+            ]
     end.
 
 -spec normalize_resp_headers(wh_proplist()) -> wh_proplist().

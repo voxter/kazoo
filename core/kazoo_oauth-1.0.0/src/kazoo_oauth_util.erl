@@ -239,26 +239,22 @@ oauth_header(URL, CustomParams, ConsumerKey, ConsumerSecret, AccessToken, Access
     
     SendParams = lists:keysort(1, [{"oauth_signature", binary_to_list(Signature)}] ++ OAuthParams),
     AuthString = "OAuth " ++ string:join(lists:foldl(fun({K, V}, Acc) ->
-        Acc ++ [K ++ "=\"" ++ V ++ "\""]
+        Acc ++ [wh_util:uri_encode(K) ++ "=\"" ++ wh_util:uri_encode(V) ++ "\""]
         end, [], SendParams
     ), ","),
     {"Authorization", AuthString}.
 
-oauth_params(_ConsumerKey, _ConsumerSecret, _AccessToken, _AccessSecret) ->
+oauth_params(ConsumerKey, _ConsumerSecret, AccessToken, _AccessSecret) ->
     Nonce = binary_to_list(base64:encode(crypto:rand_bytes(32))),
     {MegaSecs, Secs, _} = os:timestamp(),
     Timestamp = integer_to_list(MegaSecs * 1000000 + Secs),
 
     [
         {"oauth_consumer_key", wh_util:to_list(ConsumerKey)},
-        %{"oauth_consumer_key", "9d246288c58349d89804c30c42d2c1ef"},
         {"oauth_nonce", Nonce},
-        %{"oauth_nonce", "ymWhNPPWZnjPNpU"},
         {"oauth_signature_method", "HMAC-SHA1"},
         {"oauth_timestamp", Timestamp},
-        %{"oauth_timestamp", "1425507164"},
         {"oauth_token", wh_util:to_list(AccessToken)},
-        %{"oauth_token", "2199121f4e424d9ca5a720f4b2d59f7d"},
         {"oauth_version", "1.0"}
     ].
 
