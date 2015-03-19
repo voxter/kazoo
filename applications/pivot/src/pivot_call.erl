@@ -200,8 +200,9 @@ handle_cast({'request', Uri, Method, Params}, #state{call=Call
                                                      ,requester_queue=Q
                                                     }=State) ->
     Call1 = kzt_util:set_voice_uri(Uri, Call),
+    Headers = maybe_oauth_headers(whapps_call:account_id(Call), Uri, Params),
 
-    case send_req(Call1, Uri, Method, Params, Debug) of
+	case send_req(Call1, Uri, Method, Headers, Params, Debug) of
         {'ok', ReqId, Call2} ->
             lager:debug("sent request ~p to '~s' via '~s'", [ReqId, Uri, Method]),
             {'noreply', State#state{request_id=ReqId
@@ -424,22 +425,30 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
--spec send_req(whapps_call:call(), ne_binary(), http_method(), wh_json:object() | wh_proplist(), boolean()) ->
-                      'ok' |
-                      {'ok', ibrowse_req_id()} |
-                      {'stop', whapps_call:call()}.
-send_req(Call, Uri, Method, BaseParams, Debug) when not is_list(BaseParams) ->
-    send_req(Call, Uri, Method, wh_json:to_proplist(BaseParams), Debug);
-send_req(Call, Uri, 'get', BaseParams, Debug) ->
+%-spec send_req(whapps_call:call(), ne_binary(), http_method(), wh_json:object() | wh_proplist(), boolean()) ->
+%                      'ok' |
+%                      {'ok', ibrowse_req_id()} |
+%                      {'stop', whapps_call:call()}.
+%send_req(Call, Uri, Method, BaseParams, Debug) when not is_list(BaseParams) ->
+%    send_req(Call, Uri, Method, [], wh_json:to_proplist(BaseParams), Debug).
+
+send_req(Call, Uri, Method, Headers, BaseParams, Debug) when not is_list(BaseParams) ->
+    send_req(Call, Uri, Method, Headers, wh_json:to_proplist(BaseParams), Debug);
+send_req(Call, Uri, 'get', Headers, BaseParams, Debug) ->
     UserParams = kzt_translator:get_user_vars(Call),
     Params = wh_json:set_values(BaseParams, UserParams),
     UpdatedCall = whapps_call:kvs_erase(<<"digits_collected">>, Call),
-    send(UpdatedCall, uri(Uri, wh_json:to_querystring(Params)), 'get', [{"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}, {"Accept-Language", binary_to_list(whapps_call:language(Call))}], [], Debug);
-send_req(Call, Uri, 'post', BaseParams, Debug) ->
+    send(UpdatedCall, uri(Uri, wh_json:to_querystring(Params)), 'get', Headers ++ [{"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}, {"Accept-Language", binary_to_list(whapps_call:language(Call))}], [], Debug);
+send_req(Call, Uri, 'post', Headers, BaseParams, Debug) ->
     UserParams = kzt_translator:get_user_vars(Call),
     Params = wh_json:set_values(BaseParams, UserParams),
     UpdatedCall = whapps_call:kvs_erase(<<"digits_collected">>, Call),
-    send(UpdatedCall, Uri, 'post', [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}], wh_json:to_querystring(Params), Debug).
+    case Headers of
+        [] ->
+            send(UpdatedCall, Uri, 'post', [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}], wh_json:to_querystring(Params), Debug);
+        _ ->
+            send(UpdatedCall, Uri, 'post', Headers, wh_json:to_querystring(Params), Debug)
+    end.
 
 -spec send(whapps_call:call(), iolist(), atom(), wh_proplist(), iolist(), boolean()) ->
                   'ok' |
@@ -464,6 +473,29 @@ send(Call, Uri, Method, ReqHdrs, ReqBody, Debug) ->
         {'error', _Reason} ->
             lager:debug("error with req: ~p", [_Reason]),
             {'stop', Call}
+    end.
+    
+maybe_oauth_headers(AccountId, URL, Params) ->
+    {ok, AccountDoc} = couch_mgr:open_doc(<<"accounts">>, AccountId),
+    
+    ConsumerKey = wh_json:get_value(<<"pvt_oauth_consumer_key">>, AccountDoc),
+    ConsumerSecret = wh_json:get_value(<<"pvt_oauth_consumer_secret">>, AccountDoc),
+    AccessToken = wh_json:get_value(<<"pvt_oauth_access_token">>, AccountDoc),
+    AccessSecret = wh_json:get_value(<<"pvt_oauth_access_secret">>, AccountDoc),
+    Provider = wh_json:get_value(<<"pvt_oauth_provider">>, AccountDoc),
+    
+    case {ConsumerKey, Provider} of
+        {undefined, _} ->
+            [];
+        {_, undefined} ->
+            [];
+        {_, _} ->
+            [
+                {"Content-Type", "application/x-www-form-urlencoded"},
+                {"Accept", "application/json"},
+                {"Accept-Language", "en-us"},
+                kazoo_oauth_util:oauth_header(URL, Params, ConsumerKey, ConsumerSecret, AccessToken, AccessSecret)
+            ]
     end.
 
 -spec normalize_resp_headers(wh_proplist()) -> wh_proplist().
