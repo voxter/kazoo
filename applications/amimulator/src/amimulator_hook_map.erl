@@ -19,8 +19,8 @@ start_link() ->
 register_all(Responders, AccountId, Pid) ->
 	gen_server:cast(?MODULE, {register_all, Responders, AccountId, Pid}).
 
-handle_event(EventJObj, Props) ->
-	lager:debug("amimulator_hook_map handled event with props ~p", [Props]),
+handle_event(EventJObj, _Props) ->
+	%lager:debug("amimulator_hook_map handled event with props ~p", [Props]),
 	gen_server:cast(?MODULE, {handle, EventJObj}).
 
 %%
@@ -59,23 +59,39 @@ pvt_handle_event(EventJObj, Mappings) ->
 		undefined ->
 			ok;
 		AccountId ->
-			maybe_send_to_handler(EventJObj, find_mapping(AccountId, Mappings))
+			maybe_send_to_handler(EventJObj, find_mapping(AccountId,
+				wh_json:get_value(<<"Event-Category">>, EventJObj),
+				wh_json:get_value(<<"Event-Name">>, EventJObj),
+				Mappings
+			))
 	end.
 
 maybe_find_event_account_id(EventJObj) ->
-	wh_json:get_value(<<"Account-ID">>, EventJObj).
+	case wh_json:get_value(<<"Account-ID">>, EventJObj) of
+		undefined ->
+			Realm = wh_json:get_value(<<"Realm">>, EventJObj),
+			case couch_mgr:get_results(<<"accounts">>, <<"accounts/listing_by_realm">>, [{key, Realm}]) of
+				{ok, [Result]} ->
+					wh_json:get_value([<<"value">>, <<"account_id">>], Result);
+				_ ->
+					undefined
+			end;
+		AccountId ->
+			AccountId
+	end.
 
 maybe_send_to_handler(_EventJObj, undefined) ->
 	ok;
 maybe_send_to_handler(EventJObj, {Srv, Mod, Fun}) ->
 	gen_listener:cast(Srv, {handle, Mod, Fun, EventJObj}).
 
-find_mapping(_AccountId, []) ->
+find_mapping(_AccountId, _EventCategory, _EventName, []) ->
 	undefined;
-find_mapping(AccountId, [{AccountId, {Srv, {Mod, Fun}, _Events}}|_Mappings]) ->
-	{Srv, Mod, Fun};
-find_mapping(AccountId, [_|Mappings]) ->
-	find_mapping(AccountId, Mappings).
+find_mapping(AccountId, EventCategory, EventName, [{AccountId, {Srv, {Mod, Fun},
+	[{EventCategory, EventName}|_Events]}}|_Mappings]) ->
+		{Srv, Mod, Fun};
+find_mapping(AccountId, EventCategory, EventName, [_|Mappings]) ->
+	find_mapping(AccountId, EventCategory, EventName, Mappings).
 
 register_all([], _AccountId, _Pid, State) ->
 	State;

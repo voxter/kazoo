@@ -21,7 +21,8 @@
 
 -define(HANDLER_MODULES, [
     amimulator_call,
-    amimulator_acdc
+    amimulator_acdc,
+    amimulator_reg
 ]).
 
 -record(state, {
