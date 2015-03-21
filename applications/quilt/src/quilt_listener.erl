@@ -51,7 +51,7 @@ init_queue_bindings(QueueSup) ->
             % {<<"member">>, <<"call">>},
             % {<<"member">>, <<"call_cancel">>},
             % {<<"queue">>, <<"agent_change">>},
-            % {<<"call_event">>, <<"*">>}
+            {<<"call_event">>, <<"*">>},
             {<<"member">>, <<"*">>},
             {<<"queue">>, <<"*">>}
         ]
@@ -72,6 +72,7 @@ init_agent_bindings() ->
         acdc_agent_manager,
         {'quilt_log', handle_event},
         [
+            {<<"call_event">>, <<"*">>},
             {<<"agent">>, <<"*">>}
             % {<<"agent">>, <<"login">>},
             % {<<"agent">>, <<"logout">>},

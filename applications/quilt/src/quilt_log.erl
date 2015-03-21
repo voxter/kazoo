@@ -13,6 +13,9 @@
 -include("quilt.hrl").
 
 handle_event(JObj, Props) ->
+	lager:debug("QUILT: processing event object: ~p", [JObj]),
+	lager:debug("QUILT: associated event props: ~p", [Props]),
+	file:write_file(<<"/tmp/queue_log_raw">>, io_lib:fwrite("~p\n", [JObj])),
 	Event = {wh_json:get_value(<<"Event-Category">>, JObj), wh_json:get_value(<<"Event-Name">>, JObj)},
 	AccountId = binary_to_list(wh_json:get_value(<<"Account-ID">>, JObj)),
 	CallId = case wh_json:get_value(<<"Call-ID">>, JObj) of
@@ -26,16 +29,25 @@ handle_event(JObj, Props) ->
 	case Event of
 		{<<"member">>, <<"call">>} ->
 			EventName = "ENTERQUEUE",
-			lager:debug("QUILT: writing event tp queue_log: ~s", [EventName]),
+			lager:debug("QUILT: writing event to queue_log: ~s", [EventName]),
 			write_log(AccountId, CallId, QueueId, BridgedChannel, EventName);
 		{<<"member">>, <<"call_cancel">>} ->
 			EventName = "RINGNOANSWER",
-			lager:debug("QUILT: writing event tp queue_log: ~s", [EventName]),
+			lager:debug("QUILT: writing event to queue_log: ~s", [EventName]),
+			write_log(AccountId, CallId, QueueId, BridgedChannel, EventName);
+		{<<"agent">>, <<"pause">>} -> 
+			EventName = "PAUSEALL", % There is no pause for a single queue, pause all by default
+			
+			lager:debug("QUILT: writing event to queue_log: ~s", [EventName]),
+			write_log(AccountId, CallId, QueueId, BridgedChannel, EventName);
+		{<<"agent">>, <<"resume">>} -> 
+			EventName = "UNPAUSEALL", % There is no resume for a single queue, unpause all by default
+			lager:debug("QUILT: raw event object: ~p", [JObj]),
+			lager:debug("QUILT: writing event to queue_log: ~s", [EventName]),
 			write_log(AccountId, CallId, QueueId, BridgedChannel, EventName);
 		% {<<"queue">>, <<"agent_change"} ->
 		{_, _} ->
-			lager:debug("QUILT: unhandled event: ~p", [JObj]),
-			lager:debug("QUILT: unhandled event props: ~p", [Props])
+			lager:debug("QUILT: unhandled event", [])
 	end.
 
 write_log(AccountId, CallId, QueueName, BridgedChannel, Event) ->
