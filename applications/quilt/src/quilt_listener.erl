@@ -23,7 +23,13 @@
 
 -record(state, {}).
 
--define(BINDINGS, [{'self', []}]).
+-define(BINDINGS, [
+    {'self', []},
+    {acdc_stats, []},
+    % {acdc_queue, []}, %% Added dynamically
+    {acdc_agent, []}
+]).
+
 -define(RESPONDERS, []).
 
 start_link() ->
@@ -32,59 +38,47 @@ start_link() ->
                                      ], []).
 
 init([]) -> 
-    lager:debug("QUILT: adding bindings to acdc queues"),
+    lager:debug("QUILT: adding bindings to acdc"),
+    quilt_store:start_link(),
+    % gen_listener:add_responder(
+    %     acdc_agent_manager, {'quilt_log', handle_event}, [{<<"*">>, <<"*">>}]
+    % ),
     Queues = acdc_queues_sup:queues_running(),
     QueueSups = [X || {X,_} <- Queues],
+    lists:foreach(fun(QueueSup) -> init_queue_responders(QueueSup) end, QueueSups),
+    QueueSups = [X || {X,_} <- Queues],
     lists:foreach(fun(QueueSup) -> init_queue_bindings(QueueSup) end, QueueSups),
-
-    lager:debug("QUILT: adding bindings to acdc agents"),
-    init_agent_bindings(),
     {'ok', #state{}}.
 
 init_queue_bindings(QueueSup) ->
-    lager:debug("QUILT: adding responder to acdc queue sup: ~p", [QueueSup]),
+    lager:debug("QUILT: adding bindings to acdc queue sup: ~p", [QueueSup]),
+    Manager = acdc_queue_sup:manager(QueueSup),
+    lager:debug("QUILT: acdc queue manager: ~p", [Manager]),
+    {AccountId, _} = acdc_queue_manager:config(Manager),
+    lager:debug("QUILT: acdc queue config: ~p", [AccountId]),
+    gen_listener:add_binding(
+        Manager, {acdc_queue, [{restrict_to, [<<"*">>]}, {account_id, AccountId}]}
+    ).
+
+init_queue_responders(QueueSup) ->
+    lager:debug("QUILT: adding responders to acdc queue sup: ~p", [QueueSup]),
     Manager = acdc_queue_sup:manager(QueueSup),
     gen_listener:add_responder(
-        Manager,
-        {'quilt_log', 'handle_event'},
-        [
-            % {<<"member">>, <<"call">>},
-            % {<<"member">>, <<"call_cancel">>},
-            % {<<"queue">>, <<"agent_change">>},
-            {<<"call_event">>, <<"*">>},
-            {<<"member">>, <<"*">>},
-            {<<"queue">>, <<"*">>}
-        ]
-    % ),
-
-    % queue_worker_bindings(acdc_queue_workers_sup:workers(acdc_queue_sup:workers_sup(QueueSup)))] ++ Bindings
-    %     end, [], QueueSups).
-
-    % queue_worker_bindings(QueueWorkerSups) ->
-    % lists:foldl(fun(QueueWorkerSup, Acc) ->
-    %     [{acdc_queue_worker_sup:listener(QueueWorkerSup), {amimulator_acdc, handle_event},
-    %         {<<"member">>, <<"connect_accepted">>}
-    %     }] ++ Acc end, [], QueueWorkerSups
+        Manager, {'quilt_log', 'handle_event'}, [{<<"*">>, <<"*">>}]
     ).
 
-init_agent_bindings() ->
-    gen_listener:add_responder(
-        acdc_agent_manager,
-        {'quilt_log', handle_event},
-        [
-            {<<"call_event">>, <<"*">>},
-            {<<"agent">>, <<"*">>}
-            % {<<"agent">>, <<"login">>},
-            % {<<"agent">>, <<"logout">>},
-            % {<<"agent">>, <<"queue_login">>},
-            % {<<"agent">>, <<"queue_logout">>},
-            % {<<"agent">>, <<"pause">>},
-            % {<<"agent">>, <<"resume">>}
-        ]
-    ).
+%     % queue_worker_bindings(acdc_queue_workers_sup:workers(acdc_queue_sup:workers_sup(QueueSup)))] ++ Bindings
+%     %     end, [], QueueSups).
 
-handle_call(_Request, _From, State) ->
-    lager:debug("QUILT: unhandled call"),
+%     % queue_worker_bindings(QueueWorkerSups) ->
+%     % lists:foldl(fun(QueueWorkerSup, Acc) ->
+%     %     [{acdc_queue_worker_sup:listener(QueueWorkerSup), {amimulator_acdc, handle_event},
+%     %         {<<"member">>, <<"connect_accepted">>}
+%     %     }] ++ Acc end, [], QueueWorkerSups
+%     %).
+
+handle_call(Request, _From, State) ->
+    lager:debug("QUILT: unhandled call: ~p", [Request]),
     {reply, {error, not_implemented}, State}.
 
 handle_cast(Msg, State) ->

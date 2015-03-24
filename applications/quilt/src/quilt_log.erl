@@ -15,7 +15,7 @@
 handle_event(JObj, Props) ->
 	lager:debug("QUILT: processing event object: ~p", [JObj]),
 	lager:debug("QUILT: associated event props: ~p", [Props]),
-	file:write_file(<<"/tmp/queue_log_raw">>, io_lib:fwrite("~p\n", [JObj])),
+	file:write_file(<<"/tmp/queue_log_raw">>, io_lib:fwrite("~p\n", [JObj]), [append]),
 	Event = {wh_json:get_value(<<"Event-Category">>, JObj), wh_json:get_value(<<"Event-Name">>, JObj)},
 	AccountId = binary_to_list(wh_json:get_value(<<"Account-ID">>, JObj)),
 	CallId = case wh_json:get_value(<<"Call-ID">>, JObj) of
