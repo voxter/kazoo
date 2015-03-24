@@ -1,51 +1,15 @@
 -module(amimulator_acdc).
 
--export([get_bindings/1, handle_event/1]).
+-export([init/1, handle_event/1]).
 
 -include("../amimulator.hrl").
 
-get_bindings(AccountId) ->
-    queue_bindings(AccountId) ++ [agent_bindings()].
+init(_AccountId) ->
+    ok.
 
 handle_event(EventJObj) ->
     {_EventType, EventName} = wh_util:get_event_type(EventJObj),
     handle_specific_event(EventName, EventJObj).
-
-%%
-%% Private functions
-%%
-
-%% Fetch a list of bindings for queues within the specified account
-queue_bindings(AccountId) ->
-    QueueSups = acdc_queues_sup:find_acct_supervisors(AccountId),
-    lists:foldl(fun(QueueSup, Bindings) ->
-        [{
-            acdc_queue_sup:manager(QueueSup),
-            {amimulator_acdc, handle_event},
-            [
-                {<<"member">>, <<"call">>},
-                {<<"member">>, <<"call_cancel">>}
-            ]
-        } |
-        queue_worker_bindings(acdc_queue_workers_sup:workers(acdc_queue_sup:workers_sup(QueueSup)))] ++ Bindings
-    end, [], QueueSups).
-
-queue_worker_bindings(QueueWorkerSups) ->
-    lists:foldl(fun(QueueWorkerSup, Acc) ->
-        [{acdc_queue_worker_sup:listener(QueueWorkerSup), {amimulator_acdc, handle_event},
-            {<<"member">>, <<"connect_accepted">>}
-        }] ++ Acc end, [], QueueWorkerSups
-    ).
-
-agent_bindings() ->
-    {acdc_agent_manager, {amimulator_acdc, handle_event}, [
-        {<<"agent">>, <<"login">>},
-        {<<"agent">>, <<"logout">>},
-        {<<"agent">>, <<"queue_login">>},
-        {<<"agent">>, <<"queue_logout">>}
-        %{<<"agent">>, <<"pause">>},
-        %{<<"agent">>, <<"resume">>}
-    ]}.
 
 %%
 %% Event type handlers
@@ -53,49 +17,40 @@ agent_bindings() ->
     
 handle_specific_event(<<"call">>, EventJObj) ->
     EventData = wh_json:get_value(<<"Call">>, EventJObj),
-    %lager:debug("AMI: member call event ~p", [EventData]),
-    CallId = wh_json:get_value(<<"Call-ID">>, EventData),
-    amimulator_store:store(<<"acdc-", CallId/binary>>, EventData),
-    ToUser = wh_json:get_value(<<"To-User">>, EventData),
-    CallerIdNum = wh_json:get_value(<<"Caller-ID-Number">>, EventData),
-    CallerIdName = wh_json:get_value(<<"Caller-ID-Name">>, EventData),
 
-    Call = amimulator_util:whapps_call(EventData),
-    Payload = case cf_endpoint:get(Call) of
-        {error, _E} ->
-            [
-                {<<"Event">>, <<"Join">>},
-                {<<"Privilege">>, <<"call,all">>},
-                %%{<<"Channel">>, <<"SIP/101-00000000">>},
-                {<<"CallerIDNum">>, CallerIdNum},
-                {<<"CallerIDName">>, CallerIdName},
-                {<<"ConnectedLineNum">>, <<"unknown">>},
-                {<<"ConnectedLineName">>, <<"unknown">>},
-                {<<"Queue">>, ToUser},
-                {<<"Position">>, 1},
-                {<<"Count">>, 1},
-                {<<"Uniqueid">>, CallId}
-            ];
-        {ok, Endpoint} ->
-            EndpointName = amimulator_util:endpoint_name(whapps_call:account_db(Call), Endpoint),
-            [
-                {<<"Event">>, <<"Join">>},
-                {<<"Privilege">>, <<"call,all">>},
-                {<<"Channel">>, <<"SIP/", EndpointName/binary, "-", (amimulator_util:channel_tail(whapps_call:call_id(Call)))/binary>>},
-                {<<"CallerIDNum">>, CallerIdNum},
-                {<<"CallerIDName">>, CallerIdName},
-                {<<"ConnectedLineNum">>, <<"unknown">>},
-                {<<"ConnectedLineName">>, <<"unknown">>},
-                {<<"Queue">>, ToUser},
-                {<<"Position">>, 1},
-                {<<"Count">>, 1},
-                {<<"Uniqueid">>, CallId}
-            ]
-    end,
+    Call = amimulator_util:create_call(EventData),
+    WhappsCall = props:get_value(<<"call">>, Call),
+    CallId = whapps_call:call_id(WhappsCall),
+    EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
+    CallerId = props:get_value(<<"aleg_cid">>, Call),
+
+    AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
+    QueueId = wh_json:get_value(<<"Queue-ID">>, EventJObj),
+    {Position} = amimulator_store:enqueue(<<"acdc-", QueueId/binary>>, CallId),
+
+    {ok, Number} = amimulator_util:find_id_number(
+        wh_json:get_value(<<"Queue-ID">>, EventJObj),
+        wh_util:format_account_id(AccountId, encoded)
+    ),
+
+    Payload = [
+        {<<"Event">>, <<"Join">>},
+        {<<"Privilege">>, <<"call,all">>},
+        {<<"Channel">>, EndpointName},
+        {<<"CallerIDNum">>, CallerId},
+        {<<"CallerIDName">>, CallerId},
+        {<<"ConnectedLineNum">>, <<"unknown">>},
+        {<<"ConnectedLineName">>, <<"unknown">>},
+        {<<"Queue">>, Number},
+        {<<"Position">>, Position},
+        {<<"Count">>, Position},
+        {<<"Uniqueid">>, CallId}
+    ],
     amimulator_amqp:publish_amqp_event({publish, Payload});
 handle_specific_event(<<"call_cancel">>, EventJObj) ->
+    lager:debug("eventjobj ~p", [EventJObj]),
     CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
-    %lager:debug("retrieved ~p", [amimulator_store:retrieve(<<"acdc-", CallId/binary>>)]),
+    %lager:debug("retrieved ~p", [amimulator_store:get(<<"acdc-", CallId/binary>>)]),
     AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
     {ok, Number} = amimulator_util:find_id_number(
         wh_json:get_value(<<"Queue-ID">>, EventJObj),
@@ -121,9 +76,9 @@ handle_specific_event(<<"call_cancel">>, EventJObj) ->
         {<<"Uniqueid">>, CallId}
     ]],
     amimulator_amqp:publish_amqp_event({publish, Payload});
-handle_specific_event(<<"connect_accepted">>, EventJObj) ->
+handle_specific_event(<<"handled">>, EventJObj) ->
     CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
-    Call = amimulator_store:retrieve(<<"call-", CallId/binary>>),
+    Call = amimulator_store:get(<<"call-", CallId/binary>>),
 
     ToUser = hd(binary:split(whapps_call:to(Call), <<"@">>)),
     %lager:debug("touser ~p, to ~p", [ToUser, whapps_call:to(Call)]),

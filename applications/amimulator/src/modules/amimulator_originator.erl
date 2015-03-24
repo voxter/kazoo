@@ -54,7 +54,7 @@ first_leg(Props) ->
     _SourceExten = proplists:get_value(<<"SourceExten">>, UpdatedProps),
     SourceEndpoints = get_endpoints(UpdatedProps, Call),
 
-    CCVs = [{<<"Account-ID">>, proplists:get_value(<<"Account">>, UpdatedProps)}
+    CCVs = [{<<"Account-ID">>, proplists:get_value(<<"AccountId">>, UpdatedProps)}
             ,{<<"Retain-CID">>, <<"true">>}
             ,{<<"Inherit-Codec">>, <<"false">>}
             ,{<<"Authorizing-Type">>, whapps_call:authorizing_type(Call)}
@@ -95,7 +95,7 @@ eavesdrop_req(Props) ->
 
     SourceEndpoints = get_endpoints(UpdatedProps, Call),
 
-    AccountId = proplists:get_value(<<"Account">>, UpdatedProps),
+    AccountId = proplists:get_value(<<"AccountId">>, UpdatedProps),
     CCVs = props:filter_undefined([{<<"Account-ID">>, AccountId}]),
     MsgId = case proplists:get_value(<<"ActionID">>, UpdatedProps) of
         undefined -> wh_util:rand_hex_binary(16);
@@ -104,7 +104,7 @@ eavesdrop_req(Props) ->
 
     Channel = <<(hd(binary:split(proplists:get_value(<<"Data">>, Props), <<",">>)))/binary, "-", (amimulator_util:channel_tail(whapps_call:call_id(Call)))/binary>>,
     lager:debug("channel ~p", [Channel]),
-    EavesdropCallId = amimulator_store:retrieve(<<"channel-", Channel/binary>>),
+    EavesdropCallId = amimulator_store:get(<<"channel-", Channel/binary>>),
     lager:debug("eavesdropping on call id ~p", [EavesdropCallId]),
 
     Prop = wh_json:set_values(props:filter_undefined([
@@ -156,7 +156,7 @@ send_originate_execute(JObj, Q) ->
 
 %% Augment props received via AMI with additional data for call origination
 update_props(Props) ->
-    AccountId = proplists:get_value(<<"Account">>, Props),
+    AccountId = proplists:get_value(<<"AccountId">>, Props),
     Routines = [
         fun(Props2) -> [{<<"AccountDb">>, wh_util:format_account_id(AccountId, 'encoded')}] ++ Props2 end,
         fun(Props2) ->
@@ -169,7 +169,7 @@ update_props(Props) ->
 create_call_from_props(Props) ->
     Routines = [
         fun(C) -> whapps_call:set_account_db(proplists:get_value(<<"AccountDb">>, Props), C) end,
-        fun(C) -> whapps_call:set_account_id(proplists:get_value(<<"Account">>, Props), C) end,
+        fun(C) -> whapps_call:set_account_id(proplists:get_value(<<"AccountId">>, Props), C) end,
         %fun(C) ->
         %                 case wh_json:get_ne_value(<<"owner_id">>, cb_context:doc(Context)) of
         %                     'undefined' -> C;

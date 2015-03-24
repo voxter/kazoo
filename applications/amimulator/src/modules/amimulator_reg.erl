@@ -1,24 +1,11 @@
 -module(amimulator_reg).
 
--export([get_bindings/1, handle_event/1]).
+-export([init/1, handle_event/1]).
 
 -include("../amimulator.hrl").
 
-get_bindings(_AccountId) ->
-    {ok, NotifyPid} = notify_sup:listener_proc(),
-    [{
-        registrar_shared_listener,
-        {amimulator_reg, handle_event},
-        [
-            {<<"directory">>, <<"reg_success">>}
-        ]
-    },{
-        NotifyPid,
-        {amimulator_reg, handle_event},
-        [
-            {<<"notification">>, <<"deregister">>}
-        ]
-    }].
+init(_AccountId) ->
+    ok.
 
 handle_event(EventJObj) ->
     {_EventType, EventName} = wh_util:get_event_type(EventJObj),
@@ -47,7 +34,9 @@ handle_specific_event(<<"reg_success">>, EventJObj) ->
             ok
     end;
 handle_specific_event(<<"deregister">>, EventJObj) ->
-    lager:debug("deregister ~p", [EventJObj]);
+    %lager:debug("deregister ~p", [EventJObj]);
+    AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
+    handle_unregister(AccountId, EventJObj);
 handle_specific_event(_, _EventJObj) ->
     lager:debug("unhandled event").
 

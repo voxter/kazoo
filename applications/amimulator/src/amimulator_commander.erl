@@ -1,7 +1,7 @@
 -module(amimulator_commander).
 
 -export([handle/2]).
--export([sip_peers/1]).
+-export([registrations/1, reg_entries/2]).
 
 -include("amimulator.hrl").
 
@@ -97,7 +97,10 @@ handle_event("queuestatus", Props) ->
     ]],
     {ok, {Payload, n}};
 handle_event("sippeers", Props) ->
-    SipPeers = peer_entries(sip_peers(Props), Props),
+    SipPeers = lists:foldl(fun({_Number, _OnOff, Reg}, Acc) ->
+        [Reg | Acc]
+    end, [], reg_entries(registrations(Props), Props)),
+
     Payload = [[
         {<<"Response">>, <<"Success">>},
         {<<"EventList">>, <<"start">>},
@@ -189,7 +192,7 @@ handle_event("originate", Props) ->
             end
     end;
 handle_event("hangup", Props) ->
-    CallId = amimulator_store:retrieve(<<"channel-", (proplists:get_value(<<"Channel">>, Props))/binary>>),
+    CallId = amimulator_store:get(<<"channel-", (proplists:get_value(<<"Channel">>, Props))/binary>>),
     Call = amimulator_util:whapps_call_from_cf_exe(CallId),
     whapps_call_command:hangup(Call);
 handle_event(Event, _Props) ->
@@ -411,7 +414,7 @@ translate_status(Status) ->
             5
     end.
 
-sip_peers(Props) ->
+registrations(Props) ->
     {ok, AccountDoc} = couch_mgr:open_doc(<<"accounts">>, proplists:get_value(<<"AccountId">>, Props)),
     AccountRealm = wh_json:get_value(<<"realm">>, AccountDoc),
 
@@ -433,67 +436,78 @@ sip_peers(Props) ->
             end, [], JObjs)
     end.
 
-peer_entries(SipPeers, Props) ->
+reg_entries(SipPeers, Props) ->
     AccountDb = proplists:get_value(<<"AccountDb">>, Props),
     case couch_mgr:get_results(AccountDb, <<"devices/crossbar_listing">>) of
         {ok, Results} ->
-            Devices = lists:foldl(fun(Result, Acc) ->
+            lists:foldl(fun(Result, Acc) ->
                 {ok, DeviceDoc} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, Result)),
-                [DeviceDoc | Acc]
-            end, [], Results),
-            device_peer_entries(Devices, SipPeers, Props);
+                maybe_add_reg_entry(DeviceDoc, SipPeers, Props, Acc)
+            end, [], Results);
         _ ->
             []
     end.
 
-device_peer_entries(Devices, SipPeers, Props) ->
-    [device_peer_entry(Device, SipPeers, Props) || Device <- Devices].
-
-device_peer_entry(Device, SipPeers, Props) ->
+maybe_add_reg_entry(Device, SipPeers, Props, Acc) ->
     AccountDb = proplists:get_value(<<"AccountDb">>, Props),
-    EndpointId = case wh_json:get_value(<<"owner_id">>, Device) of
+    Number = case wh_json:get_value(<<"owner_id">>, Device) of
         undefined ->
-            wh_json:get_value(<<"_id">>, Device);
+            wh_json:get_value(<<"name">>, Device);
         OwnerId ->
-            {ok, OwnerDoc} = couch_mgr:open_doc(AccountDb, OwnerId),
-            wh_json:get_value(<<"_id">>, OwnerDoc)
+            case couch_mgr:open_doc(AccountDb, OwnerId) of
+                {ok, OwnerDoc} ->
+                    wh_json:get_value(<<"username">>, OwnerDoc);
+                _ ->
+                    wh_json:get_value(<<"name">>, Device)
+            end
     end,
-    {ok, Number} = amimulator_util:find_id_number(EndpointId, AccountDb),
 
-    case find_peer_reg(wh_json:get_value(<<"username">>, wh_json:get_value(<<"sip">>, Device)), SipPeers) of
-        not_found ->
-            [
-                {<<"Event">>, <<"PeerEntry">>},
-                {<<"Channeltype">>, <<"SIP">>},
-                {<<"ObjectName">>, Number},
-                {<<"ChanObjectType">>, <<"peer">>},
-                {<<"IPaddress">>, <<"-none-">>},
-                {<<"IPport">>, 0},
-                {<<"Dynamic">>, <<"yes">>},
-                {<<"Forcerport">>, <<"no">>},
-                {<<"VideoSupport">>, <<"no">>},
-                {<<"TextSupport">>, <<"no">>},
-                {<<"ACL">>, <<"yes">>},
-                {<<"Status">>, <<"UNKNOWN">>},
-                {<<"RealtimeDevice">>, <<"no">>}
-            ];
-        JObj ->
-            [
-                {<<"Event">>, <<"PeerEntry">>},
-                {<<"Channeltype">>, <<"SIP">>},
-                {<<"ObjectName">>, Number},
-                {<<"ChanObjectType">>, <<"peer">>},
-                {<<"IPaddress">>, wh_json:get_value(<<"contact_ip">>, JObj)},
-                {<<"IPport">>, wh_json:get_value(<<"contact_port">>, JObj)},
-                {<<"Dynamic">>, <<"yes">>},
-                {<<"Forcerport">>, <<"no">>},
-                {<<"VideoSupport">>, <<"no">>},
-                {<<"TextSupport">>, <<"no">>},
-                {<<"ACL">>, <<"yes">>},
-                {<<"Status">>, <<"OK (1 ms)">>},
-                {<<"RealtimeDevice">>, <<"no">>}
-            ]
+    case already_has_reg_entry(Number, Acc) of
+        true ->
+            Acc;
+        false ->
+            case find_peer_reg(wh_json:get_value(<<"username">>, wh_json:get_value(<<"sip">>, Device)), SipPeers) of
+                not_found ->
+                    [{Number, off, [
+                        {<<"Event">>, <<"PeerEntry">>},
+                        {<<"Channeltype">>, <<"SIP">>},
+                        {<<"ObjectName">>, Number},
+                        {<<"ChanObjectType">>, <<"peer">>},
+                        {<<"IPaddress">>, <<"-none-">>},
+                        {<<"IPport">>, 0},
+                        {<<"Dynamic">>, <<"yes">>},
+                        {<<"Forcerport">>, <<"no">>},
+                        {<<"VideoSupport">>, <<"no">>},
+                        {<<"TextSupport">>, <<"no">>},
+                        {<<"ACL">>, <<"yes">>},
+                        {<<"Status">>, <<"UNKNOWN">>},
+                        {<<"RealtimeDevice">>, <<"no">>}
+                    ]} | Acc];
+                JObj ->
+                    [{Number, on, [
+                        {<<"Event">>, <<"PeerEntry">>},
+                        {<<"Channeltype">>, <<"SIP">>},
+                        {<<"ObjectName">>, Number},
+                        {<<"ChanObjectType">>, <<"peer">>},
+                        {<<"IPaddress">>, wh_json:get_value(<<"contact_ip">>, JObj)},
+                        {<<"IPport">>, wh_json:get_value(<<"contact_port">>, JObj)},
+                        {<<"Dynamic">>, <<"yes">>},
+                        {<<"Forcerport">>, <<"no">>},
+                        {<<"VideoSupport">>, <<"no">>},
+                        {<<"TextSupport">>, <<"no">>},
+                        {<<"ACL">>, <<"yes">>},
+                        {<<"Status">>, <<"OK (1 ms)">>},
+                        {<<"RealtimeDevice">>, <<"no">>}
+                    ]} | Acc]
+            end
     end.
+
+already_has_reg_entry(_Number, []) ->
+    false;
+already_has_reg_entry(Number, [{Number, on, _Reg}|_Regs]) ->
+    true;
+already_has_reg_entry(Number, [_Reg|Regs]) ->
+    already_has_reg_entry(Number, Regs).
 
 find_peer_reg(_Username, []) ->
     not_found;
@@ -632,6 +646,8 @@ ami_channel_status(Call, Schema) ->
     ALegCID = props:get_value(<<"aleg_cid">>, Call),
     BLegCID = props:get_value(<<"bleg_cid">>, Call),
     WhappsCall = props:get_value(<<"call">>, Call),
+
+    lager:debug("Call ~p", [Call]),
 
     {ChannelState, ChannelStateDesc} = case props:get_value(<<"answered">>, Call) of
         false ->

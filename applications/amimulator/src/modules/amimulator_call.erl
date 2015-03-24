@@ -1,15 +1,13 @@
 -module(amimulator_call).
 
--export([get_bindings/1, handle_event/1, handle_event/2]).
--export([maybe_internal_cid/1]).
+-export([init/1, handle_event/1, handle_event/2]).
 
 -include("../amimulator.hrl").
 
 -define(STATE_UP, 6).
 
-get_bindings(AccountId) ->
-    wh_hooks:register(AccountId),
-    [].
+init(AccountId) ->
+    wh_hooks:register(AccountId).
 
 handle_event(EventJObj) ->
     handle_event(EventJObj, []).
@@ -52,7 +50,6 @@ handle_specific_event(EventName, _EventJObj) ->
     lager:debug("AMI: unhandled call event ~p", [EventName]).
 
 new_channel(EventJObj) ->
-    lager:debug("AMI: new channel ~p", [EventJObj]),
     case wh_json:get_value(<<"Call-Direction">>, EventJObj) of
         <<"inbound">> ->
             new_inbound_channel(EventJObj);
@@ -61,15 +58,26 @@ new_channel(EventJObj) ->
     end.
 
 new_inbound_channel(EventJObj) ->
-    DestExten = hd(binary:split(wh_json:get_value(<<"To">>, EventJObj), <<"@">>)),
-    Call = amimulator_util:whapps_call(EventJObj),
-    CallId = whapps_call:call_id(Call),
-    _SourceExten = amimulator_util:maybe_get_exten(Call),
-    SourceCID = amimulator_util:maybe_get_cid_name(Call),
-    EndpointName = amimulator_util:maybe_get_endpoint_name(Call),
+    %lager:debug("channel ~p", [EventJObj]),
+    Call = amimulator_util:create_call(EventJObj),
+    WhappsCall = props:get_value(<<"call">>, Call),
+    CallId = whapps_call:call_id(WhappsCall),
 
-    amimulator_store:store(<<"call-", CallId/binary>>, Call),
-    amimulator_store:store(<<"channel-", EndpointName/binary>>, CallId),
+    DestExten = props:get_value(<<"bleg_exten">>, Call),
+    SourceExten = props:get_value(<<"aleg_exten">>, Call),
+
+    SourceCID = case DestExten of
+        SourceExten ->
+            <<"Voicemail">>;
+        _ ->
+            props:get_value(<<"aleg_cid">>, Call)
+    end,
+
+    EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
+
+    amimulator_store:put(<<"whapps_call-", CallId/binary>>, WhappsCall),
+    amimulator_store:put(<<"call-", CallId/binary>>, Call),
+    amimulator_store:put(<<"channel-", EndpointName/binary>>, CallId),
 
     Payload = [
         {<<"Event">>, <<"Newchannel">>},
@@ -87,14 +95,23 @@ new_inbound_channel(EventJObj) ->
     amimulator_amqp:publish_amqp_event({publish, Payload}).
 
 new_outbound_channel(EventJObj) ->
-    Call = amimulator_util:whapps_call(EventJObj),
-    CallId = whapps_call:call_id(Call),
-    _SourceExten = amimulator_util:maybe_get_exten(Call),
-    SourceCID = amimulator_util:maybe_get_cid_name(Call),
-    EndpointName = amimulator_util:maybe_get_endpoint_name(Call),
+    Call = amimulator_util:create_call(EventJObj),
+    WhappsCall = props:get_value(<<"call">>, Call),
+    CallId = whapps_call:call_id(WhappsCall),
 
-    amimulator_store:store(<<"call-", CallId/binary>>, Call),
-    amimulator_store:store(<<"channel-", EndpointName/binary>>, CallId),
+    SourceCID = props:get_value(<<"aleg_cid">>, Call),
+    EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
+
+    amimulator_store:put(<<"whapps_call-", CallId/binary>>, WhappsCall),
+    amimulator_store:put(<<"call-", CallId/binary>>, Call),
+    case EndpointName of
+        undefined ->
+            lager:debug("Call ~p", [Call]),
+            lager:debug("EventJObj ~p", [EventJObj]);
+        _ ->
+            ok
+    end,
+    amimulator_store:put(<<"channel-", EndpointName/binary>>, CallId),
 
     Payload = [
         {<<"Event">>, <<"Newchannel">>},
@@ -120,10 +137,20 @@ new_state(<<"CHANNEL_CREATE">>, EventJObj) ->
     end.
 
 ring_state(EventJObj) ->
-    OtherCID = maybe_internal_cid(EventJObj),
     Call = amimulator_util:whapps_call(EventJObj),
     CallId = whapps_call:call_id(Call),
-    _SourceExten = amimulator_util:maybe_get_exten(Call),
+
+    DestExten = hd(binary:split(wh_json:get_value(<<"To">>, EventJObj), <<"@">>)),
+    SourceExten = amimulator_util:maybe_get_exten(Call),
+
+    OtherCID = case DestExten of
+        SourceExten ->
+            <<"Voicemail">>;
+        _ ->
+            maybe_internal_cid(amimulator_util:whapps_call(EventJObj),
+                hd(binary:split(wh_json:get_value(<<"To">>, EventJObj), <<"@">>)))
+    end,
+
     EndpointName = amimulator_util:maybe_get_endpoint_name(Call),
     Payload = [
         {<<"Event">>, <<"Newstate">>},
@@ -139,16 +166,14 @@ ring_state(EventJObj) ->
     ],
     amimulator_amqp:publish_amqp_event({publish, Payload}).
 
-maybe_internal_cid(EventJObj) ->
-    Call = amimulator_util:whapps_call(EventJObj),
-    Number = hd(binary:split(wh_json:get_value(<<"To">>, EventJObj), <<"@">>)),
-    case user_for_number(Number, whapps_call:account_db(Call)) of
+maybe_internal_cid(Call, Number) ->
+    case user_for_number(wnm_util:to_e164(Number), whapps_call:account_db(Call)) of
         {error, _E} ->
             Number;
         {ok, UserDoc} ->
-            <<(wh_json:get_value(<<"first_name">>, UserDoc))/binary, " ",
-                (wh_json:get_value(<<"last_name">>, UserDoc))/binary, " <",
-                (wh_json:get_value(<<"username">>, UserDoc))/binary, ">">>
+            <<(wh_json:get_value(<<"username">>, UserDoc))/binary, " ",
+                (wh_json:get_value(<<"first_name">>, UserDoc))/binary, " ",
+                (wh_json:get_value(<<"last_name">>, UserDoc))/binary>>
     end.
 
 user_for_number(Number, AccountDb) ->
@@ -179,14 +204,19 @@ maybe_user_in_flow(Flow) ->
     end.
 
 ringing_state(EventJObj) ->
-    Call = amimulator_util:whapps_call(EventJObj),
-    CallId = whapps_call:call_id(Call),
-    _SourceExten = amimulator_util:maybe_get_exten(Call),
-    SourceCID = amimulator_util:maybe_get_cid_name(Call),
-    EndpointName = amimulator_util:maybe_get_endpoint_name(Call),
-    OtherCall = amimulator_util:whapps_call(whapps_call:other_leg_call_id(Call)),
-    _DestExten = amimulator_util:maybe_get_exten(OtherCall),
-    DestCID = amimulator_util:maybe_get_cid_name(OtherCall),
+    Call = amimulator_util:create_call(EventJObj),
+    WhappsCall = props:get_value(<<"call">>, Call),
+    CallId = whapps_call:call_id(WhappsCall),
+
+    SourceCID = props:get_value(<<"aleg_cid">>, Call),
+    EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
+
+    OtherCall = amimulator_util:get_call(wh_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj)),
+    DestCID = case amimulator_store:get(<<"acdc-">>, props:get_value(<<"aleg_cid">>, OtherCall),
+
+    lager:debug("event ~p", [EventJObj]),
+    lager:debug("othercall ~p", [OtherCall]),
+
     Payload = [
         {<<"Event">>, <<"Newstate">>},
         {<<"Privilege">>, <<"call,all">>},
@@ -212,7 +242,8 @@ busy_state(EventJObj) ->
         <<"inbound">> ->
             inbound_cid(EventJObj);
         <<"outbound">> ->
-            OtherCall = amimulator_store:retrieve(<<"call-", (whapps_call:other_leg_call_id(Call))/binary>>),
+            OtherCall = props:get_value(<<"call">>, 
+                amimulator_store:get(<<"call-", (whapps_call:other_leg_call_id(Call))/binary>>)),
             %OtherCall = amimulator_util:whapps_call(whapps_call:other_leg_call_id(Call)),
             amimulator_util:maybe_get_cid_name(OtherCall)
     end,
@@ -284,34 +315,56 @@ maybe_dial_event(EventJObj) ->
     end.
 
 dial_event(EventJObj) ->
-    Call = amimulator_util:whapps_call(EventJObj),
-    CallId = whapps_call:call_id(Call),
-    _Exten = amimulator_util:maybe_get_exten(Call),
-    CID = amimulator_util:maybe_get_cid_name(Call),
-    EndpointName = amimulator_util:maybe_get_endpoint_name(Call),
-    OtherCall = amimulator_util:whapps_call(whapps_call:other_leg_call_id(Call)),
-    _OtherExten = amimulator_util:maybe_get_exten(OtherCall),
-    OtherCID = amimulator_util:maybe_get_cid_name(OtherCall),
-    OtherEndpointName = amimulator_util:maybe_get_endpoint_name(OtherCall),
-    Payload = [
-        {<<"Event">>, <<"Dial">>},
-        {<<"Privilege">>, <<"call,all">>},
-        {<<"SubEvent">>, <<"Begin">>},
-        {<<"Channel">>, OtherEndpointName},
-        {<<"Destination">>, EndpointName},
-        {<<"CallerIDNum">>, OtherCID},
-        {<<"CallerIDName">>, OtherCID},
-        {<<"ConnectedLineNum">>, CID},
-        {<<"ConnectedLineName">>, CID},
-        {<<"UniqueID">>, whapps_call:other_leg_call_id(Call)},
-        {<<"DestUniqueid">>, CallId},
-        {<<"Dialstring">>, CID}
-    ],
-    amimulator_amqp:publish_amqp_event({publish, Payload}).
+    Call = amimulator_util:create_call(EventJObj),
+    WhappsCall = props:get_value(<<"call">>, Call),
+    CallId = whapps_call:call_id(WhappsCall),
+
+    DestExten = props:get_value(<<"bleg_exten">>, Call),
+    SourceExten = props:get_value(<<"aleg_exten">>, Call),
+
+    CID = case DestExten of
+        SourceExten ->
+            <<"Voicemail">>;
+        _ ->
+            props:get_value(<<"aleg_cid">>, Call)
+    end,
+
+    EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
+
+    OtherCallId = wh_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj),
+    OtherCall = amimulator_util:get_call(OtherCallId),
+
+    OtherCID = props:get_value(<<"aleg_cid">>, OtherCall),
+    OtherEndpointName = props:get_value(<<"aleg_ami_channel">>, OtherCall),
+
+    %% We need to publish only if the exten matches originally dialed one
+    OtherTo = maybe_internal_cid(props:get_value(<<"call">>, OtherCall), props:get_value(<<"bleg_exten">>, OtherCall)),
+    case (CID =:= OtherTo) or
+        (wnm_util:to_e164(CID) =:= wnm_util:to_e164(OtherTo)) of
+        true ->
+            Payload = [
+                {<<"Event">>, <<"Dial">>},
+                {<<"Privilege">>, <<"call,all">>},
+                {<<"SubEvent">>, <<"Begin">>},
+                {<<"Channel">>, OtherEndpointName},
+                {<<"Destination">>, EndpointName},
+                {<<"CallerIDNum">>, OtherCID},
+                {<<"CallerIDName">>, OtherCID},
+                {<<"ConnectedLineNum">>, CID},
+                {<<"ConnectedLineName">>, CID},
+                {<<"UniqueID">>, OtherCallId},
+                {<<"DestUniqueid">>, CallId},
+                {<<"Dialstring">>, CID}
+            ],
+            amimulator_amqp:publish_amqp_event({publish, Payload});
+        false ->
+            ok
+    end.
 
 destroy_channel(EventJObj) ->
     Call = amimulator_util:whapps_call(EventJObj),
     CallId = whapps_call:call_id(Call),
+    amimulator_store:delete(<<"whapps_call-", CallId/binary>>),
     amimulator_store:delete(<<"call-", CallId/binary>>),
     
     {Cause, CauseText} = case wh_json:get_value(<<"Hangup-Cause">>, EventJObj) of

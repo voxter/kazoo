@@ -95,8 +95,8 @@ handle_info({tcp_closed, _Socket}, State) ->
 handle_info({tcp_error, _Socket, _}, State) ->
     lager:debug("tcp_error"),
     {stop, normal, State};
-handle_info(Info, State) ->
-    lager:debug("unexpected info: ~p~n", [Info]),
+handle_info(_Info, State) ->
+    %lager:debug("unexpected info: ~p~n", [Info]),
     {noreply, State}.
     
 maybe_send_response(HandleResp) ->
