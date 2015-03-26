@@ -1,7 +1,7 @@
 -module(amimulator_commander).
 
 -export([handle/2]).
--export([queues_status/1]).
+-export([registrations/1, reg_entries/2]).
 
 -include("amimulator.hrl").
 
@@ -14,7 +14,7 @@ handle(Payload, AccountId) ->
 
 update_props(Props, AccountId) ->
     Routines = [
-        fun(Props2) -> [{<<"Account">>, AccountId}] ++ Props2 end,
+        fun(Props2) -> [{<<"AccountId">>, AccountId}] ++ Props2 end,
         fun(Props2) -> case AccountId of
             <<>> ->
                 Props2;
@@ -44,7 +44,6 @@ handle_event("login", Props) ->
             %% Successful login
             lager:debug("successful login, starting event listener"),
             gen_server:cast(self(), {login, wh_json:get_value(<<"account_id">>, AMIDoc)}),
-            amimulator_amqp:start_link(self()),
             
             Payload = [[
                 {<<"Response">>, <<"Success">>},
@@ -78,39 +77,16 @@ handle_event("challenge", Props) ->
 handle_event("ping", _Props) ->
    {Megasecs, Secs, Microsecs} = os:timestamp(),
    Timestamp = Megasecs * 1000000 + Secs + Microsecs / 1000000,
-   %lager:debug("AMI: Timestamp ~p", [Timestamp]),
    Payload = [
        {<<"Response">>, <<"Success">>},
        {<<"Ping">>, <<"Pong">>},
        {<<"Timestamp">>, Timestamp}
    ],
    {ok, {Payload, n}};
-%% Handle AMI Status action - INCOMPLETE
-% handle_event("status", Props) ->
-%     AccountId = proplists:get_value(<<"Account">>, Props),
-%     AllCalls = ecallmgr_maintenance:channel_details(),
-%     FilteredCalls = lists:filter(fun(Call) ->  
-%         case proplists:get_value(<<"account_id">>, Call) of
-%             AccountId -> true;
-%             _ -> false
-%         end
-%     end, AllCalls),
-%     FormattedCalls = lists:foldl(fun(Call, List) -> 
-%         case {proplists:is_defined(<<"other_leg">>), proplists:is_defined(<<"username">>)} of
-%             {true, true} -> List ++ ami_channel_status(Call, bridged_extension);
-%             {true, false} -> List ++ ami_channel_status(Call, bridged);
-%             {false, true} -> List ++ ami_channel_status(Call, extension);
-%             {_, _} -> lager:debug("AMI: undefined channel status format for call ~p", [Call]),
-%         end
-%     end, [], FilteredCalls),
-%     Payload = [[
-%         {<<"Response">>, <<"Success">>},
-%         {<<"Message">>, <<"Channel status will follow">>}
-%         ]] ++ FormattedCalls ++ [[
-%         {<<"Event">>, <<"StatusComplete">>},
-%         {<<"Items">>, length(FormattedCalls)}
-%     ]],
-%     {ok, {Payload, n}};
+% Handle AMI Status action
+handle_event("status", Props) ->
+    Payload = initial_channel_status(amimulator_util:initial_calls(proplists:get_value(<<"AccountId">>, Props)), Props),
+    {ok, {Payload, n}};
 handle_event("queuestatus", Props) ->
     Payload = [[
         {<<"Response">>, <<"Success">>},
@@ -120,90 +96,61 @@ handle_event("queuestatus", Props) ->
         {<<"Event">>, <<"QueueStatusComplete">>}
     ]],
     {ok, {Payload, n}};
-handle_event("queuepause", Props) ->
-    Interface = proplists:get_value(<<"Interface">>, Props),
-    Exten = hd(binary:split(binary:replace(Interface, <<"Local/">>, <<"">>), <<"@">>)),
-    AccountDb = proplists:get_value(<<"AccountDb">>, Props),
+handle_event("sippeers", Props) ->
+    SipPeers = lists:foldl(fun({_Number, _OnOff, Reg}, Acc) ->
+        [Reg | Acc]
+    end, [], reg_entries(registrations(Props), Props)),
 
-    %% Load agent doc having the Exten given as name
-    {ok, [Result]} = couch_mgr:get_results(AccountDb,
-        <<"users/list_by_username">>,
-        [{key, Exten}]
-    ),
-    AgentId = wh_json:get_value(<<"id">>, Result),
-    {ok, AgentDoc} = couch_mgr:open_doc(AccountDb, AgentId),
-    AgentName = <<(wh_json:get_value(<<"first_name">>, AgentDoc))/binary, " ",
-        (wh_json:get_value(<<"last_name">>, AgentDoc))/binary
-    >>,
-    AgentFsm = acdc_agent_sup:fsm(acdc_agents_sup:find_agent_supervisor(
-        proplists:get_value(<<"Account">>, Props),
-        AgentId
-    )),
-
-    %% Found the FSM, now pause/unpause the agent
-    case proplists:get_value(<<"Paused">>, Props) of
-        <<"0">> ->
-            acdc_agent_fsm:resume(AgentFsm),
-
-            %% Respond with pause/unpause success
-            Payload = [[
-                {<<"Response">>, <<"Success">>},
-                {<<"Message">>, <<"Interface unpaused successfully">>}
-            ],[
-                {<<"Event">>, <<"QueueMemberPaused">>},
-                {<<"Privilege">>, <<"agent,all">>},
-                {<<"Queue">>, proplists:get_value(<<"Queue">>, Props)},
-                {<<"Location">>, Interface},
-                {<<"MemberName">>, AgentName},
-                {<<"Paused">>, 0}
-            ]],
-            {ok, {Payload, n}};
-        <<"1">> ->
-            %% For some reason, infinity doesn't work here despite the spec saying so
-            acdc_agent_fsm:pause(AgentFsm, 600000),
-
-            %% Respond with pause/unpause success
-            Payload = [[
-                {<<"Response">>, <<"Success">>},
-                {<<"Message">>, <<"Interface paused successfully">>}
-            ],[
-                {<<"Event">>, <<"QueueMemberPaused">>},
-                {<<"Privilege">>, <<"agent,all">>},
-                {<<"Queue">>, proplists:get_value(<<"Queue">>, Props)},
-                {<<"Location">>, Interface},
-                {<<"MemberName">>, AgentName},
-                {<<"Paused">>, 1}
-            ]],
-            {ok, {Payload, n}}
-    end;
-handle_event("queueadd", Props) ->
-    Interface = proplists:get_value(<<"Interface">>, Props),
-    Exten = hd(binary:split(binary:replace(Interface, <<"Local/">>, <<"">>), <<"@">>)),
-    AccountId = proplists:get_value(<<"Account">>, Props),
-    AccountDb = proplists:get_value(<<"AccountDb">>, Props),
-
-    %% Load agent doc having the Exten given as name
-    {ok, [Result]} = couch_mgr:get_results(AccountDb,
-        <<"users/list_by_username">>,
-        [{key, Exten}]
-    ),
-    AgentId = wh_json:get_value(<<"id">>, Result),
-    {ok, QueueDoc} = amimulator_util:queue_for_number(proplists:get_value(<<"Queue">>, Props), AccountDb),
-    QueueId = wh_json:get_value(<<"_id">>, QueueDoc),
-
-    Prop = props:filter_undefined(
-     [{<<"Account-ID">>, AccountId}
-      ,{<<"Agent-ID">>, AgentId}
-      ,{<<"Queue-ID">>, QueueId}
-      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-     ]),
-    wapi_acdc_agent:publish_login_queue(Prop),
-
-    Payload = [
+    Payload = [[
         {<<"Response">>, <<"Success">>},
-        {<<"Message">>, <<"Added interface to queue">>}
-    ],
+        {<<"EventList">>, <<"start">>},
+        {<<"Message">>, <<"Peer status list will follow">>}
+    ]] ++ SipPeers ++ [[
+        {<<"Event">>, <<"PeerlistComplete">>},
+        {<<"EventList">>, <<"Complete">>},
+        {<<"ListItems">>, length(SipPeers)}
+    ]],
     {ok, {Payload, n}};
+handle_event("mailboxcount", Props) ->
+    AccountDb = proplists:get_value(<<"AccountDb">>, Props),
+    Mailbox = proplists:get_value(<<"Mailbox">>, Props),
+    ActionId = proplists:get_value(<<"ActionID">>, Props),
+    Exten = hd(binary:split(Mailbox, <<"@">>)),
+
+    Payload = case couch_mgr:get_results(AccountDb, <<"vmboxes/listing_by_mailbox">>, [{key, Exten}]) of
+        {ok, [Result]} ->
+            lager:debug("result ~p", [Result]),
+            case couch_mgr:open_doc(AccountDb, <<"asdf">>) of
+                {ok, VMDoc} ->
+                    Messages = wh_json:get_value(<<"messages">>, VMDoc),
+                    NewCount = lists:foldl(fun(Message, Total) ->
+                        case wh_json:get_value(<<"folder">>, Message) of
+                            <<"new">> ->
+                                Total + 1;
+                            _ ->
+                                Total
+                        end
+                    end, 0, Messages),
+                    [
+                        {<<"Response">>, <<"Success">>},
+                        {<<"ActionID">>, ActionId},
+                        {<<"Message">>, <<"Mailbox Message Count">>},
+                        {<<"Mailbox">>, Mailbox},
+                        {<<"UrgMessages">>, 0},
+                        {<<"NewMessages">>, NewCount},
+                        {<<"OldMessages">>, length(Messages) - NewCount}
+                    ];
+                {error, _E} ->
+                    mailbox_count_error(ActionId, Mailbox)
+            end;
+        _ ->
+            mailbox_count_error(ActionId, Mailbox)
+    end,
+    {ok, {Payload, n}};
+handle_event("queuepause", Props) ->
+    queue_pause(Props);
+handle_event("queueadd", Props) ->
+    queue_add(Props);
 handle_event("queueremove", Props) ->
     Interface = proplists:get_value(<<"Interface">>, Props),
     Exten = hd(binary:split(binary:replace(Interface, <<"Local/">>, <<"">>), <<"@">>)),
@@ -237,11 +184,46 @@ handle_event("originate", Props) ->
         undefined ->
             {error, channel_not_specified};
         _ ->
-            gen_server:cast(self(), {originator, "originate", Props})
+            case proplists:get_value(<<"Application">>, Props) of
+                <<"ChanSpy">> ->
+                    gen_server:cast(self(), {originator, "eavesdrop", Props});
+                _ ->
+                    gen_server:cast(self(), {originator, "originate", Props})
+            end
     end;
+handle_event("hangup", Props) ->
+    CallId = amimulator_store:get(<<"channel-", (proplists:get_value(<<"Channel">>, Props))/binary>>),
+    Call = amimulator_util:whapps_call_from_cf_exe(CallId),
+    whapps_call_command:hangup(Call);
 handle_event(Event, _Props) ->
     lager:debug("no handler defined for event ~p", [Event]),
     {error, no_action}.
+
+initial_channel_status(Calls, Props) ->
+    AccountId = proplists:get_value(<<"AccountId">>, Props),
+    FilteredCalls = lists:filter(fun(Call) ->  
+        case whapps_call:account_id(props:get_value(<<"call">>, Call)) of
+            AccountId -> true;
+            _ -> false
+        end
+    end, Calls),
+    FormattedCalls = lists:foldl(fun(Call, List) ->
+        WhappsCall = props:get_value(<<"call">>, Call),
+
+        case {whapps_call:other_leg_call_id(WhappsCall) /= undefined, proplists:is_defined(<<"username">>, Call)} of
+            {true, true} -> [ami_channel_status(Call, bridged_extension)] ++ List;
+            {true, false} -> [ami_channel_status(Call, bridged)] ++ List;
+            {false, true} -> [ami_channel_status(Call, extension)] ++ List;
+            {_, _} -> lager:debug("undefined channel status format for call ~p", [Call])
+        end
+    end, [], FilteredCalls),
+    [[
+        {<<"Response">>, <<"Success">>},
+        {<<"Message">>, <<"Channel status will follow">>}
+    ]] ++ FormattedCalls ++ [[
+        {<<"Event">>, <<"StatusComplete">>},
+        {<<"Items">>, length(FormattedCalls)}
+    ]].
     
 queues_status(Props) ->
     AcctId = proplists:get_value(<<"Account">>, Props),
@@ -432,41 +414,289 @@ translate_status(Status) ->
             5
     end.
 
-%% Kazoo chan. status to AMI status translator - INCOMPLETE
-% ami_channel_status(Call, Schema) ->
-%     AMI_Status_Header = [
-%         {<<"Event">>, <<"Status">>},
-%         {<<"Priviledge">>, <<"Call">>}
-%     ],
-%     AMI_Status_Body = case Schema of
-%         bridged_extension -> [
-%             {<<"Channel">>, <<"SIP/", proplists:get_value(<<"username">>, Call)/binary, "@", proplists:get_value(<<"context">>, Call)/binary, ";1">>}
-%             {<<"CallerIDNum">>, proplists:get_value(<<"destination">>, Call)},
-%             {<<"CallerIDName">>, proplists:get_value(<<"account_id">>, Call)},
-%             {<<"ConnectedLineNum">>, proplists:get_value(<<"account_id">>, Call)},
-%             {<<"ConnectedLineName">>, proplists:get_value(<<"account_id">>, Call)},
-%             {<<"Accountcode">>, proplists:get_value(<<"account_id">>, Call)},
-%             {<<"ChannelState">>, <<"6">>}, % Numeric channel state
-%             {<<"ChannelStateDesc">>, <<"Up">>}, % Check for "answered": true/false
-%             {<<"Context">>, proplists:get_value(<<"context">>, Call)},
-%             {<<"Extension">>, proplists:get_value(<<"username">>, Call)},
-%             {<<"Priority">>, <<"12">>},
-%             {<<"Seconds">>, proplists:get_value(<<"elapsed_s">>, Call)},
-%             {<<"BridgedChannel">>, proplists:get_value(<<"other_leg">>, Call)},
-%             {<<"BridgedUniqueid">>, proplists:get_value(<<"other_leg">>, Call)}
-%         ];
-%         extension -> [
-%         [
-%             {<<"Accountcode">>, proplists:get_value(<<"account_id">>, Call)}
-%         ];
-%         bridged -> [
-%             {<<"Account">>, proplists:get_value(<<"account_id">>, Call)},
-%             {<<"BridgedChannel">>, proplists:get_value(<<"uuid">>, Call)},
-%             {<<"BridgedUniqueid">>, proplists:get_value(<<"other_leg">>, Call)}
-%         ];
-%         _ -> []
-%     end,
-%     AMI_Status_Footer = [
-%         {<<"Uniqueid">>, proplists:get_value(<<"uuid">>, Call)}
-%     ],
-%     AMI_Status_Header ++ AMI_Status_Body ++ AMI_Status_Footer.
+registrations(Props) ->
+    {ok, AccountDoc} = couch_mgr:open_doc(<<"accounts">>, proplists:get_value(<<"AccountId">>, Props)),
+    AccountRealm = wh_json:get_value(<<"realm">>, AccountDoc),
+
+    Req = [
+        {<<"Realm">>, AccountRealm}
+        | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+    ],
+
+    ReqResp = whapps_util:amqp_pool_collect(
+        Req,
+        fun wapi_registration:publish_query_req/1,
+        {'ecallmgr', 'true'}
+    ),
+    case ReqResp of
+        {'error', _} -> [];
+        {_, JObjs} ->
+            lists:foldl(fun(JObj, SipPeers) ->
+                wh_json:get_value(<<"Fields">>, JObj, []) ++ SipPeers
+            end, [], JObjs)
+    end.
+
+reg_entries(SipPeers, Props) ->
+    AccountDb = proplists:get_value(<<"AccountDb">>, Props),
+    case couch_mgr:get_results(AccountDb, <<"devices/crossbar_listing">>) of
+        {ok, Results} ->
+            lists:foldl(fun(Result, Acc) ->
+                {ok, DeviceDoc} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, Result)),
+                maybe_add_reg_entry(DeviceDoc, SipPeers, Props, Acc)
+            end, [], Results);
+        _ ->
+            []
+    end.
+
+maybe_add_reg_entry(Device, SipPeers, Props, Acc) ->
+    AccountDb = proplists:get_value(<<"AccountDb">>, Props),
+    Number = case wh_json:get_value(<<"owner_id">>, Device) of
+        undefined ->
+            wh_json:get_value(<<"name">>, Device);
+        OwnerId ->
+            case couch_mgr:open_doc(AccountDb, OwnerId) of
+                {ok, OwnerDoc} ->
+                    wh_json:get_value(<<"username">>, OwnerDoc);
+                _ ->
+                    wh_json:get_value(<<"name">>, Device)
+            end
+    end,
+
+    case already_has_reg_entry(Number, Acc) of
+        true ->
+            Acc;
+        false ->
+            case find_peer_reg(wh_json:get_value(<<"username">>, wh_json:get_value(<<"sip">>, Device)), SipPeers) of
+                not_found ->
+                    [{Number, off, [
+                        {<<"Event">>, <<"PeerEntry">>},
+                        {<<"Channeltype">>, <<"SIP">>},
+                        {<<"ObjectName">>, Number},
+                        {<<"ChanObjectType">>, <<"peer">>},
+                        {<<"IPaddress">>, <<"-none-">>},
+                        {<<"IPport">>, 0},
+                        {<<"Dynamic">>, <<"yes">>},
+                        {<<"Forcerport">>, <<"no">>},
+                        {<<"VideoSupport">>, <<"no">>},
+                        {<<"TextSupport">>, <<"no">>},
+                        {<<"ACL">>, <<"yes">>},
+                        {<<"Status">>, <<"UNKNOWN">>},
+                        {<<"RealtimeDevice">>, <<"no">>}
+                    ]} | Acc];
+                JObj ->
+                    [{Number, on, [
+                        {<<"Event">>, <<"PeerEntry">>},
+                        {<<"Channeltype">>, <<"SIP">>},
+                        {<<"ObjectName">>, Number},
+                        {<<"ChanObjectType">>, <<"peer">>},
+                        {<<"IPaddress">>, wh_json:get_value(<<"contact_ip">>, JObj)},
+                        {<<"IPport">>, wh_json:get_value(<<"contact_port">>, JObj)},
+                        {<<"Dynamic">>, <<"yes">>},
+                        {<<"Forcerport">>, <<"no">>},
+                        {<<"VideoSupport">>, <<"no">>},
+                        {<<"TextSupport">>, <<"no">>},
+                        {<<"ACL">>, <<"yes">>},
+                        {<<"Status">>, <<"OK (1 ms)">>},
+                        {<<"RealtimeDevice">>, <<"no">>}
+                    ]} | Acc]
+            end
+    end.
+
+already_has_reg_entry(_Number, []) ->
+    false;
+already_has_reg_entry(Number, [{Number, on, _Reg}|_Regs]) ->
+    true;
+already_has_reg_entry(Number, [_Reg|Regs]) ->
+    already_has_reg_entry(Number, Regs).
+
+find_peer_reg(_Username, []) ->
+    not_found;
+find_peer_reg(Username, [Peer|Peers]) ->
+    case wh_json:get_value(<<"Username">>, Peer) of
+        Username ->
+            cb_registrations:normalize_registration(Peer);
+        _ ->
+            find_peer_reg(Username, Peers)
+    end.
+
+mailbox_count_error(ActionId, Mailbox) ->
+    [
+        {<<"Response">>, <<"Success">>},
+        {<<"ActionID">>, ActionId},
+        {<<"Message">>, <<"Mailbox Message Count">>},
+        {<<"Mailbox">>, Mailbox},
+        {<<"UrgMessages">>, 0},
+        {<<"NewMessages">>, 0},
+        {<<"OldMessages">>, 0}
+    ].
+
+queue_add(Props) ->
+    Interface = proplists:get_value(<<"Interface">>, Props),
+    Exten = hd(binary:split(binary:replace(Interface, <<"Local/">>, <<"">>), <<"@">>)),
+    AccountId = proplists:get_value(<<"Account">>, Props),
+    AccountDb = proplists:get_value(<<"AccountDb">>, Props),
+
+    %% Load agent doc having the Exten given as name
+    case couch_mgr:get_results(
+        AccountDb,
+        <<"users/list_by_username">>,
+        [{key, Exten}]
+    ) of
+        {ok, [Result]} ->
+            queue_add(AccountId, AccountDb, Result, Props);
+        _ ->
+            %% Error, could not find user
+            {error, not_a_user}
+    end.
+
+queue_add(AccountId, AccountDb, Result, Props) ->
+    AgentId = wh_json:get_value(<<"id">>, Result),
+    {ok, QueueDoc} = amimulator_util:queue_for_number(proplists:get_value(<<"Queue">>, Props), AccountDb),
+    QueueId = wh_json:get_value(<<"_id">>, QueueDoc),
+
+    Prop = props:filter_undefined(
+     [{<<"Account-ID">>, AccountId}
+      ,{<<"Agent-ID">>, AgentId}
+      ,{<<"Queue-ID">>, QueueId}
+      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+     ]),
+    wapi_acdc_agent:publish_login_queue(Prop),
+
+    Payload = [
+        {<<"Response">>, <<"Success">>},
+        {<<"Message">>, <<"Added interface to queue">>}
+    ],
+    {ok, {Payload, n}}.
+
+queue_pause(Props) ->
+    Interface = proplists:get_value(<<"Interface">>, Props),
+    Exten = hd(binary:split(binary:replace(Interface, <<"Local/">>, <<"">>), <<"@">>)),
+    AccountDb = proplists:get_value(<<"AccountDb">>, Props),
+
+    %% Load agent doc having the Exten given as name
+    case couch_mgr:get_results(
+        AccountDb,
+        <<"users/list_by_username">>,
+        [{key, Exten}]
+    ) of
+        {ok, [Result]} ->
+            pause_exten(Interface, AccountDb, Result, Props);
+        _ ->
+            %% Error, could not find user
+            {error, not_a_user}
+    end.
+
+pause_exten(Interface, AccountDb, Result, Props) ->
+    AgentId = wh_json:get_value(<<"id">>, Result),
+    {ok, AgentDoc} = couch_mgr:open_doc(AccountDb, AgentId),
+    AgentName = <<(wh_json:get_value(<<"first_name">>, AgentDoc))/binary, " ",
+        (wh_json:get_value(<<"last_name">>, AgentDoc))/binary
+    >>,
+
+    case acdc_agents_sup:find_agent_supervisor(
+        proplists:get_value(<<"Account">>, Props),
+        AgentId
+    ) of
+        undefined ->
+            %% Pause error message
+            {error, not_an_agent};
+        Pid ->
+            AgentFsm = acdc_agent_sup:fsm(Pid),
+
+            %% Found the FSM, now pause/unpause the agent
+            case proplists:get_value(<<"Paused">>, Props) of
+                <<"0">> ->
+                    acdc_agent_fsm:resume(AgentFsm),
+
+                    %% Respond with pause/unpause success
+                    Payload = [[
+                        {<<"Response">>, <<"Success">>},
+                        {<<"Message">>, <<"Interface unpaused successfully">>}
+                    ],[
+                        {<<"Event">>, <<"QueueMemberPaused">>},
+                        {<<"Privilege">>, <<"agent,all">>},
+                        {<<"Queue">>, proplists:get_value(<<"Queue">>, Props)},
+                        {<<"Location">>, Interface},
+                        {<<"MemberName">>, AgentName},
+                        {<<"Paused">>, 0}
+                    ]],
+                    {ok, {Payload, n}};
+                <<"1">> ->
+                    %% For some reason, infinity doesn't work here despite the spec saying so
+                    acdc_agent_fsm:pause(AgentFsm, 600000),
+
+                    %% Respond with pause/unpause success
+                    Payload = [[
+                        {<<"Response">>, <<"Success">>},
+                        {<<"Message">>, <<"Interface paused successfully">>}
+                    ],[
+                        {<<"Event">>, <<"QueueMemberPaused">>},
+                        {<<"Privilege">>, <<"agent,all">>},
+                        {<<"Queue">>, proplists:get_value(<<"Queue">>, Props)},
+                        {<<"Location">>, Interface},
+                        {<<"MemberName">>, AgentName},
+                        {<<"Paused">>, 1}
+                    ]],
+                    {ok, {Payload, n}}
+            end
+    end.
+
+% Existing whapps_call to AMI status translator
+ami_channel_status(Call, Schema) ->
+    ALegCID = props:get_value(<<"aleg_cid">>, Call),
+    BLegCID = props:get_value(<<"bleg_cid">>, Call),
+    WhappsCall = props:get_value(<<"call">>, Call),
+
+    lager:debug("Call ~p", [Call]),
+
+    {ChannelState, ChannelStateDesc} = case props:get_value(<<"answered">>, Call) of
+        false ->
+            {0, <<"Down">>};
+        true ->
+            {6, <<"Up">>};
+        _ ->
+            {6, <<"Up">>}
+    end,
+
+    AMI_Status_Header = [
+        {<<"Event">>, <<"Status">>},
+        {<<"Priviledge">>, <<"Call">>}
+    ],
+    AMI_Status_Body = case Schema of
+        bridged_extension -> [
+             {<<"Channel">>, props:get_value(<<"aleg_ami_channel">>, Call)},
+             {<<"CallerIDNum">>, ALegCID},
+             {<<"CallerIDName">>, ALegCID},
+             {<<"ConnectedLineNum">>, BLegCID},
+             {<<"ConnectedLineName">>, BLegCID},
+             {<<"Accountcode">>, whapps_call:account_id(WhappsCall)},
+             {<<"ChannelState">>, ChannelState}, % Numeric channel state
+             {<<"ChannelStateDesc">>, ChannelStateDesc},
+             %{<<"Context">>, proplists:get_value(<<"context">>, Call)},
+             {<<"Context">>, <<"from-internal">>},
+             {<<"Extension">>, props:get_value(<<"aleg_exten">>, Call)},
+             {<<"Priority">>, <<"12">>},
+             {<<"Seconds">>, props:get_value(<<"elapsed_s">>, Call)},
+             {<<"BridgedChannel">>, props:get_value(<<"bleg_ami_channel">>, Call)},
+             {<<"BridgedUniqueid">>, whapps_call:other_leg_call_id(WhappsCall)}
+         ];
+         extension -> [
+             {<<"Accountcode">>, proplists:get_value(<<"account_id">>, Call)}
+         ];
+         bridged -> [
+             {<<"Channel">>, props:get_value(<<"aleg_ami_channel">>, Call)},
+             {<<"CallerIDNum">>, ALegCID},
+             {<<"CallerIDName">>, ALegCID},
+             {<<"ConnectedLineNum">>, BLegCID},
+             {<<"ConnectedLineName">>, BLegCID},
+             {<<"Account">>, <<"">>},
+             {<<"State">>, ChannelStateDesc},
+             {<<"BridgedChannel">>, props:get_value(<<"bleg_ami_channel">>, Call)},
+             {<<"BridgedUniqueid">>, whapps_call:other_leg_call_id(WhappsCall)}
+         ];
+         _ -> []
+     end,
+     AMI_Status_Footer = [
+         {<<"Uniqueid">>, whapps_call:call_id(WhappsCall)}
+     ],
+     AMI_Status_Header ++ AMI_Status_Body ++ AMI_Status_Footer.

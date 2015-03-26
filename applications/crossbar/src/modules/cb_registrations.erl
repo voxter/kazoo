@@ -23,6 +23,7 @@
          ,validate/1, validate/2
          ,lookup_regs/1
          ,delete/1, delete/2
+         ,normalize_registration/1
         ]).
 
 -include("../crossbar.hrl").

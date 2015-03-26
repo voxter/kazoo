@@ -65,6 +65,7 @@ handle_cast(accept, #state{listen_socket=Socket}=State) ->
     end;
 handle_cast({login, AccountId}, State) ->
     {ok, OriginatorPid} = amimulator_originator:start_link(),
+    amimulator_amqp:start_link(AccountId, self()),
     {noreply, State#state{account_id=AccountId,originator_pid=OriginatorPid}};
 handle_cast({originator, Action, Props}, #state{originator_pid=OriginatorPid}=State) ->
     gen_listener:cast(OriginatorPid, {Action, Props}),
@@ -94,8 +95,8 @@ handle_info({tcp_closed, _Socket}, State) ->
 handle_info({tcp_error, _Socket, _}, State) ->
     lager:debug("tcp_error"),
     {stop, normal, State};
-handle_info(Info, State) ->
-    lager:debug("unexpected info: ~p~n", [Info]),
+handle_info(_Info, State) ->
+    %lager:debug("unexpected info: ~p~n", [Info]),
     {noreply, State}.
     
 maybe_send_response(HandleResp) ->
