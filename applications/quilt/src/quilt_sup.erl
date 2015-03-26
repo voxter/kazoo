@@ -15,7 +15,7 @@
 -include("quilt.hrl").
 
 %% Helper macro for declaring children of supervisor
--define(CHILDREN, [?WORKER('quilt_listener')]).
+-define(CHILDREN, [?WORKER_TYPE('quilt_listener', temporary)]).
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []),
