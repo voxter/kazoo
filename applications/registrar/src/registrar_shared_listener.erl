@@ -36,6 +36,7 @@
                    ,{'authz', []}
                    ,{'route', []}
                    ,{'self', []}
+                   ,{'registration', []}
                   ]).
 -define(SERVER, ?MODULE).
 -define(REG_QUEUE_NAME, <<"registrar_listener">>).

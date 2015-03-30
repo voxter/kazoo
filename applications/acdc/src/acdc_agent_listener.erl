@@ -367,6 +367,8 @@ init([Supervisor, Agent, Queues]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_call('last_connect', _, #state{last_connect=LastConnect}=State) ->
+    {'reply', LastConnect, State, 'hibernate'};
 handle_call('presence_id', _, #state{agent_presence_id=PresenceId}=State) ->
     {'reply', PresenceId, State, 'hibernate'};
 handle_call('queues', _, #state{agent_queues=Queues}=State) ->
