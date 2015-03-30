@@ -27,6 +27,11 @@
         {realm, get_realm(A)}
     ]}
 ]).
+-define(BINDING(ConferenceId),
+    {conference, [
+        {restrict_to, [{conference, ConferenceId}]}
+    ]}
+).
 -define(RESPONDERS, [{
     {amimulator_amqp, handle_amqp_event},
     [
@@ -35,7 +40,8 @@
         {<<"notification">>, <<"deregister">>},
         {<<"member">>, <<"call">>},
         {<<"member">>, <<"call_cancel">>},
-        {<<"acdc_call_stat">>, <<"handled">>}
+        {<<"acdc_call_stat">>, <<"handled">>},
+        {<<"conference">>, <<"participants_event">>}
     ]
 }]).
 -define(QUEUE_NAME, <<"amimulator-queue">>).
@@ -48,7 +54,8 @@
 -define(HANDLER_MODULES, [
     amimulator_call,
     amimulator_acdc,
-    amimulator_reg
+    amimulator_reg,
+    amimulator_conf
 ]).
 
 -record(state, {
@@ -56,8 +63,10 @@
 }).
 
 start_link(AccountId, Pid) ->
+    ConferenceBindings = conference_bindings(amimulator_conf:account_conferences(AccountId)),
     gen_listener:start_link(?MODULE
-                           ,[{'bindings', ?BINDINGS ++ ?BINDINGS(AccountId)}
+                           ,[{'bindings', ?BINDINGS ++ ?BINDINGS(AccountId)
+                                ++ ConferenceBindings}
                             ,{'responders', ?RESPONDERS}
                             ,{'queue_name', ?QUEUE_NAME}       % optional to include
                             ,{'queue_options', ?QUEUE_OPTIONS} % optional to include
@@ -67,6 +76,18 @@ start_link(AccountId, Pid) ->
 get_realm(AccountId) ->
     {ok, AccountDoc} = couch_mgr:open_doc(<<"accounts">>, AccountId),
     wh_json:get_value(<<"realm">>, AccountDoc).
+
+conference_bindings(ConferenceIds) ->
+    [
+        {conference, [
+            {restrict_to, conference_bindings(ConferenceIds, [])}
+        ]}
+    ].
+
+conference_bindings([], Bindings) ->
+    Bindings;
+conference_bindings([ConferenceId|Ids], Bindings) ->
+    conference_bindings(Ids, [{conference, ConferenceId} | Bindings]).
 
 handle_amqp_event(EventJObj, Props, #'basic.deliver'{routing_key=RoutingKey}) ->
     handle_amqp_event_type(EventJObj, Props, RoutingKey).
@@ -98,7 +119,11 @@ handle_amqp_event_type(EventJObj, _Props, <<"acdc.member.call.", _/binary>>) ->
     amimulator_acdc:handle_event(EventJObj);
 
 handle_amqp_event_type(EventJObj, _Props, <<"acdc_stats.call.", _/binary>>) ->
-    amimulator_acdc:handle_event(EventJObj).
+    amimulator_acdc:handle_event(EventJObj);
+
+handle_amqp_event_type(EventJObj, Props, <<"conference.event.", _/binary>>) ->
+    AccountId = gen_server:call(proplists:get_value(<<"comm_pid">>, Props), account_id),
+    amimulator_conf:handle_event(wh_json:set_value(<<"Account-ID">>, AccountId, EventJObj)).
     
 publish_amqp_event({publish, Events}=_Req) ->
     {ok, Payload} = wh_api:prepare_api_payload(

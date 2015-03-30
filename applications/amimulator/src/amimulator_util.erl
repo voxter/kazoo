@@ -69,16 +69,6 @@ initial_calls(AccountId) ->
         {'ecallmgr', fun wapi_call:query_account_channels_resp_v/1}
     ) of
         {'ok', RespJObjs} ->
-            %% Store the channels as raw data in the amimulator_store first of all
-            %% They will be used for data lookups
-            lists:foreach(fun(RespJObj) ->
-                Channels = wh_json:get_value(<<"Channels">>, RespJObj),
-                case Channels of
-                    undefined -> ok;
-                    _ -> initialize_datastore(Channels)
-                end
-            end, RespJObjs),
-
             %% Now we can produce all the channels and update the amimulator_store
             lists:foreach(fun(RespJObj) ->
                 Channels = wh_json:get_value(<<"Channels">>, RespJObj),
@@ -99,17 +89,6 @@ initial_calls(AccountId) ->
         E ->
             lager:debug("Could not get channel statuses: ~p", [E])
     end.
-
-initialize_datastore(ChannelJObjs) ->
-    lists:foreach(fun(ChannelJObj) ->
-        Key = "channel-" ++ wh_util:to_list(wh_json:get_value(<<"uuid">>, ChannelJObj)),
-        case amimulator_store:get(Key) of
-            undefined ->
-                amimulator_store:put(Key, ChannelJObj);
-            _ ->
-                ok
-        end
-    end, ChannelJObjs).
 
 create_call(EventJObj) ->
     call_from_json(EventJObj),
@@ -160,15 +139,22 @@ call_from_json(JObj) ->
 %% Adds a whole bunch of extra data to make whapps_calls more useful
 better_calls(JObjs) ->
     lists:foldl(fun(JObj, Calls) ->
-        [better_call(JObj)] ++ Calls
+            BetterCall = better_call(JObj),
+            CallId = wh_json:get_first_defined([<<"uuid">>, <<"Call-ID">>], JObj),
+            amimulator_store:put(<<"call-", CallId/binary>>, BetterCall),
+            amimulator_store:put(<<"channel-", (props:get_value(<<"aleg_ami_channel">>, BetterCall))/binary>>,
+                [CallId]),
+            [BetterCall] ++ Calls
     end, [], JObjs).
 
 better_call(JObj) ->
     Call = amimulator_store:get("whapps_call-" ++ wh_util:to_list(
         wh_json:get_first_defined([<<"uuid">>, <<"Call-ID">>], JObj))),
     Routines = [
-        fun(Call2, JObj2) -> props:set_value(<<"direction">>,
-            wh_json:get_first_defined([<<"direction">>, <<"Call-Direction">>], JObj2), Call2) end,
+        fun(Call2, JObj2) -> 
+            CallDirection = wh_json:get_first_defined([<<"direction">>, <<"Call-Direction">>], JObj2,
+                <<"inbound">>),
+            props:set_value(<<"direction">>, CallDirection, Call2) end,
         fun aleg_cid/2,
         fun aleg_exten/2,
         fun aleg_ami_channel/2,
@@ -193,7 +179,7 @@ aleg_cid(Call, _ChannelJObj) ->
     case cf_endpoint:get(WhappsCall) of
         %% An external endpoint
         {error, _E} ->
-            case props:get_value(<<"direction">>, Call) of
+            case props:get_first_defined([<<"direction">>, <<"Call-Direction">>], Call) of
                 <<"inbound">> ->
                     props:set_value(<<"aleg_cid">>, whapps_call:from_user(WhappsCall), Call);
                 <<"outbound">> ->
@@ -225,22 +211,60 @@ aleg_ami_channel(Call, _ChannelJObj) ->
     case cf_endpoint:get(WhappsCall) of
         %% An external endpoint
         {error, _E} ->
-            case props:get_value(<<"direction">>, Call) of
-                <<"inbound">> ->
-                    props:set_value(<<"aleg_ami_channel">>, channel_string(
-                        whapps_call:from_user(WhappsCall),
-                        whapps_call:call_id(WhappsCall)
-                    ), Call);
-                <<"outbound">> ->
-                    props:set_value(<<"aleg_ami_channel">>, channel_string(
-                        whapps_call:to_user(WhappsCall),
-                        whapps_call:call_id(WhappsCall)
-                    ), Call)
-            end;
-            
+            maybe_cellphone_endpoint(Call);
         %% Some internal extension
         {ok, Endpoint} ->
             props:set_value(<<"aleg_ami_channel">>, endpoint_channel(Endpoint, whapps_call:account_db(WhappsCall), whapps_call:call_id(WhappsCall)), Call)
+    end.
+
+maybe_cellphone_endpoint(Call) ->
+    WhappsCall = props:get_value(<<"call">>, Call),
+    AccountDb = wh_util:format_account_id(whapps_call:account_id(WhappsCall), encoded),
+    {ok, Results} = couch_mgr:get_results(AccountDb, <<"devices/call_forwards">>),
+    E164 = wnm_util:to_e164(whapps_call:to_user(WhappsCall)),
+    case lists:foldl(fun(Result, Found) ->
+        case Found of
+            false ->
+                {ok, Device} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, Result)),
+                case {wnm_util:to_e164(wh_json:get_value([<<"call_forward">>, <<"number">>], Device)),
+                    wh_json:get_value(<<"owner_id">>, Device)} of
+                    {_, undefined} ->
+                        false;
+                    {E164, _} ->
+                        props:set_value(<<"aleg_ami_channel">>,
+                            endpoint_channel(Device, AccountDb, whapps_call:call_id(WhappsCall)), Call);
+                    _ ->
+                        false
+                end;
+            _ ->
+                Found
+        end
+    end, false, Results) of
+        false ->
+            %if length(Results) > 0 ->
+            %    {ok, Device} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, hd(Results))),
+            %    props:set_value(<<"aleg_ami_channel">>,
+            %        endpoint_channel(Device, AccountDb, whapps_call:call_id(WhappsCall)), Call);
+            %true ->
+                call_direction_endpoint(Call);
+            %end;
+        CellphoneEndpoint ->
+            CellphoneEndpoint
+    end.
+
+call_direction_endpoint(Call) ->
+    WhappsCall = props:get_value(<<"call">>, Call),
+    case props:get_value(<<"direction">>, Call) of
+        <<"inbound">> ->
+            props:set_value(<<"aleg_ami_channel">>, channel_string(
+                whapps_call:from_user(WhappsCall),
+                whapps_call:call_id(WhappsCall)
+            ), Call);
+        <<"outbound">> ->
+            props:set_value(<<"aleg_ami_channel">>, channel_string(
+                whapps_call:to_user(WhappsCall),
+                whapps_call:call_id(WhappsCall)
+            ), Call)
     end.
 
 bleg_cid(Call, ChannelJObj) ->
@@ -312,8 +336,12 @@ endpoint_exten(Endpoint, AccountDb) ->
         undefined ->
             wh_json:get_value(<<"name">>, Endpoint);
         OwnerId ->
-            {ok, Owner} = couch_mgr:open_doc(AccountDb, OwnerId),
-            <<(wh_json:get_value(<<"username">>, Owner))/binary>>
+            case couch_mgr:open_doc(AccountDb, OwnerId) of
+                {ok, Owner} ->
+                    <<(wh_json:get_value(<<"username">>, Owner))/binary>>;
+                _ ->
+                    wh_json:get_value(<<"name">>, Endpoint)
+            end
     end.
 
 
