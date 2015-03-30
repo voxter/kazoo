@@ -1,7 +1,7 @@
 -module(amimulator_commander).
 
 -export([handle/2]).
--export([registrations/1, reg_entries/2]).
+-export([command/2]).
 
 -include("amimulator.hrl").
 
@@ -195,6 +195,29 @@ handle_event("hangup", Props) ->
     CallId = amimulator_store:get(<<"channel-", (proplists:get_value(<<"Channel">>, Props))/binary>>),
     Call = amimulator_util:whapps_call_from_cf_exe(CallId),
     whapps_call_command:hangup(Call);
+handle_event("getvar", Props) ->
+    case getvar(proplists:get_value(<<"Variable">>, Props), Props) of
+        undefined ->
+            {error, undefined};
+        Payload ->
+            {ok, {Payload, n}}
+    end;
+handle_event("command", Props) ->
+    case command(proplists:get_value(<<"Command">>, Props), Props) of
+        undefined ->
+            {error, undefined};
+        {Payload, Mode} ->
+            {ok, {Payload, Mode}};
+        Payload ->
+            {ok, {Payload, n}}
+    end;
+handle_event("userevent", Props) ->
+    case user_event(proplists:get_value(<<"UserEvent">>, Props), Props) of
+        undefined ->
+            {error, undefined};
+        Payload ->
+            {ok, {Payload, n}}
+    end;
 handle_event(Event, _Props) ->
     lager:debug("no handler defined for event ~p", [Event]),
     {error, no_action}.
@@ -213,7 +236,7 @@ initial_channel_status(Calls, Props) ->
         case {whapps_call:other_leg_call_id(WhappsCall) /= undefined, proplists:is_defined(<<"username">>, Call)} of
             {true, true} -> [ami_channel_status(Call, bridged_extension)] ++ List;
             {true, false} -> [ami_channel_status(Call, bridged)] ++ List;
-            {false, true} -> [ami_channel_status(Call, extension)] ++ List;
+            {false, true} -> [ami_channel_status(Call, bridged_extension)] ++ List;
             {_, _} -> lager:debug("undefined channel status format for call ~p", [Call])
         end
     end, [], FilteredCalls),
@@ -462,6 +485,9 @@ maybe_add_reg_entry(Device, SipPeers, Props, Acc) ->
             end
     end,
 
+    %% Need to store the device SIP creds in cache for user
+    _Username = wh_json:get_value([<<"sip">>, <<"username">>], Device),
+
     case already_has_reg_entry(Number, Acc) of
         true ->
             Acc;
@@ -700,3 +726,138 @@ ami_channel_status(Call, Schema) ->
          {<<"Uniqueid">>, whapps_call:call_id(WhappsCall)}
      ],
      AMI_Status_Header ++ AMI_Status_Body ++ AMI_Status_Footer.
+
+getvar(<<"CDR(dst)">>, Props) ->
+    CallIds = amimulator_store:get(<<"channel-", (props:get_value(<<"Channel">>, Props))/binary>>),
+    case CallIds of
+        %% The call id is undefined if the channel is not a sip peer
+        undefined ->
+            undefined;
+        _ ->
+            CallId = hd(CallIds),
+            lager:debug("callid ~p", [CallId]),
+            lager:debug("channel ~p", [props:get_value(<<"Channel">>, Props)]),
+            Call = amimulator_store:get(<<"call-", CallId/binary>>),
+
+            [
+                {<<"Response">>, <<"Success">>},
+                {<<"Variable">>, props:get_value(<<"Variable">>, Props)},
+                {<<"Value">>, props:get_value(<<"bleg_cid">>, Call)},
+                {<<"ActionID">>, props:get_value(<<"ActionID">>, Props)}
+            ]
+    end;
+getvar(_, _Props) ->
+    undefined.
+
+command(<<"meetme list ", MeetMeSpec/binary>>, Props) ->
+    [Number, _Mode] = binary:split(MeetMeSpec, <<" ">>),
+    maybe_list_conf(Number, Props);
+command(_, _Props) ->
+    undefined.
+
+user_event(<<"MEETME-REFRESH">>, Props) ->
+    [[
+        {<<"Response">>, <<"Success">>},
+        {<<"Message">>, <<"Event Sent">>}
+    ] ++ [
+        {<<"Event">>, <<"UserEvent">>},
+        {<<"Privilege">>, <<"user,all">>},
+        {<<"UserEvent">>, <<"MEETME-REFRESH">>},
+        {<<"Action">>, <<"UserEvent">>},
+        {<<"Meetme">>, props:get_value(<<"Meetme">>, Props)}
+    ]].
+
+maybe_list_conf(Number, Props) ->
+    AccountDb = props:get_value(<<"AccountDb">>, Props),
+    {ok, Results} = couch_mgr:get_results(AccountDb, <<"conferences/conference_map">>),
+    maybe_conf_has_number(Number, props:get_value(<<"ActionID">>, Props), Results).
+
+maybe_conf_has_number(_Number, _ActionId, []) ->
+    undefined;
+maybe_conf_has_number(Number, ActionId, [Result|Results]) ->
+    case wh_json:get_value([<<"value">>, <<"numbers">>], Result) of
+        [_|_]=Numbers ->
+            Found = lists:any(fun(Number2) ->
+                if Number2 =:= Number ->
+                        true;
+                true ->
+                        false
+                end
+            end, Numbers),
+            if Found ->
+                conf_details(ActionId, wh_json:get_value(<<"key">>, Result));
+            true ->
+                maybe_conf_has_number(Number, ActionId, Results)
+            end;
+        _ ->
+            maybe_conf_has_number(Number, ActionId, Results)
+    end.
+
+conf_details(ActionId, ConfId) ->
+    Req = props:filter_undefined([
+        {<<"Conference-ID">>, ConfId}
+        | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+    ]),
+    case whapps_util:amqp_pool_collect(
+        Req,
+        fun wapi_conference:publish_search_req/1,
+        {ecallmgr, true}
+    ) of
+        {'error', E} ->
+            lager:debug("conf_details error ~p", [E]),
+            undefined;
+        {'ok', Resp} ->
+            maybe_conf_down(ActionId, Resp)
+    end.
+
+maybe_conf_down(_ActionId, []) ->
+    undefined;
+maybe_conf_down(ActionId, [JObj|JObjs]) ->
+    case wh_json:get_value(<<"Participants">>, JObj) of
+        undefined ->
+            maybe_conf_down(ActionId, JObjs);
+        Participants ->
+            participant_payloads(Participants, wh_json:get_integer_value(<<"Run-Time">>, JObj), ActionId)
+    end.
+
+participant_payloads(Participants, RunTime, ActionId) ->
+    {H, M, S} = {RunTime div 3600, RunTime rem 3600 div 60, RunTime rem 60},
+    TimeString = wh_util:to_binary(if H > 99 ->
+        io_lib:format("~B:~2..0B:~2..0B", [H, M, S]);
+    true ->
+        io_lib:format("~2..0B:~2..0B:~2..0B", [H, M, S])
+    end),
+
+    {[
+        <<"Response: Follows\r\nPrivilege: Command\r\n">>,
+        <<"ActionID: ", ActionId/binary, "\r\n">>
+    ] ++ lists:foldl(fun(Participant, Payloads) ->
+        CallId = wh_json:get_value(<<"Call-ID">>, Participant),
+        Call = amimulator_store:get(<<"call-", CallId/binary>>),
+
+        ParticipantId = wh_util:to_binary(wh_json:get_value(<<"Participant-ID">>, Participant)),
+        %ParticipantId = <<"1">>,
+        CallerId = props:get_value(<<"aleg_cid">>, Call),
+        EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
+
+        [
+            <<ParticipantId/binary, "!!", CallerId/binary, "!",
+                EndpointName/binary, "!!!!!-", ParticipantId/binary, "!", TimeString/binary, "\n">>
+        ] ++ Payloads
+        end, [], Participants) ++
+    [
+        <<"--END COMMAND--\r\n\r\n">>
+    ], raw}.
+
+
+
+
+
+
+
+
+
+
+
+
+

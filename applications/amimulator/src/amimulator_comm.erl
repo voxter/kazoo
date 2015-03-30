@@ -29,6 +29,12 @@ publish_event(Props, broken, Socket) ->
         gen_tcp:send(Socket, amimulator_util:format_prop(Part))
         end, Props),
     gen_tcp:send(Socket, <<"\r\n">>);
+publish_event(Props, raw, Socket) ->
+    inet:setopts(Socket, [{nodelay, true}]),
+    lists:foreach(fun(Part) ->
+        gen_tcp:send(Socket, Part)
+        end, Props),
+    inet:setopts(Socket, [{nodelay, false}]);
 publish_event(Props, _, Socket) ->
     %lager:debug("AMI: publish ~p", [Props]),
     gen_tcp:send(Socket, amimulator_util:format_binary(Props)).

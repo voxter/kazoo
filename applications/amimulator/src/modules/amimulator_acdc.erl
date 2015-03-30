@@ -42,37 +42,41 @@ handle_specific_event(<<"call">>, EventJObj) ->
         {<<"ConnectedLineNum">>, <<"unknown">>},
         {<<"ConnectedLineName">>, <<"unknown">>},
         {<<"Queue">>, Number},
-        {<<"Position">>, Position},
-        {<<"Count">>, Position},
+        {<<"Position">>, Position+1},
+        {<<"Count">>, Position+1},
         {<<"Uniqueid">>, CallId}
     ],
     amimulator_amqp:publish_amqp_event({publish, Payload});
 handle_specific_event(<<"call_cancel">>, EventJObj) ->
-    lager:debug("eventjobj ~p", [EventJObj]),
     CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
-    %lager:debug("retrieved ~p", [amimulator_store:get(<<"acdc-", CallId/binary>>)]),
+    Call = amimulator_store:get(<<"call-", CallId/binary>>),
+
+    QueueId = wh_json:get_value(<<"Queue-ID">>, EventJObj),
+    Position = amimulator_store:reverse_lookup(<<"acdc-", QueueId/binary>>, CallId),
+    
     AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
     {ok, Number} = amimulator_util:find_id_number(
         wh_json:get_value(<<"Queue-ID">>, EventJObj),
         wh_util:format_account_id(AccountId, encoded)
     ),
 
+    EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
+
     Payload = [[
         {<<"Event">>, <<"QueueCallerAbandon">>},
         {<<"Privilege">>, <<"agent,all">>},
         {<<"Queue">>, Number},
         {<<"Uniqueid">>, CallId},
-        {<<"Position">>, 1},
+        {<<"Position">>, Position},
         {<<"OriginalPosition">>, 1},
         {<<"HoldTime">>, 14}
     ],[
         {<<"Event">>, <<"Leave">>},
         {<<"Privilege">>, <<"call,all">>},
-        %% TODO: proper channel here
-        {<<"Channel">>, <<"SIP/101-00000000">>},
+        {<<"Channel">>, EndpointName},
         {<<"Queue">>, Number},
         {<<"Count">>, 0},
-        {<<"Position">>, 1},
+        {<<"Position">>, Position},
         {<<"Uniqueid">>, CallId}
     ]],
     amimulator_amqp:publish_amqp_event({publish, Payload});
@@ -80,31 +84,26 @@ handle_specific_event(<<"handled">>, EventJObj) ->
     CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
     Call = amimulator_store:get(<<"call-", CallId/binary>>),
 
-    ToUser = hd(binary:split(whapps_call:to(Call), <<"@">>)),
-    %lager:debug("touser ~p, to ~p", [ToUser, whapps_call:to(Call)]),
-    Payload = case cf_endpoint:get(Call) of
-        {error, _E} ->
-            [
-                {<<"Event">>, <<"Leave">>},
-                {<<"Privilege">>, <<"call,all">>},
-                %{<<"Channel">>, <<"SIP/101-00000000">>},
-                {<<"Queue">>, ToUser},
-                {<<"Count">>, 0},
-                {<<"Position">>, 1},
-                {<<"Uniqueid">>, CallId}
-            ];
-        {ok, Endpoint} ->
-            EndpointName = amimulator_util:endpoint_name(whapps_call:account_db(Call), Endpoint),
-            [
-                {<<"Event">>, <<"Leave">>},
-                {<<"Privilege">>, <<"call,all">>},
-                {<<"Channel">>, <<"SIP/", EndpointName/binary, "-", (amimulator_util:channel_tail(whapps_call:call_id(Call)))/binary>>},
-                {<<"Queue">>, ToUser},
-                {<<"Count">>, 0},
-                {<<"Position">>, 1},
-                {<<"Uniqueid">>, CallId}
-            ]
-    end,
+    QueueId = wh_json:get_value(<<"Queue-ID">>, EventJObj),
+    Position = amimulator_store:reverse_lookup(<<"acdc-", QueueId/binary>>, CallId),
+    
+    AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
+    {ok, Number} = amimulator_util:find_id_number(
+        wh_json:get_value(<<"Queue-ID">>, EventJObj),
+        wh_util:format_account_id(AccountId, encoded)
+    ),
+
+    EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
+
+    Payload = [
+        {<<"Event">>, <<"Leave">>},
+        {<<"Privilege">>, <<"call,all">>},
+        {<<"Channel">>, EndpointName},
+        {<<"Queue">>, Number},
+        {<<"Count">>, 0},
+        {<<"Position">>, Position},
+        {<<"Uniqueid">>, CallId}
+    ],
     amimulator_amqp:publish_amqp_event({publish, Payload});
 handle_specific_event(<<"connect_req">>, EventJObj) ->
     AgentChannelId = wh_json:get_value(<<"Call-ID">>, EventJObj),
