@@ -79,7 +79,13 @@ handle_cast(Msg, State) ->
     {noreply, State}.
 
 handle_info(Info, State) ->
-    lager:debug("QUILT: unhandled info: ~p", [Info]),
+    case Info of
+        {'EXIT', Pid, shutdown} ->
+            lager:debug("QUILT: ~p shutting down...", [Pid]),
+            exit(Pid, "QUILT: shutting down...");
+        _ ->
+            lager:debug("QUILT: unhandled info: ~p", [Info])
+    end,
     {noreply, State}.
 
 handle_event(JObj, State) ->
@@ -89,7 +95,6 @@ handle_event(JObj, State) ->
 
 terminate(Reason, _State) ->
     lager:debug("QUILT: quilt_listener listener on pid ~p terminating: ~p", [self(), Reason]),
-    supervisor:which_children(self()),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
