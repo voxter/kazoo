@@ -14,6 +14,9 @@
     ]}
 ]).
 -define(BINDINGS(A), [
+    {acdc_agent, [
+        {account_id, A}
+    ]},
     {acdc_queue, [
         {restrict_to, [member_call]},
         {account_id, A}
@@ -41,7 +44,13 @@
         {<<"member">>, <<"call">>},
         {<<"member">>, <<"call_cancel">>},
         {<<"acdc_call_stat">>, <<"handled">>},
-        {<<"conference">>, <<"participants_event">>}
+        {<<"conference">>, <<"participants_event">>},
+        {<<"agent">>, <<"login">>},
+        {<<"agent">>, <<"logout">>},
+        {<<"agent">>, <<"pause">>},
+        {<<"agent">>, <<"resume">>},
+        {<<"agent">>, <<"login_queue">>},
+        {<<"agent">>, <<"logout_queue">>}
     ]
 }]).
 -define(QUEUE_NAME, <<"amimulator-queue">>).
@@ -123,8 +132,17 @@ handle_amqp_event_type(EventJObj, _Props, <<"acdc_stats.call.", _/binary>>) ->
 
 handle_amqp_event_type(EventJObj, Props, <<"conference.event.", _/binary>>) ->
     AccountId = gen_server:call(proplists:get_value(<<"comm_pid">>, Props), account_id),
-    amimulator_conf:handle_event(wh_json:set_value(<<"Account-ID">>, AccountId, EventJObj)).
+    amimulator_conf:handle_event(wh_json:set_value(<<"Account-ID">>, AccountId, EventJObj));
+
+handle_amqp_event_type(EventJObj, _Props, <<"acdc.agent.action.", _/binary>>) ->
+    amimulator_acdc:handle_event(EventJObj);
+
+handle_amqp_event_type(_EventJObj, _Props, _RoutingKey) ->
+    ok.
     
+publish_amqp_event({_, []}) ->
+    lager:debug("Not publishing empty payload"),
+    ok;
 publish_amqp_event({publish, Events}=_Req) ->
     {ok, Payload} = wh_api:prepare_api_payload(
         [{<<"RequestType">>, <<"publish">>},

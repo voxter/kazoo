@@ -1,7 +1,7 @@
 -module(amimulator_commander).
 
 -export([handle/2]).
--export([command/2]).
+-export([queues_status/1]).
 
 -include("amimulator.hrl").
 
@@ -152,33 +152,7 @@ handle_event("queuepause", Props) ->
 handle_event("queueadd", Props) ->
     queue_add(Props);
 handle_event("queueremove", Props) ->
-    Interface = proplists:get_value(<<"Interface">>, Props),
-    Exten = hd(binary:split(binary:replace(Interface, <<"Local/">>, <<"">>), <<"@">>)),
-    AccountId = proplists:get_value(<<"Account">>, Props),
-    AccountDb = proplists:get_value(<<"AccountDb">>, Props),
-
-    %% Load agent doc having the Exten given as name
-    {ok, [Result]} = couch_mgr:get_results(AccountDb,
-        <<"users/list_by_username">>,
-        [{key, Exten}]
-    ),
-    AgentId = wh_json:get_value(<<"id">>, Result),
-    {ok, QueueDoc} = amimulator_util:queue_for_number(proplists:get_value(<<"Queue">>, Props), AccountDb),
-    QueueId = wh_json:get_value(<<"_id">>, QueueDoc),
-
-    Prop = props:filter_undefined(
-     [{<<"Account-ID">>, AccountId}
-      ,{<<"Agent-ID">>, AgentId}
-      ,{<<"Queue-ID">>, QueueId}
-      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-     ]),
-    wapi_acdc_agent:publish_logout_queue(Prop),
-
-    Payload = [
-        {<<"Response">>, <<"Success">>},
-        {<<"Message">>, <<"Removed interface from queue">>}
-    ],
-    {ok, {Payload, n}};
+    queue_remove(Props);
 handle_event("originate", Props) ->
     case proplists:get_value(<<"Channel">>, Props) of
         undefined ->
@@ -249,82 +223,56 @@ initial_channel_status(Calls, Props) ->
     ]].
     
 queues_status(Props) ->
-    AcctId = proplists:get_value(<<"Account">>, Props),
-    AcctSupers = acdc_queues_sup:find_acct_supervisors(AcctId),
-    lists:foldl(fun(Super, Results) ->
-    	case queue_status(Super) of
-    		{ok, Status} ->
-    			Status ++ Results;
-    		{error, _E} ->
-    			Results
-    	end end, [], AcctSupers).
-    
-queue_status(Super) ->
-    Manager = acdc_queue_sup:manager(Super),
-    {AcctId, QueueId} = acdc_queue_manager:config(Manager),
-    case queue_details(QueueId, AcctId) of
-    	{ok, QueueDetails} ->
-		    Agents = acdc_queue_manager:status(Manager),
-		    AgentsStatus = agents_status(Agents, [], AcctId, QueueDetails),
-		    {ok, format_queue_status(QueueDetails, AgentsStatus)};
-		{error, E} ->
-			{error, E}
-	end.
-    
-format_queue_status(QueueDetails, AgentsStatus) ->
-    {Calls, Holdtime, TalkTime, Completed, Abandoned} = proplists:get_value(<<"QueueStats">>, QueueDetails),
-    CompletedCalls = Completed - Abandoned,
-    AverageHold = case CompletedCalls of
-        0 ->
-            0;
-        _ ->
-            Holdtime / CompletedCalls
-    end,
-    [[
-        {<<"Event">>, <<"QueueParams">>},
-        {<<"Queue">>, proplists:get_value(<<"QueueNumber">>, QueueDetails)},
-        {<<"Max">>, proplists:get_value(<<"Max">>, QueueDetails)},
-        {<<"Strategy">>, proplists:get_value(<<"Strategy">>, QueueDetails)},
-        {<<"Calls">>, Calls},
-        {<<"Holdtime">>, AverageHold},
-        {<<"TalkTime">>, TalkTime},
-        {<<"Completed">>, CompletedCalls},
-        {<<"Abandoned">>, Abandoned},
-        % TODO: add servicelevel
-        {<<"ServiceLevel">>, 60},
-        {<<"ServicelevelPerf">>, 69.0}
-    ]] ++
-    AgentsStatus.
-        
-queue_details(QueueId, AcctId) ->
-    AcctDb = wh_util:format_account_id(AcctId, encoded),
-    {ok, QueueDoc} = couch_mgr:open_doc(AcctDb, QueueId),
-    case amimulator_util:find_id_number(QueueId, AcctDb) of
-    	{ok, QueueNumber} ->
-    		{ok, [
-		        {<<"QueueNumber">>, QueueNumber},
-		        {<<"Queue">>, wh_json:get_value(<<"name">>, QueueDoc)},
-		        {<<"Max">>, wh_json:get_value(<<"max_queue_size">>, QueueDoc)},
-		        {<<"Strategy">>, translate_strat(wh_json:get_value(<<"strategy">>, QueueDoc))},
-		        {<<"QueueStats">>, queue_stats(QueueId, AcctId)}
-		    ]};
-		{error, not_found} ->
-			lager:debug("Extension for queue ~p not found", [QueueId]),
-			{error, not_found};
-		{error, E} ->
-			{error, E}
-	end.
+    AccountId = proplists:get_value(<<"AccountId">>, Props),
+    AccountDb = proplists:get_value(<<"AccountDb">>, Props),
+    {ok, Results} = couch_mgr:get_results(AccountDb, <<"queues/crossbar_listing">>),
+
+    lists:foldl(fun(Result, Acc) ->
+        QueueId = wh_json:get_value(<<"id">>, Result),
+        case queue_status(QueueId, AccountId) of
+            {ok, Status} ->
+                Status ++ Acc;
+            {error, _E} ->
+                Acc
+        end end, [], Results).
+
+queue_status(QueueId, AccountId) ->
+    case queue_details(QueueId, AccountId) of
+        {ok, QueueDetails} ->
+            QueueStats = queue_stats(QueueId, AccountId),
+            QueueAgentStatuses = agent_statuses(QueueId, AccountId),
+            {ok, format_queue_status(QueueDetails, QueueStats, QueueAgentStatuses)};
+        {error, E} ->
+            {error, E}
+    end.
+
+queue_details(QueueId, AccountId) ->
+    AccountDb = wh_util:format_account_id(AccountId, encoded),
+    {ok, QueueDoc} = couch_mgr:open_doc(AccountDb, QueueId),
+    case amimulator_util:find_id_number(QueueId, AccountDb) of
+        {ok, QueueNumber} ->
+            {ok, [
+                {<<"QueueNumber">>, QueueNumber},
+                {<<"Queue">>, wh_json:get_value(<<"name">>, QueueDoc)},
+                {<<"Max">>, wh_json:get_value(<<"max_queue_size">>, QueueDoc)},
+                {<<"Strategy">>, translate_strat(wh_json:get_value(<<"strategy">>, QueueDoc))}
+            ]};
+        {error, not_found} ->
+            lager:debug("Extension for queue ~p not found", [QueueId]),
+            {error, not_found};
+        {error, E} ->
+            {error, E}
+    end.
         
 translate_strat(Strat) ->
     % TODO: actually translate the strategy names
     Strat.
     
 % TODO: maybe we need acdc stats to be persisted in couch
-queue_stats(_QueueId, AcctId) ->
+queue_stats(QueueId, AcctId) ->
     Req = props:filter_undefined(
             [{<<"Account-ID">>, AcctId}
-             ,{<<"Status">>, undefined}
-             ,{<<"Agent-ID">>, undefined}
+             ,{<<"Queue-ID">>, QueueId}
              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
     case whapps_util:amqp_pool_request(
@@ -349,47 +297,49 @@ count_stats([], {Calls, Holdtime, TalkTime, Completed, Abandoned}) ->
 count_stats([Stat|Stats], {Calls, Holdtime, TalkTime, Completed, Abandoned}) ->
     case wh_json:get_value(<<"status">>, Stat) of
         <<"abandoned">> ->
-            count_stats(Stats, {Calls, Holdtime, TalkTime, Completed+1, Abandoned+1});
+            WaitTime = wh_json:get_value(<<"abandoned_timestamp">>, Stat) -
+                wh_json:get_value(<<"entered_timestamp">>, Stat),
+            count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime, Completed+1, Abandoned+1});
         <<"waiting">> ->
             % TODO: updated the calculation for wait can call time
-            WaitTime = wh_json:get_value(<<"entered_timestamp">>, Stat),
+            WaitTime = wh_util:current_tstamp() - wh_json:get_value(<<"entered_timestamp">>, Stat),
             count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime, Completed, Abandoned});
         <<"handled">> ->
-            CallTime = wh_json:get_value(<<"handled_timestamp">>, Stat),
-            count_stats(Stats, {Calls+1, Holdtime, TalkTime+CallTime, Completed+1, Abandoned});
+            WaitTime = wh_json:get_value(<<"handled_timestamp">>, Stat) -
+                wh_json:get_value(<<"entered_timestamp">>, Stat),
+            CallTime = wh_util:current_tstamp() - wh_json:get_value(<<"handled_timestamp">>, Stat),
+            count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime+CallTime, Completed+1, Abandoned});
         <<"processed">> ->
-            count_stats(Stats, {Calls, Holdtime, TalkTime, Completed+1, Abandoned})
+            case wh_json:get_value(<<"abandoned_timestamp">>, Stat) of
+                undefined ->
+                    WaitTime = wh_json:get_value(<<"handled_timestamp">>, Stat) -
+                        wh_json:get_value(<<"entered_timestamp">>, Stat),
+                    CallTime = wh_json:get_value(<<"processed_timestamp">>, Stat) -
+                        wh_json:get_value(<<"handled_timestamp">>, Stat),
+                    count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime+CallTime, Completed+1, Abandoned});
+                _ ->
+                    WaitTime = wh_json:get_value(<<"abandoned_timestamp">>, Stat) -
+                        wh_json:get_value(<<"entered_timestamp">>, Stat),
+                    count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime, Completed+1, Abandoned+1})
+            end
     end.
 
-agents_status([], Statuses, _AccountId, _QueueDetails) ->
-    Statuses;
-agents_status([Agent|Agents], Statuses, AccountId, QueueDetails) ->
-    case agent_status(Agent, AccountId, QueueDetails) of
-        {error, _E} ->
-            agents_status(Agents, Statuses, AccountId, QueueDetails);
-        {ok, Status} ->
-            agents_status(Agents, Statuses ++ [Status], AccountId, QueueDetails)
-    end.
+agent_statuses(QueueId, AccountId) ->
+    AccountDb = wh_util:format_account_id(AccountId, encoded),
+    {ok, Results} = couch_mgr:get_results(AccountDb, <<"queues/agents_listing">>, [{key, QueueId}]),
+    lists:foldl(fun(Result, Acc) ->
+        AgentId = wh_json:get_value(<<"id">>, Result),
+        [agent_status(QueueId, AgentId, AccountId) | Acc]
+        end, [], Results).
         
-agent_status(AgentId, AcctId, QueueDetails) ->
-    AcctDb = wh_util:format_account_id(AcctId, encoded),
-    {ok, UserDoc} = couch_mgr:open_doc(AcctDb, AgentId),
+agent_status(QueueId, AgentId, AccountId) ->
+    AccountDb = wh_util:format_account_id(AccountId, encoded), 
+    {ok, UserDoc} = couch_mgr:open_doc(AccountDb, AgentId),
     FirstName = wh_json:get_value(<<"first_name">>, UserDoc),
     LastName = wh_json:get_value(<<"last_name">>, UserDoc),
     Username = wh_json:get_value(<<"username">>, UserDoc),
-    
-    %% Ripped from cb_agents
-    %Now = wh_util:current_tstamp(),
-    %Yday = Now - ?SECONDS_IN_DAY,
 
-    %Opts = [{<<"Status">>, undefined}
-    %          ,{<<"Agent-ID">>, AgentId}
-    %          ,{<<"Start-Range">>, Yday}
-    %          ,{<<"End-Range">>, Now}
-    %          ,{<<"Most-Recent">>, true}
-    %         ],
-
-    {'ok', Status} = acdc_agent_util:most_recent_status(AcctId, AgentId),
+    {'ok', Status} = acdc_agent_util:most_recent_status(AccountId, AgentId),
     % TODO: properly assigned paused based on status
     Paused = case Status of
         <<"paused">> ->
@@ -398,44 +348,77 @@ agent_status(AgentId, AcctId, QueueDetails) ->
             0
     end,
 
-    case acdc_agents_sup:find_agent_supervisor(AcctId, AgentId) of
-        undefined ->
-            {error, not_logged_in};
-        AgentSup ->
-            AgentListener = acdc_agent_sup:listener(AgentSup),
-            LastCall = case gen_listener:call(AgentListener, last_connect) of
-                undefined ->
-                    0;
-                {MegaSecs, Secs, MicroSecs} ->
-                    MegaSecs * 1000000 + Secs + MicroSecs / 1000000
-            end,
+    {ok, QueueNumber} = amimulator_util:find_id_number(QueueId, AccountDb),
+
+    %case acdc_agents_sup:find_agent_supervisor(AcctId, AgentId) of
+    %    undefined ->
+    %        {error, not_logged_in};
+    %    AgentSup ->
+    %        AgentListener = acdc_agent_sup:listener(AgentSup),
+    %        LastCall = case gen_listener:call(AgentListener, last_connect) of
+    %            undefined ->
+    %                0;
+    %            {MegaSecs, Secs, MicroSecs} ->
+    %                MegaSecs * 1000000 + Secs + MicroSecs / 1000000
+    %        end,
             
-            %% Agent status payload
-            {ok, [
-                {<<"Event">>, <<"QueueMember">>},
-                {<<"Queue">>, proplists:get_value(<<"QueueNumber">>, QueueDetails)},
-                {<<"Name">>, <<FirstName/binary, " ", LastName/binary>>},
-                {<<"Location">>, <<"Local/", Username/binary, "@from-queue/n">>},
-                %% Membership static is also possible
-                {<<"Membership">>, <<"dynamic">>},
-                {<<"Penalty">>, 0},
-                %% CallsTaken handled by count_stats function
-                {<<"LastCall">>, LastCall},
-                {<<"Status">>, translate_status(Status)},
-                {<<"Paused">>, Paused}
-            ]}
-    end.
+    %% Agent status payload
+    [
+        {<<"Event">>, <<"QueueMember">>},
+        {<<"Queue">>, QueueNumber},
+        {<<"Name">>, <<FirstName/binary, " ", LastName/binary>>},
+        {<<"Location">>, <<"Local/", Username/binary, "@from-queue/n">>},
+        %% Membership static is also possible
+        {<<"Membership">>, <<"dynamic">>},
+        {<<"Penalty">>, 0},
+        %% CallsTaken handled by count_stats function
+        %{<<"LastCall">>, LastCall},
+        {<<"Status">>, translate_status(Status)},
+        {<<"Paused">>, Paused}
+    ].
     
 translate_status(Status) ->
     % TODO: properly translate statuses
     case Status of
         <<"ready">> ->
             1;
+        <<"connected">> ->
+            2;
+        <<"outbound">> ->
+            2;
+        <<"logged_out">> ->
+            5;
         <<"paused">> ->
             5;
         _ ->
+            lager:debug("unspecified status ~p", [Status]),
             5
     end.
+    
+format_queue_status(QueueDetails, QueueStats, QueueAgentStatuses) ->
+    {Calls, Holdtime, TalkTime, Completed, Abandoned} = QueueStats,
+    CompletedCalls = Completed - Abandoned,
+    AverageHold = case CompletedCalls of
+        0 ->
+            0.0;
+        _ ->
+            Holdtime / CompletedCalls
+    end,
+    [[
+        {<<"Event">>, <<"QueueParams">>},
+        {<<"Queue">>, proplists:get_value(<<"QueueNumber">>, QueueDetails)},
+        {<<"Max">>, proplists:get_value(<<"Max">>, QueueDetails)},
+        {<<"Strategy">>, proplists:get_value(<<"Strategy">>, QueueDetails)},
+        {<<"Calls">>, Calls},
+        {<<"Holdtime">>, AverageHold},
+        {<<"TalkTime">>, TalkTime},
+        {<<"Completed">>, CompletedCalls},
+        {<<"Abandoned">>, Abandoned},
+        % TODO: add servicelevel
+        {<<"ServiceLevel">>, 60},
+        {<<"ServicelevelPerf">>, 69.0}
+    ]] ++
+    QueueAgentStatuses.
 
 registrations(Props) ->
     {ok, AccountDoc} = couch_mgr:open_doc(<<"accounts">>, proplists:get_value(<<"AccountId">>, Props)),
@@ -559,7 +542,7 @@ mailbox_count_error(ActionId, Mailbox) ->
 queue_add(Props) ->
     Interface = proplists:get_value(<<"Interface">>, Props),
     Exten = hd(binary:split(binary:replace(Interface, <<"Local/">>, <<"">>), <<"@">>)),
-    AccountId = proplists:get_value(<<"Account">>, Props),
+    AccountId = proplists:get_value(<<"AccountId">>, Props),
     AccountDb = proplists:get_value(<<"AccountDb">>, Props),
 
     %% Load agent doc having the Exten given as name
@@ -580,6 +563,9 @@ queue_add(AccountId, AccountDb, Result, Props) ->
     {ok, QueueDoc} = amimulator_util:queue_for_number(proplists:get_value(<<"Queue">>, Props), AccountDb),
     QueueId = wh_json:get_value(<<"_id">>, QueueDoc),
 
+    {ok, AgentDoc} = couch_mgr:open_doc(AccountDb, AgentId),
+    couch_mgr:save_doc(AccountDb, cb_queues:maybe_add_queue_to_agent(QueueId, AgentDoc)),
+
     Prop = props:filter_undefined(
      [{<<"Account-ID">>, AccountId}
       ,{<<"Agent-ID">>, AgentId}
@@ -594,9 +580,42 @@ queue_add(AccountId, AccountDb, Result, Props) ->
     ],
     {ok, {Payload, n}}.
 
+queue_remove(Props) ->
+    Interface = proplists:get_value(<<"Interface">>, Props),
+    Exten = hd(binary:split(binary:replace(Interface, <<"Local/">>, <<"">>), <<"@">>)),
+    AccountId = proplists:get_value(<<"AccountId">>, Props),
+    AccountDb = proplists:get_value(<<"AccountDb">>, Props),
+
+    %% Load agent doc having the Exten given as name
+    {ok, [Result]} = couch_mgr:get_results(AccountDb,
+        <<"users/list_by_username">>,
+        [{key, Exten}]
+    ),
+    AgentId = wh_json:get_value(<<"id">>, Result),
+    {ok, QueueDoc} = amimulator_util:queue_for_number(proplists:get_value(<<"Queue">>, Props), AccountDb),
+    QueueId = wh_json:get_value(<<"_id">>, QueueDoc),
+
+    {ok, AgentDoc} = couch_mgr:open_doc(AccountDb, AgentId),
+    couch_mgr:save_doc(AccountDb, cb_queues:maybe_rm_queue_from_agent(QueueId, AgentDoc)),
+
+    Prop = props:filter_undefined(
+     [{<<"Account-ID">>, AccountId}
+      ,{<<"Agent-ID">>, AgentId}
+      ,{<<"Queue-ID">>, QueueId}
+      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+     ]),
+    wapi_acdc_agent:publish_logout_queue(Prop),
+
+    Payload = [
+        {<<"Response">>, <<"Success">>},
+        {<<"Message">>, <<"Removed interface from queue">>}
+    ],
+    {ok, {Payload, n}}.
+
 queue_pause(Props) ->
     Interface = proplists:get_value(<<"Interface">>, Props),
     Exten = hd(binary:split(binary:replace(Interface, <<"Local/">>, <<"">>), <<"@">>)),
+    AccountId = proplists:get_value(<<"AccountId">>, Props),
     AccountDb = proplists:get_value(<<"AccountDb">>, Props),
 
     %% Load agent doc having the Exten given as name
@@ -606,65 +625,43 @@ queue_pause(Props) ->
         [{key, Exten}]
     ) of
         {ok, [Result]} ->
-            pause_exten(Interface, AccountDb, Result, Props);
+            pause_exten(AccountId, Result, Props);
         _ ->
             %% Error, could not find user
             {error, not_a_user}
     end.
 
-pause_exten(Interface, AccountDb, Result, Props) ->
+pause_exten(AccountId, Result, Props) ->
     AgentId = wh_json:get_value(<<"id">>, Result),
-    {ok, AgentDoc} = couch_mgr:open_doc(AccountDb, AgentId),
-    AgentName = <<(wh_json:get_value(<<"first_name">>, AgentDoc))/binary, " ",
-        (wh_json:get_value(<<"last_name">>, AgentDoc))/binary
-    >>,
 
-    case acdc_agents_sup:find_agent_supervisor(
-        proplists:get_value(<<"Account">>, Props),
-        AgentId
-    ) of
-        undefined ->
-            %% Pause error message
-            {error, not_an_agent};
-        Pid ->
-            AgentFsm = acdc_agent_sup:fsm(Pid),
+    case props:get_value(<<"Paused">>, Props) of
+        <<"0">> ->
+            Prop = props:filter_undefined(
+             [{<<"Account-ID">>, AccountId}
+              ,{<<"Agent-ID">>, AgentId}
+              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+             ]),
+            wapi_acdc_agent:publish_resume(Prop),
 
-            %% Found the FSM, now pause/unpause the agent
-            case proplists:get_value(<<"Paused">>, Props) of
-                <<"0">> ->
-                    acdc_agent_fsm:resume(AgentFsm),
+            Payload = [
+                {<<"Response">>, <<"Success">>},
+                {<<"Message">>, <<"Interface unpaused successfully">>}
+            ],
+            {ok, {Payload, n}};
+        <<"1">> ->
+            Prop = props:filter_undefined(
+             [{<<"Account-ID">>, AccountId}
+              ,{<<"Agent-ID">>, AgentId}
+              ,{<<"Time-Limit">>, 600000}
+              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+             ]),
+            wapi_acdc_agent:publish_pause(Prop),
 
-                    %% Respond with pause/unpause success
-                    Payload = [[
-                        {<<"Response">>, <<"Success">>},
-                        {<<"Message">>, <<"Interface unpaused successfully">>}
-                    ],[
-                        {<<"Event">>, <<"QueueMemberPaused">>},
-                        {<<"Privilege">>, <<"agent,all">>},
-                        {<<"Queue">>, proplists:get_value(<<"Queue">>, Props)},
-                        {<<"Location">>, Interface},
-                        {<<"MemberName">>, AgentName},
-                        {<<"Paused">>, 0}
-                    ]],
-                    {ok, {Payload, n}};
-                <<"1">> ->
-                    %% For some reason, infinity doesn't work here despite the spec saying so
-                    acdc_agent_fsm:pause(AgentFsm, 600000),
-
-                    %% Respond with pause/unpause success
-                    Payload = [[
-                        {<<"Response">>, <<"Success">>},
-                        {<<"Message">>, <<"Interface paused successfully">>}
-                    ],[
-                        {<<"Event">>, <<"QueueMemberPaused">>},
-                        {<<"Privilege">>, <<"agent,all">>},
-                        {<<"Queue">>, proplists:get_value(<<"Queue">>, Props)},
-                        {<<"Location">>, Interface},
-                        {<<"MemberName">>, AgentName},
-                        {<<"Paused">>, 1}
-                    ]],
-                    {ok, {Payload, n}}
-            end
+            Payload = [
+                {<<"Response">>, <<"Success">>},
+                {<<"Message">>, <<"Interface paused successfully">>}
+            ],
+            {ok, {Payload, n}}
     end.
 
 % Existing whapps_call to AMI status translator
@@ -672,8 +669,6 @@ ami_channel_status(Call, Schema) ->
     ALegCID = props:get_value(<<"aleg_cid">>, Call),
     BLegCID = props:get_value(<<"bleg_cid">>, Call),
     WhappsCall = props:get_value(<<"call">>, Call),
-
-    lager:debug("Call ~p", [Call]),
 
     {ChannelState, ChannelStateDesc} = case props:get_value(<<"answered">>, Call) of
         false ->

@@ -182,9 +182,113 @@ handle_specific_event(<<"logout">>, EventJObj) ->
         end end, [], wh_json:get_value(<<"queues">>, AgentDoc, [])
     ),
     amimulator_amqp:publish_amqp_event({publish, WholePayload});
-handle_specific_event(<<"queue_login">>, EventJObj) ->
-    lager:debug("Agent logged into a queue ~p", [EventJObj]);
-handle_specific_event(<<"queue_logout">>, EventJObj) ->
-    lager:debug("Agent logged out from a queue ~p", [EventJObj]);
+handle_specific_event(<<"login_queue">>, EventJObj) ->
+    AgentId = wh_json:get_value(<<"Agent-ID">>, EventJObj),
+    AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
+    QueueId = wh_json:get_value(<<"Queue-ID">>, EventJObj),
+
+    AccountDb = wh_util:format_account_id(AccountId, encoded),
+    {ok, AgentDoc} = couch_mgr:open_doc(AccountDb, AgentId),
+    Exten = case amimulator_util:find_id_number(AgentId, AccountDb) of
+        {error, not_found} ->
+            wh_json:get_value(<<"username">>, AgentDoc);
+        {ok, Number} ->
+            Number
+    end,
+    AgentName = <<(wh_json:get_value(<<"first_name">>, AgentDoc))/binary, " ", (wh_json:get_value(<<"last_name">>, AgentDoc))/binary>>,
+    case amimulator_util:find_id_number(QueueId, AccountDb) of
+        {error, _E} -> ok;
+        {ok, Number2} ->
+            Payload = [
+                {<<"Event">>, <<"QueueMemberAdded">>},
+                {<<"Privilege">>, <<"agent,all">>},
+                {<<"Queue">>, Number2},
+                {<<"Location">>, <<"Local/", Exten/binary, "@from-queue/n">>},
+                {<<"MemberName">>, AgentName},
+                {<<"Membership">>, <<"dynamic">>},
+                {<<"Penalty">>, 0},
+                {<<"CallsTaken">>, 0},
+                {<<"LastCall">>, 0},
+                {<<"Status">>, 1},
+                {<<"Paused">>, 0}
+            ],
+            amimulator_amqp:publish_amqp_event({publish, Payload})
+    end;
+handle_specific_event(<<"logout_queue">>, EventJObj) ->
+    AgentId = wh_json:get_value(<<"Agent-ID">>, EventJObj),
+    AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
+    QueueId = wh_json:get_value(<<"Queue-ID">>, EventJObj),
+
+    AccountDb = wh_util:format_account_id(AccountId, encoded),
+    {ok, AgentDoc} = couch_mgr:open_doc(AccountDb, AgentId),
+    Exten = case amimulator_util:find_id_number(AgentId, AccountDb) of
+        {error, not_found} ->
+            wh_json:get_value(<<"username">>, AgentDoc);
+        {ok, Number} ->
+            Number
+    end,
+    AgentName = <<(wh_json:get_value(<<"first_name">>, AgentDoc))/binary, " ", (wh_json:get_value(<<"last_name">>, AgentDoc))/binary>>,
+    case amimulator_util:find_id_number(QueueId, AccountDb) of
+        {error, _E} -> ok;
+        {ok, Number2} ->
+            Payload = [
+                {<<"Event">>, <<"QueueMemberRemoved">>},
+                {<<"Privilege">>, <<"agent,all">>},
+                {<<"Queue">>, Number2},
+                {<<"Location">>, <<"Local/", Exten/binary, "@from-queue/n">>},
+                {<<"MemberName">>, AgentName}
+            ],
+            amimulator_amqp:publish_amqp_event({publish, Payload})
+    end;
+handle_specific_event(<<"pause">>, EventJObj) ->
+    AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
+    AccountDb = wh_util:format_account_id(AccountId, encoded),
+    AgentId = wh_json:get_value(<<"Agent-ID">>, EventJObj),
+
+    {ok, AgentDoc} = couch_mgr:open_doc(AccountDb, AgentId),
+    Interface = <<"Local/", (wh_json:get_value(<<"username">>, AgentDoc))/binary,
+        "@from-queue/n">>,
+    AgentName = <<(wh_json:get_value(<<"first_name">>, AgentDoc))/binary, " ",
+        (wh_json:get_value(<<"last_name">>, AgentDoc))/binary>>,
+    Payload = lists:foldl(fun(QueueId, Acc) ->
+        case amimulator_util:find_id_number(QueueId, AccountDb) of
+            {ok, QueueNumber} ->
+                [[
+                    {<<"Event">>, <<"QueueMemberPaused">>},
+                    {<<"Privilege">>, <<"agent,all">>},
+                    {<<"Queue">>, QueueNumber},
+                    {<<"Location">>, Interface},
+                    {<<"MemberName">>, AgentName},
+                    {<<"Paused">>, 1}
+                ] | Acc];
+            _ ->
+                Acc
+        end end, [], wh_json:get_value(<<"queues">>, AgentDoc, [])),
+    amimulator_amqp:publish_amqp_event({publish, Payload});
+handle_specific_event(<<"resume">>, EventJObj) ->
+    AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
+    AccountDb = wh_util:format_account_id(AccountId, encoded),
+    AgentId = wh_json:get_value(<<"Agent-ID">>, EventJObj),
+
+    {ok, AgentDoc} = couch_mgr:open_doc(AccountDb, AgentId),
+    Interface = <<"Local/", (wh_json:get_value(<<"username">>, AgentDoc))/binary,
+        "@from-queue/n">>,
+    AgentName = <<(wh_json:get_value(<<"first_name">>, AgentDoc))/binary, " ",
+        (wh_json:get_value(<<"last_name">>, AgentDoc))/binary>>,
+    Payload = lists:foldl(fun(QueueId, Acc) ->
+        case amimulator_util:find_id_number(QueueId, AccountDb) of
+            {ok, QueueNumber} ->
+                [[
+                    {<<"Event">>, <<"QueueMemberPaused">>},
+                    {<<"Privilege">>, <<"agent,all">>},
+                    {<<"Queue">>, QueueNumber},
+                    {<<"Location">>, Interface},
+                    {<<"MemberName">>, AgentName},
+                    {<<"Paused">>, 0}
+                ] | Acc];
+            _ ->
+                Acc
+        end end, [], wh_json:get_value(<<"queues">>, AgentDoc, [])),
+    amimulator_amqp:publish_amqp_event({publish, Payload});
 handle_specific_event(_, _EventJObj) ->
     lager:debug("AMI: unhandled acdc event").

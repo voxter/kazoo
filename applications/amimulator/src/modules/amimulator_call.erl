@@ -21,10 +21,12 @@ handle_specific_event(<<"CHANNEL_CREATE">>=EventName, EventJObj) ->
     new_channel(EventJObj),
     new_state(EventName, EventJObj),
     extension_status(EventJObj),
-    maybe_dial_event(EventJObj);
+    maybe_dial_event(EventJObj),
+    maybe_change_agent_status(EventJObj);
 
 handle_specific_event(<<"CHANNEL_ANSWER">>, EventJObj) ->
-    busy_state(EventJObj);
+    busy_state(EventJObj),
+    maybe_change_agent_status(EventJObj);
     
 handle_specific_event(<<"CHANNEL_DESTROY">>, EventJObj) ->
     destroy_channel(EventJObj);
@@ -81,6 +83,9 @@ new_inbound_channel(EventJObj) ->
     amimulator_store:put(<<"whapps_call-", CallId/binary>>, WhappsCall),
     amimulator_store:put(<<"call-", CallId/binary>>, Call),
 
+    StoreKey = <<"channel-", EndpointName/binary>>,
+    amimulator_store:put_fun(StoreKey, CallId, fun store_put_fun/3),
+
     Payload = [
         {<<"Event">>, <<"Newchannel">>},
         {<<"Privilege">>, <<"call,all">>},
@@ -114,6 +119,9 @@ new_outbound_channel(EventJObj) ->
             ok
     end,
 
+    StoreKey = <<"channel-", EndpointName/binary>>,
+    amimulator_store:put_fun(StoreKey, CallId, fun store_put_fun/3),
+
     Payload = [
         {<<"Event">>, <<"Newchannel">>},
         {<<"Privilege">>, <<"call,all">>},
@@ -128,6 +136,14 @@ new_outbound_channel(EventJObj) ->
         {<<"Uniqueid">>, CallId}
     ],
     amimulator_amqp:publish_amqp_event({publish, Payload}).
+
+store_put_fun(Key, Value, Store) ->
+    case proplists:get_value(Key, Store) of
+        undefined ->
+            [{Key, [Value]}] ++ proplists:delete(Key, Store);
+        CallIds ->
+            [{Key, [Value | CallIds]}] ++ proplists:delete(Key, Store)
+    end.
 
 new_state(<<"CHANNEL_CREATE">>, EventJObj) ->
     case wh_json:get_value(<<"Call-Direction">>, EventJObj) of
@@ -228,19 +244,35 @@ ringing_state(EventJObj) ->
             <<"Queue ", Number/binary, " Call">>
     end,
 
-    Payload = [
-        {<<"Event">>, <<"Newstate">>},
-        {<<"Privilege">>, <<"call,all">>},
-        {<<"Channel">>, EndpointName},
-        {<<"ChannelState">>, 5},
-        {<<"ChannelStateDesc">>, <<"Ringing">>},
-        {<<"CallerIDNum">>, SourceCID},
-        {<<"CallerIDName">>, SourceCID},
-        {<<"ConnectedLineNum">>, DestCID},
-        {<<"ConnectedLineName">>, DestCID},
-        {<<"Uniqueid">>, CallId}
-    ],
-    amimulator_amqp:publish_amqp_event({publish, Payload}).
+    StoreKey = <<"ui-ring-", EndpointName/binary>>,
+    amimulator_store:put_fun(StoreKey, CallId, fun store_ui_ring_fun/3),
+
+    case amimulator_store:get(StoreKey) of
+        CallId ->
+            Payload = [
+                {<<"Event">>, <<"Newstate">>},
+                {<<"Privilege">>, <<"call,all">>},
+                {<<"Channel">>, EndpointName},
+                {<<"ChannelState">>, 5},
+                {<<"ChannelStateDesc">>, <<"Ringing">>},
+                {<<"CallerIDNum">>, SourceCID},
+                {<<"CallerIDName">>, SourceCID},
+                {<<"ConnectedLineNum">>, DestCID},
+                {<<"ConnectedLineName">>, DestCID},
+                {<<"Uniqueid">>, CallId}
+            ],
+            amimulator_amqp:publish_amqp_event({publish, Payload});
+        _ ->
+            ok
+    end.
+
+store_ui_ring_fun(Key, Value, Store) ->
+    case proplists:get_value(Key, Store) of
+        undefined ->
+            [{Key, Value}] ++ Store;
+        _ ->
+            Store
+    end.
 
 busy_state(EventJObj) ->
     Call = amimulator_util:create_call(EventJObj),
@@ -268,9 +300,6 @@ busy_state(EventJObj) ->
             <<"Queue ", Number/binary, " Call">>
     end,
 
-    StoreKey = <<"channel-", EndpointName/binary>>,
-    amimulator_store:put_fun(StoreKey, CallId, fun store_put_fun/3),
-
     Payload = [
         {<<"Event">>, <<"Newstate">>},
         {<<"Privilege">>, <<"call,all">>},
@@ -284,14 +313,6 @@ busy_state(EventJObj) ->
         {<<"Uniqueid">>, CallId}
     ],
     amimulator_amqp:publish_amqp_event({publish, Payload}).
-
-store_put_fun(Key, Value, Store) ->
-    case proplists:get_value(Key, Store) of
-        undefined ->
-            [{Key, [Value]}] ++ proplists:delete(Key, Store);
-        CallIds ->
-            [{Key, [Value | CallIds]}] ++ proplists:delete(Key, Store)
-    end.
 
 extension_status(EventJObj) ->
     case wh_json:get_value(<<"Call-Direction">>, EventJObj) of
@@ -384,7 +405,6 @@ dial_event(EventJObj) ->
     end.
 
 destroy_channel(EventJObj) ->
-    lager:debug("got here"),
     Call = amimulator_util:create_call(EventJObj),
     WhappsCall = props:get_value(<<"call">>, Call),
     CallId = whapps_call:call_id(WhappsCall),
@@ -416,6 +436,14 @@ destroy_channel(EventJObj) ->
     StoreKey = <<"channel-", EndpointName/binary>>,
     amimulator_store:put_fun(StoreKey, CallId, fun store_del_fun/3),
 
+    StoreKey2 = <<"ui-ring-", EndpointName/binary>>,
+    case amimulator_store:get(StoreKey2) of
+        CallId ->
+            amimulator_store:delete(StoreKey2);
+        _ ->
+            ok
+    end,
+
     case amimulator_store:get(StoreKey) of
         undefined ->
             Payload = [[
@@ -431,22 +459,27 @@ destroy_channel(EventJObj) ->
                 {<<"Cause-txt">>, CauseText}
             ]] ++ maybe_leave_conference(CallId),
 
+            maybe_change_agent_status(EventJObj),
+
             amimulator_amqp:publish_amqp_event({publish, Payload});
-        CallIds ->
-            lager:debug("still have callids ~p", [CallIds]),
+        _CallIds ->
             ok
     end.
 
 store_del_fun(Key, Value, Store) ->
-    AnsweredCallIds = proplists:get_value(Key, Store),
-    case AnsweredCallIds of
-        [Value] ->
+    CallIds = proplists:get_value(Key, Store),
+    CallIdsLeft = lists:filter(fun(CallId) ->
+        case CallId of
+            Value ->
+                false;
+            _ ->
+                true
+        end end, CallIds),
+    case CallIdsLeft of
+        [] ->
             proplists:delete(Key, Store);
-        %% undefined is set if no call is ever answered
-        undefined ->
-            Store;
         _ ->
-            [{Key, lists:delete(Value, AnsweredCallIds)}] ++ proplists:delete(Key, Store)
+            [{Key, CallIdsLeft}] ++ proplists:delete(Key, Store)
     end.
 
 maybe_leave_conference(CallId) ->
@@ -473,7 +506,70 @@ maybe_leave_conference(CallId) ->
             ]]
     end.
 
+maybe_change_agent_status(EventJObj) ->
+    Status = case wh_util:get_event_type(EventJObj) of
+        {_, <<"CHANNEL_CREATE">>} ->
+            6;
+        {_, <<"CHANNEL_ANSWER">>} ->
+            2;
+        {_, <<"CHANNEL_DESTROY">>} ->
+            1
+    end,
 
+    case wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Authorizing-ID">>], EventJObj) of
+        undefined ->
+            ok;
+        AuthorizingId ->
+            AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], EventJObj),
+            AccountDb = wh_util:format_account_id(AccountId, encoded),
+
+            case cf_endpoint:get(AuthorizingId, AccountDb) of
+                {error, _E} ->
+                    ok;
+                {ok, Endpoint} ->
+                    case wh_json:get_value(<<"owner_id">>, Endpoint) of
+                        undefined ->
+                            ok;
+                        OwnerId ->
+                            {ok, UserDoc} = couch_mgr:open_doc(AccountDb, OwnerId),
+                            case wh_json:get_value(<<"queues">>, UserDoc) of
+                                undefined ->
+                                    ok;
+                                [] ->
+                                    ok;
+                                Queues ->
+                                    change_agent_status(UserDoc, Queues, EventJObj, Status)
+                            end
+                    end
+            end
+    end.
+
+change_agent_status(UserDoc, Queues, EventJObj, Status) ->
+    AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], EventJObj),
+    AccountDb = wh_util:format_account_id(AccountId, encoded),
+    Username = wh_json:get_value(<<"username">>, UserDoc),
+    FirstName = wh_json:get_value(<<"first_name">>, UserDoc),
+    LastName = wh_json:get_value(<<"last_name">>, UserDoc),
+
+    Payload = lists:foldl(fun(QueueId, Acc) ->
+        case amimulator_util:find_id_number(QueueId, AccountDb) of
+            {error, _E} ->
+                Acc;
+            {ok, QueueNumber} ->
+                [[
+                    {<<"Event">>, <<"QueueMemberStatus">>},
+                    {<<"Queue">>, QueueNumber},
+                    {<<"Location">>, <<"Local/", Username/binary, "@from-queue/n">>},
+                    {<<"MemberName">>, <<FirstName/binary, " ", LastName/binary>>},
+                    {<<"Membership">>, <<"dynamic">>},
+                    {<<"Penalty">>, 0},
+                    %{<<"LastCall">>, LastCall},
+                    {<<"Status">>, Status},
+                    {<<"Paused">>, 0}
+                ] | Acc]
+        end end, [], Queues),
+
+    amimulator_amqp:publish_amqp_event({publish, Payload}).
 
 
 
