@@ -44,6 +44,12 @@ handle_event(JObj, _Props) ->
 							lager:debug("QUILT: writing event to queue_log: ~s, ~p", [EventName, EventParams]),
 							write_log(AccountId, CallId, QueueId, BridgedChannel, EventName, EventParams);
 
+						{<<"member">>, <<"call_cancel">>} ->
+							EventName = "ABANDON", % ABANDON(position|origposition|waittime)
+							EventParams = {<<"1">>, <<"5">>, <<"45">>},
+							lager:debug("QUILT: writing event to queue_log: ~s", [EventName]),
+							write_log(AccountId, CallId, QueueId, BridgedChannel, EventName, EventParams);
+
 						{<<"acdc_call_stat">>, <<"missed">>} ->
 							EventName = "RINGNOANSWER", % RINGNOANSWER(ringtime)
 							lager:debug("QUILT: writing event to queue_log: ~s", [EventName]),
@@ -55,11 +61,23 @@ handle_event(JObj, _Props) ->
 							lager:debug("QUILT: writing event to queue_log: ~s", [EventName]),
 							write_log(AccountId, CallId, QueueId, BridgedChannel, EventName, EventParams);
 
-						%{<<"">>, <<"">>} ->
+						% {<<"">>, <<"">>} ->
 							%EventName = "COMPLETEAGENT", % COMPLETEAGENT(holdtime|calltime|origposition)
 
-						%{<<"">>, <<"">>} ->
+						% {<<"">>, <<"">>} ->
 							%EventName = "COMPLETECALLER", % COMPLETECALLER(holdtime|calltime|origposition)
+
+						% {<<"">>, <<"">>} ->
+							%EventName = "ADDMEMBER", % ADDMEMBER(?)
+
+						% {<<"">>, <<"">>} ->
+							%EventName = "REMOVEMEMBER", % REMOVEMEMBER(?)
+
+						% {<<"">>, <<"">>} ->
+							%EventName = "EXITEMPTY", % EXITEMPTY(position|origposition|waittime)
+
+						% {<<"">>, <<"">>} ->
+							%EventName = "TRANSFER", % TRANSFER(extension|context|holdtime|calltime)
 
 						{<<"agent">>, <<"pause">>} -> 
 							EventName = "PAUSEALL", 
