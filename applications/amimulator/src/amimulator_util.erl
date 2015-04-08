@@ -3,7 +3,7 @@
 -include("amimulator.hrl").
 
 -export([parse_payload/1, format_prop/1, format_binary/1, format_json_events/1, initial_calls/1, create_call/1,
-    get_call/1, endpoint_exten/2, whapps_call/1,
+    get_call/1, bleg_ami_channel/3, endpoint_exten/2, whapps_call/1,
     maybe_get_exten/1, maybe_get_endpoint_name/1, endpoint_name/2, maybe_get_cid_name/1,
     find_id_number/2, queue_for_number/2,
     filter_registered_events/4, whapps_call_from_cf_exe/1, channel_tail/1]).
@@ -56,6 +56,29 @@ format_json_events([Event|Events], Acc) ->
 
 
 
+
+create_call(EventJObj) ->
+    {CallId, WhappsCall} = call_from_json(EventJObj),
+
+    BCs = case whapps_call:other_leg_call_id(WhappsCall) of
+        CallId ->
+            lager:debug("Why are the legs the same ID"),
+            [{CallId, WhappsCall}];
+        undefined ->
+            [{CallId, WhappsCall}];
+        OtherLegCallId ->
+            [{OtherLegCallId, ami_sm:call(OtherLegCallId)}, {CallId, WhappsCall}]
+    end,
+
+    better_call(EventJObj, BCs).
+
+get_call(CallId) ->
+    %better_call(wh_json:set_value(<<"Call-ID">>, CallId, wh_json:new())).
+    %amimulator_store:get(<<"call-", CallId/binary>>).
+    ami_sm:call(CallId).
+
+
+
 %% Fetches all whapps calls for an account and adds them to the data store
 initial_calls(AccountId) ->
     Req = [
@@ -69,39 +92,32 @@ initial_calls(AccountId) ->
         {'ecallmgr', fun wapi_call:query_account_channels_resp_v/1}
     ) of
         {'ok', RespJObjs} ->
-            %% Now we can produce all the channels and update the amimulator_store
-            lists:foreach(fun(RespJObj) ->
+            %% Now we can produce all the channels and update the state master
+            BasicCalls = lists:foldl(fun(RespJObj, Calls) ->
                 Channels = wh_json:get_value(<<"Channels">>, RespJObj),
                 case Channels of
-                    undefined -> ok;
-                    _ -> calls_from_json(Channels)
+                    undefined -> Calls;
+                    _ -> calls_from_json(Channels) ++ Calls
                 end
-            end, RespJObjs),
+            end, [], RespJObjs),
 
             %% Finally, make these calls not suck
             lists:foldl(fun(RespJObj, Acc) ->
                 Channels = wh_json:get_value(<<"Channels">>, RespJObj),
                 case Channels of
                     undefined -> Acc;
-                    _ -> better_calls(Channels) ++ Acc
+                    _ -> better_calls(Channels, BasicCalls) ++ Acc
                 end
             end, [], RespJObjs);
         E ->
             lager:debug("Could not get channel statuses: ~p", [E])
     end.
 
-create_call(EventJObj) ->
-    call_from_json(EventJObj),
-    better_call(EventJObj).
-
-get_call(CallId) ->
-    %better_call(wh_json:set_value(<<"Call-ID">>, CallId, wh_json:new())).
-    amimulator_store:get(<<"call-", CallId/binary>>).
 
 calls_from_json(JObjs) ->
-    lists:foreach(fun(JObj) ->
-        call_from_json(JObj)
-    end, JObjs).
+    lists:foldl(fun(JObj, Calls) ->
+        [call_from_json(JObj) | Calls]
+    end, [], JObjs).
 
 call_from_json(JObj) ->
     Routines = [
@@ -128,54 +144,60 @@ call_from_json(JObj) ->
             whapps_call:set_from(From, Call) end
     ],
     Call = lists:foldl(fun(F, Call) -> F(Call) end, whapps_call:new(), Routines),
-    Key = "whapps_call-" ++ wh_util:to_list(whapps_call:call_id(Call)),
-    case amimulator_store:get(Key) of
-        undefined ->
-            amimulator_store:put(Key, Call);
+
+    %% Remove other leg if it's just the same leg
+    CallId = whapps_call:call_id(Call),
+    Call2 = case whapps_call:other_leg_call_id(Call) of
+        CallId ->
+            whapps_call:set_other_leg_call_id(undefined, Call);
         _ ->
-            ok
-    end.
+            Call
+    end,
+
+    {whapps_call:call_id(Call2), Call2}.
 
 %% Adds a whole bunch of extra data to make whapps_calls more useful
-better_calls(JObjs) ->
+better_calls(JObjs, BasicCalls) ->
     lists:foldl(fun(JObj, Calls) ->
-            BetterCall = better_call(JObj),
-            CallId = wh_json:get_first_defined([<<"uuid">>, <<"Call-ID">>], JObj),
-            amimulator_store:put(<<"call-", CallId/binary>>, BetterCall),
-            amimulator_store:put(<<"channel-", (props:get_value(<<"aleg_ami_channel">>, BetterCall))/binary>>,
-                [CallId]),
-            [BetterCall] ++ Calls
+            [better_call(JObj, BasicCalls)] ++ Calls
     end, [], JObjs).
 
-better_call(JObj) ->
-    Call = amimulator_store:get("whapps_call-" ++ wh_util:to_list(
-        wh_json:get_first_defined([<<"uuid">>, <<"Call-ID">>], JObj))),
+better_call(JObj, BasicCalls) ->
+    CallId = wh_json:get_first_defined([<<"uuid">>, <<"Call-ID">>], JObj),
+    Call = props:get_value(CallId, BasicCalls),
+
     Routines = [
-        fun(Call2, JObj2) -> 
+        fun(Call2, JObj2, _BC) -> 
             CallDirection = wh_json:get_first_defined([<<"direction">>, <<"Call-Direction">>], JObj2,
                 <<"inbound">>),
             props:set_value(<<"direction">>, CallDirection, Call2) end,
-        fun aleg_cid/2,
-        fun aleg_exten/2,
-        fun aleg_ami_channel/2,
-        fun bleg_cid/2,
-        fun bleg_exten/2,
-        fun bleg_ami_channel/2,
-        fun(Call2, JObj2) -> props:set_value(<<"username">>, 
+        fun aleg_cid/3,
+        fun aleg_exten/3,
+        fun aleg_ami_channel/3,
+        fun bleg_cid/3,
+        fun bleg_exten/3,
+        fun bleg_ami_channel/3,
+        fun(Call2, JObj2, _BC) -> props:set_value(<<"username">>, 
             wh_json:get_first_defined([<<"username">>, <<"Username">>], JObj2), Call2) end,
-        fun(Call2, JObj2) -> props:set_value(<<"answered">>, 
+        fun(Call2, JObj2, _BC) -> props:set_value(<<"answered">>, 
             wh_json:get_first_defined([<<"answered">>], JObj2), Call2) end,
-        fun(Call2, JObj2) -> props:set_value(<<"elapsed_s">>, 
+        fun(Call2, JObj2, _BC) -> props:set_value(<<"elapsed_s">>, 
             wh_json:get_first_defined([<<"elapsed_s">>], JObj2), Call2) end
     ],
     lists:foldl(
-        fun(F, BCall) -> F(BCall, JObj) end,
+        fun(F, BCall) -> F(BCall, JObj, BasicCalls) end,
         [{<<"call">>, Call}],
         Routines
     ).
 
-aleg_cid(Call, _ChannelJObj) ->
+aleg_cid(Call, _ChannelJObj, _BC) ->
     WhappsCall = props:get_value(<<"call">>, Call),
+    case WhappsCall of
+        undefined ->
+            try throw(42) catch 42 -> wh_util:log_stacktrace() end;
+        _ ->
+            ok
+    end,
     case cf_endpoint:get(WhappsCall) of
         %% An external endpoint
         {error, _E} ->
@@ -190,7 +212,7 @@ aleg_cid(Call, _ChannelJObj) ->
             props:set_value(<<"aleg_cid">>, endpoint_cid(Endpoint, whapps_call:account_db(WhappsCall)), Call)
     end.
 
-aleg_exten(Call, _ChannelJObj) ->
+aleg_exten(Call, _ChannelJObj, _BC) ->
     WhappsCall = props:get_value(<<"call">>, Call),
     case cf_endpoint:get(WhappsCall) of
         %% An external endpoint
@@ -206,7 +228,7 @@ aleg_exten(Call, _ChannelJObj) ->
             props:set_value(<<"aleg_exten">>, endpoint_exten(Endpoint, whapps_call:account_db(WhappsCall)), Call)
     end.
 
-aleg_ami_channel(Call, _ChannelJObj) ->
+aleg_ami_channel(Call, _ChannelJObj, _BC) ->
     WhappsCall = props:get_value(<<"call">>, Call),
     case cf_endpoint:get(WhappsCall) of
         %% An external endpoint
@@ -267,9 +289,9 @@ call_direction_endpoint(Call) ->
             ), Call)
     end.
 
-bleg_cid(Call, ChannelJObj) ->
-    case amimulator_store:get("whapps_call-" ++ wh_util:to_list(
-        wh_json:get_first_defined([<<"other_leg">>, <<"Other-Leg-Call-ID">>], ChannelJObj))) of
+bleg_cid(Call, _ChannelJObj, BC) ->
+    case props:get_value(whapps_call:other_leg_call_id(props:get_value(<<"call">>, Call)),
+        BC) of
         undefined ->
             %% TODO, find the call somehow
             Call;
@@ -278,14 +300,20 @@ bleg_cid(Call, ChannelJObj) ->
                 <<"inbound">> -> <<"outbound">>;
                 <<"outbound">> -> <<"inbound">>
             end,
-            props:set_value(<<"bleg_cid">>,
-                props:get_value(<<"aleg_cid">>, aleg_cid([{<<"call">>, OtherCall},
-                    {<<"direction">>, Direction}], undefined)), Call)
+
+            case is_tuple(OtherCall) of
+                true ->
+                    props:set_value(<<"bleg_cid">>, props:get_value(<<"aleg_cid">>,
+                        aleg_cid([{<<"call">>, OtherCall},
+                        {<<"direction">>, Direction}], undefined, undefined)), Call);
+                _ ->
+                    props:set_value(<<"bleg_cid">>, props:get_value(<<"aleg_cid">>, OtherCall), Call)
+            end
     end.
 
-bleg_exten(Call, JObj) ->
-    case amimulator_store:get("whapps_call-" ++ wh_util:to_list(
-        wh_json:get_first_defined([<<"other_leg">>, <<"Other-Leg-Call-ID">>], JObj))) of
+bleg_exten(Call, _ChannelJObj, BC) ->
+    case props:get_value(whapps_call:other_leg_call_id(props:get_value(<<"call">>, Call)),
+        BC) of
         undefined ->
             props:set_value(<<"bleg_exten">>, whapps_call:to_user(props:get_value(<<"call">>, Call)), Call);
         OtherCall ->
@@ -293,14 +321,20 @@ bleg_exten(Call, JObj) ->
                 <<"inbound">> -> <<"outbound">>;
                 <<"outbound">> -> <<"inbound">>
             end,
-            props:set_value(<<"bleg_exten">>,
-                props:get_value(<<"aleg_exten">>, aleg_cid([{<<"call">>, OtherCall},
-                    {<<"direction">>, Direction}], undefined)), Call)
+
+            case is_tuple(OtherCall) of
+                true ->
+                    props:set_value(<<"bleg_exten">>, props:get_value(<<"aleg_exten">>,
+                    aleg_exten([{<<"call">>, OtherCall},
+                    {<<"direction">>, Direction}], undefined, undefined)), Call);
+                _ ->
+                    props:set_value(<<"bleg_exten">>, props:get_value(<<"aleg_exten">>, OtherCall), Call)
+            end
     end.
 
-bleg_ami_channel(Call, ChannelJObj) ->
-    case amimulator_store:get("whapps_call-" ++ wh_util:to_list(
-        wh_json:get_first_defined([<<"other_leg">>, <<"Other-Leg-Call-ID">>], ChannelJObj))) of
+bleg_ami_channel(Call, _ChannelJObj, BC) ->
+    case props:get_value(whapps_call:other_leg_call_id(props:get_value(<<"call">>, Call)),
+        BC) of
         undefined ->
             %% TODO, find the call somehow
             Call;
@@ -309,9 +343,15 @@ bleg_ami_channel(Call, ChannelJObj) ->
                 <<"inbound">> -> <<"outbound">>;
                 <<"outbound">> -> <<"inbound">>
             end,
-            props:set_value(<<"bleg_ami_channel">>,
-                props:get_value(<<"aleg_ami_channel">>, aleg_ami_channel([{<<"call">>, OtherCall},
-                    {<<"direction">>, Direction}], undefined)), Call)
+
+            case is_tuple(OtherCall) of
+                true ->
+                    props:set_value(<<"bleg_ami_channel">>, props:get_value(<<"aleg_ami_channel">>,
+                        aleg_ami_channel([{<<"call">>, OtherCall},
+                        {<<"direction">>, Direction}], undefined, undefined)), Call);
+                _ ->
+                    props:set_value(<<"bleg_ami_channel">>, props:get_value(<<"aleg_ami_channel">>, OtherCall), Call)
+            end
     end.
 
 endpoint_cid(Endpoint, AccountDb) ->

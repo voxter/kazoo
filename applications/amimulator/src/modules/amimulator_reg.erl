@@ -1,11 +1,33 @@
 -module(amimulator_reg).
 
--export([init/1, handle_event/1]).
+-export([init/1, bindings/1, responders/1, handle_event/1]).
 
 -include("../amimulator.hrl").
 
+%%
+%% Public functions
+%%
+
 init(_AccountId) ->
     ok.
+
+bindings(Props) ->
+    AccountId = props:get_value("AccountId", Props),
+    [
+        {notifications, [
+            {restrict_to, [deregister]}
+        ]},
+        {registration, [
+            {restrict_to, [reg_success]},
+            {realm, get_realm(AccountId)}
+        ]}
+    ].
+
+responders(_Props) ->
+    [
+        {<<"directory">>, <<"reg_success">>},
+        {<<"notification">>, <<"deregister">>}
+    ].
 
 handle_event(EventJObj) ->
     {_EventType, EventName} = wh_util:get_event_type(EventJObj),
@@ -44,6 +66,10 @@ handle_specific_event(_, _EventJObj) ->
 %% Private functions
 %%
 
+get_realm(AccountId) ->
+    {ok, AccountDoc} = couch_mgr:open_doc(<<"accounts">>, AccountId),
+    wh_json:get_value(<<"realm">>, AccountDoc).
+
 handle_register(AccountId, EventJObj) ->
     AccountDb = wh_util:format_account_id(AccountId, encoded),
     Reg = cb_registrations:normalize_registration(EventJObj),
@@ -75,7 +101,7 @@ handle_register(AccountId, EventJObj) ->
                 {<<"PeerStatus">>, <<"Reachable">>},
                 {<<"Time">>, <<"2">>}
             ]],
-            amimulator_amqp:publish_amqp_event({publish, Payload});
+            ami_ev:publish_amqp_event({publish, Payload});
         _ ->
             ok
     end.
@@ -102,7 +128,7 @@ handle_unregister(AccountId, EventJObj) ->
                 {<<"Hint">>, <<Peer/binary, ",CustomPresence:", Exten/binary>>},
                 {<<"Status">>, 4}
             ]],
-            amimulator_amqp:publish_amqp_event({publish, Payload});
+            ami_ev:publish_amqp_event({publish, Payload});
         _ ->
             ok
     end.

@@ -13,17 +13,19 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
+%%
+%% gen_server callbacks
+%%
+
 init([]) ->
     process_flag(trap_exit, true),
 
     AMIPort = whapps_config:get_integer(<<"amimulator">>, <<"port">>, 5038),
-    {ok, ListenSocket} = gen_tcp:listen(AMIPort, [{active, true}, {packet, line}]),
+    {ok, ListenSocket} = gen_tcp:listen(AMIPort, [{reuseaddr, true}, {active, true}, {packet, line}]),
     lager:debug("listening on port ~p", [AMIPort]),
     
-    amimulator_sup:start_link(ListenSocket),
-    amimulator_sup:start_listeners(),
-    amimulator_hook_map:start_link(),
-    amimulator_store:start_link(),
+    amimulator_sup:start_link(),
+    amimulator_sup:start_listeners(ListenSocket),
     
     {ok, #state{listen_socket = ListenSocket}}.
     
@@ -37,8 +39,8 @@ handle_info(_Info, State) ->
     {noreply, State}.
     
 terminate(shutdown, #state{listen_socket=ListenSocket}) ->
+    lager:debug("gracefully closing listen_socket ~p", [ListenSocket]),
     gen_tcp:close(ListenSocket),
-    lager:debug("gracefully closed listen_socket"),
     ok.
     
 code_change(_OldVsn, State, _Extra) ->

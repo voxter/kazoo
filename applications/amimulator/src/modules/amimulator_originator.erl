@@ -33,6 +33,15 @@ handle_call(_Request, _From, State) ->
 handle_cast({"originate", Props}, State) ->
 	first_leg(Props),
 	{noreply, State};
+handle_cast({"blindxfer", Props}, State) ->
+    blind_transfer(update_props(Props)),
+    {noreply, State};
+handle_cast({"vmxfer", Props}, State) ->
+    vm_transfer(update_props(Props)),
+    {noreply, State};
+handle_cast({"atxfer", Props}, State) ->
+    attended_transfer(update_props(Props)),
+    {noreply, State};
 handle_cast({"eavesdrop", Props}, State) ->
     eavesdrop_req(Props),
     {noreply, State};
@@ -89,6 +98,90 @@ first_leg(Props) ->
     lager:debug("AMI: originate request ~p", [Request]),
     wapi_resource:publish_originate_req(props:filter_undefined(Request)).
 
+blind_transfer(Props) ->
+    Call = props:get_value(<<"Call">>, Props),
+    WhappsCall = props:get_value(<<"call">>, Call),
+
+    CallId = whapps_call:call_id(WhappsCall),
+    DestExten = props:get_value(<<"Exten">>, Props),
+
+    %Endpoints = get_endpoints()
+
+    CCVs = [
+        {<<"Account-ID">>, proplists:get_value(<<"AccountId">>, UpdatedProps)},
+        {<<"Retain-CID">>, <<"true">>},
+        {<<"Inherit-Codec">>, <<"false">>},
+        %{<<"Authorizing-Type">>, whapps_call:authorizing_type(WhappsCall)},
+        {<<"Authorizing-ID">>, whapps_call:authorizing_id(WhappsCall)}
+    ],
+
+    Request = [
+        {<<"Application-Name">>, <<"transfer">>},
+        {<<"Endpoints">>, []},
+        {<<"Application-Data">>, wh_json:from_list([{<<"Route">>, DestExten}])},
+        %{<<"Msg-ID">>, MsgId}
+        %{<<"Timeout">>, <<"30">>}
+        %{<<"Ignore-Early-Media">>, <<"true">>}
+        %{<<"Media">>, <<"process">>}
+        {<<"Outbound-Caller-ID-Name">>, undefined}
+        {<<"Outbound-Caller-ID-Number">>, undefined}
+        {<<"Outbound-Callee-ID-Name">>, DestExten}
+        {<<"Outbound-Callee-ID-Number">>, DestExten}
+        %{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
+        {<<"Continue-On-Fail">>, false}
+        {<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
+        {<<"Export-Custom-Channel-Vars">>, [
+            <<"Account-ID">>,
+            <<"Retain-CID">>,
+            %<<"Authorizing-Type">>,
+            <<"Authorizing-ID">>
+        ]}
+        | wh_api:default_headers(<<"resource">>, <<"originate_req">>, ?APP_NAME, ?APP_VERSION)
+    ],
+
+
+
+    lager:debug("attempting to transfer ~s to ~s", [CallId, DestExten]),
+    wapi_metaflow:publish_req(API).
+
+vm_transfer(Props) ->
+    Call = props:get_value(<<"Call">>, Props),
+    WhappsCall = props:get_value(<<"call">>, Call),
+
+    CallId = whapps_call:call_id(WhappsCall),
+    DestExten = <<"**", (props:get_value(<<"Exten">>, Call))/binary>>,
+
+    API = [{<<"Call-ID">>, CallId}
+           ,{<<"Action">>, <<"transfer">>}
+           ,{<<"Data">>, wh_json:from_list(
+                           [{<<"target">>, DestExten}
+                           ])
+            }
+           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+          ],
+
+    lager:debug("attempting to transfer ~s to ~s", [CallId, DestExten]),
+    wh_amqp_worker:cast(API, fun wapi_metaflow:publish_req/1).
+
+attended_transfer(Props) ->
+    Call = props:get_value(<<"Call">>, Props),
+    WhappsCall = props:get_value(<<"call">>, Call),
+
+    CallId = whapps_call:call_id(WhappsCall),
+    DestExten = props:get_value(<<"Exten">>, Call),
+
+    API = [{<<"Call-ID">>, CallId}
+           ,{<<"Action">>, <<"transfer">>}
+           ,{<<"Data">>, wh_json:from_list(
+                           [{<<"target">>, DestExten}
+                           ])
+            }
+           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+          ],
+
+    lager:debug("attempting to transfer ~s to ~s", [CallId, DestExten]),
+    wh_amqp_worker:cast(API, fun wapi_metaflow:publish_req/1).
+
 eavesdrop_req(Props) ->
     UpdatedProps = update_props(Props),
     Call = create_call_from_props(UpdatedProps),
@@ -104,7 +197,8 @@ eavesdrop_req(Props) ->
 
     Channel = <<(hd(binary:split(proplists:get_value(<<"Data">>, Props), <<",">>)))/binary, "-", (amimulator_util:channel_tail(whapps_call:call_id(Call)))/binary>>,
     lager:debug("channel ~p", [Channel]),
-    EavesdropCallId = amimulator_store:get(<<"channel-", Channel/binary>>),
+
+    EavesdropCallId = whapps_call:call_id(props:get_value(<<"call">>, ami_sm:call_by_channel(Channel))),
     lager:debug("eavesdropping on call id ~p", [EavesdropCallId]),
 
     Prop = wh_json:set_values(props:filter_undefined([
@@ -215,10 +309,9 @@ aleg_authorizing_id(Props) ->
 get_endpoints(Props, Call) ->
     UserId = whapps_call:authorizing_id(Call),
     Number = proplists:get_value(<<"SourceExten">>, Props),
-    Properties = wh_json:from_list([{<<"can_call_self">>, 'true'}
-                                    ,{<<"suppress_clid">>, 'true'}
-                                    ,{<<"source">>, 'cb_users'}
-                                   ]),
+    Properties = wh_json:from_list([
+        {<<"can_call_self">>, false}
+    ]),
     lists:foldr(fun(EndpointId, Acc) ->
                         case cf_endpoint:build(EndpointId, Properties, aleg_cid(Number, Call)) of
                             {'ok', Endpoint} -> Endpoint ++ Acc;
