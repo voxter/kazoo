@@ -14,9 +14,12 @@
 -export([start_link/2, start_link/3, start_link/5
          ,member_connect_resp/2
          ,member_connect_retry/2
-         ,member_connect_accepted/1, member_connect_accepted/2
+         ,member_connect_accepted/1, member_connect_accepted/2, member_connect_accepted/3
          ,agent_timeout/1
+         ,redial_member/7
          ,bridge_to_member/6
+         ,callback_announce/2
+         ,replace_call/2
          ,monitor_call/4
          ,channel_hungup/2
          ,originate_execute/2
@@ -62,6 +65,7 @@
 
 -record(state, {
          call :: whapps_call:call()
+         ,old_call :: whapps_call:call()
          ,acdc_queue_id :: ne_binary() % the ACDc Queue ID
          ,msg_queue_id :: ne_binary() % the AMQP Queue ID of the ACDc Queue process
          ,agent_id :: ne_binary()
@@ -221,12 +225,27 @@ member_connect_accepted(Srv) ->
     gen_listener:cast(Srv, {'member_connect_accepted'}).
 member_connect_accepted(Srv, ACallId) ->
     gen_listener:cast(Srv, {'member_connect_accepted', ACallId}).
+member_connect_accepted(Srv, ACallId, MemberCall) ->
+    gen_listener:cast(Srv, {'member_connect_accepted', ACallId, MemberCall}).
+
+-spec redial_member(pid(), whapps_call:call(), wh_json:object()
+                       ,wh_json:objects(), api_binary(), api_binary(), api_binary()
+                      ) -> 'ok'.
+redial_member(Srv, Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number) ->
+    gen_listener:cast(Srv, {'redial_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number}).
 
 -spec bridge_to_member(pid(), whapps_call:call(), wh_json:object()
                        ,wh_json:objects(), api_binary(), api_binary()
                       ) -> 'ok'.
 bridge_to_member(Srv, Call, WinJObj, EPs, CDRUrl, RecordingUrl) ->
     gen_listener:cast(Srv, {'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}).
+
+-spec callback_announce(pid(), whapps_call:call()) -> 'ok'.
+callback_announce(Srv, AgentCall) ->
+    gen_listener:cast(Srv, {'callback_announce', AgentCall}).
+
+replace_call(Srv, Call) ->
+    gen_listener:cast(Srv, {'replace_call', Call}).
 
 monitor_call(Srv, Call, CDRUrl, RecordingUrl) ->
     gen_listener:cast(Srv, {'monitor_call', Call, CDRUrl, RecordingUrl}).
@@ -483,6 +502,7 @@ handle_cast({'channel_hungup', CallId}, #state{call=Call
             case IsThief of
                 'false' ->
                     {'noreply', State#state{call='undefined'
+                                            ,old_call='undefined'
                                             ,msg_queue_id='undefined'
                                             ,acdc_queue_id='undefined'
                                             ,agent_call_ids=[]
@@ -560,6 +580,37 @@ handle_cast({'member_connect_retry', WinJObj}, #state{my_id=MyId
     lager:debug("cannot process this win, sending a retry: ~s", [call_id(WinJObj)]),
     send_member_connect_retry(WinJObj, MyId, AgentId),
     {'noreply', State};
+
+handle_cast({'redial_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number}, #state{fsm_pid=FSM
+                                                                                ,agent_queues=Qs
+                                                                                ,acct_id=AcctId
+                                                                                ,agent_id=AgentId
+                                                                                ,my_q=MyQ
+                                                                                ,agent=Agent
+                                                                               }=State) ->
+    _ = whapps_call:put_callid(Call),
+    lager:debug("Performing transfer back to member #"),
+
+    RingTimeout = wh_json:get_value(<<"Ring-Timeout">>, WinJObj),
+    lager:debug("ring agent for ~ps", [RingTimeout]),
+
+    ShouldRecord = should_record_endpoints(EPs, record_calls(Agent)
+                                           ,wh_json:is_true(<<"Record-Caller">>, WinJObj, 'false')
+                                          ),
+
+    acdc_agent_fsm:awaiting_callback(FSM),
+
+    AgentCallIds = maybe_originate_callback(MyQ, EPs, Call, RingTimeout, AgentId, CDRUrl, Number),
+
+    lager:debug("originate sent, waiting on bridge of agent and callback call"),
+    update_my_queues_of_change(AcctId, AgentId, Qs),
+    {'noreply', State#state{call=Call
+                            ,record_calls=ShouldRecord
+                            ,msg_queue_id=wh_json:get_value(<<"Server-ID">>, WinJObj)
+                            ,agent_call_ids=AgentCallIds
+                            ,recording_url=RecordingUrl
+                           }
+     ,'hibernate'};
 
 handle_cast({'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}, #state{is_thief='false'
                                                                                    ,agent_queues=Qs
@@ -656,6 +707,27 @@ handle_cast({'member_connect_accepted', ACallId}, #state{msg_queue_id=AmqpQueue
     send_member_connect_accepted(AmqpQueue, call_id(Call), AcctId, AgentId, MyId),
     {'noreply', State#state{agent_call_ids=ACallIds1}, 'hibernate'};
 
+handle_cast({'member_connect_accepted', ACallId, NewCall}, #state{msg_queue_id=AmqpQueue
+                                                         ,old_call=OldCall
+                                                         ,acct_id=AcctId
+                                                         ,agent_id=AgentId
+                                                         ,my_id=MyId
+                                                         ,record_calls=ShouldRecord
+                                                         ,recording_url=RecordingUrl
+                                                         ,agent_call_ids=ACallIds
+                                                        }=State) ->
+    lager:debug("member's new call bridged to agent!"),
+    maybe_start_recording(NewCall, ShouldRecord, RecordingUrl),
+
+    ACallIds1 = filter_agent_calls(ACallIds, ACallId),
+
+    lager:debug("new agent call ids: ~p", [ACallIds1]),
+
+    send_member_connect_accepted(AmqpQueue, call_id(NewCall), AcctId, AgentId, MyId, call_id(OldCall)),
+    {'noreply', State#state{agent_call_ids=ACallIds1
+                            ,call=NewCall
+                           }, 'hibernate'};
+
 handle_cast({'member_connect_resp', ReqJObj}, #state{agent_id=AgentId
                                                      ,last_connect=LastConn
                                                      ,agent_queues=Qs
@@ -676,6 +748,26 @@ handle_cast({'member_connect_resp', ReqJObj}, #state{agent_id=AgentId
                                    }
              ,'hibernate'}
     end;
+
+handle_cast({'callback_announce', AgentCall}, State) ->
+    whapps_call_command:tts(<<"Now calling back to client">>, AgentCall),
+    {'noreply', State, 'hibernate'};
+
+handle_cast({'replace_call', NewCall}, #state{call=OldCall
+                                              ,acct_id=AccountId
+                                              ,acdc_queue_id=QueueId
+                                              ,msg_queue_id=AMQPQueue
+                                             }=State) ->
+    acdc_stats:call_id_change(AccountId, QueueId, call_id(OldCall), call_id(NewCall)),
+
+    Update = props:filter_undefined([{<<"Account-ID">>, AccountId}
+                                     ,{<<"Queue-ID">>, QueueId}
+                                     ,{<<"Call">>, whapps_call:to_json(NewCall)}
+                                     | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                    ]),
+    wapi_acdc_queue:publish_member_callback_update(AMQPQueue, Update),
+
+    {'noreply', State#state{call=NewCall,old_call=OldCall}, 'hibernate'};
 
 handle_cast({'monitor_call', Call, _CDRUrl, RecordingUrl}, State) ->
     _ = whapps_call:put_callid(Call),
@@ -922,6 +1014,17 @@ send_member_connect_accepted(Queue, CallId, AcctId, AgentId, MyId) ->
                                   ]),
     wapi_acdc_queue:publish_member_connect_accepted(Queue, Resp).
 
+-spec send_member_connect_accepted(ne_binary(), ne_binary(), ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+send_member_connect_accepted(Queue, CallId, AcctId, AgentId, MyId, OldCallId) ->
+    Resp = props:filter_undefined([{<<"Call-ID">>, CallId}
+                                   ,{<<"Account-ID">>, AcctId}
+                                   ,{<<"Agent-ID">>, AgentId}
+                                   ,{<<"Process-ID">>, MyId}
+                                   ,{<<"Old-Call-ID">>, OldCallId}
+                                   | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                  ]),
+    wapi_acdc_queue:publish_member_connect_accepted(Queue, Resp).
+
 -spec send_originate_execute(wh_json:object(), ne_binary()) -> 'ok'.
 send_originate_execute(JObj, Q) ->
     Prop = [{<<"Call-ID">>, wh_json:get_value(<<"Call-ID">>, JObj)}
@@ -1031,6 +1134,63 @@ maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
               ,{<<"Ignore-Early-Media">>, <<"true">>}
               | wh_api:default_headers(MyQ, ?APP_NAME, ?APP_VERSION)
              ]),
+
+    lager:debug("sending originate request with agent call-ids ~p", [ACallIds]),
+
+    wapi_resource:publish_originate_req(Prop),
+    ACallIds.
+
+-spec maybe_originate_callback(ne_binary(), wh_json:objects(), whapps_call:call(), api_integer(), ne_binary(), api_binary()
+    ,api_binary()) ->
+                                    ne_binaries().
+maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Number) ->
+    MCallId = whapps_call:call_id(Call),
+    put('callid', MCallId),
+
+    ReqId = wh_util:rand_hex_binary(6),
+    AcctId = whapps_call:account_id(Call),
+
+    CCVs = props:filter_undefined([{<<"Account-ID">>, AcctId}
+                                   ,{<<"Authorizing-ID">>, whapps_call:authorizing_id(Call)}
+                                   ,{<<"Request-ID">>, ReqId}
+                                   ,{<<"Retain-CID">>, <<"true">>}
+                                   ,{<<"Agent-ID">>, AgentId}
+                                  ]),
+
+    {ACallIds, Endpoints} = lists:foldl(fun(EP, {Cs, Es}) ->
+                                                ACallId = outbound_call_id(Call, AgentId),
+                                                acdc_util:bind_to_call_events(ACallId),
+
+                                                {[ACallId | Cs]
+                                                 ,[wh_json:set_values([{<<"Endpoint-Timeout">>, Timeout}
+                                                                       ,{<<"Outbound-Call-ID">>, ACallId}
+                                                                      ], EP)
+                                                   | Es
+                                                  ]}
+                                        end, {[], []}, EPs),
+
+    Prop = props:filter_undefined([{<<"Application-Name">>, <<"transfer">>}
+                                   ,{<<"Resource-Type">>, <<"originate">>}
+                                   ,{<<"Account-ID">>, AcctId}
+                                   ,{<<"Endpoints">>, Endpoints}
+                                   ,{<<"Application-Data">>, wh_json:from_list([{<<"Route">>, Number}])}
+                                   ,{<<"Msg-ID">>, wh_util:rand_hex_binary(6)}
+                                   ,{<<"Timeout">>, Timeout}
+                                   ,{<<"Ignore-Early-Media">>, <<"true">>}
+                                   ,{<<"Caller-ID-Name">>, whapps_call:caller_id_name(Call)}
+                                   ,{<<"Caller-ID-Number">>, whapps_call:caller_id_number(Call)}
+                                   ,{<<"Outbound-Caller-ID-Name">>, whapps_call:caller_id_name(Call)}
+                                   ,{<<"Outbound-Caller-ID-Number">>, whapps_call:caller_id_number(Call)}
+                                   ,{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
+                                   ,{<<"Continue-On-Fail">>, 'false'}
+                                   ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
+                                   ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>
+                                                                        ,<<"Retain-CID">>
+                                                                        ,<<"Authorizing-ID">>
+                                                                        ,<<"Authorizing-Type">>
+                                                                       ]}
+                                   | wh_api:default_headers(MyQ, ?APP_NAME, ?APP_VERSION)
+                                  ]),
 
     lager:debug("sending originate request with agent call-ids ~p", [ACallIds]),
 

@@ -18,12 +18,19 @@
          ,handle_member_call/2
          ,handle_member_call_cancel/2
          ,handle_agent_change/2
+         ,handle_agent_status_stat/2
+         ,handle_queue_member_add/2
+         ,handle_queue_member_remove/2
+         ,handle_manager_success_notify/2
+         ,handle_manager_fail_notify/2
          ,handle_config_change/2
          ,should_ignore_member_call/3, should_ignore_member_call/4
          ,config/1
          ,status/1
          ,current_agents/1
          ,refresh/2
+
+         ,replace_call/3
         ]).
 
 %% FSM helpers
@@ -38,6 +45,8 @@
          ,terminate/2
          ,code_change/3
         ]).
+
+-export([announce_position_loop/2]).
 
 -include("acdc.hrl").
 
@@ -58,6 +67,9 @@
           ,known_agents = dict:new() :: dict() % how many agent processes are available {AgentId, Count}
           ,enter_when_empty = 'true' :: boolean() % allow caller into queue if no agents are logged in
           ,moh :: api_binary()
+          ,current_member_calls = [] :: list() % ordered list of current members waiting
+
+          ,pos_announce_pid :: pid()
          }).
 -type mgr_state() :: #state{}.
 
@@ -66,12 +78,17 @@
                                    ,{'id', Q}
                                    ,'federate'
                                   ]}
-                         ,{'acdc_queue', [{'restrict_to', ['stats_req', 'agent_change']}
+                         ,{'acdc_queue', [{'restrict_to', ['stats_req', 'agent_change', 'member_addremove']}
                                           ,{'account_id', A}
                                           ,{'queue_id', Q}
                                          ]}
                          ,{'presence', [{'restrict_to', ['probe']}]}
+                         ,{'acdc_stats', [{'restrict_to', ['status_stat']}
+                                          ,{'account_id', A}
+                                         ]}
                         ]).
+-define(AGENT_BINDINGS(AccountId, AgentId), [
+                                            ]).
 
 -define(RESPONDERS, [{{'acdc_queue_handler', 'handle_config_change'}
                       ,[{<<"configuration">>, <<"*">>}]
@@ -90,6 +107,21 @@
                       }
                      ,{{'acdc_queue_manager', 'handle_agent_change'}
                        ,[{<<"queue">>, <<"agent_change">>}]
+                      }
+                     ,{{'acdc_queue_manager', 'handle_agent_status_stat'}
+                       ,[{<<"acdc_status_stat">>, <<"connected">>}]
+                      }
+                     ,{{'acdc_queue_manager', 'handle_queue_member_add'}
+                       ,[{<<"queue">>, <<"member_add">>}]
+                      }
+                     ,{{'acdc_queue_manager', 'handle_queue_member_remove'}
+                       ,[{<<"queue">>, <<"member_remove">>}]
+                      }
+                     ,{{'acdc_queue_manager', 'handle_manager_success_notify'}
+                       ,[{<<"member">>, <<"call_success">>}]
+                      }
+                     ,{{'acdc_queue_manager', 'handle_manager_fail_notify'}
+                       ,[{<<"member">>, <<"call_fail">>}]
                       }
                     ]).
 
@@ -182,8 +214,12 @@ start_queue_call(JObj, Props, Call) ->
             whapps_call_command:hold(MOH, Call)
     end,
 
-    wapi_acdc_queue:publish_shared_member_call(AccountId, QueueId, JObj),
-    lager:debug("put call into shared messaging queue"),
+    JObj2 = case maybe_konami_queue(whapps_call:account_db(Call), QueueId, Call) of
+        'false' ->
+            JObj;
+        'true' ->
+            wh_json:set_value([<<"Call">>, <<"Custom-Channel-Vars">>, <<"No-Queue-Exit">>], <<"true">>, JObj)
+    end,
 
     _ = whapps_call_command:set('undefined'
                                 ,wh_json:from_list([{<<"Eavesdrop-Group-ID">>, QueueId}
@@ -192,9 +228,8 @@ start_queue_call(JObj, Props, Call) ->
                                 ,Call
                                ),
 
-    gen_listener:cast(props:get_value('server', Props), {'monitor_call', Call}),
-
-    acdc_util:presence_update(AccountId, QueueId, ?PRESENCE_RED_FLASH).
+    %% Add member to queue for tracking position
+    gen_listener:cast(props:get_value('server', Props), {'add_queue_member', JObj2}).
 
 handle_member_call_cancel(JObj, Props) ->
     wh_util:put_callid(JObj),
@@ -204,6 +239,7 @@ handle_member_call_cancel(JObj, Props) ->
                         ,wh_json:get_value(<<"Queue-ID">>, JObj)
                         ,wh_json:get_value(<<"Call-ID">>, JObj)
                        ),
+
     gen_listener:cast(props:get_value('server', Props), {'member_call_cancel', K, JObj}).
 
 handle_agent_change(JObj, Prop) ->
@@ -216,6 +252,25 @@ handle_agent_change(JObj, Prop) ->
         <<"unavailable">> ->
             gen_listener:cast(props:get_value('server', Prop), {'agent_unavailable', JObj})
     end.
+
+handle_agent_status_stat(JObj, Prop) ->
+    lager:debug("agent status stat ~p with prop ~p", [JObj, Prop]).
+
+-spec handle_queue_member_add(wh_json:object(), wh_proplist()) -> 'ok'.
+handle_queue_member_add(JObj, Prop) ->
+    gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_add', JObj, props:get_value('queue', Prop)}).
+
+-spec handle_queue_member_remove(wh_json:object(), wh_proplist()) -> 'ok'.
+handle_queue_member_remove(JObj, Prop) ->
+    gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_remove', JObj}).
+
+-spec handle_manager_success_notify(wh_json:object(), wh_proplist()) -> 'ok'.
+handle_manager_success_notify(JObj, Prop) ->
+    gen_listener:cast(props:get_value('server', Prop), {'remove_queue_member', wh_json:get_value(<<"Call-ID">>, JObj)}).
+
+-spec handle_manager_fail_notify(wh_json:object(), wh_proplist()) -> 'ok'.
+handle_manager_fail_notify(JObj, Prop) ->
+    gen_listener:cast(props:get_value('server', Prop), {'remove_queue_member', wh_json:get_value(<<"Call-ID">>, JObj)}).
 
 -spec handle_config_change(server_ref(), wh_json:object()) -> 'ok'.
 handle_config_change(Srv, JObj) ->
@@ -251,6 +306,9 @@ next_winner(Srv) -> gen_listener:call(Srv, 'next_winner').
 agents_available(Srv) -> gen_listener:call(Srv, 'agents_available').
 
 pick_winner(Srv, Resps) -> pick_winner(Srv, Resps, strategy(Srv), next_winner(Srv)).
+
+replace_call(Srv, OldCall, NewCall) ->
+    gen_listener:cast(Srv, {'replace_call', OldCall, NewCall}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -366,6 +424,15 @@ handle_call('current_agents', _, #state{strategy='mi'
                                         ,strategy_state=L
                                        }=State) ->
     {'reply', L, State};
+
+handle_call({'queue_position', CallId}, _, #state{current_member_calls=CurrentCalls
+                                                 }=State) ->
+    Call = lists:keyfind(CallId, 2, CurrentCalls),
+
+    {Map, _} = lists:mapfoldr(fun(X, I) -> {{X, I}, I + 1} end, 1, CurrentCalls),
+    {_, Index} = lists:keyfind(Call, 1, Map),
+
+    {'reply', Index, State};
 
 handle_call(_Request, _From, State) ->
     {'reply', 'ok', State}.
@@ -509,6 +576,109 @@ handle_cast({'refresh', QueueJObj}, State) ->
 
 handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
     {'noreply', State};
+
+handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
+                                             ,queue_id=QueueId
+                                            }=State) ->
+    lager:debug("Publishing add of new queue member"),
+
+    Prop = [{<<"Account-ID">>, AccountId}
+            ,{<<"Queue-ID">>, QueueId}
+            ,{<<"JObj">>, JObj}
+            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+
+    wapi_acdc_queue:publish_queue_member_add(Prop),
+    {'noreply', State};
+
+handle_cast({'remove_queue_member', CallId}, #state{account_id=AccountId
+                                                    ,queue_id=QueueId
+                                                   }=State) ->
+    lager:debug("Publishing remove of queue member"),
+
+    Prop = [{<<"Account-ID">>, AccountId}
+            ,{<<"Queue-ID">>, QueueId}
+            ,{<<"Call-ID">>, CallId}
+            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+
+    wapi_acdc_queue:publish_queue_member_remove(Prop),
+    {'noreply', State};
+
+handle_cast({'handle_queue_member_add', JObj, _Queue}, #state{account_id=AccountId
+                                                              ,queue_id=QueueId
+                                                              ,current_member_calls=CurrentCalls
+                                                             }=State) ->
+    lager:debug("Received notification of new queue member"),
+
+    JObj2 = wh_json:get_value(<<"JObj">>, JObj),
+    Position = length(CurrentCalls)+1,
+
+    Call = whapps_call:set_custom_channel_var(<<"Queue-Position">>, Position, whapps_call:from_json(wh_json:get_value(<<"Call">>, JObj2))),
+    CallId = whapps_call:call_id(Call),
+
+    Prop = [{<<"Account-ID">>, AccountId}
+            ,{<<"Queue-ID">>, QueueId}
+            ,{<<"Call-ID">>, CallId}
+            ,{<<"Entered-Position">>, Position}
+            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+
+    wapi_acdc_stats:publish_call_entered_position(Prop),
+    
+    UpdatedMemberCalls = [Call | CurrentCalls],
+
+    AccountId = whapps_call:account_id(Call),
+    QueueId = wh_json:get_value(<<"Queue-ID">>, JObj2),
+
+    wapi_acdc_queue:publish_shared_member_call(AccountId, QueueId, JObj2),
+    lager:debug("put call into shared messaging queue"),
+
+    gen_listener:cast(self(), {'monitor_call', Call}),
+
+    acdc_util:presence_update(AccountId, QueueId, ?PRESENCE_RED_FLASH),
+
+    announce_position(Call, Position),
+    Pid = schedule_position_announcements(Call),
+
+    {'noreply', State#state{current_member_calls=UpdatedMemberCalls
+                            ,pos_announce_pid=Pid
+                           }};
+
+handle_cast({'handle_queue_member_remove', JObj}, #state{account_id=AccountId
+                                                         ,queue_id=QueueId
+                                                         ,current_member_calls=CurrentCalls
+                                                         ,pos_announce_pid=Pid
+                                                        }=State) ->
+    lager:debug("Received notification of queue member being removed"),
+
+    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    Call = lists:keyfind(CallId, 2, CurrentCalls),
+
+    {Map, _} = lists:mapfoldr(fun(X, I) -> {{X, I}, I + 1} end, 1, CurrentCalls),
+    {_, Index} = lists:keyfind(Call, 1, Map),
+
+    Prop = [{<<"Account-ID">>, AccountId}
+            ,{<<"Queue-ID">>, QueueId}
+            ,{<<"Call-ID">>, CallId}
+            ,{<<"Exited-Position">>, Index}
+            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+
+    wapi_acdc_stats:publish_call_exited_position(Prop),
+
+    UpdatedMemberCalls = lists:delete(Call, CurrentCalls),
+
+    cancel_position_announcements(Pid, Call),
+
+    {'noreply', State#state{current_member_calls=UpdatedMemberCalls}};
+
+handle_cast({'replace_call', OldCall, NewCall}, #state{current_member_calls=CurrentCalls}=State) ->
+    OldCallId = whapps_call:call_id(OldCall),
+    OldCall2 = lists:keyfind(OldCallId, 2, CurrentCalls),
+    UpdatedMemberCalls = [NewCall | lists:delete(OldCall2, CurrentCalls)],
+    {'noreply', State#state{current_member_calls=UpdatedMemberCalls}};
+
 handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p", [_Msg]),
     {'noreply', State}.
@@ -756,3 +926,62 @@ update_properties(QueueJObj, State) ->
       enter_when_empty=wh_json:is_true(<<"enter_when_empty">>, QueueJObj, 'true')
       ,moh=wh_json:get_ne_value(<<"moh">>, QueueJObj)
      }.
+
+announce_position(Call, Position) ->
+    AccountDb = whapps_call:account_db(Call),
+
+    Prompt = [{'play', <<$/, AccountDb/binary, $/, "8a8ca1bdd784871de87a229a680a4e85">>}
+              ,{'say', wh_util:to_binary(Position)}
+              ,{'play', <<$/, AccountDb/binary, $/, "2a05296cc7c5715a170fd0cbf570ef04">>}
+             ],
+    whapps_call_command:audio_macro(Prompt, Call).
+
+announce_position_loop(Srv, Call) ->
+    timer:sleep(120000),
+    Position = gen_listener:call(Srv, {'queue_position', whapps_call:call_id(Call)}),
+    announce_position(Call, Position),
+    announce_position_loop(Srv, Call).
+
+schedule_position_announcements(Call) ->
+    spawn(?MODULE, announce_position_loop, [self(), Call]).
+
+cancel_position_announcements(Pid, Call) ->
+    erlang:exit(Pid, 'call_done'),
+    whapps_call_command:flush(Call).
+
+maybe_konami_queue(AccountDb, QueueId, Call) ->
+    case whapps_controller:app_running('konami') of
+        'true' ->
+            maybe_queue_has_metaflows(AccountDb, QueueId, Call);
+        'false' ->
+            'false'
+    end.
+
+maybe_queue_has_metaflows(AccountDb, QueueId, Call) ->
+    {ok, Queue} = couch_mgr:open_cache_doc(AccountDb, QueueId),
+    case wh_json:get_value(<<"metaflows">>, Queue) of
+        undefined ->
+            'false';
+        Metaflows ->
+            CVs = wh_json:set_value(<<"Queue-ID">>, QueueId, wh_json:new()),
+            apply_new_metaflows(whapps_call:call_id(Call), CVs, whapps_call:controller_queue(Call), Metaflows),
+            'true'
+    end.
+
+apply_new_metaflows(CallId, CVs, ControllerQueue, Metaflows) ->
+    Numbers = update_with_cq(update_with_cvs(wh_json:get_value(<<"numbers">>, Metaflows), CVs), ControllerQueue),
+    lists:foreach(fun(FSM) ->
+        konami_code_fsm:update_numbers(FSM, CallId, Numbers)
+    end, konami_event_listener:fsms_for_callid(CallId)).
+
+update_with_cvs(NumbersJObj, CVs) ->
+    Numbers = wh_json:get_keys(NumbersJObj),
+    lists:foldl(fun(Number, Updated) ->
+        wh_json:set_value([Number, <<"data">>, <<"custom_vars">>], CVs, Updated)
+    end, NumbersJObj, Numbers).
+
+update_with_cq(NumbersJObj, ControllerQueue) ->
+    Numbers = wh_json:get_keys(NumbersJObj),
+    lists:foldl(fun(Number, Updated) ->
+        wh_json:set_value([Number, <<"data">>, <<"controller_queue">>], ControllerQueue, Updated)
+    end, NumbersJObj, Numbers).

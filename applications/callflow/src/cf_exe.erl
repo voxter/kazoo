@@ -513,6 +513,9 @@ handle_event(JObj, #state{cf_module_pid=PidRef
                     'true' -> 'ok'
                 end,
             'ignore';
+        {{<<"konami">>, <<"callback_reg">>}, _} ->
+            relay_amqp(JObj, [{'cf_module_pid', get_pid(PidRef)}]),
+            'ignore';
         {{<<"error">>, _}, _} ->
             case wh_json:get_value([<<"Request">>, <<"Call-ID">>], JObj) of
                 CallId -> {'reply', [{'cf_module_pid', get_pid(PidRef)}
