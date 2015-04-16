@@ -14,6 +14,7 @@
 -export([start_fsm/2
          ,event/4
          ,transfer_to/2
+         ,update_numbers/3
         ]).
 
 %% gen_fsm callbacks
@@ -119,6 +120,12 @@ event(FSM, CallId, Event, JObj) ->
 transfer_to(Call, Leg) ->
     gen_fsm:send_all_state_event(whapps_call:kvs_fetch(?MODULE, Call)
                                  ,{'transfer_to', Call, Leg}
+                                ).
+
+update_numbers(FSM, CallId, NewNumbers) ->
+    lager:debug("Trying to update FSM ~p numbers to ~p", [FSM, NewNumbers]),
+    gen_fsm:send_all_state_event(FSM
+                                 ,{'update_numbers', CallId, NewNumbers}
                                 ).
 
 %%%===================================================================
@@ -237,6 +244,12 @@ handle_event(?EVENT(OtherLeg, <<"CHANNEL_DESTROY">>, _Evt)
              ,#state{other_leg=OtherLeg}=State
             ) ->
     {'next_state', StateName, handle_channel_destroy(State, OtherLeg)};
+handle_event({'update_numbers', CallId, NewNumbers}
+             ,StateName
+             ,#state{call_id=CallId
+                    }=State
+            ) ->
+    {'next_state', StateName, State#state{numbers=NewNumbers,digit_timeout=0}};
 handle_event(?EVENT(_UUID, _EventName, _Evt)
              ,StateName
              ,#state{call_id=_CallId

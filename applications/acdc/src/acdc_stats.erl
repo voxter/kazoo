@@ -17,6 +17,8 @@
          ,call_missed/5
          ,call_processed/4
 
+         ,call_id_change/4
+
          ,find_call/1
          ,call_stat_to_json/1
         ]).
@@ -107,6 +109,16 @@ call_processed(AccountId, QueueId, AgentId, CallId) ->
              ]),
     whapps_util:amqp_pool_send(Prop, fun wapi_acdc_stats:publish_call_processed/1).
 
+call_id_change(AccountId, QueueId, OldCallId, NewCallId) ->
+    Prop = props:filter_undefined(
+        [{<<"Account-ID">>, AccountId}
+         ,{<<"Queue-ID">>, QueueId}
+         ,{<<"Old-Call-ID">>, OldCallId}
+         ,{<<"Call-ID">>, NewCallId}
+         | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+        ]),
+    whapps_util:amqp_pool_send(Prop, fun wapi_acdc_stats:publish_call_id_change/1).
+
 %% ETS config
 call_table_id() -> 'acdc_stats_call'.
 call_key_pos() -> #call_stat.id.
@@ -124,6 +136,9 @@ call_table_opts() ->
                         ,{<<"acdc_call_stat">>, <<"abandoned">>}
                         ,{<<"acdc_call_stat">>, <<"handled">>}
                         ,{<<"acdc_call_stat">>, <<"processed">>}
+                        ,{<<"acdc_call_stat">>, <<"entered-position">>}
+                        ,{<<"acdc_call_stat">>, <<"exited-position">>}
+                        ,{<<"acdc_call_stat">>, <<"id-change">>}
                         ,{<<"acdc_call_stat">>, <<"flush">>}
                        ]
                      }
@@ -163,6 +178,9 @@ handle_call_stat(JObj, Props) ->
         <<"abandoned">> -> handle_abandoned_stat(JObj, Props);
         <<"handled">> -> handle_handled_stat(JObj, Props);
         <<"processed">> -> handle_processed_stat(JObj, Props);
+        <<"entered-position">> -> handle_entered_stat(JObj, Props);
+        <<"exited-position">> -> handle_exited_stat(JObj, Props);
+        <<"id-change">> -> handle_id_change(JObj, Props);
         <<"flush">> -> flush_call_stat(JObj, Props);
         _Name ->
             lager:debug("recv unknown call stat type ~s: ~p", [_Name, JObj])
@@ -235,6 +253,23 @@ handle_cast({'create_status', #status_stat{id=_Id, status=_Status}=Stat}, State)
 handle_cast({'update_call', Id, Updates}, State) ->
     lager:debug("updating call stat ~s: ~p", [Id, Updates]),
     ets:update_element(call_table_id(), Id, Updates),
+    {'noreply', State};
+handle_cast({'replace_call_id', QueueId, OldCallId, NewCallId}, State) ->
+    CallTableId = call_table_id(),
+    OldId = call_stat_id(OldCallId, QueueId),
+    NewId = call_stat_id(NewCallId, QueueId),
+
+    lager:debug("Replacing old stat id ~p with ~p", [OldId, NewId]),
+    [Stat] = ets:select(CallTableId, [{#call_stat{id=OldId
+                                                  ,_='_'
+                                                 }
+                                       ,[]
+                                       ,['$_']
+                                      }]),
+    ets:delete(CallTableId, OldId),
+    ets:insert(CallTableId, Stat#call_stat{id=NewId
+                                           ,call_id=NewCallId
+                                          }),
     {'noreply', State};
 handle_cast({'flush_call', Id}, State) ->
     lager:debug("flushing call stat ~s", [Id]),
@@ -402,6 +437,8 @@ query_calls(RespQ, MsgId, Match, _Limit) ->
                                    ,{<<"handled">>, []}
                                    ,{<<"abandoned">>, []}
                                    ,{<<"processed">>, []}
+                                   ,{<<"entered_position">>, []}
+                                   ,{<<"exited_position">>, []}
                                   ]),
 
             QueryResult = lists:foldl(fun query_call_fold/2, Dict, Stats),
@@ -409,6 +446,8 @@ query_calls(RespQ, MsgId, Match, _Limit) ->
                     ,{<<"Handled">>, dict:fetch(<<"handled">>, QueryResult)}
                     ,{<<"Abandoned">>, dict:fetch(<<"abandoned">>, QueryResult)}
                     ,{<<"Processed">>, dict:fetch(<<"processed">>, QueryResult)}
+                    ,{<<"Entered-Position">>, dict:fetch(<<"entered_position">>, QueryResult)}
+                    ,{<<"Exited-Position">>, dict:fetch(<<"exited_position">>, QueryResult)}
                     ,{<<"Query-Time">>, wh_util:current_tstamp()}
                     ,{<<"Msg-ID">>, MsgId}
                     | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
@@ -534,6 +573,8 @@ call_stat_to_doc(#call_stat{id=Id
                             ,abandoned_timestamp=AbandonedT
                             ,handled_timestamp=HandledT
                             ,processed_timestamp=ProcessedT
+                            ,entered_position=EnteredPos
+                            ,exited_position=ExitedPos
                             ,abandoned_reason=AbandonedR
                             ,misses=Misses
                             ,status=Status
@@ -551,6 +592,8 @@ call_stat_to_doc(#call_stat{id=Id
            ,{<<"abandoned_timestamp">>, AbandonedT}
            ,{<<"handled_timestamp">>, HandledT}
            ,{<<"processed_timestamp">>, ProcessedT}
+           ,{<<"entered_position">>, EnteredPos}
+           ,{<<"exited_position">>, ExitedPos}
            ,{<<"abandoned_reason">>, AbandonedR}
            ,{<<"misses">>, misses_to_docs(Misses)}
            ,{<<"status">>, Status}
@@ -574,6 +617,8 @@ call_stat_to_json(#call_stat{id=Id
                              ,abandoned_timestamp=AbandonedT
                              ,handled_timestamp=HandledT
                              ,processed_timestamp=ProcessedT
+                             ,entered_position=EnteredPos
+                             ,exited_position=ExitedPos
                              ,abandoned_reason=AbandonedR
                              ,misses=Misses
                              ,status=Status
@@ -591,6 +636,8 @@ call_stat_to_json(#call_stat{id=Id
          ,{<<"Abandoned-Timestamp">>, AbandonedT}
          ,{<<"Handled-Timestamp">>, HandledT}
          ,{<<"Processed-Timestamp">>, ProcessedT}
+         ,{<<"Entered-Position">>, EnteredPos}
+         ,{<<"Exited-Position">>, ExitedPos}
          ,{<<"Abandoned-Reason">>, AbandonedR}
          ,{<<"Misses">>, misses_to_docs(Misses)}
          ,{<<"Status">>, Status}
@@ -709,6 +756,36 @@ handle_processed_stat(JObj, Props) ->
                  ,{#call_stat.status, <<"processed">>}
                 ]),
     update_call_stat(Id, Updates, Props).
+
+-spec handle_entered_stat(wh_json:object(), wh_proplist()) -> 'ok'.
+handle_entered_stat(JObj, Props) ->
+    'true' = wapi_acdc_stats:call_entered_position_v(JObj),
+
+    Id = call_stat_id(JObj),
+    Updates = props:filter_undefined([{#call_stat.entered_position, wh_json:get_value(<<"Entered-Position">>, JObj)}]),
+    update_call_stat(Id, Updates, Props).
+
+-spec handle_exited_stat(wh_json:object(), wh_proplist()) -> 'ok'.
+handle_exited_stat(JObj, Props) ->
+    'true' = wapi_acdc_stats:call_exited_position_v(JObj),
+
+    Id = call_stat_id(JObj),
+    Updates = props:filter_undefined([{#call_stat.exited_position, wh_json:get_value(<<"Exited-Position">>, JObj)}]),
+    update_call_stat(Id, Updates, Props).
+
+-spec handle_id_change(wh_json:object(), wh_proplist()) -> 'ok'.
+handle_id_change(JObj, Props) ->
+    'true' = wapi_acdc_stats:call_id_change_v(JObj),
+
+    lager:debug("Trying id change"),
+
+    gen_listener:cast(props:get_value('server', Props)
+                      ,{'replace_call_id'
+                        ,wh_json:get_value(<<"Queue-ID">>, JObj)
+                        ,wh_json:get_value(<<"Old-Call-ID">>, JObj)
+                        ,wh_json:get_value(<<"Call-ID">>, JObj)
+                       }
+                     ).
 
 -spec flush_call_stat(wh_json:object(), wh_proplist()) -> 'ok'.
 flush_call_stat(JObj, Props) ->
