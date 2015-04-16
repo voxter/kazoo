@@ -671,8 +671,8 @@ handle_event({'refresh', QueueJObj}, StateName, State) ->
 handle_event({'replace_call', Call}, StateName, #state{connection_timer_ref=ConnRef
                                                        ,agent_ring_timer_ref=AgentRef
                                                       }=State) ->
-    gen_fsm:cancel_timer(ConnRef),
-    gen_fsm:cancel_timer(AgentRef),
+    maybe_stop_timer(ConnRef),
+    maybe_stop_timer(AgentRef),
     lager:debug("Cancelled timeout timers - agent has answered, ignoring lack of bridge to callback for now"),
     lager:debug("Replacing call in queue FSM"),
     {'next_state', StateName, State#state{member_call=Call

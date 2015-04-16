@@ -18,7 +18,6 @@
          ,agent_timeout/1
          ,redial_member/7
          ,bridge_to_member/6
-         ,callback_announce/2
          ,replace_call/2
          ,monitor_call/4
          ,channel_hungup/2
@@ -239,10 +238,6 @@ redial_member(Srv, Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number) ->
                       ) -> 'ok'.
 bridge_to_member(Srv, Call, WinJObj, EPs, CDRUrl, RecordingUrl) ->
     gen_listener:cast(Srv, {'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}).
-
--spec callback_announce(pid(), whapps_call:call()) -> 'ok'.
-callback_announce(Srv, AgentCall) ->
-    gen_listener:cast(Srv, {'callback_announce', AgentCall}).
 
 replace_call(Srv, Call) ->
     gen_listener:cast(Srv, {'replace_call', Call}).
@@ -749,10 +744,6 @@ handle_cast({'member_connect_resp', ReqJObj}, #state{agent_id=AgentId
              ,'hibernate'}
     end;
 
-handle_cast({'callback_announce', AgentCall}, State) ->
-    whapps_call_command:tts(<<"Now calling back to client">>, AgentCall),
-    {'noreply', State, 'hibernate'};
-
 handle_cast({'replace_call', NewCall}, #state{call=OldCall
                                               ,acct_id=AccountId
                                               ,acdc_queue_id=QueueId
@@ -1155,6 +1146,7 @@ maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Number) ->
                                    ,{<<"Request-ID">>, ReqId}
                                    ,{<<"Retain-CID">>, <<"true">>}
                                    ,{<<"Agent-ID">>, AgentId}
+                                   ,{<<"Callback-Number">>, Number}
                                   ]),
 
     {ACallIds, Endpoints} = lists:foldl(fun(EP, {Cs, Es}) ->
@@ -1169,11 +1161,10 @@ maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Number) ->
                                                   ]}
                                         end, {[], []}, EPs),
 
-    Prop = props:filter_undefined([{<<"Application-Name">>, <<"transfer">>}
+    Prop = props:filter_undefined([{<<"Application-Name">>, <<"park">>}
                                    ,{<<"Resource-Type">>, <<"originate">>}
                                    ,{<<"Account-ID">>, AcctId}
                                    ,{<<"Endpoints">>, Endpoints}
-                                   ,{<<"Application-Data">>, wh_json:from_list([{<<"Route">>, Number}])}
                                    ,{<<"Msg-ID">>, wh_util:rand_hex_binary(6)}
                                    ,{<<"Timeout">>, Timeout}
                                    ,{<<"Ignore-Early-Media">>, <<"true">>}
@@ -1188,7 +1179,9 @@ maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Number) ->
                                                                         ,<<"Retain-CID">>
                                                                         ,<<"Authorizing-ID">>
                                                                         ,<<"Authorizing-Type">>
+                                                                        ,<<"Callback-Number">>
                                                                        ]}
+                                   ,{<<"Originate-Immediate">>, <<"true">>}
                                    | wh_api:default_headers(MyQ, ?APP_NAME, ?APP_VERSION)
                                   ]),
 

@@ -36,7 +36,7 @@
 
          ,delivery/1
 
-         ,enter_callback_mode/2
+         ,maybe_enter_callback_mode/3
          ,callback_update/2
         ]).
 
@@ -191,8 +191,8 @@ send_sync_resp(Srv, Strategy, StrategyState, ReqJObj) ->
 delivery(Srv) ->
     gen_listener:call(Srv, 'delivery').
 
-enter_callback_mode(Srv, Number) ->
-    gen_listener:cast(Srv, {'enter_callback_mode', Number}).
+maybe_enter_callback_mode(Srv, CallId, Number) ->
+    gen_listener:cast(Srv, {'maybe_enter_callback_mode', CallId, Number}).
 
 callback_update(Srv, CallJObj) ->
     gen_listener:cast(Srv, {'callback_update', CallJObj}).
@@ -482,12 +482,20 @@ handle_cast({'send_sync_resp', Strategy, StrategyState, ReqJObj}, #state{my_id=I
     {'noreply', State};
 handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
     {'noreply', State};
-handle_cast({'enter_callback_mode', Number}, #state{awaiting_callback=_AC}=State) ->
-    {'noreply', State#state{awaiting_callback=Number}};
+handle_cast({'maybe_enter_callback_mode', _, _}, #state{call='undefined'
+													   }=State) ->
+	{'noreply', State};
+handle_cast({'maybe_enter_callback_mode', CallId, Number}, #state{call=Call
+													      ,awaiting_callback=_AC
+													     }=State) ->
+	case whapps_call:call_id(Call) of
+		CallId ->
+			lager:debug("Callback activated for number ~p", [Number]),
+		    {'noreply', State#state{awaiting_callback=Number}};
+		_ ->
+			{'noreply', State}
+	end;
 handle_cast({'callback_update', CallJObj}, #state{call=Call
-                                                  ,my_id=MyId
-                                                  ,my_q=MyQ
-                                                  ,member_call_queue=MemberCallQ
                                                   ,fsm_pid=FSM
                                                   ,mgr_pid=MgrPid
                                                  }=State) ->
