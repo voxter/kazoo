@@ -46,6 +46,7 @@
          ,delete/2, delete/3
          ,delete_account/2
         ]).
+-export([maybe_add_queue_to_agent/2, maybe_rm_queue_from_agent/2]).
 
 -include("../crossbar.hrl").
 

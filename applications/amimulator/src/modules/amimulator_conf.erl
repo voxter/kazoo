@@ -1,18 +1,26 @@
 -module(amimulator_conf).
 
--export([init/1, account_conferences/1, handle_event/1]).
+-export([init/1, bindings/1, responders/1, handle_event/1]).
 
 -include("../amimulator.hrl").
+
+%%
+%% Public functions
+%%
 
 init(_AccountId) ->
     ok.
 
-account_conferences(AccountId) ->
-    AccountDb = wh_util:format_account_id(AccountId, encoded),
-    {ok, Conferences} = couch_mgr:get_results(AccountDb, <<"conferences/crossbar_listing">>),
-    lists:foldl(fun(Conference, Ids) ->
-        [wh_json:get_value(<<"id">>, Conference) | Ids]
-    end, [], Conferences).
+bindings(Props) ->
+    AccountId = props:get_value("AccountId", Props),
+    [
+        {conference, [
+            {restrict_to, conference_bindings(account_conferences(AccountId), [])}
+        ]}
+    ].
+
+responders(_Props) ->
+    [{<<"conference">>, <<"participants_event">>}].
 
 handle_event(EventJObj) ->
     {_EventType, EventName} = wh_util:get_event_type(EventJObj),
@@ -24,7 +32,7 @@ handle_event(EventJObj) ->
 
 handle_specific_event(<<"participants_event">>, EventJObj) ->
     Payload = participants_cache_change(EventJObj),
-    amimulator_amqp:publish_amqp_event({publish, Payload});
+    ami_ev:publish_amqp_event({publish, Payload});
 handle_specific_event(_, EventJObj) ->
     lager:debug("unhandled event ~p", [EventJObj]).
 
@@ -32,17 +40,25 @@ handle_specific_event(_, EventJObj) ->
 %% Private functions
 %%
 
+%% Find all conferences belonging to an account
+account_conferences(AccountId) ->
+    AccountDb = wh_util:format_account_id(AccountId, encoded),
+    {ok, Conferences} = couch_mgr:get_results(AccountDb, <<"conferences/crossbar_listing">>),
+    lists:foldl(fun(Conference, Ids) ->
+        [wh_json:get_value(<<"id">>, Conference) | Ids]
+    end, [], Conferences).
+
+conference_bindings([], Bindings) ->
+    Bindings;
+conference_bindings([ConferenceId|Ids], Bindings) ->
+    conference_bindings(Ids, [{conference, ConferenceId} | Bindings]).
+
 participants_cache_change(EventJObj) ->
     AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
     AccountDb = wh_util:format_account_id(AccountId, encoded),
     ConferenceId = wh_json:get_value(<<"Conference-ID">>, EventJObj),
     {ok, ConferenceNumber} = amimulator_util:find_id_number(ConferenceId, AccountDb),
-    CachedParticipants = case amimulator_store:get(<<"conf-", ConferenceId/binary>>) of
-        undefined ->
-            [];
-        Something ->
-            Something
-    end,
+    CachedParticipants = ami_sm:conf_parts(ConferenceId),
 
     Current = wh_json:get_value(<<"Participants">>, EventJObj),
     Removed = removed(removed_participants(CachedParticipants, Current), ConferenceNumber),
@@ -69,10 +85,10 @@ update_cache(Removed, Added, Cached, ConferenceId) ->
             {<<"CallerIDnum">>, proplists:get_value(<<"CallerIDnum">>, Add)},
             {<<"Timestamp">>, MegaSecs * 1000000 + Secs}
         ],
-        amimulator_store:put(<<"conf-cache-", CallId/binary>>, Cache),
+        ami_sm:cache_conf_part(CallId, Cache),
         [CallId | Acc]
     end, Done1, Added),
-    amimulator_store:put(<<"conf-", ConferenceId/binary>>, Done2).
+    ami_sm:update_conf_parts(ConferenceId, Done2).
 
 removed_participants(Cached, Current) ->
     removed_participants(Cached, Current, []).
@@ -90,8 +106,8 @@ removed_participants([First|Others], Current, Removed) ->
 removed(CallIds, ConferenceNumber) when is_list(CallIds) ->
     [removed(CallId, ConferenceNumber) || CallId <- CallIds];
 
-removed(CallId, _ConferenceNumber) ->
-    _Call = amimulator_store:get(<<"call-", CallId/binary>>),
+removed(_CallId, _ConferenceNumber) ->
+    %_Call = amimulator_store:get(<<"call-", CallId/binary>>),
 
     %EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
     %CallerId = props:get_value(<<"aleg_cid">>, Call),
@@ -132,7 +148,7 @@ added(CallIds, ConferenceNumber) when is_list(CallIds) ->
     [added(CallId, ConferenceNumber) || CallId <- CallIds];
 
 added(CallId, ConferenceNumber) ->
-    Call = amimulator_store:get(<<"call-", CallId/binary>>),
+    Call = ami_sm:call(CallId),
 
     _Exten = props:get_value(<<"aleg_exten">>, Call),
     EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),

@@ -1,14 +1,23 @@
 -module(amimulator_call).
 
--export([init/1, handle_event/1, handle_event/2]).
--export([store_put_fun/3]).
+-export([init/1, bindings/1, responders/1, handle_event/1, handle_event/2]).
 
 -include("../amimulator.hrl").
 
 -define(STATE_UP, 6).
 
+%%
+%% Public functions
+%%
+
 init(AccountId) ->
     wh_hooks:register(AccountId).
+
+bindings(_Props) ->
+    [].
+
+responders(_Props) ->
+    [].
 
 handle_event(EventJObj) ->
     handle_event(EventJObj, []).
@@ -21,10 +30,42 @@ handle_specific_event(<<"CHANNEL_CREATE">>=EventName, EventJObj) ->
     new_channel(EventJObj),
     new_state(EventName, EventJObj),
     extension_status(EventJObj),
-    maybe_dial_event(EventJObj);
+    maybe_dial_event(EventJObj),
+    maybe_change_agent_status(EventJObj);
 
 handle_specific_event(<<"CHANNEL_ANSWER">>, EventJObj) ->
-    busy_state(EventJObj);
+    busy_state(EventJObj),
+    maybe_change_agent_status(EventJObj);
+
+handle_specific_event(<<"CHANNEL_BRIDGE">>, EventJObj) ->
+    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
+    OtherCallId = wh_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj),
+
+    Call = ami_sm:call(CallId),
+    WhappsCall = props:get_value(<<"call">>, Call),
+    OtherCall = ami_sm:call(OtherCallId),
+
+    Updaters = [
+        fun(Call2) -> props:set_value(<<"call">>,
+            whapps_call:set_other_leg_call_id(OtherCallId, WhappsCall), Call2) end,
+        fun(Call2) -> amimulator_util:bleg_ami_channel(Call2, undefined,
+            [{OtherCallId, OtherCall}, {CallId, Call}]) end
+    ],
+    Call2 = lists:foldl(fun(F, Call3) -> F(Call3) end, Call, Updaters),
+
+    ami_sm:update_call(CallId, Call2),
+
+    Channel1 = props:get_value(<<"aleg_ami_channel">>, Call2),
+    Channel2 = props:get_value(<<"bleg_ami_channel">>, Call2),
+
+    Payload = [
+        {<<"Event">>, <<"Link">>},
+        {<<"Channel1">>, Channel1},
+        {<<"Channel2">>, Channel2},
+        {<<"Uniqueid1">>, CallId},
+        {<<"Uniqueid2">>, OtherCallId}
+    ],
+    ami_ev:publish_amqp_event({publish, Payload});
     
 handle_specific_event(<<"CHANNEL_DESTROY">>, EventJObj) ->
     destroy_channel(EventJObj);
@@ -45,7 +86,7 @@ handle_specific_event(<<"DTMF">>, EventJObj) ->
     ],
     % TODO: Also need to do this with begin/end reversed
     
-    amimulator_amqp:publish_amqp_event({publish, Payload});
+    ami_ev:publish_amqp_event({publish, Payload});
     
 handle_specific_event(EventName, _EventJObj) ->
     lager:debug("AMI: unhandled call event ~p", [EventName]).
@@ -78,8 +119,7 @@ new_inbound_channel(EventJObj) ->
 
     EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
 
-    amimulator_store:put(<<"whapps_call-", CallId/binary>>, WhappsCall),
-    amimulator_store:put(<<"call-", CallId/binary>>, Call),
+    ami_sm:new_call(CallId, Call),
 
     Payload = [
         {<<"Event">>, <<"Newchannel">>},
@@ -94,7 +134,7 @@ new_inbound_channel(EventJObj) ->
         {<<"Context">>, <<"from-internal">>},
         {<<"Uniqueid">>, CallId}
     ],
-    amimulator_amqp:publish_amqp_event({publish, Payload}).
+    ami_ev:publish_amqp_event({publish, Payload}).
 
 new_outbound_channel(EventJObj) ->
     Call = amimulator_util:create_call(EventJObj),
@@ -104,8 +144,7 @@ new_outbound_channel(EventJObj) ->
     SourceCID = props:get_value(<<"aleg_cid">>, Call),
     EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
 
-    amimulator_store:put(<<"whapps_call-", CallId/binary>>, WhappsCall),
-    amimulator_store:put(<<"call-", CallId/binary>>, Call),
+    ami_sm:new_call(CallId, Call),
     case EndpointName of
         undefined ->
             lager:debug("Call ~p", [Call]),
@@ -127,7 +166,7 @@ new_outbound_channel(EventJObj) ->
         {<<"Context">>, <<"from-internal">>},
         {<<"Uniqueid">>, CallId}
     ],
-    amimulator_amqp:publish_amqp_event({publish, Payload}).
+    ami_ev:publish_amqp_event({publish, Payload}).
 
 new_state(<<"CHANNEL_CREATE">>, EventJObj) ->
     case wh_json:get_value(<<"Call-Direction">>, EventJObj) of
@@ -138,9 +177,9 @@ new_state(<<"CHANNEL_CREATE">>, EventJObj) ->
     end.
 
 ring_state(EventJObj) ->
-    Call = amimulator_util:create_call(EventJObj),
+    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
+    Call = ami_sm:call(CallId),
     WhappsCall = props:get_value(<<"call">>, Call),
-    CallId = whapps_call:call_id(WhappsCall),
 
     EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
  
@@ -151,7 +190,7 @@ ring_state(EventJObj) ->
         SourceExten ->
             <<"Voicemail">>;
         _ ->
-            maybe_internal_cid(amimulator_util:whapps_call(EventJObj),
+            maybe_internal_cid(WhappsCall,
                 hd(binary:split(wh_json:get_value(<<"To">>, EventJObj), <<"@">>)))
     end,
 
@@ -167,7 +206,7 @@ ring_state(EventJObj) ->
         {<<"ConnectedLineName">>, <<"">>},
         {<<"Uniqueid">>, CallId}
     ],
-    amimulator_amqp:publish_amqp_event({publish, Payload}).
+    ami_ev:publish_amqp_event({publish, Payload}).
 
 maybe_internal_cid(Call, Number) ->
     case user_for_number(wnm_util:to_e164(Number), whapps_call:account_db(Call)) of
@@ -207,14 +246,13 @@ maybe_user_in_flow(Flow) ->
     end.
 
 ringing_state(EventJObj) ->
-    Call = amimulator_util:create_call(EventJObj),
-    WhappsCall = props:get_value(<<"call">>, Call),
-    CallId = whapps_call:call_id(WhappsCall),
+    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
+    Call = ami_sm:call(CallId),
 
     SourceCID = props:get_value(<<"aleg_cid">>, Call),
     EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
 
-    OtherCall = amimulator_util:get_call(wh_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj)),
+    OtherCall = ami_sm:call(wh_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj)),
 
     DestCID = case wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], EventJObj) of
         undefined ->
@@ -228,24 +266,28 @@ ringing_state(EventJObj) ->
             <<"Queue ", Number/binary, " Call">>
     end,
 
-    Payload = [
-        {<<"Event">>, <<"Newstate">>},
-        {<<"Privilege">>, <<"call,all">>},
-        {<<"Channel">>, EndpointName},
-        {<<"ChannelState">>, 5},
-        {<<"ChannelStateDesc">>, <<"Ringing">>},
-        {<<"CallerIDNum">>, SourceCID},
-        {<<"CallerIDName">>, SourceCID},
-        {<<"ConnectedLineNum">>, DestCID},
-        {<<"ConnectedLineName">>, DestCID},
-        {<<"Uniqueid">>, CallId}
-    ],
-    amimulator_amqp:publish_amqp_event({publish, Payload}).
+    case ami_sm:maybe_ringing(EndpointName, CallId) of
+        true ->
+            Payload = [
+                {<<"Event">>, <<"Newstate">>},
+                {<<"Privilege">>, <<"call,all">>},
+                {<<"Channel">>, EndpointName},
+                {<<"ChannelState">>, 5},
+                {<<"ChannelStateDesc">>, <<"Ringing">>},
+                {<<"CallerIDNum">>, SourceCID},
+                {<<"CallerIDName">>, SourceCID},
+                {<<"ConnectedLineNum">>, DestCID},
+                {<<"ConnectedLineName">>, DestCID},
+                {<<"Uniqueid">>, CallId}
+            ],
+            ami_ev:publish_amqp_event({publish, Payload});
+        false ->
+            ok
+    end.
 
 busy_state(EventJObj) ->
-    Call = amimulator_util:create_call(EventJObj),
-    WhappsCall = props:get_value(<<"call">>, Call),
-    CallId = whapps_call:call_id(WhappsCall),
+    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
+    Call = ami_sm:call(CallId),
 
     SourceCID = props:get_value(<<"aleg_cid">>, Call),
     EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
@@ -268,9 +310,6 @@ busy_state(EventJObj) ->
             <<"Queue ", Number/binary, " Call">>
     end,
 
-    StoreKey = <<"channel-", EndpointName/binary>>,
-    amimulator_store:put_fun(StoreKey, CallId, fun store_put_fun/3),
-
     Payload = [
         {<<"Event">>, <<"Newstate">>},
         {<<"Privilege">>, <<"call,all">>},
@@ -283,15 +322,7 @@ busy_state(EventJObj) ->
         {<<"ConnectedLineName">>, DestCID},
         {<<"Uniqueid">>, CallId}
     ],
-    amimulator_amqp:publish_amqp_event({publish, Payload}).
-
-store_put_fun(Key, Value, Store) ->
-    case proplists:get_value(Key, Store) of
-        undefined ->
-            [{Key, [Value]}] ++ proplists:delete(Key, Store);
-        CallIds ->
-            [{Key, [Value | CallIds]}] ++ proplists:delete(Key, Store)
-    end.
+    ami_ev:publish_amqp_event({publish, Payload}).
 
 extension_status(EventJObj) ->
     case wh_json:get_value(<<"Call-Direction">>, EventJObj) of
@@ -302,8 +333,10 @@ extension_status(EventJObj) ->
     end.
 
 in_use_status(EventJObj) ->
-    Call = amimulator_util:whapps_call(EventJObj),
-    SourceExten = amimulator_util:maybe_get_exten(Call),
+    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
+    Call = ami_sm:call(CallId),
+
+    SourceExten = props:get_value(<<"aleg_exten">>, Call),
     Payload = [
         {<<"Event">>, <<"ExtensionStatus">>},
         {<<"Privilege">>, <<"call,all">>},
@@ -312,11 +345,13 @@ in_use_status(EventJObj) ->
         {<<"Hint">>, <<"SIP/", SourceExten/binary, ",CustomPresence:", SourceExten/binary>>},
         {<<"Status">>, 1}
     ],
-    amimulator_amqp:publish_amqp_event({publish, Payload}).
+    ami_ev:publish_amqp_event({publish, Payload}).
 
 ringing_status(EventJObj) ->
-    Call = amimulator_util:whapps_call(EventJObj),
-    SourceExten = amimulator_util:maybe_get_exten(Call),
+    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
+    Call = ami_sm:call(CallId),
+
+    SourceExten = props:get_value(<<"aleg_exten">>, Call),
     Payload = [
         {<<"Event">>, <<"ExtensionStatus">>},
         {<<"Privilege">>, <<"call,all">>},
@@ -325,7 +360,7 @@ ringing_status(EventJObj) ->
         {<<"Hint">>, <<"SIP/", SourceExten/binary, ",CustomPresence:", SourceExten/binary>>},
         {<<"Status">>, 8}
     ],
-    amimulator_amqp:publish_amqp_event({publish, Payload}).
+    ami_ev:publish_amqp_event({publish, Payload}).
 
 maybe_dial_event(EventJObj) ->
     case wh_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj) of
@@ -336,9 +371,8 @@ maybe_dial_event(EventJObj) ->
     end.
 
 dial_event(EventJObj) ->
-    Call = amimulator_util:create_call(EventJObj),
-    WhappsCall = props:get_value(<<"call">>, Call),
-    CallId = whapps_call:call_id(WhappsCall),
+    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
+    Call = ami_sm:call(CallId),
 
     DestExten = props:get_value(<<"bleg_exten">>, Call),
     SourceExten = props:get_value(<<"aleg_exten">>, Call),
@@ -355,10 +389,27 @@ dial_event(EventJObj) ->
     EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
 
     OtherCallId = wh_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj),
-    OtherCall = amimulator_util:get_call(OtherCallId),
+    OtherCall = ami_sm:call(OtherCallId),
 
-    OtherCID = props:get_value(<<"aleg_cid">>, OtherCall),
-    OtherEndpointName = props:get_value(<<"aleg_ami_channel">>, OtherCall),
+    {OtherCID, OtherEndpointName} = case wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], EventJObj) of
+        undefined ->
+            case wh_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj) of
+                CallId ->
+                    {props:get_value(<<"bleg_cid">>, Call), props:get_value(<<"bleg_ami_channel">>, Call)};
+                undefined ->
+                    {props:get_value(<<"bleg_cid">>, Call), props:get_value(<<"bleg_ami_channel">>, Call)};
+                OtherCallId ->
+                    OtherCall = ami_sm:call(OtherCallId),
+                    {props:get_value(<<"aleg_cid">>, OtherCall), props:get_value(<<"aleg_ami_channel">>, OtherCall)}
+            end;
+        QueueId ->
+            AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], EventJObj),
+            {ok, Number} = amimulator_util:find_id_number(
+                QueueId,
+                wh_util:format_account_id(AccountId, encoded)
+            ),
+            {<<"Queue ", Number/binary, " Call">>, <<>>}
+    end,
 
     %% We need to publish only if the exten matches originally dialed one
     OtherDialed = props:get_value(<<"bleg_exten">>, OtherCall),
@@ -380,14 +431,12 @@ dial_event(EventJObj) ->
                 {<<"DestUniqueid">>, CallId},
                 {<<"Dialstring">>, CID}
             ],
-            amimulator_amqp:publish_amqp_event({publish, Payload})
+            ami_ev:publish_amqp_event({publish, Payload})
     end.
 
 destroy_channel(EventJObj) ->
-    lager:debug("got here"),
-    Call = amimulator_util:create_call(EventJObj),
-    WhappsCall = props:get_value(<<"call">>, Call),
-    CallId = whapps_call:call_id(WhappsCall),
+    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
+    Call = ami_sm:call(CallId),
 
     SourceCID = props:get_value(<<"aleg_cid">>, Call),
     EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
@@ -411,13 +460,8 @@ destroy_channel(EventJObj) ->
             {<<"0">>, <<"Not Defined">>}
     end,
 
-    amimulator_store:delete(<<"whapps_call-", CallId/binary>>),
-    amimulator_store:delete(<<"call-", CallId/binary>>),
-    StoreKey = <<"channel-", EndpointName/binary>>,
-    amimulator_store:put_fun(StoreKey, CallId, fun store_del_fun/3),
-
-    case amimulator_store:get(StoreKey) of
-        undefined ->
+    case ami_sm:maybe_ringing(EndpointName, CallId) of
+        true ->
             Payload = [[
                 {<<"Event">>, <<"Hangup">>},
                 {<<"Privilege">>, <<"call,all">>},
@@ -431,26 +475,17 @@ destroy_channel(EventJObj) ->
                 {<<"Cause-txt">>, CauseText}
             ]] ++ maybe_leave_conference(CallId),
 
-            amimulator_amqp:publish_amqp_event({publish, Payload});
-        CallIds ->
-            lager:debug("still have callids ~p", [CallIds]),
-            ok
-    end.
+            maybe_change_agent_status(EventJObj),
 
-store_del_fun(Key, Value, Store) ->
-    AnsweredCallIds = proplists:get_value(Key, Store),
-    case AnsweredCallIds of
-        [Value] ->
-            proplists:delete(Key, Store);
-        %% undefined is set if no call is ever answered
-        undefined ->
-            Store;
-        _ ->
-            [{Key, lists:delete(Value, AnsweredCallIds)}] ++ proplists:delete(Key, Store)
-    end.
+            ami_ev:publish_amqp_event({publish, Payload});
+        false ->
+            ok
+    end,
+
+    ami_sm:delete_call(CallId).
 
 maybe_leave_conference(CallId) ->
-    case amimulator_store:get(<<"conf-cache-", CallId/binary>>) of
+    case ami_sm:conf_cache(CallId) of
         undefined ->
             [];
         Cache ->
@@ -473,7 +508,70 @@ maybe_leave_conference(CallId) ->
             ]]
     end.
 
+maybe_change_agent_status(EventJObj) ->
+    Status = case wh_util:get_event_type(EventJObj) of
+        {_, <<"CHANNEL_CREATE">>} ->
+            6;
+        {_, <<"CHANNEL_ANSWER">>} ->
+            2;
+        {_, <<"CHANNEL_DESTROY">>} ->
+            1
+    end,
 
+    case wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Authorizing-ID">>], EventJObj) of
+        undefined ->
+            ok;
+        AuthorizingId ->
+            AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], EventJObj),
+            AccountDb = wh_util:format_account_id(AccountId, encoded),
+
+            case cf_endpoint:get(AuthorizingId, AccountDb) of
+                {error, _E} ->
+                    ok;
+                {ok, Endpoint} ->
+                    case wh_json:get_value(<<"owner_id">>, Endpoint) of
+                        undefined ->
+                            ok;
+                        OwnerId ->
+                            {ok, UserDoc} = couch_mgr:open_doc(AccountDb, OwnerId),
+                            case wh_json:get_value(<<"queues">>, UserDoc) of
+                                undefined ->
+                                    ok;
+                                [] ->
+                                    ok;
+                                Queues ->
+                                    change_agent_status(UserDoc, Queues, EventJObj, Status)
+                            end
+                    end
+            end
+    end.
+
+change_agent_status(UserDoc, Queues, EventJObj, Status) ->
+    AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], EventJObj),
+    AccountDb = wh_util:format_account_id(AccountId, encoded),
+    Username = wh_json:get_value(<<"username">>, UserDoc),
+    FirstName = wh_json:get_value(<<"first_name">>, UserDoc),
+    LastName = wh_json:get_value(<<"last_name">>, UserDoc),
+
+    Payload = lists:foldl(fun(QueueId, Acc) ->
+        case amimulator_util:find_id_number(QueueId, AccountDb) of
+            {error, _E} ->
+                Acc;
+            {ok, QueueNumber} ->
+                [[
+                    {<<"Event">>, <<"QueueMemberStatus">>},
+                    {<<"Queue">>, QueueNumber},
+                    {<<"Location">>, <<"Local/", Username/binary, "@from-queue/n">>},
+                    {<<"MemberName">>, <<FirstName/binary, " ", LastName/binary>>},
+                    {<<"Membership">>, <<"dynamic">>},
+                    {<<"Penalty">>, 0},
+                    %{<<"LastCall">>, LastCall},
+                    {<<"Status">>, Status},
+                    {<<"Paused">>, 0}
+                ] | Acc]
+        end end, [], Queues),
+
+    ami_ev:publish_amqp_event({publish, Payload}).
 
 
 
