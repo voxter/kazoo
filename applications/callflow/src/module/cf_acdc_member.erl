@@ -48,7 +48,12 @@ handle(Data, Call) ->
     MaxWait = max_wait(wh_json:get_integer_value(<<"connection_timeout">>, QueueJObj, 3600)),
     MaxQueueSize = max_queue_size(wh_json:get_integer_value(<<"max_queue_size">>, QueueJObj, 0)),
 
-    Call1 = whapps_call:kvs_store('caller_exit_key', wh_json:get_value(<<"caller_exit_key">>, QueueJObj, <<"#">>), Call),
+    Call1 = case wh_json:get_value(<<"metaflows">>, QueueJObj) of
+        'undefined' ->
+            whapps_call:kvs_store('caller_exit_key', wh_json:get_value(<<"caller_exit_key">>, QueueJObj, <<"#">>), Call);
+        _Metaflows ->
+            Call
+    end,
 
     CurrQueueSize = wapi_acdc_queue:queue_size(whapps_call:account_id(Call1), QueueId),
 
@@ -106,6 +111,9 @@ end_member_call(Call) ->
                       ,wh_now(), wh_json:object()
                       ,{ne_binary(), ne_binary()}
                      ) -> 'ok'.
+process_message(#member_call{call=Call}, _, _Start, _Wait, _JObj, {<<"konami">>,<<"callback_reg">>}) ->
+    lager:debug("a callback was requested. Terminating callflow"),
+    cf_exe:control_usurped(Call);
 process_message(#member_call{call=Call}, _, Start, _Wait, _JObj, {<<"call_event">>,<<"CHANNEL_BRIDGE">>}) ->
     lager:info("member was bridged to agent, yay! took ~b s", [wh_util:elapsed_s(Start)]),
     cf_exe:control_usurped(Call);

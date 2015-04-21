@@ -15,6 +15,11 @@
          ,call_handled/1, call_handled_v/1
          ,call_processed/1, call_processed_v/1
 
+         ,call_entered_position/1, call_entered_position_v/1
+         ,call_exited_position/1, call_exited_position_v/1
+
+         ,call_id_change/1, call_id_change_v/1
+
          ,call_flush/1, call_flush_v/1
 
          ,current_calls_req/1, current_calls_req_v/1
@@ -46,6 +51,11 @@
          ,publish_call_abandoned/1, publish_call_abandoned/2
          ,publish_call_handled/1, publish_call_handled/2
          ,publish_call_processed/1, publish_call_processed/2
+
+         ,publish_call_entered_position/1, publish_call_entered_position/2
+         ,publish_call_exited_position/1, publish_call_exited_position/2
+
+         ,publish_call_id_change/1, publish_call_id_change/2
 
          ,publish_call_flush/1, publish_call_flush/2
 
@@ -96,6 +106,18 @@
 -define(PROCESS_HEADERS, [<<"Agent-ID">>, <<"Processed-Timestamp">>]).
 -define(PROCESS_VALUES, ?CALL_REQ_VALUES(<<"processed">>)).
 -define(PROCESS_TYPES, []).
+
+-define(ENTERED_HEADERS, [<<"Entered-Position">>]).
+-define(ENTERED_VALUES, ?CALL_REQ_VALUES(<<"entered-position">>)).
+-define(ENTERED_TYPES, []).
+
+-define(EXITED_HEADERS, [<<"Exited-Position">>]).
+-define(EXITED_VALUES, ?CALL_REQ_VALUES(<<"exited-position">>)).
+-define(EXITED_TYPES, []).
+
+-define(ID_CHANGE_HEADERS, [<<"Old-Call-ID">>]).
+-define(ID_CHANGE_VALUES, ?CALL_REQ_VALUES(<<"id-change">>)).
+-define(ID_CHANGE_TYPES, []).
 
 -define(FLUSH_HEADERS, [<<"Call-ID">>]).
 -define(FLUSH_VALUES, ?CALL_REQ_VALUES(<<"flush">>)).
@@ -186,6 +208,57 @@ call_processed_v(Prop) when is_list(Prop) ->
 call_processed_v(JObj) ->
     call_processed_v(wh_json:to_proplist(JObj)).
 
+-spec call_entered_position(api_terms()) ->
+                            {'ok', iolist()} |
+                            {'error', string()}.
+call_entered_position(Props) when is_list(Props) ->
+    case call_entered_position_v(Props) of
+        'true' -> wh_api:build_message(Props, ?CALL_REQ_HEADERS, ?ENTERED_HEADERS);
+        'false' -> {'error', "Proplist failed validation for call_entered_position"}
+    end;
+call_entered_position(JObj) ->
+    call_entered_position(wh_json:to_proplist(JObj)).
+
+-spec call_entered_position_v(api_terms()) -> boolean().
+call_entered_position_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?CALL_REQ_HEADERS, ?ENTERED_VALUES, ?ENTERED_TYPES);
+call_entered_position_v(JObj) ->
+    call_entered_position_v(wh_json:to_proplist(JObj)).
+
+-spec call_exited_position(api_terms()) ->
+                            {'ok', iolist()} |
+                            {'error', string()}.
+call_exited_position(Props) when is_list(Props) ->
+    case call_exited_position_v(Props) of
+        'true' -> wh_api:build_message(Props, ?CALL_REQ_HEADERS, ?EXITED_HEADERS);
+        'false' -> {'error', "Proplist failed validation for call_exited_position"}
+    end;
+call_exited_position(JObj) ->
+    call_exited_position(wh_json:to_proplist(JObj)).
+
+-spec call_exited_position_v(api_terms()) -> boolean().
+call_exited_position_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?CALL_REQ_HEADERS, ?EXITED_VALUES, ?EXITED_TYPES);
+call_exited_position_v(JObj) ->
+    call_exited_position_v(wh_json:to_proplist(JObj)).
+
+-spec call_id_change(api_terms()) ->
+                            {'ok', iolist()} |
+                            {'error', string()}.
+call_id_change(Props) when is_list(Props) ->
+    case call_id_change_v(Props) of
+        'true' -> wh_api:build_message(Props, ?CALL_REQ_HEADERS, ?ID_CHANGE_HEADERS);
+        'false' -> {'error', "Proplist failed validation for call_id_change"}
+    end;
+call_id_change(JObj) ->
+    call_id_change(wh_json:to_proplist(JObj)).
+
+-spec call_id_change_v(api_terms()) -> boolean().
+call_id_change_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?CALL_REQ_HEADERS, ?ID_CHANGE_VALUES, ?ID_CHANGE_TYPES);
+call_id_change_v(JObj) ->
+    call_id_change_v(wh_json:to_proplist(JObj)).
+
 -spec call_flush(api_terms()) ->
                             {'ok', iolist()} |
                             {'error', string()}.
@@ -257,6 +330,7 @@ current_calls_err_v(JObj) ->
 -define(CURRENT_CALLS_RESP_HEADERS, [<<"Query-Time">>]).
 -define(OPTIONAL_CURRENT_CALLS_RESP_HEADERS, [<<"Waiting">>, <<"Handled">>
                                               ,<<"Abandoned">>, <<"Processed">>
+                                              ,<<"Entered-Position">>, <<"Exited-Position">>
                                              ]).
 -define(CURRENT_CALLS_RESP_VALUES, [{<<"Event-Category">>, <<"acdc_stat">>}
                                     ,{<<"Event-Name">>, <<"current_calls_resp">>}
@@ -527,9 +601,14 @@ bind_q(Q, AcctId, QID, AID, 'undefined') ->
     amqp_util:bind_q_to_whapps(Q, call_stat_routing_key(AcctId, QID)),
     amqp_util:bind_q_to_whapps(Q, status_stat_routing_key(AcctId, AID)),
     amqp_util:bind_q_to_whapps(Q, query_call_stat_routing_key(AcctId, QID)),
+<<<<<<< HEAD
     amqp_util:bind_q_to_whapps(Q, query_status_stat_routing_key(AcctId, AID));
 bind_q(_Q, _AcctId, _QID, _AID, []) ->
     ok;
+=======
+    amqp_util:bind_q_to_whapps(Q, query_status_stat_routing_key(AcctId, AID)),
+    amqp_util:bind_q_to_whapps(Q, call_id_change_routing_key(AcctId, QID));
+>>>>>>> 3.19-feature-acdc-breakout
 bind_q(Q, AcctId, QID, AID, ['call_stat'|L]) ->
     amqp_util:bind_q_to_whapps(Q, call_stat_routing_key(AcctId, QID)),
     bind_q(Q, AcctId, QID, AID, L);
@@ -542,8 +621,12 @@ bind_q(Q, AcctId, QID, AID, ['query_call_stat'|L]) ->
 bind_q(Q, AcctId, QID, AID, ['query_status_stat'|L]) ->
     amqp_util:bind_q_to_whapps(Q, query_status_stat_routing_key(AcctId, AID)),
     bind_q(Q, AcctId, QID, AID, L);
+bind_q(Q, AcctId, QID, AID, ['id_change'|L]) ->
+    amqp_util:bind_q_to_whapps(Q, call_id_change_routing_key(AcctId, QID)),
+    bind_q(Q, AcctId, QID, AID, L);
 bind_q(Q, AcctId, QID, AID, [_|L]) ->
-    bind_q(Q, AcctId, QID, AID, L).
+    bind_q(Q, AcctId, QID, AID, L);
+bind_q(_, _, _, _, []) -> 'ok'.
 
 unbind_q(Q, Props) ->
     QID = props:get_value('queue_id', Props, <<"*">>),
@@ -569,8 +652,12 @@ unbind_q(Q, AcctId, QID, AID, ['query_call_stat'|L]) ->
 unbind_q(Q, AcctId, QID, AID, ['query_status_stat'|L]) ->
     amqp_util:unbind_q_from_whapps(Q, query_status_stat_routing_key(AcctId, AID)),
     unbind_q(Q, AcctId, QID, AID, L);
+unbind_q(Q, AcctId, QID, AID, ['id_change'|L]) ->
+    amqp_util:unbind_q_from_whapps(Q, call_id_change_routing_key(AcctId, QID)),
+    unbind_q(Q, AcctId, QID, AID, L);
 unbind_q(Q, AcctId, QID, AID, [_|L]) ->
-    unbind_q(Q, AcctId, QID, AID, L).
+    unbind_q(Q, AcctId, QID, AID, L);
+unbind_q(_, _, _, _, []) -> 'ok'.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -610,6 +697,24 @@ publish_call_processed(JObj) ->
 publish_call_processed(API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?PROCESS_VALUES, fun call_processed/1),
     amqp_util:whapps_publish(call_stat_routing_key(API), Payload, ContentType).
+
+publish_call_entered_position(JObj) ->
+    publish_call_entered_position(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_call_entered_position(API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?ENTERED_VALUES, fun call_entered_position/1),
+    amqp_util:whapps_publish(call_stat_routing_key(API), Payload, ContentType).
+
+publish_call_exited_position(JObj) ->
+    publish_call_exited_position(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_call_exited_position(API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?EXITED_VALUES, fun call_exited_position/1),
+    amqp_util:whapps_publish(call_stat_routing_key(API), Payload, ContentType).
+
+publish_call_id_change(JObj) ->
+    publish_call_id_change(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_call_id_change(API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?ID_CHANGE_VALUES, fun call_id_change/1),
+    amqp_util:whapps_publish(call_id_change_routing_key(API), Payload, ContentType).
 
 publish_call_flush(JObj) ->
     publish_call_flush(JObj, ?DEFAULT_CONTENT_TYPE).
@@ -758,6 +863,18 @@ query_status_stat_routing_key(AcctId, 'undefined') ->
     <<"acdc_stats.query_status.", AcctId/binary, ".all">>;
 query_status_stat_routing_key(AcctId, QID) ->
     <<"acdc_stats.query_status.", AcctId/binary, ".", QID/binary>>.
+
+call_id_change_routing_key(Prop) when is_list(Prop) ->
+    call_id_change_routing_key(props:get_value(<<"Account-ID">>, Prop)
+                                  ,props:get_value(<<"Queue-ID">>, Prop)
+                                 );
+call_id_change_routing_key(JObj) ->
+    call_id_change_routing_key(wh_json:get_value(<<"Account-ID">>, JObj)
+                                  ,wh_json:get_value(<<"Queue-ID">>, JObj)
+                                 ).
+
+call_id_change_routing_key(AcctId, QID) ->
+    <<"acdc_stats.id_change.", AcctId/binary, ".", QID/binary>>.
 
 
 status_value(API) when is_list(API) -> props:get_value(<<"Status">>, API);

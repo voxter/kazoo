@@ -15,6 +15,7 @@
          ,stop_app/1
          ,restart_app/1
          ,running_apps/0, running_apps/1
+         ,app_running/1
          ,list_apps/0
         ]).
 
@@ -117,6 +118,16 @@ running_apps_list() ->
     of
         [] -> "whapps have not started yet, check that rabbitmq and bigcouch/haproxy are running at the configured addresses";
         Resp -> Resp
+    end.
+
+app_running(AppName) ->
+    case [App
+          || App <- running_apps_list(),
+             AppName =:= App
+         ]
+    of
+        [] -> false;
+        _ -> true
     end.
 
 initialize_whapps() ->

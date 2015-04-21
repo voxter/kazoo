@@ -345,8 +345,8 @@ handle_cast({'continue', Key}, #state{flow=Flow
     end;
 handle_cast('stop', #state{flows=[]}=State) ->
     {'stop', 'normal', State};
-handle_cast('stop', #state{flows=[Flow|Flows]}=State) ->
-    {'noreply', launch_cf_module(State#state{flow=Flow, flows=Flows})};
+handle_cast('stop', #state{call=Call, flows=[Flow|Flows]}=State) ->
+    stop_if_inactive(Call, Flow, Flows, State);
 handle_cast('hard_stop', State) ->
     {'stop', 'normal', State};
 handle_cast('transfer', State) ->
@@ -408,6 +408,23 @@ handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p", [_Msg]),
     {'noreply', State}.
 
+stop_if_inactive(Call, Flow, Flows, State) ->
+    try gen_server:call(whapps_call:kvs_fetch('consumer_pid', Call), 'callid', 3000) of
+        CallId ->
+            case whapps_call_command:b_channel_status(CallId) of
+                {'error', _E} ->
+                    lager:info("channel no longer active, hard stop!"),
+                    {'stop', 'normal', State};
+                'ok' ->
+                    lager:info("still active, continuing"),
+                    {'noreply', launch_cf_module(State#state{flow=Flow, flows=Flows})}
+            end
+    catch _:_ ->
+        lager:info("channel no longer active, hard stop!"),
+        {'stop', 'normal', State}
+    end.
+    
+    
 -spec event_listener_name(whapps_call:call(), atom() | ne_binary()) -> ne_binary().
 event_listener_name(Call, Module) ->
     <<(whapps_call:call_id_direct(Call))/binary, "-", (wh_util:to_binary(Module))/binary>>.
@@ -495,6 +512,9 @@ handle_event(JObj, #state{cf_module_pid=PidRef
                     'false' -> control_usurped(Self);
                     'true' -> 'ok'
                 end,
+            'ignore';
+        {{<<"konami">>, <<"callback_reg">>}, _} ->
+            relay_amqp(JObj, [{'cf_module_pid', get_pid(PidRef)}]),
             'ignore';
         {{<<"error">>, _}, _} ->
             case wh_json:get_value([<<"Request">>, <<"Call-ID">>], JObj) of
