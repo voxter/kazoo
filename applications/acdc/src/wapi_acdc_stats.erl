@@ -601,14 +601,8 @@ bind_q(Q, AcctId, QID, AID, 'undefined') ->
     amqp_util:bind_q_to_whapps(Q, call_stat_routing_key(AcctId, QID)),
     amqp_util:bind_q_to_whapps(Q, status_stat_routing_key(AcctId, AID)),
     amqp_util:bind_q_to_whapps(Q, query_call_stat_routing_key(AcctId, QID)),
-<<<<<<< HEAD
-    amqp_util:bind_q_to_whapps(Q, query_status_stat_routing_key(AcctId, AID));
-bind_q(_Q, _AcctId, _QID, _AID, []) ->
-    ok;
-=======
     amqp_util:bind_q_to_whapps(Q, query_status_stat_routing_key(AcctId, AID)),
     amqp_util:bind_q_to_whapps(Q, call_id_change_routing_key(AcctId, QID));
->>>>>>> 3.19-feature-acdc-breakout
 bind_q(Q, AcctId, QID, AID, ['call_stat'|L]) ->
     amqp_util:bind_q_to_whapps(Q, call_stat_routing_key(AcctId, QID)),
     bind_q(Q, AcctId, QID, AID, L);
