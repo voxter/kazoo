@@ -108,7 +108,7 @@ blind_transfer(Props) ->
     %Endpoints = get_endpoints()
 
     CCVs = [
-        {<<"Account-ID">>, proplists:get_value(<<"AccountId">>, UpdatedProps)},
+        {<<"Account-ID">>, proplists:get_value(<<"AccountId">>, Props)},
         {<<"Retain-CID">>, <<"true">>},
         {<<"Inherit-Codec">>, <<"false">>},
         %{<<"Authorizing-Type">>, whapps_call:authorizing_type(WhappsCall)},
@@ -123,13 +123,13 @@ blind_transfer(Props) ->
         %{<<"Timeout">>, <<"30">>}
         %{<<"Ignore-Early-Media">>, <<"true">>}
         %{<<"Media">>, <<"process">>}
-        {<<"Outbound-Caller-ID-Name">>, undefined}
-        {<<"Outbound-Caller-ID-Number">>, undefined}
-        {<<"Outbound-Callee-ID-Name">>, DestExten}
-        {<<"Outbound-Callee-ID-Number">>, DestExten}
+        {<<"Outbound-Caller-ID-Name">>, undefined},
+        {<<"Outbound-Caller-ID-Number">>, undefined},
+        {<<"Outbound-Callee-ID-Name">>, DestExten},
+        {<<"Outbound-Callee-ID-Number">>, DestExten},
         %{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
-        {<<"Continue-On-Fail">>, false}
-        {<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
+        {<<"Continue-On-Fail">>, false},
+        {<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)},
         {<<"Export-Custom-Channel-Vars">>, [
             <<"Account-ID">>,
             <<"Retain-CID">>,
@@ -139,10 +139,8 @@ blind_transfer(Props) ->
         | wh_api:default_headers(<<"resource">>, <<"originate_req">>, ?APP_NAME, ?APP_VERSION)
     ],
 
-
-
     lager:debug("attempting to transfer ~s to ~s", [CallId, DestExten]),
-    wapi_metaflow:publish_req(API).
+    wapi_metaflow:publish_req(Request).
 
 vm_transfer(Props) ->
     Call = props:get_value(<<"Call">>, Props),
