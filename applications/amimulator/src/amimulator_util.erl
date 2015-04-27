@@ -125,6 +125,13 @@ call_from_json(JObj) ->
             wh_json:get_first_defined([<<"authorizing_id">>, [<<"Custom-Channel-Vars">>, <<"Authorizing-ID">>]], JObj, <<>>), Call) end,
         fun(Call) -> whapps_call:set_account_id(
             wh_json:get_first_defined([<<"account_id">>, [<<"Custom-Channel-Vars">>, <<"Account-ID">>]], JObj), Call) end,
+        fun(Call) ->
+        	case wh_json:get_value(<<"Custom-Channel-Vars">>, JObj) of
+        		undefined ->
+        			Call;
+        		CCVs ->
+		        	whapps_call:set_custom_channel_vars(wh_json:to_proplist(CCVs), Call)
+		    end end,
         fun(Call) -> whapps_call:set_account_db(
             wh_util:format_account_id(whapps_call:account_id(Call), encoded), Call) end,
         fun(Call) -> whapps_call:set_call_id(
@@ -289,12 +296,11 @@ call_direction_endpoint(Call) ->
             ), Call)
     end.
 
-bleg_cid(Call, _ChannelJObj, BC) ->
+bleg_cid(Call, ChannelJObj, BC) ->
     case props:get_value(whapps_call:other_leg_call_id(props:get_value(<<"call">>, Call)),
         BC) of
         undefined ->
-            %% TODO, find the call somehow
-            Call;
+            props:set_value(<<"bleg_cid">>, wh_json:get_value(<<"Caller-ID-Name">>, ChannelJObj, undefined), Call);
         OtherCall ->
             Direction = case props:get_value(<<"direction">>, Call) of
                 <<"inbound">> -> <<"outbound">>;

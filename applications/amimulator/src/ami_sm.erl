@@ -3,7 +3,7 @@
 
 -export([start_link/0, register/0, unregister/0, ev_going_down/2, ev_staying_up/1, is_ev_down/2,
     account_id/0, set_account_id/1,
-    init_state/1, events/0, account_consumers/1, call/1, call_by_channel/1, new_call/2, 
+    init_state/1, purge_state/1, events/0, account_consumers/1, call/1, call_by_channel/1, new_call/2, 
     new_call/3, update_call/2, delete_call/1, queue_call/2, queue_pos/2, conf_parts/1,
     update_conf_parts/2, conf_cache/1, cache_conf_part/2,
     calls/1, channel_call_ids/1, add_channel_call_id/2, maybe_ringing/2, debug/0]).
@@ -49,6 +49,9 @@ set_account_id(AccountId) ->
 %% Fetches the existing calls, queue state, etc and puts in ETS
 init_state(AccountId) ->
     gen_server:cast(?MODULE, {init_state, AccountId}).
+
+purge_state(AccountId) ->
+	gen_server:cast(?MODULE, {purge_state, AccountId}).
 
 %% Whether events should be published to this client
 events() ->
@@ -244,6 +247,9 @@ handle_cast({reg_account_id, AccountId, Pid}, #state{ets=ETS}=State) ->
 handle_cast({init_state, AccountId}, #state{ets=ETS}=State) ->
     init_state(AccountId, ETS),
     {noreply, State};
+handle_cast({purge_state, AccountId}, #state{ets=ETS}=State) ->
+	purge_state(AccountId, ETS),
+	{noreply, State};
 
 handle_cast({insert, Cat, Key, Value}, #state{ets=ETS}=State) ->
     insert(Cat, Key, Value, ETS),
@@ -407,7 +413,12 @@ init_state(AccountId, ETS) ->
         concat("ChannelCallIds", Channel, CallId, ETS)
     end, Calls).
 
-
+purge_state(AccountId, ETS) ->
+	Calls = get("Calls", AccountId, ETS),
+	lists:foreach(fun(CallId) ->
+		delete("Call", CallId, ETS)
+	end, Calls),
+	delete("Calls", AccountId, ETS).
 
 
 

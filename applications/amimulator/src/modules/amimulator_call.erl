@@ -27,11 +27,17 @@ handle_event(EventJObj, _Props) ->
     handle_specific_event(EventName, EventJObj).
     
 handle_specific_event(<<"CHANNEL_CREATE">>=EventName, EventJObj) ->
-    new_channel(EventJObj),
-    new_state(EventName, EventJObj),
-    extension_status(EventJObj),
-    maybe_dial_event(EventJObj),
-    maybe_change_agent_status(EventJObj);
+	new_channel(EventJObj),
+	case wh_json:get_value(<<"Callee-ID-Name">>, EventJObj) of
+		<<"Outbound Call">> ->
+			ok;
+		_ ->
+			new_channel_event(EventJObj),
+		    extension_status(EventJObj),
+		    maybe_dial_event(EventJObj),
+		    new_state(EventName, EventJObj),
+		    maybe_change_agent_status(EventJObj)
+	end;
 
 handle_specific_event(<<"CHANNEL_ANSWER">>, EventJObj) ->
     busy_state(EventJObj),
@@ -58,13 +64,54 @@ handle_specific_event(<<"CHANNEL_BRIDGE">>, EventJObj) ->
     Channel1 = props:get_value(<<"aleg_ami_channel">>, Call2),
     Channel2 = props:get_value(<<"bleg_ami_channel">>, Call2),
 
-    Payload = [
-        {<<"Event">>, <<"Link">>},
-        {<<"Channel1">>, Channel1},
-        {<<"Channel2">>, Channel2},
-        {<<"Uniqueid1">>, CallId},
-        {<<"Uniqueid2">>, OtherCallId}
-    ],
+    lager:debug("ccvs: ~p", [whapps_call:ccvs(WhappsCall)]),
+    Payload = [[
+				{<<"Event">>, <<"Link">>},
+		        {<<"Channel1">>, Channel1},
+		        {<<"Channel2">>, Channel2},
+		        {<<"Uniqueid1">>, CallId},
+		        {<<"Uniqueid2">>, OtherCallId}
+			  ]] ++ case whapps_call:custom_channel_var(<<"Web-Dial">>, WhappsCall) of
+			    	undefined ->
+			    		[];
+					<<"true">> ->
+						SourceCID = props:get_value(<<"aleg_cid">>, Call2),
+						OtherCID = props:get_value(<<"aleg_cid">>, OtherCall),
+						[
+					        {<<"Event">>, <<"Dial">>},
+			                {<<"Privilege">>, <<"call,all">>},
+			                {<<"SubEvent">>, <<"Begin">>},
+			                {<<"Channel">>, Channel1},
+			                {<<"Destination">>, Channel2},
+			                {<<"CallerIDNum">>, SourceCID},
+			                {<<"CallerIDName">>, SourceCID},
+			                {<<"ConnectedLineNum">>, OtherCID},
+			                {<<"ConnectedLineName">>, OtherCID},
+			                {<<"UniqueID">>, CallId},
+			                {<<"DestUniqueid">>, OtherCallId},
+			                {<<"Dialstring">>, OtherCID}
+						]
+			    end ++ case whapps_call:custom_channel_var(<<"Amimulator-Blind-Transfer">>, WhappsCall) of
+			    	undefined ->
+			    		[];
+			    	<<"true">> ->
+			    		SourceCID = props:get_value(<<"aleg_cid">>, Call2),
+						OtherCID = props:get_value(<<"aleg_cid">>, OtherCall),
+			    		[
+					        {<<"Event">>, <<"Dial">>},
+			                {<<"Privilege">>, <<"call,all">>},
+			                {<<"SubEvent">>, <<"Begin">>},
+			                {<<"Channel">>, Channel1},
+			                {<<"Destination">>, Channel2},
+			                {<<"CallerIDNum">>, SourceCID},
+			                {<<"CallerIDName">>, SourceCID},
+			                {<<"ConnectedLineNum">>, OtherCID},
+			                {<<"ConnectedLineName">>, OtherCID},
+			                {<<"UniqueID">>, CallId},
+			                {<<"DestUniqueid">>, OtherCallId},
+			                {<<"Dialstring">>, OtherCID}
+						]
+				end,
     ami_ev:publish_amqp_event({publish, Payload});
     
 handle_specific_event(<<"CHANNEL_DESTROY">>, EventJObj) ->
@@ -92,6 +139,11 @@ handle_specific_event(EventName, _EventJObj) ->
     lager:debug("AMI: unhandled call event ~p", [EventName]).
 
 new_channel(EventJObj) ->
+	Call = amimulator_util:create_call(EventJObj),
+	CallId = whapps_call:call_id(props:get_value(<<"call">>, Call)),
+	ami_sm:new_call(CallId, Call).
+
+new_channel_event(EventJObj) ->
     case wh_json:get_value(<<"Call-Direction">>, EventJObj) of
         <<"inbound">> ->
             new_inbound_channel(EventJObj);
@@ -100,10 +152,8 @@ new_channel(EventJObj) ->
     end.
 
 new_inbound_channel(EventJObj) ->
-    %lager:debug("channel ~p", [EventJObj]),
-    Call = amimulator_util:create_call(EventJObj),
-    WhappsCall = props:get_value(<<"call">>, Call),
-    CallId = whapps_call:call_id(WhappsCall),
+    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
+    Call = ami_sm:call(CallId),
 
     DestExten = props:get_value(<<"bleg_exten">>, Call),
     SourceExten = props:get_value(<<"aleg_exten">>, Call),
@@ -119,32 +169,16 @@ new_inbound_channel(EventJObj) ->
 
     EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
 
-    ami_sm:new_call(CallId, Call),
-
-    Payload = [
-        {<<"Event">>, <<"Newchannel">>},
-        {<<"Privilege">>, <<"call,all">>},
-        {<<"Channel">>, EndpointName},
-        {<<"ChannelState">>, 0},
-        {<<"ChannelStateDesc">>, <<"Down">>},
-        {<<"CallerIDNum">>, SourceCID},
-        {<<"CallerIDName">>, SourceCID},
-        {<<"AccountCode">>, <<"">>}, %% Always blank
-        {<<"Exten">>, DestExten},
-        {<<"Context">>, <<"from-internal">>},
-        {<<"Uniqueid">>, CallId}
-    ],
+    Payload = new_channel_payload(EndpointName, SourceCID, SourceCID, DestExten, CallId),
     ami_ev:publish_amqp_event({publish, Payload}).
 
 new_outbound_channel(EventJObj) ->
-    Call = amimulator_util:create_call(EventJObj),
-    WhappsCall = props:get_value(<<"call">>, Call),
-    CallId = whapps_call:call_id(WhappsCall),
+    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
+    Call = ami_sm:call(CallId),
 
     SourceCID = props:get_value(<<"aleg_cid">>, Call),
     EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
 
-    ami_sm:new_call(CallId, Call),
     case EndpointName of
         undefined ->
             lager:debug("Call ~p", [Call]),
@@ -153,26 +187,32 @@ new_outbound_channel(EventJObj) ->
             ok
     end,
 
-    Payload = [
-        {<<"Event">>, <<"Newchannel">>},
+    Payload = new_channel_payload(EndpointName, SourceCID, SourceCID, CallId),
+    ami_ev:publish_amqp_event({publish, Payload}).
+
+new_channel_payload(Channel, CallerIDNum, CallerIDName, Uniqueid) ->
+	new_channel_payload(Channel, CallerIDNum, CallerIDName, <<"">>, Uniqueid).
+new_channel_payload(Channel, CallerIDNum, CallerIDName, Exten, Uniqueid) ->
+	[
+		{<<"Event">>, <<"Newchannel">>},
         {<<"Privilege">>, <<"call,all">>},
-        {<<"Channel">>, EndpointName},
+        {<<"Channel">>, Channel},
         {<<"ChannelState">>, 0},
         {<<"ChannelStateDesc">>, <<"Down">>},
-        {<<"CallerIDNum">>, SourceCID},
-        {<<"CallerIDName">>, SourceCID},
+        {<<"CallerIDNum">>, CallerIDNum},
+        {<<"CallerIDName">>, CallerIDName},
         {<<"AccountCode">>, <<"">>}, %% Always blank
-        {<<"Exten">>, <<"">>},
+        {<<"Exten">>, Exten},
         {<<"Context">>, <<"from-internal">>},
-        {<<"Uniqueid">>, CallId}
-    ],
-    ami_ev:publish_amqp_event({publish, Payload}).
+        {<<"Uniqueid">>, Uniqueid}
+	].
 
 new_state(<<"CHANNEL_CREATE">>, EventJObj) ->
     case wh_json:get_value(<<"Call-Direction">>, EventJObj) of
         <<"inbound">> ->
             ring_state(EventJObj);
         <<"outbound">> ->
+        	% maybe_pre_dial_event(EventJObj),
             ringing_state(EventJObj)
     end.
 
@@ -252,11 +292,19 @@ ringing_state(EventJObj) ->
     SourceCID = props:get_value(<<"aleg_cid">>, Call),
     EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
 
-    OtherCall = ami_sm:call(wh_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj)),
+    OtherCallId = wh_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj),
+    OtherCall = ami_sm:call(OtherCallId),
 
-    DestCID = case wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], EventJObj) of
+    OtherCID = case wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], EventJObj) of
         undefined ->
-            props:get_value(<<"aleg_cid">>, OtherCall);
+            case wh_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj) of
+                CallId ->
+                    props:get_value(<<"bleg_cid">>, Call);
+                undefined ->
+                    props:get_value(<<"bleg_cid">>, Call);
+                OtherCallId ->
+                    props:get_value(<<"aleg_cid">>, OtherCall)
+            end;
         QueueId ->
             AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], EventJObj),
             {ok, Number} = amimulator_util:find_id_number(
@@ -276,8 +324,8 @@ ringing_state(EventJObj) ->
                 {<<"ChannelStateDesc">>, <<"Ringing">>},
                 {<<"CallerIDNum">>, SourceCID},
                 {<<"CallerIDName">>, SourceCID},
-                {<<"ConnectedLineNum">>, DestCID},
-                {<<"ConnectedLineName">>, DestCID},
+                {<<"ConnectedLineNum">>, OtherCID},
+                {<<"ConnectedLineName">>, OtherCID},
                 {<<"Uniqueid">>, CallId}
             ],
             ami_ev:publish_amqp_event({publish, Payload});
@@ -292,13 +340,17 @@ busy_state(EventJObj) ->
     SourceCID = props:get_value(<<"aleg_cid">>, Call),
     EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
 
-    DestCID = case wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], EventJObj) of
+    OtherCallId = wh_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj),
+    OtherCall = ami_sm:call(OtherCallId),
+
+    OtherCID = case wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], EventJObj) of
         undefined ->
             case wh_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj) of
+                CallId ->
+                    props:get_value(<<"bleg_cid">>, Call);
                 undefined ->
                     props:get_value(<<"bleg_cid">>, Call);
                 OtherCallId ->
-                    OtherCall = amimulator_util:get_call(OtherCallId),
                     props:get_value(<<"aleg_cid">>, OtherCall)
             end;
         QueueId ->
@@ -318,8 +370,8 @@ busy_state(EventJObj) ->
         {<<"ChannelStateDesc">>, <<"Up">>},
         {<<"CallerIDNum">>, SourceCID},
         {<<"CallerIDName">>, SourceCID},
-        {<<"ConnectedLineNum">>, DestCID},
-        {<<"ConnectedLineName">>, DestCID},
+        {<<"ConnectedLineNum">>, OtherCID},
+        {<<"ConnectedLineName">>, OtherCID},
         {<<"Uniqueid">>, CallId}
     ],
     ami_ev:publish_amqp_event({publish, Payload}).
@@ -399,7 +451,6 @@ dial_event(EventJObj) ->
                 undefined ->
                     {props:get_value(<<"bleg_cid">>, Call), props:get_value(<<"bleg_ami_channel">>, Call)};
                 OtherCallId ->
-                    OtherCall = ami_sm:call(OtherCallId),
                     {props:get_value(<<"aleg_cid">>, OtherCall), props:get_value(<<"aleg_ami_channel">>, OtherCall)}
             end;
         QueueId ->
@@ -417,22 +468,25 @@ dial_event(EventJObj) ->
         undefined ->
             ok;
         _ ->
-            Payload = [
-                {<<"Event">>, <<"Dial">>},
-                {<<"Privilege">>, <<"call,all">>},
-                {<<"SubEvent">>, <<"Begin">>},
-                {<<"Channel">>, OtherEndpointName},
-                {<<"Destination">>, EndpointName},
-                {<<"CallerIDNum">>, OtherCID},
-                {<<"CallerIDName">>, OtherCID},
-                {<<"ConnectedLineNum">>, CID},
-                {<<"ConnectedLineName">>, CID},
-                {<<"UniqueID">>, OtherCallId},
-                {<<"DestUniqueid">>, CallId},
-                {<<"Dialstring">>, CID}
-            ],
+        	Payload = dial(OtherEndpointName, EndpointName, OtherCID, OtherCID, CID, CID, OtherCallId, CallId, CID),
             ami_ev:publish_amqp_event({publish, Payload})
     end.
+
+dial(Channel, Destination, CallerIDNum, CallerIDName, ConnectedLineNum, ConnectedLineName, Uniqueid, DestUniqueid, Dialstring) ->
+	[
+		{<<"Event">>, <<"Dial">>},
+        {<<"Privilege">>, <<"call,all">>},
+        {<<"SubEvent">>, <<"Begin">>},
+        {<<"Channel">>, Channel},
+        {<<"Destination">>, Destination},
+        {<<"CallerIDNum">>, CallerIDNum},
+        {<<"CallerIDName">>, CallerIDName},
+        {<<"ConnectedLineNum">>, ConnectedLineNum},
+        {<<"ConnectedLineName">>, ConnectedLineName},
+        {<<"UniqueID">>, Uniqueid},
+        {<<"DestUniqueid">>, DestUniqueid},
+        {<<"Dialstring">>, Dialstring}
+	].
 
 destroy_channel(EventJObj) ->
     CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),

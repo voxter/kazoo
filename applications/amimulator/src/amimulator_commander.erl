@@ -180,6 +180,11 @@ handle_event("originate", Props) ->
             case proplists:get_value(<<"Application">>, Props) of
                 <<"ChanSpy">> ->
                     gen_server:cast(self(), {originator, "eavesdrop", Props});
+               	<<"PickupChan">> ->
+               		Props2 = props:set_value(<<"Channel">>, props:get_value(<<"Data">>, 
+               			props:set_value(<<"SourceExten">>, hd(binary:split(props:get_value(<<"Channel">>, Props), <<"/">>)),
+               			Props)), Props),
+               		gen_server:cast(self(), {originator, "pickupchan", Props2});
                 _ ->
                     gen_server:cast(self(), {originator, "originate", Props})
             end

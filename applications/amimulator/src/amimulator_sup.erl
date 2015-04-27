@@ -55,7 +55,8 @@ do_pause_check(AccountId, Timestamp) ->
             EvName = "ami_ev-" ++ wh_util:to_list(AccountId),
             case supervisor:terminate_child(?MODULE, EvName) of
                 ok ->
-                    supervisor:delete_child(?MODULE, EvName);
+                    supervisor:delete_child(?MODULE, EvName),
+            		ami_sm:purge_state(AccountId);
                 {error, Error} ->
                     lager:debug("error when reaping event consumer ~p", [Error])
             end;
