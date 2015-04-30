@@ -1,6 +1,7 @@
 -module(amimulator_commander).
 
 -export([handle/2]).
+-export([queues_status/1]).
 
 -include("amimulator.hrl").
 
@@ -98,27 +99,22 @@ handle_event("ping", _Props) ->
    {ok, {Payload, n}};
 % Handle AMI Status action
 handle_event("status", Props) ->
-    Calls = case ami_sm:calls(props:get_value(<<"AccountId">>, Props)) of
-        undefined ->
-            [];
-        Calls2 ->
-            Calls2
-    end,
+    Calls = ami_sm:calls(props:get_value(<<"AccountId">>, Props)),
     Payload = initial_channel_status(Calls, Props, <<"Status">>),
     {ok, {Payload, n}};
+
 handle_event("queuestatus", Props) ->
-    Payload = [[
-        {<<"Response">>, <<"Success">>},
+	Header = [[
+		{<<"Response">>, <<"Success">>},
         {<<"Message">>, <<"Queue status will follow">>}
-    ]] ++ queues_status(Props) ++
-    [[
-        {<<"Event">>, <<"QueueStatusComplete">>}
-    ]],
-    {ok, {Payload, n}};
+	]],
+	Footer = [[
+		{<<"Event">>, <<"QueueStatusComplete">>}
+	]],
+	{'ok', {Header ++ queues_status(Props) ++ Footer, 'n'}};
+
 handle_event("sippeers", Props) ->
-    SipPeers = lists:foldl(fun({_Number, _OnOff, Reg}, Acc) ->
-        [Reg | Acc]
-    end, [], reg_entries(registrations(Props), Props)),
+	SipPeers = sip_peers(Props),
 
     Payload = [[
         {<<"Response">>, <<"Success">>},
@@ -136,32 +132,19 @@ handle_event("mailboxcount", Props) ->
     ActionId = proplists:get_value(<<"ActionID">>, Props),
     Exten = hd(binary:split(Mailbox, <<"@">>)),
 
-    Payload = case couch_mgr:get_results(AccountDb, <<"vmboxes/listing_by_mailbox">>, [{key, Exten}]) of
+    %% NEED TO get_results UPDATE THIS VIEW BAZINGA
+    Payload = case couch_mgr:get_results(AccountDb, <<"vmboxes/crossbar_listing">>, [{key, Exten}]) of
         {ok, [Result]} ->
-            lager:debug("result ~p", [Result]),
-            case couch_mgr:open_doc(AccountDb, <<"asdf">>) of
-                {ok, VMDoc} ->
-                    Messages = wh_json:get_value(<<"messages">>, VMDoc),
-                    NewCount = lists:foldl(fun(Message, Total) ->
-                        case wh_json:get_value(<<"folder">>, Message) of
-                            <<"new">> ->
-                                Total + 1;
-                            _ ->
-                                Total
-                        end
-                    end, 0, Messages),
-                    [
-                        {<<"Response">>, <<"Success">>},
-                        {<<"ActionID">>, ActionId},
-                        {<<"Message">>, <<"Mailbox Message Count">>},
-                        {<<"Mailbox">>, Mailbox},
-                        {<<"UrgMessages">>, 0},
-                        {<<"NewMessages">>, NewCount},
-                        {<<"OldMessages">>, length(Messages) - NewCount}
-                    ];
-                {error, _E} ->
-                    mailbox_count_error(ActionId, Mailbox)
-            end;
+            Value = wh_json:get_value(<<"value">>, Result),
+            [
+                {<<"Response">>, <<"Success">>},
+                {<<"ActionID">>, ActionId},
+                {<<"Message">>, <<"Mailbox Message Count">>},
+                {<<"Mailbox">>, Mailbox},
+                {<<"UrgMessages">>, 0},
+                {<<"NewMessages">>, wh_json:get_value(<<"new_messages">>, Value)},
+                {<<"OldMessages">>, wh_json:get_value(<<"old_messages">>, Value)}
+            ];
         _ ->
             mailbox_count_error(ActionId, Mailbox)
     end,
@@ -462,48 +445,61 @@ append_space(RevList, Count, Index) ->
 queues_status(Props) ->
     AccountId = proplists:get_value(<<"AccountId">>, Props),
     AccountDb = proplists:get_value(<<"AccountDb">>, Props),
-    {ok, Results} = couch_mgr:get_results(AccountDb, <<"queues/crossbar_listing">>),
+    {'ok', Results} = couch_mgr:get_results(AccountDb, <<"queues/crossbar_listing">>),
 
     lists:foldl(fun(Result, Acc) ->
         QueueId = wh_json:get_value(<<"id">>, Result),
-        case queue_status(QueueId, AccountId) of
-            {ok, Status} ->
-                Status ++ Acc;
-            {error, _E} ->
-                Acc
-        end end, [], Results).
+        case couch_mgr:open_doc(AccountDb, QueueId) of
+        	{'error', E} ->
+        		lager:debug("Error opening queue doc: ~p", [E]),
+        		[] ++ Acc;
+        	{'ok', QueueDoc} ->
+        		case couch_mgr:get_results(AccountDb, <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
+        			{'error', E} ->
+        				lager:debug("Could not find queue number for queue ~p (~p)", [QueueId, E]),
+        				[] ++ Acc;
+        			{'ok', Results2} when length(Results2) =:= 1 ->
+        				Value = wh_json:get_value(<<"value">>, hd(Results2)),
+        				Number = hd(Value),
 
-queue_status(QueueId, AccountId) ->
-    case queue_details(QueueId, AccountId) of
-        {ok, QueueDetails} ->
-            QueueStats = queue_stats(QueueId, AccountId),
-            QueueAgentStatuses = agent_statuses(QueueId, AccountId),
-            {ok, format_queue_status(QueueDetails, QueueStats, QueueAgentStatuses)};
-        {error, E} ->
-            {error, E}
-    end.
+        				{Calls, Holdtime, TalkTime, Completed, Abandoned} = case queue_stats(QueueId, AccountId) of
+        					{'error', E} ->
+        						lager:debug("Error ~p when getting queue stats for queue ~p", [E, QueueId]),
+        						{0, 0, 0, 0, 0};
+        					{_, _, _, _, _}=Stats ->
+        						Stats
+        				end,
 
-queue_details(QueueId, AccountId) ->
-    AccountDb = wh_util:format_account_id(AccountId, encoded),
-    {ok, QueueDoc} = couch_mgr:open_doc(AccountDb, QueueId),
-    case amimulator_util:find_id_number(QueueId, AccountDb) of
-        {ok, QueueNumber} ->
-            {ok, [
-                {<<"QueueNumber">>, QueueNumber},
-                {<<"Queue">>, wh_json:get_value(<<"name">>, QueueDoc)},
-                {<<"Max">>, wh_json:get_value(<<"max_queue_size">>, QueueDoc)},
-                {<<"Strategy">>, translate_strat(wh_json:get_value(<<"strategy">>, QueueDoc))}
-            ]};
-        {error, not_found} ->
-            lager:debug("Extension for queue ~p not found", [QueueId]),
-            {error, not_found};
-        {error, E} ->
-            {error, E}
-    end.
-        
-translate_strat(Strat) ->
-    % TODO: actually translate the strategy names
-    Strat.
+        				CompletedCalls = Completed - Abandoned,
+        				AverageHold = case CompletedCalls of
+        					0 ->
+        						0.0;
+        					_ ->
+        						Holdtime / CompletedCalls
+        				end,
+
+        				[[
+        					{<<"Event">>, <<"QueueParams">>},
+					        {<<"Queue">>, Number},
+					        {<<"Max">>, wh_json:get_value(<<"max_queue_size">>, QueueDoc)},
+					        {<<"Strategy">>, wh_json:get_value(<<"strategy">>, QueueDoc)},
+					        {<<"Calls">>, Calls},
+					        {<<"Holdtime">>, AverageHold},
+					        {<<"TalkTime">>, TalkTime},
+					        {<<"Completed">>, CompletedCalls},
+					        {<<"Abandoned">>, Abandoned},
+					        % TODO: add servicelevel
+					        {<<"ServiceLevel">>, 60},
+					        {<<"ServicelevelPerf">>, 69.0}
+        				]]
+        				++ agent_statuses(QueueId, AccountId, Number)
+        				++ Acc;
+        			{'ok', Results2} ->
+        				lager:debug("Too many results when trying to find queue number for queue ~p: ~p", [QueueId, Results2]),
+        				[] ++ Acc
+        		end
+        end
+    end, [], Results).
     
 % TODO: maybe we need acdc stats to be persisted in couch
 queue_stats(QueueId, AcctId) ->
@@ -517,7 +513,7 @@ queue_stats(QueueId, AcctId) ->
         fun wapi_acdc_stats:publish_current_calls_req/1,
         fun wapi_acdc_stats:current_calls_resp_v/1
     ) of
-        {'error', E} -> E;
+        {'error', _E}=Error -> Error;
         {'ok', Resp} -> count_stats(Resp)
     end.
 
@@ -561,15 +557,15 @@ count_stats([Stat|Stats], {Calls, Holdtime, TalkTime, Completed, Abandoned}) ->
             end
     end.
 
-agent_statuses(QueueId, AccountId) ->
+agent_statuses(QueueId, AccountId, Number) ->
     AccountDb = wh_util:format_account_id(AccountId, encoded),
     {ok, Results} = couch_mgr:get_results(AccountDb, <<"queues/agents_listing">>, [{key, QueueId}]),
     lists:foldl(fun(Result, Acc) ->
         AgentId = wh_json:get_value(<<"id">>, Result),
-        [agent_status(QueueId, AgentId, AccountId) | Acc]
+        [agent_status(AgentId, AccountId, Number) | Acc]
         end, [], Results).
         
-agent_status(QueueId, AgentId, AccountId) ->
+agent_status(AgentId, AccountId, Number) ->
     AccountDb = wh_util:format_account_id(AccountId, encoded), 
     {ok, UserDoc} = couch_mgr:open_doc(AccountDb, AgentId),
     FirstName = wh_json:get_value(<<"first_name">>, UserDoc),
@@ -585,24 +581,9 @@ agent_status(QueueId, AgentId, AccountId) ->
             0
     end,
 
-    {ok, QueueNumber} = amimulator_util:find_id_number(QueueId, AccountDb),
-
-    %case acdc_agents_sup:find_agent_supervisor(AcctId, AgentId) of
-    %    undefined ->
-    %        {error, not_logged_in};
-    %    AgentSup ->
-    %        AgentListener = acdc_agent_sup:listener(AgentSup),
-    %        LastCall = case gen_listener:call(AgentListener, last_connect) of
-    %            undefined ->
-    %                0;
-    %            {MegaSecs, Secs, MicroSecs} ->
-    %                MegaSecs * 1000000 + Secs + MicroSecs / 1000000
-    %        end,
-            
-    %% Agent status payload
     [
         {<<"Event">>, <<"QueueMember">>},
-        {<<"Queue">>, QueueNumber},
+        {<<"Queue">>, Number},
         {<<"Name">>, <<FirstName/binary, " ", LastName/binary>>},
         {<<"Location">>, <<"Local/", Username/binary, "@from-queue/n">>},
         %% Membership static is also possible
@@ -633,139 +614,62 @@ translate_status(Status) ->
             lager:debug("unspecified status ~p", [Status]),
             5
     end.
-    
-format_queue_status(QueueDetails, QueueStats, QueueAgentStatuses) ->
-    {Calls, Holdtime, TalkTime, Completed, Abandoned} = QueueStats,
-    CompletedCalls = Completed - Abandoned,
-    AverageHold = case CompletedCalls of
-        0 ->
-            0.0;
-        _ ->
-            Holdtime / CompletedCalls
-    end,
-    [[
-        {<<"Event">>, <<"QueueParams">>},
-        {<<"Queue">>, proplists:get_value(<<"QueueNumber">>, QueueDetails)},
-        {<<"Max">>, proplists:get_value(<<"Max">>, QueueDetails)},
-        {<<"Strategy">>, proplists:get_value(<<"Strategy">>, QueueDetails)},
-        {<<"Calls">>, Calls},
-        {<<"Holdtime">>, AverageHold},
-        {<<"TalkTime">>, TalkTime},
-        {<<"Completed">>, CompletedCalls},
-        {<<"Abandoned">>, Abandoned},
-        % TODO: add servicelevel
-        {<<"ServiceLevel">>, 60},
-        {<<"ServicelevelPerf">>, 69.0}
-    ]] ++
-    QueueAgentStatuses.
 
-registrations(Props) ->
-    {ok, AccountDoc} = couch_mgr:open_doc(<<"accounts">>, proplists:get_value(<<"AccountId">>, Props)),
-    AccountRealm = wh_json:get_value(<<"realm">>, AccountDoc),
+sip_peers(Props) ->
+	AccountId = props:get_value(<<"AccountId">>, Props),
+	AccountDb = props:get_value(<<"AccountDb">>, Props),
+	{'ok', Results} = couch_mgr:get_results(AccountDb, <<"devices/listing_by_owner">>),
+        lists:foldl(fun(Result, Registrations) ->
+        	Value = wh_json:get_value(<<"value">>, Result),
+        	case wh_json:get_value(<<"key">>, Result) of
+        		'null' ->
+        			[reg_entry(AccountId, wh_json:get_value(<<"id">>, Value), wh_json:get_value(<<"name">>, Value))] ++ Registrations;
+        		OwnerId ->
+        			case couch_mgr:open_doc(AccountDb, OwnerId) of
+        				{'error', 'not_found'} ->
+        					lager:debug("Missing owner ~p for endpoint with username ~p", [OwnerId, wh_json:get_value(<<"name">>, Value)]),
+        					Registrations;
+        				{'ok', Endpoint} ->
+	            			[reg_entry(AccountId, wh_json:get_value(<<"_id">>, Endpoint), wh_json:get_value(<<"username">>, Endpoint))] ++ Registrations
+	            	end
+        	end
+        end, [], Results).
 
-    Req = [
-        {<<"Realm">>, AccountRealm}
-        | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-    ],
-
-    ReqResp = whapps_util:amqp_pool_collect(
-        Req,
-        fun wapi_registration:publish_query_req/1,
-        {'ecallmgr', 'true'}
-    ),
-    case ReqResp of
-        {'error', _} -> [];
-        {_, JObjs} ->
-            lists:foldl(fun(JObj, SipPeers) ->
-                wh_json:get_value(<<"Fields">>, JObj, []) ++ SipPeers
-            end, [], JObjs)
-    end.
-
-reg_entries(SipPeers, Props) ->
-    AccountDb = proplists:get_value(<<"AccountDb">>, Props),
-    case couch_mgr:get_results(AccountDb, <<"devices/crossbar_listing">>) of
-        {ok, Results} ->
-            lists:foldl(fun(Result, Acc) ->
-                {ok, DeviceDoc} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, Result)),
-                maybe_add_reg_entry(DeviceDoc, SipPeers, Props, Acc)
-            end, [], Results);
-        _ ->
-            []
-    end.
-
-maybe_add_reg_entry(Device, SipPeers, Props, Acc) ->
-    AccountDb = proplists:get_value(<<"AccountDb">>, Props),
-    Number = case wh_json:get_value(<<"owner_id">>, Device) of
-        undefined ->
-            wh_json:get_value(<<"name">>, Device);
-        OwnerId ->
-            case couch_mgr:open_doc(AccountDb, OwnerId) of
-                {ok, OwnerDoc} ->
-                    wh_json:get_value(<<"username">>, OwnerDoc);
-                _ ->
-                    wh_json:get_value(<<"name">>, Device)
-            end
-    end,
-
-    %% Need to store the device SIP creds in cache for user
-    _Username = wh_json:get_value([<<"sip">>, <<"username">>], Device),
-
-    case already_has_reg_entry(Number, Acc) of
-        true ->
-            Acc;
-        false ->
-            case find_peer_reg(wh_json:get_value(<<"username">>, wh_json:get_value(<<"sip">>, Device)), SipPeers) of
-                not_found ->
-                    [{Number, off, [
-                        {<<"Event">>, <<"PeerEntry">>},
-                        {<<"Channeltype">>, <<"SIP">>},
-                        {<<"ObjectName">>, Number},
-                        {<<"ChanObjectType">>, <<"peer">>},
-                        {<<"IPaddress">>, <<"-none-">>},
-                        {<<"IPport">>, 0},
-                        {<<"Dynamic">>, <<"yes">>},
-                        {<<"Forcerport">>, <<"no">>},
-                        {<<"VideoSupport">>, <<"no">>},
-                        {<<"TextSupport">>, <<"no">>},
-                        {<<"ACL">>, <<"yes">>},
-                        {<<"Status">>, <<"UNKNOWN">>},
-                        {<<"RealtimeDevice">>, <<"no">>}
-                    ]} | Acc];
-                JObj ->
-                    [{Number, on, [
-                        {<<"Event">>, <<"PeerEntry">>},
-                        {<<"Channeltype">>, <<"SIP">>},
-                        {<<"ObjectName">>, Number},
-                        {<<"ChanObjectType">>, <<"peer">>},
-                        {<<"IPaddress">>, wh_json:get_value(<<"contact_ip">>, JObj)},
-                        {<<"IPport">>, wh_json:get_value(<<"contact_port">>, JObj)},
-                        {<<"Dynamic">>, <<"yes">>},
-                        {<<"Forcerport">>, <<"no">>},
-                        {<<"VideoSupport">>, <<"no">>},
-                        {<<"TextSupport">>, <<"no">>},
-                        {<<"ACL">>, <<"yes">>},
-                        {<<"Status">>, <<"OK (1 ms)">>},
-                        {<<"RealtimeDevice">>, <<"no">>}
-                    ]} | Acc]
-            end
-    end.
-
-already_has_reg_entry(_Number, []) ->
-    false;
-already_has_reg_entry(Number, [{Number, on, _Reg}|_Regs]) ->
-    true;
-already_has_reg_entry(Number, [_Reg|Regs]) ->
-    already_has_reg_entry(Number, Regs).
-
-find_peer_reg(_Username, []) ->
-    not_found;
-find_peer_reg(Username, [Peer|Peers]) ->
-    case wh_json:get_value(<<"Username">>, Peer) of
-        Username ->
-            cb_registrations:normalize_registration(Peer);
-        _ ->
-            find_peer_reg(Username, Peers)
-    end.
+reg_entry(AccountId, EndpointId, EndpointName) ->
+	case ami_sm:registration(AccountId, EndpointId) of
+		'not_registered' ->
+			[
+				{<<"Event">>, <<"PeerEntry">>},
+                {<<"Channeltype">>, <<"SIP">>},
+                {<<"ObjectName">>, EndpointName},
+                {<<"ChanObjectType">>, <<"peer">>},
+                {<<"IPaddress">>, <<"-none-">>},
+                {<<"IPport">>, 0},
+                {<<"Dynamic">>, <<"yes">>},
+                {<<"Forcerport">>, <<"no">>},
+                {<<"VideoSupport">>, <<"no">>},
+                {<<"TextSupport">>, <<"no">>},
+                {<<"ACL">>, <<"yes">>},
+                {<<"Status">>, <<"UNKNOWN">>},
+                {<<"RealtimeDevice">>, <<"no">>}
+			];
+		RegProps ->
+			[
+				{<<"Event">>, <<"PeerEntry">>},
+                {<<"Channeltype">>, <<"SIP">>},
+                {<<"ObjectName">>, EndpointName},
+                {<<"ChanObjectType">>, <<"peer">>},
+                {<<"IPaddress">>, props:get_value(<<"IP">>, RegProps)},
+                {<<"IPport">>, props:get_value(<<"Port">>, RegProps)},
+                {<<"Dynamic">>, <<"yes">>},
+                {<<"Forcerport">>, <<"no">>},
+                {<<"VideoSupport">>, <<"no">>},
+                {<<"TextSupport">>, <<"no">>},
+                {<<"ACL">>, <<"yes">>},
+                {<<"Status">>, <<"OK (1 ms)">>},
+                {<<"RealtimeDevice">>, <<"no">>}
+			]
+	end.
 
 mailbox_count_error(ActionId, Mailbox) ->
     [
@@ -963,7 +867,10 @@ user_event(<<"MEETME-REFRESH">>, Props) ->
         {<<"UserEvent">>, <<"MEETME-REFRESH">>},
         {<<"Action">>, <<"UserEvent">>},
         {<<"Meetme">>, props:get_value(<<"Meetme">>, Props)}
-    ]].
+    ]];
+user_event(EventName, Props) ->
+	lager:debug("Unhandled event ~p with props ~p", [EventName, Props]),
+	undefined.
 
 maybe_list_conf(Number, Props) ->
     AccountDb = props:get_value(<<"AccountDb">>, Props),

@@ -28,7 +28,7 @@ start_listeners(ListenSocket, Count) ->
 start_listener(ListenSocket, Num) ->
     supervisor:start_child(?MODULE, {
         "amimulator_comm-" ++ wh_util:to_list(Num),
-        {amimulator_comm, start_link, [ListenSocket]}, permanent, 2000, worker, [amimulator_com]
+        {amimulator_comm, start_link, [ListenSocket]}, permanent, 2000, worker, [amimulator_comm]
     }).
 
 %% Find an event consumer for a kazoo account
@@ -43,7 +43,7 @@ start_ev(AccountId) ->
     }).
 
 pause_ev(AccountId) ->
-    lager:debug("Soon to reap the zombied ami_ev"),
+    % lager:debug("Soon to reap the zombied ami_ev"),
     Timestamp = wh_util:current_tstamp(),
     ami_sm:ev_going_down(AccountId, Timestamp),
     timer:apply_after(?EV_TIMEOUT, ?MODULE, do_pause_check, [AccountId, Timestamp]).

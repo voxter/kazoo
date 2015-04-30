@@ -54,7 +54,8 @@ handle_cast(accept, #state{listen_socket=Socket}=State) ->
             %% Need to wait for login now
             {noreply, State#state{accept_socket=AcceptSocket}};
         {error, closed} ->
-            {stop, normal, State};
+        	% lager:debug("Listen socket closed"),
+            {noreply, State};
         {_, _} ->
             lager:debug("Exception occurred when waiting for socket accept"),
             {noreply, State}
@@ -93,17 +94,16 @@ handle_info({tcp, _Socket, Data}, #state{bundle=Bundle}=State) ->
     end;
 handle_info({tcp_closed, _Socket}, State) ->
     lager:debug("Disconnected client"),
+    lager:debug("One less consumer for the account."),
     {stop, normal, State};
 handle_info({tcp_error, _Socket, _}, State) ->
     lager:debug("tcp_error"),
     {stop, normal, State};
 handle_info(_Info, State) ->
-    %lager:debug("unexpected info: ~p~n", [Info]),
     {noreply, State}.
 
-terminate(_Reason, #state{accept_socket=AcceptSocket}) ->
-    % TODO: actually close these accept sockets on restart
-    lager:debug("terminating"),
+terminate(shutdown, #state{accept_socket=AcceptSocket}) ->
+	% TODO: actually close these accept sockets on restart
     case AcceptSocket of
         undefined ->
             ok;
@@ -112,9 +112,10 @@ terminate(_Reason, #state{accept_socket=AcceptSocket}) ->
             gen_tcp:close(AcceptSocket),
             ok
     end,
-
-    ami_sm:unregister(),
-    lager:debug("One less consumer for the account.").
+    ami_sm:unregister();
+terminate(Reason, State) ->
+    lager:debug("Unexpected terminate (~p)", [Reason]),
+    terminate(shutdown, State).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -126,7 +127,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% Build up state for this account if it is not in the state master
 maybe_init_state(AccountId) ->
     case ami_sm:calls(AccountId) of
-        undefined ->
+        [] ->
             ami_sm:init_state(AccountId);
         _ ->
             ok
@@ -137,11 +138,11 @@ maybe_send_response(HandleResp) ->
         {ok, Resp} ->
             %% Can disable events from AMI
             case ami_sm:events() of
-                "On" ->
+                'on' ->
                     gen_server:cast(self(), {publish, Resp});
-                "Off" ->
+                'off' ->
                     ok;
-                undefined ->
+                'undefined' ->
                     ok
             end;
         _ ->

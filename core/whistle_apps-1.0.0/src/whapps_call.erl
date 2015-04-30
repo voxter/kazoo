@@ -40,7 +40,7 @@
 
 -export([set_request/2, request/1, request_user/1, request_realm/1]).
 -export([set_from/2, from/1, from_user/1, from_realm/1]).
--export([set_to/2, to/1, to_user/1, to_realm/1]).
+-export([set_to/2, set_to_user/2, to/1, to_user/1, to_realm/1]).
 
 -export([set_account_db/2, account_db/1]).
 -export([set_account_id/2, account_id/1]).
@@ -632,6 +632,10 @@ from_realm(#whapps_call{from_realm=FromRealm}) ->
 set_to(To, #whapps_call{}=Call) when is_binary(To) ->
     [ToUser, ToRealm] = binary:split(To, <<"@">>),
     Call#whapps_call{to=To, to_user=ToUser, to_realm=ToRealm}.
+
+-spec set_to_user(ne_binary(), call()) -> call().
+set_to_user(To, #whapps_call{}=Call) when is_binary(To) ->
+	Call#whapps_call{to=To, to_user=To}.
 
 -spec to(call()) -> ne_binary().
 to(#whapps_call{to=To}) ->
