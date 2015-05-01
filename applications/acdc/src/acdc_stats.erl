@@ -268,11 +268,9 @@ handle_info({'ETS-TRANSFER', _TblId, _From, _Data}, State) ->
     lager:debug("ETS control for ~p transferred to me for writing", [_TblId]),
     {'noreply', State};
 handle_info(?ARCHIVE_MSG, State) ->
-	lager:debug("Starting archive of acdc_stats data"),
     _ = archive_data(),
     {'noreply', State#state{archive_ref=start_archive_timer()}};
 handle_info(?CLEANUP_MSG, State) ->
-	lager:debug("Starting cleanup of acdc_stats data"),
     _ = cleanup_data(self()),
     {'noreply', State#state{cleanup_ref=start_cleanup_timer()}};
 handle_info(_Msg, State) ->
