@@ -375,26 +375,10 @@ archive_status_data(Srv, 'false') ->
              }],
     maybe_archive_status_data(Srv, Match).
 
-archive_status_data_match() ->
-	[{
-		#status_stat{
-			is_archived = '$1',
-			_ = '_'
-		},
-		[{'=:=', '$1', 'false'}],
-		['$_']
-	}].
-
 maybe_archive_status_data(Srv, Match) ->
-	case ets:select(acdc_agent_stats:status_table_id(), archive_status_data_match()) of
-		[] -> ok;
-		Stats2 -> lager:debug("Count of status stats not yet archived: ~p", [length(Stats2)])
-	end,
-
-    case ets:select(acdc_agent_stats:status_table_id(), Match) of
+	case ets:select(acdc_agent_stats:status_table_id(), Match) of
         [] -> 'ok';
         Stats ->
-        	lager:debug("Count of status stats to archive: ~p", [length(Stats)]),
             couch_mgr:suppress_change_notice(),
             ToSave = lists:foldl(fun archive_status_fold/2, dict:new(), Stats),
             [couch_mgr:save_docs(acdc_stats_util:db_name(Acct), Docs)
