@@ -4,10 +4,10 @@
 -export([start_link/0, register/0, unregister/0, ev_going_down/2, ev_staying_up/1, is_ev_down/2,
     account_id/0, set_account_id/1,
     init_state/1, purge_state/1, events/0, account_consumers/1, registration/2, call/1, call_by_channel/1, new_call/2, 
-    new_call/3, update_call/2, delete_call/1, queue_call/2, queue_pos/2, conf_parts/1,
+    new_call/3, update_call/2, delete_call/1, queue_call/3, queue_pos/2, fetch_queue_call_data/2, queue_leave/2, conf_parts/1,
     update_conf_parts/2, conf_cache/1, cache_conf_part/2,
     calls/1, channel_call_ids/1, add_channel_call_id/2, call_id_in_channel/2, maybe_ringing/2,
-    answer/2, answered_or_ignored/2, debug/1]).
+    answer/2, answered_or_ignored/2, debug/1]).%, debug_clear_call/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -export([initial_registrations/1]).
 
@@ -43,7 +43,7 @@ is_ev_down(AccountId, Timestamp) ->
     gen_server:call(?MODULE, {is_ev_down, AccountId, Timestamp}).
 
 account_id() ->
-    gen_server:call(?MODULE, 'get_account_id').
+    gen_server:call(?MODULE, 'get_account_id', 60000).
 
 set_account_id(AccountId) ->
     gen_server:cast(?MODULE, {reg_account_id, AccountId, self()}).
@@ -84,11 +84,17 @@ update_call(CallId, Data) ->
 delete_call(CallId) ->
     gen_server:cast(?MODULE, {delete_call, CallId}).
 
-queue_call(QueueId, CallId) ->
-    gen_server:call(?MODULE, {queue_call, QueueId, CallId}).
+queue_call(QueueId, CallId, Call) ->
+    gen_server:call(?MODULE, {queue_call, QueueId, CallId, Call}).
 
 queue_pos(QueueId, CallId) ->
     gen_server:call(?MODULE, {queue_pos, QueueId, CallId}).
+
+fetch_queue_call_data(QueueId, CallId) ->
+	gen_server:call(?MODULE, {get_queue_call, QueueId, CallId}).
+
+queue_leave(QueueId, CallId) ->
+	gen_server:cast(?MODULE, {queue_leave, QueueId, CallId}).
 
 conf_parts(ConfId) ->
     gen_server:call(?MODULE, {conf_parts, ConfId}).
@@ -129,6 +135,9 @@ flag_early_answer(CallId) ->
 
 debug(TableName) ->
     gen_server:call(?MODULE, {'debug', TableName}).
+
+debug_clear_call(CallId) ->
+	gen_server:call(?MODULE, {debug_clear_call, CallId}).
 
 %%
 %% gen_server callbacks
@@ -233,19 +242,28 @@ handle_call({get_call_by_channel, Channel}, From, State) ->
 	end,
     {reply, Reply, State};
 
-handle_call({queue_call, QueueId, CallId}, _From, State) ->
-	Size = length(ets:match('queue_calls', {QueueId, '_'})),
-	ets:insert('queue_calls', {QueueId, CallId}),
+handle_call({queue_call, QueueId, CallId, Call}, _From, State) ->
+	Size = length(ets:match('queue_calls', {QueueId, '_', '_'})),
+	ets:insert('queue_calls', {QueueId, CallId, Call}),
     {reply, Size+1, State};
 
 handle_call({queue_pos, QueueId, CallId}, _From, State) ->
-	Reply = case ets:match('queue_calls', {QueueId, '_'}) of
+	Reply = case ets:match('queue_calls', {QueueId, '$1', '_'}) of
 		[] ->
 			undefined;
 		List ->
 			amimulator_util:index_of([CallId], List)
 	end,
     {reply, Reply, State};
+
+handle_call({get_queue_call, QueueId, CallId}, _From, State) ->
+	Reply = case ets:match('queue_calls', {QueueId, CallId, '$1'}) of
+		[] ->
+			undefined;
+		[[Match]] ->
+			Match
+	end,
+	{reply, Reply, State};
 
 handle_call({conf_parts, ConfId}, _From, State) ->
 	Reply = lists:flatten(ets:match('conference_participants', {ConfId, '$1'})),
@@ -261,7 +279,7 @@ handle_call({conf_cache, CallId}, _From, State) ->
     {reply, Reply, State};
 
 handle_call({'maybe_ringing', Channel, CallId}, _From, State) ->
-	Reply = case ets:match('ringing_channels', {Channel, CallId}) of
+	Reply = case ets:match('ringing_channels', {Channel, '$1'}) of
 		[] ->
 			ets:insert('ringing_channels', {Channel, CallId}),
 			true;
@@ -273,7 +291,7 @@ handle_call({'maybe_ringing', Channel, CallId}, _From, State) ->
     {reply, Reply, State};
 
 handle_call({'answered_or_ignored', Channel, CallId}, _From, State) ->
-	Reply = case ets:match('answered_channels', {Channel, CallId}) of
+	Reply = case ets:match('answered_channels', {Channel, '$1'}) of
 		[] ->
 			true;
 		[[CallId]] ->
@@ -371,6 +389,15 @@ handle_cast({'add_channel_call_id', Channel, CallId}, State) ->
 	ets:insert('channels', {Channel, CallId}),
 	{'noreply', State};
 
+handle_cast({queue_leave, QueueId, CallId}, State) ->
+	case ets:match('queue_calls', {QueueId, CallId, '$1'}) of
+		[] ->
+			lager:debug("Trying to clean up a queue call (~p) that is not in the queue_calls table", [CallId]);
+		[[Call]] ->
+			ets:delete_object('queue_calls', {QueueId, CallId, Call})
+	end,
+	{noreply, State};
+
 handle_cast({update_conf_parts, ConfId, Data}, State) ->
 	ets:insert('conference_participants', {ConfId, Data}),
     {noreply, State};
@@ -386,6 +413,39 @@ handle_cast({answer, Channel, CallId}, State) ->
 handle_cast({'flag_early_answer', CallId}, State) ->
 	ets:insert('flags', {CallId, 'early_answer'}),
 	{'noreply', State};
+
+% handle_cast({debug_clear_call, CallId}, State) ->
+% 	case ets:match(calls, {CallId, '$1', '$2'}) of
+% 		[] ->
+% 			io:format("The call ~p does not exist", [CallId]);
+% 		[[AccountId, Call]] ->
+% 			ets:delete_object(calls, {CallId, AccountId, Call}),
+% 			ets:delete_object(channels, {props:get_value(<<"aleg_ami_channel">>, Call), })
+
+
+% 	lists:foreach(fun([CallId, Call]) ->
+% 		ets:delete_object('calls', {CallId, AccountId, Call}),
+% 		ets:delete_object('channels', {props:get_value(<<"aleg_ami_channel">>, Call), CallId}),
+% 		ets:delete_object('ringing_channels', {props:get_value(<<"aleg_ami_channel">>, Call), CallId}),
+% 		ets:delete_object('answered_channels', {props:get_value(<<"aleg_ami_channel">>, Call), CallId})
+% 		%% queue_calls
+% 		%% conference_participants
+% 	end, ets:match('calls', {'$1', AccountId, '$2'})).
+
+
+
+
+% 	 ets:new('registrations', ['named_table']),
+%     ets:new('calls', ['named_table']),
+%     ets:new('flags', ['named_table']),
+%     ets:new('channels', ['named_table', 'bag']),
+%     ets:new('ringing_channels', ['named_table']),
+%     ets:new('answered_channels', ['named_table']),
+%     ets:new('queue_calls', ['named_table', 'bag']),
+%     ets:new('conference_participants', ['named_table', 'bag']),
+%     ets:new('conference_cache_data', ['named_table']),
+%     ets:new('event_listener_kill_reqs', ['named_table', 'bag']),
+%     ets:new('account_consumers', ['named_table', 'bag']),
 
 handle_cast(_Request, State) ->
     {noreply, State}.
@@ -410,7 +470,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% By doing the state initialization here, we ensure that it is atomic, and no commander/ami_ev
 %% functions can read from the data store before it is ready
 pvt_init_state(AccountId) ->
-    Calls = amimulator_util:initial_calls(AccountId),
+    Calls = amimulator_util:initial_calls2(AccountId),
 
     lists:foreach(fun(Call) ->
         WhappsCall = props:get_value(<<"call">>, Call),

@@ -22,7 +22,7 @@ bindings(Props) ->
             {account_id, AccountId}
         ]},
         {acdc_stats, [
-            {restrict_to, [call_stat]},
+            {restrict_to, [call_stat, status_stat]},
             {account_id, AccountId}
         ]}
     ].
@@ -32,6 +32,7 @@ responders(_Props) ->
         {<<"member">>, <<"call">>},
         {<<"member">>, <<"call_cancel">>},
         {<<"acdc_call_stat">>, <<"handled">>},
+        {<<"acdc_status_stat">>, <<"connecting">>},
         {<<"agent">>, <<"login">>},
         {<<"agent">>, <<"logout">>},
         {<<"agent">>, <<"pause">>},
@@ -55,14 +56,15 @@ handle_specific_event(<<"call">>, EventJObj) ->
     WhappsCall = props:get_value(<<"call">>, Call),
     CallId = whapps_call:call_id(WhappsCall),
     EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
+    CallerIdNum = props:get_value(<<"aleg_exten">>, Call),
     CallerId = props:get_value(<<"aleg_cid">>, Call),
 
-    lager:debug("acdc eventdata ~p", [wh_json:delete_key(<<"Key-Value-Store">>, EventData)]),
+    %lager:debug("acdc eventdata ~p", [wh_json:delete_key(<<"Key-Value-Store">>, EventData)]),
 
     AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
     QueueId = wh_json:get_value(<<"Queue-ID">>, EventJObj),
 
-    Position = ami_sm:queue_call(QueueId, CallId),
+    Position = ami_sm:queue_call(QueueId, CallId, Call),
 
     case amimulator_util:find_id_number(
         wh_json:get_value(<<"Queue-ID">>, EventJObj),
@@ -75,7 +77,7 @@ handle_specific_event(<<"call">>, EventJObj) ->
 		        {<<"Event">>, <<"Join">>},
 		        {<<"Privilege">>, <<"call,all">>},
 		        {<<"Channel">>, EndpointName},
-		        {<<"CallerIDNum">>, CallerId},
+		        {<<"CallerIDNum">>, CallerIdNum},
 		        {<<"CallerIDName">>, CallerId},
 		        {<<"ConnectedLineNum">>, <<"unknown">>},
 		        {<<"ConnectedLineName">>, <<"unknown">>},
@@ -87,11 +89,12 @@ handle_specific_event(<<"call">>, EventJObj) ->
 		    ami_ev:publish_amqp_event({publish, Payload})
 	end;
 handle_specific_event(<<"call_cancel">>, EventJObj) ->
-    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
-    Call = ami_sm:call(CallId),
-
     QueueId = wh_json:get_value(<<"Queue-ID">>, EventJObj),
+    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
+
+    Call = ami_sm:fetch_queue_call_data(QueueId, CallId),
     Position = ami_sm:queue_pos(QueueId, CallId),
+    ami_sm:queue_leave(QueueId, CallId),
     
     AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
     case amimulator_util:find_id_number(
@@ -122,12 +125,32 @@ handle_specific_event(<<"call_cancel">>, EventJObj) ->
 		    ]],
 		    ami_ev:publish_amqp_event({publish, Payload})
 	end;
+handle_specific_event(<<"connecting">>, EventJObj) ->
+	AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
+	AccountDb = wh_util:format_account_id(AccountId, encoded),
+	CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
+	AgentId = wh_json:get_value(<<"Agent-ID">>, EventJObj),
+
+	{ok, Owner} = couch_mgr:open_doc(AccountDb, AgentId),
+	Call = ami_sm:call(CallId),
+	Payload = [
+		{<<"Event">>, <<"AgentCalled">>},
+		{<<"AgentCalled">>, <<"Local/", (wh_json:get_value(<<"username">>, Owner))/binary, "@from-queue/n">>},
+		{<<"ChannelCalling">>, props:get_value(<<"aleg_ami_channel">>, Call)},
+		{<<"CallerID">>, props:get_value(<<"aleg_cid">>, Call)},
+		{<<"Context">>, <<"default">>},
+		{<<"Extension">>, props:get_value(<<"aleg_exten">>, Call)},
+		{<<"Priority">>, 1}
+	],
+	ami_ev:publish_amqp_event({publish, Payload});
 handle_specific_event(<<"handled">>, EventJObj) ->
     CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
     Call = ami_sm:call(CallId),
 
     QueueId = wh_json:get_value(<<"Queue-ID">>, EventJObj),
     Position = ami_sm:queue_pos(QueueId, CallId),
+
+    ami_sm:queue_leave(QueueId, CallId),
     
     AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
     case amimulator_util:find_id_number(

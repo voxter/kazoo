@@ -64,11 +64,23 @@ handle_cast({login, AccountId}, State) ->
     {ok, OriginatorPid} = amimulator_originator:start_link(),
     maybe_init_state(AccountId),
     {noreply, State#state{originator_pid=OriginatorPid}};
-handle_cast({logout}, #state{accept_socket=AcceptSocket}=State) ->
+handle_cast({logout}, #state{accept_socket=AcceptSocket, originator_pid=OriginatorPid}=State) ->
     inet:setopts(AcceptSocket, [{nodelay, true}]),
     gen_tcp:send(AcceptSocket, <<"Response: Goodbye\r\nMessage: Thanks for all the fish.\r\n\r\n">>),
     inet:setopts(AcceptSocket, [{nodelay, false}]),
-    {stop, normal, State};
+
+    case AcceptSocket of
+        undefined ->
+            ok;
+        _ ->
+            lager:debug("Closing an accept socket"),
+            gen_tcp:close(AcceptSocket),
+            ok
+    end,
+    exit(OriginatorPid, kill),
+
+    gen_server:cast(self(), accept),
+    {noreply, State#state{accept_socket=undefined, bundle = <<>>, originator_pid=undefined}};
 handle_cast({originator, Action, Props}, #state{originator_pid=OriginatorPid}=State) ->
     gen_listener:cast(OriginatorPid, {Action, Props}),
     {noreply, State};

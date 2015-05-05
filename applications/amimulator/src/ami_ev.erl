@@ -106,6 +106,9 @@ handle_amqp_event_type(EventJObj, _Props, <<"acdc.member.call.", _/binary>>) ->
 handle_amqp_event_type(EventJObj, _Props, <<"acdc_stats.call.", _/binary>>) ->
     amimulator_acdc:handle_event(EventJObj);
 
+handle_amqp_event_type(EventJObj, _Props, <<"acdc_stats.status.", _/binary>>) ->
+	amimulator_acdc:handle_event(EventJObj);
+
 handle_amqp_event_type(EventJObj, Props, <<"conference.event.", _/binary>>) ->
     AccountId = props:get_value(<<"AccountId">>, Props),
     amimulator_conf:handle_event(wh_json:set_value(<<"Account-ID">>, AccountId, EventJObj));
@@ -162,7 +165,8 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info(?HOOK_EVT(_AccountId, _EventType, JObj), State) ->
-    spawn(amimulator_call, 'handle_event', [JObj]),
+    %spawn(amimulator_call, 'handle_event', [JObj]),
+    amimulator_call:handle_event(JObj),
     {noreply, State};
 handle_info(_Info, State) ->
     %lager:debug("unhandled info"),

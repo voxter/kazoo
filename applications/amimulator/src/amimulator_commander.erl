@@ -1,7 +1,7 @@
 -module(amimulator_commander).
 
 -export([handle/2]).
--export([queues_status/1]).
+-export([queue_stats/2]).
 
 -include("amimulator.hrl").
 
@@ -260,10 +260,11 @@ initial_channel_status(Calls, Props, Format) ->
             FormattedCalls = lists:foldl(fun(Call, List) ->
                 WhappsCall = props:get_value(<<"call">>, Call),
 
-                case {whapps_call:other_leg_call_id(WhappsCall) /= undefined, proplists:is_defined(<<"username">>, Call)} of
-                    {true, true} -> [ami_channel_status(Call, bridged_extension, Format)] ++ List;
-                    {true, false} -> [ami_channel_status(Call, bridged, Format)] ++ List;
-                    {false, true} -> [ami_channel_status(Call, bridged_extension, Format)] ++ List;
+                case {whapps_call:other_leg_call_id(WhappsCall) /= undefined, props:get_value(<<"username">>, Call)} of
+                    %{true, undefined} -> [ami_channel_status(Call, bridged, Format)] ++ List;
+                    {_, undefined} -> List;
+                    {true, _} -> [ami_channel_status(Call, bridged_extension, Format)] ++ List;
+                    {false, _} -> [ami_channel_status(Call, bridged_extension, Format)] ++ List;
                     {_, _} -> lager:debug("undefined channel status format for call ~p", [Call])
                 end
             end, [], FilteredCalls),
@@ -279,10 +280,11 @@ initial_channel_status(Calls, Props, Format) ->
             FormattedCalls = lists:foldl(fun(Call, List) ->
                 WhappsCall = props:get_value(<<"call">>, Call),
 
-                case {whapps_call:other_leg_call_id(WhappsCall) /= undefined, proplists:is_defined(<<"username">>, Call)} of
-                    {true, true} -> [ami_channel_status(Call, bridged_extension, Format)] ++ List;
-                    {true, false} -> [ami_channel_status(Call, bridged, Format)] ++ List;
-                    {false, true} -> [ami_channel_status(Call, bridged_extension, Format)] ++ List;
+                case {whapps_call:other_leg_call_id(WhappsCall) /= undefined, props:get_value(<<"username">>, Call)} of
+                    %{true, undefined} -> [ami_channel_status(Call, bridged, Format)] ++ List;
+                    {_, undefined} -> List;
+                    {true, _} -> [ami_channel_status(Call, bridged_extension, Format)] ++ List;
+                    {false, _} -> [ami_channel_status(Call, bridged_extension, Format)] ++ List;
                     {_, _} -> lager:debug("undefined channel status format for call ~p", [Call])
                 end
             end, [], FilteredCalls),
@@ -309,48 +311,41 @@ ami_channel_status(Call, Schema, <<"Status">>) ->
             {6, <<"Up">>}
     end,
 
-    AMI_Status_Header = [
-        {<<"Event">>, <<"Status">>},
-        {<<"Privilege">>, <<"Call">>}
-    ],
-    AMI_Status_Body = case Schema of
-        bridged_extension -> [
-             {<<"Channel">>, props:get_value(<<"aleg_ami_channel">>, Call)},
-             {<<"CallerIDNum">>, ALegCID},
-             {<<"CallerIDName">>, ALegCID},
-             {<<"ConnectedLineNum">>, BLegCID},
-             {<<"ConnectedLineName">>, BLegCID},
-             {<<"Accountcode">>, whapps_call:account_id(WhappsCall)},
-             {<<"ChannelState">>, ChannelState}, % Numeric channel state
-             {<<"ChannelStateDesc">>, ChannelStateDesc},
-             %{<<"Context">>, proplists:get_value(<<"context">>, Call)},
-             {<<"Context">>, <<"from-internal">>},
-             {<<"Extension">>, props:get_value(<<"aleg_exten">>, Call)},
-             {<<"Priority">>, <<"12">>},
-             {<<"Seconds">>, props:get_value(<<"elapsed_s">>, Call)},
-             {<<"BridgedChannel">>, props:get_value(<<"bleg_ami_channel">>, Call)},
-             {<<"BridgedUniqueid">>, whapps_call:other_leg_call_id(WhappsCall)}
-         ];
-         extension -> [
-             {<<"Accountcode">>, proplists:get_value(<<"account_id">>, Call)}
-         ];
-         bridged -> [
-             {<<"Channel">>, props:get_value(<<"aleg_ami_channel">>, Call)},
-             {<<"CallerIDNum">>, ALegCID},
-             {<<"CallerIDName">>, ALegCID},
-             {<<"ConnectedLineNum">>, BLegCID},
-             {<<"ConnectedLineName">>, BLegCID},
-             {<<"Account">>, <<"">>},
-             {<<"State">>, ChannelStateDesc},
-             {<<"BridgedChannel">>, props:get_value(<<"bleg_ami_channel">>, Call)},
-             {<<"BridgedUniqueid">>, whapps_call:other_leg_call_id(WhappsCall)}
-         ];
-         _ -> []
-     end,
-     AMI_Status_Footer = [
-         {<<"Uniqueid">>, whapps_call:call_id(WhappsCall)}
-     ],
-     AMI_Status_Header ++ AMI_Status_Body ++ AMI_Status_Footer;
+    case props:get_value(<<"direction">>, Call) of
+    	<<"inbound">> ->
+    		ami_channel_status(
+    			<<"Status">>,
+    			Schema,
+    			props:get_value(<<"bleg_ami_channel">>, Call),
+    			BLegCID,
+    			ALegCID,
+    			whapps_call:account_id(WhappsCall),
+    			ChannelState,
+    			ChannelStateDesc,
+    			props:get_value(<<"bleg_exten">>, Call),
+    			props:get_value(<<"elapsed_s">>, Call),
+    			props:get_value(<<"aleg_ami_channel">>, Call),
+    			whapps_call:other_leg_call_id(WhappsCall),
+    			whapps_call:call_id(WhappsCall)
+    		);
+    	<<"outbound">> ->
+    		ami_channel_status(
+    			<<"Status">>,
+    			Schema,
+    			props:get_value(<<"aleg_ami_channel">>, Call),
+    			ALegCID,
+    			BLegCID,
+    			whapps_call:account_id(WhappsCall),
+    			ChannelState,
+    			ChannelStateDesc,
+    			props:get_value(<<"aleg_exten">>, Call),
+    			props:get_value(<<"elapsed_s">>, Call),
+    			props:get_value(<<"bleg_ami_channel">>, Call),
+    			whapps_call:call_id(WhappsCall),
+    			whapps_call:other_leg_call_id(WhappsCall)
+    		)
+    end;
+
 ami_channel_status(Call, _Schema, <<"concise">>) ->
     Channel = binary_to_list(props:get_value(<<"aleg_ami_channel">>, Call)),
     Exten = binary_to_list(props:get_value(<<"aleg_exten">>, Call)),
@@ -441,6 +436,51 @@ append_space(RevList, Count, Count) ->
     RevList;
 append_space(RevList, Count, Index) ->
     append_space(" " ++ RevList, Count, Index+1).
+
+ami_channel_status(<<"Status">>, Schema, SourceChannel, SourceCID, DestCID, AccountId, ChannelState, ChannelStateDesc, SourceExtension,
+	ElapsedSeconds, DestChannel, SourceCallId, DestCallId) ->
+	AMI_Status_Header = [
+        {<<"Event">>, <<"Status">>},
+        {<<"Privilege">>, <<"Call">>}
+    ],
+    AMI_Status_Body = case Schema of
+        bridged_extension -> [
+             {<<"Channel">>, SourceChannel},
+             {<<"CallerIDNum">>, SourceCID},
+             {<<"CallerIDName">>, SourceCID},
+             {<<"ConnectedLineNum">>, DestCID},
+             {<<"ConnectedLineName">>, DestCID},
+             {<<"Accountcode">>, AccountId},
+             {<<"ChannelState">>, ChannelState}, % Numeric channel state
+             {<<"ChannelStateDesc">>, ChannelStateDesc},
+             %{<<"Context">>, proplists:get_value(<<"context">>, Call)},
+             {<<"Context">>, <<"from-internal">>},
+             {<<"Extension">>, SourceExtension},
+             {<<"Priority">>, <<"12">>},
+             {<<"Seconds">>, ElapsedSeconds},
+             {<<"BridgedChannel">>, DestChannel},
+             {<<"BridgedUniqueid">>, DestCallId}
+         ];
+         extension -> [
+             {<<"Accountcode">>, AccountId}
+         ];
+         bridged -> [
+             {<<"Channel">>, SourceChannel},
+             {<<"CallerIDNum">>, SourceCID},
+             {<<"CallerIDName">>, SourceCID},
+             {<<"ConnectedLineNum">>, DestCID},
+             {<<"ConnectedLineName">>, DestCID},
+             {<<"Account">>, <<"">>},
+             {<<"State">>, ChannelStateDesc},
+             {<<"BridgedChannel">>, DestChannel},
+             {<<"BridgedUniqueid">>, DestCallId}
+         ];
+         _ -> []
+     end,
+     AMI_Status_Footer = [
+         {<<"Uniqueid">>, SourceCallId}
+     ],
+     AMI_Status_Header ++ AMI_Status_Body ++ AMI_Status_Footer.
     
 queues_status(Props) ->
     AccountId = proplists:get_value(<<"AccountId">>, Props),
@@ -462,12 +502,13 @@ queues_status(Props) ->
         				Value = wh_json:get_value(<<"value">>, hd(Results2)),
         				Number = hd(Value),
 
-        				{Calls, Holdtime, TalkTime, Completed, Abandoned} = case queue_stats(QueueId, AccountId) of
-        					{'error', E} ->
+        				RawStats = queue_stats(QueueId, AccountId),
+        				{Calls, Holdtime, TalkTime, Completed, Abandoned, AgentStats} = case RawStats of
+        					{error, E} ->
         						lager:debug("Error ~p when getting queue stats for queue ~p", [E, QueueId]),
         						{0, 0, 0, 0, 0};
-        					{_, _, _, _, _}=Stats ->
-        						Stats
+        					{ok, Resp} ->
+        						count_stats(Resp)
         				end,
 
         				CompletedCalls = Completed - Abandoned,
@@ -477,13 +518,15 @@ queues_status(Props) ->
         					_ ->
         						Holdtime / CompletedCalls
         				end,
+        				WaitingCalls = Calls - Completed,
 
         				[[
         					{<<"Event">>, <<"QueueParams">>},
 					        {<<"Queue">>, Number},
 					        {<<"Max">>, wh_json:get_value(<<"max_queue_size">>, QueueDoc)},
 					        {<<"Strategy">>, wh_json:get_value(<<"strategy">>, QueueDoc)},
-					        {<<"Calls">>, Calls},
+					        %% Calls actually represents number of waiting calls
+					        {<<"Calls">>, WaitingCalls},
 					        {<<"Holdtime">>, AverageHold},
 					        {<<"TalkTime">>, TalkTime},
 					        {<<"Completed">>, CompletedCalls},
@@ -492,7 +535,7 @@ queues_status(Props) ->
 					        {<<"ServiceLevel">>, 60},
 					        {<<"ServicelevelPerf">>, 69.0}
         				]]
-        				++ agent_statuses(QueueId, AccountId, Number)
+        				++ agent_statuses(QueueId, AccountId, Number, AgentStats)
         				++ Acc;
         			{'ok', Results2} ->
         				lager:debug("Too many results when trying to find queue number for queue ~p: ~p", [QueueId, Results2]),
@@ -508,14 +551,11 @@ queue_stats(QueueId, AcctId) ->
              ,{<<"Queue-ID">>, QueueId}
              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
-    case whapps_util:amqp_pool_request(
+    whapps_util:amqp_pool_request(
         Req,
         fun wapi_acdc_stats:publish_current_calls_req/1,
         fun wapi_acdc_stats:current_calls_resp_v/1
-    ) of
-        {'error', _E}=Error -> Error;
-        {'ok', Resp} -> count_stats(Resp)
-    end.
+    ).
 
 % TODO: may still need to add counting of agents fails
 count_stats(Stats) ->
@@ -523,25 +563,36 @@ count_stats(Stats) ->
         wh_json:get_value(<<"Abandoned">>, Stats, []) ++
         wh_json:get_value(<<"Waiting">>, Stats, []) ++
         wh_json:get_value(<<"Processed">>, Stats, []),
-    count_stats(AllStats, {0, 0, 0, 0, 0}).
+    count_stats(AllStats, {0, 0, 0, 0, 0, []}).
     
-count_stats([], {Calls, Holdtime, TalkTime, Completed, Abandoned}) ->
-    {Calls, Holdtime, TalkTime, Completed, Abandoned};
-count_stats([Stat|Stats], {Calls, Holdtime, TalkTime, Completed, Abandoned}) ->
-    case wh_json:get_value(<<"status">>, Stat) of
+count_stats([], {Calls, Holdtime, TalkTime, Completed, Abandoned, AgentStats}) ->
+    {Calls, Holdtime, TalkTime, Completed, Abandoned, AgentStats};
+count_stats([Stat|Stats], {Calls, Holdtime, TalkTime, Completed, Abandoned, AgentStats}) ->
+	Status = wh_json:get_value(<<"status">>, Stat),
+	AgentStats2 = if (Status =:= <<"handled">>) or (Status =:= <<"processed">>) ->
+		AgentId = wh_json:get_value(<<"agent_id">>, Stat),
+		props:set_value(AgentId, [
+				{<<"CallsTaken">>, props:get_value(<<"CallsTaken">>, props:get_value(AgentId, AgentStats, []), 0) + 1},
+				{<<"LastCall">>, wh_json:get_first_defined([<<"processed_timestamp">>, <<"handled_timestamp">>], Stat, 0) - 62167219200}
+			], AgentStats);
+	true ->
+		AgentStats
+	end,
+
+    case Status of
         <<"abandoned">> ->
             WaitTime = wh_json:get_value(<<"abandoned_timestamp">>, Stat) -
                 wh_json:get_value(<<"entered_timestamp">>, Stat),
-            count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime, Completed+1, Abandoned+1});
+            count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime, Completed+1, Abandoned+1, AgentStats2});
         <<"waiting">> ->
             % TODO: updated the calculation for wait can call time
             WaitTime = wh_util:current_tstamp() - wh_json:get_value(<<"entered_timestamp">>, Stat),
-            count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime, Completed, Abandoned});
+            count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime, Completed, Abandoned, AgentStats2});
         <<"handled">> ->
             WaitTime = wh_json:get_value(<<"handled_timestamp">>, Stat) -
                 wh_json:get_value(<<"entered_timestamp">>, Stat),
             CallTime = wh_util:current_tstamp() - wh_json:get_value(<<"handled_timestamp">>, Stat),
-            count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime+CallTime, Completed+1, Abandoned});
+            count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime+CallTime, Completed+1, Abandoned, AgentStats2});
         <<"processed">> ->
             case wh_json:get_value(<<"abandoned_timestamp">>, Stat) of
                 undefined ->
@@ -549,23 +600,23 @@ count_stats([Stat|Stats], {Calls, Holdtime, TalkTime, Completed, Abandoned}) ->
                         wh_json:get_value(<<"entered_timestamp">>, Stat),
                     CallTime = wh_json:get_value(<<"processed_timestamp">>, Stat) -
                         wh_json:get_value(<<"handled_timestamp">>, Stat),
-                    count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime+CallTime, Completed+1, Abandoned});
+                    count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime+CallTime, Completed+1, Abandoned, AgentStats2});
                 _ ->
                     WaitTime = wh_json:get_value(<<"abandoned_timestamp">>, Stat) -
                         wh_json:get_value(<<"entered_timestamp">>, Stat),
-                    count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime, Completed+1, Abandoned+1})
+                    count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime, Completed+1, Abandoned+1, AgentStats2})
             end
     end.
 
-agent_statuses(QueueId, AccountId, Number) ->
+agent_statuses(QueueId, AccountId, Number, AgentStats) ->
     AccountDb = wh_util:format_account_id(AccountId, encoded),
     {ok, Results} = couch_mgr:get_results(AccountDb, <<"queues/agents_listing">>, [{key, QueueId}]),
     lists:foldl(fun(Result, Acc) ->
         AgentId = wh_json:get_value(<<"id">>, Result),
-        [agent_status(AgentId, AccountId, Number) | Acc]
+        [agent_status(AgentId, AccountId, Number, AgentStats) | Acc]
         end, [], Results).
         
-agent_status(AgentId, AccountId, Number) ->
+agent_status(AgentId, AccountId, Number, AgentStats) ->
     AccountDb = wh_util:format_account_id(AccountId, encoded), 
     {ok, UserDoc} = couch_mgr:open_doc(AccountDb, AgentId),
     FirstName = wh_json:get_value(<<"first_name">>, UserDoc),
@@ -589,8 +640,8 @@ agent_status(AgentId, AccountId, Number) ->
         %% Membership static is also possible
         {<<"Membership">>, <<"dynamic">>},
         {<<"Penalty">>, 0},
-        %% CallsTaken handled by count_stats function
-        {<<"LastCall">>, 0},
+        {<<"CallsTaken">>, props:get_value(<<"CallsTaken">>, props:get_value(AgentId, AgentStats, []), 0)},
+        {<<"LastCall">>, props:get_value(<<"LastCall">>, props:get_value(AgentId, AgentStats, []), 0)},
         {<<"Status">>, translate_status(Status)},
         {<<"Paused">>, Paused}
     ].
@@ -815,9 +866,9 @@ getvar(<<"CDR(dst)">>, Props) ->
         undefined ->
             undefined;
         _ ->
+            lager:debug("channel ~p", [props:get_value(<<"Channel">>, Props)]),
             CallId = hd(CallIds),
             lager:debug("callid ~p", [CallId]),
-            lager:debug("channel ~p", [props:get_value(<<"Channel">>, Props)]),
             Call = ami_sm:call(CallId),
 
             [

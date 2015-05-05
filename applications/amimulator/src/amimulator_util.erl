@@ -9,7 +9,7 @@
     find_id_number/2, queue_for_number/2,
     filter_registered_events/4, whapps_call_from_cf_exe/1, channel_tail/1]).
 
--export([basic_calls/1]).
+-export([initial_calls2/1]).
 
 %% AMI commands broken up by newlines
 parse_payload(Payload) ->
@@ -93,7 +93,7 @@ create_call(EventJObj) ->
 get_call(CallId) ->
     ami_sm:call(CallId).
 
-basic_calls(AccountId) ->
+initial_calls2(AccountId) ->
 	Req = [
         {<<"Account-ID">>, AccountId},
         {<<"Active-Only">>, 'true'}
@@ -147,83 +147,78 @@ call_from_channel(JObj, Lookup) ->
 
 		fun({Call, WhappsCall}) ->
 			{props:set_value(<<"direction">>, wh_json:get_value(<<"direction">>, JObj), Call), WhappsCall} end,
+        fun({Call, WhappsCall}) ->
+        	{props:set_value(<<"username">>, wh_json:get_value(<<"username">>, JObj), Call), WhappsCall} end,
+        fun({Call, WhappsCall}) ->
+        	{props:set_value(<<"answered">>, wh_json:get_value(<<"answered">>, JObj), Call), WhappsCall} end,
+        fun({Call, WhappsCall}) ->
+        	{props:set_value(<<"elapsed_s">>, wh_json:get_value(<<"elapsed_s">>, JObj), Call), WhappsCall} end,
 		fun({Call, WhappsCall}) ->
 			CallId = wh_json:get_value(<<"uuid">>, JObj),
-			Props = case wh_json:get_value(<<"bridge_id">>, JObj) of
-				CallId ->
-					AccountDb = whapps_call:account_db(WhappsCall),
-					case wh_json:get_value(<<"authorizing_id">>, JObj) of
-						undefined ->
-							ALeg = case maybe_cellphone_endpoint2(
-								whapps_call:to_user(WhappsCall), props:get_value(<<"direction">>, Call),
-								CallId, wh_json:get_value(<<"presence_id">>, JObj), AccountDb) of
-								{direction, D} ->
-									[
-										{<<"aleg_cid">>, props:get_value(<<"cid">>, D)},
-										{<<"aleg_exten">>, props:get_value(<<"cid">>, D)},
-										{<<"aleg_ami_channel">>, props:get_value(<<"channel">>, D)}
-									];
-								{endpoint, Endpoint} ->
-									[
-										{<<"aleg_cid">>, endpoint_cid(Endpoint, AccountDb)},
-										{<<"aleg_exten">>, endpoint_exten(Endpoint, AccountDb)},
-										{<<"aleg_ami_channel">>, endpoint_channel(Endpoint, AccountDb, CallId)}
-									]
-							end,
-							{ok, Endpoint2} = couch_mgr:open_doc(AccountDb,
-								wh_json:get_value(<<"authorizing_id">>,
-									props:get_value(whapps_call:other_leg_call_id(WhappsCall), Lookup))),
-							BLeg = [
-								{<<"bleg_cid">>, endpoint_cid(Endpoint2, AccountDb)},
-								{<<"bleg_exten">>, endpoint_exten(Endpoint2, AccountDb)},
-								{<<"bleg_ami_channel">>, endpoint_channel(Endpoint2, AccountDb, CallId)}
-							],
-							ALeg ++ BLeg;
-						_ ->
-							{ok, Endpoint} = cf_endpoint:get(WhappsCall),
-							ALeg = [
+			AccountDb = whapps_call:account_db(WhappsCall),
+			Props = case wh_json:get_value(<<"authorizing_id">>, JObj) of
+				undefined ->
+					ALeg = case maybe_cellphone_endpoint2(
+						whapps_call:to_user(WhappsCall), props:get_value(<<"direction">>, Call),
+						CallId, wh_json:get_value(<<"presence_id">>, JObj), AccountDb) of
+						{direction, D} ->
+							[
+								{<<"aleg_cid">>, props:get_value(<<"cid">>, D)},
+								{<<"aleg_exten">>, props:get_value(<<"cid">>, D)},
+								{<<"aleg_ami_channel">>, props:get_value(<<"channel">>, D)}
+							];
+						{endpoint, Endpoint} ->
+							[
 								{<<"aleg_cid">>, endpoint_cid(Endpoint, AccountDb)},
 								{<<"aleg_exten">>, endpoint_exten(Endpoint, AccountDb)},
 								{<<"aleg_ami_channel">>, endpoint_channel(Endpoint, AccountDb, CallId)}
-							],
-							OtherLegCallId = whapps_call:other_leg_call_id(WhappsCall),
-							OtherChannel = props:get_value(OtherLegCallId, Lookup),
-							BLeg = case maybe_cellphone_endpoint2(
-								wh_json:get_value(<<"destination">>, OtherChannel), wh_json:get_value(<<"direction">>, OtherChannel),
-								CallId, wh_json:get_value(<<"presence_id">>, OtherChannel), AccountDb) of
-								{direction, D} ->
-									[
-										{<<"bleg_cid">>, props:get_value(<<"cid">>, D)},
-										{<<"bleg_exten">>, props:get_value(<<"cid">>, D)},
-										{<<"bleg_ami_channel">>, props:get_value(<<"channel">>, D)}
-									];
-								{endpoint, Endpoint} ->
-									[
-										{<<"bleg_cid">>, endpoint_cid(Endpoint, AccountDb)},
-										{<<"bleg_exten">>, endpoint_exten(Endpoint, AccountDb)},
-										{<<"bleg_ami_channel">>, endpoint_channel(Endpoint, AccountDb, OtherLegCallId)}
-									]
-							end,
-							ALeg ++ BLeg
-					end;
+							]
+					end,
+					BLeg = case couch_mgr:open_doc(AccountDb,
+						wh_json:get_value(<<"authorizing_id">>,
+							props:get_value(whapps_call:other_leg_call_id(WhappsCall), Lookup))) of
+						{error, empty_doc_id} ->
+							[];
+						{ok, Endpoint2} ->
+							[
+								{<<"bleg_cid">>, endpoint_cid(Endpoint2, AccountDb)},
+								{<<"bleg_exten">>, endpoint_exten(Endpoint2, AccountDb)},
+								{<<"bleg_ami_channel">>, endpoint_channel(Endpoint2, AccountDb, CallId)}
+							]
+					end,
+					ALeg ++ BLeg;
 				_ ->
-					[]
+					{ok, Endpoint} = cf_endpoint:get(WhappsCall),
+					ALeg = [
+						{<<"aleg_cid">>, endpoint_cid(Endpoint, AccountDb)},
+						{<<"aleg_exten">>, endpoint_exten(Endpoint, AccountDb)},
+						{<<"aleg_ami_channel">>, endpoint_channel(Endpoint, AccountDb, CallId)}
+					],
+					OtherLegCallId = whapps_call:other_leg_call_id(WhappsCall),
+					OtherChannel = props:get_value(OtherLegCallId, Lookup),
+					BLeg = case maybe_cellphone_endpoint2(
+						wh_json:get_value(<<"destination">>, OtherChannel), wh_json:get_value(<<"direction">>, OtherChannel),
+						CallId, wh_json:get_value(<<"presence_id">>, OtherChannel), AccountDb) of
+						{direction, D} ->
+							[
+								{<<"bleg_cid">>, props:get_value(<<"cid">>, D)},
+								{<<"bleg_exten">>, props:get_value(<<"cid">>, D)},
+								{<<"bleg_ami_channel">>, props:get_value(<<"channel">>, D)}
+							];
+						{endpoint, Endpoint} ->
+							[
+								{<<"bleg_cid">>, endpoint_cid(Endpoint, AccountDb)},
+								{<<"bleg_exten">>, endpoint_exten(Endpoint, AccountDb)},
+								{<<"bleg_ami_channel">>, endpoint_channel(Endpoint, AccountDb, OtherLegCallId)}
+							]
+					end,
+					ALeg ++ BLeg
 			end,
 			{props:set_values(Props, Call), WhappsCall}
 		end
 	],
-    {Call, WhappsCall} = lists:foldl(fun(F, {Call, WhappsCall}) -> F({Call, WhappsCall}) end, {[], whapps_call:new()}, Routines).%,
-
-    %% Remove other leg if it's just the same leg
-    % CallId = whapps_call:call_id(Call),
-    % Call2 = case whapps_call:other_leg_call_id(Call) of
-    %     CallId ->
-    %         whapps_call:set_other_leg_call_id(undefined, Call);
-    %     _ ->
-    %         Call
-    % end,
-
-    %{whapps_call:call_id(WhappsCall), WhappsCall}.
+    {Call, WhappsCall} = lists:foldl(fun(F, {Call, WhappsCall}) -> F({Call, WhappsCall}) end, {[], whapps_call:new()}, Routines),
+    props:set_value(<<"call">>, WhappsCall, Call).
 
 maybe_cellphone_endpoint2(To, Direction, CallId, PresenceId, AccountDb) ->
     {ok, Results} = couch_mgr:get_results(AccountDb, <<"devices/call_forwards">>),
@@ -253,7 +248,8 @@ find_call_forward(E164, AccountDb, [Result|Others]) ->
 	case wnm_util:to_e164(wh_json:get_value(<<"key">>, Result)) of
 		E164 ->
 			Value = wh_json:get_value(<<"value">>, Result),
-			{ok, Device} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, Value));
+			{ok, Device} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, Value)),
+			Device;
 		_ ->
 			find_call_forward(E164, AccountDb, Others)
 	end.
@@ -262,7 +258,7 @@ find_call_forward(E164, AccountDb, [Result|Others]) ->
 
 
 call_direction_endpoint2(To, Direction, CallId, PresenceId) ->
-    Props = case Direction of
+    case Direction of
         <<"inbound">> ->
             [
             	{<<"channel">>, channel_string(hd(binary:split(PresenceId, <<"@">>)), CallId)},

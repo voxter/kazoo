@@ -27,6 +27,7 @@ handle_event(EventJObj, _Props) ->
     handle_specific_event(EventName, EventJObj).
     
 handle_specific_event(<<"CHANNEL_CREATE">>=EventName, EventJObj) ->
+	lager:debug("Channel create for channel ~p", [wh_json:get_value(<<"Call-ID">>, EventJObj)]),
 	new_channel(EventJObj),
 	new_channel_event(EventJObj),
     extension_status(EventJObj),
@@ -35,6 +36,7 @@ handle_specific_event(<<"CHANNEL_CREATE">>=EventName, EventJObj) ->
     maybe_change_agent_status(EventJObj);
 
 handle_specific_event(<<"CHANNEL_ANSWER">>, EventJObj) ->
+	lager:debug("Channel answer for channel ~p", [wh_json:get_value(<<"Call-ID">>, EventJObj)]),
 	answer(EventJObj),
     busy_state(EventJObj),
     maybe_change_agent_status(EventJObj);
@@ -63,27 +65,12 @@ handle_specific_event(<<"CHANNEL_BRIDGE">>, EventJObj) ->
     SourceCID = props:get_value(<<"aleg_cid">>, Call2),
 	OtherCID = props:get_value(<<"aleg_cid">>, OtherCall),
 
-    Payload = [[
-				{<<"Event">>, <<"Link">>},
-		        {<<"Channel1">>, Channel1},
-		        {<<"Channel2">>, Channel2},
-		        {<<"Uniqueid1">>, CallId},
-		        {<<"Uniqueid2">>, OtherCallId}
-			], [
-		        {<<"Event">>, <<"Dial">>},
-                {<<"Privilege">>, <<"call,all">>},
-                {<<"SubEvent">>, <<"Begin">>},
-                {<<"Channel">>, Channel1},
-                {<<"Destination">>, Channel2},
-                {<<"CallerIDNum">>, SourceCID},
-                {<<"CallerIDName">>, SourceCID},
-                {<<"ConnectedLineNum">>, OtherCID},
-                {<<"ConnectedLineName">>, OtherCID},
-                {<<"UniqueID">>, CallId},
-                {<<"DestUniqueid">>, OtherCallId},
-                {<<"Dialstring">>, OtherCID}
-			]],
-    ami_ev:publish_amqp_event({publish, Payload});
+	case props:get_value(<<"direction">>, Call) of
+		<<"inbound">> ->
+			bridge_and_dial(Channel1, Channel2, CallId, OtherCallId, SourceCID, OtherCID);
+		<<"outbound">> ->
+			bridge_and_dial(Channel2, Channel1, OtherCallId, CallId, OtherCID, SourceCID)
+	end;
     
 handle_specific_event(<<"CHANNEL_DESTROY">>, EventJObj) ->
     destroy_channel(EventJObj);
@@ -490,6 +477,29 @@ dial(Channel, Destination, CallerIDNum, CallerIDName, ConnectedLineNum, Connecte
         {<<"Dialstring">>, Dialstring}
 	].
 
+bridge_and_dial(SourceChannel, DestChannel, SourceCallId, DestCallId, SourceCID, DestCID) ->
+	Payload = [[
+		{<<"Event">>, <<"Link">>},
+        {<<"Channel1">>, SourceChannel},
+        {<<"Channel2">>, DestChannel},
+        {<<"Uniqueid1">>, SourceCallId},
+        {<<"Uniqueid2">>, DestCallId}
+	], [
+        {<<"Event">>, <<"Dial">>},
+        {<<"Privilege">>, <<"call,all">>},
+        {<<"SubEvent">>, <<"Begin">>},
+        {<<"Channel">>, SourceChannel},
+        {<<"Destination">>, DestChannel},
+        {<<"CallerIDNum">>, SourceCID},
+        {<<"CallerIDName">>, SourceCID},
+        {<<"ConnectedLineNum">>, DestCID},
+        {<<"ConnectedLineName">>, DestCID},
+        {<<"UniqueID">>, SourceCallId},
+        {<<"DestUniqueid">>, DestCallId},
+        {<<"Dialstring">>, DestCID}
+	]],
+    ami_ev:publish_amqp_event({publish, Payload}).
+
 destroy_channel(EventJObj) ->
     CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
     Call = ami_sm:call(CallId),
@@ -523,6 +533,7 @@ destroy_channel(EventJObj) ->
 
     case {ami_sm:call_id_in_channel(CallId, EndpointName), ami_sm:answered_or_ignored(EndpointName, CallId)} of
         {true, true} ->
+        	lager:debug("Sending hangup for reason ~p", [wh_json:get_value(<<"Hangup-Cause">>, EventJObj)]),
             Payload = [[
                 {<<"Event">>, <<"Hangup">>},
                 {<<"Privilege">>, <<"call,all">>},
@@ -540,11 +551,13 @@ destroy_channel(EventJObj) ->
 
             ami_ev:publish_amqp_event({publish, Payload});
         {false, _} ->
-        	lager:debug("eventjobj ~p", [EventJObj]),
-        	lager:debug("Call not destroyed because it was not for the channel (~p)", [EndpointName]);
+        	ok;
+        	%lager:debug("eventjobj ~p", [EventJObj]),
+        	%lager:debug("Call not destroyed because it was not for the channel (~p)", [EndpointName]);
         {_, false} ->
-        	lager:debug("eventjobj ~p", [EventJObj]),
-            lager:debug("Call not destroyed because it was not the correct answered channel")
+        	ok
+        	%lager:debug("eventjobj ~p", [EventJObj]),
+            %lager:debug("Call not destroyed because it was not the correct answered channel")
     end,
 
     ami_sm:delete_call(CallId).
