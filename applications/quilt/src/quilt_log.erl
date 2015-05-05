@@ -31,7 +31,7 @@ handle_event(JObj, _Props) ->
 					QueueId = case wh_json:get_value(<<"Queue-ID">>, JObj) of
 						undefined -> "NONE";
 						_ -> wh_json:get_value(<<"Queue-ID">>, JObj) end,
-					_QueueName = case QueueId of
+					QueueName = case QueueId of
 						"NONE" -> "NONE";
 						_ -> lookup_queue_name(AccountId, QueueId) end,
 					BridgedChannel = case wh_json:get_value(<<"Agent-ID">>, JObj) of
@@ -42,24 +42,24 @@ handle_event(JObj, _Props) ->
 							EventName = "ENTERQUEUE", % ENTERQUEUE(url|callerid)
 							EventParams = {<<"">>, wh_json:get_value(<<"Caller-ID-Name">>, JObj)},
 							lager:debug("QUILT: writing event to queue_log: ~s, ~p", [EventName, EventParams]),
-							write_log(AccountId, CallId, QueueId, BridgedChannel, EventName, EventParams);
+							write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
 
 						{<<"member">>, <<"call_cancel">>} ->
 							EventName = "ABANDON", % ABANDON(position|origposition|waittime)
 							EventParams = {<<"1">>, <<"5">>, <<"45">>},
 							lager:debug("QUILT: writing event to queue_log: ~s", [EventName]),
-							write_log(AccountId, CallId, QueueId, BridgedChannel, EventName, EventParams);
+							write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
 
 						{<<"acdc_call_stat">>, <<"missed">>} ->
 							EventName = "RINGNOANSWER", % RINGNOANSWER(ringtime)
 							lager:debug("QUILT: writing event to queue_log: ~s", [EventName]),
-							write_log(AccountId, CallId, QueueId, BridgedChannel, EventName);
+							write_log(AccountId, CallId, QueueName, BridgedChannel, EventName);
 
 						{<<"acdc_call_stat">>, <<"handled">>} ->
 							EventName = "CONNECT", % CONNECT(holdtime|bridgedchanneluniqueid)
 							EventParams = {<<"10">>, wh_json:get_value(<<"Agent-ID">>, JObj)},
 							lager:debug("QUILT: writing event to queue_log: ~s", [EventName]),
-							write_log(AccountId, CallId, QueueId, BridgedChannel, EventName, EventParams);
+							write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
 
 						% {<<"">>, <<"">>} ->
 							%EventName = "COMPLETEAGENT", % COMPLETEAGENT(holdtime|calltime|origposition)
@@ -83,22 +83,26 @@ handle_event(JObj, _Props) ->
 							EventName = "PAUSEALL", 
 							% There is no pause for a single queue, pause all by default
 							lager:debug("QUILT: writing event to queue_log: ~s", [EventName]),
-							write_log(AccountId, CallId, QueueId, BridgedChannel, EventName);
+							write_log(AccountId, CallId, QueueName, BridgedChannel, EventName);
 
 						{<<"agent">>, <<"resume">>} -> 
 							EventName = "UNPAUSEALL", 
 							% There is no resume for a single queue, unpause all by default
 							lager:debug("QUILT: writing event to queue_log: ~s", [EventName]),
-							write_log(AccountId, CallId, QueueId, BridgedChannel, EventName);
+							write_log(AccountId, CallId, QueueName, BridgedChannel, EventName);
 
 						{<<"acdc_status_stat">>, <<"logged_in">>} ->
 							EventName = "AGENTLOGIN", % AGENTLOGIN(channel)
 							% Agent will log into all queues that they are a member of
 							AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
 							lists:foreach(fun(Q) ->
+								QueueName2 = case Q of
+									"NONE" -> "NONE";
+									_ -> lookup_queue_name(AccountId, Q)
+								end,
 								EventParams = {AgentId}, % TODO: add logintime param
 								lager:debug("QUILT: writing event to queue_log: ~s", [EventName]),
-								write_log(AccountId, CallId, Q, BridgedChannel, EventName, EventParams)
+								write_log(AccountId, CallId, QueueName2, BridgedChannel, EventName, EventParams)
 							end, get_queue_list_by_agent_id(AccountId, AgentId));
 
 						{<<"acdc_status_stat">>, <<"logged_out">>} ->
@@ -106,9 +110,13 @@ handle_event(JObj, _Props) ->
 							% Agent will log into all queues that they are a member of
 							AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
 							lists:foreach(fun(Q) ->
+								QueueName2 = case Q of
+									"NONE" -> "NONE";
+									_ -> lookup_queue_name(AccountId, Q)
+								end,
 								EventParams = {AgentId}, % TODO: add logintime param
 								lager:debug("QUILT: writing event to queue_log: ~s", [EventName]),
-								write_log(AccountId, CallId, Q, BridgedChannel, EventName, EventParams)
+								write_log(AccountId, CallId, QueueName2, BridgedChannel, EventName, EventParams)
 							end, get_queue_list_by_agent_id(AccountId, AgentId));
 
 						{_, _} ->
@@ -128,8 +136,14 @@ lookup_agent_name(AccountId, AgentId) ->
 	iolist_to_binary([FirstName, <<" ">>, LastName]).
 
 lookup_queue_name(AccountId, QueueId) ->
-	{ok, Result} = couch_mgr:get_results(wh_util:format_account_id(AccountId, encoded), <<"queues/crossbar_listing">>, [{'key', QueueId}]),
-	wh_json:get_value([<<"value">>, <<"name">>], hd(Result)).
+	case couch_mgr:get_results(wh_util:format_account_id(AccountId, encoded), <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
+		{'error', E} ->
+			lager:debug("Could not find queue number for queue ~p (~p)", [QueueId, E]),
+			"NONE";
+		{'ok', Results2} when length(Results2) =:= 1 ->
+			Value = wh_json:get_value(<<"value">>, hd(Results2)),
+			hd(Value)
+	end.
 
 %% queue_log format: epoch_timestamp|unique_id_of_call|queue_name|bridged_channel|event_name|event_param_1|event_param_2|event_param_3
 write_log(AccountId, CallId, QueueName, BridgedChannel, Event) ->
