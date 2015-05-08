@@ -456,17 +456,12 @@ handle_cast({'flag_early_answer', CallId}, State) ->
 	{'noreply', State};
 
 handle_cast({db_put, AccountId, Family, Key, Value}, State) ->
-	ets:insert('database', {AccountId, Family, Key, Value}),
+	ets:insert('database', {{AccountId, Family, Key}, Value}),
 	{noreply, State};
 
-handle_cast({db_del, AccountId, Family, Key}, State) ->
-	case ets:match('database', {AccountId, Family, Key, '$1'}) of
-		[] ->
-			lager:debug("No such database record to delete: ~p/~p/~p", [AccountId, Family, Key]);
-		[[Value]] ->
-			ets:delete_object('database', {AccountId, Family, Key, Value})
-	end,
-	{noreply, State};
+handle_cast({'db_del', AccountId, Family, Key}, State) ->
+	ets:delete('database', {AccountId, Family, Key}),
+	{'noreply', State};
 
 % handle_cast({debug_clear_call, CallId}, State) ->
 % 	case ets:match(calls, {CallId, '$1', '$2'}) of

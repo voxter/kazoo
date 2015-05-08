@@ -385,28 +385,28 @@ eavesdrop_req(Props) ->
     SourceEndpoints = get_endpoints(props:delete(<<"SourceExten">>, Props), Call),
 
     Prop = wh_json:set_values(props:filter_undefined([
-        {<<"Msg-ID">>, wh_util:rand_hex_binary(16)},
-        {<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)},
-        {<<"Timeout">>, <<"30">>},
-        {<<"Endpoints">>, SourceEndpoints},
-        {<<"Dial-Endpoint-Method">>, <<"simultaneous">>},
-        {<<"Ignore-Early-Media">>, <<"true">>},
-        {<<"Outbound-Caller-ID-Name">>, <<"Eavesdrop ", DestExten/binary>>},
-        {<<"Outbound-Caller-ID-Number">>, DestExten},
-        {<<"Export-Custom-Channel-Vars">>, [
-            <<"Account-ID">>,
-            <<"Retain-CID">>,
-            <<"Authorizing-ID">>,
-            <<"Authorizing-Type">>
-        ]},
-        {<<"Account-ID">>, AccountId},
-        {<<"Resource-Type">>, <<"originate">>},
-        {<<"Application-Name">>, <<"eavesdrop">>},
-        {<<"Eavesdrop-Call-ID">>, EavesdropCallId},
-        {<<"Eavesdrop-Group-ID">>, 'undefined'},
-        {<<"Eavesdrop-Mode">>, EavesdropMode}
-        | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-    ]), wh_json:new()),
+	         {<<"Msg-ID">>, wh_util:rand_hex_binary(16)}
+	         ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
+	         ,{<<"Timeout">>, <<"30">>}
+	         ,{<<"Endpoints">>, SourceEndpoints}
+	         ,{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
+	         ,{<<"Ignore-Early-Media">>, <<"true">>}
+	         ,{<<"Outbound-Caller-ID-Name">>, <<"Eavesdrop ", DestExten/binary>>}
+	         ,{<<"Outbound-Caller-ID-Number">>, DestExten}
+	         ,{<<"Export-Custom-Channel-Vars">>, [
+	            <<"Account-ID">>
+	            ,<<"Retain-CID">>
+	            ,<<"Authorizing-ID">>
+	            ,<<"Authorizing-Type">>
+	          ]}
+	         ,{<<"Account-ID">>, AccountId}
+	         ,{<<"Resource-Type">>, <<"originate">>}
+	         ,{<<"Application-Name">>, <<"eavesdrop">>}
+	         ,{<<"Eavesdrop-Call-ID">>, EavesdropCallId}
+	         ,{<<"Eavesdrop-Group-ID">>, 'undefined'}
+	         ,{<<"Eavesdrop-Mode">>, EavesdropMode}
+	         | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+	    	]), wh_json:new()),
               
     lager:debug("Eavesdropping on call id ~p", [EavesdropCallId]),
     case whapps_util:amqp_pool_collect(Prop
