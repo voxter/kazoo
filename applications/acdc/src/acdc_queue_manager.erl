@@ -21,6 +21,7 @@
          ,handle_agent_status_stat/2
          ,handle_queue_member_add/2
          ,handle_queue_member_remove/2
+         ,handle_queue_member_position/2
          ,handle_manager_success_notify/2
          ,handle_manager_fail_notify/2
          ,handle_config_change/2
@@ -35,6 +36,7 @@
 
 %% FSM helpers
 -export([pick_winner/2]).
+-export([test_queue_member_position/3]).
 
 %% gen_server callbacks
 -export([init/1
@@ -78,7 +80,7 @@
                                    ,{'id', Q}
                                    ,'federate'
                                   ]}
-                         ,{'acdc_queue', [{'restrict_to', ['stats_req', 'agent_change', 'member_addremove']}
+                         ,{'acdc_queue', [{'restrict_to', ['stats_req', 'agent_change', 'member_addremove', 'member_position']}
                                           ,{'account_id', A}
                                           ,{'queue_id', Q}
                                          ]}
@@ -116,6 +118,9 @@
                       }
                      ,{{'acdc_queue_manager', 'handle_queue_member_remove'}
                        ,[{<<"queue">>, <<"member_remove">>}]
+                      }
+                     ,{{'acdc_queue_manager', 'handle_queue_member_position'}
+                       ,[{<<"queue">>, <<"call_position_req">>}]
                       }
                      ,{{'acdc_queue_manager', 'handle_manager_success_notify'}
                        ,[{<<"member">>, <<"call_success">>}]
@@ -264,6 +269,10 @@ handle_queue_member_add(JObj, Prop) ->
 handle_queue_member_remove(JObj, Prop) ->
     gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_remove', JObj}).
 
+-spec handle_queue_member_position(wh_json:object(), wh_proplist()) -> 'ok'.
+handle_queue_member_position(JObj, Prop) ->
+	gen_listener:cast(props:get_value('server', Prop), {'queue_member_position', JObj}).
+
 -spec handle_manager_success_notify(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_manager_success_notify(JObj, Prop) ->
     gen_listener:cast(props:get_value('server', Prop), {'remove_queue_member', wh_json:get_value(<<"Call-ID">>, JObj)}).
@@ -309,6 +318,18 @@ pick_winner(Srv, Resps) -> pick_winner(Srv, Resps, strategy(Srv), next_winner(Sr
 
 replace_call(Srv, OldCall, NewCall) ->
     gen_listener:cast(Srv, {'replace_call', OldCall, NewCall}).
+
+test_queue_member_position(AccountId, QueueId, CallId) ->
+	Req = [{<<"Account-ID">>, AccountId}
+		   ,{<<"Queue-ID">>, QueueId}
+		   ,{<<"Call-ID">>, CallId}
+		   | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+		  ],
+	whapps_util:amqp_pool_request(
+        Req,
+        fun wapi_acdc_queue:publish_call_position_req/1,
+        fun wapi_acdc_queue:call_position_resp_v/1
+    ).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -672,6 +693,33 @@ handle_cast({'handle_queue_member_remove', JObj}, #state{account_id=AccountId
     cancel_position_announcements(Pid, Call),
 
     {'noreply', State#state{current_member_calls=UpdatedMemberCalls}};
+
+handle_cast({'queue_member_position', JObj}, #state{account_id=AccountId
+												    ,queue_id=QueueId
+													,current_member_calls=CurrentCalls
+												   }=State) ->
+	CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    Call = lists:keyfind(CallId, 2, CurrentCalls),
+
+    {Map, _} = lists:mapfoldr(fun(X, I) -> {{X, I}, I + 1} end, 1, CurrentCalls),
+    Index = case lists:keyfind(Call, 1, Map) of
+    	'false' ->
+    		'not_found';
+		{_, I} ->
+			I
+	end,
+
+    Prop = [{<<"Account-ID">>, AccountId}
+            ,{<<"Queue-ID">>, QueueId}
+            ,{<<"Call-ID">>, CallId}
+            ,{<<"Position">>, Index}
+            ,{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, JObj)}
+            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+
+    wapi_acdc_queue:publish_call_position_resp(wh_json:get_value(<<"Server-ID">>, JObj), Prop),
+
+    {'noreply', State};
 
 handle_cast({'replace_call', OldCall, NewCall}, #state{current_member_calls=CurrentCalls}=State) ->
     OldCallId = whapps_call:call_id(OldCall),

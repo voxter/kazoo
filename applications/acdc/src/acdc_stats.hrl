@@ -28,6 +28,8 @@
           ,handled_timestamp :: api_integer() | '_'
           ,processed_timestamp :: api_integer() | '_'
 
+       	  ,hung_up_by :: api_binary() | '_'
+
           ,entered_position :: pos_integer()
           ,exited_position :: pos_integer()
 
