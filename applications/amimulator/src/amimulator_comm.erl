@@ -10,8 +10,7 @@
     listen_socket,
     accept_socket,
     %% A collection of data packets that represent a single command
-    bundle = <<>>,
-    originator_pid
+    bundle = <<>>
 }).
 
 %%
@@ -61,10 +60,9 @@ handle_cast(accept, #state{listen_socket=Socket}=State) ->
             {noreply, State}
     end;
 handle_cast({login, AccountId}, State) ->
-    {ok, OriginatorPid} = amimulator_originator:start_link(),
     maybe_init_state(AccountId),
-    {noreply, State#state{originator_pid=OriginatorPid}};
-handle_cast({logout}, #state{accept_socket=AcceptSocket, originator_pid=OriginatorPid}=State) ->
+    {noreply, State};
+handle_cast({logout}, #state{accept_socket=AcceptSocket}=State) ->
     inet:setopts(AcceptSocket, [{nodelay, true}]),
     gen_tcp:send(AcceptSocket, <<"Response: Goodbye\r\nMessage: Thanks for all the fish.\r\n\r\n">>),
     inet:setopts(AcceptSocket, [{nodelay, false}]),
@@ -77,13 +75,9 @@ handle_cast({logout}, #state{accept_socket=AcceptSocket, originator_pid=Originat
             gen_tcp:close(AcceptSocket),
             ok
     end,
-    exit(OriginatorPid, kill),
 
     gen_server:cast(self(), accept),
-    {noreply, State#state{accept_socket=undefined, bundle = <<>>, originator_pid=undefined}};
-handle_cast({originator, Action, Props}, #state{originator_pid=OriginatorPid}=State) ->
-    gen_listener:cast(OriginatorPid, {Action, Props}),
-    {noreply, State};
+    {noreply, State#state{accept_socket=undefined, bundle = <<>>}};
 %% Synchronously publish AMI events to socket
 handle_cast({publish, Events}, #state{accept_socket=AcceptSocket}=State) ->
     publish_events(Events, AcceptSocket),

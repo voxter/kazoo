@@ -1,22 +1,28 @@
 -module(ami_sm).
 -behaviour(gen_server).
 
--export([start_link/0, register/0, unregister/0, ev_going_down/2, ev_staying_up/1, is_ev_down/2,
-    account_id/0, set_account_id/1,
-    init_state/1, purge_state/1, events/0, account_consumers/1, registration/2, call/1, call_by_channel/1, new_call/2, 
-    new_call/3, update_call/2, delete_call/1, queue_call/3, queue_pos/2, fetch_queue_call_data/2, queue_leave/2, conf_parts/1,
-    update_conf_parts/2, conf_cache/1, cache_conf_part/2,
-    calls/1, channel_call_ids/1, add_channel_call_id/2, call_id_in_channel/2, maybe_ringing/2,
-    answer/2, answered_or_ignored/2, debug/1]).%, debug_clear_call/1]).
+-export([start_link/0]).
+-export([register/0, unregister/0
+	     ,ev_going_down/2, ev_staying_up/1, is_ev_down/2
+	     ,account_id/0, set_account_id/1
+	     ,init_state/1, purge_state/1
+	     ,events/0
+	     ,account_consumers/1
+	     ,registration/2, add_registration/4
+	     ,call/1, call_by_channel/1, new_call/2, new_call/3, update_call/2, delete_call/1
+	     ,queue_call/3, queue_pos/2, fetch_queue_call_data/2, queue_leave/2
+	     ,conf_parts/1, update_conf_parts/2, conf_cache/1, cache_conf_part/2
+	     ,calls/1, channel_call_ids/1, add_channel_call_id/2, call_id_in_channel/2
+	     ,maybe_ringing/2
+	     ,answer/2, answered_or_ignored/2, flag_early_answer/1
+	     ,db_put/4, db_del/3
+	     ,debug/1, debug_clear_call/1
+	    ]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
--export([initial_registrations/1]).
-
--export([flag_early_answer/1]).
 
 -include("amimulator.hrl").
 
--record(state, {
-}).
+-record(state, {}).
 
 %%
 %% Public functions
@@ -64,6 +70,9 @@ account_consumers(AccountId) ->
 
 registration(AccountId, EndpointId) ->
 	gen_server:call(?MODULE, {'get_registration', AccountId, EndpointId}).
+
+add_registration(AccountId, EndpointId, ContactIP, ContactPort) ->
+	gen_server:cast(?MODULE, {'add_registration', AccountId, EndpointId, ContactIP, ContactPort}).
 
 call(CallId) ->
     gen_server:call(?MODULE, {get_call, CallId}).
@@ -133,11 +142,18 @@ answered_or_ignored(Channel, CallId) ->
 flag_early_answer(CallId) ->
 	gen_server:cast(?MODULE, {'flag_early_answer', CallId}).
 
+db_put(AccountId, Family, Key, Value) ->
+	gen_server:cast(?MODULE, {db_put, AccountId, Family, Key, Value}).
+
+db_del(AccountId, Family, Key) ->
+	gen_server:cast(?MODULE, {db_del, AccountId, Family, Key}).
+
 debug(TableName) ->
     gen_server:call(?MODULE, {'debug', TableName}).
 
-debug_clear_call(CallId) ->
-	gen_server:call(?MODULE, {debug_clear_call, CallId}).
+debug_clear_call(_CallId) ->
+	io:format("Function not yet implemented~n").
+	% gen_server:call(?MODULE, {debug_clear_call, CallId}).
 
 %%
 %% gen_server callbacks
@@ -156,6 +172,7 @@ init([]) ->
     ets:new('conference_cache_data', ['named_table']),
     ets:new('event_listener_kill_reqs', ['named_table', 'bag']),
     ets:new('account_consumers', ['named_table', 'bag']),
+    ets:new('database', ['named_table', 'bag']),
     {'ok', #state{}}.
 
 handle_call({'is_ev_down', AccountId, Timestamp}, _From, State) ->
@@ -229,13 +246,28 @@ handle_call({call_id_in_channel, CallId, Channel}, _From, State) ->
 	{reply, Reply, State};
 
 handle_call({get_call_ids_by_channel, Channel}, _From, State) ->
+	lager:debug("match ~p", [ets:match('channels', {Channel, '$1'})]),
 	Reply = lists:flatten(ets:match('channels', {Channel, '$1'})),
     {reply, Reply, State};
 
 handle_call({get_call_by_channel, Channel}, From, State) ->
 	Reply = case ets:match('channels', {Channel, '$1'}) of
 		[] ->
-			undefined;
+			lager:debug("Channel ~p not matched exactly, attempting short version", [Channel]),
+			case ets:match('channels', {'$1', '$2'}) of
+				[] ->
+					undefined;
+				List ->
+					lists:foldl(fun([Channel2, CallId], Result) ->
+						case binary:match(Channel2, Channel) of
+							nomatch ->
+								Result;
+							_ ->
+								{_, Result2, _} = handle_call({get_call, CallId}, From, State),
+								Result2
+						end
+					end, undefined, List)
+			end;
 		List ->
 			{_, Result, _} = handle_call({get_call, hd(hd(List))}, From, State),
 			Result
@@ -270,7 +302,7 @@ handle_call({conf_parts, ConfId}, _From, State) ->
     {reply, Reply, State};
 
 handle_call({conf_cache, CallId}, _From, State) ->
-	Reply = case ets:match('conference_cache', {CallId, '$1'}) of
+	Reply = case ets:match('conference_cache_data', {CallId, '$1'}) of
 		[] ->
 			'undefined';
 		[[Match]] ->
@@ -352,6 +384,10 @@ handle_cast({purge_state, AccountId}, State) ->
 	pvt_purge_state(AccountId),
 	{noreply, State};
 
+handle_cast({'add_registration', AccountId, EndpointId, ContactIP, ContactPort}, State) ->
+	ets:insert('registrations', {EndpointId, AccountId, ContactIP, ContactPort}),
+	{'noreply', State};
+
 handle_cast({new_call, CallId, AccountId, Call}, State) ->
 	case ets:match('flags', {CallId, 'early_answer'}) of
 		[] ->
@@ -403,16 +439,34 @@ handle_cast({update_conf_parts, ConfId, Data}, State) ->
     {noreply, State};
 
 handle_cast({cache_conf_part, CallId, Data}, State) ->
-	ets:insert('conference_cache', {CallId, Data}),
+	ets:insert('conference_cache_data', {CallId, Data}),
     {noreply, State};
 
 handle_cast({answer, Channel, CallId}, State) ->
-	ets:insert('answered_channels', {Channel, CallId}),
+	case ets:match('answered_channels', {Channel, '_'}) of
+		[] ->
+			ets:insert('answered_channels', {Channel, CallId});
+		_ ->
+			ok
+	end,
 	{noreply, State};
 
 handle_cast({'flag_early_answer', CallId}, State) ->
 	ets:insert('flags', {CallId, 'early_answer'}),
 	{'noreply', State};
+
+handle_cast({db_put, AccountId, Family, Key, Value}, State) ->
+	ets:insert('database', {AccountId, Family, Key, Value}),
+	{noreply, State};
+
+handle_cast({db_del, AccountId, Family, Key}, State) ->
+	case ets:match('database', {AccountId, Family, Key, '$1'}) of
+		[] ->
+			lager:debug("No such database record to delete: ~p/~p/~p", [AccountId, Family, Key]);
+		[[Value]] ->
+			ets:delete_object('database', {AccountId, Family, Key, Value})
+	end,
+	{noreply, State};
 
 % handle_cast({debug_clear_call, CallId}, State) ->
 % 	case ets:match(calls, {CallId, '$1', '$2'}) of

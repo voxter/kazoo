@@ -1,7 +1,9 @@
 -module(amimulator_commander).
 
 -export([handle/2]).
+-export([handle_event/2]).
 -export([queue_stats/2]).
+-export([parse_command/1]).
 
 -include("amimulator.hrl").
 
@@ -132,7 +134,6 @@ handle_event("mailboxcount", Props) ->
     ActionId = proplists:get_value(<<"ActionID">>, Props),
     Exten = hd(binary:split(Mailbox, <<"@">>)),
 
-    %% NEED TO get_results UPDATE THIS VIEW BAZINGA
     Payload = case couch_mgr:get_results(AccountDb, <<"vmboxes/crossbar_listing">>, [{key, Exten}]) of
         {ok, [Result]} ->
             Value = wh_json:get_value(<<"value">>, Result),
@@ -162,14 +163,14 @@ handle_event("originate", Props) ->
         _ ->
             case proplists:get_value(<<"Application">>, Props) of
                 <<"ChanSpy">> ->
-                    gen_server:cast(self(), {originator, "eavesdrop", Props});
+                    gen_listener:cast(amimulator_originator, {"eavesdrop", Props});
                	<<"PickupChan">> ->
-               		Props2 = props:set_value(<<"Channel">>, props:get_value(<<"Data">>, 
-               			props:set_value(<<"SourceExten">>, hd(binary:split(props:get_value(<<"Channel">>, Props), <<"/">>)),
-               			Props)), Props),
-               		gen_server:cast(self(), {originator, "pickupchan", Props2});
+               		% Props2 = props:set_value(<<"Channel">>, props:get_value(<<"Data">>, 
+               		% 	props:set_value(<<"SourceExten">>, hd(binary:split(props:get_value(<<"Channel">>, Props), <<"/">>)),
+               		% 	Props)), Props),
+               		gen_listener:cast(amimulator_originator, {"pickupchan", Props});
                 _ ->
-                    gen_server:cast(self(), {originator, "originate", Props})
+                    gen_listener:cast(amimulator_originator, {"originate", Props})
             end
     end;
 handle_event("redirect", Props) ->
@@ -183,9 +184,9 @@ handle_event("redirect", Props) ->
         _ ->
             case props:get_value(<<"Context">>, Props) of
                 <<"default">> ->
-                    gen_server:cast(self(), {originator, "vmxfer", props:set_value(<<"Call">>, Call, Props)});
+                    gen_listener:cast(amimulator_originator, {"vmxfer", props:set_value(<<"Call">>, Call, Props)});
                 _ ->
-                    gen_server:cast(self(), {originator, "blindxfer", props:set_value(<<"Call">>, Call, Props)})
+                    gen_listener:cast(amimulator_originator, {"blindxfer", props:set_value(<<"Call">>, Call, Props)})
             end
     end;
 handle_event("atxfer", Props) ->
@@ -197,13 +198,21 @@ handle_event("atxfer", Props) ->
             lager:debug("Missing call when trying to transfer attended"),
             ok;
         _ ->
-            gen_server:cast(self(), {originator, "atxfer", props:set_value(<<"Call">>, Call, Props)})
+            gen_listener:cast(amimulator_originator, {"atxfer", props:set_value(<<"Call">>, Call, Props)})
     end;
 handle_event("hangup", Props) ->
     EndpointName = props:get_value(<<"Channel">>, Props),
-    CallId = ami_sm:call_by_channel(EndpointName),
-    Call = amimulator_util:whapps_call_from_cf_exe(CallId),
-    whapps_call_command:hangup(Call);
+    lager:debug("Hanging up channel ~p", [EndpointName]),
+    Call = ami_sm:call_by_channel(EndpointName),
+    WhappsCall = props:get_value(<<"call">>, Call),
+    {ok, ControlQueueResp} = amimulator_util:control_queue(WhappsCall),
+    ControlQueue = wh_json:get_value(<<"Control-Queue">>, ControlQueueResp),
+    lager:debug("Control queue for call: ~p", [ControlQueue]),
+
+    whapps_call_command:hangup(whapps_call:set_control_queue(ControlQueue, WhappsCall));
+    % CallId = ami_sm:call_by_channel(EndpointName),
+    % Call = amimulator_util:whapps_call_from_cf_exe(CallId),
+    % whapps_call_command:hangup(Call);
 handle_event("getvar", Props) ->
     case getvar(proplists:get_value(<<"Variable">>, Props), Props) of
         undefined ->
@@ -311,40 +320,28 @@ ami_channel_status(Call, Schema, <<"Status">>) ->
             {6, <<"Up">>}
     end,
 
-    case props:get_value(<<"direction">>, Call) of
+    BridgedChannel = case props:get_value(<<"direction">>, Call) of
     	<<"inbound">> ->
-    		ami_channel_status(
-    			<<"Status">>,
-    			Schema,
-    			props:get_value(<<"bleg_ami_channel">>, Call),
-    			BLegCID,
-    			ALegCID,
-    			whapps_call:account_id(WhappsCall),
-    			ChannelState,
-    			ChannelStateDesc,
-    			props:get_value(<<"bleg_exten">>, Call),
-    			props:get_value(<<"elapsed_s">>, Call),
-    			props:get_value(<<"aleg_ami_channel">>, Call),
-    			whapps_call:other_leg_call_id(WhappsCall),
-    			whapps_call:call_id(WhappsCall)
-    		);
+    		props:get_value(<<"bleg_ami_channel">>, Call);
     	<<"outbound">> ->
-    		ami_channel_status(
-    			<<"Status">>,
-    			Schema,
-    			props:get_value(<<"aleg_ami_channel">>, Call),
-    			ALegCID,
-    			BLegCID,
-    			whapps_call:account_id(WhappsCall),
-    			ChannelState,
-    			ChannelStateDesc,
-    			props:get_value(<<"aleg_exten">>, Call),
-    			props:get_value(<<"elapsed_s">>, Call),
-    			props:get_value(<<"bleg_ami_channel">>, Call),
-    			whapps_call:call_id(WhappsCall),
-    			whapps_call:other_leg_call_id(WhappsCall)
-    		)
-    end;
+    		props:get_value(<<"aleg_ami_channel">>, Call)
+    end,
+
+    ami_channel_status(
+		<<"Status">>,
+		Schema,
+		props:get_value(<<"aleg_ami_channel">>, Call),
+		ALegCID,
+		BLegCID,
+		whapps_call:account_id(WhappsCall),
+		ChannelState,
+		ChannelStateDesc,
+		props:get_value(<<"aleg_exten">>, Call),
+		props:get_value(<<"elapsed_s">>, Call),
+		BridgedChannel,
+		whapps_call:call_id(WhappsCall),
+		whapps_call:other_leg_call_id(WhappsCall)
+	);
 
 ami_channel_status(Call, _Schema, <<"concise">>) ->
     Channel = binary_to_list(props:get_value(<<"aleg_ami_channel">>, Call)),
@@ -571,9 +568,16 @@ count_stats([Stat|Stats], {Calls, Holdtime, TalkTime, Completed, Abandoned, Agen
 	Status = wh_json:get_value(<<"status">>, Stat),
 	AgentStats2 = if (Status =:= <<"handled">>) or (Status =:= <<"processed">>) ->
 		AgentId = wh_json:get_value(<<"agent_id">>, Stat),
+        LastCall = props:get_value(<<"LastCall">>, props:get_value(AgentId, AgentStats, []), 0),
+        StatLastCall = wh_json:get_first_defined([<<"processed_timestamp">>, <<"handled_timestamp">>], Stat, 0) - 62167219200,
+        NewLastCall = if StatLastCall > LastCall ->
+            StatLastCall;
+        true ->
+            LastCall
+        end,
 		props:set_value(AgentId, [
 				{<<"CallsTaken">>, props:get_value(<<"CallsTaken">>, props:get_value(AgentId, AgentStats, []), 0) + 1},
-				{<<"LastCall">>, wh_json:get_first_defined([<<"processed_timestamp">>, <<"handled_timestamp">>], Stat, 0) - 62167219200}
+				{<<"LastCall">>, NewLastCall}
 			], AgentStats);
 	true ->
 		AgentStats
@@ -661,6 +665,8 @@ translate_status(Status) ->
             5;
         <<"wrapup">> ->
             1;
+        <<"connecting">> ->
+            6;
         _ ->
             lager:debug("unspecified status ~p", [Status]),
             5
@@ -863,7 +869,7 @@ getvar(<<"CDR(dst)">>, Props) ->
     CallIds = ami_sm:channel_call_ids(Channel),
     case CallIds of
         %% The call id is undefined if the channel is not a sip peer
-        undefined ->
+        [] ->
             undefined;
         _ ->
             lager:debug("channel ~p", [props:get_value(<<"Channel">>, Props)]),
@@ -899,6 +905,24 @@ command(<<"meetme list ", MeetMeSpec/binary>>, Props) ->
     maybe_list_conf(Number, Props);
 command(<<"core show channels ", Verbosity/binary>>, Props) ->
     initial_channel_status(amimulator_util:initial_calls(proplists:get_value(<<"AccountId">>, Props)), Props, Verbosity);
+command(<<"database put ", Variable/binary>>, Props) ->
+	[Family, Key, Value] = parse_command(wh_util:to_list(Variable)),
+	ami_sm:db_put(props:get_value(<<"AccountId">>, Props), Family, Key, Value),
+
+	{[
+        <<"Response: Follows\r\nPrivilege: Command\r\n">>,
+        <<"Updated database successfully\n">>,
+        <<"--END COMMAND--\r\n\r\n">>
+    ], raw};
+command(<<"database del ", Variable/binary>>, Props) ->
+	[Family, Key] = parse_command(wh_util:to_list(Variable)),
+	ami_sm:db_del(props:get_value(<<"AccountId">>, Props), Family, Key),
+
+	{[
+        <<"Response: Follows\r\nPrivilege: Command\r\n">>,
+        <<"Database entry removed.\n">>,
+        <<"--END COMMAND--\r\n\r\n">>
+    ], raw};
 command(CommandName, Props) ->
     lager:debug("Unhandled command ~p with props ~p", [CommandName, Props]),
     {[
@@ -907,6 +931,29 @@ command(CommandName, Props) ->
             CommandName/binary, "' for other possible commands)\n">>,
         <<"--END COMMAND--\r\n\r\n">>
     ], raw}.
+
+parse_command(Command) ->
+	parse_command(Command, [], []).
+
+parse_command([], Parts, _Acc) ->
+	lists:reverse(Parts);
+parse_command([Char|Chars], Parts, Acc) ->
+	if Char =:= 34 ->
+		parse_command(quoted, Chars, Parts, Acc);
+	Char =:= 32 ->
+		parse_command(Chars, [lists:reverse(Acc)] ++ Parts, []);
+	true ->
+		parse_command(Chars, Parts, [Char | Acc])
+	end.
+
+parse_command(quoted, [], Parts, _Acc) ->
+	lists:reverse(Parts);
+parse_command(quoted, [Char|Chars], Parts, Acc) ->
+	if Char =:= 34 ->
+		parse_command(Chars, [lists:reverse(Acc)] ++ Parts, []);
+	true ->
+		parse_command(quoted, Chars, Parts, [Char | Acc])
+	end.
 
 user_event(<<"MEETME-REFRESH">>, Props) ->
     [[
@@ -919,6 +966,46 @@ user_event(<<"MEETME-REFRESH">>, Props) ->
         {<<"Action">>, <<"UserEvent">>},
         {<<"Meetme">>, props:get_value(<<"Meetme">>, Props)}
     ]];
+user_event(<<"FOP2ASTDB">>, Props) ->
+	[[
+        {<<"Response">>, <<"Success">>},
+        {<<"Message">>, <<"Event Sent">>}
+    ] ++ [
+        {<<"Event">>, <<"UserEvent">>},
+        {<<"Privilege">>, <<"user,all">>},
+        {<<"UserEvent">>, <<"FOP2ASTDB">>},
+        {<<"Action">>, <<"UserEvent">>},
+        {<<"Family">>, props:get_value(<<"Family">>, Props)},
+        {<<"Key">>, props:get_value(<<"Key">>, Props)},
+        {<<"Channel">>, props:get_value(<<"Channel">>, Props)},
+        {<<"Value">>, props:get_value(<<"Value">>, Props)}
+    ]];
+user_event(<<"FOP2CHAT">>, Props) ->
+	[[
+		{<<"Response">>, <<"Success">>},
+        {<<"Message">>, <<"Event Sent">>}
+	] ++ [
+		{<<"Event">>, <<"UserEvent">>},
+        {<<"Privilege">>, <<"user,all">>},
+        {<<"UserEvent">>, <<"FOP2CHAT">>},
+        {<<"Action">>, <<"UserEvent">>},
+        {<<"From">>, props:get_value(<<"From">>, Props)},
+        {<<"Channel">>, props:get_value(<<"Channel">>, Props)},
+        {<<"Msg">>, props:get_value(<<"Msg">>, Props)}
+	]];
+user_event(<<"FOP2NOTIFY">>, Props) ->
+	[[
+		{<<"Response">>, <<"Success">>},
+        {<<"Message">>, <<"Event Sent">>}
+	] ++ [
+		{<<"Event">>, <<"UserEvent">>},
+        {<<"Privilege">>, <<"user,all">>},
+        {<<"UserEvent">>, <<"FOP2NOTIFY">>},
+        {<<"Action">>, <<"UserEvent">>},
+        {<<"From">>, props:get_value(<<"From">>, Props)},
+        {<<"Channel">>, props:get_value(<<"Channel">>, Props)},
+        {<<"Msg">>, props:get_value(<<"Msg">>, Props)}
+	]];
 user_event(EventName, Props) ->
 	lager:debug("Unhandled event ~p with props ~p", [EventName, Props]),
 	undefined.

@@ -2,12 +2,17 @@
 
 -include("amimulator.hrl").
 
--export([parse_payload/1, format_prop/1, format_binary/1, format_json_events/1,
-	index_of/2, initial_calls/1, create_call/1,
-    get_call/1, bleg_ami_channel/3, endpoint_exten/2, whapps_call/1,
+-export([parse_payload/1
+	     ,format_prop/1
+	     ,format_binary/1
+	     ,format_json_events/1
+	     ,index_of/2
+	     ,control_queue/1
+	     ,initial_calls/1, create_call/1,
+    get_call/1, bleg_ami_channel/3, bleg_cid/3, endpoint_exten/2, whapps_call/1,
     maybe_get_exten/1, maybe_get_endpoint_name/1, endpoint_name/2, maybe_get_cid_name/1,
     find_id_number/2, queue_for_number/2,
-    filter_registered_events/4, whapps_call_from_cf_exe/1, channel_tail/1]).
+    filter_registered_events/4, channel_tail/1]).
 
 -export([initial_calls2/1]).
 
@@ -67,6 +72,46 @@ index_of(Element, [Element|_], Index) ->
 	Index;
 index_of(Element, [_|T], Index) ->
 	index_of(Element, T, Index+1).
+
+
+
+
+
+
+
+
+
+
+control_queue(WhappsCall) ->
+	Req = props:filter_undefined([{<<"Call-ID">>, whapps_call:call_id(WhappsCall)}
+		   						  | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+		  						 ]),
+    ReqResp = whapps_util:amqp_pool_request(Req
+                                            ,fun wapi_amimulator:publish_control_queue_req/1
+                                            ,fun wapi_amimulator:control_queue_resp_v/1
+                                           ),
+    case ReqResp of
+    	{'error', 'timeout'} ->
+    		case whapps_call:other_leg_call_id(WhappsCall) of
+    			'undefined' ->
+    				{'error', 'not_found'};
+    			OtherCallId ->
+		    		ReqResp2 = whapps_util:amqp_pool_request(props:set_value(<<"Call-ID">>, OtherCallId, Req)
+		    												 ,fun wapi_amimulator:publish_control_queue_req/1
+		    												 ,fun wapi_amimulator:control_queue_resp_v/1
+		    												),
+		    		case ReqResp2 of
+		    			{'error', _E}=Error -> Error;
+		    			{'ok', Resp} ->
+		    				{'ok', Resp}
+		    		end
+		    end;
+        {'error', _E}=Error -> Error;
+        {'ok', Resp} ->
+        	{'ok', Resp}
+    end.
+
+
 
 
 
@@ -156,8 +201,8 @@ call_from_channel(JObj, Lookup) ->
 		fun({Call, WhappsCall}) ->
 			CallId = wh_json:get_value(<<"uuid">>, JObj),
 			AccountDb = whapps_call:account_db(WhappsCall),
-			Props = case wh_json:get_value(<<"authorizing_id">>, JObj) of
-				undefined ->
+			Props = case whapps_call:authorizing_id(WhappsCall) of
+				<<>> ->
 					ALeg = case maybe_cellphone_endpoint2(
 						whapps_call:to_user(WhappsCall), props:get_value(<<"direction">>, Call),
 						CallId, wh_json:get_value(<<"presence_id">>, JObj), AccountDb) of
@@ -188,7 +233,13 @@ call_from_channel(JObj, Lookup) ->
 					end,
 					ALeg ++ BLeg;
 				_ ->
-					{ok, Endpoint} = cf_endpoint:get(WhappsCall),
+					Endpoint = case cf_endpoint:get(WhappsCall) of
+						{error, E} ->
+							lager:debug("Error when getting endpoint: ~p", [WhappsCall]),
+							undefined;
+						{ok, Endpoint2} ->
+							Endpoint2
+					end,
 					ALeg = [
 						{<<"aleg_cid">>, endpoint_cid(Endpoint, AccountDb)},
 						{<<"aleg_exten">>, endpoint_exten(Endpoint, AccountDb)},
@@ -377,7 +428,11 @@ call_from_json(JObj) ->
                 [FromUser] ->
                     <<FromUser/binary, "@">>
             end,
-            whapps_call:set_from(From, Call) end
+            whapps_call:set_from(From, Call) end,
+        fun(Call) -> whapps_call:set_caller_id_name(wh_json:get_value(<<"Caller-ID-Name">>, JObj, <<>>), Call) end,
+        fun(Call) -> whapps_call:set_caller_id_number(wh_json:get_value(<<"Caller-ID-Number">>, JObj, <<>>), Call) end,
+        fun(Call) -> whapps_call:set_callee_id_name(wh_json:get_value(<<"Callee-ID-Name">>, JObj, <<>>), Call) end,
+        fun(Call) -> whapps_call:set_callee_id_number(wh_json:get_value(<<"Callee-ID-Number">>, JObj, <<>>), Call) end
     ],
     Call = lists:foldl(fun(F, Call) -> F(Call) end, whapps_call:new(), Routines),
 
@@ -521,7 +576,7 @@ call_direction_endpoint(Call) ->
                 whapps_call:to_user(WhappsCall),
                 whapps_call:call_id(WhappsCall)
              )}
-             ,{<<"cid">>, whapps_call:caller_id_name(WhappsCall)}
+             ,{<<"cid">>, whapps_call:callee_id_name(WhappsCall)}
             ]
     end,
     case props:get_value(<<"cid">>, Props) of
@@ -545,7 +600,28 @@ bleg_cid(Call, ChannelJObj, BC) ->
     case props:get_value(whapps_call:other_leg_call_id(props:get_value(<<"call">>, Call)),
         BC) of
         undefined ->
-            props:set_value(<<"bleg_cid">>, wh_json:get_value(<<"Caller-ID-Name">>, ChannelJObj, undefined), Call);
+        	case props:get_value(<<"direction">>, Call) of
+        		<<"inbound">> ->
+        			WhappsCall = props:get_value(<<"call">>, Call),
+        			BLegCid = case whapps_call:callee_id_name(WhappsCall) of
+        				<<>> ->
+        					whapps_call:to_user(WhappsCall);
+        				CalleeId ->
+        					CalleeId
+        			end,
+        			props:set_value(<<"bleg_cid">>, BLegCid, Call);
+        		<<"outbound">> ->
+        			% WhappsCall = props:get_value(<<"call">>, Call),
+        			% BLegCid = case whapps_call:caller_id_name(WhappsCall) of
+        			% 	<<>> ->
+        			% 		whapps_call:from_user(WhappsCall);
+        			% 	CallerId ->
+        			% 		CallerId
+        			% end,
+        			% props:set_value(<<"bleg_cid">>, BLegCid)
+        			props:set_value(<<"bleg_cid">>, whapps_call:caller_id_name(props:get_value(<<"call">>, Call)), Call)
+        	end;
+            % props:set_value(<<"bleg_cid">>, whapps_call:to_user(props:get_value(<<"call">>, Call)), Call);
         OtherCall ->
             Direction = case props:get_value(<<"direction">>, Call) of
                 <<"inbound">> -> <<"outbound">>;
@@ -830,23 +906,17 @@ filter_registered_events(EventName, EventJObj, CommPid, Mod) ->
             ok
     end.
 
-%% Look through active calls and find the cf_exe process with the desired call ID
-whapps_call_from_cf_exe(CallId) ->
-    whapps_call_from_cf_exe(CallId, cf_exe_sup:workers()).
-
-whapps_call_from_cf_exe(_CallId, []) ->
-    not_found;
-whapps_call_from_cf_exe(CallId, [Worker|Workers]) ->
-    case cf_exe:get_call(Worker) of
-        {ok, Call} ->
-            Call;
-        _ ->
-            whapps_call_from_cf_exe(CallId, Workers)
-    end.
-
 %% Returns an 8-digit tail for channels for AMI calls
 channel_tail(CallId) ->
-    Digest = crypto:hash('md5', wh_util:to_binary(CallId)),
+	Seed = case binary:split(CallId, <<"-">>, [global]) of
+		List when length(List) =:= 5 ->
+			%% When the call id looks like 4cad762c-f415-11e4-b890-cdee54d38ecb there may be many legs created
+			%% The 2nd and 3rd parts are unique to a call as a whole even though the 1st and 5th change per leg
+			<<(lists:nth(2, List))/binary, "-", (lists:nth(3, List))/binary>>;
+		_ ->
+			CallId
+	end,
+    Digest = crypto:hash('md5', wh_util:to_binary(Seed)),
     MD5 = lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest]),
     list_to_binary(lists:sublist(MD5, length(MD5)-7, 8)).
 

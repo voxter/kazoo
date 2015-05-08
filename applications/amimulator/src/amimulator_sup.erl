@@ -78,9 +78,12 @@ init([]) ->
     StateMaster = {
         ami_sm, {ami_sm, start_link, []}, permanent, infinity, worker, [ami_sm]
     },
+    Originator = {
+    	amimulator_originator, {amimulator_originator, start_link, []}, permanent, 2000, worker, [amimulator_originator]
+    },
     
     {'ok', {
-        SupFlags, [StateMaster]
+        SupFlags, [StateMaster, Originator]
     }}.
 
 %%
