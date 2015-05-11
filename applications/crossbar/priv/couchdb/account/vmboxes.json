@@ -3,7 +3,7 @@
     ,"language": "javascript"
     ,"views": {
         "crossbar_listing": {
-            "map": "function(doc) { if (doc.pvt_type != 'vmbox' || doc.pvt_deleted) return; emit(doc.name, {'id': doc._id, 'name': doc.name, 'mailbox': doc.mailbox, 'owner_id': doc.owner_id, 'messages':doc.messages.length || 0}); }"
+            "map": "function(doc) { if (doc.pvt_type != 'vmbox' || doc.pvt_deleted) return; var newMessages = 0; for(var i = 0; i < doc.messages.length; i++) { var message = doc.messages[i]; if(message.folder != 'deleted') { newMessages += 1; }} emit(doc.name, {'id': doc._id, 'name': doc.name, 'mailbox': doc.mailbox, 'owner_id': doc.owner_id, 'messages':doc.messages.length || 0, 'old_messages':(doc.messages.length - newMessages) || 0, 'new_messages':newMessages || 0}); }"
         }
         ,"listing_by_mailbox": {
             "map": "function(doc) { if (doc.pvt_type != 'vmbox' || doc.pvt_deleted) return; emit(parseInt(doc.mailbox, 10), null); }"
