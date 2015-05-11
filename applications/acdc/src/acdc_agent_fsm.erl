@@ -1014,7 +1014,7 @@ awaiting_callback({'channel_hungup', MemberCallId, Reason}, #state{account_id=Ac
     lager:debug("caller did not pick up callback on ~p (~p)", [MemberCallId, Reason]),
     acdc_agent_listener:channel_hungup(AgentListener, MemberCallId),
 
-    acdc_stats:call_processed(AccountId, QueueId, AgentId, MemberCallId),
+    acdc_stats:call_processed(AccountId, QueueId, AgentId, MemberCallId, 'agent'),
     acdc_agent_stats:agent_ready(AccountId, AgentId),
 
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
@@ -1099,10 +1099,10 @@ answered({'channel_bridged', CallId}, #state{agent_call_id=CallId
     {'next_state', 'answered', State};
 answered({'channel_hungup', CallId, _Cause}, #state{member_call_id=CallId}=State) ->
     lager:debug("caller's channel hung up: ~s", [_Cause]),
-    {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State)}};
+    {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'member')}};
 answered({'channel_hungup', CallId, _Cause}, #state{agent_call_id=CallId}=State) ->
     lager:debug("agent's channel has hung up: ~s", [_Cause]),
-    {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State)}};
+    {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'agent')}};
 answered({'channel_hungup', CallId, _Cause}, #state{agent_listener=AgentListener}=State) ->
     lager:debug("someone(~s) hungup, ignoring: ~s", [CallId, _Cause]),
     acdc_agent_listener:channel_hungup(AgentListener, CallId),
@@ -1115,10 +1115,10 @@ answered({'sync_req', JObj}, #state{agent_listener=AgentListener
     {'next_state', 'answered', State};
 answered({'channel_unbridged', CallId}, #state{member_call_id=CallId}=State) ->
     lager:debug("caller channel unbridged"),
-    {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State)}};
+    {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'member')}};
 answered({'channel_unbridged', CallId}, #state{agent_call_id=CallId}=State) ->
     lager:debug("agent channel unbridged"),
-    {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State)}};
+    {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'agent')}};
 answered({'channel_answered', JObj}=Evt, #state{agent_call_id=AgentCallId
                                               ,member_call_id=MemberCallId
                                              }=State) ->
@@ -1641,11 +1641,11 @@ hangup_call(#state{wrapup_timeout=WrapupTimeout
                    ,account_id=AccountId
                    ,agent_id=AgentId
                    ,queue_notifications=Ns
-                  }=State) ->
+                  }=State, Initiator) ->
     lager:debug("call lasted ~b s", [elapsed(_Started)]),
     lager:debug("going into a wrapup period ~p: ~s", [WrapupTimeout, CallId]),
 
-    acdc_stats:call_processed(AccountId, QueueId, AgentId, CallId),
+    acdc_stats:call_processed(AccountId, QueueId, AgentId, CallId, Initiator),
 
     acdc_agent_listener:channel_hungup(AgentListener, CallId),
 
