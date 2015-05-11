@@ -55,16 +55,17 @@ handle(Data, Call) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec menu_loop(menu(), whapps_call:call()) -> 'ok'.
-menu_loop(#cf_menu_data{retries=Retries}=Menu, Call) when Retries =< 0 ->
+menu_loop(#cf_menu_data{retries=Retries}, Call) when Retries =< 0 ->
     lager:info("maxium number of retries reached"),
-    _ = whapps_call_command:flush_dtmf(Call),
-    _ = play_exit_prompt(Menu, Call);
+    whapps_call_command:flush_dtmf(Call),
+    whapps_call_command:hold(Call);
 menu_loop(#cf_menu_data{retries=Retries
                         ,timeout=Timeout
                         ,interdigit_timeout=Interdigit
                        }=Menu, Call) ->
     whapps_call_command:flush(Call),
-    NoopId = whapps_call_command:play(get_prompt(Menu, Call), Call),
+    whapps_call_command:hold(<<"silence_stream://0">>, Call),
+    NoopId = whapps_call_command:prompt(<<"breakout-prompt">>, Call),
 
     case whapps_call_command:collect_digits(?MENU_KEY_LENGTH, Timeout, Interdigit, NoopId, Call) of
         {'ok', <<>>} ->
@@ -82,8 +83,8 @@ menu_loop(#cf_menu_data{retries=Retries
                     lager:debug("Successful breakout menu exec"),
                     konami_event_listener:rm_call_binding(whapps_call:call_id(Call), <<"DTMF">>);
                 'false' ->
-                    lager:info("invalid selection ~w", [Digits]),
-                    _ = play_invalid_prompt(Menu, Call),
+                    lager:info("invalid selection ~p", [Digits]),
+                    whapps_call_command:play(<<"menu-invalid_entry">>, Call),
                     menu_loop(Menu#cf_menu_data{retries=Retries - 1}, Call)
             end;
         {'error', _} ->
@@ -120,9 +121,9 @@ try_match_digits(Digits, Menu, Call) ->
 %% @end
 %%--------------------------------------------------------------------
 callback_loop(Call, Menu, From) ->
-    Prompt = [{'tts', <<"You will be called back at">>}
+    Prompt = [{'prompt', <<"breakout-call_back_at">>}
               ,{'say', From}
-              ,{'tts', <<"If this is correct, press 1. If it is incorrect, press 2. To return to the main menu, press 3.">>}
+              ,{'prompt', <<"breakout-number_correct">>}
              ],
     whapps_call_command:audio_macro(Prompt, Call),
 
@@ -132,7 +133,7 @@ callback_loop(Call, Menu, From) ->
         {'ok', <<"1">>} ->
             register_callback(Call, Menu#cf_menu_data.cf_controller_queue, Menu#cf_menu_data.custom_vars, From);
         {'ok', <<"2">>} ->
-            whapps_call_command:tts(<<"Enter your callback number, followed by the pound sign">>, Call),
+            whapps_call_command:prompt(<<"breakout-enter_callback_number">>, Call),
             case whapps_call_command:collect_digits(15, 30000, 3000, Call) of
                 {'ok', <<>>} ->
                     callback_loop(Call, Menu, From);
@@ -172,7 +173,7 @@ register_callback(Call, ControllerQueue, CVs, Number) ->
               ],
     wapi_acdc_queue:publish_member_callback_reg(Payload2),
 
-    whapps_call_command:tts(<<"Your callback has been registered. Goodbye!">>, Call),
+    whapps_call_command:prompt(<<"breakout-callback_registered">>, Call),
     whapps_call_command:queued_hangup(Call),
     'true'.
 
@@ -208,52 +209,6 @@ callback_event_v(Prop) when is_list(Prop) ->
     wh_api:validate(Prop, [], callback_values(), []);
 callback_event_v(JObj) ->
     callback_event_v(wh_json:to_proplist(JObj)).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec play_invalid_prompt(menu(), whapps_call:call()) ->
-                                 {'ok', wh_json:object()} |
-                                 {'error', atom()}.
-play_invalid_prompt(#cf_menu_data{invalid_media='false'}, _) ->
-    {'ok', wh_json:new()};
-play_invalid_prompt(#cf_menu_data{invalid_media='true'}, Call) ->
-    whapps_call_command:b_prompt(<<"menu-invalid_entry">>, Call);
-play_invalid_prompt(#cf_menu_data{invalid_media=Id}, Call) ->
-    whapps_call_command:b_play(<<$/, (whapps_call:account_db(Call))/binary, $/, Id/binary>>, Call).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec play_exit_prompt(menu(), whapps_call:call()) ->
-                              {'ok', wh_json:object()} |
-                              {'error', atom()}.
-play_exit_prompt(#cf_menu_data{exit_media='false'}, _) ->
-    {'ok', wh_json:new()};
-play_exit_prompt(#cf_menu_data{exit_media='true'}, Call) ->
-    whapps_call_command:b_prompt(<<"menu-exit">>, Call);
-play_exit_prompt(#cf_menu_data{exit_media=Id}, Call) ->
-    whapps_call_command:b_play(<<$/, (whapps_call:account_db(Call))/binary, $/, Id/binary>>, Call).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec get_prompt(menu(), whapps_call:call()) -> ne_binary().
-get_prompt(#cf_menu_data{greeting_id='undefined'}, Call) ->
-    wh_media_util:get_prompt(<<"menu-no_prompt">>, Call);
-get_prompt(#cf_menu_data{greeting_id = <<"local_stream://", _/binary>> = ID}, _) ->
-    ID;
-get_prompt(#cf_menu_data{greeting_id=Id}, Call) ->
-    <<$/, (whapps_call:account_db(Call))/binary, $/, Id/binary>>.
 
 %%--------------------------------------------------------------------
 %% @private
