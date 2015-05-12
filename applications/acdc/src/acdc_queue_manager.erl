@@ -245,7 +245,8 @@ handle_member_call_cancel(JObj, Props) ->
                         ,wh_json:get_value(<<"Call-ID">>, JObj)
                        ),
 
-    gen_listener:cast(props:get_value('server', Props), {'member_call_cancel', K, JObj}).
+    gen_listener:cast(props:get_value('server', Props), {'member_call_cancel', K, JObj}),
+    gen_listener:cast(props:get_value('server', Props), {'remove_queue_member', wh_json:get_value(<<"Call-ID">>, JObj)}).
 
 handle_agent_change(JObj, Prop) ->
     'true' = wapi_acdc_queue:agent_change_v(JObj),

@@ -111,6 +111,7 @@
                 ,queue_notifications :: api_object()
 
                 ,agent_call_id :: api_binary()
+                ,agent_callback_call = 'undefined'
                 ,originate_call_ids = []
                 ,control_q_map = []
                 ,next_status :: api_binary()
@@ -182,6 +183,8 @@ call_event(FSM, <<"error">>, <<"dialplan">>, JObj) ->
     Req = wh_json:get_value(<<"Request">>, JObj),
 
     gen_fsm:send_event(FSM, {'dialplan_error', wh_json:get_value(<<"Application-Name">>, Req)});
+call_event(FSM, <<"call_event">>, <<"PLAYBACK_STOP">>, JObj) ->
+    gen_fsm:send_event(FSM, {'playback_stop', JObj});
 call_event(_, _C, _E, _) -> 'ok'.
 
 %%--------------------------------------------------------------------
@@ -680,6 +683,8 @@ ringing({'originate_started', ACallId}, #state{agent_listener=AgentListener
     CIDName = whapps_call:caller_id_name(MemberCall),
     CIDNum = whapps_call:caller_id_number(MemberCall),
 
+    acdc_util:bind_to_call_events(ACallId, AgentListener),
+
     acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNum),
 
     {'next_state', 'answered', State#state{agent_call_id=ACallId
@@ -845,6 +850,8 @@ ringing({'originate_resp', ACallId}, #state{agent_listener=AgentListener
     CIDName = whapps_call:caller_id_name(MemberCall),
     CIDNum = whapps_call:caller_id_number(MemberCall),
 
+    acdc_util:bind_to_call_events(ACallId, AgentListener),
+
     acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNum),
 
     {'next_state', 'answered', State#state{agent_call_id=ACallId
@@ -944,36 +951,32 @@ awaiting_callback({'channel_answered', JObj}=Evt, #state{agent_call_id=ACallId
             NewAgentCall = whapps_call:from_json(JObj),
             Updaters = [fun(Call) -> whapps_call:set_account_id(whapps_call:custom_channel_var(<<"Account-ID">>, Call), Call) end
             			,fun(Call) -> whapps_call:set_control_queue(element(2, lists:keyfind(CallId, 1, ControlQMap)), Call) end
+                        ,fun(Call) -> whapps_call:set_call_id(CallId, Call) end
             		   ],
             NewAgentCall2 = lists:foldl(fun(F, Call) -> F(Call) end, NewAgentCall, Updaters),
 
             lager:debug("agent answered phone on ~s, now calling back to the member", [CallId]),
-            whapps_call_command:tts(<<"Now calling back to client">>, NewAgentCall2),
-            
-            NewMemberCallId = originate_to_extension(whapps_call:custom_channel_var(<<"Callback-Number">>, NewAgentCall2), CallId, NewAgentCall2,
-            	AgentListener),
+            whapps_call_command:prompt(<<"queue-now_calling_back">>, NewAgentCall2),
 
             acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_RED_SOLID),
             {'next_state', 'awaiting_callback', State#state{connect_failures=0
-            												,member_call_id=NewMemberCallId
+                                                            ,agent_callback_call=NewAgentCall2
             											   }};
         {_, 'true'} ->
             NewAgentCall = whapps_call:from_json(JObj),
             Updaters = [fun(Call) -> whapps_call:set_account_id(whapps_call:custom_channel_var(<<"Account-ID">>, Call), Call) end
             			,fun(Call) -> whapps_call:set_control_queue(element(2, lists:keyfind(CallId, 1, ControlQMap)), Call) end
             			,fun(Call) -> whapps_call:set_to(wh_json:get_value(<<"To">>, JObj), Call) end
+                        ,fun(Call) -> whapps_call:set_call_id(CallId, Call) end
             		   ],
             NewAgentCall2 = lists:foldl(fun(F, Call) -> F(Call) end, NewAgentCall, Updaters),
 
             lager:debug("agent answered phone on ~p, now calling back to the member", [CallId]),
-            whapps_call_command:tts(<<"Now calling back to client">>, NewAgentCall2),
-
-            NewMemberCallId = originate_to_extension(whapps_call:custom_channel_var(<<"Callback-Number">>, NewAgentCall2), CallId, NewAgentCall2,
-            	AgentListener),
+            whapps_call_command:prompt(<<"queue-now_calling_back">>, NewAgentCall2),
 
             acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_RED_SOLID),
             {'next_state', 'awaiting_callback', State#state{connect_failures=0
-            												,member_call_id=NewMemberCallId
+                                                            ,agent_callback_call=NewAgentCall2
             											   }};
         {MemberCallId, _} ->
             NewMemberCall = whapps_call:from_json(JObj),
@@ -985,6 +988,15 @@ awaiting_callback({'channel_answered', JObj}=Evt, #state{agent_call_id=ACallId
             lager:debug("unhandled event while awaiting callback: ~p", [Evt]),
             {'next_state', 'awaiting_callback', State}
     end;
+awaiting_callback({'playback_stop', _JObj}, #state{agent_callback_call=AgentCallbackCall
+                                                   ,agent_listener=AgentListener
+                                                  }=State) ->
+    NewMemberCallId = originate_to_extension(whapps_call:custom_channel_var(<<"Callback-Number">>, AgentCallbackCall),
+        whapps_call:call_id(AgentCallbackCall), AgentCallbackCall,
+        AgentListener),
+    {'next_state', 'awaiting_callback', State#state{agent_callback_call='undefined'
+                                                    ,member_call_id=NewMemberCallId
+                                                   }};
 awaiting_callback({'channel_bridged', MemberCallId}, #state{agent_listener=AgentListener
                                                     ,agent_call_id=ACallId
                                                     ,member_call=MemberCall
@@ -1115,10 +1127,12 @@ answered({'sync_req', JObj}, #state{agent_listener=AgentListener
     {'next_state', 'answered', State};
 answered({'channel_unbridged', CallId}, #state{member_call_id=CallId}=State) ->
     lager:debug("caller channel unbridged"),
-    {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'member')}};
+    {'next_state', 'answered', State};
+    %{'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'member')}};
 answered({'channel_unbridged', CallId}, #state{agent_call_id=CallId}=State) ->
     lager:debug("agent channel unbridged"),
-    {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'agent')}};
+    {'next_state', 'answered', State};
+    %{'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'agent')}};
 answered({'channel_answered', JObj}=Evt, #state{agent_call_id=AgentCallId
                                               ,member_call_id=MemberCallId
                                              }=State) ->
