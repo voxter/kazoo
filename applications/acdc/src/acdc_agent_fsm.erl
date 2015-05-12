@@ -683,6 +683,8 @@ ringing({'originate_started', ACallId}, #state{agent_listener=AgentListener
     CIDName = whapps_call:caller_id_name(MemberCall),
     CIDNum = whapps_call:caller_id_number(MemberCall),
 
+    acdc_util:bind_to_call_events(ACallId, AgentListener),
+
     acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNum),
 
     {'next_state', 'answered', State#state{agent_call_id=ACallId
@@ -847,6 +849,8 @@ ringing({'originate_resp', ACallId}, #state{agent_listener=AgentListener
 
     CIDName = whapps_call:caller_id_name(MemberCall),
     CIDNum = whapps_call:caller_id_number(MemberCall),
+
+    acdc_util:bind_to_call_events(ACallId, AgentListener),
 
     acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNum),
 
@@ -1123,10 +1127,12 @@ answered({'sync_req', JObj}, #state{agent_listener=AgentListener
     {'next_state', 'answered', State};
 answered({'channel_unbridged', CallId}, #state{member_call_id=CallId}=State) ->
     lager:debug("caller channel unbridged"),
-    {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'member')}};
+    {'next_state', 'answered', State};
+    %{'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'member')}};
 answered({'channel_unbridged', CallId}, #state{agent_call_id=CallId}=State) ->
     lager:debug("agent channel unbridged"),
-    {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'agent')}};
+    {'next_state', 'answered', State};
+    %{'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'agent')}};
 answered({'channel_answered', JObj}=Evt, #state{agent_call_id=AgentCallId
                                               ,member_call_id=MemberCallId
                                              }=State) ->
