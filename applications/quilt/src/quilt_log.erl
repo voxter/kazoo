@@ -143,10 +143,9 @@ get_queue_list_by_agent_id(AccountId, AgentId) ->
 	wh_json:get_value([<<"value">>, <<"queues">>], hd(Result)).
 
 lookup_agent_name(AccountId, AgentId) ->
-	{ok, Result} = couch_mgr:get_results(wh_util:format_account_id(AccountId, encoded), <<"agents/crossbar_listing">>, [{'key', AgentId}]),
-	FirstName = wh_json:get_value([<<"value">>, <<"first_name">>], hd(Result)),
-	LastName = wh_json:get_value([<<"value">>, <<"last_name">>], hd(Result)),
-	iolist_to_binary([FirstName, <<" ">>, LastName]).
+	AccountDb = wh_util:format_account_id(AccountId, encoded),
+	{ok, Result} = couch_mgr:open_doc(AccountDb, AgentId),
+	<<"Local/", (wh_json:get_value(<<"username">>, Result))/binary, "@from-queue/n">>.
 
 lookup_queue_name(AccountId, QueueId) ->
 	case couch_mgr:get_results(wh_util:format_account_id(AccountId, encoded), <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
