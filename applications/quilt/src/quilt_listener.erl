@@ -24,10 +24,10 @@
 -record(state, {}).
 
 -define(BINDINGS, [
-    {'self', []},
-    {acdc_stats, []},
-    % {acdc_queue, []}, %% Added dynamically
-    {acdc_agent, []}
+    {'self', []}
+    ,{acdc_agent, []}
+    ,{acdc_stats, []}
+    % ,{acdc_queue, []} %% Added dynamically
 ]).
 
 -define(RESPONDERS, []).
