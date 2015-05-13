@@ -20,11 +20,9 @@ handle_event(JObj, _Props) ->
 			case wh_json:get_value(<<"Event-Name">>, JObj) of
 				<<"status_req">> -> ok;
 				_ ->
-					% lager:debug("processing event object: ~p", [JObj]),
-					% lager:debug("associated event props: ~p", [Props]),
 					file:write_file(<<"/tmp/queue_log_raw">>, io_lib:fwrite("~p\n", [JObj]), [append]),
 					Event = {wh_json:get_value(<<"Event-Category">>, JObj), wh_json:get_value(<<"Event-Name">>, JObj)},
-					AccountId = binary_to_list(wh_json:get_value(<<"Account-ID">>, JObj)),
+					AccountId = wh_json:get_value(<<"Account-ID">>, JObj),
 					CallId = case wh_json:get_value(<<"Call-ID">>, JObj) of
 						undefined -> wh_json:get_value(<<"Msg-ID">>, JObj);
 						_ -> wh_json:get_value(<<"Call-ID">>, JObj) end,
@@ -90,13 +88,19 @@ handle_event(JObj, _Props) ->
 							write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
 
 						% {<<"">>, <<"">>} ->
-							%EventName = "ADDMEMBER", % ADDMEMBER(?)
+							%EventName = "ADDMEMBER", % ADDMEMBER
 
 						% {<<"">>, <<"">>} ->
-							%EventName = "REMOVEMEMBER", % REMOVEMEMBER(?)
+							%EventName = "REMOVEMEMBER", % REMOVEMEMBER
 
 						% {<<"">>, <<"">>} ->
 							%EventName = "EXITEMPTY", % EXITEMPTY(position|origposition|waittime)
+
+						% {<<"">>, <<"">>} ->
+							%EventName = "EXITWITHTIMEOUT", % EXITWITHTIMEOUT(position)
+
+						% {<<"">>, <<"">>} ->
+							%EventName = "EXITWITHKEY", % EXITWITHKEY(key|position)
 
 						% {<<"">>, <<"">>} ->
 							%EventName = "TRANSFER", % TRANSFER(extension|context|holdtime|calltime)
@@ -115,29 +119,31 @@ handle_event(JObj, _Props) ->
 
 						{<<"acdc_status_stat">>, <<"logged_in">>} ->
 							EventName = "AGENTLOGIN", % AGENTLOGIN(channel)
-							% Agent will log in to all queues that they are a member of
 							AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
-							lists:foreach(fun(Q) ->
+							ChannelName = lookup_agent_name(AccountId, AgentId),
+							lists:foreach(fun(Q) -> % Agent will log in to all queues that they are a member of
 								QueueName2 = case Q of
 									"NONE" -> "NONE";
 									_ -> lookup_queue_name(AccountId, Q)
 								end,
-								EventParams = {AgentId}, 
+								EventParams = {ChannelName}, 
 								lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
 								write_log(AccountId, CallId, QueueName2, BridgedChannel, EventName, EventParams)
 							end, get_queue_list_by_agent_id(AccountId, AgentId));
 
 						{<<"acdc_status_stat">>, <<"logged_out">>} ->
 							EventName = "AGENTLOGOFF", % AGENTLOGOFF(channel|logintime)
-							% Agent will log out of all queues that they are a member of
 							AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
-							lists:foreach(fun(Q) ->
+							ChannelName = lookup_agent_name(AccountId, AgentId),
+							LogoutTimestamp = wh_json:get_value(<<"Timestamp">>, JObj),
+							LoginTimestamp = list_to_integer(binary_to_list(get_agent_login_timestamp(AccountId, AgentId, LogoutTimestamp))),
+							LoginTime = list_to_binary(integer_to_list(LogoutTimestamp - LoginTimestamp)),
+							lists:foreach(fun(Q) -> % Agent will log out of all queues that they are a member of
 								QueueName2 = case Q of
 									"NONE" -> "NONE";
 									_ -> lookup_queue_name(AccountId, Q)
 								end,
-								%% TODO: add logintime param
-								EventParams = {AgentId},
+								EventParams = {ChannelName, LoginTime},
 								lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
 								write_log(AccountId, CallId, QueueName2, BridgedChannel, EventName, EventParams)
 							end, get_queue_list_by_agent_id(AccountId, AgentId));
@@ -146,6 +152,24 @@ handle_event(JObj, _Props) ->
 							lager:debug("unhandled event: ~p", [Event])
 					end
 			end
+	end.
+
+get_agent_login_timestamp(AccountId, AgentId, Default) ->
+	Request = props:filter_undefined(
+		[{<<"Account-ID">>, AccountId}
+		 ,{<<"Agent-ID">>, AgentId}
+		 ,{<<"Status">>, <<"logged_in">>}
+		 | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+		]),
+	case whapps_util:amqp_pool_request(Request, fun wapi_acdc_stats:publish_status_req/1, fun wapi_acdc_stats:status_resp_v/1) of
+		{ok, Result} ->
+			lager:debug("got agent logged in status response: ~p", [Result]),
+			Keys = wh_json:get_keys(wh_json:get_value([<<"Agents">>, AgentId], Result)),
+			SortedKeys = lists:sort(fun(A, B) -> list_to_integer(binary_to_list(A)) =< list_to_integer(binary_to_list(B)) end, Keys),
+			lists:last(SortedKeys);
+		{error, E} ->
+			lager:debug("agent login timestamp query failed: ~p", [E]),
+			list_to_binary(integer_to_list(Default))
 	end.
 
 get_queue_list_by_agent_id(AccountId, AgentId) ->
@@ -170,13 +194,13 @@ lookup_queue_name(AccountId, QueueId) ->
 
 %% queue_log format: epoch_timestamp|unique_id_of_call|queue_name|bridged_channel|event_name|event_param_1|event_param_2|event_param_3
 write_log(AccountId, CallId, QueueName, BridgedChannel, Event) ->
-	LogFile = "/tmp/queue_log." ++ AccountId,
+	LogFile = "/tmp/queue_log." ++ binary_to_list(AccountId),
 	{MegaSec, Sec, _} = os:timestamp(),
 	lager:debug("queue_log event: ~p~p|~s|~s|~s|~s|", [MegaSec, Sec, CallId, QueueName, BridgedChannel, Event]),
 	file:write_file(LogFile, io_lib:fwrite("~p~p|~s|~s|~s|~s|\n", [MegaSec, Sec, CallId, QueueName, BridgedChannel, Event]), [append]).
 
 write_log(AccountId, CallId, QueueName, BridgedChannel, Event, EventParams) ->
-	LogFile = "/tmp/queue_log." ++ AccountId,
+	LogFile = "/tmp/queue_log." ++ binary_to_list(AccountId),
 	{MegaSec, Sec, _} = os:timestamp(),
 	case EventParams of
 		{Param1, Param2, Param3} -> 
