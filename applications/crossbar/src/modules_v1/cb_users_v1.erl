@@ -128,13 +128,23 @@ validate_resource(Context, UserId, _, _) -> validate_user_id(UserId, Context).
 validate_user_id(UserId, Context) ->
     case couch_mgr:open_cache_doc(cb_context:account_db(Context), UserId) of
         {'ok', Doc} -> validate_user_id(UserId, Context, Doc);
-        {'error', 'not_found'} -> cb_context:add_system_error('bad_identifier', [{'details', UserId}],  Context);
+        {'error', 'not_found'} ->
+            cb_context:add_system_error(
+                'bad_identifier'
+                ,wh_json:from_list([{<<"cause">>, UserId}])
+                ,Context
+            );
         {'error', _R} -> crossbar_util:response_db_fatal(Context)
     end.
 
 validate_user_id(UserId, Context, Doc) ->
-    case wh_json:is_true(<<"pvt_deleted">>, Doc) of
-        'true' -> cb_context:add_system_error('bad_identifier', [{'details', UserId}],  Context);
+    case wh_doc:is_soft_deleted(Doc) of
+        'true' ->
+            cb_context:add_system_error(
+                'bad_identifier'
+                ,wh_json:from_list([{<<"cause">>, UserId}])
+                ,Context
+            );
         'false'->
             cb_context:setters(Context
                                ,[{fun cb_context:set_user_id/2, UserId}
@@ -239,6 +249,7 @@ validate(Context, UserId, ?QUICKCALL, _) ->
 
 -spec post(cb_context:context(), path_token()) -> cb_context:context().
 post(Context, _) ->
+    _ = crossbar_util:maybe_refresh_fs_xml('user', Context),
     crossbar_doc:save(Context).
 
 -spec put(cb_context:context()) -> cb_context:context().
@@ -337,17 +348,7 @@ validate_request(UserId, Context) ->
 
 -spec validate_patch(api_binary(), cb_context:context()) -> cb_context:context().
 validate_patch(UserId, Context) ->
-    Context1 = load_user(UserId, Context),
-    case cb_context:resp_status(Context1) of
-        'success' ->
-            PatchJObj = wh_doc:public_fields(cb_context:req_data(Context)),
-            UserJObj = wh_json:merge_jobjs(PatchJObj, cb_context:doc(Context1)),
-
-            lager:debug("patched doc, now validating"),
-            prepare_username(UserId, cb_context:set_req_data(Context, UserJObj));
-        _Status ->
-            Context1
-    end.
+    crossbar_doc:patch_and_validate(UserId, Context, fun validate_request/2).
 
 -spec prepare_username(api_binary(), cb_context:context()) -> cb_context:context().
 prepare_username(UserId, Context) ->
@@ -366,17 +367,20 @@ check_user_name(UserId, Context) ->
     AccountDb = cb_context:account_db(Context),
     case is_username_unique(AccountDb, UserId, UserName) of
         'true' ->
-            lager:debug("username ~p is unique", [UserName]),
+            lager:debug("user name ~p is unique", [UserName]),
             check_emergency_caller_id(UserId, Context);
         'false' ->
             Context1 =
                 cb_context:add_validation_error(
                     [<<"username">>]
                     ,<<"unique">>
-                    ,<<"Username already in use">>
+                    ,wh_json:from_list([
+                        {<<"message">>, <<"User name already in use">>}
+                        ,{<<"cause">>, UserName}
+                     ])
                     ,Context
                 ),
-            lager:error("username ~p is already used", [UserName]),
+            lager:error("user name ~p is already used", [UserName]),
             check_emergency_caller_id(UserId, Context1)
     end.
 
@@ -439,31 +443,35 @@ maybe_validate_username(UserId, Context) ->
         orelse CurrentUsername =:= NewUsername
         orelse username_doc_id(NewUsername, Context)
     of
-        %% username is unchanged
+        %% user name is unchanged
         'true' -> maybe_rehash_creds(UserId, NewUsername, Context);
-        %% updated username that doesnt exist
+        %% updated user name that doesn't exist
         'undefined' ->
             manditory_rehash_creds(UserId, NewUsername, Context);
-        %% updated username to existing, collect any further errors...
+        %% updated user name to existing, collect any further errors...
         _Else ->
-            C = cb_context:add_validation_error(<<"username">>
-                                                ,<<"unique">>
-                                                ,<<"Username is not unique for this account">>
-                                                ,Context
-                                               ),
+            C = cb_context:add_validation_error(
+                    <<"username">>
+                    ,<<"unique">>
+                    ,wh_json:from_list([
+                        {<<"message">>, <<"User name is not unique for this account">>}
+                        ,{<<"cause">>, NewUsername}
+                     ])
+                    ,Context
+                ),
             manditory_rehash_creds(UserId, NewUsername, C)
     end.
 
 -spec maybe_rehash_creds(api_binary(), api_binary(), cb_context:context()) -> cb_context:context().
 maybe_rehash_creds(UserId, Username, Context) ->
     case wh_json:get_ne_value(<<"password">>, cb_context:doc(Context)) of
-        %% No username or hash, no creds for you!
+        %% No user name or hash, no creds for you!
         'undefined' when Username =:= 'undefined' ->
             HashKeys = [<<"pvt_md5_auth">>, <<"pvt_sha1_auth">>],
             cb_context:set_doc(Context, wh_json:delete_keys(HashKeys, cb_context:doc(Context)));
-        %% Username without password, creds status quo
+        %% User name without password, creds status quo
         'undefined' -> Context;
-        %% Got a password, hope you also have a username...
+        %% Got a password, hope you also have a user name...
         Password -> rehash_creds(UserId, Username, Password, Context)
     end.
 
@@ -472,22 +480,28 @@ maybe_rehash_creds(UserId, Username, Context) ->
 manditory_rehash_creds(UserId, Username, Context) ->
     case wh_json:get_ne_value(<<"password">>, cb_context:doc(Context)) of
         'undefined' ->
-            cb_context:add_validation_error(<<"password">>
-                                            ,<<"required">>
-                                            ,<<"The password must be provided when updating the username">>
-                                            ,Context
-                                           );
+            cb_context:add_validation_error(
+                <<"password">>
+                ,<<"required">>
+                ,wh_json:from_list([
+                    {<<"message">>, <<"The password must be provided when updating the user name">>}
+                 ])
+                ,Context
+            );
         Password -> rehash_creds(UserId, Username, Password, Context)
     end.
 
 -spec rehash_creds(api_binary(), api_binary(), ne_binary(), cb_context:context()) ->
                           cb_context:context().
 rehash_creds(_UserId, 'undefined', _Password, Context) ->
-    cb_context:add_validation_error(<<"username">>
-                                    ,<<"required">>
-                                    ,<<"The username must be provided when updating the password">>
-                                    ,Context
-                                   );
+    cb_context:add_validation_error(
+        <<"username">>
+        ,<<"required">>
+        ,wh_json:from_list([
+            {<<"message">>, <<"The user name must be provided when updating the password">>}
+         ])
+        ,Context
+    );
 rehash_creds(_UserId, Username, Password, Context) ->
     lager:debug("password set on doc, updating hashes for ~s", [Username]),
     {MD5, SHA1} = cb_modules_util:pass_hashes(Username, Password),

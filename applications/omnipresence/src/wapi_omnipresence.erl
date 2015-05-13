@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013, 2600Hz
+%%% @copyright (C) 2013-2015, 2600Hz
 %%% @doc
 %%% Intra-whapp comm
 %%% @end
@@ -15,7 +15,7 @@
          ,publish_subscribe/1, publish_subscribe/2
          ,publish_update/2, publish_update/3
          ,declare_exchanges/0
-         ]).
+        ]).
 
 -include("omnipresence.hrl").
 
@@ -24,9 +24,9 @@
 
 -define(SUBSCRIBE_HEADERS, [<<"User">>, <<"Expires">>]).
 -define(OPTIONAL_SUBSCRIBE_HEADERS, [<<"Queue">>, <<"From">>
-                                    ,<<"Event-Package">>, <<"Call-ID">>
-                                    ,<<"From-Tag">>, <<"To-Tag">>
-                                    ,<<"Contact">>
+                                     ,<<"Event-Package">>, <<"Call-ID">>
+                                     ,<<"From-Tag">>, <<"To-Tag">>
+                                     ,<<"Contact">>
                                     ]).
 -define(SUBSCRIBE_VALUES, [{<<"Event-Category">>, <<"presence">>}
                            ,{<<"Event-Name">>, <<"subscription">>}
@@ -35,18 +35,19 @@
 
 -define(UPDATE_HEADERS, [<<"To">>, <<"From">>]).
 -define(OPTIONAL_UPDATE_HEADERS, [<<"Call-ID">>, <<"Direction">>
-                                 ,<<"Event-Package">>, <<"State">>
-                                 ,<<"From-Tag">>, <<"To-Tag">>
-                                 ,<<"From-User">>, <<"From-Realm">>, <<"From-URI">>
-                                 ,<<"To-User">>, <<"To-Realm">>, <<"To-URI">>
-                                 ,<<"Messages-Waiting">>, <<"Messages-New">>
-                                 ,<<"Messages-Saved">>, <<"Messages-Urgent">>
-                                 ,<<"Messages-Urgent-Saved">>, <<"Message-Account">>
-                                 ,<<"Expires">>, <<"Flush-Level">>
-                                 ,<<"Presentity">>, <<"Presentity-User">>, <<"Presentity-Realm">>
+                                  ,<<"Event-Package">>, <<"State">>
+                                  ,<<"From-Tag">>, <<"To-Tag">>
+                                  ,<<"From-User">>, <<"From-Realm">>, <<"From-URI">>
+                                  ,<<"To-User">>, <<"To-Realm">>, <<"To-URI">>
+                                  ,<<"Messages-Waiting">>, <<"Messages-New">>
+                                  ,<<"Messages-Saved">>, <<"Messages-Urgent">>
+                                  ,<<"Messages-Urgent-Saved">>, <<"Message-Account">>
+                                  ,<<"Expires">>, <<"Flush-Level">>
+                                  ,<<"Presentity">>, <<"Presentity-User">>, <<"Presentity-Realm">>
+                                  ,<<"Target-Call-ID">>, <<"Switch-URI">>, <<"Call-Cookie">>
                                  ]).
 -define(UPDATE_VALUES, [{<<"Event-Category">>, <<"presence">>}
-                       ,{<<"Event-Name">>, <<"update">>}
+                        ,{<<"Event-Name">>, <<"update">>}
                        ]).
 -define(UPDATE_TYPES, [
                        {<<"State">>, fun(A) -> lists:member(A, wapi_presence:presence_states()) end}
@@ -132,10 +133,12 @@ bind_q(Queue, [_|Restrict], Props) ->
     bind_q(Queue, Restrict, Props);
 bind_q(_, [], _) -> 'ok'.
 
+-spec unbind_q(ne_binary(), wh_proplist()) -> 'ok'.
+-spec unbind_q(ne_binary(), atoms() | 'undefined', wh_proplist()) -> 'ok'.
 unbind_q(Queue, Props) ->
     unbind_q(Queue, props:get_value('restrict_to', Props), Props).
 
-unbind_q(Queue, _Props, 'undefined') ->
+unbind_q(Queue, 'undefined', _Props) ->
     amqp_util:unbind_q_from_exchange(Queue
                                      ,Queue
                                      ,?SUBSCRIPTIONS_EXCHANGE

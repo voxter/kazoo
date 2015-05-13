@@ -18,6 +18,8 @@
                     ,<<"*">>, <<"0">>, <<"#">>
                    ]).
 
+-define(DEFAULT_CONTENT_TYPE, <<"application/json">>).
+
 %% Hangup Causes that are fine
 -define(SUCCESSFUL_HANGUPS, [<<"NORMAL_CLEARING">>, <<"ORIGINATOR_CANCEL">>, <<"SUCCESS">>]).
 
@@ -30,7 +32,7 @@
 -type pid_refs() :: [pid_ref(),...] | [].
 
 -type api_terms() :: wh_json:object() | wh_json:json_proplist().
--type api_binary() :: ne_binary() | 'undefined'.
+-type api_binary() :: binary() | 'undefined'.
 -type api_binaries() :: [api_binary(),...] | [] | 'undefined'.
 -type api_object() :: wh_json:object() | 'undefined'.
 -type api_objects() :: wh_json:objects() | 'undefined'.
@@ -73,7 +75,7 @@
 
 -type wh_proplist_value() :: any().
 -type wh_proplist_values() :: [wh_proplist_value(),...] | [].
--type wh_proplist_key() :: binary() | atom() | number() | string() | function() | ne_binaries().
+-type wh_proplist_key() :: ne_binary() | atom() | number() | string() | function() | ne_binaries().
 -type wh_proplist_keys() :: [wh_proplist_key(),...] | [].
 -type wh_proplist_kv(K, V) :: [{K, V} | atom(),...] | [].
 -type wh_proplist_k(K) :: wh_proplist_kv(K, wh_proplist_value()).
@@ -104,6 +106,7 @@
 -type wh_iso_week() :: calendar:yearweeknum(). %%{wh_year(), wh_weeknum()}.
 -type gregorian_seconds() :: pos_integer().
 -type unix_seconds() :: pos_integer().
+-type api_seconds() :: 'undefined' | gregorian_seconds().
 
 -type wh_timeout() :: non_neg_integer() | 'infinity'.
 
@@ -147,14 +150,24 @@
                            {'noreply', term()} | {'noreply', term(), gen_server_timeout()} |
                            {'stop', term(), term()} | {'stop', term(), term(), term()}.
 
+-type handle_call_ret_state(State) :: {'reply', term(), State} | {'reply', term(), State, gen_server_timeout()} |
+                                      {'noreply', State} | {'noreply', State, gen_server_timeout()} |
+                                      {'stop', term(), State} | {'stop', term(), State, term()}.
+
 -type handle_cast_ret() :: {'noreply', term()} | {'noreply', term(), gen_server_timeout()} |
                            {'stop', term(), term()}.
+-type handle_cast_ret_state(State) :: {'noreply', State} | {'noreply', State, gen_server_timeout()} |
+                                      {'stop', term(), State}.
 
 -type handle_info_ret() :: {'noreply', term()} | {'noreply', term(), gen_server_timeout()} |
                            {'stop', term(), term()}.
+-type handle_info_ret_state(State) :: {'noreply', State} | {'noreply', State, gen_server_timeout()} |
+                                      {'stop', term(), State}.
+
+-type handle_event_ret() :: 'ignore' |
+                            {'reply', wh_proplist()}.
 
 -type server_ref() :: atom() | {atom(), atom()} | {'global', term()} | {'via', atom(), term()} | pid().
-
 
 -type gen_server_name() :: {'local', atom()} |
                            {'global', term()} |

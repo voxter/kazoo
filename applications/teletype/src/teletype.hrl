@@ -6,7 +6,7 @@
 -define(APP_NAME, <<"teletype">>).
 -define(APP_VERSION, <<"0.0.1">> ).
 
--define(PVT_TYPE, <<"notification">>).
+-define(PVT_TYPE, kz_notification:pvt_type()).
 
 -define(NOTIFY_CONFIG_CAT, <<"notify">>).
 
@@ -88,13 +88,33 @@
           ,?MACRO_VALUE(<<"to.realm">>, <<"to_realm">>, <<"To Realm">>, <<"SIP To Realm">>)
          ]).
 
--define(SERVICE_MACROS
-        ,[?MACRO_VALUE(<<"service.url">>, <<"service_url">>, <<"Service Provider URL">>, <<"Service Provider URL">>)
-          ,?MACRO_VALUE(<<"service.name">>, <<"service_name">>, <<"Service Provider Name">>, <<"Service Provider Name">>)
-          ,?MACRO_VALUE(<<"service.provider">>, <<"service_provider">>, <<"Service Provider">>, <<"Service Provider">>)
-          ,?MACRO_VALUE(<<"service.support_number">>, <<"service_support_number">>, <<"Support Number">>, <<"Support Number">>)
-          ,?MACRO_VALUE(<<"service.support_email">>, <<"service_support_email">>, <<"Support Email">>, <<"Support Email">>)
-          ,?MACRO_VALUE(<<"service.from">>, <<"service_from">>, <<"Service Provider Email">>, <<"Service Provider's Email">>)
+-define(ACCOUNT_MACROS
+        ,[?MACRO_VALUE(<<"account.name">>, <<"account_name">>, <<"Account Name">>, <<"Name of the account">>)
+          ,?MACRO_VALUE(<<"account.realm">>, <<"account_realm">>, <<"Account Realm">>, <<"SIP Realm of the account">>)
+          ,?MACRO_VALUE(<<"account.id">>, <<"account_id">>, <<"Account ID">>, <<"Account ID">>)
+          ,?MACRO_VALUE(<<"account.language">>, <<"account_language">>, <<"Account Language">>, <<"Account Language">>)
+          ,?MACRO_VALUE(<<"account.timezone">>, <<"account_timezone">>, <<"Account Timezone">>, <<"Account Timezone">>)
+         ]).
+
+-define(USER_MACROS
+        ,[?MACRO_VALUE(<<"user.first_name">>, <<"user_first_name">>, <<"First Name">>, <<"First name of the user">>)
+          ,?MACRO_VALUE(<<"user.last_name">>, <<"user_last_name">>, <<"Last Name">>, <<"Last name of the user">>)
+          ,?MACRO_VALUE(<<"user.email">>, <<"user_email">>, <<"Email">>, <<"Email of the user">>)
+          ,?MACRO_VALUE(<<"user.timezone">>, <<"user_timezone">>, <<"Timezone">>, <<"Timezone of the user">>)
+         ]).
+
+-define(PORT_REQUEST_MACROS
+        ,[?MACRO_VALUE(<<"port_request.carrier">>, <<"carrier">>, <<"Carrier">>, <<"Carrier">>)
+          ,?MACRO_VALUE(<<"port_request.name">>, <<"name">>, <<"Name">>, <<"Name">>)
+          ,?MACRO_VALUE(<<"port_request.bill_name">>, <<"bill_name">>, <<"Bill Name">>, <<"Name on the bill">>)
+          ,?MACRO_VALUE(<<"port_request.bill_address">>, <<"bill_address">>, <<"Bill Address">>, <<"Address on the bill">>)
+          ,?MACRO_VALUE(<<"port_request.bill_locality">>, <<"bill_locality">>, <<"Bill Locality">>, <<"City on the bill">>)
+          ,?MACRO_VALUE(<<"port_request.bill_region">>, <<"bill_region">>, <<"Bill Region">>, <<"Region on the bill">>)
+          ,?MACRO_VALUE(<<"port_request.bill_postal_code">>, <<"bill_postal_code">>, <<"Bill Postal Code">>, <<"Postal Code on the bill">>)
+          ,?MACRO_VALUE(<<"port_request.transfer_date">>, <<"transfer_date">>, <<"Transfer Date">>, <<"Transfer Date">>)
+          ,?MACRO_VALUE(<<"port_request.numbers">>, <<"numbers">>, <<"Numbers">>, <<"Numbers">>)
+          ,?MACRO_VALUE(<<"port_request.comments">>, <<"comments">>, <<"Comments">>, <<"Comments">>)
+          ,?MACRO_VALUE(<<"port_request.scheduled_date">>, <<"scheduled_date">>, <<"Scheduled Date">>, <<"Scheduled Date">>)
          ]).
 
 -define(DEFAULT_CALL_MACROS

@@ -1,11 +1,13 @@
 %%%-------------------------------------------------------------------
-%%% @yright (C) 2011-2014 2600Hz INC
+%%% @yright (C) 2011-2015 2600Hz INC
 %%% @doc
 %%% Dialplan API definitions
 %%% @end
 %%% @contributors
 %%%   James Aimonetti
 %%%   Karl Anderson
+%%%
+%%% Fix KAZOO-3406: Sponsored by Velvetech LLC, implemented by SIPLABS LLC
 %%%-------------------------------------------------------------------
 -ifndef(WAPI_DIALPLAN_HRL).
 -include_lib("whistle/include/wh_types.hrl").
@@ -52,6 +54,7 @@
           ,<<"Enable-T38-Fax">>, <<"Enable-T38-Fax-Request">>
           ,<<"Enable-T38-Passthrough">>, <<"Enable-T38-Gateway">>
           ,<<"B-Leg-Events">>
+          ,<<"Ignore-Forward">>
          ]).
 -define(BRIDGE_REQ_VALUES, [{<<"Event-Category">>, <<"call">>}
                             ,{<<"Event-Name">>, <<"command">>}
@@ -83,9 +86,11 @@
           ,<<"Ignore-Early-Media">>, <<"Bypass-Media">>, <<"Hold-Media">>
           ,<<"Endpoint-Timeout">>, <<"Endpoint-Progress-Timeout">>
           ,<<"Endpoint-Delay">>, <<"Codecs">>, <<"Custom-SIP-Headers">>, <<"Presence-ID">>
-          ,<<"Custom-Channel-Vars">>, <<"Auth-User">>, <<"Auth-Password">>
+          ,<<"Custom-Channel-Vars">>
+          ,<<"Auth-User">>, <<"Auth-Password">>, <<"Auth-Realm">>
           ,<<"Endpoint-Type">>, <<"Endpoint-Options">>, <<"Force-Fax">>
-          ,<<"Proxy-IP">>, <<"Forward-IP">>, <<"SIP-Transport">>
+          ,<<"Proxy-Zone">>, <<"Proxy-IP">>
+          ,<<"Forward-IP">>, <<"SIP-Transport">>
           ,<<"Ignore-Completed-Elsewhere">>
           ,<<"SIP-Interface">>
           ,<<"Enable-T38-Fax">>, <<"Enable-T38-Fax-Request">>
@@ -479,7 +484,7 @@
                                  ]).
 -define(OPTIONAL_RECORD_CALL_REQ_HEADERS, [<<"Time-Limit">>, <<"Insert-At">>, <<"Follow-Transfer">>
                                            ,<<"Media-Transfer-Method">> ,<<"Media-Transfer-Destination">>
-                                           ,<<"Additional-Headers">>
+                                           ,<<"Additional-Headers">>, <<"Record-Sample-Rate">>
                                           ]).
 -define(RECORD_CALL_REQ_VALUES, [{<<"Event-Category">>, <<"call">>}
                                  ,{<<"Event-Name">>, <<"command">>}
@@ -487,7 +492,7 @@
                                  ,{<<"Record-Action">>, [<<"start">>, <<"stop">>]}
                                  ,?INSERT_AT_TUPLE
                                 ]).
--define(RECORD_CALL_REQ_TYPES, []).
+-define(RECORD_CALL_REQ_TYPES, [{<<"Record-Sample-Rate">>, fun is_integer/1}]).
 
 %% Play and Record Digits
 -define(PLAY_COLLECT_DIGITS_REQ_HEADERS

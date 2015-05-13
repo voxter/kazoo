@@ -17,6 +17,7 @@
          ,validate/1, validate/2
          ,put/1
          ,post/2
+         ,patch/2
          ,delete/2
         ]).
 
@@ -33,6 +34,7 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.validate.connectivity">>, ?MODULE, 'validate'),
     _ = crossbar_bindings:bind(<<"*.execute.put.connectivity">>, ?MODULE, 'put'),
     _ = crossbar_bindings:bind(<<"*.execute.post.connectivity">>, ?MODULE, 'post'),
+    _ = crossbar_bindings:bind(<<"*.execute.patch.connectivity">>, ?MODULE, 'patch'),
     crossbar_bindings:bind(<<"*.execute.delete.connectivity">>, ?MODULE, 'delete').
 
 %%--------------------------------------------------------------------
@@ -49,7 +51,7 @@ init() ->
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
 allowed_methods(_) ->
-    [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE].
+    [?HTTP_GET, ?HTTP_POST, ?HTTP_PATCH, ?HTTP_DELETE].
 
 %%--------------------------------------------------------------------
 %% @public
@@ -91,6 +93,8 @@ validate_connectivity_pbx(Context, Id, ?HTTP_GET) ->
     read(Id, Context);
 validate_connectivity_pbx(Context, Id, ?HTTP_POST) ->
     update(Id, Context);
+validate_connectivity_pbx(Context, Id, ?HTTP_PATCH) ->
+    validate_patch(Id, Context);
 validate_connectivity_pbx(Context, Id, ?HTTP_DELETE) ->
     read(Id, Context).
 
@@ -103,6 +107,11 @@ post(Context, _) ->
             Context1;
         _Status -> Context1
     end.
+
+-spec patch(cb_context:context(), path_token()) -> cb_context:context().
+patch(Context, _) ->
+    'ok' = track_assignment('post', Context),
+    crossbar_doc:save(Context).
 
 -spec put(cb_context:context()) -> cb_context:context().
 put(Context) ->
@@ -140,7 +149,7 @@ registration_update(Context) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec  track_assignment(atom(), cb_context:context()) -> cb_context:context().
+-spec  track_assignment(atom(), cb_context:context()) -> 'ok'.
 track_assignment('post', Context) ->
     OldNums = get_numbers(cb_context:fetch(Context, 'db_doc')),
     NewNums = get_numbers(cb_context:doc(Context)),
@@ -205,6 +214,17 @@ update(Id, Context) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Update-merge an existing instance partially with the data provided, if it is
+%% valid
+%% @end
+%%--------------------------------------------------------------------
+-spec validate_patch(ne_binary(), cb_context:context()) -> cb_context:context().
+validate_patch(Id, Context) ->
+    crossbar_doc:patch_and_validate(Id, Context, fun update/2).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %%
 %% @end
 %%--------------------------------------------------------------------
@@ -223,7 +243,11 @@ on_successful_validation(Id, Context) ->
 %%--------------------------------------------------------------------
 -spec summary(cb_context:context()) -> cb_context:context().
 summary(Context) ->
-    crossbar_doc:load_view(?CB_LIST, [{'reduce', 'false'}], Context, fun normalize_view_results/2).
+    crossbar_doc:load_view(?CB_LIST
+                           ,[{'reduce', 'false'}]
+                           ,Context
+                           ,fun normalize_view_results/2
+                          ).
 
 %%--------------------------------------------------------------------
 %% @private

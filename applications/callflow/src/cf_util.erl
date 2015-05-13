@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz
+%%% @copyright (C) 2011-2015, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -179,18 +179,17 @@ notification_register(JObj, _Props) ->
 
 -spec mwi_query(wh_json:object()) -> 'ok'.
 mwi_query(JObj) ->
-    Username = wh_json:get_value(<<"Username">>, JObj),
     Realm = wh_json:get_value(<<"Realm">>, JObj),
     case whapps_util:get_account_by_realm(Realm) of
         {'ok', AccountDb} ->
             lager:debug("replying to mwi query"),
+            Username = wh_json:get_value(<<"Username">>, JObj),
             mwi_resp(Username, Realm, AccountDb, JObj);
         _Else -> 'ok'
     end.
 
--spec mwi_resp(api_binary(), api_binary(), ne_binary(), wh_json:object()) -> 'ok'.
+-spec mwi_resp(api_binary(), ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
 mwi_resp('undefined', _Realm, _AccountDb, _JObj) -> 'ok';
-mwi_resp(_Username, 'undefined', _AccountDb, _JObj) -> 'ok';
 mwi_resp(Username, Realm, AccountDb, JObj) ->
     case owner_ids_by_sip_username(AccountDb, Username) of
         {'ok', [OwnerId]} ->
@@ -226,24 +225,27 @@ unsolicited_owner_mwi_update(AccountDb, OwnerId) ->
             {New, Saved} = vm_count_by_owner(AccountDb, OwnerId),
             AccountId = wh_util:format_account_id(AccountDb, 'raw'),
             lists:foreach(
-              fun(JObj) ->
-                      J = wh_json:get_value(<<"doc">>, JObj),
-                      Username = wh_json:get_value([<<"sip">>, <<"username">>], J),
-                      Realm = get_sip_realm(J, AccountId),
-                      OwnerId = get_endpoint_owner(J),
-                      case wh_json:get_value([<<"sip">>, <<"method">>], J) =:= <<"password">>
-                          andalso Username =/= 'undefined'
-                          andalso Realm =/= 'undefined'
-                          andalso OwnerId =/= 'undefined'
-                      of
-                          'true' -> send_mwi_update(New, Saved, Username, Realm);
-                          'false' -> 'ok'
-                      end
-              end, JObjs),
-            'ok';
+              fun(JObj) -> maybe_send_mwi_update(JObj, AccountId, New, Saved) end
+              ,JObjs
+             );
         {'error', _R}=E ->
             lager:warning("failed to find devices owned by ~s: ~p", [OwnerId, _R]),
             E
+    end.
+
+-spec maybe_send_mwi_update(wh_json:object(), ne_binary(), integer(), integer()) -> 'ok'.
+maybe_send_mwi_update(JObj, AccountId, New, Saved) ->
+    J = wh_json:get_value(<<"doc">>, JObj),
+    Username = kz_device:sip_username(J),
+    Realm = get_sip_realm(J, AccountId),
+    OwnerId = get_endpoint_owner(J),
+    case kz_device:sip_method(J) =:= <<"password">>
+        andalso Username =/= 'undefined'
+        andalso Realm =/= 'undefined'
+        andalso OwnerId =/= 'undefined'
+    of
+        'true' -> send_mwi_update(New, Saved, Username, Realm);
+        'false' -> 'ok'
     end.
 
 -spec unsolicited_endpoint_mwi_update(api_binary(), api_binary()) ->
@@ -263,10 +265,10 @@ unsolicited_endpoint_mwi_update(AccountDb, EndpointId) ->
                                             'ok' | {'error', 'not_appropriate'}.
 maybe_send_endpoint_mwi_update(JObj, AccountDb) ->
     AccountId = wh_util:format_account_id(AccountDb, 'raw'),
-    Username = wh_json:get_value([<<"sip">>, <<"username">>], JObj),
+    Username = kz_device:sip_username(JObj),
     Realm = get_sip_realm(JObj, AccountId),
     OwnerId = get_endpoint_owner(JObj),
-    case wh_json:get_value([<<"sip">>, <<"method">>], JObj) =:= <<"password">>
+    case kz_device:sip_method(JObj) =:= <<"password">>
         andalso Username =/= 'undefined'
         andalso Realm =/= 'undefined'
     of
@@ -305,8 +307,8 @@ send_mwi_update(New, Waiting, Username, Realm, JObj) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec vm_count_by_owner(ne_binary(), api_binary()) -> {non_neg_integer(), non_neg_integer()}.
-vm_count_by_owner(_, 'undefined') -> {0, 0};
-vm_count_by_owner(AccountDb, OwnerId) ->
+vm_count_by_owner(_AccountDb, 'undefined') -> {0, 0};
+vm_count_by_owner(<<_/binary>> = AccountDb, <<_/binary>> = OwnerId) ->
     ViewOptions = [{'reduce', 'true'}
                    ,{'group', 'true'}
                    ,{'group_level', 2}
@@ -315,10 +317,14 @@ vm_count_by_owner(AccountDb, OwnerId) ->
                   ],
     case couch_mgr:get_results(AccountDb, <<"cf_attributes/vm_count_by_owner">>, ViewOptions) of
         {'ok', MessageCounts} ->
-            Props = [{wh_json:get_value([<<"key">>, 2], MessageCount), wh_json:get_value(<<"value">>, MessageCount)}
+            Props = [{wh_json:get_integer_value([<<"key">>, 2], MessageCount)
+                      ,wh_json:get_integer_value(<<"value">>, MessageCount)
+                     }
                      || MessageCount <- MessageCounts
                     ],
-            {props:get_value(<<"new">>, Props, 0), props:get_value(<<"saved">>, Props, 0)};
+            {props:get_integer_value(<<"new">>, Props, 0)
+             ,props:get_integer_value(<<"saved">>, Props, 0)
+            };
         {'error', _R} ->
             lager:info("unable to lookup vm counts by owner: ~p", [_R]),
             {0, 0}
@@ -525,9 +531,7 @@ send_default_response(Cause, Call) ->
     case cf_exe:wildcard_is_empty(Call) of
         'false' -> 'ok';
         'true' ->
-            CallId = cf_exe:callid(Call),
-            CtrlQ = cf_exe:control_queue(Call),
-            case wh_call_response:send_default(CallId, CtrlQ, Cause) of
+            case wh_call_response:send_default(Call, Cause) of
                 {'error', 'no_response'} -> 'ok';
                 {'ok', NoopId} ->
                     _ = whapps_call_command:wait_for_noop(Call, NoopId),
@@ -547,13 +551,16 @@ get_sip_realm(SIPJObj, AccountId) ->
 
 -spec get_sip_realm(wh_json:object(), ne_binary(), Default) -> Default | ne_binary().
 get_sip_realm(SIPJObj, AccountId, Default) ->
-    case wh_json:get_ne_value([<<"sip">>, <<"realm">>], SIPJObj) of
-        'undefined' ->
-            case wh_util:get_account_realm(AccountId) of
-                'undefined' -> Default;
-                Else -> Else
-            end;
+    case kz_device:sip_realm(SIPJObj) of
+        'undefined' -> get_account_realm(AccountId, Default);
         Realm -> Realm
+    end.
+
+-spec get_account_realm(ne_binary(), api_binary()) -> api_binary().
+get_account_realm(AccountId, Default) ->
+    case wh_util:get_account_realm(AccountId) of
+        'undefined' -> Default;
+        Else -> Else
     end.
 
 %%-----------------------------------------------------------------------------
@@ -563,7 +570,7 @@ get_sip_realm(SIPJObj, AccountId, Default) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -type lookup_callflow_ret() :: {'ok', wh_json:object(), boolean()} |
-                               {'error', term()}.
+                               {'error', _}.
 
 -spec lookup_callflow(whapps_call:call()) -> lookup_callflow_ret().
 lookup_callflow(Call) ->
@@ -715,6 +722,7 @@ apply_dialplan(Number, DialPlan) ->
         _ -> maybe_apply_dialplan(Regexs, DialPlan, Number)
     end.
 
+-spec maybe_apply_dialplan(wh_json:keys(), wh_json:object(), ne_binary()) -> ne_binary().
 maybe_apply_dialplan([], _, Number) -> Number;
 maybe_apply_dialplan([Regex|Regexs], DialPlan, Number) ->
     case re:run(Number, Regex, [{'capture', 'all', 'binary'}]) of
@@ -866,12 +874,12 @@ sip_user_from_device_id(EndpointId, Call) ->
     case cf_endpoint:get(EndpointId, Call) of
         {'error', _} -> 'undefined';
         {'ok', Endpoint} ->
-            wh_json:get_value([<<"sip">>, <<"username">>], Endpoint)
+            kz_device:sip_username(Endpoint)
     end.
 
 -spec wait_for_noop(whapps_call:call(), ne_binary()) ->
                            {'ok', whapps_call:call()} |
-                           {'error', 'channel_destroy' | wh_json:object()}.
+                           {'error', 'channel_hungup' | wh_json:object()}.
 wait_for_noop(Call, NoopId) ->
     case whapps_call_command:receive_event(?MILLISECONDS_IN_DAY) of
         {'ok', JObj} ->
@@ -888,7 +896,7 @@ process_event(Call, NoopId, JObj) ->
     case whapps_call_command:get_event_type(JObj) of
         {<<"call_event">>, <<"CHANNEL_DESTROY">>, _} ->
             lager:debug("channel was destroyed"),
-            {'error', 'channel_destroy'};
+            {'error', 'channel_hungup'};
         {<<"error">>, _, <<"noop">>} ->
             lager:debug("channel execution error while waiting for ~s: ~s", [NoopId, wh_json:encode(JObj)]),
             {'error', JObj};
@@ -922,14 +930,3 @@ account_timezone(Call) ->
         {'error', _E} ->
             whapps_config:get(<<"accounts">>, <<"timezone">>, ?DEFAULT_TIMEZONE)
     end.
-
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
-
-alpha_to_dialpad_test() ->
-    ?assertEqual(<<"222">>, alpha_to_dialpad(<<"abc">>)),
-    ?assertEqual(<<"23456789">>, alpha_to_dialpad(<<"behknqux">>)),
-    ?assertEqual(<<"23456789">>, alpha_to_dialpad(<<"BeHkNqUx">>)),
-    ?assertEqual(<<"23456789">>, alpha_to_dialpad(<<"1BeH@k(N$q-u+x=">>)).
-
--endif.

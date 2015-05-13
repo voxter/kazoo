@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2015, 2600Hz INC
 %%% @doc
 %%% "data":{
 %%%   "action":"compose"|"check"
@@ -135,18 +135,24 @@ handle(Data, Call) ->
     case wh_json:get_value(<<"action">>, Data, <<"compose">>) of
         <<"compose">> ->
             whapps_call_command:answer(Call),
+            lager:debug("answered the call and composing the voicemail"),
             case compose_voicemail(get_mailbox_profile(Data, Call), Call) of
                 'ok' ->
                     lager:info("compose voicemail complete"),
                     cf_exe:continue(Call);
                 {'branch', Flow} ->
                     lager:info("compose voicemail complete, branch to operator"),
-                    cf_exe:branch(Flow, Call)
+                    cf_exe:branch(Flow, Call);
+                {'error', 'channel_hungup'} ->
+                    lager:info("channel has hungup, stopping the compose"),
+                    cf_exe:stop(Call)
             end;
         <<"check">> ->
             whapps_call_command:answer(Call),
-            check_mailbox(get_mailbox_profile(Data, Call), Call),
-            cf_exe:continue(Call);
+            case check_mailbox(get_mailbox_profile(Data, Call), Call) of
+                'ok' ->  cf_exe:continue(Call);
+                {'error', 'channel_hungup'} -> cf_exe:stop(Call)
+            end;
         _ ->
             cf_exe:continue(Call)
     end.
@@ -157,9 +163,12 @@ handle(Data, Call) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec check_mailbox(mailbox(), whapps_call:call()) -> 'ok'.
--spec check_mailbox(mailbox(), whapps_call:call(), non_neg_integer()) -> 'ok'.
--spec check_mailbox(mailbox(), boolean(), whapps_call:call(), non_neg_integer()) -> 'ok'.
+-spec check_mailbox(mailbox(), whapps_call:call()) ->
+                           'ok' | {'error', 'channel_hungup'}.
+-spec check_mailbox(mailbox(), whapps_call:call(), non_neg_integer()) ->
+                           'ok' | {'error', 'channel_hungup'}.
+-spec check_mailbox(mailbox(), boolean(), whapps_call:call(), non_neg_integer()) ->
+                           'ok' | {'error', 'channel_hungup'}.
 
 check_mailbox(#mailbox{owner_id=OwnerId}=Box, Call) ->
     %% Wrapper to initalize the attempt counter
@@ -281,9 +290,11 @@ find_mailbox(#mailbox{interdigit_timeout=Interdigit}=Box, Call, Loop) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec compose_voicemail(mailbox(), whapps_call:call()) ->
-                               'ok' | {'branch', _}.
+                               'ok' | {'branch', _} |
+                               {'error', 'channel_hungup'}.
 -spec compose_voicemail(mailbox(), boolean(), whapps_call:call()) ->
-                               'ok' | {'branch', _}.
+                               'ok' | {'branch', _} |
+                               {'error', 'channel_hungup'}.
 compose_voicemail(#mailbox{owner_id=OwnerId}=Box, Call) ->
     IsOwner = is_owner(Call, OwnerId),
     compose_voicemail(Box, IsOwner, Call).
@@ -455,12 +466,12 @@ setup_mailbox(Box, Call) ->
     {'ok', _} = whapps_call_command:b_prompt(<<"vm-setup_intro">>, Call),
 
     lager:info("prompting caller to set a pin"),
-    _ = change_pin(Box, Call),
+    #mailbox{} = change_pin(Box, Call),
 
     {'ok', _} = whapps_call_command:b_prompt(<<"vm-setup_rec_greeting">>, Call),
     lager:info("prompting caller to record an unavailable greeting"),
 
-    Box1 = record_unavailable_greeting(tmp_file(), Box, Call),
+    #mailbox{}=Box1 = record_unavailable_greeting(tmp_file(), Box, Call),
     'ok' = update_doc(<<"is_setup">>, 'true', Box1, Call),
     lager:info("voicemail configuration wizard is complete"),
 
@@ -473,10 +484,20 @@ setup_mailbox(Box, Call) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec main_menu(mailbox(), whapps_call:call()) -> 'ok'.
--spec main_menu(mailbox(), whapps_call:call(), non_neg_integer()) -> 'ok'.
+-spec main_menu(mailbox(), whapps_call:call()) ->
+                       'ok' | {'error', 'channel_hungup'}.
+-spec main_menu(mailbox(), whapps_call:call(), non_neg_integer()) ->
+                       'ok' | {'error', 'channel_hungup'}.
 main_menu(#mailbox{is_setup='false'}=Box, Call) ->
-    main_menu(setup_mailbox(Box, Call), Call, 1);
+    try setup_mailbox(Box, Call) of
+        #mailbox{}=Box1 -> main_menu(Box1, Call, 1)
+    catch
+        'error':{'badmatch',{'error','channel_hungup'}} ->
+            lager:debug("channel has hungup while setting up mailbox"),
+            {'error', 'channel_hungup'};
+        _E:_R ->
+            lager:debug("failed to setup mailbox: ~s: ~p", [_E, _R])
+    end;
 main_menu(Box, Call) -> main_menu(Box, Call, 1).
 
 main_menu(#mailbox{owner_id=OwnerId}, Call, Loop) when Loop > 4 ->
@@ -562,7 +583,7 @@ main_menu(#mailbox{owner_id=OwnerId
     NoopId = whapps_call_command:audio_macro(message_count_prompts(New, Saved)
                                              ++ [{'prompt', <<"vm-main_menu">>}]
                                              ,Call),
-    put('cf_voicemail', ?LINE),
+
     case whapps_call_command:collect_digits(?KEY_LENGTH
                                             ,whapps_call_command:default_collect_timeout()
                                             ,Interdigit
@@ -596,7 +617,10 @@ main_menu(#mailbox{owner_id=OwnerId
             lager:info("caller choose to change their mailbox configuration"),
             case config_menu(Box, Call) of
                 'ok' -> 'ok';
-                Else -> main_menu(Else, Call)
+                {'error', 'channel_hungup'}=E ->
+                    lager:debug("channel has hungup, done trying to setup mailbox"),
+                    E;
+                #mailbox{}=Box1 -> main_menu(Box1, Call)
             end;
         _ ->
             main_menu(Box, Call, Loop + 1)
@@ -613,50 +637,50 @@ message_count_prompts(0, 0) ->
     [{'prompt', <<"vm-no_messages">>}];
 message_count_prompts(1, 0) ->
     [{'prompt', <<"vm-you_have">>}
-     ,{'say', <<"1">>}
+     ,{'say', <<"1">>, <<"messages">>}
      ,{'prompt', <<"vm-new_message">>}
     ];
 message_count_prompts(0, 1) ->
     [{'prompt', <<"vm-you_have">>}
-     ,{'say', <<"1">>}
+     ,{'say', <<"1">>, <<"messages">>}
      ,{'prompt', <<"vm-saved_message">>}
     ];
 message_count_prompts(1, 1) ->
     [{'prompt', <<"vm-you_have">>}
-     ,{'say', <<"1">>}
+     ,{'say', <<"1">>, <<"messages">>}
      ,{'prompt', <<"vm-new_and">>}
-     ,{'say', <<"1">>}
+     ,{'say', <<"1">>, <<"messages">>}
      ,{'prompt', <<"vm-saved_message">>}
     ];
 message_count_prompts(New, 0) ->
     [{'prompt', <<"vm-you_have">>}
-     ,{'say', wh_util:to_binary(New), <<"number">>}
+     ,{'say', wh_util:to_binary(New), <<"messages">>}
      ,{'prompt', <<"vm-new_messages">>}
     ];
 message_count_prompts(New, 1) ->
     [{'prompt', <<"vm-you_have">>}
-     ,{'say', wh_util:to_binary(New), <<"number">>}
+     ,{'say', wh_util:to_binary(New), <<"messages">>}
      ,{'prompt', <<"vm-new_and">>}
-     ,{'say', <<"1">>}
+     ,{'say', <<"1">>, <<"messages">>}
      ,{'prompt', <<"vm-saved_message">>}
     ];
 message_count_prompts(0, Saved) ->
     [{'prompt', <<"vm-you_have">>}
-     ,{'say', wh_util:to_binary(Saved), <<"number">>}
+     ,{'say', wh_util:to_binary(Saved), <<"messages">>}
      ,{'prompt', <<"vm-saved_messages">>}
     ];
 message_count_prompts(1, Saved) ->
     [{'prompt', <<"vm-you_have">>}
-     ,{'say', <<"1">>}
+     ,{'say', <<"1">>, <<"messages">>}
      ,{'prompt', <<"vm-new_and">>}
-     ,{'say', wh_util:to_binary(Saved), <<"number">>}
+     ,{'say', wh_util:to_binary(Saved), <<"messages">>}
      ,{'prompt', <<"vm-saved_messages">>}
     ];
 message_count_prompts(New, Saved) ->
     [{'prompt', <<"vm-you_have">>}
-     ,{'say', wh_util:to_binary(New), <<"number">>}
+     ,{'say', wh_util:to_binary(New), <<"messages">>}
      ,{'prompt', <<"vm-new_and">>}
-     ,{'say', wh_util:to_binary(Saved), <<"number">>}
+     ,{'say', wh_util:to_binary(Saved), <<"messages">>}
      ,{'prompt', <<"vm-saved_messages">>}
     ].
 
@@ -754,11 +778,12 @@ message_menu(Prompt, #mailbox{keys=#keys{replay=Replay
 %% @end
 %%--------------------------------------------------------------------
 -spec config_menu(mailbox(), whapps_call:call()) ->
-                         'ok' | mailbox().
+                         'ok' | mailbox() | {'error', 'channel_hungup'}.
 -spec config_menu(mailbox(), whapps_call:call(), pos_integer()) ->
-                         'ok' | mailbox().
+                         'ok' | mailbox() | {'error', 'channel_hungup'}.
 
-config_menu(Box, Call) -> config_menu(Box, Call, 1).
+config_menu(Box, Call) ->
+    config_menu(Box, Call, 1).
 
 config_menu(#mailbox{keys=#keys{rec_unavailable=RecUnavailable
                                 ,rec_name=RecName
@@ -795,8 +820,14 @@ config_menu(#mailbox{keys=#keys{rec_unavailable=RecUnavailable
         {'ok', SetPin} ->
             lager:info("caller choose to change their pin"),
             case change_pin(Box, Call) of
-                'ok' -> 'ok';
-                _Else -> config_menu(Box, Call)
+                {'error', 'channel_hungup'}=E ->
+                    lager:debug("channel has hungup, done trying to setup mailbox"),
+                    E;
+                {'error', _E} ->
+                    lager:debug("changing pin failed: ~p", [_E]),
+                    config_menu(Box, Call);
+                #mailbox{}=Box1 ->
+                    config_menu(Box1, Call)
             end;
         {'ok', ReturnMain} ->
             lager:info("caller choose to return to the main menu"),
@@ -926,16 +957,16 @@ record_name(AttachmentName, #mailbox{name_media_id=MediaId}=Box, Call, DocId) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec change_pin(mailbox(), whapps_call:call()) -> 'ok' | mailbox().
+-spec change_pin(mailbox(), whapps_call:call()) ->
+                        mailbox() | {'error', _}.
 change_pin(#mailbox{mailbox_id=Id
                     ,interdigit_timeout=Interdigit
                    }=Box, Call) ->
     lager:info("requesting new mailbox pin number"),
     try
-        put('cf_voicemail', ?LINE),
         {'ok', Pin} = get_new_pin(Interdigit, Call),
         lager:info("collected first pin"),
-        put('cf_voicemail', ?LINE),
+
         {'ok', Pin} = confirm_new_pin(Interdigit, Call),
         lager:info("collected second pin"),
 
@@ -944,7 +975,7 @@ change_pin(#mailbox{mailbox_id=Id
 
         AccountDb = whapps_call:account_db(Call),
 
-        {'ok', JObj} = couch_mgr:open_doc(AccountDb, Id),
+        {'ok', JObj} = couch_mgr:open_cache_doc(AccountDb, Id),
 
         case validate_box_schema(wh_json:set_value(<<"pin">>, Pin, JObj)) of
             {'ok', PublicJObj} ->
@@ -985,16 +1016,29 @@ change_pin(#mailbox{mailbox_id=Id
                 invalid_pin(Box, Call)
         end
     catch
+        'error':{'badmatch',{'error','channel_hungup'}} ->
+            lager:debug("channel hungup while configuring pin"),
+            {'error', 'channel_hungup'};
+        'error':{'badmatch',{'ok',_ConfirmPin}} ->
+            lager:debug("new pin was invalid, try again"),
+            invalid_pin(Box, Call);
         _E:_R ->
-            lager:info("new pin was invalid, trying again"),
+            lager:debug("failed to get new pin: ~s: ~p", [_E, _R]),
             invalid_pin(Box, Call)
     end.
 
--spec invalid_pin(mailbox(), whapps_call:call()) -> 'ok' | mailbox().
+-spec invalid_pin(mailbox(), whapps_call:call()) ->
+                         mailbox() |
+                         {'error', _}.
 invalid_pin(Box, Call) ->
     case whapps_call_command:b_prompt(<<"vm-pin_invalid">>, Call) of
         {'ok', _} -> change_pin(Box, Call);
-        _ -> 'ok'
+        {'error', 'channel_hungup'}=E ->
+            lager:debug("channel hungup after bad pin"),
+            E;
+        {'error', _E}=E ->
+            lager:debug("invalid pin prompt interrupted: ~p", [_E]),
+            E
     end.
 
 -spec validate_box_schema(wh_json:object()) ->
@@ -1010,19 +1054,22 @@ validate_box_schema(JObj) ->
     end.
 
 -spec get_new_pin(pos_integer(), whapps_call:call()) ->
-                         {'ok', binary()}.
+                         {'ok', binary()} |
+                         {'error', _}.
 get_new_pin(Interdigit, Call) ->
     NoopId = whapps_call_command:prompt(<<"vm-enter_new_pin">>, Call),
     collect_pin(Interdigit, Call, NoopId).
 
 -spec confirm_new_pin(pos_integer(), whapps_call:call()) ->
-                         {'ok', binary()}.
+                             {'ok', binary()} |
+                             {'error', _}.
 confirm_new_pin(Interdigit, Call) ->
     NoopId = whapps_call_command:prompt(<<"vm-enter_new_pin_confirm">>, Call),
     collect_pin(Interdigit, Call, NoopId).
 
 -spec collect_pin(pos_integer(), whapps_call:call(), ne_binary()) ->
-                         {'ok', binary()}.
+                         {'ok', binary()} |
+                         {'error', _}.
 collect_pin(Interdigit, Call, NoopId) ->
     whapps_call_command:collect_digits(?DEFAULT_MAX_PIN_LENGTH
                                        ,whapps_call_command:default_collect_timeout()
@@ -1203,16 +1250,15 @@ publish_voicemail_saved(Length, Id, Call, MediaId, Timestamp) ->
 maybe_transcribe(Call, MediaId, 'true') ->
     Db = whapps_call:account_db(Call),
     {'ok', MediaDoc} = couch_mgr:open_doc(Db, MediaId),
-    case wh_json:get_value(<<"_attachments">>, MediaDoc, []) of
+    case wh_doc:attachment_names(MediaDoc) of
         [] ->
             lager:warning("no audio attachments on media doc ~s: ~p", [MediaId, MediaDoc]),
             'undefined';
-        Attachments ->
-            {Attachment, MetaData} = hd(wh_json:to_proplist(Attachments)),
-            case couch_mgr:fetch_attachment(Db, MediaId, Attachment) of
+        [AttachmentId|_] ->
+            case couch_mgr:fetch_attachment(Db, MediaId, AttachmentId) of
                 {'ok', Bin} ->
-                    lager:info("transcribing first attachment ~s: ~p", [Attachment, MetaData]),
-                    maybe_transcribe(Db, MediaDoc, Bin, wh_json:get_value(<<"content_type">>, MetaData));
+                    lager:info("transcribing first attachment ~s", [AttachmentId]),
+                    maybe_transcribe(Db, MediaDoc, Bin, wh_doc:attachment_content_type(MediaDoc, AttachmentId));
                 {'error', _E} ->
                     lager:info("error fetching vm: ~p", [_E]),
                     'undefined'
@@ -1221,7 +1267,7 @@ maybe_transcribe(Call, MediaId, 'true') ->
 maybe_transcribe(_, _, 'false') -> 'undefined'.
 
 -spec maybe_transcribe(ne_binary(), wh_json:object(), binary(), api_binary()) ->
-                                    api_object().
+                              api_object().
 maybe_transcribe(_, _, _, 'undefined') -> 'undefined';
 maybe_transcribe(_, _, <<>>, _) -> 'undefined';
 maybe_transcribe(Db, MediaDoc, Bin, ContentType) ->
@@ -1589,9 +1635,9 @@ store_recording(AttachmentName, DocId, Call) ->
     case couch_mgr:open_doc(AccountDb, DocId) of
         {'ok', JObj} ->
             MinLength = min_recording_length(Call),
-            AttachmentLength = wh_json:get_integer_value([<<"_attachments">>, AttachmentName, <<"length">>], JObj, 0),
+            AttachmentLength = wh_doc:attachment_length(JObj, AttachmentName),
             lager:info("attachment length is ~B and must be larger than ~B to be stored", [AttachmentLength, MinLength]),
-            AttachmentLength > MinLength;
+            is_integer(AttachmentLength) andalso AttachmentLength > MinLength;
         _Else -> 'false'
     end.
 
@@ -1651,10 +1697,9 @@ get_new_attachment_url(AttachmentName, MediaId, Call) ->
 
 -spec maybe_remove_attachments(ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
 maybe_remove_attachments(AccountDb, MediaId, JObj) ->
-    case wh_json:get_keys(wh_doc:attachments(JObj, wh_json:new())) of
-        [] -> 'ok';
-        _Existing ->
-            Removed = wh_json:delete_key(<<"_attachments">>, JObj),
+    case wh_doc:maybe_remove_attachments(JObj) of
+        {'false', _} -> 'ok';
+        {'true', Removed} ->
             couch_mgr:save_doc(AccountDb, Removed),
             lager:debug("doc ~s has existing attachments, removing", [MediaId])
     end.

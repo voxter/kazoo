@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013, 2600Hz
+%%% @copyright (C) 2013-2015, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -17,7 +17,7 @@
 -include("webhooks.hrl").
 
 %% Helper macro for declaring children of supervisor
--define(CHILDREN, [?CACHE('webhooks_cache')
+-define(CHILDREN, [?CACHE(?CACHE_NAME)
                    ,?WORKER_ARGS('kazoo_etsmgr_srv', [[{'table_id', webhooks_util:table_id()}
                                                        ,{'find_me_function', fun webhooks_sup:listener/0}
                                                        ,{'table_options', webhooks_util:table_options()}
@@ -67,6 +67,7 @@ child_of_type(S, T) ->
 %%--------------------------------------------------------------------
 -spec init([]) -> sup_init_ret().
 init([]) ->
+    wh_util:set_startup(),
     RestartStrategy = 'one_for_one',
     MaxRestarts = 5,
     MaxSecondsBetweenRestarts = 10,

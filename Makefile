@@ -1,15 +1,13 @@
 ROOT = .
-DIALYZER = dialyzer
+
+KAZOODIRS = core/Makefile \
+	    applications/Makefile
 
 MAKEDIRS = deps/Makefile \
 	   core/Makefile \
 	   applications/Makefile
 
-DIRS = $(ROOT)/core/whistle-1.0.0 \
-	   $(ROOT)/core/whistle_amqp-1.0.0 \
-	   $(ROOT)/core/whistle_apps-1.0.0
-
-.PHONY: $(MAKEDIRS)
+.PHONY: $(MAKEDIRS) core deps apps
 
 all : compile
 
@@ -19,30 +17,39 @@ compile: $(MAKEDIRS)
 $(MAKEDIRS):
 	$(MAKE) -C $(@D) $(ACTION)
 
-deps : ACTION = get-deps
-deps : $(MAKEDIRS)
-
-clean : ACTION = clean
-clean : $(MAKEDIRS)
-	rm -f test/*.beam
+clean: ACTION = clean
+clean: $(MAKEDIRS)
 	rm -f *crash.dump
+	rm -rf scripts/log/*
 
-test : clean app eunit
+clean-test : ACTION = clean-test
+clean-test : $(KAZOODIRS)
 
-eunit :
-	@$(REBAR) eunit skip_deps=true
+eunit: ACTION = test
+eunit: ERLC_OPTS += -DTEST
+eunit: $(KAZOODIRS)
+
+proper: ACTION = test
+proper: ERLC_OPTS += -DPROPER
+proper: $(KAZOODIRS)
+
+test: ACTION = test
+test: ERLC_OPTS += -DTEST -DPROPER
+test: $(KAZOODIRS)
+
+core:
+	$(MAKE) -C core all
+deps:
+	$(MAKE) -C deps all
+apps:
+	$(MAKE) -C applications all
+
+kazoo: core apps
 
 build-plt :
 	@$(DIALYZER) --build_plt --output_plt $(ROOT)/.platform_dialyzer.plt \
 		--apps erts kernel stdlib crypto public_key ssl
 
-dialyze :
-	@$(DIALYZER) $(foreach DIR,$(DIRS),$(DIR)/ebin) \
-                --plt $(ROOT)/.platform_dialyzer.plt --no_native \
-		-Werror_handling -Wrace_conditions -Wunmatched_returns # -Wunderspecs
-
-docs:
-	@$(REBAR) doc skip_deps=true
-
-update:
-	./bin/git_update.sh
+xref: EBINS = $(shell find $(ROOT) -name ebin -print)
+xref:
+	@$(ROOT)/scripts/check-xref.escript $(EBINS)

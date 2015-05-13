@@ -1,11 +1,13 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
+%%% @copyright (C) 2012-2015, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
 %%% @contributors
 %%%   Karl Anderson
 %%%   James Aimonetti
+%%%
+%%% Fix KAZOO-3406: Sponsored by Velvetech LLC, implemented by SIPLABS LLC
 %%%-------------------------------------------------------------------
 -module(whapps_call_command).
 
@@ -52,7 +54,7 @@
          ,b_receive_fax/1
         ]).
 -export([bridge/2, bridge/3, bridge/4, bridge/5, bridge/6, bridge/7
-         ,b_bridge/2, b_bridge/3, b_bridge/4, b_bridge/5, b_bridge/6, b_bridge/7
+         ,b_bridge/2, b_bridge/3, b_bridge/4, b_bridge/5, b_bridge/6, b_bridge/7, b_bridge/8
          ,unbridge/1, unbridge/2, unbridge/3
         ]).
 -export([page/2, page/3, page/4, page/5, page/6]).
@@ -76,6 +78,8 @@
 -export([record/2, record/3, record/4, record/5, record/6]).
 -export([record_call/2, record_call/3, record_call/4, record_call/5
          ,b_record_call/2, b_record_call/3, b_record_call/4, b_record_call/5
+         ,start_record_call/2, start_record_call/3, start_record_call/4
+         ,stop_record_call/2
         ]).
 -export([store/3, store/4, store/5
          ,store_fax/2, store_fax/3
@@ -439,9 +443,7 @@ response(Code, Call) ->
 response(Code, Cause, Call) ->
     response(Code, Cause, 'undefined', Call).
 response(Code, Cause, Media, Call) ->
-    CallId = whapps_call:call_id(Call),
-    CtrlQ = whapps_call:control_queue(Call),
-    wh_call_response:send(CallId, CtrlQ, Code, Cause, Media).
+    wh_call_response:send(Call, Code, Cause, Media).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -922,6 +924,7 @@ b_page(Endpoints, Timeout, CIDName, CIDNumber, SIPHeaders, Call) ->
 -spec bridge(wh_json:objects(), integer(), api_binary(), api_binary(), whapps_call:call()) -> 'ok'.
 -spec bridge(wh_json:objects(), integer(), api_binary(), api_binary(), api_binary(), whapps_call:call()) -> 'ok'.
 -spec bridge(wh_json:objects(), integer(), api_binary(), api_binary(), api_binary(), api_object(), whapps_call:call()) -> 'ok'.
+-spec bridge(wh_json:objects(), integer(), api_binary(), api_binary(), api_binary(), api_object(), api_binary(), whapps_call:call()) -> 'ok'.
 
 -spec b_bridge(wh_json:objects(), whapps_call:call()) ->
                       whapps_api_bridge_return().
@@ -935,18 +938,22 @@ b_page(Endpoints, Timeout, CIDName, CIDNumber, SIPHeaders, Call) ->
                       whapps_api_bridge_return().
 -spec b_bridge(wh_json:objects(), integer(), api_binary(), api_binary(), api_binary(), api_object(), whapps_call:call()) ->
                       whapps_api_bridge_return().
+-spec b_bridge(wh_json:objects(), integer(), api_binary(), api_binary(), api_binary(), api_object(), api_binary(), whapps_call:call()) ->
+                      whapps_api_bridge_return().
 
 bridge_command(Endpoints, Call) ->
     bridge_command(Endpoints, ?DEFAULT_TIMEOUT_S, Call).
 bridge_command(Endpoints, Timeout, Call) ->
     bridge_command(Endpoints, Timeout, wapi_dialplan:dial_method_single(), Call).
 bridge_command(Endpoints, Timeout, Strategy, Call) ->
-    bridge_command(Endpoints, Timeout, Strategy, 'true', Call).
+    bridge_command(Endpoints, Timeout, Strategy, <<"true">>, Call).
 bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Call) ->
     bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, 'undefined', Call).
 bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, Call) ->
     bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, 'undefined', Call).
 bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHeaders, Call) ->
+    bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHeaders, <<"false">>, Call).
+bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHeaders, IgnoreFoward, Call) ->
     [{<<"Application-Name">>, <<"bridge">>}
      ,{<<"Endpoints">>, Endpoints}
      ,{<<"Timeout">>, Timeout}
@@ -954,6 +961,7 @@ bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHead
      ,{<<"Ringback">>, wh_media_util:media_path(Ringback, Call)}
      ,{<<"Dial-Endpoint-Method">>, Strategy}
      ,{<<"Custom-SIP-Headers">>, SIPHeaders}
+     ,{<<"Ignore-Forward">>, IgnoreFoward}
     ].
 
 bridge(Endpoints, Call) ->
@@ -974,6 +982,9 @@ bridge(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, Call) ->
 bridge(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHeaders, Call) ->
     Command = bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHeaders, Call),
     send_command(Command, Call).
+bridge(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHeaders, IgnoreFoward, Call) ->
+    Command = bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHeaders, IgnoreFoward, Call),
+    send_command(Command, Call).
 
 b_bridge(Endpoints, Call) ->
     bridge(Endpoints, Call),
@@ -992,6 +1003,9 @@ b_bridge(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, Call) ->
     b_bridge_wait(Timeout, Call).
 b_bridge(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHeaders, Call) ->
     bridge(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHeaders, Call),
+    b_bridge_wait(Timeout, Call).
+b_bridge(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHeaders, IgnoreForward, Call) ->
+    bridge(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHeaders, IgnoreForward, Call),
     b_bridge_wait(Timeout, Call).
 
 -spec b_bridge_wait(pos_integer(), whapps_call:call()) -> whapps_api_bridge_return().
@@ -1329,7 +1343,25 @@ b_record(MediaName, Terminators, TimeLimit, SilenceThreshold, Call) ->
     b_record(MediaName, Terminators, TimeLimit, SilenceThreshold, <<"5">>, Call).
 b_record(MediaName, Terminators, TimeLimit, SilenceThreshold, SilenceHits, Call) ->
     record(MediaName, Terminators, TimeLimit, SilenceThreshold, SilenceHits, Call),
-    wait_for_headless_application(<<"record">>, <<"RECORD_STOP">>, <<"call_event">>, 'infinity').
+    wait_for_headless_application(<<"record">>
+                                  ,{<<"RECORD_START">>, <<"RECORD_STOP">>}
+                                  ,<<"call_event">>
+                                  ,'infinity'
+                                 ).
+
+-spec start_record_call(wh_proplist(), whapps_call:call()) -> 'ok'.
+-spec start_record_call(wh_proplist(), api_binary() | pos_integer(), whapps_call:call()) -> 'ok'.
+-spec start_record_call(wh_proplist(), api_binary() | pos_integer(), ne_binaries(), whapps_call:call()) -> 'ok'.
+start_record_call(Media, Call) ->
+    record_call(Media, <<"start">>, Call).
+start_record_call(Media, TimeLimit, Call) ->
+    record_call(Media, <<"start">>, TimeLimit, Call).
+start_record_call(Media, TimeLimit, Terminators, Call) ->
+    record_call(Media, <<"start">>, TimeLimit, Terminators, Call).
+
+-spec stop_record_call(wh_proplist(), whapps_call:call()) -> 'ok'.
+stop_record_call(Media, Call) ->
+    record_call(Media, <<"stop">>, Call).
 
 -spec record_call(wh_proplist(), whapps_call:call()) -> 'ok'.
 -spec record_call(wh_proplist(), ne_binary(), whapps_call:call()) -> 'ok'.
@@ -1347,6 +1379,7 @@ record_call(Media, Action, TimeLimit, Terminators, Call) ->
     Destination = props:get_value(<<"Media-Transfer-Destination">>, Media),
     Headers = props:get_value(<<"Additional-Headers">>, Media),
     Limit = props:get_value(<<"Time-Limit">>, Media, wh_util:to_binary(TimeLimit)),
+    SampleRate = props:get_value(<<"Record-Sample-Rate">>, Media),
 
     Command = props:filter_undefined(
                 [{<<"Application-Name">>, <<"record_call">>}
@@ -1358,6 +1391,7 @@ record_call(Media, Action, TimeLimit, Terminators, Call) ->
                  ,{<<"Media-Transfer-Method">>, Method}
                  ,{<<"Media-Transfer-Destination">>, Destination}
                  ,{<<"Additional-Headers">>, Headers}
+                 ,{<<"Record-Sample-Rate">>, SampleRate}
                 ]),
     send_command(Command, Call).
 
@@ -2108,7 +2142,7 @@ wait_for_message(Call, Application, Event, Type, Timeout) ->
             case get_event_type(JObj) of
                 {<<"call_event">>, <<"CHANNEL_DESTROY">>, _} ->
                     lager:debug("channel was destroyed while waiting for ~s", [Application]),
-                    {'error', 'channel_destroy'};
+                    {'error', 'channel_hungup'};
                 {<<"error">>, _, Application} ->
                     lager:debug("channel execution error while waiting for ~s: ~s", [Application, wh_json:encode(JObj)]),
                     {'error', JObj};
@@ -2170,15 +2204,22 @@ wait_for_application(Call, Application, Event, Type, Timeout) ->
 %% is only interested in events for the application.
 %% @end
 %%--------------------------------------------------------------------
+-type headless_event() :: ne_binary() | %% STOP EVENT
+                          {ne_binary(), ne_binary()}. %% {START, STOP}
+
 -type wait_for_headless_application_return() :: {'error', 'timeout' | wh_json:object()} |
                                                 {'ok', wh_json:object()}.
 -spec wait_for_headless_application(ne_binary()) ->
                                            wait_for_headless_application_return().
--spec wait_for_headless_application(ne_binary(), ne_binary()) ->
+-spec wait_for_headless_application(ne_binary(), headless_event()) ->
                                            wait_for_headless_application_return().
--spec wait_for_headless_application(ne_binary(), ne_binary(), ne_binary()) ->
+-spec wait_for_headless_application(ne_binary(), headless_event(), ne_binary()) ->
                                            wait_for_headless_application_return().
--spec wait_for_headless_application(ne_binary(), ne_binary(), ne_binary(), wh_timeout()) ->
+-spec wait_for_headless_application(ne_binary()
+                                    ,headless_event()
+                                    ,ne_binary()
+                                    ,wh_timeout()
+                                   ) ->
                                            wait_for_headless_application_return().
 
 wait_for_headless_application(Application) ->
@@ -2188,10 +2229,34 @@ wait_for_headless_application(Application, Event) ->
 wait_for_headless_application(Application, Event, Type) ->
     wait_for_headless_application(Application, Event, Type, ?DEFAULT_APPLICATION_TIMEOUT).
 
+wait_for_headless_application(Application, {StartEv, StopEv}=Event, Type, Timeout) ->
+    Start = os:timestamp(),
+    case receive_event(Timeout) of
+        {'ok', JObj} ->
+            case get_event_type(JObj) of
+                {<<"error">>, _, Application} ->
+                    lager:debug("channel execution error while waiting for ~s: ~s"
+                                ,[Application, wh_json:encode(JObj)]
+                               ),
+                    {'error', JObj};
+                {<<"call_event">>,<<"CHANNEL_DESTROY">>, _} ->
+                    lager:debug("channel has gone down before app ~s started", [Application]),
+                    {'error', 'channel_hungup'};
+                {Type, StartEv, Application} ->
+                    lager:debug("start event ~s has been received for ~s", [StartEv, Application]),
+                    wait_for_headless_application(Application, StopEv, Type, wh_util:decr_timeout(Timeout, Start));
+                {Type, StopEv, Application} ->
+                    {'ok', JObj};
+                _T ->
+                    lager:debug("ignore ~p", [_T]),
+                    wait_for_headless_application(Application, Event, Type, wh_util:decr_timeout(Timeout, Start))
+            end;
+        {'error', _E}=E -> E
+    end;
 wait_for_headless_application(Application, Event, Type, Timeout) ->
     Start = os:timestamp(),
-    receive
-        {'amqp_msg', JObj} ->
+    case receive_event(Timeout) of
+        {'ok', JObj} ->
             case get_event_type(JObj) of
                 {<<"error">>, _, Application} ->
                     lager:debug("channel execution error while waiting for ~s: ~s", [Application, wh_json:encode(JObj)]),
@@ -2199,16 +2264,13 @@ wait_for_headless_application(Application, Event, Type, Timeout) ->
                 {<<"call_event">>,<<"CHANNEL_DESTROY">>, _} ->
                     lager:debug("destroy occurred, waiting 60000 ms for ~s event", [Application]),
                     wait_for_headless_application(Application, Event, Type, 60000);
-                { Type, Event, Application } ->
+                {Type, Event, Application} ->
                     {'ok', JObj};
                 _T ->
                     lager:debug("ignore ~p", [_T]),
                     wait_for_headless_application(Application, Event, Type, wh_util:decr_timeout(Timeout, Start))
             end;
-        _ ->
-            wait_for_headless_application(Application, Event, Type, wh_util:decr_timeout(Timeout, Start))
-    after
-        Timeout -> {'error', 'timeout'}
+        {'error', _E}=E -> E
     end.
 
 %%--------------------------------------------------------------------
@@ -2218,16 +2280,16 @@ wait_for_headless_application(Application, Event, Type, Timeout) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec wait_for_dtmf(wh_timeout()) ->
-                           {'error', 'channel_hungup' | wh_json:object()} |
+                           {'error', 'channel_hungup' | 'timeout' | wh_json:object()} |
                            {'ok', binary()}.
 wait_for_dtmf(Timeout) ->
     Start = os:timestamp(),
-    receive
-        {'amqp_msg', JObj} ->
+    case receive_event(Timeout) of
+        {'ok', JObj} ->
             case whapps_util:get_event_type(JObj) of
                 {<<"call_event">>, <<"CHANNEL_DESTROY">>} ->
                     lager:debug("channel was destroyed while waiting for DTMF"),
-                    {'error', 'channel_destroy'};
+                    {'error', 'channel_hungup'};
                 {<<"error">>, _} ->
                     lager:debug("channel execution error while waiting for DTMF: ~s", [wh_json:encode(JObj)]),
                     {'error', JObj};
@@ -2236,13 +2298,9 @@ wait_for_dtmf(Timeout) ->
                 _ ->
                     wait_for_dtmf(wh_util:decr_timeout(Timeout, Start))
             end;
-        _E ->
-            lager:debug("unexpected ~p", [_E]),
-            %% dont let the mailbox grow unbounded if
-            %%   this process hangs around...
-            wait_for_dtmf(wh_util:decr_timeout(Timeout, Start))
-    after
-        Timeout -> {'ok', <<>>}
+        {'error', 'timeout'}=E ->
+            lager:debug("timed out after ~p ms waiting for DTMF", [Timeout]),
+            E
     end.
 
 %%--------------------------------------------------------------------
@@ -2433,7 +2491,7 @@ wait_for_application_or_dtmf(Application, Timeout) ->
             case get_event_type(JObj) of
                 {<<"call_event">>, <<"CHANNEL_DESTROY">>, _} ->
                     lager:debug("channel was destroyed while waiting for ~s or DTMF", [Application]),
-                    {'error', 'channel_destroy'};
+                    {'error', 'channel_hungup'};
                 {<<"error">>, _, Application} ->
                     lager:debug("channel execution error while waiting ~s or DTMF: ~s", [Application, wh_json:encode(JObj)]),
                     {'error', JObj};
@@ -2731,7 +2789,10 @@ wait_for_unparked_call(Call, Timeout) ->
             case get_event_type(JObj) of
                 {<<"call_event">>, <<"CHANNEL_DESTROY">>, _} ->
                     lager:debug("channel was destroyed while waiting for unparked call"),
-                    {'error', 'channel_destroy'};
+                    {'error', 'channel_hungup'};
+                {<<"call_event">>, <<"CHANNEL_DISCONNECTED">>, _} ->
+                    lager:debug("channel was disconnected while waiting for unparked call"),
+                    {'error', 'channel_disconnected'};
                 {<<"call_event">>, <<"CHANNEL_INTERCEPTED">>, _} ->
                     lager:debug("channel was intercepted while waiting for unparked call"),
                     {'ok', JObj};

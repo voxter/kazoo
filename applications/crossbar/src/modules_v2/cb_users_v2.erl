@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2015, 2600Hz INC
 %%% @doc
 %%% Users module
 %%%
@@ -32,6 +32,7 @@
 -define(SERVER, ?MODULE).
 -define(CB_LIST, <<"users/crossbar_listing">>).
 -define(LIST_BY_USERNAME, <<"users/list_by_username">>).
+-define(LIST_BY_PRESENCE_ID, <<"devices/listing_by_presence_id">>).
 -define(QUICKCALL, <<"quickcall">>).
 
 %%%===================================================================
@@ -166,13 +167,23 @@ validate_resource(Context, UserId, _, _) -> validate_user_id(UserId, Context).
 validate_user_id(UserId, Context) ->
     case couch_mgr:open_cache_doc(cb_context:account_db(Context), UserId) of
         {'ok', Doc} -> validate_user_id(UserId, Context, Doc);
-       {'error', 'not_found'} -> cb_context:add_system_error('bad_identifier', [{'details', UserId}],  Context);
-       {'error', _R} -> crossbar_util:response_db_fatal(Context)
+        {'error', 'not_found'} ->
+            cb_context:add_system_error(
+                'bad_identifier'
+                ,wh_json:from_list([{<<"cause">>, UserId}])
+                ,Context
+            );
+        {'error', _R} -> crossbar_util:response_db_fatal(Context)
     end.
 
 validate_user_id(UserId, Context, Doc) ->
-    case wh_json:is_true(<<"pvt_deleted">>, Doc) of
-        'true' -> cb_context:add_system_error('bad_identifier', [{'details', UserId}],  Context);
+    case wh_doc:is_soft_deleted(Doc) of
+        'true' ->
+            cb_context:add_system_error(
+                'bad_identifier'
+                ,wh_json:from_list([{<<"cause">>, UserId}])
+                ,Context
+            );
         'false'->
             cb_context:setters(Context
                                ,[{fun cb_context:set_user_id/2, UserId}
@@ -222,45 +233,28 @@ validate(Context, UserId, ?QUICKCALL, _) ->
 
 -spec post(cb_context:context(), path_token()) -> cb_context:context().
 post(Context, _) ->
-    crossbar_doc:save(Context).
+    _ = crossbar_util:maybe_refresh_fs_xml('user', Context),
+    Context1 = crossbar_doc:save(Context),
+    case cb_context:resp_status(Context1) of
+        'success' ->
+            maybe_update_devices_presence(Context1),
+            Context1;
+        _ -> Context1
+    end.
 
 -spec put(cb_context:context()) -> cb_context:context().
 put(Context) ->
-    DryRun = (not wh_json:is_true(<<"accept_charges">>, cb_context:req_json(Context), 'false')),
-    put_resp(DryRun, Context).
-
-put_resp('true', Context) ->
-    RespJObj = dry_run(Context),
-    case wh_json:is_empty(RespJObj) of
-        'false' -> crossbar_util:response_402(RespJObj, Context);
-        'true' ->
-            NewReqJObj = wh_json:set_value(<<"accept_charges">>, 'true', cb_context:req_json(Context)),
-            ?MODULE:put(cb_context:set_req_json(Context, NewReqJObj))
-    end;
-put_resp('false', Context) ->
-    crossbar_doc:save(Context).
-
--spec dry_run(cb_context:context()) -> wh_json:object().
-dry_run(Context) ->
-    JObj = cb_context:doc(Context),
-    AccountId = cb_context:account_id(Context),
-
-    UserType = wh_json:get_value(<<"priv_level">>, JObj),
-    UserName = wh_json:get_value(<<"username">>, JObj),
-
-    Services = wh_services:fetch(AccountId),
-    UpdateServices = wh_service_users:reconcile(Services, UserType),
-
-    Charges = wh_services:activation_charges(<<"devices">>, UserType, Services),
-
-    case Charges > 0 of
-        'false' -> wh_services:calculate_charges(UpdateServices, []);
-        'true' ->
-            Transaction = wh_transaction:debit(AccountId, wht_util:dollars_to_units(Charges)),
-            Desc = <<"activation charges for ", UserType/binary , " ", UserName/binary>>,
-            Transaction2 = wh_transaction:set_description(Desc, Transaction),
-            wh_services:calculate_charges(UpdateServices, [Transaction2])
-    end.
+    Callback =
+        fun() ->
+            Context1 = crossbar_doc:save(Context),
+            case cb_context:resp_status(Context1) of
+                'success' ->
+                    _ = maybe_send_email(Context1),
+                    Context1;
+                _ -> Context1
+            end
+        end,
+    crossbar_services:maybe_dry_run(Context, Callback).
 
 -spec delete(cb_context:context(), path_token()) -> cb_context:context().
 delete(Context, _Id) ->
@@ -269,6 +263,99 @@ delete(Context, _Id) ->
 -spec patch(cb_context:context(), path_token()) -> cb_context:context().
 patch(Context, _Id) ->
     crossbar_doc:save(Context).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_update_devices_presence(cb_context:context()) -> 'ok'.
+maybe_update_devices_presence(Context) ->
+    DbDoc = cb_context:fetch(Context, 'db_doc'),
+    Doc = cb_context:doc(Context),
+    case wh_json:get_value(<<"presence_id">>, DbDoc) =:= wh_json:get_value(<<"presence_id">>, Doc) of
+        'true' ->
+            lager:debug("presence_id did not change, ignoring");
+        'false' ->
+            update_devices_presence(Context)
+    end.
+
+-spec update_devices_presence(cb_context:context()) -> 'ok'.
+-spec update_devices_presence(cb_context:context(), wh_json:objects()) -> 'ok'.
+update_devices_presence(Context) ->
+    Doc = cb_context:doc(Context),
+    UserId = wh_json:get_value(<<"id">>, Doc),
+    AccountDb = wh_json:get_value(<<"pvt_account_db">>, Doc),
+    Options = [{'key', UserId}, 'include_docs'],
+    case couch_mgr:get_results(AccountDb, ?LIST_BY_PRESENCE_ID, Options) of
+        {'error', _R} ->
+            lager:error("failed to query view ~s in ~s : ~p", [?LIST_BY_PRESENCE_ID, AccountDb, _R]);
+        {'ok', []} ->
+            lager:debug("no device found attached to ~s", [UserId]);
+        {'ok', JObjs} ->
+            update_devices_presence(Context, JObjs)
+    end.
+
+update_devices_presence(Context, JObjs) ->
+    lists:foreach(
+      fun(JObj) -> update_device_presence(Context, JObj) end
+      ,JObjs
+     ).
+
+-spec update_device_presence(cb_context:context(), wh_json:object()) -> pid().
+update_device_presence(Context, JObj) ->
+    AuthToken = cb_context:auth_token(Context),
+    ReqId = cb_context:req_id(Context),
+
+    DeviceDoc = wh_json:get_value(<<"doc">>, JObj),
+
+    lager:debug("re-provisioning device ~s", [wh_json:get_value(<<"id">>, JObj)]),
+
+    spawn(fun() ->
+                  wh_util:put_callid(ReqId),
+                  provisioner_v5:update_device(DeviceDoc, AuthToken)
+          end).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_send_email(cb_context:context()) -> 'ok'.
+maybe_send_email(Context) ->
+    ReqJObj = cb_context:req_data(Context),
+    case wh_json:is_true(<<"send_email_on_creation">>, ReqJObj, 'true') of
+        'false' -> 'ok';
+        'true' -> send_email(Context)
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec send_email(cb_context:context()) -> 'ok'.
+send_email(Context) ->
+    lager:debug("trying to publish new user notification"),
+    Doc = cb_context:doc(Context),
+    ReqData = cb_context:req_data(Context),
+    Req = [{<<"Account-ID">>, cb_context:account_id(Context)}
+           ,{<<"User-ID">>, wh_json:get_value(<<"_id">>, Doc)}
+           ,{<<"Password">>, wh_json:get_value(<<"password">>, ReqData)}
+           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+          ],
+    case
+        whapps_util:amqp_pool_request(
+          Req
+          ,fun wapi_notifications:publish_new_user/1
+          ,fun wapi_notifications:new_user_v/1
+         )
+    of
+        {'ok', _Resp} ->
+            lager:debug("published new user notification");
+        {'error', _E} ->
+            lager:debug("failed to publish new user notification: ~p", [_E])
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -313,17 +400,7 @@ validate_request(UserId, Context) ->
 
 -spec validate_patch(api_binary(), cb_context:context()) -> cb_context:context().
 validate_patch(UserId, Context) ->
-    Context1 = load_user(UserId, Context),
-    case cb_context:resp_status(Context1) of
-        'success' ->
-            PatchJObj = wh_doc:public_fields(cb_context:req_data(Context)),
-            UserJObj = wh_json:merge_jobjs(PatchJObj, cb_context:doc(Context1)),
-
-            lager:debug("patched doc, now validating"),
-            prepare_username(UserId, cb_context:set_req_data(Context, UserJObj));
-        _Status ->
-            Context1
-    end.
+    crossbar_doc:patch_and_validate(UserId, Context, fun validate_request/2).
 
 -spec prepare_username(api_binary(), cb_context:context()) -> cb_context:context().
 prepare_username(UserId, Context) ->
@@ -349,7 +426,10 @@ check_user_name(UserId, Context) ->
                 cb_context:add_validation_error(
                     [<<"username">>]
                     ,<<"unique">>
-                    ,<<"Username already in use">>
+                    ,wh_json:from_list([
+                        {<<"message">>, <<"User name already in use">>}
+                        ,{<<"cause">>, UserName}
+                     ])
                     ,Context
                 ),
             lager:error("username ~p is already used", [UserName]),
@@ -424,24 +504,28 @@ maybe_validate_username(UserId, Context) ->
             manditory_rehash_creds(UserId, NewUsername, Context);
         %% updated username to existing, collect any further errors...
         _Else ->
-            C = cb_context:add_validation_error(<<"username">>
-                                                ,<<"unique">>
-                                                ,<<"Username is not unique for this account">>
-                                                ,Context
-                                               ),
+            C = cb_context:add_validation_error(
+                    <<"username">>
+                    ,<<"unique">>
+                    ,wh_json:from_list([
+                        {<<"message">>, <<"User name is not unique for this account">>}
+                        ,{<<"cause">>, NewUsername}
+                     ])
+                    ,Context
+                ),
             manditory_rehash_creds(UserId, NewUsername, C)
     end.
 
 -spec maybe_rehash_creds(api_binary(), api_binary(), cb_context:context()) -> cb_context:context().
 maybe_rehash_creds(UserId, Username, Context) ->
     case wh_json:get_ne_value(<<"password">>, cb_context:doc(Context)) of
-        %% No username or hash, no creds for you!
+        %% No user name or hash, no creds for you!
         'undefined' when Username =:= 'undefined' ->
             HashKeys = [<<"pvt_md5_auth">>, <<"pvt_sha1_auth">>],
             cb_context:set_doc(Context, wh_json:delete_keys(HashKeys, cb_context:doc(Context)));
-        %% Username without password, creds status quo
+        %% User name without password, creds status quo
         'undefined' -> Context;
-        %% Got a password, hope you also have a username...
+        %% Got a password, hope you also have a user name...
         Password -> rehash_creds(UserId, Username, Password, Context)
     end.
 
@@ -450,22 +534,28 @@ maybe_rehash_creds(UserId, Username, Context) ->
 manditory_rehash_creds(UserId, Username, Context) ->
     case wh_json:get_ne_value(<<"password">>, cb_context:doc(Context)) of
         'undefined' ->
-            cb_context:add_validation_error(<<"password">>
-                                            ,<<"required">>
-                                            ,<<"The password must be provided when updating the username">>
-                                            ,Context
-                                           );
+            cb_context:add_validation_error(
+                <<"password">>
+                ,<<"required">>
+                ,wh_json:from_list([
+                    {<<"message">>, <<"The password must be provided when updating the user name">>}
+                 ])
+                ,Context
+            );
         Password -> rehash_creds(UserId, Username, Password, Context)
     end.
 
 -spec rehash_creds(api_binary(), api_binary(), ne_binary(), cb_context:context()) ->
                           cb_context:context().
 rehash_creds(_UserId, 'undefined', _Password, Context) ->
-    cb_context:add_validation_error(<<"username">>
-                                    ,<<"required">>
-                                    ,<<"The username must be provided when updating the password">>
-                                    ,Context
-                                   );
+    cb_context:add_validation_error(
+        <<"username">>
+        ,<<"required">>
+        ,wh_json:from_list([
+            {<<"message">>, <<"The user name must be provided when updating the password">>}
+         ])
+        ,Context
+    );
 rehash_creds(_UserId, Username, Password, Context) ->
     lager:debug("password set on doc, updating hashes for ~s", [Username]),
     {MD5, SHA1} = cb_modules_util:pass_hashes(Username, Password),
@@ -498,7 +588,7 @@ maybe_validate_quickcall(Context, _) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% This function will determine if the username in the request is
+%% This function will determine if the user name in the request is
 %% unique or belongs to the request being made
 %% @end
 %%--------------------------------------------------------------------
@@ -519,7 +609,7 @@ username_doc_id(Username, Context, _AccountDb) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Normalizes the resuts of a view
+%% Normalizes the results of a view
 %% @end
 %%--------------------------------------------------------------------
 -spec(normalize_view_results(wh_json:object(), wh_json:objects()) -> wh_json:objects()).

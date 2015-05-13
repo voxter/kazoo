@@ -139,7 +139,6 @@ authorize_media(Context, [{<<"media">>, _}|_], 'undefined') ->
 authorize_media(Context, [{<<"media">>, _}, {<<"accounts">>, [AccountId]}], AccountId) ->
     cb_simple_authz:authorize(Context);
 authorize_media(_Context, _Nouns, _AccountId) ->
-    lager:debug("failing authz media: ~p ~p", [_Nouns, _AccountId]),
     'false'.
 
 %%--------------------------------------------------------------------
@@ -161,10 +160,10 @@ content_types_provided(Context, MediaId, ?BIN_DATA, ?HTTP_GET) ->
     case cb_context:resp_status(Context1) of
         'success' ->
             JObj = cb_context:doc(Context1),
-            case wh_json:get_keys(wh_json:get_value([<<"_attachments">>], JObj, [])) of
-                [] -> Context;
+            case wh_doc:attachment_names(JObj) of
+                [] -> Context1;
                 [Attachment|_] ->
-                    CT = wh_json:get_value([<<"_attachments">>, Attachment, <<"content_type">>], JObj),
+                    CT = wh_doc:attachment_content_type(JObj, Attachment),
                     [Type, SubType] = binary:split(CT, <<"/">>),
                     cb_context:set_content_types_provided(Context, [{'to_binary', [{Type, SubType}]}])
             end;
@@ -251,8 +250,14 @@ validate_media_binary(Context, MediaId, ?HTTP_GET, _Files) ->
     lager:debug("fetch media contents for '~s'", [MediaId]),
     load_media_binary(Context, MediaId);
 validate_media_binary(Context, _MediaId, ?HTTP_POST, []) ->
-    Message = <<"please provide an media file">>,
-    cb_context:add_validation_error(<<"file">>, <<"required">>, Message, Context);
+    cb_context:add_validation_error(
+        <<"file">>
+        ,<<"required">>
+        ,wh_json:from_list([
+            {<<"message">>, <<"Please provide an media file">>}
+         ])
+        ,Context
+    );
 validate_media_binary(Context, MediaId, ?HTTP_POST, [{_Filename, FileObj}]) ->
     Context1 = load_media_meta(Context, MediaId),
     lager:debug("loaded media meta for '~s'", [MediaId]),
@@ -262,8 +267,14 @@ validate_media_binary(Context, MediaId, ?HTTP_POST, [{_Filename, FileObj}]) ->
         _Status -> Context1
     end;
 validate_media_binary(Context, _MediaId, ?HTTP_POST, _Files) ->
-    Message = <<"please provide a single media file">>,
-    cb_context:add_validation_error(<<"file">>, <<"maxItems">>, Message, Context).
+    cb_context:add_validation_error(
+        <<"file">>
+        ,<<"maxItems">>
+        ,wh_json:from_list([
+            {<<"message">>, <<"Please provide a single media file">>}
+         ])
+        ,Context
+    ).
 
 -spec maybe_normalize_upload(cb_context:context(), ne_binary(), wh_json:object()) -> cb_context:context().
 maybe_normalize_upload(Context, MediaId, FileJObj) ->
@@ -339,7 +350,7 @@ validate_upload(Context, MediaId, FileJObj) ->
 
     Props = [{<<"content_type">>, CT}
              ,{<<"content_length">>, Size}
-             ,{<<"media_source">>, <<"recording">>}
+             ,{<<"media_source">>, <<"upload">>}
             ],
     validate_request(MediaId
                      ,cb_context:set_req_data(Context
@@ -546,7 +557,7 @@ load_media_summary(Context, _AccountId) ->
                             )
      ).
 
--spec start_key(cb_context:context()) -> wh_json:json_term() | 'undefined'.
+-spec start_key(cb_context:context()) -> crossbar_doc:startkey().
 start_key(Context) ->
     case crossbar_doc:start_key(Context) of
         'undefined' -> 'undefined';
@@ -621,7 +632,7 @@ load_media_docs_by_language(Context, Language) ->
 load_media_docs_by_language(Context, Language, 'undefined') ->
     fix_start_keys(
       crossbar_doc:load_view(?CB_LIST_BY_LANG
-                              ,[{'startkey_fun', fun(Ctx) -> language_start_key(Ctx, Language) end}
+                             ,[{'startkey_fun', fun(Ctx) -> language_start_key(Ctx, Language) end}
                                ,{'endkey', [Language, wh_json:new()]}
                                ,{'reduce', 'false'}
                                ,{'include_docs', 'false'}
@@ -742,7 +753,17 @@ prompt_start_key(Context, PromptId) ->
 
 -spec normalize_prompt_results(wh_json:object(), ne_binaries()) -> ne_binaries().
 normalize_prompt_results(JObj, Acc) ->
-    [wh_json:get_value(<<"id">>, JObj) | Acc].
+    HasAttachments =
+        case wh_doc:attachments(wh_json:get_value(<<"doc">>, JObj)) of
+            'undefined' -> 'false';
+            As -> not wh_json:is_empty(As)
+        end,
+    [wh_json:from_list(
+       [{<<"id">>, wh_json:get_value(<<"id">>, JObj)}
+        ,{<<"has_attachments">>, HasAttachments}
+       ])
+     | Acc
+    ].
 
 -spec fix_prompt_start_keys(cb_context:context()) -> cb_context:context().
 fix_prompt_start_keys(Context) ->
@@ -826,7 +847,15 @@ validate_prompt(MediaId, Context, PromptId) ->
             lager:info("attempt to change prompt id '~s' is not allowed on existing media doc '~s'"
                        ,[PromptId, MediaId]
                       ),
-            cb_context:add_validation_error(<<"prompt_id">>, <<"invalid">>, <<"Changing the prompt_id on an existing prompt is not allowed">>, Context)
+            cb_context:add_validation_error(
+                <<"prompt_id">>
+                ,<<"invalid">>
+                ,wh_json:from_list([
+                    {<<"message">>, <<"Changing the prompt_id on an existing prompt is not allowed">>}
+                    ,{<<"cause">>, PromptId}
+                 ])
+                ,Context
+            )
     end.
 
 -spec maybe_add_prompt_fields(cb_context:context()) -> wh_proplist().
@@ -866,16 +895,14 @@ load_media_binary(Context, MediaId) ->
     Context1 = load_media_meta(Context, MediaId),
     case cb_context:resp_status(Context1) of
         'success' ->
-            MediaMeta = wh_json:get_value([<<"_attachments">>], cb_context:doc(Context1), []),
-
-            case wh_json:get_keys(MediaMeta) of
+            case wh_doc:attachment_names(cb_context:doc(Context1)) of
                 [] -> crossbar_util:response_bad_identifier(MediaId, Context);
                 [Attachment|_] ->
                     cb_context:add_resp_headers(
                       crossbar_doc:load_attachment(cb_context:doc(Context1), Attachment, Context1)
                       ,[{<<"Content-Disposition">>, <<"attachment; filename=", Attachment/binary>>}
-                        ,{<<"Content-Type">>, wh_json:get_value([Attachment, <<"content_type">>], MediaMeta)}
-                        ,{<<"Content-Length">>, wh_json:get_value([Attachment, <<"length">>], MediaMeta)}
+                        ,{<<"Content-Type">>, wh_doc:attachment_content_type(cb_context:doc(Context1), Attachment)}
+                        ,{<<"Content-Length">>, wh_doc:attachment_length(cb_context:doc(Context1), Attachment)}
                        ])
             end;
         _Status -> Context1
@@ -928,11 +955,10 @@ delete_media_binary(MediaId, Context, _AccountId) ->
     Context1 = crossbar_doc:load(MediaId, Context),
     case cb_context:resp_status(Context1) of
         'success' ->
-            case wh_json:get_value([<<"_attachments">>, 1], cb_context:doc(Context1)) of
-                'undefined' -> crossbar_util:response_bad_identifier(MediaId, Context);
-                AttachMeta ->
-                    [AttachmentID] = wh_json:get_keys(AttachMeta),
-                    crossbar_doc:delete_attachment(MediaId, AttachmentID, Context)
+            case wh_doc:attachment_names(cb_context:doc(Context1)) of
+                [] -> crossbar_util:response_bad_identifier(MediaId, Context);
+                [AttachmentId|_] ->
+                    crossbar_doc:delete_attachment(MediaId, AttachmentId, Context)
             end;
         _Status -> Context1
     end.

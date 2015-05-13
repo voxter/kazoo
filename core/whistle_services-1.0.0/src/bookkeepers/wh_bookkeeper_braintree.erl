@@ -9,7 +9,7 @@
 
 -export([sync/2]).
 -export([is_good_standing/1]).
--export([transactions/2]).
+-export([transactions/3]).
 -export([subscriptions/1]).
 -export([commit_transactions/2]).
 -export([charge_transactions/2]).
@@ -89,7 +89,8 @@ sync([], _AccountId, #wh_service_updates{bt_subscriptions=Subscriptions}) ->
         ],
     'ok';
 sync([ServiceItem|ServiceItems], AccountId, Updates) ->
-    case braintree_plan_addon_id(ServiceItem) of
+    JObj = wh_service_item:bookkeeper(<<"braintree">>, ServiceItem),
+    case {wh_json:get_value(<<"plan">>, JObj), wh_json:get_value(<<"addon">>, JObj)} of
         {'undefined', _} ->
             lager:debug("service item had no plan id: ~p", [ServiceItem]),
             sync(ServiceItems, AccountId, Updates);
@@ -97,20 +98,9 @@ sync([ServiceItem|ServiceItems], AccountId, Updates) ->
             lager:debug("service item had no add on id: ~p", [ServiceItem]),
             sync(ServiceItems, AccountId, Updates);
         {PlanId, AddOnId}->
-            Quantity = wh_service_item:quantity(ServiceItem),
-            Routines = [fun(S) -> braintree_subscription:update_addon_quantity(S, AddOnId, Quantity) end
-                        ,fun(S) ->
-                                 Rate = wh_service_item:rate(ServiceItem),
-                                 braintree_subscription:update_addon_amount(S, AddOnId, Rate)
-                         end
-                        ,fun(S) -> handle_single_discount(ServiceItem, S) end
-                        ,fun(S) -> handle_cumulative_discounts(ServiceItem, S) end
-                       ],
-            Subscription = lists:foldl(fun(F, S) -> F(S) end
-                                       ,fetch_or_create_subscription(PlanId, Updates)
-                                       ,Routines
-                                      ),
-            sync(ServiceItems, AccountId, update_subscriptions(PlanId, Subscription, Updates))
+            Subscription = prepare_subscription(ServiceItem, AddOnId, PlanId, Updates),
+            NewUpdates = update_subscriptions(PlanId, Subscription, Updates),
+            sync(ServiceItems, AccountId, NewUpdates)
     end.
 
 %%--------------------------------------------------------------------
@@ -119,82 +109,21 @@ sync([ServiceItem|ServiceItems], AccountId, Updates) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec transactions(ne_binary(), wh_proplist()) ->
+-spec transactions(ne_binary(), gregorian_seconds(), gregorian_seconds()) ->
+                          {'ok', wh_transaction:transactions()} |
                           {'error', 'not_found'} |
-                          {'error', 'unknown_error'} |
-                          {'ok', wh_transaction:transactions()}.
-transactions(Account, Options) ->
-    From = timestamp_to_braintree(props:get_value('from', Options)),
-    To = timestamp_to_braintree(props:get_value('to', Options)),
-    AccountId = wh_util:format_account_id(Account, 'raw'),
+                          {'error', 'unknown_error'}.
+transactions(AccountId, From0, To0) ->
+    From = timestamp_to_braintree(From0),
+    To   = timestamp_to_braintree(To0),
     try braintree_transaction:find_by_customer(AccountId, From, To) of
         BTTransactions ->
             JObjs = [braintree_transaction:record_to_json(Tr) || Tr <- BTTransactions],
-            Filtered = filter_prorated(JObjs, props:get_value('prorated', Options, 'true')),
-            Transactions = convert_transactions(Filtered),
-            {'ok', Transactions}
+            {'ok', convert_transactions(JObjs)}
     catch
         'throw':{'not_found', _} -> {'error', 'not_found'};
         _:_ -> {'error', 'unknown_error'}
     end.
-
-filter_prorated(Transactions, 'true') ->
-    [Tr || Tr <- Transactions, is_prorated(Tr)];
-filter_prorated(Transactions, 'false') ->
-    [Tr || Tr <- Transactions, not(is_prorated(Tr))].
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec is_prorated(wh_json:object()) -> boolean().
-is_prorated(BTransaction) ->
-    case wh_json:get_value(<<"subscription_id">>, BTransaction) of
-        'undefined' -> 'true';
-        _Id ->
-            Addon = calculate_addon(BTransaction),
-            Discount = calculate_discount(BTransaction),
-            Amount = wh_json:get_number_value(<<"amount">>, BTransaction, 0),
-            (Addon - Discount) =/= Amount
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec calculate_addon(wh_json:object()) -> number().
-calculate_addon(BTransaction) ->
-    Addons = wh_json:get_value(<<"add_ons">>, BTransaction, []),
-    calculate(Addons, 0).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec calculate_discount(wh_json:object()) -> number().
-calculate_discount(BTransaction) ->
-    Addons = wh_json:get_value(<<"discounts">>, BTransaction, []),
-    calculate(Addons, 0).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec calculate(wh_json:objects(), number()) -> number().
-calculate([], Acc) -> Acc/100;
-calculate([Addon|Addons], Acc) ->
-    Amount = wh_json:get_number_value(<<"amount">>, Addon, 0)*100,
-    Quantity = wh_json:get_number_value(<<"quantity">>, Addon, 0),
-    calculate(Addons, (Amount*Quantity+Acc)).
-
 
 %%--------------------------------------------------------------------
 %% @public
@@ -206,7 +135,9 @@ calculate([Addon|Addons], Acc) ->
 subscriptions(AccountId) ->
     try braintree_customer:find(AccountId) of
         Customer ->
-            [braintree_subscription:record_to_json(Sub) || Sub <-  braintree_customer:get_subscriptions(Customer)]
+            [braintree_subscription:record_to_json(Sub)
+             || Sub <- braintree_customer:get_subscriptions(Customer)
+            ]
     catch
         'throw':{'not_found', _} -> 'not_found';
         _:_ -> 'unknow_error'
@@ -309,8 +240,36 @@ handle_topup(BillingId, JObjs) ->
                    ,wht_util:units_to_dollars(Amount)
                    ,Props
                   ),
-            handle_quick_sale_response(BT)
+            Success = handle_quick_sale_response(BT),
+            _ = send_topup_notification(Success, BillingId, BT),
+            Success
     end.
+
+-spec send_topup_notification(boolean(), ne_binary(), bt_transaction()) -> boolean().
+send_topup_notification(Success, BillingId, BtTransaction) ->
+    Transaction = braintree_transaction:record_to_json(BtTransaction),
+    Amount = wht_util:dollars_to_units(wh_json:get_float_value(<<"amount">>, Transaction, 0.0)),
+    Props = [{<<"Account-ID">>, BillingId}
+             ,{<<"Amount">>, Amount}
+             ,{<<"Success">>, Success}
+             ,{<<"Response">>, wh_json:get_value(<<"processor_response_text">>, Transaction)}
+             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+            ],
+    _ = case
+            whapps_util:amqp_pool_send(
+              Props
+              ,fun wapi_notifications:publish_topup/1
+             )
+        of
+            'ok' ->
+                lager:debug("topup notification sent for ~s", [BillingId]);
+            {'error', _R} ->
+                lager:error(
+                  "failed to send topup notification for ~s : ~p"
+                           ,[BillingId, _R]
+                 )
+        end,
+    Success.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -318,17 +277,9 @@ handle_topup(BillingId, JObjs) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec convert_transactions(wh_json:objects()) ->
-                                  wh_transaction:transactions().
--spec convert_transactions(wh_json:objects(), wh_transaction:transactions()) ->
-                                  wh_transaction:transactions().
+-spec convert_transactions(wh_json:objects()) -> wh_transaction:transactions().
 convert_transactions(BTTransactions) ->
-    convert_transactions(BTTransactions, []).
-
-convert_transactions([], Transactions) -> Transactions;
-convert_transactions([BTTransaction|BTTransactions], Transactions) ->
-    Transaction = convert_transaction(BTTransaction),
-    convert_transactions(BTTransactions, [Transaction|Transactions]).
+    [convert_transaction(Tr) || Tr <- BTTransactions].
 
 -spec convert_transaction(wh_json:object()) -> wh_transaction:transaction().
 convert_transaction(BTTransaction) ->
@@ -336,7 +287,9 @@ convert_transaction(BTTransaction) ->
                 ,fun set_bookkeeper_info/2
                 ,fun set_metadata/2
                 ,fun set_reason/2
+                ,fun set_status/2
                 ,fun set_amount/2
+                ,fun set_type/2  %% Make sure type is set /after/ amount
                 ,fun set_created/2
                 ,fun set_modified/2
                 ,fun set_account_id/2
@@ -369,8 +322,41 @@ set_metadata(BTTransaction, Transaction) ->
     wh_transaction:set_metadata(BTTransaction, Transaction).
 
 -spec set_reason(wh_json:object(), wh_transaction:transaction()) -> wh_transaction:transaction().
-set_reason(_, Transaction) ->
-    wh_transaction:set_reason(<<"unknown">>, Transaction).
+-spec set_reason(wh_json:object(), wh_transaction:transaction(), pos_integer() | 'undefined') -> wh_transaction:transaction().
+set_reason(BTTransaction, Transaction) ->
+    Code = wh_json:get_integer_value(<<"purchase_order">>, BTTransaction),
+    set_reason(BTTransaction, Transaction, Code).
+
+set_reason(BTTransaction, Transaction, 'undefined') ->
+    IsApi = wh_json:is_true(<<"is_api">>, BTTransaction),
+    IsRecurring = wh_json:is_true(<<"is_recurring">>, BTTransaction),
+    IsProrated = transaction_is_prorated(BTTransaction),
+    if
+        IsProrated, IsRecurring ->
+            wh_transaction:set_reason(<<"recurring_prorate">>, Transaction);
+        IsApi, IsRecurring ->
+            wh_transaction:set_reason(<<"recurring_prorate">>, Transaction);
+        IsRecurring ->
+            wh_transaction:set_reason(<<"monthly_recurring">>, Transaction);
+        IsApi ->
+            wh_transaction:set_reason(<<"manual_addition">>, Transaction);
+        'true' ->
+            wh_transaction:set_reason(<<"unknown">>, Transaction)
+    end;
+set_reason(_BTTransaction, Transaction, Code) ->
+    wh_transaction:set_code(Code, Transaction).
+
+-spec set_type(wh_json:object(), wh_transaction:transaction()) -> wh_transaction:transaction().
+set_type(BTTransaction, Transaction) ->
+    case wh_json:get_ne_value(<<"type">>, BTTransaction) =:= ?BT_TRANS_SALE of
+        'true'  -> wh_transaction:set_type(<<"debit">>, Transaction);
+        'false' -> wh_transaction:set_type(<<"credit">>, Transaction)
+    end.
+
+-spec set_status(wh_json:object(), wh_transaction:transaction()) -> wh_transaction:transaction().
+set_status(BTTransaction, Transaction) ->
+    Status = wh_json:get_value(<<"status">>, BTTransaction),
+    wh_transaction:set_status(Status, Transaction).
 
 -spec set_amount(wh_json:object(), wh_transaction:transaction()) -> wh_transaction:transaction().
 set_amount(BTTransaction, Transaction) ->
@@ -389,13 +375,40 @@ set_modified(BTTransaction, Transaction) ->
 
 -spec set_account_id(wh_json:object(), wh_transaction:transaction()) -> wh_transaction:transaction().
 set_account_id(BTTransaction, Transaction) ->
-    AccountId = wh_util:format_account_id(wh_json:get_value([<<"customer">>, <<"id">>], BTTransaction), 'raw'),
+    CustomerId = wh_json:get_value([<<"customer">>, <<"id">>], BTTransaction),
+    AccountId = wh_util:format_account_id(CustomerId, 'raw'),
     wh_transaction:set_account_id(AccountId, Transaction).
 
 -spec set_account_db(wh_json:object(), wh_transaction:transaction()) -> wh_transaction:transaction().
 set_account_db(BTTransaction, Transaction) ->
-    AccountDb = wh_util:format_account_id(wh_json:get_value([<<"customer">>, <<"id">>], BTTransaction), 'encoded'),
+    CustormerId = wh_json:get_value([<<"customer">>, <<"id">>], BTTransaction),
+    AccountDb = wh_util:format_account_id(CustormerId, 'encoded'),
     wh_transaction:set_account_db(AccountDb, Transaction).
+
+-spec transaction_is_prorated(wh_json:object()) -> boolean().
+transaction_is_prorated(BTransaction) ->
+    Addon = calculate_addon(BTransaction),
+    Discount = calculate_discount(BTransaction),
+    Amount = wh_json:get_number_value(<<"amount">>, BTransaction, 0),
+    (Addon - Discount) =/= Amount.
+
+-spec calculate_addon(wh_json:object()) -> number().
+calculate_addon(BTransaction) ->
+    Addons = wh_json:get_value(<<"add_ons">>, BTransaction, []),
+    calculate(Addons, 0).
+
+-spec calculate_discount(wh_json:object()) -> number().
+calculate_discount(BTransaction) ->
+    Addons = wh_json:get_value(<<"discounts">>, BTransaction, []),
+    calculate(Addons, 0).
+
+-spec calculate(wh_json:objects(), number()) -> number().
+calculate([], Acc) ->
+    Acc/100;
+calculate([Addon|Addons], Acc) ->
+    Amount = wh_json:get_number_value(<<"amount">>, Addon, 0)*100,
+    Quantity = wh_json:get_number_value(<<"quantity">>, Addon, 0),
+    calculate(Addons, (Amount*Quantity+Acc)).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -403,7 +416,7 @@ set_account_db(BTTransaction, Transaction) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec timestamp_to_braintree('undefined' | gregorian_seconds()) -> ne_binary().
+-spec timestamp_to_braintree(api_seconds()) -> ne_binary().
 timestamp_to_braintree('undefined') ->
     lager:debug("timestamp undefined using current_tstamp"),
     timestamp_to_braintree(wh_util:current_tstamp());
@@ -420,9 +433,10 @@ timestamp_to_braintree(Timestamp) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec utc_to_gregorian_seconds(ne_binary()) -> 'undefined' | gregorian_seconds().
+-spec utc_to_gregorian_seconds(ne_binary()) -> api_seconds().
 utc_to_gregorian_seconds(<<Y:4/binary, "-", M:2/binary, "-", D:2/binary, "T"
-                          ,H:2/binary, ":", Mi:2/binary, ":", S:2/binary, _/binary>>
+                           ,H:2/binary, ":", Mi:2/binary, ":", S:2/binary, _/binary
+                         >>
                         ) ->
     Date = {
       {wh_util:to_integer(Y), wh_util:to_integer(M), wh_util:to_integer(D)}
@@ -440,15 +454,11 @@ utc_to_gregorian_seconds(UTC) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec calculate_amount(wh_json:objects()) -> integer().
--spec calculate_amount(wh_json:objects(), integer()) -> integer().
 calculate_amount(JObjs) ->
-    calculate_amount(JObjs, 0).
-
-calculate_amount([], Amount) -> Amount;
-calculate_amount([JObj|JObjs], Amount) ->
-    calculate_amount(JObjs
-                     ,wh_json:get_integer_value(<<"pvt_amount">>, JObj, 0) + Amount
-                    ).
+    Adder = fun (JObj, Amount) ->
+                    Amount + wh_json:get_integer_value(<<"pvt_amount">>, JObj, 0)
+            end,
+    lists:foldl(Adder, 0, JObjs).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -460,7 +470,7 @@ calculate_amount([JObj|JObjs], Amount) ->
 handle_quick_sale_response(BtTransaction) ->
     Transaction = braintree_transaction:record_to_json(BtTransaction),
     RespCode = wh_json:get_value(<<"processor_response_code">>, Transaction, ?CODE_UNKNOWN),
-    % https://www.braintreepayments.com/docs/ruby/reference/processor_responses
+    %% https://www.braintreepayments.com/docs/ruby/reference/processor_responses
     wh_util:to_integer(RespCode) < 2000.
 
 %%--------------------------------------------------------------------
@@ -471,7 +481,7 @@ handle_quick_sale_response(BtTransaction) ->
 %%--------------------------------------------------------------------
 -spec already_charged(ne_binary() | integer() , integer() | wh_json:objects()) -> boolean().
 already_charged(BillingId, Code) when is_integer(Code) ->
-    lager:debug("checking if ~s has been charge for transaction of type ~p today", [BillingId, Code]),
+    lager:debug("checking if ~s has been charged for transaction of type ~p today", [BillingId, Code]),
     BtTransactions = braintree_transaction:find_by_customer(BillingId),
     Transactions = [braintree_transaction:record_to_json(BtTransaction)
                     || BtTransaction <- BtTransactions
@@ -534,7 +544,8 @@ already_charged_transaction(_, _, _, _) ->
 -spec handle_single_discount(wh_service_item:item(), braintree_subscription:subscription()) ->
                                     braintree_subscription:subscription().
 handle_single_discount(ServiceItem, Subscription) ->
-    DiscountId = braintree_single_discount_id(ServiceItem),
+    KeySingle = [<<"braintree">>, <<"discounts">>, <<"single">>],
+    DiscountId = wh_service_item:bookkeeper(KeySingle, ServiceItem),
     SingleDiscount = wh_service_item:single_discount(ServiceItem),
     case wh_util:is_empty(SingleDiscount) orelse wh_util:is_empty(DiscountId) of
         'true' -> Subscription;
@@ -553,7 +564,8 @@ handle_single_discount(ServiceItem, Subscription) ->
 -spec handle_cumulative_discounts(wh_service_item:item(), braintree_subscription:subscription()) ->
                                          braintree_subscription:subscription().
 handle_cumulative_discounts(ServiceItem, Subscription) ->
-    DiscountId = braintree_cumulative_discount_id(ServiceItem),
+    KeyCumulative = [<<"braintree">>, <<"discounts">>, <<"cumulative">>],
+    DiscountId = wh_service_item:bookkeeper(KeyCumulative, ServiceItem),
     CumulativeDiscount = wh_service_item:cumulative_discount(ServiceItem),
     case wh_util:is_empty(CumulativeDiscount) orelse wh_util:is_empty(DiscountId) of
         'true' -> Subscription;
@@ -562,6 +574,21 @@ handle_cumulative_discounts(ServiceItem, Subscription) ->
             Rate = wh_service_item:cumulative_discount_rate(ServiceItem),
             braintree_subscription:update_discount_amount(S, DiscountId, Rate)
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec update_subscriptions(ne_binary(), braintree_subscription:subscription(), updates()) ->
+                                  updates().
+update_subscriptions(PlanId, Subscription, #wh_service_updates{bt_subscriptions=Subscriptions}=Updates) ->
+    Update = #wh_service_update{bt_subscription = Subscription
+                                ,plan_id = PlanId
+                               },
+    Replaced = lists:keystore(PlanId, #wh_service_update.plan_id, Subscriptions, Update),
+    Updates#wh_service_updates{bt_subscriptions = Replaced}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -587,69 +614,47 @@ fetch_bt_customer(AccountId, NewItems) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec update_subscriptions(ne_binary(), braintree_subscription:subscription(), updates()) ->
-                                  updates().
-update_subscriptions(PlanId, Subscription, #wh_service_updates{bt_subscriptions=Subscriptions}=Updates) ->
-    Update = #wh_service_update{bt_subscription=Subscription
-                                ,plan_id=PlanId
-                               },
-    Updates#wh_service_updates{bt_subscriptions=lists:keystore(PlanId, #wh_service_update.plan_id, Subscriptions, Update)}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec fetch_or_create_subscription(ne_binary(), updates()) -> braintree_subscription:subscription().
+-spec fetch_or_create_subscription(ne_binary(), updates() | braintree_customer:customer()) ->
+                                          braintree_subscription:subscription().
+fetch_or_create_subscription(PlanId, #wh_service_updates{bt_subscriptions=[]
+                                                         ,bt_customer=Customer
+                                                        }) ->
+    fetch_or_create_subscription(PlanId, Customer);
 fetch_or_create_subscription(PlanId, #wh_service_updates{bt_subscriptions=Subscriptions
                                                          ,bt_customer=Customer
                                                         }) ->
     case lists:keyfind(PlanId, #wh_service_update.plan_id, Subscriptions) of
         'false' ->
-            try braintree_customer:get_subscription(PlanId, Customer) of
-                Subscription ->
-                    lager:debug("found subscription ~s for plan id ~s"
-                                ,[braintree_subscription:get_id(Subscription), PlanId]),
-                    braintree_subscription:reset(Subscription)
-            catch
-                'throw':{'not_found', _} ->
-                    lager:debug("creating new subscription for plan id ~s", [PlanId]),
-                    braintree_customer:new_subscription(PlanId, Customer)
-            end;
+            fetch_or_create_subscription(PlanId, Customer);
         #wh_service_update{bt_subscription=Subscription} -> Subscription
+    end;
+fetch_or_create_subscription(PlanId, #bt_customer{}=Customer) ->
+    try braintree_customer:get_subscription(PlanId, Customer) of
+        Subscription ->
+            lager:debug("found subscription ~s for plan id ~s"
+                        ,[braintree_subscription:get_id(Subscription), PlanId]
+                       ),
+            braintree_subscription:reset(Subscription)
+    catch
+        'throw':{'not_found', _} ->
+            lager:debug("creating new subscription for plan id ~s", [PlanId]),
+            braintree_customer:new_subscription(PlanId, Customer)
     end.
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec braintree_plan_addon_id(wh_service_item:item()) ->
-                                     {api_binary(), api_binary()}.
-braintree_plan_addon_id(ServiceItem) ->
-    JObj = wh_service_item:bookkeeper(<<"braintree">>, ServiceItem),
-    {wh_json:get_value(<<"plan">>, JObj), wh_json:get_value(<<"addon">>, JObj)}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec braintree_cumulative_discount_id(wh_service_item:item()) ->
-                                              api_binary().
-braintree_cumulative_discount_id(ServiceItem) ->
-    wh_service_item:bookkeeper([<<"braintree">>, <<"discounts">>, <<"cumulative">>], ServiceItem).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec braintree_single_discount_id(wh_service_item:item()) ->
-                                          api_binary().
-braintree_single_discount_id(ServiceItem) ->
-    wh_service_item:bookkeeper([<<"braintree">>, <<"discounts">>, <<"single">>], ServiceItem).
+-spec prepare_subscription(wh_service:item(), ne_binary(), ne_binary(), updates()) ->
+                                  braintree_subscription:subscription().
+prepare_subscription(ServiceItem, AddOnId, PlanId, Updates) ->
+    Routines = [fun(S) ->
+                        Quantity = wh_service_item:quantity(ServiceItem),
+                        braintree_subscription:update_addon_quantity(S, AddOnId, Quantity)
+                end
+               ,fun(S) ->
+                        Rate = wh_service_item:rate(ServiceItem),
+                        braintree_subscription:update_addon_amount(S, AddOnId, Rate)
+                end
+               ,fun(S) -> handle_single_discount(ServiceItem, S) end
+               ,fun(S) -> handle_cumulative_discounts(ServiceItem, S) end
+               ],
+    Subscription = fetch_or_create_subscription(PlanId, Updates),
+    lists:foldl(fun(F, S) -> F(S) end, Subscription, Routines).

@@ -289,7 +289,6 @@ admin_db_exists(DbName) ->
                    couchbeam_error().
 -spec admin_db_info() -> {'ok', ne_binaries()} |
                          couchbeam_error().
-
 db_info() ->
     couch_util:db_info(wh_couch_connections:get_server()).
 
@@ -479,7 +478,7 @@ admin_db_compact(DbName) ->
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
-%% Delete a database
+%% Delete a database (takes an 'encoded' DbName)
 %% @end
 %%--------------------------------------------------------------------
 -spec db_delete(text()) -> boolean().
@@ -802,7 +801,7 @@ del_docs(DbName, Docs) when is_list(Docs) ->
 %%% Attachment Functions
 %%%===================================================================
 -spec fetch_attachment(text(), ne_binary(), ne_binary()) ->
-                              {'ok', ne_binary()} |
+                              {'ok', binary()} |
                               couchbeam_error().
 fetch_attachment(DbName, DocId, AName) when ?VALID_DBNAME ->
     couch_util:fetch_attachment(wh_couch_connections:get_server(), DbName, DocId, AName);

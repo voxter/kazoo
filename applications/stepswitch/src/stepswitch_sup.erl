@@ -27,6 +27,7 @@
 
 -define(ORIGIN_BINDINGS, [[{'type', <<"resource">>}
                            ,{'type', <<"number">>}
+                           ,{'type', <<"dedicated_ip">>}
                           ]
                          ]).
 -define(CACHE_PROPS, [{'origin_bindings', ?ORIGIN_BINDINGS}]).
@@ -65,6 +66,7 @@ start_link() -> supervisor:start_link({'local', ?MODULE}, ?MODULE, []).
 %%--------------------------------------------------------------------
 -spec init([]) -> sup_init_ret().
 init([]) ->
+    wh_util:set_startup(),
     RestartStrategy = 'one_for_one',
     MaxRestarts = 5,
     MaxSecondsBetweenRestarts = 10,

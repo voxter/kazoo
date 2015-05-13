@@ -12,13 +12,13 @@
          ,allowed_methods/0, allowed_methods/1
          ,resource_exists/0, resource_exists/1
          ,validate/1, validate/2
+         ,to_csv/1
         ]).
 
 -include("../crossbar.hrl").
+-include_lib("whistle_transactions/include/whistle_transactions.hrl").
 
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
--endif.
+-type payload() :: {cowboy_req:req(), cb_context:context()}.
 
 %%%===================================================================
 %%% API
@@ -34,7 +34,27 @@
 init() ->
     _ = crossbar_bindings:bind(<<"*.allowed_methods.transactions">>, ?MODULE, 'allowed_methods'),
     _ = crossbar_bindings:bind(<<"*.resource_exists.transactions">>, ?MODULE, 'resource_exists'),
-    crossbar_bindings:bind(<<"*.validate.transactions">>, ?MODULE, 'validate').
+    _ = crossbar_bindings:bind(<<"*.validate.transactions">>, ?MODULE, 'validate'),
+    _ = crossbar_bindings:bind(<<"*.to_csv.get.transactions">>, ?MODULE, 'to_csv').
+
+-spec to_csv(payload()) -> payload().
+to_csv({Req, Context}) ->
+    JObjs = flatten(cb_context:resp_data(Context), []),
+    {Req, cb_context:set_resp_data(Context, JObjs)}.
+
+-spec flatten(wh_json:objects(), wh_json:objects()) -> wh_json:objects().
+flatten([], Results) ->
+    wht_util:collapse_call_transactions(Results);
+flatten([JObj|JObjs], Results) ->
+    Metadata = wh_json:get_ne_value(<<"metadata">>, JObj),
+    case wh_json:is_json_object(Metadata) of
+        'true' ->
+            Props = wh_json:to_proplist(Metadata),
+            flatten(JObjs, [wh_json:set_values(Props, JObj)|Results]);
+        'false' ->
+            flatten(JObjs, [JObj|Results])
+    end;
+flatten(Else, _) -> Else.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -69,17 +89,15 @@ resource_exists(_) -> 'true'.
 %% @doc
 %% Check the request (request body, query string params, path tokens, etc)
 %% and load necessary information.
-%% /transactions mights load a list of transactions objects
+%% /transactions might load a list of transactions objects
 %% /transactions/123 might load the transactions object 123
-%% Generally, use crossbar_doc to manipulate the cb_context{} record
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(cb_context:context()) -> cb_context:context().
--spec validate(cb_context:context(), path_token()) -> cb_context:context().
-
 validate(Context) ->
     validate_transactions(Context, cb_context:req_verb(Context)).
 
+-spec validate(cb_context:context(), path_token()) -> cb_context:context().
 validate(Context, PathToken) ->
     validate_transaction(Context, PathToken, cb_context:req_verb(Context)).
 
@@ -88,12 +106,8 @@ validate(Context, PathToken) ->
 validate_transactions(Context, ?HTTP_GET) ->
     case cb_modules_util:range_view_options(Context) of
         {CreatedFrom, CreatedTo} ->
-            Options = [{'from', CreatedFrom}
-                       ,{'to', CreatedTo}
-                       ,{'prorated', 'true'}
-                       ,{'reason', cb_context:req_value(Context, <<"reason">>)}
-                      ],
-            fetch(Context, Options);
+            Reason = cb_context:req_value(Context, <<"reason">>),
+            fetch_transactions(Context, CreatedFrom, CreatedTo, Reason);
         Context1 -> Context1
     end.
 
@@ -109,47 +123,51 @@ validate_transaction(Context, <<"current_balance">>, ?HTTP_GET) ->
 validate_transaction(Context, <<"monthly_recurring">>, ?HTTP_GET) ->
     case cb_modules_util:range_view_options(Context) of
         {CreatedFrom, CreatedTo} ->
-            Options = [{'from', CreatedFrom}
-                       ,{'to', CreatedTo}
-                       ,{'prorated', 'false'}
-                       ,{'reason', cb_context:req_value(Context, <<"reason">>)}
-                      ],
-            fetch_monthly_recurring(Context, Options);
+            Reason = cb_context:req_value(Context, <<"reason">>),
+            fetch_monthly_recurring(Context, CreatedFrom, CreatedTo, Reason);
         Context1 -> Context1
     end;
 validate_transaction(Context, <<"subscriptions">>, ?HTTP_GET) ->
-    fetch_braintree_subscriptions(Context);
+    filter_subscriptions(Context);
 validate_transaction(Context, _PathToken, _Verb) ->
     cb_context:add_system_error('bad_identifier',  Context).
 
-%%--------------------------------------------------------------------
+
 %% @private
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec fetch(cb_context:context(), wh_proplist()) -> cb_context:context().
-fetch(Context, Options) ->
-    case fetch_transactions(Context, Options) of
+-spec fetch_transactions(cb_context:context(), gregorian_seconds(), gregorian_seconds(), api_binary()) ->
+                                cb_context:context().
+
+fetch_transactions(Context, From, To, 'undefined') ->
+    case wh_transactions:fetch(cb_context:account_id(Context), From, To) of
         {'error', _R}=Error -> send_resp(Error, Context);
         {'ok', Transactions} ->
-            JObjs = maybe_filter_by_reason(Transactions, Options),
-            send_resp({'ok', wht_util:collapse_call_transactions(JObjs)}, Context)
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec fetch_monthly_recurring(cb_context:context(), wh_proplist()) ->
-                                     cb_context:context().
-fetch_monthly_recurring(Context, Options) ->
-    case wh_bookkeeper_braintree:transactions(cb_context:account_id(Context), Options) of
-        {'error', _}=E -> send_resp(E, Context);
+            JObjs = wh_transactions:to_public_json(Transactions),
+            send_resp({'ok', JObjs}, Context)
+    end;
+fetch_transactions(Context, From, To, <<"only_calls">>) ->
+    case wh_transactions:fetch_local(cb_context:account_id(Context), From, To) of
+        {'error', _R}=Error -> send_resp(Error, Context);
         {'ok', Transactions} ->
-            JObjs = maybe_filter_by_reason(Transactions, Options),
+            JObjs = [wh_transaction:to_public_json(Transaction)
+                     || Transaction <- wh_transactions:filter_for_per_minute(Transactions)
+                    ],
+            send_resp({'ok', JObjs}, Context)
+    end;
+fetch_transactions(Context, From, To, Reason)
+  when Reason =:= <<"only_bookkeeper">>; Reason =:= <<"no_calls">> ->
+    case wh_transactions:fetch_bookkeeper(cb_context:account_id(Context), From, To) of
+        {'error', _R}=Error -> send_resp(Error, Context);
+        {'ok', Transactions} ->
+            Filtered = wh_transactions:filter_by_reason(Reason, Transactions),
+            JObjs = wh_transactions:to_public_json(Filtered),
+            send_resp({'ok', JObjs}, Context)
+    end;
+fetch_transactions(Context, From, To, Reason) ->
+    case wh_transactions:fetch(cb_context:account_id(Context), From, To) of
+        {'error', _R}=Error -> send_resp(Error, Context);
+        {'ok', Transactions} ->
+            Filtered = wh_transactions:filter_by_reason(Reason, Transactions),
+            JObjs = wh_transactions:to_public_json(Filtered),
             send_resp({'ok', JObjs}, Context)
     end.
 
@@ -159,28 +177,17 @@ fetch_monthly_recurring(Context, Options) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_transactions(cb_context:context(), wh_proplist()) ->
-                                {'ok', wh_json:objects()} |
-                                {'error', _}.
-fetch_transactions(Context, Options) ->
-    From = props:get_value('from', Options),
-    To = props:get_value('to', Options),
-    wh_transactions:fetch_since(cb_context:account_id(Context), From, To).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec maybe_filter_by_reason(any(), wh_proplist()) -> wh_json:objects().
-maybe_filter_by_reason(Transactions, Options) ->
-    case props:get_value('reason', Options) of
-        'undefined' ->
-            wh_transactions:to_public_json(Transactions);
-        Reason ->
-            Filtered = wh_transactions:filter_by_reason(Reason, Transactions),
-            wh_transactions:to_public_json(Filtered)
+-spec fetch_monthly_recurring(cb_context:context(), gregorian_seconds(), gregorian_seconds(), api_binary()) ->
+                                     cb_context:context().
+fetch_monthly_recurring(Context, From, To, Reason) ->
+    case wh_bookkeeper_braintree:transactions(cb_context:account_id(Context), From, To) of
+        {'error', _}=E -> send_resp(E, Context);
+        {'ok', Transactions} ->
+            JObjs = [wh_transaction:to_public_json(Transaction)
+                     || Transaction <- wh_transactions:filter_by_reason(Reason, Transactions),
+                        wh_transaction:code(Transaction) =:= ?CODE_MONTHLY_RECURRING
+                    ],
+            send_resp({'ok', JObjs}, Context)
     end.
 
 %%--------------------------------------------------------------------
@@ -189,25 +196,16 @@ maybe_filter_by_reason(Transactions, Options) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_braintree_subscriptions(cb_context:context()) -> cb_context:context().
-fetch_braintree_subscriptions(Context) ->
-    filter_braintree_subscriptions(Context).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec filter_braintree_subscriptions(cb_context:context()) -> cb_context:context().
-filter_braintree_subscriptions(Context) ->
-    case wh_service_transactions:current_billing_period(cb_context:account_id(Context), 'subscriptions') of
+-spec filter_subscriptions(cb_context:context()) -> cb_context:context().
+filter_subscriptions(Context) ->
+    AccountId = cb_context:account_id(Context),
+    case wh_service_transactions:current_billing_period(AccountId, 'subscriptions') of
         'not_found' ->
             send_resp({'error', <<"no data found in braintree">>}, Context);
         'unknow_error' ->
             send_resp({'error', <<"unknown braintree error">>}, Context);
         BSubscriptions ->
-            JObjs = [filter_braintree_subscription(BSub) || BSub <- BSubscriptions],
+            JObjs = [filter_subscription(BSub) || BSub <- BSubscriptions],
             send_resp({'ok', JObjs}, Context)
     end.
 
@@ -217,10 +215,10 @@ filter_braintree_subscriptions(Context) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec filter_braintree_subscription(wh_json:object()) -> wh_json:object().
-filter_braintree_subscription(BSubscription) ->
-    Routines = [fun(BSub) -> clean_braintree_subscription(BSub) end
-                ,fun(BSub) -> correct_date_braintree_subscription(BSub) end
+-spec filter_subscription(wh_json:object()) -> wh_json:object().
+filter_subscription(BSubscription) ->
+    Routines = [fun clean_braintree_subscription/1
+                ,fun correct_date_braintree_subscription/1
                ],
     lists:foldl(fun(F, BSub) -> F(BSub) end, BSubscription, Routines).
 
@@ -267,11 +265,9 @@ correct_date_braintree_subscription(BSubscription) ->
 correct_date_braintree_subscription_fold(Key, BSub) ->
     case wh_json:get_value(Key, BSub, 'null') of
         'null' -> BSub;
-        V1 ->
-            V2 = binary:bin_to_list(V1),
-            [Y, M, D|_] = string:tokens(V2, "-"),
-            {{Y1, _}, {M1, _}, {D1, _}} = {string:to_integer(Y), string:to_integer(M), string:to_integer(D)},
-            DateTime = {{Y1, M1, D1}, {0, 0, 0}},
+        Value ->
+            [Y, M, D | _] = string:tokens(binary_to_list(Value), "-"),
+            DateTime = {{list_to_integer(Y), list_to_integer(M), list_to_integer(D)}, {0, 0, 0}},
             Timestamp = calendar:datetime_to_gregorian_seconds(DateTime),
             wh_json:set_value(Key, Timestamp, BSub)
     end.
@@ -289,4 +285,8 @@ send_resp({'ok', JObj}, Context) ->
                          ,{fun cb_context:set_resp_data/2, JObj}
                         ]);
 send_resp({'error', Details}, Context) ->
-    cb_context:add_system_error('bad_identifier', [{'details', Details}], Context).
+    cb_context:add_system_error(
+      'bad_identifier'
+      ,wh_json:from_list([{<<"cause">>, Details}])
+      ,Context
+     ).

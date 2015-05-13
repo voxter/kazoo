@@ -19,12 +19,12 @@
 
 -spec migrate() -> 'no_return'.
 migrate() ->
-    io:format("migrating relevant settings from system_config/callflow to system_config/~s~n", [?WHS_CONFIG_CAT]),
+    io:format("migrating relevant settings from system_config/callflow to system_config/~s~n", [?WHM_CONFIG_CAT]),
 
     maybe_migrate_system_config(<<"callflow">>),
 
-    io:format("migrating relevant settings from system_config/media_mgr to system_config/~s~n", [?WHS_CONFIG_CAT]),
-    maybe_migrate_system_config(<<"media_mgr">>),
+    io:format("migrating relevant settings from system_config/media_mgr to system_config/~s~n", [?WHM_CONFIG_CAT]),
+    maybe_migrate_system_config(<<"media_mgr">>, 'true'),
 
     'no_return'.
 
@@ -39,7 +39,7 @@ set_account_language(Account, Language) ->
     OldLang = wh_media_util:prompt_language(AccountId),
 
     try whapps_account_config:set(AccountId
-                                  ,?WHS_CONFIG_CAT
+                                  ,?WHM_CONFIG_CAT
                                   ,?PROMPT_LANGUAGE_KEY
                                   ,wh_util:to_lower_binary(Language)
                                  )
@@ -188,7 +188,7 @@ maybe_cleanup_metadoc(ID, E) ->
 maybe_retry_upload(ID, AttachmentName, Contents, Options, Retries) ->
     case couch_mgr:open_doc(?WH_MEDIA_DB, ID) of
         {'ok', JObj} ->
-            case wh_json:get_value([<<"_attachments">>, AttachmentName], JObj) of
+            case wh_doc:attachment(JObj, AttachmentName) of
                 'undefined' ->
                     io:format("  attachment does not appear on the document, retrying after a pause~n"),
                     timer:sleep(1000),
@@ -207,11 +207,23 @@ refresh() ->
     'ok'.
 
 -spec maybe_migrate_system_config(ne_binary()) -> 'ok'.
+-spec maybe_migrate_system_config(ne_binary(), boolean()) -> 'ok'.
 maybe_migrate_system_config(ConfigId) ->
+    maybe_migrate_system_config(ConfigId, 'false').
+
+maybe_migrate_system_config(ConfigId, DeleteAfter) ->
     case couch_mgr:open_doc(?WH_CONFIG_DB, ConfigId) of
-        {'ok', JObj} -> migrate_system_config(wh_doc:public_fields(JObj));
-        {'error', 'not_found'} -> 'ok'
+        {'error', 'not_found'} -> 'ok';
+        {'ok', JObj} ->
+            migrate_system_config(wh_doc:public_fields(JObj)),
+            maybe_delete_system_config(ConfigId, DeleteAfter)
     end.
+
+-spec maybe_delete_system_config(ne_binary(), boolean()) -> 'ok'.
+maybe_delete_system_config(_ConfigId, 'false') -> 'ok';
+maybe_delete_system_config(ConfigId, 'true') ->
+    {'ok', _} = couch_mgr:del_doc(?WH_CONFIG_DB, ConfigId),
+    io:format("deleted ~s from ~s", [ConfigId, ?WH_CONFIG_DB]).
 
 -spec migrate_system_config(wh_json:object()) -> 'ok'.
 migrate_system_config(ConfigJObj) ->
@@ -224,9 +236,9 @@ migrate_system_config(ConfigJObj) ->
 
 -spec get_media_config_doc() -> {'ok', wh_json:object()}.
 get_media_config_doc() ->
-    case couch_mgr:open_doc(?WH_CONFIG_DB, ?WHS_CONFIG_CAT) of
+    case couch_mgr:open_doc(?WH_CONFIG_DB, ?WHM_CONFIG_CAT) of
         {'ok', _MediaJObj}=OK -> OK;
-        {'error', 'not_found'} -> {'ok', wh_json:from_list([{<<"_id">>, ?WHS_CONFIG_CAT}])}
+        {'error', 'not_found'} -> {'ok', wh_json:from_list([{<<"_id">>, ?WHM_CONFIG_CAT}])}
     end.
 
 -spec migrate_system_config_fold(ne_binary(), wh_json:json_term(), wh_json:object()) -> wh_json:object().
@@ -308,15 +320,8 @@ remove_empty_media_docs(AccountId, AccountDb, File, [Media|MediaDocs]) ->
 
 -spec maybe_remove_media_doc(ne_binary(), file:io_device(), wh_json:object()) -> 'ok'.
 maybe_remove_media_doc(AccountDb, File, MediaJObj) ->
-    case wh_json:get_value(<<"_attachments">>, MediaJObj) of
+    case wh_doc:attachments(MediaJObj) of
         'undefined' ->
-            io:format("media doc ~s has undefined attachments, archiving and removing~n"
-                      ,[wh_json:get_value(<<"_id">>, MediaJObj)]
-                     ),
-            file:write(File, wh_json:encode(MediaJObj)),
-            file:write(File, [$\n]),
-            remove_media_doc(AccountDb, MediaJObj);
-        [] ->
             io:format("media doc ~s has no attachments, archiving and removing~n"
                       ,[wh_json:get_value(<<"_id">>, MediaJObj)]
                      ),

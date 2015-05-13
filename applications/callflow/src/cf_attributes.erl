@@ -98,8 +98,17 @@ maybe_get_endpoint_cid(Validate, Attribute, Call) ->
         {'ok', JObj} ->
             Number = get_cid_or_default(Attribute, <<"number">>, JObj),
             Name = get_cid_or_default(Attribute, <<"name">>, JObj),
-            maybe_normalize_cid(Number, Name, Validate, Attribute, Call)
+            maybe_use_presence_number(Number, Name, JObj, Validate, Attribute, Call)
     end.
+
+-spec maybe_use_presence_number(api_binary(), api_binary(), wh_json:object(), boolean(), ne_binary(), whapps_call:call()) ->
+                                 {api_binary(), api_binary()}.
+maybe_use_presence_number('undefined', Name, Endpoint, Validate, <<"internal">> = Attribute, Call) ->
+    Number = maybe_get_presence_number(Endpoint, Call),
+    lager:debug("presence number is ~s", [Number]),
+    maybe_normalize_cid(Number, Name, Validate, Attribute, Call);
+maybe_use_presence_number(Number, Name, _Endpoint, Validate, Attribute, Call) ->
+    maybe_normalize_cid(Number, Name, Validate, Attribute, Call).
 
 -spec maybe_normalize_cid(api_binary(), api_binary(), boolean(), ne_binary(), whapps_call:call()) ->
                                  {api_binary(), api_binary()}.
@@ -265,7 +274,7 @@ maybe_get_assigned_number(_, Name, Call) ->
                        || Num <- wh_json:get_keys(PublicJObj)
                               ,Num =/= <<"id">>
                               ,(not wh_json:is_true([Num, <<"on_subaccount">>], JObj))
-                              ,(wh_json:get_value([Num, <<"state">>], JObj) =:= <<"in_service">>)
+                              ,(wh_json:get_value([Num, <<"state">>], JObj) =:= ?NUMBER_STATE_IN_SERVICE)
                       ],
             maybe_get_assigned_numbers(Numbers, Name, Call)
     end.
@@ -289,6 +298,17 @@ is_valid_caller_id(Number, Call) ->
     case wh_number_manager:lookup_account_by_number(Number) of
         {'ok', AccountId, _} -> 'true';
         _Else -> 'false'
+    end.
+
+-spec maybe_get_presence_number(wh_json:object(), whapps_call:call()) -> api_binary().
+maybe_get_presence_number(Endpoint, Call) ->
+    case cf_attributes:presence_id(Endpoint, Call) of
+        'undefined' -> 'undefined';
+        PresenceId ->
+            case binary:split(PresenceId, <<"@">>) of
+                [PresenceNumber, _] -> PresenceNumber;
+                [_Else] -> PresenceId
+            end
     end.
 
 %%-----------------------------------------------------------------------------
@@ -354,7 +374,6 @@ moh_attributes(EndpointId, Attribute, Call) when is_binary(EndpointId) ->
 moh_attributes(Endpoint, Attribute, Call) ->
     Value = wh_json:get_ne_value([<<"music_on_hold">>, Attribute], Endpoint),
     maybe_normalize_moh_attribute(Value, Attribute, Call).
-
 
 -spec maybe_normalize_moh_attribute(api_binary(), ne_binary(), whapps_call:call()) -> api_binary().
 maybe_normalize_moh_attribute('undefined', _, _) -> 'undefined';
@@ -434,15 +453,9 @@ presence_id(EndpointId, Call) when is_binary(EndpointId) ->
         {'error', _} -> 'undefined'
     end;
 presence_id(Endpoint, Call) ->
-    PresenceId = case wh_json:get_ne_value(<<"presence_id">>, Endpoint) of
-                     'undefined' ->
-                         wh_json:get_binary_value(
-                           [<<"sip">>, <<"username">>]
-                           ,Endpoint
-                           ,whapps_call:request_user(Call)
-                          );
-                     Else -> Else
-                 end,
+    Username = kz_device:sip_username(Endpoint, whapps_call:request_user(Call)),
+    PresenceId = kz_device:presence_id(Endpoint, Username),
+
     case binary:match(PresenceId, <<"@">>) of
         'nomatch' ->
             Realm = cf_util:get_sip_realm(
@@ -552,11 +565,11 @@ get_cid_or_default(Attribute, Property, Endpoint) ->
 -spec valid_emergency_numbers(whapps_call:call()) -> ne_binaries().
 valid_emergency_numbers(Call) ->
     AccountDb = whapps_call:account_db(Call),
-    case couch_mgr:open_cache_doc(AccountDb, <<"phone_numbers">>) of
+    case couch_mgr:open_cache_doc(AccountDb, ?WNM_PHONE_NUMBER_DOC) of
         {'ok', JObj} ->
             [Number
-             || Number <- wh_json:get_keys(JObj)
-                    ,lists:member(<<"dash_e911">>, wh_json:get_value([Number, <<"features">>], JObj, []))
+             || Number <- wh_json:get_keys(JObj),
+                wnm_util:emergency_services_configured(Number, JObj)
             ];
         {'error', _} ->
             []

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2015, 2600Hz INC
 %%% @doc
 %%% @end
 %%% @contributors
@@ -251,7 +251,7 @@ get_default_value(Category, Keys, Default, JObj) ->
     case wh_json:get_value([<<"default">> | Keys], JObj) of
         'undefined' ->
             lager:debug("setting default for ~s ~p: ~p", [Category, Keys, Default]),
-            _ = set(Category, Keys, Default),
+            _ = set_default(Category, Keys, Default),
             Default;
         Else -> Else
     end.
@@ -364,9 +364,11 @@ update_category(Category, JObj) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec maybe_save_category(ne_binary(), wh_json:object()) ->
-                                 {'ok', wh_json:object()}.
+                                 {'ok', wh_json:object()} |
+                                 {'error', 'conflict'}.
 -spec maybe_save_category(ne_binary(), wh_json:object(), boolean()) ->
-                                 {'ok', wh_json:object()}.
+                                 {'ok', wh_json:object()} |
+                                 {'error', 'conflict'}.
 maybe_save_category(Category, JObj) ->
     maybe_save_category(Category, JObj, 'false').
 

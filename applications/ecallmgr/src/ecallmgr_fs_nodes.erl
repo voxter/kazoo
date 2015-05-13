@@ -13,10 +13,10 @@
 %%%-----------------------------------------------------------------------------
 -module(ecallmgr_fs_nodes).
 
--behaviour(gen_server).
+-behaviour(gen_listener).
 
 -export([start_link/0]).
--export([connected/0]).
+-export([connected/0, connected/1]).
 -export([all_nodes_connected/0]).
 -export([add/1, add/2, add/3]).
 -export([remove/1]).
@@ -37,15 +37,30 @@
          ,flush/0, flush/2
         ]).
 
+-export([handle_fs_xml_flush/2]).
+
 -export([init/1
          ,handle_call/3
          ,handle_cast/2
          ,handle_info/2
+         ,handle_event/2
          ,terminate/2
          ,code_change/3
         ]).
 
 -include("ecallmgr.hrl").
+
+-define(RESPONDERS, [{{?MODULE, 'handle_fs_xml_flush'}
+                      ,[{<<"switch_event">>, <<"fs_xml_flush">>}]
+                     }
+                    ]).
+-define(BINDINGS, [{'switch', [{'restrict_to', ['fs_xml_flush']}
+                               ,'federate'
+                              ]}
+                  ]).
+-define(QUEUE_NAME, <<"fs_nodes_shared_listener">>).
+-define(QUEUE_OPTIONS, [{'exclusive', 'false'}]).
+-define(CONSUME_OPTIONS, [{'exclusive', 'false'}]).
 
 -define(SERVER, ?MODULE).
 -define(EXPIRE_CHECK, 60000).
@@ -53,6 +68,7 @@
 -record(node, {node :: atom()
                ,cookie :: atom()
                ,connected = 'false' :: boolean()
+               ,started = wh_util:current_tstamp() :: gregorian_seconds()
                ,client_version :: api_binary()
                ,options = [] :: wh_proplist()
               }).
@@ -79,7 +95,14 @@
 %%%===================================================================
 
 -spec start_link() -> startlink_ret().
-start_link() -> gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link() ->
+    gen_listener:start_link({'local', ?MODULE}, ?MODULE
+                           , [{'responders', ?RESPONDERS}
+                             ,{'bindings', ?BINDINGS}
+                             ,{'queue_name', ?QUEUE_NAME}
+                             ,{'queue_options', ?QUEUE_OPTIONS}
+                             ,{'consume_options', ?CONSUME_OPTIONS}
+                             ], []).
 
 %% returns 'ok' or {'error', some_error_atom_explaining_more}
 -spec add(atom()) -> 'ok' | {'error', 'no_connection'}.
@@ -103,8 +126,11 @@ nodeup(Node) -> gen_server:cast(?MODULE, {'fs_nodeup', Node}).
 -spec remove(atom()) -> 'ok'.
 remove(Node) -> gen_server:cast(?MODULE, {'rm_fs_node', Node}).
 
--spec connected() -> atoms().
-connected() -> gen_server:call(?MODULE, 'connected_nodes').
+-spec connected() -> atoms() | wh_proplist_kv(atom(), gregorian_seconds()).
+connected() ->
+    connected('false').
+connected(Verbose) ->
+    gen_server:call(?MODULE, {'connected_nodes', Verbose}).
 
 -spec flush() -> 'ok'.
 -spec flush(ne_binary(), ne_binary()) -> 'ok'.
@@ -117,7 +143,7 @@ flush(User, Realm) ->
            >>,
     do_flush(Args).
 
--spec do_flush(ne_binary()) -> 'ok'.
+-spec do_flush(binary()) -> 'ok'.
 do_flush(Args) ->
     lager:debug("flushing xml cache ~s from all FreeSWITCH servers", [Args]),
     [freeswitch:api(Node, 'xml_flush_cache', Args)
@@ -286,6 +312,13 @@ capability_to_json(#capability{node=Node
                        ,{<<"is_loaded">>, IsLoaded}
                       ]).
 
+-spec handle_fs_xml_flush(wh_json:object(), wh_proplist()) -> 'ok'.
+handle_fs_xml_flush(JObj, _Props) ->
+    'true' = wapi_switch:fs_xml_flush_v(JObj),
+    Username = wh_json:get_value(<<"Username">>, JObj),
+    Realm = wh_json:get_value(<<"Realm">>, JObj, <<>>),
+    flush(Username, Realm).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -333,10 +366,23 @@ handle_call({'is_node_up', Node}, _From, #state{nodes=Nodes}=State) ->
                    Connected
            end,
     {'reply', Resp, State};
-handle_call('connected_nodes', _From, #state{nodes=Nodes}=State) ->
+handle_call({'connected_nodes', 'false'}, _From, #state{nodes=Nodes}=State) ->
     Resp = [Node
-             || {_, #node{node=Node, connected=Connected}} <- dict:to_list(Nodes)
-                ,Connected
+             || {_, #node{node=Node
+                          ,connected=IsConnected
+                         }
+                } <- dict:to_list(Nodes),
+                IsConnected
+           ],
+    {'reply', Resp, State};
+handle_call({'connected_nodes', 'true'}, _From, #state{nodes=Nodes}=State) ->
+    Resp = [{Node, Started}
+             || {_, #node{node=Node
+                          ,connected=Connected
+                          ,started=Started
+                         }
+                } <- dict:to_list(Nodes),
+                Connected
            ],
     {'reply', Resp, State};
 handle_call({'add_fs_node', NodeName, Cookie, Options}, From, State) ->
@@ -442,6 +488,17 @@ handle_info({'DOWN', Ref, 'process', Pid, _Reason}, #state{init_pidref={Pid, Ref
 handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Allows listener to pass options to handlers
+%%
+%% @spec handle_event(JObj, State) -> {reply, Options}
+%% @end
+%%--------------------------------------------------------------------
+handle_event(_JObj, _State) ->
+    {'reply', []}.
 
 %%--------------------------------------------------------------------
 %% @private

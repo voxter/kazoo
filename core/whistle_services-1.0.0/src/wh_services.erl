@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz, INC
+%%% @copyright (C) 2012-2015, 2600Hz, INC
 %%% @doc
 %%%
 %%% @end
@@ -45,9 +45,7 @@
 
 -export([is_reseller/1]).
 
--export([calculate_charges/2]).
-
--export([dry_run/2, dry_run/3]).
+-export([dry_run/1]).
 
 -include("whistle_services.hrl").
 
@@ -93,36 +91,50 @@ empty() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec new(ne_binary()) -> services().
-new(AccountId) ->
+new(<<_/binary>> = AccountId) ->
     AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
-    Account = get_account_definition(AccountDb, AccountId),
-    ResellerId = get_reseller_id(AccountId),
-    IsReseller = depreciated_is_reseller(Account),
-    BillingId = depreciated_billing_id(Account),
-    PvtTree = wh_json:get_value(<<"pvt_tree">>, Account, []),
-    Props = [{<<"_id">>, AccountId}
-             ,{<<"pvt_created">>, wh_util:current_tstamp()}
-             ,{<<"pvt_modified">>, wh_util:current_tstamp()}
-             ,{<<"pvt_type">>, <<"service">>}
-             ,{<<"pvt_vsn">>, <<"1">>}
-             ,{<<"pvt_account_id">>, AccountId}
-             ,{<<"pvt_account_db">>, AccountDb}
-             ,{<<"pvt_status">>, <<"good_standing">>}
-             ,{<<"pvt_reseller">>, IsReseller}
-             ,{<<"pvt_reseller_id">>, ResellerId}
-             ,{<<"pvt_tree">>, PvtTree}
-             ,{?QUANTITIES, wh_json:new()}
-             ,{<<"billing_id">>, BillingId}
-             ,{<<"plans">>, populate_service_plans(Account, ResellerId)}
-            ],
+    AccountJObj = get_account_definition(AccountDb, AccountId),
+
+    Props = base_service_props(AccountId, AccountDb, AccountJObj),
+
+    BillingId = props:get_value(<<"billing_id">>, Props),
+    IsReseller = props:get_value(<<"pvt_reseller">>, Props),
+
     #wh_services{account_id=AccountId
                  ,jobj=wh_json:from_list(Props)
                  ,cascade_quantities=cascade_quantities(AccountId, IsReseller)
                  ,dirty='true'
                  ,billing_id=BillingId
                  ,current_billing_id=BillingId
-                 ,deleted=wh_json:is_true(<<"pvt_deleted">>, Account)
+                 ,deleted=wh_doc:is_soft_deleted(AccountJObj)
                 }.
+
+-spec base_service_props(ne_binary(), ne_binary(), wh_json:object()) ->
+                                wh_proplist().
+base_service_props(AccountId, AccountDb, AccountJObj) ->
+    ResellerId = get_reseller_id(AccountId),
+    PvtTree = kz_account:tree(AccountJObj),
+
+    IsReseller = depreciated_is_reseller(AccountJObj),
+    BillingId = depreciated_billing_id(AccountJObj),
+
+    Now = wh_util:current_tstamp(),
+
+    [{<<"_id">>, AccountId}
+     ,{<<"pvt_created">>, Now}
+     ,{<<"pvt_modified">>, Now}
+     ,{<<"pvt_type">>, <<"service">>}
+     ,{<<"pvt_vsn">>, <<"1">>}
+     ,{<<"pvt_account_id">>, AccountId}
+     ,{<<"pvt_account_db">>, AccountDb}
+     ,{<<"pvt_status">>, <<"good_standing">>}
+     ,{<<"pvt_reseller">>, IsReseller}
+     ,{<<"pvt_reseller_id">>, ResellerId}
+     ,{<<"pvt_tree">>, PvtTree}
+     ,{?QUANTITIES, wh_json:new()}
+     ,{<<"billing_id">>, BillingId}
+     ,{<<"plans">>, populate_service_plans(AccountJObj, ResellerId)}
+    ].
 
 %%--------------------------------------------------------------------
 %% @public
@@ -135,13 +147,14 @@ from_service_json(JObj) ->
     AccountId = wh_json:get_value(<<"pvt_account_id">>, JObj),
     IsReseller = wh_json:is_true(<<"pvt_reseller">>, JObj),
     BillingId = wh_json:get_value(<<"billing_id">>, JObj, AccountId),
+
     #wh_services{account_id=AccountId
                  ,jobj=JObj
                  ,cascade_quantities=cascade_quantities(AccountId, IsReseller)
                  ,status=wh_json:get_ne_value(<<"pvt_status">>, JObj, <<"good_standing">>)
                  ,billing_id=BillingId
                  ,current_billing_id=BillingId
-                 ,deleted=wh_json:is_true(<<"pvt_deleted">>, JObj)
+                 ,deleted=wh_doc:is_soft_deleted(JObj)
                 }.
 
 %%--------------------------------------------------------------------
@@ -151,27 +164,31 @@ from_service_json(JObj) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch(ne_binary()) -> services().
-fetch(Account) ->
+fetch(<<_/binary>> = Account) ->
     AccountId = wh_util:format_account_id(Account, 'raw'),
     %% TODO: if reseller populate cascade via merchant id
     case couch_mgr:open_cache_doc(?WH_SERVICES_DB, AccountId) of
         {'ok', JObj} ->
-            lager:debug("loaded account service doc ~s", [AccountId]),
-            IsReseller = wh_json:is_true(<<"pvt_reseller">>, JObj),
-            BillingId = wh_json:get_value(<<"billing_id">>, JObj, AccountId),
-            #wh_services{account_id=AccountId
-                         ,jobj=JObj
-                         ,cascade_quantities=cascade_quantities(AccountId, IsReseller)
-                         ,status=wh_json:get_ne_value(<<"pvt_status">>, JObj, <<"good_standing">>)
-                         ,billing_id=BillingId
-                         ,current_billing_id=BillingId
-                         ,deleted=wh_json:is_true(<<"pvt_deleted">>, JObj)
-                         ,dirty=wh_json:is_true(<<"pvt_dirty">>, JObj)
-                        };
+            handle_fetch_result(AccountId, JObj);
         {'error', _R} ->
             lager:debug("unable to open account ~s services doc (creating new): ~p", [Account, _R]),
             new(AccountId)
     end.
+
+-spec handle_fetch_result(ne_binary(), wh_json:object()) -> services().
+handle_fetch_result(AccountId, JObj) ->
+    lager:debug("loaded account service doc ~s", [AccountId]),
+    IsReseller = wh_json:is_true(<<"pvt_reseller">>, JObj),
+    BillingId = wh_json:get_value(<<"billing_id">>, JObj, AccountId),
+    #wh_services{account_id=AccountId
+                 ,jobj=JObj
+                 ,cascade_quantities=cascade_quantities(AccountId, IsReseller)
+                 ,status=wh_json:get_ne_value(<<"pvt_status">>, JObj, <<"good_standing">>)
+                 ,billing_id=BillingId
+                 ,current_billing_id=BillingId
+                 ,deleted=wh_doc:is_soft_deleted(JObj)
+                 ,dirty=wh_json:is_true(<<"pvt_dirty">>, JObj)
+                }.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -208,7 +225,7 @@ save_as_dirty(#wh_services{}=Services) ->
     save_as_dirty(Services, ?BASE_BACKOFF).
 
 save_as_dirty(#wh_services{jobj=JObj
-                           ,account_id=AccountId
+                           ,account_id = <<_/binary>> = AccountId
                           }=Services
               ,BackOff
              ) ->
@@ -222,7 +239,7 @@ save_as_dirty(#wh_services{jobj=JObj
             lager:debug("marked services as dirty for account ~s", [AccountId]),
             Services#wh_services{jobj=JObj
                                  ,status=wh_json:get_ne_value(<<"pvt_status">>, SavedJObj, <<"good_standing">>)
-                                 ,deleted=wh_json:is_true(<<"pvt_deleted">>, SavedJObj)
+                                 ,deleted=wh_doc:is_soft_deleted(SavedJObj)
                                  ,dirty='true'
                                 };
         {'error', 'not_found'} ->
@@ -231,17 +248,22 @@ save_as_dirty(#wh_services{jobj=JObj
             timer:sleep(BackOff),
             save_as_dirty(Services, BackOff);
         {'error', 'conflict'} ->
-            {'ok', Existing} = couch_mgr:open_doc(?WH_SERVICES_DB, AccountId),
-            NewServices = from_service_json(Existing),
-            case is_dirty(NewServices) of
-                'true' ->
-                    lager:debug("services doc for ~s saved elsewhere", [AccountId]),
-                    NewServices;
-                'false' ->
-                    lager:debug("new services doc for ~s not dirty, marking it as so", [AccountId]),
-                    timer:sleep(BackOff + random:uniform(?BASE_BACKOFF)),
-                    save_as_dirty(NewServices, BackOff*2)
-            end
+            save_conflicting_as_dirty(Services, BackOff)
+    end.
+
+-spec save_conflicting_as_dirty(services(), pos_integer()) -> services().
+save_conflicting_as_dirty(#wh_services{account_id=AccountId}, BackOff) ->
+    {'ok', Existing} = couch_mgr:open_doc(?WH_SERVICES_DB, AccountId),
+    NewServices = from_service_json(Existing),
+
+    case is_dirty(NewServices) of
+        'true' ->
+            lager:debug("services doc for ~s saved elsewhere", [AccountId]),
+            NewServices;
+        'false' ->
+            lager:debug("new services doc for ~s not dirty, marking it as so", [AccountId]),
+            timer:sleep(BackOff + random:uniform(?BASE_BACKOFF)),
+            save_as_dirty(NewServices, BackOff*2)
     end.
 
 -spec save(services()) -> services().
@@ -269,13 +291,13 @@ save(#wh_services{jobj=JObj
             lager:debug("saved services for ~s", [AccountId]),
             IsReseller = wh_json:is_true(<<"pvt_reseller">>, JObj),
             _ = maybe_clean_old_billing_id(Services),
-            BillingId=wh_json:get_value(<<"billing_id">>, NewJObj, AccountId),
+            BillingId = wh_json:get_value(<<"billing_id">>, NewJObj, AccountId),
             Services#wh_services{jobj=NewJObj
                                  ,cascade_quantities=cascade_quantities(AccountId, IsReseller)
                                  ,status=wh_json:get_ne_value(<<"pvt_status">>, NewJObj, <<"good_stainding">>)
                                  ,billing_id=BillingId
                                  ,current_billing_id=BillingId
-                                 ,deleted=wh_json:is_true(<<"pvt_deleted">>, NewJObj)
+                                 ,deleted=wh_doc:is_soft_deleted(NewJObj)
                                 };
         {'error', 'not_found'} ->
             lager:debug("service database does not exist, attempting to create"),
@@ -345,7 +367,7 @@ set_billing_id(BillingId, #wh_services{jobj=ServicesJObj}=Services) ->
         {'EXIT', _} ->
             throw({'invalid_billing_id', <<"Unable to determine if billing id is valid">>})
     end;
-set_billing_id(BillingId, AccountId) ->
+set_billing_id(BillingId, <<_/binary>> = AccountId) ->
     set_billing_id(BillingId, fetch(AccountId)).
 
 %%--------------------------------------------------------------------
@@ -393,7 +415,7 @@ update(Category, Item, Quantity, #wh_services{updates=JObj}=Services) when is_bi
 activation_charges(Category, Item, #wh_services{jobj=ServicesJObj}) ->
     Plans = wh_service_plans:from_service_json(ServicesJObj),
     wh_service_plans:activation_charges(Category, Item, Plans);
-activation_charges(Category, Item, Account) ->
+activation_charges(Category, Item, <<_/binary>> = Account) ->
     activation_charges(Category, Item, fetch(Account)).
 
 %%--------------------------------------------------------------------
@@ -405,7 +427,11 @@ activation_charges(Category, Item, Account) ->
 -spec commit_transactions(services(), wh_transactions:wh_transactions()) -> atom().
 commit_transactions(#wh_services{billing_id=BillingId}, Activations) ->
     Bookkeeper = select_bookkeeper(BillingId),
-    Bookkeeper:commit_transactions(BillingId, Activations).
+    Transactions = [Activation
+                    || Activation <- Activations
+                           ,wh_transaction:amount(Activation) > 0
+                   ],
+    Bookkeeper:commit_transactions(BillingId, Transactions).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -417,7 +443,7 @@ commit_transactions(#wh_services{billing_id=BillingId}, Activations) ->
 select_bookkeeper(BillingId) ->
     ResellerId = get_reseller_id(BillingId),
     {'ok', MasterAccountId} = whapps_util:get_master_account_id(),
-    case ResellerId =:= MasterAccountId of
+    case ResellerId =/= MasterAccountId of
         'true' -> 'wh_bookkeeper_local';
         'false' ->
             whapps_config:get_atom(?WHS_CONFIG_CAT, <<"master_account_bookkeeper">>, 'wh_bookkeeper_local')
@@ -449,7 +475,7 @@ check_bookkeeper(BillingId, Amount) ->
 service_plan_json(#wh_services{jobj=ServicesJObj}) ->
     Plans = wh_service_plans:from_service_json(ServicesJObj),
     wh_service_plans:public_json(Plans);
-service_plan_json(Account) ->
+service_plan_json(<<_/binary>> = Account) ->
     service_plan_json(fetch(Account)).
 
 %%--------------------------------------------------------------------
@@ -468,7 +494,7 @@ public_json(#wh_services{jobj=ServicesJObj
                      catch
                          'throw':_ -> 'false'
                      end,
-    Props = [{<<"account_quantities">>, wh_json:get_value(<<"quantities">>, ServicesJObj, wh_json:new())}
+    Props = [{<<"account_quantities">>, wh_json:get_value(?QUANTITIES, ServicesJObj, wh_json:new())}
              ,{<<"cascade_quantities">>, CascadeQuantities}
              ,{<<"plans">>, wh_service_plans:plan_summary(ServicesJObj)}
              ,{<<"billing_id">>, wh_json:get_value(<<"billing_id">>, ServicesJObj, AccountId)}
@@ -526,8 +552,8 @@ find_reseller_id(Account) ->
 %% accounting issues.
 %% @end
 %%--------------------------------------------------------------------
--spec allow_updates(ne_binary()) -> boolean().
-allow_updates(Account) ->
+-spec allow_updates(ne_binary()) -> 'true'.
+allow_updates(<<_/binary>> = Account) ->
     AccountId = wh_util:format_account_id(Account, 'raw'),
     lager:debug("determining if account ~s is able to make updates", [AccountId]),
     case couch_mgr:open_cache_doc(?WH_SERVICES_DB, AccountId) of
@@ -538,6 +564,7 @@ allow_updates(Account) ->
             maybe_follow_billling_id(AccountId, ServicesJObj)
     end.
 
+-spec maybe_follow_billling_id(ne_binary(), wh_json:object()) -> 'true'.
 maybe_follow_billling_id(AccountId, ServicesJObj) ->
     case wh_json:get_ne_value(<<"billing_id">>, ServicesJObj, AccountId) of
         AccountId -> maybe_allow_updates(AccountId, ServicesJObj);
@@ -546,27 +573,30 @@ maybe_follow_billling_id(AccountId, ServicesJObj) ->
             allow_updates(BillingId)
     end.
 
--spec maybe_allow_updates(ne_binary(), wh_json:object()) -> boolean().
+-spec maybe_allow_updates(ne_binary(), wh_json:object()) -> 'true'.
 maybe_allow_updates(AccountId, ServicesJObj) ->
     Plans = wh_service_plans:plan_summary(ServicesJObj),
-    case wh_util:is_empty(Plans) orelse wh_json:get_value(<<"pvt_status">>, ServicesJObj) of
+    case wh_util:is_empty(Plans)
+        orelse wh_json:get_value(<<"pvt_status">>, ServicesJObj)
+    of
         'true' ->
             lager:debug("allowing request for account with no service plans"),
             'true';
         <<"good_standing">> ->
             lager:debug("allowing request for account in good standing"),
             'true';
-        Status -> maybe_local_bookkeeper_allow_updates(AccountId, Status)
+        Status ->
+            maybe_local_bookkeeper_allow_updates(AccountId, Status)
     end.
 
--spec maybe_local_bookkeeper_allow_updates(ne_binary(), ne_binary()) -> boolean().
+-spec maybe_local_bookkeeper_allow_updates(ne_binary(), ne_binary()) -> 'true'.
 maybe_local_bookkeeper_allow_updates(AccountId, Status) ->
     case select_bookkeeper(AccountId) of
         'wh_bookkeeper_local' -> spawn_move_to_good_standing(AccountId);
         Bookkeeper -> maybe_bookkeeper_allow_updates(Bookkeeper, AccountId, Status)
     end.
 
--spec maybe_bookkeeper_allow_updates(atom(), ne_binary(), ne_binary()) -> boolean().
+-spec maybe_bookkeeper_allow_updates(atom(), ne_binary(), ne_binary()) -> 'true'.
 maybe_bookkeeper_allow_updates(Bookkeeper, AccountId, Status) ->
     case Bookkeeper:is_good_standing(AccountId) of
         'true' -> spawn_move_to_good_standing(AccountId);
@@ -576,6 +606,7 @@ maybe_bookkeeper_allow_updates(Bookkeeper, AccountId, Status) ->
             throw({Status, wh_util:to_binary(Error)})
     end.
 
+-spec default_maybe_allow_updates(ne_binary()) -> 'true'.
 default_maybe_allow_updates(AccountId) ->
     case whapps_config:get_is_true(?WHS_CONFIG_CAT, <<"default_allow_updates">>, 'true') of
         'true' -> 'true';
@@ -586,12 +617,12 @@ default_maybe_allow_updates(AccountId) ->
     end.
 
 -spec spawn_move_to_good_standing(ne_binary()) -> 'true'.
-spawn_move_to_good_standing(AccountId) ->
+spawn_move_to_good_standing(<<_/binary>> = AccountId) ->
     spawn(fun() -> move_to_good_standing(AccountId) end),
     'true'.
 
--spec move_to_good_standing(ne_binary()) -> #wh_services{}.
-move_to_good_standing(AccountId) ->
+-spec move_to_good_standing(ne_binary()) -> services().
+move_to_good_standing(<<_/binary>> = AccountId) ->
     #wh_services{jobj=JObj}=Services = fetch(AccountId),
     save(Services#wh_services{jobj=wh_json:set_value(<<"pvt_status">>, <<"good_standing">>, JObj)}).
 
@@ -601,17 +632,23 @@ move_to_good_standing(AccountId) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec reconcile(api_binary()) -> services().
-reconcile_only('undefined') -> [];
-reconcile_only(Account) ->
+-spec reconcile_only(api_binary()) -> 'false' | services().
+-spec reconcile(api_binary()) -> 'false' | services().
+
+reconcile_only('undefined') -> 'false';
+reconcile_only(<<_/binary>> = Account) ->
     lager:debug("reconcile all services for ~s", [Account]),
-    lists:foldl(fun(M, S) -> M:reconcile(S) end
+    lists:foldl(fun reconcile_module/2
                 ,fetch(Account)
                 ,get_service_modules()
                ).
 
-reconcile('undefined') -> [];
-reconcile(Account) ->
+-spec reconcile_module(atom(), services()) -> services().
+reconcile_module(M, Services) ->
+    M:reconcile(Services).
+
+reconcile('undefined') -> 'false';
+reconcile(<<_/binary>> = Account) ->
     save(reconcile_only(Account)).
 
 %%--------------------------------------------------------------------
@@ -620,9 +657,9 @@ reconcile(Account) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec reconcile(api_binary(), text()) -> 'false' | services().
-reconcile_only('undefined', _) -> 'false';
-reconcile_only(Account, Module) ->
+-spec reconcile_only(api_binary(), text()) -> 'false' | services().
+reconcile_only('undefined', _Module) -> 'false';
+reconcile_only(<<_/binary>> = Account, Module) ->
     lager:debug("reconcile ~s services for ~s", [Module, Account]),
     case get_service_module(Module) of
         'false' -> 'false';
@@ -631,8 +668,9 @@ reconcile_only(Account, Module) ->
             ServiceModule:reconcile(CurrentServices)
     end.
 
-reconcile('undefined', _) -> 'false';
-reconcile(Account, Module) ->
+-spec reconcile(api_binary(), text()) -> 'false' | services().
+reconcile('undefined', _Module) -> 'false';
+reconcile(<<_/binary>> = Account, Module) ->
     timer:sleep(1000),
     maybe_save(reconcile_only(Account, Module)).
 
@@ -749,35 +787,50 @@ reset_category(Category, #wh_services{updates=JObj}=Services) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_reseller(ne_binary() | services()) -> boolean().
-is_reseller(Account) ->
-    Service = public_json(Account),
-    wh_json:is_true(<<"reseller">>, Service).
+is_reseller(#wh_services{jobj=ServicesJObj}) ->
+    wh_json:is_true(<<"pvt_reseller">>, ServicesJObj);
+is_reseller(<<_/binary>> = Account) ->
+    is_reseller(fetch(Account)).
 
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
+
+%% @end
+%%--------------------------------------------------------------------
+-spec dry_run(services()) -> wh_json:object().
+dry_run(Services) ->
+    ActivationsCharges = dry_run_activation_charges(Services),
+    calculate_charges(Services, ActivationsCharges).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec calculate_charges(services(), wh_transaction:transactions()) ->
-                               wh_json:object().
-calculate_charges(Services, Transactions) ->
-    TransactionCharges = calculate_transactions_charges(Transactions),
+-spec calculate_charges(services(), wh_json:objects()) -> wh_json:object().
+calculate_charges(Services, JObjs) ->
     case calculate_services_charges(Services) of
         {'error', _} -> wh_json:new();
         {'no_plan', _} -> wh_json:new();
         {'ok', PlansCharges} ->
-            wh_json:merge_jobjs(TransactionCharges, PlansCharges)
+            calculate_transactions_charges(PlansCharges, JObjs)
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
 -spec calculate_services_charges(services()) ->
-                                        {'no_plan', wh_json:object()} |
-                                        {'error', wh_json:object()} |
-                                        {'ok', wh_json:object()}.
+                                        {'no_plan' | 'error' | 'ok', wh_json:object()}.
 -spec calculate_services_charges(services(), wh_service_plans:plans()) ->
-                                        {'error', wh_json:object()} |
-                                        {'ok', wh_json:object()}.
-
+                                        {'error' | 'ok', wh_json:object()}.
 calculate_services_charges(#wh_services{jobj=ServiceJObj}=Services) ->
     case wh_service_plans:from_service_json(ServiceJObj) of
         [] -> {'no_plan', wh_json:new()};
@@ -794,56 +847,87 @@ calculate_services_charges(#wh_services{jobj=ServiceJObj}=Services, ServicePlans
             {'ok', wh_service_items:public_json(Changed)}
     end.
 
--spec calculate_transactions_charges(wh_transaction:transactions()) ->
-                                            wh_json:object().
-calculate_transactions_charges(Transactions) ->
-    lists:foldl(fun calculate_transactions_charge_fold/2
-                ,wh_json:new()
-                ,Transactions
-               ).
-
--spec calculate_transactions_charge_fold(wh_transaction:transaction(), wh_json:object()) ->
-                                                wh_json:object().
-calculate_transactions_charge_fold(Transaction, Acc) ->
-    Rate = value_or_default(wh_transaction:amount(Transaction), 0),
-    Description = value_or_default(wh_transaction:description(Transaction), <<>>),
-
-    wh_json:set_values(
-      [{<<"activation_charges">>, wht_util:units_to_dollars(Rate)}
-       ,{<<"activation_charges_description">>, Description}
-      ]
-      ,Acc
-     ).
-
--spec value_or_default('undefined' | Value, Default) -> Value | Default.
-value_or_default('undefined', Default) -> Default;
-value_or_default(Value, _Default) -> Value.
-
 %%--------------------------------------------------------------------
-%% @public
+%% @private
 %% @doc
-%%
 %% @end
 %%--------------------------------------------------------------------
--spec dry_run(ne_binary(), [{ne_binary(), ne_binary(), integer()}]) -> wh_json:object().
--spec dry_run(ne_binary(), [{ne_binary(), ne_binary(), integer()}], any()) -> wh_json:object().
-dry_run(Account, Updates) ->
-    dry_run(Account, Updates, []).
+-spec calculate_transactions_charges(wh_json:object(), wh_json:objects()) -> wh_json:object().
+calculate_transactions_charges(PlansCharges, JObjs) ->
+    lists:foldl(
+      fun calculate_transactions_charge_fold/2
+      ,PlansCharges
+      ,JObjs
+     ).
 
-dry_run(Account, Updates, Transactions) ->
-    Services = fetch(Account),
-    UpdatedServices = dry_run_update(Updates, Services),
-    calculate_charges(UpdatedServices, Transactions).
+-spec calculate_transactions_charge_fold(wh_json:object(), wh_json:object()) -> wh_json:object().
+calculate_transactions_charge_fold(JObj, Acc) ->
+    Amount = wh_json:get_value(<<"amount">>, JObj, 0),
+    Quantity = wh_json:get_value(<<"quantity">>, JObj, 0),
+    SubTotal = wh_json:get_value(<<"activation_charges">>, Acc, 0),
+    case SubTotal + (Amount*Quantity) of
+        Zero when Zero == 0 ->
+            %% Works for 0.0 and 0. May compare to a threshold though…
+            Acc;
+        Total ->
+            Category = wh_json:get_value(<<"category">>, JObj),
+            Item = wh_json:get_value(<<"item">>, JObj),
+            Props = [{<<"activation_charges">>, Total}
+                     ,{[Category, Item, <<"activation_charges">>], Amount}
+                    ],
+            wh_json:set_values(Props, Acc)
+    end.
 
--spec dry_run_update([{ne_binary(), ne_binary(), integer()}], services()) -> services().
-dry_run_update([], Services) -> Services;
-dry_run_update([{Category, Classification, Quantity}|Updates], Services) ->
-    NewServices = wh_services:update(Category, Classification, Quantity, Services),
-    dry_run_update(Updates, NewServices).
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec dry_run_activation_charges(services()) -> wh_json:objects().
+-spec dry_run_activation_charges(ne_binary(), wh_json:object()
+                                 ,services(), wh_json:objects()
+                                ) -> wh_json:objects().
+-spec dry_run_activation_charges(ne_binary(), ne_binary()
+                                 ,wh_json:object(), services()
+                                 ,wh_json:objects()
+                                ) -> wh_json:objects().
+dry_run_activation_charges(#wh_services{updates=Updates}=Services) ->
+    wh_json:foldl(
+      fun(Category, CategoryJObj, Acc) ->
+              dry_run_activation_charges(Category, CategoryJObj, Services, Acc)
+      end
+      ,[]
+      ,Updates
+     ).
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+dry_run_activation_charges(Category, CategoryJObj, Services, JObjs) ->
+    wh_json:foldl(
+      fun(Item, Quantity, Acc1) ->
+              dry_run_activation_charges(Category, Item, Quantity, Services, Acc1)
+      end
+      ,JObjs
+      ,CategoryJObj
+     ).
+
+dry_run_activation_charges(Category, Item, Quantity, #wh_services{jobj=JObj}=Services, JObjs) ->
+    case wh_json:get_value([?QUANTITIES, Category, Item], JObj, 0) of
+        Quantity -> JObjs;
+        OldQuantity ->
+            ServicesJObj = wh_services:to_json(Services),
+            Plans = wh_service_plans:from_service_json(ServicesJObj),
+            ServicePlan = wh_service_plans:public_json(Plans),
+            ItemPlan = wh_json:get_first_defined([[Category, Item], [Category, <<"_all">>]], ServicePlan),
+            As = wh_json:get_ne_value(<<"as">>, ItemPlan, Item),
+
+            [wh_json:from_list(
+               [{<<"category">>, Category}
+                ,{<<"item">>, As}
+                ,{<<"amount">>, activation_charges(Category, Item, Services)}
+                ,{<<"quantity">>, Quantity-OldQuantity}
+               ])
+             |JObjs
+            ]
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -855,19 +939,25 @@ dry_run_update([{Category, Classification, Quantity}|Updates], Services) ->
 get_service_modules() ->
     case whapps_config:get(?WHS_CONFIG_CAT, <<"modules">>) of
         'undefined' ->
-            Mods = [Mod
-                    || P <- filelib:wildcard([code:lib_dir('whistle_services'), "/src/services/*.erl"])
-                           ,begin
-                                Name = wh_util:to_binary(filename:rootname(filename:basename(P))),
-                                (Mod = wh_util:try_load_module(Name)) =/= 'false'
-                            end
-                   ],
-            lager:debug("found service modules: ~p", [Mods]),
-            Mods;
+            get_filesystem_service_modules();
         Modules ->
             lager:debug("configured service modules: ~p", [Modules]),
-            [Module || M <- Modules, (Module = wh_util:try_load_module(M)) =/= 'false']
+            [Module || M <- Modules,
+                       (Module = wh_util:try_load_module(M)) =/= 'false'
+            ]
     end.
+
+-spec get_filesystem_service_modules() -> atoms().
+get_filesystem_service_modules() ->
+    Mods = [Mod
+            || P <- filelib:wildcard([code:lib_dir('whistle_services'), "/src/services/*.erl"]),
+               begin
+                   Name = wh_util:to_binary(filename:rootname(filename:basename(P))),
+                   (Mod = wh_util:try_load_module(Name)) =/= 'false'
+               end
+           ],
+    lager:debug("found filesystem service modules: ~p", [Mods]),
+    Mods.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -878,7 +968,7 @@ get_service_modules() ->
 -spec get_service_module(text()) -> atom() | 'false'.
 get_service_module(Module) when not is_binary(Module) ->
     get_service_module(wh_util:to_binary(Module));
-get_service_module(<<"wh_service_", _/binary>>=Module) ->
+get_service_module(<<"wh_service_", _/binary>> = Module) ->
     ServiceModules = get_service_modules(),
     case [M
           || M <- ServiceModules,
@@ -899,13 +989,13 @@ get_service_module(Module) ->
 %%--------------------------------------------------------------------
 -spec cascade_quantities(ne_binary(), boolean()) -> wh_json:object().
 
-cascade_quantities(Account, 'false') ->
+cascade_quantities(<<_/binary>> = Account, 'false') ->
     do_cascade_quantities(Account, <<"services/cascade_quantities">>);
-cascade_quantities(Account, 'true') ->
+cascade_quantities(<<_/binary>> = Account, 'true') ->
     do_cascade_quantities(Account, <<"services/reseller_quantities">>).
 
 -spec do_cascade_quantities(ne_binary(), ne_binary()) -> wh_json:object().
-do_cascade_quantities(Account, View) ->
+do_cascade_quantities(<<_/binary>> = Account, <<_/binary>> = View) ->
     AccountId = wh_util:format_account_id(Account, 'raw'),
     ViewOptions = ['group'
                    ,'reduce'
@@ -915,12 +1005,19 @@ do_cascade_quantities(Account, View) ->
     case couch_mgr:get_results(?WH_SERVICES_DB, View, ViewOptions) of
         {'error', _} -> wh_json:new();
         {'ok', JObjs} ->
-            lists:foldl(fun(JObj, J) ->
-                                Key = wh_json:get_value(<<"key">>, JObj),
-                                Value = wh_json:get_integer_value(<<"value">>, JObj),
-                                wh_json:set_value(tl(Key), Value, J)
-                        end, wh_json:new(), JObjs)
+            lists:foldl(fun do_cascade_quantities_fold/2, wh_json:new(), JObjs)
     end.
+
+-spec do_cascade_quantities_fold(wh_json:object(), wh_json:object()) ->
+                                        wh_json:object().
+-spec do_cascade_quantities_fold(wh_json:object(), wh_json:object(), wh_json:key()) ->
+                                        wh_json:object().
+do_cascade_quantities_fold(JObj, J) ->
+    do_cascade_quantities_fold(JObj, J, wh_json:get_value(<<"key">>, JObj)).
+
+do_cascade_quantities_fold(JObj, J, [_|Keys]) ->
+    Value = wh_json:get_integer_value(<<"value">>, JObj),
+    wh_json:set_value(Keys, Value, J).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -988,28 +1085,35 @@ master_default_service_plan() ->
 incorporate_default_service_plan(ResellerId, JObj) ->
     case depreciated_default_service_plan_id(ResellerId) of
         'undefined' ->
-            case default_service_plan_id(ResellerId) of
-                'undefined' -> JObj;
-                PlanId ->
-                    Plan = wh_json:from_list([{<<"account_id">>, ResellerId}]),
-                    wh_json:set_value(PlanId, Plan, JObj)
-            end;
+            incorporate_only_default_service_plan(ResellerId, JObj);
         PlanId ->
-            Plan = wh_json:from_list([{<<"account_id">>, ResellerId}]),
-            wh_json:set_value(PlanId, Plan, JObj)
+            maybe_augment_with_plan(ResellerId, JObj, PlanId)
     end.
+
+-spec incorporate_only_default_service_plan(ne_binary(), wh_json:object()) -> wh_json:object().
+incorporate_only_default_service_plan(ResellerId, JObj) ->
+    maybe_augment_with_plan(ResellerId, JObj, default_service_plan_id(ResellerId)).
+
+maybe_augment_with_plan(_ResellerId, JObj, 'undefined') -> JObj;
+maybe_augment_with_plan(ResellerId, JObj, PlanId) ->
+    Plan = wh_json:from_list([{<<"account_id">>, ResellerId}]),
+    wh_json:set_value(PlanId, Plan, JObj).
 
 -spec incorporate_depreciated_service_plans(wh_json:object(), wh_json:object()) -> wh_json:object().
 incorporate_depreciated_service_plans(Plans, JObj) ->
     PlanIds = wh_json:get_value(<<"pvt_service_plans">>, JObj),
     ResellerId = wh_json:get_value(<<"pvt_reseller_id">>, JObj),
-    case wh_util:is_empty(PlanIds) orelse wh_util:is_empty(ResellerId) of
+    case wh_util:is_empty(PlanIds)
+        orelse wh_util:is_empty(ResellerId)
+    of
         'true' -> Plans;
         'false' ->
             lists:foldl(fun(PlanId, Ps) ->
-                                Plan = wh_json:from_list([{<<"account_id">>, ResellerId}]),
-                                wh_json:set_value(PlanId, Plan, Ps)
-                        end, Plans, PlanIds)
+                                maybe_augment_with_plan(ResellerId, Ps, PlanId)
+                        end
+                        ,Plans
+                        ,PlanIds
+                       )
     end.
 
 %%--------------------------------------------------------------------
@@ -1018,33 +1122,35 @@ incorporate_depreciated_service_plans(Plans, JObj) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_reseller_id(ne_binaries() | ne_binary()) -> api_binary().
+-spec get_reseller_id(ne_binaries() | ne_binary()) -> ne_binary().
 get_reseller_id([]) ->
-    case whapps_util:get_master_account_id() of
-        {'ok', MasterAccountId} -> MasterAccountId;
-        {'error', _} -> 'undefined'
-    end;
+    {'ok', MasterAccountId} = whapps_util:get_master_account_id(),
+    MasterAccountId;
 get_reseller_id([Parent|Ancestors]) ->
     case couch_mgr:open_cache_doc(?WH_SERVICES_DB, Parent) of
         {'error', _R} ->
             lager:debug("failed to open services doc ~s durning reseller search: ~p", [Parent, _R]),
             get_reseller_id(Ancestors);
         {'ok', JObj} ->
-            case wh_json:is_true(<<"pvt_reseller">>, JObj) of
-                'false' -> get_reseller_id(Ancestors);
-                'true' -> Parent
-            end
+            get_reseller_id(Parent, Ancestors, JObj)
     end;
-get_reseller_id(Account) ->
+get_reseller_id(<<_/binary>> = Account) ->
     AccountId = wh_util:format_account_id(Account, 'raw'),
     AccountDb = wh_util:format_account_id(Account, 'encoded'),
     case couch_mgr:open_cache_doc(AccountDb, AccountId) of
-        {'ok', JObj} ->
-            PvtTree = lists:reverse(wh_json:get_value(<<"pvt_tree">>, JObj, [])),
-            get_reseller_id(PvtTree);
+        {'ok', AccountJObj} ->
+            Tree = lists:reverse(kz_account:tree(AccountJObj)),
+            get_reseller_id(Tree);
         {'error', _R} ->
             lager:info("unable to open account defintion for ~s: ~p", [AccountId, _R]),
             get_reseller_id([])
+    end.
+
+-spec get_reseller_id(ne_binary(), ne_binaries(), wh_json:object()) -> api_binary().
+get_reseller_id(Parent, Ancestors, JObj) ->
+    case wh_json:is_true(<<"pvt_reseller">>, JObj) of
+        'false' -> get_reseller_id(Ancestors);
+        'true' -> Parent
     end.
 
 %%--------------------------------------------------------------------
@@ -1053,7 +1159,10 @@ get_reseller_id(Account) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_save(services()) -> services().
+-spec maybe_save('false' | services()) -> 'false' |
+                                          services() |
+                                          {'error', 'no_change'}.
+maybe_save('false') -> 'false';
 maybe_save(#wh_services{jobj=JObj
                         ,updates=UpdatedQuantities
                        }=Services) ->
@@ -1075,16 +1184,22 @@ maybe_save(#wh_services{jobj=JObj
 %%--------------------------------------------------------------------
 -spec have_quantities_changed(wh_json:object(), wh_json:object()) -> boolean().
 have_quantities_changed(Updated, Current) ->
-    lists:any(fun(Key) -> wh_json:get_value(Key, Updated) =/= wh_json:get_value(Key, Current) end
+    KeyNotSameFun = fun(Key) ->
+                            wh_json:get_value(Key, Updated) =/= wh_json:get_value(Key, Current)
+                    end,
+
+    any_changed(KeyNotSameFun, Updated)
+        orelse any_changed(KeyNotSameFun, Current).
+
+-type changed_fun() :: fun((wh_json:key()) -> boolean()).
+
+-spec any_changed(changed_fun(), wh_json:object()) -> boolean().
+any_changed(KeyNotSameFun, Quantities) ->
+    lists:any(KeyNotSameFun
               ,[[Category, Item]
-                || Category <- wh_json:get_keys(Updated),
-                   Item <- wh_json:get_keys(Category, Updated)
-               ])
-        orelse lists:any(fun(Key) -> wh_json:get_value(Key, Updated) =/= wh_json:get_value(Key, Current) end
-                         ,[[Category, Item]
-                           || Category <- wh_json:get_keys(Current),
-                              Item <- wh_json:get_keys(Category, Current)
-                          ]).
+                || Category <- wh_json:get_keys(Quantities),
+                   Item <- wh_json:get_keys(Category, Quantities)
+               ]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1093,7 +1208,7 @@ have_quantities_changed(Updated, Current) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_account_definition(ne_binary(), ne_binary()) -> wh_json:object().
-get_account_definition(AccountDb, AccountId) ->
+get_account_definition(<<_/binary>> = AccountDb, <<_/binary>> = AccountId) ->
     case couch_mgr:open_cache_doc(AccountDb, AccountId) of
         {'error', _R} ->
             lager:debug("unable to get account defintion for ~s: ~p", [AccountId, _R]),

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
+%%% @copyright (C) 2012-2015, 2600Hz INC
 %%% @doc
 %%% Send config commands to FS
 %%% @end
@@ -162,7 +162,7 @@ code_change(_OldVsn, State, _Extra) ->
 handle_config_req(Node, Id, <<"acl.conf">>, _Props) ->
     wh_util:put_callid(Id),
 
-    SysconfResp = ecallmgr_config:fetch(<<"acls">>, wh_json:new()),
+    SysconfResp = ecallmgr_config:fetch(<<"acls">>, wh_json:new(), ecallmgr_fs_node:fetch_timeout(Node)),
 
     try generate_acl_xml(SysconfResp) of
         'undefined' ->
@@ -204,10 +204,10 @@ handle_config_req(Node, Id, <<"conference.conf">>, Data) ->
     wh_util:put_callid(Id),
 
     Profile = props:get_value(<<"profile_name">>, Data, <<"default">>),
-    Cmd =
-        [{<<"Profile">>, Profile}
-         | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-        ],
+    Cmd = [{<<"Profile">>, Profile}
+           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+          ],
+    lager:debug("fetching profile '~s'", [Profile]),
     XmlResp = case wh_amqp_worker:call(Cmd
                                        ,fun wapi_conference:publish_config_req/1
                                        ,fun wapi_conference:config_resp_v/1

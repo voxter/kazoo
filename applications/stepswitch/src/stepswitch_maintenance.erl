@@ -10,7 +10,9 @@
 
 -export([resources/0]).
 -export([reverse_lookup/1]).
--export([flush/0]).
+-export([flush/0
+         ,cnam_flush/0
+        ]).
 -export([refresh/0]).
 -export([lookup_number/1
          ,number_tree/1
@@ -66,8 +68,7 @@ number_tree(DID) ->
 -spec number_tree(ne_binary(), wh_json:object()) -> 'ok'.
 number_tree(DID, AccountDoc) ->
     io:format("~s tree ", [DID]),
-    Tree = wh_json:get_value(<<"pvt_tree">>, AccountDoc, []),
-    print_tree(Tree),
+    print_tree(kz_account:tree(AccountDoc)),
     io:format(" ~s(~s)~n", [wh_json:get_value(<<"name">>, AccountDoc), wh_json:get_value(<<"_id">>, AccountDoc)]).
 
 -spec print_tree(ne_binaries()) -> 'ok'.
@@ -115,6 +116,10 @@ pretty_print_resource([{Key, Value}|Props]) ->
 %%--------------------------------------------------------------------
 -spec flush() -> 'ok'.
 flush() -> wh_cache:flush_local(?STEPSWITCH_CACHE).
+
+-spec cnam_flush() -> 'ok'.
+cnam_flush() ->
+    stepswitch_cnam:flush().
 
 %%--------------------------------------------------------------------
 %% @public

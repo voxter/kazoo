@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
+%%% @copyright (C) 2012-2015, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -59,6 +59,9 @@
          ,terminate/2
          ,code_change/3
         ]).
+
+-type config() :: {ne_binary(), ne_binary(), ne_binary()}.
+-export_type([config/0]).
 
 -include("acdc.hrl").
 
@@ -260,7 +263,7 @@ send_sync_resp(Srv, Status, ReqJObj) -> send_sync_resp(Srv, Status, ReqJObj, [])
 send_sync_resp(Srv, Status, ReqJObj, Options) ->
     gen_listener:cast(Srv, {'send_sync_resp', Status, ReqJObj, Options}).
 
--spec config(pid()) -> {ne_binary(), ne_binary(), ne_binary()}.
+-spec config(pid()) -> config().
 config(Srv) -> gen_listener:call(Srv, 'config').
 
 refresh_config(_, 'undefined') -> 'ok';

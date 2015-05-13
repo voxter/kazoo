@@ -179,6 +179,7 @@ validate(Context, DeviceId, ?QUICKCALL_PATH_TOKEN, _) ->
 post(Context, DeviceId) ->
     case changed_mac_address(Context) of
         'true' ->
+            _ = crossbar_util:maybe_refresh_fs_xml('device', Context),
             Context1 = crossbar_doc:save(Context),
             _ = maybe_aggregate_device(DeviceId, Context1),
             _ = registration_update(Context),
@@ -197,6 +198,7 @@ put(Context) ->
 
 -spec delete(cb_context:context(), path_token()) -> cb_context:context().
 delete(Context, DeviceId) ->
+    _ = crossbar_util:refresh_fs_xml(Context),
     Context1 = crossbar_doc:delete(Context),
     _ = registration_update(Context),
     _ = provisioner_util:maybe_delete_provision(Context),
@@ -268,33 +270,38 @@ changed_mac_address(Context) ->
     case NewAddress =:= OldAddress of
         'true' -> 'true';
         'false' ->
-            unique_mac_address(NewAddress, cb_context:account_db(Context))
+            unique_mac_address(NewAddress, Context)
     end.
 
 -spec check_mac_address(api_binary(), cb_context:context()) -> cb_context:context().
 check_mac_address(DeviceId, Context) ->
-    case unique_mac_address(cb_context:req_value(Context, <<"mac_address">>)
-                            ,cb_context:account_db(Context)
-                           )
-    of
+    MacAddress = cb_context:req_value(Context, <<"mac_address">>),
+    case unique_mac_address(MacAddress, Context) of
         'true' ->
             prepare_outbound_flags(DeviceId, Context);
         'false' ->
            error_used_mac_address(Context)
     end.
 
--spec unique_mac_address(api_binary(), ne_binary()) -> boolean().
-unique_mac_address('undefined', _) -> 'true';
-unique_mac_address(MacAddress, DbName) ->
-    not(lists:member(MacAddress, get_mac_addresses(DbName))).
+-spec unique_mac_address(api_binary(), cb_context:context()) -> boolean().
+unique_mac_address('undefined', _Context) -> 'true';
+unique_mac_address(MacAddress, Context) ->
+    DbName = cb_context:account_db(Context),
+    not lists:member(MacAddress, get_mac_addresses(DbName))
+        andalso not provisioner_util:is_mac_address_in_use(Context, MacAddress).
 
 -spec error_used_mac_address(cb_context:context()) -> cb_context:context().
 error_used_mac_address(Context) ->
-    cb_context:add_validation_error(<<"mac_address">>
-                                    ,<<"unique">>
-                                    ,<<"mac address already in use">>
-                                    ,Context
-                                   ).
+    MacAddress = cb_context:req_value(Context, <<"mac_address">>),
+    cb_context:add_validation_error(
+        <<"mac_address">>
+        ,<<"unique">>
+        ,wh_json:from_list([
+            {<<"message">>, <<"Mac address already in use">>}
+            ,{<<"cause">>, MacAddress}
+         ])
+        ,Context
+    ).
 
 -spec get_mac_addresses(ne_binary()) -> ne_binaries().
 get_mac_addresses(DbName) ->
@@ -306,6 +313,7 @@ get_mac_addresses(DbName) ->
 -spec prepare_outbound_flags(api_binary(), cb_context:context()) -> cb_context:context().
 prepare_outbound_flags(DeviceId, Context) ->
     JObj = case cb_context:req_value(Context, <<"outbound_flags">>) of
+               'undefined' -> cb_context:req_data(Context);
                [] -> cb_context:req_data(Context);
                Flags when is_list(Flags) ->
                    OutboundFlags = [wh_util:strip_binary(Flag)
@@ -329,7 +337,6 @@ prepare_device_realm(DeviceId, Context) ->
             validate_device_creds(Realm, DeviceId, cb_context:store(Context, 'aggregate_device', 'true'))
     end.
 
-
 -spec validate_device_creds(ne_binary(), api_binary(), cb_context:context()) -> cb_context:context().
 validate_device_creds(Realm, DeviceId, Context) ->
     case cb_context:req_value(Context, [<<"sip">>, <<"method">>], <<"password">>) of
@@ -337,12 +344,16 @@ validate_device_creds(Realm, DeviceId, Context) ->
         <<"ip">> ->
             IP = cb_context:req_value(Context, [<<"sip">>, <<"ip">>]),
             validate_device_ip(IP, DeviceId, Context);
-        _Else ->
-            C = cb_context:add_validation_error([<<"sip">>, <<"method">>]
-                                               ,<<"enum">>
-                                               ,<<"SIP authentication method is invalid">>
-                                               ,Context
-                                               ),
+        Else ->
+            C = cb_context:add_validation_error(
+                  [<<"sip">>, <<"method">>]
+                  ,<<"enum">>
+                  ,wh_json:from_list([{<<"message">>, <<"SIP authentication method is invalid">>}
+                                      ,{<<"target">>, [<<"password">>, <<"ip">>]}
+                                      ,{<<"cause">>, Else}
+                                     ])
+                  ,Context
+                 ),
             check_emergency_caller_id(DeviceId, C)
     end.
 
@@ -352,11 +363,14 @@ validate_device_password(Realm, DeviceId, Context) ->
     case is_sip_creds_unique(cb_context:account_db(Context), Realm, Username, DeviceId) of
         'true' -> check_emergency_caller_id(DeviceId, Context);
         'false' ->
-            C = cb_context:add_validation_error([<<"sip">>, <<"username">>]
-                                                ,<<"unique">>
-                                                ,<<"SIP credentials already in use">>
-                                                ,Context
-                                               ),
+            C = cb_context:add_validation_error(
+                  [<<"sip">>, <<"username">>]
+                  ,<<"unique">>
+                  ,wh_json:from_list([{<<"message">>, <<"SIP credentials already in use">>}
+                                      ,{<<"cause">>, Username}
+                                     ])
+                  ,Context
+                 ),
             check_emergency_caller_id(DeviceId, C)
     end.
 
@@ -365,23 +379,33 @@ validate_device_ip(IP, DeviceId, Context) ->
     case wh_network_utils:is_ipv4(IP) of
         'true' -> validate_device_ip_unique(IP, DeviceId, Context);
         'false' ->
-            C = cb_context:add_validation_error([<<"sip">>, <<"ip">>]
-                                                ,<<"type">>
-                                                ,<<"Must be a valid IPv4 RFC 791">>
-                                                ,Context
-                                               ),
+            C = cb_context:add_validation_error(
+                  [<<"sip">>, <<"ip">>]
+                  ,<<"type">>
+                  ,wh_json:from_list([{<<"message">>, <<"Must be a valid IPv4 RFC 791">>}
+                                      ,{<<"cause">>, IP}
+                                     ])
+                  ,Context
+                 ),
             check_emergency_caller_id(DeviceId, C)
     end.
 
+-spec validate_device_ip_unique(ne_binary(), api_binary(), cb_context:context()) ->
+                                       cb_context:context().
 validate_device_ip_unique(IP, DeviceId, Context) ->
     case cb_devices_utils:is_ip_unique(IP, DeviceId) of
         'true' ->
             check_emergency_caller_id(DeviceId, cb_context:store(Context, 'aggregate_device', 'true'));
         'false' ->
-            C = cb_context:add_validation_error([<<"sip">>, <<"ip">>]
-                                                ,<<"unique">>
-                                                ,<<"SIP IP already in use">>
-                                                ,Context),
+            C = cb_context:add_validation_error(
+                    [<<"sip">>, <<"ip">>]
+                    ,<<"unique">>
+                    ,wh_json:from_list([
+                        {<<"message">>, <<"SIP IP already in use">>}
+                        ,{<<"cause">>, IP}
+                     ])
+                    ,Context
+                ),
             check_emergency_caller_id(DeviceId, C)
     end.
 
@@ -390,10 +414,15 @@ check_emergency_caller_id(DeviceId, Context) ->
     Context1 = crossbar_util:format_emergency_caller_id_number(Context),
     check_device_schema(DeviceId, Context1).
 
+-spec check_device_schema(api_binary(), cb_context:context()) -> cb_context:context().
 check_device_schema(DeviceId, Context) ->
     OnSuccess = fun(C) -> on_successful_validation(DeviceId, C) end,
-    cb_context:validate_request_data(<<"devices">>, Context, OnSuccess).
+    cb_context:validate_request_data(<<"devices">>
+                                     ,Context
+                                     ,OnSuccess
+                                    ).
 
+-spec on_successful_validation(api_binary(), cb_context:context()) -> cb_context:context().
 on_successful_validation('undefined', Context) ->
     Props = [{<<"pvt_type">>, <<"device">>}],
     cb_context:set_doc(Context, wh_json:set_values(Props, cb_context:doc(Context)));
@@ -406,8 +435,11 @@ on_successful_validation(DeviceId, Context) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
+-spec maybe_validate_quickcall(cb_context:context()) -> cb_context:context().
+-spec maybe_validate_quickcall(cb_context:context(), crossbar_status()) -> cb_context:context().
 maybe_validate_quickcall(Context) ->
     maybe_validate_quickcall(Context, cb_context:resp_status(Context)).
+
 maybe_validate_quickcall(Context, 'success') ->
     case (not wh_util:is_empty(cb_context:auth_token(Context)))
         orelse wh_util:is_true(cb_context:req_value(Context, <<"allow_anoymous_quickcalls">>))

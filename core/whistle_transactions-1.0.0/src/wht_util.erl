@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2014, 2600Hz, INC
+%%% @copyright (C) 2013-2015, 2600Hz, INC
 %%% @doc
 %%%
 %%% @end
@@ -10,9 +10,11 @@
 
 -export([reasons/0
          ,reasons/1
-         ,reasons/2]).
+         ,reasons/2
+        ]).
 -export([dollars_to_units/1]).
 -export([units_to_dollars/1]).
+-export([pretty_print_dollars/1]).
 -export([base_call_cost/3]).
 -export([current_balance/1
          ,previous_balance/3
@@ -30,7 +32,7 @@
          ,rollup/2
         ]).
 
--include("whistle_transactions.hrl").
+-include("../include/whistle_transactions.hrl").
 
 %% tracked in hundred-ths of a cent
 -define(DOLLAR_TO_UNIT, 10000).
@@ -48,6 +50,9 @@
                   ,{<<"admin_discretion">>, ?CODE_ADMIN_DISCRETION}
                   ,{<<"topup">>, ?CODE_TOPUP}
                   ,{<<"database_rollup">>, ?CODE_DATABASE_ROLLUP}
+                  ,{<<"recurring">>, ?CODE_RECURRING}
+                  ,{<<"monthly_recurring">>, ?CODE_MONTHLY_RECURRING}
+                  ,{<<"recurring_prorate">>, ?CODE_RECURRING_PRORATE}
                   ,{<<"unknown">>, ?CODE_UNKNOWN}
                  ]).
 
@@ -87,6 +92,12 @@ units_to_dollars(Units) when is_number(Units) ->
     trunc(Units) / ?DOLLAR_TO_UNIT;
 units_to_dollars(Units) ->
     units_to_dollars(wh_util:to_integer(Units)).
+
+%% @public
+-spec pretty_print_dollars(float()) -> ne_binary().
+pretty_print_dollars(Amount) ->
+    wh_util:to_binary(io_lib:format("$~.2f", [Amount])).
+
 
 %%--------------------------------------------------------------------
 %% @public
@@ -145,7 +156,7 @@ get_balance_from_previous(Account, ViewOptions, Retry) when Retry >= 0 ->
     lager:warning("could not find current balance trying previous month: ~p", [VOptions]),
     get_balance(Account, VOptions);
 get_balance_from_previous(Account, ViewOptions, _) ->
-    lager:error("3 attempt to find balance in previous modb getting from account", []),
+    lager:warning("3 attempt to find balance in previous modb getting from account", []),
     get_balance_from_account(Account, ViewOptions).
 
 -spec maybe_rollup(ne_binary(), wh_proplist(), integer()) -> integer().
@@ -186,30 +197,32 @@ maybe_rollup_previous_month(Account, Balance) ->
     end.
 
 -spec get_rollup_from_previous(ne_binary()) ->
-                                      {'ok', integer()} | {'error', _}.
+                                      {'ok', integer()} |
+                                      {'error', _}.
 get_rollup_from_previous(Account) ->
     {Y, M, _} = erlang:date(),
     {Year, Month} = kazoo_modb_util:prev_year_month(Y, M),
-    ViewOptions = [{'year', wh_util:to_binary(Year)}
-                ,{'month', wh_util:pad_month(Month)}
-               ],
-    case kazoo_modb:open_doc(Account, <<"monthly_rollup">>, ViewOptions) of
+    ModbOptions = [{'year', wh_util:to_binary(Year)}
+                   ,{'month', wh_util:pad_month(Month)}
+                  ],
+    case kazoo_modb:open_doc(Account, <<"monthly_rollup">>, ModbOptions) of
         {'ok', _} ->
             %% NOTE: the previous modb had a rollup, use its balance as
             %%  the value for the current rollup.
-            get_rollup_balance(Account, ViewOptions);
+            get_rollup_balance(Account, ModbOptions);
         {'error', 'not_found'} ->
             %% NOTE: the previous modb did not have a rollup, this must be
             %%   the first rollup of this series, move the balance from the
             %%   account
-            {'ok', get_balance_from_account(Account, ViewOptions)};
+            {'ok', get_balance_from_account(Account, ModbOptions)};
         {'error', _R}=E ->
             lager:warning("unable to get previous monthly_rollup: ~p", [_R]),
             E
     end.
 
 -spec get_rollup_balance(ne_binary(), wh_proplist()) ->
-                                {'ok', integer()} | {'error', _}.
+                                {'ok', integer()} |
+                                {'error', _}.
 get_rollup_balance(Account, ViewOptions) ->
     View = <<"transactions/credit_remaining">>,
     case kazoo_modb:get_results(Account, View, ViewOptions) of
@@ -218,7 +231,8 @@ get_rollup_balance(Account, ViewOptions) ->
             {'ok', wh_json:get_integer_value(<<"value">>, ViewRes, 0)};
         {'error', _R}=E ->
             lager:warning("unable to get rollup balance for ~s: ~p"
-                          ,[Account, _R]),
+                          ,[Account, _R]
+                         ),
             E
     end.
 
@@ -368,8 +382,10 @@ is_valid_reason(Reason) ->
 %%--------------------------------------------------------------------
 -spec reason_code(ne_binary()) -> pos_integer().
 reason_code(Reason) ->
-    {_, Code} = lists:keyfind(Reason, 1, ?REASONS),
-    Code.
+    case lists:keyfind(Reason, 1, ?REASONS) of
+        'false' -> ?CODE_UNKNOWN;
+        {_, Code} -> Code
+    end.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -377,10 +393,12 @@ reason_code(Reason) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec code_reason(pos_integer()) -> ne_binary().
+-spec code_reason(pos_integer()) -> api_binary().
 code_reason(Code) ->
-    {Reason, _} = lists:keyfind(Code, 2, ?REASONS),
-    Reason.
+    case lists:keyfind(Code, 2, ?REASONS) of
+        'false' -> <<"unknown">>;
+        {Reason, _} -> Reason
+    end.
 
 %%--------------------------------------------------------------------
 %% @public

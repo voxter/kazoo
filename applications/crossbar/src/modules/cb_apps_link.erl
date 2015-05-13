@@ -48,7 +48,7 @@ init() ->
 %% allowed to access the resource, or false if not.
 %% @end
 %%--------------------------------------------------------------------
--spec authorize(cb_context:context()) -> 'false'.
+-spec authorize(cb_context:context()) -> 'true'.
 authorize(#cb_context{req_nouns=[{<<"apps_link">>, _}]}) ->
     'true'.
 

@@ -6,10 +6,16 @@
 %%% @contributors
 %%%   James Aimonetti
 %%%   Karl Anderson
+%%%
+%%% Fix KAZOO-3406: Sponsored by Velvetech LLC, implemented by SIPLABS LLC
 %%%-------------------------------------------------------------------
 -module(ecallmgr_call_command).
 
 -export([exec_cmd/4]).
+
+-ifdef(TEST).
+-export([get_conference_flags/1]).
+-endif.
 
 -include("ecallmgr.hrl").
 
@@ -30,8 +36,8 @@ exec_cmd(Node, UUID, JObj, ControlPid, UUID) ->
             ecallmgr_call_control:event_execute_complete(ControlPid, UUID, AppName);
         {AppName, AppData} ->
             ecallmgr_util:send_cmd(Node, UUID, AppName, AppData);
-        %% {AppName, AppData, NewNode} ->
-        %%     ecallmgr_util:send_cmd(NewNode, UUID, AppName, AppData);
+        {AppName, AppData, NewNode} ->
+            ecallmgr_util:send_cmd(NewNode, UUID, AppName, AppData);
         [_|_]=Apps ->
             [ecallmgr_util:send_cmd(Node, UUID, AppName, AppData) || {AppName, AppData} <- Apps]
     end;
@@ -154,58 +160,7 @@ get_fs_app(Node, UUID, JObj, <<"record_call">>) ->
     case wapi_dialplan:record_call_v(JObj) of
         'false' -> {'error', <<"record_call failed to execute as JObj did not validate">>};
         'true' ->
-            Routines = [fun(V) ->
-                            case ecallmgr_config:is_true(<<"record_waste_resources">>, 'false') of
-                                'false' -> V;
-                                'true' -> [{<<"record_waste_resources">>, <<"true">>}|V]
-                            end
-                        end
-                        ,fun(V) ->
-                            case get_terminators(JObj) of
-                                'undefined' -> V;
-                                Terminators -> [Terminators|V]
-                            end
-                         end
-                        ,fun(V) -> [{<<"RECORD_APPEND">>, <<"true">>}
-                                    ,{<<"enable_file_write_buffering">>, <<"false">>}
-                                    | V
-                                   ]
-                         end
-                       ],
-            Vars = lists:foldl(fun(F, V) -> F(V) end, [], Routines),
-            _ = ecallmgr_util:set(Node, UUID, Vars),
-
-            MediaName = wh_json:get_value(<<"Media-Name">>, JObj),
-            RecordingName = ecallmgr_util:recording_filename(MediaName),
-            case wh_json:get_value(<<"Record-Action">>, JObj) of
-                <<"start">> ->
-                    FollowTransfer = wh_json:get_binary_boolean(<<"Follow-Transfer">>, JObj, <<"true">>),
-                    _ = ecallmgr_util:set(Node, UUID, [{<<"recording_follow_transfer">>, FollowTransfer}
-                                                       ,{<<"recording_follow_attxfer">>, FollowTransfer}
-                                                      ]),
-                    _ = ecallmgr_util:export(
-                            Node
-                            ,UUID
-                            ,[{<<"Insert-At">>, wh_json:get_value(<<"Insert-At">>, JObj)}
-                              ,{<<"Time-Limit">>, wh_json:get_value(<<"Time-Limit">>, JObj)}
-                              ,{<<"Media-Name">>, wh_json:get_value(<<"Media-Name">>, JObj)}
-                              ,{<<"Media-Transfer-Method">>, wh_json:get_value(<<"Media-Transfer-Method">>, JObj)}
-                              ,{<<"Media-Transfer-Destination">>, wh_json:get_value(<<"Media-Transfer-Destination">>, JObj)}
-                              ,{<<"Additional-Headers">>, wh_json:get_value(<<"Additional-Headers">>, JObj)}
-                             ]
-                        ),
-                    %% UUID start path/to/media limit
-                    RecArg = binary_to_list(
-                                list_to_binary([UUID, <<" start ">>
-                                                ,RecordingName, <<" ">>
-                                                ,wh_json:get_string_value(<<"Time-Limit">>, JObj, "3600") % one hour
-                                               ])),
-                    {<<"record_call">>, RecArg};
-                <<"stop">> ->
-                    %% UUID stop path/to/media
-                    RecArg = binary_to_list(list_to_binary([UUID, <<" stop ">>, RecordingName])),
-                    {<<"record_call">>, RecArg}
-            end
+            record_call(Node, UUID, JObj)
     end;
 
 get_fs_app(Node, UUID, JObj, <<"store">>) ->
@@ -859,27 +814,20 @@ build_set_args([{ApiHeader, Default, FSHeader}|Headers], JObj, Args) ->
 %% Conference command helpers
 %% @end
 %%--------------------------------------------------------------------
+-spec get_conference_app(atom(), ne_binary(), wh_json:object(), boolean()) ->
+                                {ne_binary(), ne_binary(), atom()} |
+                                {ne_binary(), 'noop' | ne_binary()}.
 get_conference_app(ChanNode, UUID, JObj, 'true') ->
     ConfName = wh_json:get_value(<<"Conference-ID">>, JObj),
     ConferenceConfig = wh_json:get_value(<<"Profile">>, JObj, <<"default">>),
     Cmd = list_to_binary([ConfName, "@", ConferenceConfig, get_conference_flags(JObj)]),
-    ecallmgr_util:export(ChanNode, UUID, [{<<"Hold-Media">>, <<"silence">>}]),
+
     case ecallmgr_fs_conferences:node(ConfName) of
         {'error', 'not_found'} ->
-            lager:debug("conference ~s hasn't been started yet", [ConfName]),
-            {'ok', _} = ecallmgr_util:send_cmd(ChanNode, UUID, "conference", Cmd),
-
-            case wait_for_conference(ConfName) of
-                {'ok', ChanNode} ->
-                    lager:debug("conference has started on ~s", [ChanNode]),
-                    maybe_set_nospeak_flags(ChanNode, UUID, JObj),
-                    {<<"conference">>, 'noop'};
-                {'ok', OtherNode} ->
-                    lager:debug("conference has started on other node ~s, lets move", [OtherNode]),
-                    get_conference_app(ChanNode, UUID, JObj, 'true')
-            end;
+            maybe_start_conference_on_our_node(ChanNode, UUID, JObj);
         {'ok', ChanNode} ->
             lager:debug("channel is on same node as conference"),
+            ecallmgr_util:export(ChanNode, UUID, [{<<"Hold-Media">>, <<"silence">>}]),
             maybe_set_nospeak_flags(ChanNode, UUID, JObj),
             {<<"conference">>, Cmd};
         {'ok', ConfNode} ->
@@ -894,8 +842,29 @@ get_conference_app(ChanNode, UUID, JObj, 'false') ->
     ConfName = wh_json:get_value(<<"Conference-ID">>, JObj),
     ConferenceConfig = wh_json:get_value(<<"Profile">>, JObj, <<"default">>),
     maybe_set_nospeak_flags(ChanNode, UUID, JObj),
-    ecallmgr_util:export(ChanNode, UUID, [{<<"Hold-Media">>, <<"silence">>}]),
+    %% ecallmgr_util:export(ChanNode, UUID, [{<<"Hold-Media">>, <<"silence">>}]),
     {<<"conference">>, list_to_binary([ConfName, "@", ConferenceConfig, get_conference_flags(JObj)])}.
+
+-spec maybe_start_conference_on_our_node(atom(), ne_binary(), wh_json:object()) ->
+                                                {ne_binary(), ne_binary(), atom()} |
+                                                {ne_binary(), 'noop' | ne_binary()}.
+maybe_start_conference_on_our_node(ChanNode, UUID, JObj) ->
+    ConfName = wh_json:get_value(<<"Conference-ID">>, JObj),
+    ConferenceConfig = wh_json:get_value(<<"Profile">>, JObj, <<"default">>),
+    Cmd = list_to_binary([ConfName, "@", ConferenceConfig, get_conference_flags(JObj)]),
+
+    lager:debug("conference ~s hasn't been started yet", [ConfName]),
+    {'ok', _} = ecallmgr_util:send_cmd(ChanNode, UUID, "conference", Cmd),
+
+    case wait_for_conference(ConfName) of
+        {'ok', ChanNode} ->
+            lager:debug("conference has started on ~s", [ChanNode]),
+            maybe_set_nospeak_flags(ChanNode, UUID, JObj),
+            {<<"conference">>, 'noop'};
+        {'ok', OtherNode} ->
+            lager:debug("conference has started on other node ~s, lets move", [OtherNode]),
+            get_conference_app(ChanNode, UUID, JObj, 'true')
+    end.
 
 maybe_set_nospeak_flags(Node, UUID, JObj) ->
     case wh_json:is_true(<<"Member-Nospeak">>, JObj) of
@@ -966,23 +935,24 @@ stream_over_http(Node, UUID, File, Method, Type, JObj) ->
                      <<"success">>;
                  {'ok', Err} ->
                      lager:debug("store media failed for ~s: ~s", [Type, Err]),
-                     wh_notify:system_alert("Failed to store ~s: media file ~s for call ~s on ~s "
-                                            ,[Type, File, UUID, Node]
-                                            ,[{<<"Details">>, Err}]
-                                           ),
+                     send_detailed_alert(Node, UUID, File, Type, Err),
                      <<"failure">>;
                  {'error', E} ->
                      lager:debug("error executing http_put for ~s: ~p", [Type, E]),
-                     wh_notify:system_alert("Failed to store ~s: media file ~s for call ~s on ~s "
-                                            ,[Type, File, UUID, Node]
-                                            ,[{<<"Details">>, E}]
-                                           ),
+                     send_detailed_alert(Node, UUID, File, Type, E),
                      <<"failure">>
              end,
     case Type of
         'store' -> send_store_call_event(Node, UUID, Result);
         'fax' -> send_store_fax_call_event(UUID, Result)
     end.
+
+-spec send_detailed_alert(atom(), ne_binary(), ne_binary(), 'store' | 'fax', term()) -> any().
+send_detailed_alert(Node, UUID, File, Type, Reason) ->
+    wh_notify:detailed_alert("Failed to store ~s: media file ~s for call ~s on ~s "
+                             ,[Type, File, UUID, Node]
+                             ,[{<<"Details">>, Reason}]
+                            ).
 
 -spec send_fs_store(atom(), ne_binary(), 'put' | 'post') -> fs_api_ret().
 send_fs_store(Node, Args, 'put') ->
@@ -1252,28 +1222,78 @@ maybe_set_park_timeout(Node, UUID, JObj) ->
             ecallmgr_fs_command:set(Node, UUID, [{<<"park_timeout">>, ParkTimeout}])
     end.
 
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
+-spec record_call(atom(), ne_binary(), wh_json:object()) -> fs_app().
+record_call(Node, UUID, JObj) ->
+    set_record_call_vars(Node, UUID, JObj),
 
-all_conference_flags_test() ->
-    JObj = wh_json:from_list([{<<"Mute">>, 'true'}
-                              ,{<<"Deaf">>, 'true'}
-                              ,{<<"Moderator">>, 'true'}
-                             ]),
-    ?assertEqual(<<"+flags{mute,moderator,deaf}">>, get_conference_flags(JObj)).
+    MediaName = wh_json:get_value(<<"Media-Name">>, JObj),
+    RecordingName = ecallmgr_util:recording_filename(MediaName),
 
-two_conference_flags_test() ->
-    JObj = wh_json:from_list([{<<"Mute">>, 'true'}
-                              ,{<<"Moderator">>, 'true'}
-                             ]),
-    ?assertEqual(<<"+flags{mute,moderator}">>, get_conference_flags(JObj)).
+    RecArg = case wh_json:get_value(<<"Record-Action">>, JObj) of
+                 <<"start">> ->
+                     start_record_call_args(Node, UUID, JObj, RecordingName);
+                 <<"stop">> ->
+                     list_to_binary([UUID, <<" stop ">>, RecordingName])
+             end,
+    ecallmgr_fs_command:record_call(Node, UUID, RecArg),
+    {<<"record_call">>, 'noop'}.
 
-one_conference_flag_test() ->
-    JObj = wh_json:from_list([{<<"Mute">>, 'true'}]),
-    ?assertEqual(<<"+flags{mute}">>, get_conference_flags(JObj)).
+-spec set_record_call_vars(atom(), ne_binary(), wh_json:object()) -> 'ok'.
+set_record_call_vars(Node, UUID, JObj) ->
+    Routines = [fun maybe_waste_resources/1
+                ,fun(Acc) -> maybe_get_terminators(Acc, JObj) end
+               ],
 
-no_conference_flags_test() ->
-    JObj = wh_json:new(),
-    ?assertEqual(<<>>, get_conference_flags(JObj)).
+    Vars = lists:foldl(fun(F, V) -> F(V) end
+                       ,[{<<"RECORD_APPEND">>, <<"true">>}
+                         ,{<<"enable_file_write_buffering">>, <<"false">>}
+                        ]
+                       ,Routines
+                      ),
+    ecallmgr_util:set(Node, UUID, Vars).
 
--endif.
+-spec maybe_waste_resources(wh_proplist()) -> wh_proplist().
+maybe_waste_resources(Acc) ->
+    case ecallmgr_config:is_true(<<"record_waste_resources">>, 'false') of
+        'false' -> Acc;
+        'true' -> [{<<"record_waste_resources">>, <<"true">>}|Acc]
+    end.
+
+-spec maybe_get_terminators(wh_proplist(), wh_json:object()) -> wh_proplist().
+maybe_get_terminators(Acc, JObj) ->
+    case get_terminators(JObj) of
+        'undefined' -> Acc;
+        Terminators -> [Terminators|Acc]
+    end.
+
+-spec start_record_call_args(atom(), ne_binary(), wh_json:object(), ne_binary()) -> ne_binary().
+start_record_call_args(Node, UUID, JObj, RecordingName) ->
+    FollowTransfer = wh_json:get_binary_boolean(<<"Follow-Transfer">>, JObj, <<"true">>),
+    SampleRate = get_sample_rate(JObj),
+
+    _ = ecallmgr_util:set(Node, UUID, [{<<"recording_follow_transfer">>, FollowTransfer}
+                                       ,{<<"recording_follow_attxfer">>, FollowTransfer}
+                                       ,{<<"record_sample_rate">>, wh_util:to_binary(SampleRate)}
+                                      ]),
+    _ = ecallmgr_util:export(
+          Node
+          ,UUID
+          ,[{<<"Insert-At">>, wh_json:get_value(<<"Insert-At">>, JObj)}
+            ,{<<"Time-Limit">>, wh_json:get_value(<<"Time-Limit">>, JObj)}
+            ,{<<"Media-Name">>, wh_json:get_value(<<"Media-Name">>, JObj)}
+            ,{<<"Media-Transfer-Method">>, wh_json:get_value(<<"Media-Transfer-Method">>, JObj)}
+            ,{<<"Media-Transfer-Destination">>, wh_json:get_value(<<"Media-Transfer-Destination">>, JObj)}
+            ,{<<"Additional-Headers">>, wh_json:get_value(<<"Additional-Headers">>, JObj)}
+           ]),
+
+    list_to_binary([UUID, <<" start ">>
+                    ,RecordingName, <<" ">>
+                    ,wh_json:get_string_value(<<"Time-Limit">>, JObj, "3600") % one hour
+                   ]).
+
+-spec get_sample_rate(wh_json:object()) -> pos_integer().
+get_sample_rate(JObj) ->
+    case wh_json:get_integer_value(<<"Record-Sample-Rate">>, JObj) of
+        'undefined' -> ?DEFAULT_SAMPLE_RATE;
+        SampleRate -> SampleRate
+    end.

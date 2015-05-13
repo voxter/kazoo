@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2014, 2600Hz
+%%% @copyright (C) 2014-2015, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -201,7 +201,14 @@ handle_disconnected_channel(JObj) ->
     'true' = wapi_call:event_v(JObj),
     wh_util:put_callid(JObj),
     lager:debug("channel has been disconnected, checking status of channel on the cluster"),
-    handle_destroyed_channel(JObj).
+    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    case whapps_call_command:b_channel_status(CallId) of
+        {'ok', _} ->
+            lager:info("call '~s' is still active, ignoring disconnect", [CallId]);
+        _Else ->
+            lager:info("call '~s' is no longer active, sending hangup", [CallId]),
+            handle_destroyed_channel(JObj)
+    end.
 
 -spec handle_connected_channel(wh_json:object()) -> 'ok'.
 handle_connected_channel(_JObj) ->
@@ -251,21 +258,17 @@ handle_update(JObj, State, Expires) ->
 
 -spec handle_update(wh_json:object(), ne_binary(), ne_binary(), ne_binary(), integer()) -> any().
 handle_update(JObj, State, From, To, Expires) ->
-    To = wh_json:get_first_defined([<<"To">>, <<"Presence-ID">>], JObj),
-    From = wh_json:get_first_defined([<<"From">>, <<"Presence-ID">>], JObj),
     [ToUsername, ToRealm] = binary:split(To, <<"@">>),
     [FromUsername, FromRealm] = binary:split(From, <<"@">>),
-    Direction = wh_json:get_lower_binary(<<"Call-Direction">>, JObj),
-    ToURI = case {State, wh_json:get_value(<<"App-Name">>, JObj)} of
-                {?PRESENCE_RINGING, <<"park">>} ->
-                    <<"sip:", From/binary,";kazoo-pickup=true">>;
-                {_State, _App} ->
-                    <<"sip:", From/binary>>
-            end,
+
+    CallId = wh_json:get_value(<<"Call-ID">>, JObj, ?FAKE_CALLID(From)),
+    TargetCallId = wh_json:get_value(<<"Target-Call-ID">>, JObj, CallId),
+    SwitchURI = wh_json:get_value(<<"Switch-URI">>, JObj),
+    Cookie = wh_util:rand_hex_binary(6),
 
     {User, Props} =
-        case Direction =:= <<"inbound">> of
-            'true' ->
+        case wh_json:get_lower_binary(<<"Call-Direction">>, JObj) of
+            <<"inbound">> ->
                 {From, props:filter_undefined(
                          [{<<"From">>, <<"sip:", From/binary>>}
                           ,{<<"From-User">>, FromUsername}
@@ -279,7 +282,10 @@ handle_update(JObj, State, From, To, Expires) ->
                           ,{<<"Expires">>, Expires}
                           ,{<<"Flush-Level">>, wh_json:get_value(<<"Flush-Level">>, JObj)}
                           ,{<<"Direction">>, <<"initiator">>}
-                          ,{<<"Call-ID">>, wh_json:get_value(<<"Call-ID">>, JObj, ?FAKE_CALLID(From))}
+                          ,{<<"Call-ID">>, CallId}
+                          ,{<<"Target-Call-ID">>, TargetCallId}
+                          ,{<<"Switch-URI">>, SwitchURI}
+                          ,{<<"Call-Cookie">>, Cookie}
                           ,{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, JObj)}
                           ,{<<"Event-Package">>, <<"dialog">>}
                           ,{<<"destination">>, ToUsername}
@@ -289,7 +295,9 @@ handle_update(JObj, State, From, To, Expires) ->
                           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
                          ])
                 };
-            'false' ->
+            _Direction ->
+                App = wh_json:get_value(<<"App-Name">>, JObj),
+                ToURI = build_update_to_uri(State, App, From, ToRealm, Cookie),
                 {To, props:filter_undefined(
                        [{<<"From">>, <<"sip:", To/binary>>}
                         ,{<<"From-User">>, ToUsername}
@@ -304,18 +312,40 @@ handle_update(JObj, State, From, To, Expires) ->
                         ,{<<"Expires">>, Expires}
                         ,{<<"Flush-Level">>, wh_json:get_value(<<"Flush-Level">>, JObj)}
                         ,{<<"Direction">>, <<"recipient">>}
-                        ,{<<"Call-ID">>, wh_json:get_value(<<"Call-ID">>, JObj, ?FAKE_CALLID(To))}
+                        ,{<<"Call-ID">>, CallId}
+                        ,{<<"Target-Call-ID">>, TargetCallId}
+                        ,{<<"Switch-URI">>, SwitchURI}
+                        ,{<<"Call-Cookie">>, Cookie}
                         ,{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, JObj)}
                         ,{<<"Event-Package">>, <<"dialog">>}
                         ,{<<"destination">>, FromUsername}
                         ,{<<"uuid">>, wh_json:get_value(<<"Call-ID">>, JObj)}
                         ,{<<"user">>, ToUsername}
                         ,{<<"realm">>, ToRealm}
-                        | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                        | wh_api:default_headers(App, ?APP_VERSION)
                        ])
                 }
         end,
     maybe_send_update(User, Props).
+
+-spec build_update_to_uri(ne_binary(), ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> ne_binary().
+build_update_to_uri(State, App, From, Realm, Cookie) ->
+    case whapps_config:get(<<"omnipresence">>, <<"use_fast_pickup_cookies">>, 'true') of
+        'true' -> to_uri_cookie(State, App, From, Realm, Cookie);
+        _Other -> to_uri(State, App, From, Realm, Cookie)
+    end.
+
+-spec to_uri(ne_binary(), ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> ne_binary().
+to_uri(?PRESENCE_RINGING, <<"park">>, From, _, _) ->
+    <<"sip:", From/binary,";kazoo-pickup=true">>;
+to_uri(_State, _, From, _, _) ->
+    <<"sip:", From/binary>>.
+
+-spec to_uri_cookie(ne_binary(), ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> ne_binary().
+to_uri_cookie(?PRESENCE_RINGING, _, _, Realm, Cookie) ->
+    <<"sip:kfp+", Cookie/binary, "@", Realm/binary>>;
+to_uri_cookie(_State, _, From, _, _) ->
+    <<"sip:", From/binary>>.
 
 -spec maybe_send_update(ne_binary(), wh_proplist()) -> 'ok'.
 maybe_send_update(User, Props) ->
@@ -451,6 +481,7 @@ reset_blf(User) ->
                ,{<<"To">>, User}
                ,{<<"Flush-Level">>, 1}
                ,{<<"Call-ID">>, wh_util:to_hex_binary(crypto:hash(md5, User))}
+               | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
               ],
     handle_update(wh_json:from_list(Headers), ?PRESENCE_HANGUP).
 

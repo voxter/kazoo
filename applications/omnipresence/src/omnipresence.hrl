@@ -1,7 +1,6 @@
 -ifndef(OMNIPRESENCE_HRL).
 
 %% Typical includes needed
--include_lib("whistle/include/wh_amqp.hrl").
 -include_lib("whistle/include/wh_types.hrl").
 -include_lib("whistle/include/wh_log.hrl").
 -include_lib("whistle/include/wh_databases.hrl").
@@ -28,7 +27,7 @@
           ,from                                 :: api_binary() | <<>> | '_' %% user@realm.com
           ,stalker                              :: api_binary() | '_' % amqp queue to publish updates to
           ,expires = 0                          :: non_neg_integer() | '_' | '$2'
-          ,timestamp = wh_util:current_tstamp() :: non_neg_integer() | '_' | '$1'
+          ,timestamp = wh_util:current_tstamp() :: gregorian_seconds() | '_' | '$1'
           ,protocol = <<"sip">>                 :: ne_binary() | '_' % protocol
           ,username                             :: api_binary() | '_'
           ,realm                                :: api_binary() | '_'

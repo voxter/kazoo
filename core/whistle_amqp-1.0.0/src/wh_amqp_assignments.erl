@@ -32,7 +32,7 @@
 -include("amqp_util.hrl").
 
 -define(TAB, ?MODULE).
-
+-define(SERVER_RETRY_PERIOD, 30000).
 -record(state, {brokers = ordsets:new()}).
 
 %%%===================================================================
@@ -176,18 +176,18 @@ handle_cast({'add_watcher', Consumer, Watcher}, State) ->
     _ = add_watcher(Consumer, Watcher),
     {'noreply', State};
 handle_cast({'maybe_reassign', Consumer}, State) ->
-    Pattern = #wh_amqp_assignment{consumer=Consumer, _='_'},
-    _ = case ets:match_object(?TAB, Pattern, 1) of
-            '$end_of_table' -> 'ok';
-            {[#wh_amqp_assignment{channel=Channel}], _}
-              when is_pid(Channel) -> 'ok';
-            {[#wh_amqp_assignment{type='sticky'
-                                  ,broker=Broker}=Assignment
-             ], _} -> maybe_reassign(Assignment, Broker);
-            {[#wh_amqp_assignment{type='float'}=Assignment], _} ->
-                Broker = wh_amqp_connections:primary_broker(),
-                maybe_reassign(Assignment, Broker)
-        end,
+    maybe_reassign(Consumer),
+    {'noreply', State};
+handle_cast({'maybe_defer_reassign', #wh_amqp_assignment{timestamp=Timestamp
+                                                         ,consumer=Consumer
+                                                        }}, State) ->
+    Props = [{#wh_amqp_assignment.channel, 'undefined'}
+             ,{#wh_amqp_assignment.channel_ref, 'undefined'}
+             ,{#wh_amqp_assignment.connection, 'undefined'}
+             ,{#wh_amqp_assignment.reconnect, 'true'}
+            ],
+    ets:update_element(?TAB, Timestamp, Props),
+    maybe_reassign(Consumer),
     {'noreply', State};
 handle_cast(_Msg, State) ->
     {'noreply', State}.
@@ -301,6 +301,24 @@ release_assignments({[#wh_amqp_assignment{timestamp=Timestamp
 %%
 %% @end
 %%--------------------------------------------------------------------
+
+-spec maybe_reassign(pid()) -> 'undefined' | wh_amqp_assignment().
+maybe_reassign(Consumer) ->
+    Pattern = #wh_amqp_assignment{consumer=Consumer, _='_'},
+    case ets:match_object(?TAB, Pattern, 1) of
+        '$end_of_table' -> 'ok';
+        {[#wh_amqp_assignment{channel=Channel}], _}
+          when is_pid(Channel) -> 'ok';
+        {[#wh_amqp_assignment{type='sticky'
+                              ,broker=Broker}=Assignment
+         ], _} -> maybe_reassign(Assignment, Broker);
+        {[#wh_amqp_assignment{type='float'}=Assignment], _} ->
+            Broker = wh_amqp_connections:primary_broker(),
+            maybe_reassign(Assignment, Broker)
+    end.
+
+
+
 -spec maybe_reassign(wh_amqp_assignment(), _) -> 'undefined' | wh_amqp_assignment().
 maybe_reassign(_, 'undefined') -> 'undefined';
 maybe_reassign(_, '$end_of_table') -> 'undefined';
@@ -420,8 +438,7 @@ move_channel_to_consumer(#wh_amqp_assignment{timestamp=Timestamp
     lager:debug("assigned existing consumer ~p an available channel ~p on ~s"
                 ,[Consumer, Channel, Broker]),
 
-    amqp_channel:register_return_handler(Channel, Consumer),
-    lager:debug("registered return handler for channel ~p to ~p", [Channel, Consumer]),
+    register_channel_handlers(Channel, Consumer),
 
     _ = maybe_reconnect(Assignment),
     send_notifications(Assignment).
@@ -451,8 +468,7 @@ add_consumer_to_channel(#wh_amqp_assignment{channel=Channel
     lager:debug("assigned existing channel ~p on ~s to new consumer ~p"
                 ,[Channel, _Broker, Consumer]),
 
-    amqp_channel:register_return_handler(Channel, Consumer),
-    lager:debug("registered return handler for channel ~p to ~p", [Channel, Consumer]),
+    register_channel_handlers(Channel, Consumer),
 
     send_notifications(Assignment).
 
@@ -566,6 +582,7 @@ assign_channel(#wh_amqp_assignment{timestamp=Timestamp
                                                  }),
     lager:debug("assigned consumer ~p new channel ~p on ~s after ~pus"
                 ,[Consumer, Channel, Broker, wh_util:elapsed_us(Timestamp)]),
+    register_channel_handlers(Channel, Consumer),
     _ = maybe_reconnect(Assigment),
     _ = send_notifications(Assigment),
     'true'.
@@ -597,6 +614,7 @@ maybe_reconnect(#wh_amqp_assignment{consumer=Consumer
 reconnect(_, []) -> 'ok';
 reconnect(Assignment, [Command|Commands]) ->
     try wh_amqp_channel:command(Assignment, Command) of
+        {'error', E} -> lager:info("replayed command failed: ~p", [E]);
         _ -> reconnect(Assignment, Commands)
     catch
         _:_R -> lager:info("replayed command failed: ~p", [_R])
@@ -716,37 +734,43 @@ handle_down_match({'channel', #wh_amqp_assignment{timestamp=Timestamp
     lager:debug("unused channel ~p on ~s went down: ~p"
                 ,[Channel, Broker, Reason]),
     ets:delete(?TAB, Timestamp);
-handle_down_match({'channel', #wh_amqp_assignment{timestamp=Timestamp
-                                                  ,channel=Channel
+handle_down_match({'channel', #wh_amqp_assignment{channel=Channel
                                                   ,type='float'
                                                   ,broker=Broker
-                                                  ,consumer=Consumer}}
+                                                  ,consumer=Consumer
+                                                 }=Assignment}
                   ,Reason) ->
-    Props = [{#wh_amqp_assignment.channel, 'undefined'}
-             ,{#wh_amqp_assignment.channel_ref, 'undefined'}
-             ,{#wh_amqp_assignment.connection, 'undefined'}
-             ,{#wh_amqp_assignment.broker, 'undefined'}
-             ,{#wh_amqp_assignment.reconnect, 'true'}
-            ],
-    ets:update_element(?TAB, Timestamp, Props),
-    gen_server:cast(?MODULE, {'maybe_reassign', Consumer}),
     lager:debug("floating channel ~p on ~s went down while still assigned to consumer ~p: ~p"
-                ,[Channel, Broker, Consumer, Reason]);
-handle_down_match({'channel', #wh_amqp_assignment{timestamp=Timestamp
-                                                  ,channel=Channel
+                ,[Channel, Broker, Consumer, Reason]),
+    maybe_defer_reassign(Assignment, Reason);
+handle_down_match({'channel', #wh_amqp_assignment{channel=Channel
                                                   ,type='sticky'
                                                   ,broker=Broker
-                                                  ,consumer=Consumer}}
+                                                  ,consumer=Consumer
+                                                 }=Assignment}
                   ,Reason) ->
+    lager:debug("sticky channel ~p on ~s went down while still assigned to consumer ~p: ~p"
+                ,[Channel, Broker, Consumer, Reason]),
+    maybe_defer_reassign(Assignment, Reason).
+
+-spec maybe_defer_reassign(#wh_amqp_assignment{}, term()) -> 'ok'.
+maybe_defer_reassign(#wh_amqp_assignment{}=Assignment
+                    ,{'shutdown',{'server_initiated_close', 404, _Msg}}) ->
+     lager:debug("defer channel reassign for ~p ms", [?SERVER_RETRY_PERIOD]),
+     spawn(fun() ->
+                   timer:sleep(?SERVER_RETRY_PERIOD),                   
+                   gen_server:cast(?MODULE, {'maybe_defer_reassign', Assignment})
+           end);
+maybe_defer_reassign(#wh_amqp_assignment{timestamp=Timestamp
+                                         ,consumer=Consumer
+                                        }, _) ->
     Props = [{#wh_amqp_assignment.channel, 'undefined'}
              ,{#wh_amqp_assignment.channel_ref, 'undefined'}
              ,{#wh_amqp_assignment.connection, 'undefined'}
              ,{#wh_amqp_assignment.reconnect, 'true'}
             ],
     ets:update_element(?TAB, Timestamp, Props),
-    gen_server:cast(?MODULE, {'maybe_reassign', Consumer}),
-    lager:debug("sticky channel ~p on ~s went down while still assigned to consumer ~p: ~p"
-                ,[Channel, Broker, Consumer, Reason]).
+    gen_server:cast(?MODULE, {'maybe_reassign', Consumer}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -825,3 +849,11 @@ log_short_lived(#wh_amqp_assignment{assigned=Timestamp}=Assignment) ->
             lager:warning("short lived assignment (~ps): ~p"
                           ,[Duration, Assignment])
     end.
+
+-spec register_channel_handlers(pid(), pid()) -> 'ok'.
+register_channel_handlers(Channel, Consumer) ->
+    amqp_channel:register_return_handler(Channel, Consumer),
+    amqp_channel:register_confirm_handler(Channel, Consumer),
+    amqp_channel:register_flow_handler(Channel, Consumer),
+    lager:debug("registered handlers for channel ~p to ~p", [Channel, Consumer]).
+
