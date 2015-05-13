@@ -63,5 +63,6 @@ start_deps() ->
                                                ,'whistle_couch'
                                                ,'kazoo_bindings'
                                                ,'acdc'
+                                               ,'amimulator'
                                                ]],
     'ok'.

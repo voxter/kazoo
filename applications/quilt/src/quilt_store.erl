@@ -16,7 +16,7 @@
 %% Public functions
 %%
 start_link() ->
-    lager:debug("QUILT: starting datastore"),
+    lager:debug("starting datastore"),
 	gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 put(Key, Value) ->

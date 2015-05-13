@@ -64,7 +64,7 @@ handle_event(JObj, _Props) ->
 								% Ring time is difference of current missed timestamp and last missed timestamp
 								_ -> wh_json:get_integer_value(<<"timestamp">>, hd(Misses))
 							end,
-							RingTime = integer_to_list(MissedTimestamp - RingStartTimestamp),
+							RingTime = integer_to_list( (MissedTimestamp - RingStartTimestamp) * 1000 ),
 							EventParams = {RingTime},
 							lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
 							write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
