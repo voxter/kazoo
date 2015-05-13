@@ -149,9 +149,10 @@ maybe_add_binding_to_listener(ServerName, EventName) ->
 handle_call_event(JObj, Props) ->
     'true' = wapi_call:event_v(JObj),
     HookEvent = wh_json:get_value(<<"Event-Name">>, JObj),
-    AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>
-                                   ,<<"Account-ID">>
-                                  ], JObj),
+    AccountId = wh_json:get_first_defined([
+        [<<"Custom-Channel-Vars">>, <<"Execute-Extension-Original-Account-ID">>],
+        [<<"Custom-Channel-Vars">>, <<"Account-ID">>]
+        ], JObj),
     CallId = wh_json:get_value(<<"Call-ID">>, JObj),
     wh_util:put_callid(CallId),
     handle_call_event(JObj, AccountId, HookEvent, CallId, props:get_is_true('rr', Props)).
