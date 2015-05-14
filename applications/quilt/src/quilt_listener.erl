@@ -27,48 +27,52 @@
     {'self', []}
     ,{acdc_agent, []}
     ,{acdc_stats, []}
-    % ,{acdc_queue, []} %% Added dynamically
+    %% Added dynamically
+    %,{acdc_queue, []}
 ]).
 
 -define(RESPONDERS, []).
 
 start_link() ->
-    gen_listener:start_link(?MODULE, [{'bindings', ?BINDINGS}
-                                      ,{'responders', ?RESPONDERS}
-                                     ], []).
+    gen_listener:start_link(?MODULE, [
+        {'bindings', ?BINDINGS},
+        {'responders', ?RESPONDERS}
+    ], []).
 
 init([]) -> 
-    lager:debug("adding bindings to acdc"),
+    lager:debug("adding bindings for acdc queues"),
     quilt_store:start_link(),
     Queues = acdc_queues_sup:queues_running(),
     QueueSups = [X || {X,_} <- Queues],
-    lists:foreach(fun(QueueSup) -> init_queue_responders(QueueSup) end, QueueSups),
-    QueueSups = [X || {X,_} <- Queues],
-    lists:foreach(fun(QueueSup) -> init_queue_bindings(QueueSup) end, QueueSups),
+    lists:foreach(fun(QueueSup) -> init_queue(QueueSup) end, QueueSups),
     {'ok', #state{}}.
 
-init_queue_bindings(QueueSup) ->
-    % lager:debug("adding bindings to acdc queue sup: ~p", [QueueSup]),
+init_queue(QueueSup) ->
+    lager:debug("adding bindings/responders for queue sup: ~p", [QueueSup]),
     Manager = acdc_queue_sup:manager(QueueSup),
     {AccountId,_} = acdc_queue_manager:config(Manager),
-    % Check to see if we are monitoring this account's queues already
+    % Check to see if we have configuration for this account already
     case quilt_store:get(AccountId) of
         undefined ->
-            lager:debug("adding bindings to acdc queues for account id: ~p", [AccountId]),
-            quilt_store:put(AccountId, true),
-            gen_listener:add_binding(
-                Manager, {acdc_queue, [{restrict_to, [<<"*">>]}, {account_id, AccountId}]}
-            );
+            lager:debug("adding queue bindings for account id: ~p", [AccountId]),
+            gen_listener:add_binding(self(), {acdc_queue, [{account_id, AccountId}]}),
+            lager:debug("adding queue responders for account id: ~p", [AccountId]),
+            gen_listener:add_responder(self(), {?MODULE, 'handle_event'}, [
+                % {<<"*">>, <<"*">>}
+                {<<"acdc_call_stat">>, <<"waiting">>},
+                {<<"acdc_call_stat">>, <<"abandoned">>},
+                {<<"acdc_call_stat">>, <<"missed">>},
+                {<<"acdc_call_stat">>, <<"handled">>},
+                {<<"acdc_call_stat">>, <<"processed">>},
+                {<<"agent">>, <<"pause">>},
+                {<<"agent">>, <<"resume">>},
+                {<<"acdc_status_stat">>, <<"logged_in">>},
+                {<<"acdc_status_stat">>, <<"logged_out">>}
+            ]),
+            quilt_store:put(AccountId, true);
         _ ->
-            lager:debug("already bound to events for account id: ~p", [AccountId])
+            lager:debug("already have configuration for account id: ~p", [AccountId])
     end.
-
-init_queue_responders(QueueSup) ->
-    lager:debug("adding responders to acdc queue sup: ~p", [QueueSup]),
-    Manager = acdc_queue_sup:manager(QueueSup),
-    gen_listener:add_responder(
-        Manager, {?MODULE, 'handle_event'}, [{<<"*">>, <<"*">>}]
-    ).
 
 handle_call(Request, _From, State) ->
     lager:debug("unhandled call: ~p", [Request]),
@@ -91,7 +95,7 @@ handle_info(Info, State) ->
 handle_event(JObj, State) ->
     % lager:debug("unhandled event: ~p, state: ~p", [JObj, State]),
     quilt_log:handle_event(JObj, State),
-    {reply, []}.
+    {noreply, []}.
 
 terminate(Reason, _State) ->
     lager:debug("quilt_listener listener on pid ~p terminating: ~p", [self(), Reason]),
