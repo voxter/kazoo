@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2015, 2600Hz INC
 %%% @doc
 %%% Token auth module
 %%%
@@ -20,7 +20,7 @@
          ,delete/1
          ,authenticate/1
          ,finish_request/1
-         ,clean_expired/0
+         ,clean_expired/0, clean_expired/1
         ]).
 
 -include("../crossbar.hrl").
@@ -115,22 +115,27 @@ maybe_save_auth_doc(OldAuthDoc) ->
     end.
 
 -spec clean_expired() -> 'ok'.
+-spec clean_expired(gregorian_seconds()) -> 'ok'.
 clean_expired() ->
-    CreatedBefore = wh_util:current_tstamp() - ?LOOP_TIMEOUT, % gregorian seconds - Expiry time
+    clean_expired(wh_util:current_tstamp() - ?LOOP_TIMEOUT).
+
+clean_expired(CreatedBefore) ->
     ViewOpts = [{'startkey', 0}
                 ,{'endkey', CreatedBefore}
-                ,{'limit', 5000}
+                ,{'limit', couch_util:max_bulk_insert()}
                ],
 
     case couch_mgr:get_results(?KZ_TOKEN_DB, <<"token_auth/listing_by_mtime">>, ViewOpts) of
+        {'error', _E} -> lager:debug("failed to lookup expired tokens: ~p", [_E]);
         {'ok', []} -> lager:debug("no expired tokens found");
         {'ok', L} ->
             lager:debug("removing ~b expired tokens", [length(L)]),
+
+            couch_mgr:suppress_change_notice(),
             _ = couch_mgr:del_docs(?KZ_TOKEN_DB, L),
-            couch_compactor_fsm:compact_db(?KZ_TOKEN_DB),
-            'ok';
-        {'error', _E} ->
-            lager:debug("failed to lookup expired tokens: ~p", [_E])
+            couch_mgr:enable_change_notice(),
+
+            lager:debug("removed tokens")
     end.
 
 %%--------------------------------------------------------------------

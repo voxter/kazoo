@@ -9,7 +9,6 @@
 %%%   ,"terminators":["#","*"] // what DTMFs stop collection (and aren't included)
 %%%   ,"interdigit_timeout":2000 // milliseconds, how long to wait for the next DTMF
 %%%   ,"collection_name":"your_name_here" // name the collection for later processing
-%%%   ,"reset_collection":"true" // already collected DTMF in the collection are purged if this is set to true
 %%% }
 %%% @end
 %%% @contributors
@@ -30,46 +29,54 @@
 handle(Data, Call) ->
     whapps_call_command:answer(Call),
 
-    AlreadyCollected = case whapps_call:get_dtmf_collection(Call) of
-        'undefined' -> <<>>;
-        <<_/binary>> = D ->
-            _ = cf_exe:set_call(whapps_call:set_dtmf_collection('undefined', Call)),
-            D
-    end,
+    AlreadyCollected =
+        case whapps_call:get_dtmf_collection(Call) of
+            'undefined' -> <<>>;
+            <<_/binary>> = D ->
+                _ = cf_exe:set_call(whapps_call:set_dtmf_collection('undefined', Call)),
+                D
+        end,
 
     maybe_collect_more_digits(Data, Call, AlreadyCollected).
 
+-spec maybe_collect_more_digits(wh_json:object(), whapps_call:call(), binary()) -> 'ok'.
 maybe_collect_more_digits(Data, Call, AlreadyCollected) ->
 	AlreadyCollectedSize = byte_size(AlreadyCollected),
 	MaxDigits = max_digits(Data),
 
-	if AlreadyCollectedSize >= MaxDigits ->
-		lager:debug("Early DTMF met collection criteria, not collecting any more digits"),
-		<<Head:MaxDigits/binary, _/binary>> = AlreadyCollected,
-		CollectionName = collection_name(Data),
+    maybe_collect_more_digits(Data, Call, AlreadyCollected, AlreadyCollectedSize, MaxDigits),
+    cf_exe:continue(Call).
 
-		cf_exe:set_call(whapps_call:set_dtmf_collection(Head, CollectionName, Call));
-	'true' ->
-		case whapps_call_command:collect_digits(MaxDigits - AlreadyCollectedSize
-												,collect_timeout(Data)
-												,interdigit(Data)
-												,'undefined'
-												,terminators(Data)
-												,Call
-											   )
-			of
-				{'ok', Ds} ->
-	                CollectionName = collection_name(Data),
-	                lager:debug("collected ~s~s for ~s", [AlreadyCollected, Ds, CollectionName]),
+-spec maybe_collect_more_digits(wh_json:object(), whapps_call:call(), binary(), non_neg_integer(), pos_integer()) -> 'ok'.
+maybe_collect_more_digits(Data, Call, AlreadyCollected, ACS, Max) when ACS >= Max ->
+    lager:debug("early DTMF met collection criteria, not collecting any more digits"),
+    <<Head:Max/binary, _/binary>> = AlreadyCollected,
+    CollectionName = collection_name(Data),
 
-	                cf_exe:set_call(
-	                  whapps_call:set_dtmf_collection(<<AlreadyCollected/binary, Ds/binary>>, CollectionName, Call)
-	                 );
-	            {'error', _E} ->
-	                lager:debug("failed to collect DTMF: ~p", [_E])
-	        end
-	end,
-	cf_exe:continue(Call).
+    cf_exe:set_call(whapps_call:set_dtmf_collection(Head, CollectionName, Call));
+maybe_collect_more_digits(Data, Call, AlreadyCollected, ACS, Max) ->
+    collect_more_digits(Data, Call, AlreadyCollected, Max-ACS).
+
+-spec collect_more_digits(wh_json:object(), whapps_call:call(), binary(), pos_integer()) -> 'ok'.
+collect_more_digits(Data, Call, AlreadyCollected, MaxDigits) ->
+    case whapps_call_command:collect_digits(MaxDigits
+                                            ,collect_timeout(Data)
+                                            ,interdigit(Data)
+                                            ,'undefined'
+                                            ,terminators(Data)
+                                            ,Call
+                                           )
+    of
+        {'ok', Ds} ->
+            CollectionName = collection_name(Data),
+            lager:debug("collected ~s~s for ~s", [AlreadyCollected, Ds, CollectionName]),
+
+            cf_exe:set_call(
+              whapps_call:set_dtmf_collection(<<AlreadyCollected/binary, Ds/binary>>, CollectionName, Call)
+             );
+        {'error', _E} ->
+            lager:debug("failed to collect DTMF: ~p", [_E])
+    end.
 
 -spec collection_name(wh_json:object()) -> ne_binary().
 collection_name(Data) ->
