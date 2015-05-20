@@ -2012,6 +2012,16 @@ collect_digits(MaxDigits, Timeout, Interdigit, NoopId, Call) ->
                                           ,call=Call
                                          }).
 
+%% When noop id is undefined, do not wait for the noop_complete before applying timeout
+collect_digits(MaxDigits, Timeout, Interdigit, 'undefined', Terminators, Call) ->
+	do_collect_digits(#wcc_collect_digits{max_digits=wh_util:to_integer(MaxDigits)
+                                          ,timeout=wh_util:to_integer(Timeout)
+                                          ,interdigit=wh_util:to_integer(Interdigit)
+                                          ,noop_id='undefined'
+                                          ,terminators=Terminators
+                                          ,call=Call
+                                          ,after_timeout=wh_util:to_integer(Timeout)
+										 });
 collect_digits(MaxDigits, Timeout, Interdigit, NoopId, Terminators, Call) ->
     do_collect_digits(#wcc_collect_digits{max_digits=wh_util:to_integer(MaxDigits)
                                           ,timeout=wh_util:to_integer(Timeout)
