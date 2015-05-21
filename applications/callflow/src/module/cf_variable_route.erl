@@ -23,7 +23,7 @@ handle(Data, Call) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
-check_branches([], Data, Call) ->
+check_branches([], _Data, _Call) ->
 	<<"_">>;
 check_branches([H|T], Data, Call) ->
 	case evaluate_branch(H, Call) of
@@ -38,7 +38,7 @@ check_branches([H|T], Data, Call) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
-evaluate_branch(Branch, Call) ->
+evaluate_branch(Branch, _Call) ->
 	case whapps_call:custom_channel_var(wh_json:get_value(<<"variable">>, Branch)) of
 		'undefined' ->
 			'false';
@@ -49,7 +49,7 @@ evaluate_branch(Branch, Call) ->
 evaluate_branch(CallValue, <<"<">>, Value) ->
 	CallValue < Value;
 evaluate_branch(CallValue, <<"<=">>, Value) ->
-	CallValue <= Value;
+	CallValue =< Value;
 evaluate_branch(CallValue, <<"=">>, Value) ->
 	CallValue =:= Value;
 evaluate_branch(CallValue, <<"=/=">>, Value) ->
