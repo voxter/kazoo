@@ -19,6 +19,8 @@
          ,start_bucket/1, start_bucket/2, start_bucket/3, start_bucket/4, start_bucket/5
          ,exists/1, exists/2
          ,tokens/0
+
+         ,get_bucket/2, get_bucket/3
         ]).
 
 %% ETS related
@@ -53,7 +55,7 @@
                }).
 
 -record(bucket, {key :: {ne_binary(), ne_binary()} | '_'
-                 ,srv :: pid() | '$1' | '_'
+                 ,srv :: pid() | '$1' | '$2' | '_'
                  ,ref :: reference() | '$2' | '_'
                  ,accessed = wh_util:now_s(os:timestamp()) :: gregorian_seconds() | '$1' | '_'
                 }).
@@ -410,11 +412,20 @@ check_for_inactive_buckets() ->
     Now = wh_util:now_s(os:timestamp()),
     InactivityTimeout = ?INACTIVITY_TIMEOUT_S,
 
-    MS = [{#bucket{accessed='$1', srv='$2', _='_'}
+    MS = [{#bucket{accessed='$1'
+                   ,srv='$2'
+                   ,_='_'
+                  }
            ,[{'<', '$1', {'const', Now-InactivityTimeout}}]
            ,['$2']
           }],
-    case [kz_token_bucket:stop(Srv) || Srv <- ets:select(?MODULE:table_id(), MS)] of
+    case [begin
+              kz_token_bucket:stop(Srv),
+              wh_util:to_binary(Srv)
+          end
+          || Srv <- ets:select(?MODULE:table_id(), MS)
+         ]
+    of
         [] -> 'ok';
-        L -> lager:debug("stopped ~p servers", [length(L)])
+        L -> lager:debug("stopped servers ~s", [wh_util:join_binary(L)])
     end.

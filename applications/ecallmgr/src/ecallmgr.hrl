@@ -3,12 +3,15 @@
 -include_lib("whistle/include/wh_types.hrl").
 -include_lib("whistle/include/wh_log.hrl").
 -include_lib("whistle/include/wh_api.hrl").
+-include_lib("kazoo_documents/include/kazoo_documents.hrl").
 
 -define(ECALLMGR_UTIL_CACHE, 'ecallmgr_util_cache').
 -define(ECALLMGR_AUTH_CACHE, 'ecallmgr_auth_cache').
 -define(ECALLMGR_CALL_CACHE, 'ecallmgr_call_cache').
 
 -define(CHANNELS_TBL, 'ecallmgr_channels').
+
+-define(DEFAULT_FETCH_TIMEOUT, 2600).
 
 -define(ECALLMGR_PLAYBACK_MEDIA_KEY(M), {'playback_media', M}).
 
@@ -20,6 +23,8 @@
 -define(DEFAULT_FS_DIALPLAN, "XML").
 
 -define(LOCAL_MEDIA_PATH, "/tmp/").
+
+-define(DEFAULT_SAMPLE_RATE, ecallmgr_config:get_integer(<<"record_sample_rate">>, 8000)).
 
 -type fs_api_ret()       :: {'ok', binary()} |
                             {'error', 'badarg'} |
@@ -52,7 +57,7 @@
                   ,account_billing :: api_binary() | '$7' | '_'
                   ,authorizing_id :: api_binary() | '$1' | '$3' | '_'
                   ,authorizing_type :: api_binary() | '_'
-                  ,owner_id :: api_binary() | '_'
+                  ,owner_id :: api_binary() | '$1' | '_'
                   ,resource_id :: api_binary() | '$4' | '_'
                   ,presence_id :: api_binary() | '$2' | '_'
                   ,fetch_id :: api_binary() | '$5' | '_'
@@ -155,7 +160,7 @@
 -define(GET_CCV(Key), <<"variable_", ?CHANNEL_VAR_PREFIX, Key/binary>>).
 -define(SET_CCV(Key, Value), <<?CHANNEL_VAR_PREFIX, Key/binary, "=", Value/binary>>).
 
--define(CREDS_KEY(Realm, Username), {?MODULE, 'authn', Username, Realm}).
+-define(CREDS_KEY(Realm, Username), {'authn', Username, Realm}).
 
 %% Call and Channel Vars that have a special prefix instead of the standard CHANNEL_VAR_PREFIX prefix
 %% [{AMQP-Header, FS-var-name}]
@@ -169,6 +174,7 @@
                                ,{<<"Outbound-Callee-ID-Number">>, <<"origination_callee_id_number">>}
                                ,{<<"Auth-User">>, <<"sip_auth_username">>}
                                ,{<<"Auth-Password">>, <<"sip_auth_password">>}
+                               ,{<<"Auth-Realm">>, <<"sip_auth_realm">>}
                                ,{<<"Caller-ID-Name">>, <<"effective_caller_id_name">>}
                                ,{<<"Caller-ID-Number">>, <<"effective_caller_id_number">>}
                                ,{<<"Callee-ID-Name">>, <<"effective_callee_id_name">>}
@@ -180,7 +186,7 @@
                                ,{<<"Endpoint-Timeout">>, <<"leg_timeout">>}
                                ,{<<"Endpoint-Progress-Timeout">>, <<"leg_progress_timeout">>}
                                ,{<<"Endpoint-Delay">>, <<"leg_delay_start">>}
-                               ,{<<"Endpoint-Ignore-Forward">>, <<"outbound_redirect_fatal">>}
+                               ,{<<"Ignore-Forward">>, <<"outbound_redirect_fatal">>}
                                ,{<<"Overwrite-Channel-Vars">>, <<"local_var_clobber">>}
                                ,{<<"Confirm-File">>, <<"group_confirm_file">>}
                                ,{<<"Confirm-Key">>, <<"group_confirm_key">>}
@@ -217,6 +223,8 @@
                                ,{<<"tts_voice">>, <<"tts_voice">>}
                                ,{<<"playback_terminators">>, <<"playback_terminators">>}
                                ,{<<"record_waste_resources">>, <<"record_waste_resources">>}
+                               ,{<<"record_sample_rate">>, <<"record_sample_rate">>}
+                               ,{<<"Record-Sample-Rate">>, <<"record_sample_rate">>}
                                ,{<<"recording_follow_transfer">>, <<"recording_follow_transfer">>}
                                ,{<<"recording_follow_attxfer">>, <<"recording_follow_attxfer">>}
                                ,{<<"enable_file_write_buffering">>, <<"enable_file_write_buffering">>}
@@ -399,9 +407,6 @@
 
 -define(LOOPBACK_BOWOUT_REG(CallId), {'loopback_bowout', CallId}).
 -define(LOOPBACK_BOWOUT_MSG(Node, Props), {Node, Props}).
-
--define(ACQUIRED_UUID, <<"Acquired-UUID">>).
--define(RESIGNING_UUID, <<"Resigning-UUID">>).
 
 -define(FS_EVENT_REG_MSG(Node, EvtName), {'event', Node, EvtName}).
 -define(FS_CALL_EVENT_REG_MSG(Node, EvtName), {'call_event', Node, EvtName}).

@@ -39,7 +39,7 @@ update_status(?NE_BINARY = AccountId, AgentId, Status, Options) ->
            ,{<<"Timestamp">>, wh_util:current_tstamp()}
            | Options ++ wh_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
-    wapi_acdc_stats:publish_status_update(API).
+    whapps_util:amqp_pool_send(API, fun wapi_acdc_stats:publish_status_update/1).
 
 -spec most_recent_status(ne_binary(), ne_binary()) ->
                                 {'ok', ne_binary()} |
@@ -82,21 +82,33 @@ most_recent_db_status(AccountId, AgentId) ->
     case couch_mgr:get_results(acdc_stats_util:db_name(AccountId), <<"agent_stats/status_log">>, Opts) of
         {'ok', [StatusJObj]} -> {'ok', wh_json:get_value(<<"value">>, StatusJObj)};
         {'ok', []} ->
-        	lager:debug("Could not find a recent status for agent ~p, checking previous modb", [AgentId]),
-        	case couch_mgr:get_results(acdc_stats_util:prev_modb(AccountId), <<"agent_stats/status_log">>, Opts) of
-        		{'ok', [StatusJObj2]} -> {'ok', wh_json:get_value(<<"value">>, StatusJObj2)};
-        		{'ok', []} -> {'ok', <<"unknown">>};
-				{'error', 'not_found'} ->
-					lager:debug("No previous modb found, returning unknown status"),
-					{'ok', <<"unknown">>};
-		        {'error', _E} ->
-		            lager:debug("error querying view: ~p", [_E]),
-		            {'ok', <<"unknown">>}
-		    end;
+            lager:debug("could not find a recent status for agent ~s, checking previous modb", [AgentId]),
+            prev_month_recent_db_status(AccountId, AgentId);
         {'error', 'not_found'} ->
             acdc_maintenance:refresh_account(AccountId),
             timer:sleep(150),
             most_recent_db_status(AccountId, AgentId);
+        {'error', _E} ->
+            lager:debug("error querying view: ~p", [_E]),
+            {'ok', <<"unknown">>}
+    end.
+
+-spec prev_month_recent_db_status(ne_binary(), ne_binary()) ->
+                                         {'ok', ne_binary()}.
+prev_month_recent_db_status(AccountId, AgentId) ->
+    Opts = [{'startkey', [AgentId, wh_util:current_tstamp()]}
+            ,{'limit', 1}
+            ,'descending'
+           ],
+    Db = kazoo_modb_util:prev_year_month_mod(acdc_stats_util:db_name(AccountId)),
+    case couch_mgr:get_results(Db, <<"agent_stats/status_log">>, Opts) of
+        {'ok', [StatusJObj]} ->
+            {'ok', wh_json:get_value(<<"value">>, StatusJObj)};
+        {'ok', []} ->
+            {'ok', <<"unknown">>};
+        {'error', 'not_found'} ->
+            lager:debug("no previous modb found, returning unknown status"),
+            {'ok', <<"unknown">>};
         {'error', _E} ->
             lager:debug("error querying view: ~p", [_E]),
             {'ok', <<"unknown">>}
@@ -130,7 +142,7 @@ most_recent_statuses(AccountId, AgentId, Options) ->
     maybe_reduce_statuses(AgentId, receive_statuses([ETS, DB])).
 
 -spec maybe_start_db_lookup(atom(), ne_binary(), api_binary(), list(), pid()) ->
-                                   {pid(), reference()} | 'undefined'.
+                                   pid_ref() | 'undefined'.
 maybe_start_db_lookup(F, AccountId, AgentId, Options, Self) ->
     case wh_cache:fetch_local(?ACDC_CACHE, db_fetch_key(F, AccountId, AgentId)) of
         {'ok', _} -> 'undefined';
@@ -247,8 +259,8 @@ most_recent_ets_statuses(AccountId, AgentId, Options) ->
     end.
 
 -spec most_recent_db_statuses(ne_binary()) ->
-                                      statuses_return() |
-                                      {'error', _}.
+                                     statuses_return() |
+                                     {'error', _}.
 -spec most_recent_db_statuses(ne_binary(), api_binary(), wh_proplist()) ->
                                       statuses_return() |
                                       {'error', _}.

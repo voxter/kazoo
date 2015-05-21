@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz
+%%% @copyright (C) 2011-2015, 2600Hz
 %%% @doc
 %%% Notification messages, like voicemail left
 %%% @end
@@ -23,9 +23,13 @@
          ,deregister/1, deregister_v/1
          ,pwd_recovery/1, pwd_recovery_v/1
          ,new_account/1, new_account_v/1
+         ,new_user/1, new_user_v/1
          ,port_request/1, port_request_v/1
+         ,port_pending/1, port_pending_v/1
+         ,port_scheduled/1, port_scheduled_v/1
          ,port_cancel/1, port_cancel_v/1
          ,ported/1, ported_v/1
+         ,port_comment/1, port_comment_v/1
          ,cnam_request/1, cnam_request_v/1
          ,low_balance/1, low_balance_v/1
          ,topup/1, topup_v/1
@@ -50,9 +54,13 @@
          ,publish_deregister/1, publish_deregister/2
          ,publish_pwd_recovery/1, publish_pwd_recovery/2
          ,publish_new_account/1, publish_new_account/2
+         ,publish_new_user/1, publish_new_user/2
          ,publish_port_request/1, publish_port_request/2
+         ,publish_port_pending/1, publish_port_pending/2
+         ,publish_port_scheduled/1, publish_port_scheduled/2
          ,publish_port_cancel/1, publish_port_cancel/2
          ,publish_ported/1, publish_ported/2
+         ,publish_port_comment/1, publish_port_comment/2
          ,publish_cnam_request/1, publish_cnam_request/2
          ,publish_low_balance/1, publish_low_balance/2
          ,publish_topup/1, publish_topup/2
@@ -86,10 +94,14 @@
 -define(NOTIFY_REGISTER, <<"notifications.sip.register">>).
 -define(NOTIFY_PWD_RECOVERY, <<"notifications.password.recovery">>).
 -define(NOTIFY_NEW_ACCOUNT, <<"notifications.account.new">>).
+-define(NOTIFY_NEW_USER, <<"notifications.user.new">>).
 %% -define(NOTIFY_DELETE_ACCOUNT, <<"notifications.account.delete">>).
 -define(NOTIFY_PORT_REQUEST, <<"notifications.number.port">>).
+-define(NOTIFY_PORT_PENDING, <<"notifications.number.port_pending">>).
+-define(NOTIFY_PORT_SCHEDULED, <<"notifications.number.port_scheduled">>).
 -define(NOTIFY_PORT_CANCEL, <<"notifications.number.port_cancel">>).
 -define(NOTIFY_PORTED, <<"notifications.number.ported">>).
+-define(NOTIFY_PORT_COMMENT, <<"notifications.number.port_comment">>).
 -define(NOTIFY_CNAM_REQUEST, <<"notifications.number.cnam">>).
 -define(NOTIFY_LOW_BALANCE, <<"notifications.account.low_balance">>).
 -define(NOTIFY_TOPUP, <<"notifications.account.topup">>).
@@ -165,7 +177,7 @@
 -define(FAX_INBOUND_ERROR_TYPES, []).
 
 -define(FAX_OUTBOUND_HEADERS, [<<"Caller-ID-Number">>, <<"Callee-ID-Number">>
-                               ,<<"Account-ID">>, <<"Fax-JobId">>
+                               ,<<"Account-ID">>, <<"Fax-JobId">>, <<"Fax-ID">>
                               ]).
 -define(OPTIONAL_FAX_OUTBOUND_HEADERS, [<<"Caller-ID-Name">>, <<"Callee-ID-Name">>
                                         ,<<"Call-ID">>, <<"Fax-Info">>
@@ -178,7 +190,7 @@
                              ]).
 -define(FAX_OUTBOUND_TYPES, []).
 
--define(FAX_OUTBOUND_ERROR_HEADERS, [<<"Fax-JobId">>]).
+-define(FAX_OUTBOUND_ERROR_HEADERS, [<<"Fax-JobId">>, <<"Fax-ID">>]).
 -define(OPTIONAL_FAX_OUTBOUND_ERROR_HEADERS, [<<"Caller-ID-Name">>, <<"Callee-ID-Name">>
                                               ,<<"Caller-ID-Number">>, <<"Callee-ID-Number">>
                                               ,<<"Call-ID">>, <<"Fax-Info">>
@@ -225,7 +237,8 @@
 
 %% Notify Password Recovery
 -define(PWD_RECOVERY_HEADERS, [<<"Email">>, <<"Password">>, <<"Account-ID">>]).
--define(OPTIONAL_PWD_RECOVERY_HEADERS, [<<"First-Name">>, <<"Last-Name">>, <<"Account-DB">>, <<"Request">>
+-define(OPTIONAL_PWD_RECOVERY_HEADERS, [<<"First-Name">>, <<"Last-Name">>
+                                        ,<<"Account-DB">>, <<"Request">>
                                         | ?DEFAULT_OPTIONAL_HEADERS
                                        ]).
 -define(PWD_RECOVERY_VALUES, [{<<"Event-Category">>, <<"notification">>}
@@ -235,13 +248,22 @@
 
 %% Notify New Account
 -define(NEW_ACCOUNT_HEADERS, [<<"Account-ID">>]).
--define(OPTIONAL_NEW_ACCOUNT_HEADERS, [<<"Account-DB">>, <<"Account-Name">>, <<"Account-API-Key">>, <<"Account-Realm">>
+-define(OPTIONAL_NEW_ACCOUNT_HEADERS, [<<"Account-DB">>, <<"Account-Name">>
+                                       ,<<"Account-API-Key">>, <<"Account-Realm">>
                                        | ?DEFAULT_OPTIONAL_HEADERS
                                       ]).
 -define(NEW_ACCOUNT_VALUES, [{<<"Event-Category">>, <<"notification">>}
                              ,{<<"Event-Name">>, <<"new_account">>}
                             ]).
 -define(NEW_ACCOUNT_TYPES, []).
+
+%% Notify New User
+-define(NEW_USER_HEADERS, [<<"Account-ID">>, <<"User-ID">>, <<"Password">>]).
+-define(OPTIONAL_NEW_USER_HEADERS, ?DEFAULT_OPTIONAL_HEADERS).
+-define(NEW_USER_VALUES, [{<<"Event-Category">>, <<"notification">>}
+                          ,{<<"Event-Name">>, <<"new_user">>}
+                         ]).
+-define(NEW_USER_TYPES, []).
 
 %% Notify Port Request
 -define(PORT_REQUEST_HEADERS, [<<"Account-ID">>]).
@@ -254,6 +276,30 @@
                               ,{<<"Event-Name">>, <<"port_request">>}
                              ]).
 -define(PORT_REQUEST_TYPES, []).
+
+%% Notify Port Pending
+-define(PORT_PENDING_HEADERS, [<<"Account-ID">>]).
+-define(OPTIONAL_PORT_PENDING_HEADERS, [<<"Authorized-By">>, <<"Port-Request-ID">>
+                                        ,<<"Number-State">>, <<"Local-Number">>
+                                        ,<<"Number">>, <<"Port">>, <<"Version">>
+                                        | ?DEFAULT_OPTIONAL_HEADERS
+                                       ]).
+-define(PORT_PENDING_VALUES, [{<<"Event-Category">>, <<"notification">>}
+                              ,{<<"Event-Name">>, <<"port_pending">>}
+                             ]).
+-define(PORT_PENDING_TYPES, []).
+
+%% Notify Port Scheduled
+-define(PORT_SCHEDULED_HEADERS, [<<"Account-ID">>]).
+-define(OPTIONAL_PORT_SCHEDULED_HEADERS, [<<"Authorized-By">>, <<"Port-Request-ID">>
+                                          ,<<"Number-State">>, <<"Local-Number">>
+                                          ,<<"Number">>, <<"Port">>, <<"Version">>
+                                          | ?DEFAULT_OPTIONAL_HEADERS
+                                         ]).
+-define(PORT_SCHEDULED_VALUES, [{<<"Event-Category">>, <<"notification">>}
+                                ,{<<"Event-Name">>, <<"port_scheduled">>}
+                               ]).
+-define(PORT_SCHEDULED_TYPES, []).
 
 % Notify Port Cancel
 -define(PORT_CANCEL_HEADERS, [<<"Account-ID">>]).
@@ -268,14 +314,26 @@
 -define(PORT_CANCEL_TYPES, []).
 
 %% Notify Ported Request
--define(PORTED_HEADERS, [<<"Account-ID">>, <<"Number">>, <<"Port">>]).
+-define(PORTED_HEADERS, [<<"Account-ID">>]).
 -define(OPTIONAL_PORTED_HEADERS, [<<"Number-State">>, <<"Local-Number">>, <<"Authorized-By">>, <<"Request">>
+                                  ,<<"Port-Request-ID">>, <<"Number">>, <<"Port">>
                                   | ?DEFAULT_OPTIONAL_HEADERS
                                  ]).
 -define(PORTED_VALUES, [{<<"Event-Category">>, <<"notification">>}
                         ,{<<"Event-Name">>, <<"ported">>}
                        ]).
 -define(PORTED_TYPES, []).
+
+%% Notify Ported Request
+-define(PORT_COMMENT_HEADERS, [<<"Account-ID">>]).
+-define(OPTIONAL_PORT_COMMENT_HEADERS, [<<"Number-State">>, <<"Local-Number">>, <<"Authorized-By">>, <<"Request">>
+                                        ,<<"Port-Request-ID">>, <<"Number">>, <<"Port">>
+                                        | ?DEFAULT_OPTIONAL_HEADERS
+                                       ]).
+-define(PORT_COMMENT_VALUES, [{<<"Event-Category">>, <<"notification">>}
+                              ,{<<"Event-Name">>, <<"port_comment">>}
+                             ]).
+-define(PORT_COMMENT_TYPES, []).
 
 %% Notify Cnam Request
 -define(CNAM_REQUEST_HEADERS, [<<"Account-ID">>, <<"Number">>, <<"Cnam">>]).
@@ -297,9 +355,11 @@
 
 %% Notify Top Up
 -define(TOPUP_HEADERS, [<<"Account-ID">>]).
--define(OPTIONAL_TOPUP_HEADERS, ?DEFAULT_OPTIONAL_HEADERS).
+-define(OPTIONAL_TOPUP_HEADERS, [<<"Amount">>, <<"Response">>, <<"Success">>
+                                 | ?DEFAULT_OPTIONAL_HEADERS
+                                ]).
 -define(TOPUP_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                       ,{<<"Event-Name">>, <<"low_balance">>}
+                       ,{<<"Event-Name">>, <<"topup">>}
                       ]).
 -define(TOPUP_TYPES, []).
 
@@ -331,7 +391,6 @@
                                   ]).
 -define(WEBHOOK_VALUES, [{<<"Event-Category">>, <<"notification">>}
                          ,{<<"Event-Name">>, <<"webhook">>}
-
                         ]).
 -define(WEBHOOK_TYPES, []).
 
@@ -360,10 +419,46 @@ headers(<<"voicemail_full">>) ->
     ?VOICEMAIL_FULL_HEADERS ++ ?OPTIONAL_VOICEMAIL_FULL_HEADERS;
 headers(<<"fax_inbound_to_email">>) ->
     ?FAX_INBOUND_HEADERS ++ ?OPTIONAL_FAX_INBOUND_HEADERS;
+headers(<<"fax_inbound_error_to_email">>) ->
+    ?FAX_INBOUND_ERROR_HEADERS ++ ?OPTIONAL_FAX_INBOUND_ERROR_HEADERS;
+headers(<<"fax_outbound_to_email">>) ->
+    ?FAX_OUTBOUND_HEADERS ++ ?OPTIONAL_FAX_OUTBOUND_HEADERS;
+headers(<<"fax_outbound_error_to_email">>) ->
+    ?FAX_OUTBOUND_ERROR_HEADERS ++ ?OPTIONAL_FAX_OUTBOUND_ERROR_HEADERS;
+headers(<<"low_balance">>) ->
+    ?LOW_BALANCE_HEADERS ++ ?OPTIONAL_LOW_BALANCE_HEADERS;
+headers(<<"new_account">>) ->
+    ?NEW_ACCOUNT_HEADERS ++ ?OPTIONAL_NEW_ACCOUNT_HEADERS;
+headers(<<"new_user">>) ->
+    ?NEW_USER_HEADERS ++ ?OPTIONAL_NEW_USER_HEADERS;
+headers(<<"deregister">>) ->
+    ?DEREGISTER_HEADERS ++ ?OPTIONAL_DEREGISTER_HEADERS;
+headers(<<"transaction">>) ->
+    ?TRANSACTION_HEADERS ++ ?OPTIONAL_TRANSACTION_HEADERS;
+headers(<<"password_recovery">>) ->
+    ?PWD_RECOVERY_HEADERS ++ ?OPTIONAL_PWD_RECOVERY_HEADERS;
+headers(<<"system_alert">>) ->
+    ?SYSTEM_ALERT_HEADERS ++ ?OPTIONAL_SYSTEM_ALERT_HEADERS;
+headers(<<"cnam_request">>) ->
+    ?CNAM_REQUEST_HEADERS ++ ?OPTIONAL_CNAM_REQUEST_HEADERS;
 headers(<<"skel">>) ->
     ?SKEL_HEADERS ++ ?OPTIONAL_SKEL_HEADERS;
+headers(<<"topup">>) ->
+    ?TOPUP_HEADERS ++ ?OPTIONAL_TOPUP_HEADERS;
+headers(<<"port_request">>) ->
+    ?PORT_REQUEST_HEADERS ++ ?OPTIONAL_PORT_REQUEST_HEADERS;
+headers(<<"port_pending">>) ->
+    ?PORT_PENDING_HEADERS ++ ?OPTIONAL_PORT_PENDING_HEADERS;
+headers(<<"port_scheduled">>) ->
+    ?PORT_SCHEDULED_HEADERS ++ ?OPTIONAL_PORT_SCHEDULED_HEADERS;
+headers(<<"port_cancel">>) ->
+    ?PORT_CANCEL_HEADERS ++ ?OPTIONAL_PORT_CANCEL_HEADERS;
+headers(<<"ported">>) ->
+    ?PORTED_HEADERS ++ ?OPTIONAL_PORTED_HEADERS;
+headers(<<"port_comment">>) ->
+    ?PORT_COMMENT_HEADERS ++ ?OPTIONAL_PORT_COMMENT_HEADERS;
 headers(_Notification) ->
-    lager:debug("no notification headers for ~s", [_Notification]),
+    lager:warning("no notification headers for ~s", [_Notification]),
     [].
 
 %%--------------------------------------------------------------------
@@ -554,6 +649,23 @@ new_account_v(Prop) when is_list(Prop) ->
 new_account_v(JObj) -> new_account_v(wh_json:to_proplist(JObj)).
 
 %%--------------------------------------------------------------------
+%% @doc New user notification - see wiki
+%% Takes proplist, creates JSON string or error
+%% @end
+%%--------------------------------------------------------------------
+new_user(Prop) when is_list(Prop) ->
+    case new_user_v(Prop) of
+        'true' -> wh_api:build_message(Prop, ?NEW_USER_HEADERS, ?OPTIONAL_NEW_USER_HEADERS);
+        'false' -> {'error', "Proplist failed validation for new_user"}
+    end;
+new_user(JObj) -> new_user(wh_json:to_proplist(JObj)).
+
+-spec new_user_v(api_terms()) -> boolean().
+new_user_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?NEW_USER_HEADERS, ?NEW_USER_VALUES, ?NEW_USER_TYPES);
+new_user_v(JObj) -> new_user_v(wh_json:to_proplist(JObj)).
+
+%%--------------------------------------------------------------------
 %% @doc Port request notification - see wiki
 %% Takes proplist, creates JSON string or error
 %% @end
@@ -569,6 +681,40 @@ port_request(JObj) -> port_request(wh_json:to_proplist(JObj)).
 port_request_v(Prop) when is_list(Prop) ->
     wh_api:validate(Prop, ?PORT_REQUEST_HEADERS, ?PORT_REQUEST_VALUES, ?PORT_REQUEST_TYPES);
 port_request_v(JObj) -> port_request_v(wh_json:to_proplist(JObj)).
+
+%%--------------------------------------------------------------------
+%% @doc Port pending notification - see wiki
+%% Takes proplist, creates JSON string or error
+%% @end
+%%--------------------------------------------------------------------
+port_pending(Prop) when is_list(Prop) ->
+    case port_pending_v(Prop) of
+        'true' -> wh_api:build_message(Prop, ?PORT_PENDING_HEADERS, ?OPTIONAL_PORT_PENDING_HEADERS);
+        'false' -> {'error', "Proplist failed validation for port_pending"}
+    end;
+port_pending(JObj) -> port_pending(wh_json:to_proplist(JObj)).
+
+-spec port_pending_v(api_terms()) -> boolean().
+port_pending_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?PORT_PENDING_HEADERS, ?PORT_PENDING_VALUES, ?PORT_PENDING_TYPES);
+port_pending_v(JObj) -> port_pending_v(wh_json:to_proplist(JObj)).
+
+%%--------------------------------------------------------------------
+%% @doc Port scheduled notification - see wiki
+%% Takes proplist, creates JSON string or error
+%% @end
+%%--------------------------------------------------------------------
+port_scheduled(Prop) when is_list(Prop) ->
+    case port_scheduled_v(Prop) of
+        'true' -> wh_api:build_message(Prop, ?PORT_SCHEDULED_HEADERS, ?OPTIONAL_PORT_SCHEDULED_HEADERS);
+        'false' -> {'error', "Proplist failed validation for port_scheduled"}
+    end;
+port_scheduled(JObj) -> port_scheduled(wh_json:to_proplist(JObj)).
+
+-spec port_scheduled_v(api_terms()) -> boolean().
+port_scheduled_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?PORT_SCHEDULED_HEADERS, ?PORT_SCHEDULED_VALUES, ?PORT_SCHEDULED_TYPES);
+port_scheduled_v(JObj) -> port_scheduled_v(wh_json:to_proplist(JObj)).
 
 %%--------------------------------------------------------------------
 %% @doc Port cancel notification - see wiki
@@ -603,6 +749,23 @@ ported(JObj) -> ported(wh_json:to_proplist(JObj)).
 ported_v(Prop) when is_list(Prop) ->
     wh_api:validate(Prop, ?PORTED_HEADERS, ?PORTED_VALUES, ?PORTED_TYPES);
 ported_v(JObj) -> ported_v(wh_json:to_proplist(JObj)).
+
+%%--------------------------------------------------------------------
+%% @doc Port comment request notification - see wiki
+%% Takes proplist, creates JSON string or error
+%% @end
+%%--------------------------------------------------------------------
+port_comment(Prop) when is_list(Prop) ->
+    case port_comment_v(Prop) of
+        'true' -> wh_api:build_message(Prop, ?PORT_COMMENT_HEADERS, ?OPTIONAL_PORT_COMMENT_HEADERS);
+        'false' -> {'error', "Proplist failed validation for port_comment"}
+    end;
+port_comment(JObj) -> port_comment(wh_json:to_proplist(JObj)).
+
+-spec port_comment_v(api_terms()) -> boolean().
+port_comment_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?PORT_COMMENT_HEADERS, ?PORT_COMMENT_VALUES, ?PORT_COMMENT_TYPES);
+port_comment_v(JObj) -> port_comment_v(wh_json:to_proplist(JObj)).
 
 %%--------------------------------------------------------------------
 %% @doc Cnam request notification - see wiki
@@ -789,14 +952,26 @@ bind_to_q(Q, ['pwd_recovery'|T]) ->
 bind_to_q(Q, ['new_account'|T]) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_NEW_ACCOUNT),
     bind_to_q(Q, T);
+bind_to_q(Q, ['new_user'|T]) ->
+    'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_NEW_USER),
+    bind_to_q(Q, T);
 bind_to_q(Q, ['port_request'|T]) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_PORT_REQUEST),
+    bind_to_q(Q, T);
+bind_to_q(Q, ['port_pending'|T]) ->
+    'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_PORT_PENDING),
+    bind_to_q(Q, T);
+bind_to_q(Q, ['port_scheduled'|T]) ->
+    'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_PORT_SCHEDULED),
     bind_to_q(Q, T);
 bind_to_q(Q, ['port_cancel'|T]) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_PORT_CANCEL),
     bind_to_q(Q, T);
 bind_to_q(Q, ['ported'|T]) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_PORTED),
+    bind_to_q(Q, T);
+bind_to_q(Q, ['port_comment'|T]) ->
+    'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_PORT_COMMENT),
     bind_to_q(Q, T);
 bind_to_q(Q, ['cnam_requests'|T]) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_CNAM_REQUEST),
@@ -867,14 +1042,26 @@ unbind_q_from(Q, ['pwd_recovery'|T]) ->
 unbind_q_from(Q, ['new_account'|T]) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_NEW_ACCOUNT),
     unbind_q_from(Q, T);
+unbind_q_from(Q, ['new_user'|T]) ->
+    'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_NEW_USER),
+    unbind_q_from(Q, T);
 unbind_q_from(Q, ['port_request'|T]) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_PORT_REQUEST),
+    unbind_q_from(Q, T);
+unbind_q_from(Q, ['port_pending'|T]) ->
+    'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_PORT_PENDING),
+    unbind_q_from(Q, T);
+unbind_q_from(Q, ['port_scheduled'|T]) ->
+    'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_PORT_SCHEDULED),
     unbind_q_from(Q, T);
 unbind_q_from(Q, ['port_cancel'|T]) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_PORT_CANCEL),
     unbind_q_from(Q, T);
 unbind_q_from(Q, ['ported'|T]) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_PORTED),
+    unbind_q_from(Q, T);
+unbind_q_from(Q, ['port_comment'|T]) ->
+    'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_PORT_COMMENT),
     unbind_q_from(Q, T);
 unbind_q_from(Q, ['cnam_request'|T]) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_CNAM_REQUEST),
@@ -986,12 +1173,33 @@ publish_new_account(API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?NEW_ACCOUNT_VALUES, fun ?MODULE:new_account/1),
     amqp_util:notifications_publish(?NOTIFY_NEW_ACCOUNT, Payload, ContentType).
 
+-spec publish_new_user(api_terms()) -> 'ok'.
+-spec publish_new_user(api_terms(), ne_binary()) -> 'ok'.
+publish_new_user(JObj) -> publish_new_user(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_new_user(API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?NEW_USER_VALUES, fun ?MODULE:new_user/1),
+    amqp_util:notifications_publish(?NOTIFY_NEW_USER, Payload, ContentType).
+
 -spec publish_port_request(api_terms()) -> 'ok'.
 -spec publish_port_request(api_terms(), ne_binary()) -> 'ok'.
 publish_port_request(JObj) -> publish_port_request(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_port_request(API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?PORT_REQUEST_VALUES, fun ?MODULE:port_request/1),
     amqp_util:notifications_publish(?NOTIFY_PORT_REQUEST, Payload, ContentType).
+
+-spec publish_port_pending(api_terms()) -> 'ok'.
+-spec publish_port_pending(api_terms(), ne_binary()) -> 'ok'.
+publish_port_pending(JObj) -> publish_port_pending(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_port_pending(API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?PORT_PENDING_VALUES, fun ?MODULE:port_pending/1),
+    amqp_util:notifications_publish(?NOTIFY_PORT_PENDING, Payload, ContentType).
+
+-spec publish_port_scheduled(api_terms()) -> 'ok'.
+-spec publish_port_scheduled(api_terms(), ne_binary()) -> 'ok'.
+publish_port_scheduled(JObj) -> publish_port_scheduled(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_port_scheduled(API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?PORT_SCHEDULED_VALUES, fun ?MODULE:port_scheduled/1),
+    amqp_util:notifications_publish(?NOTIFY_PORT_SCHEDULED, Payload, ContentType).
 
 -spec publish_port_cancel(api_terms()) -> 'ok'.
 -spec publish_port_cancel(api_terms(), ne_binary()) -> 'ok'.
@@ -1006,6 +1214,13 @@ publish_ported(JObj) -> publish_ported(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_ported(API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?PORTED_VALUES, fun ?MODULE:ported/1),
     amqp_util:notifications_publish(?NOTIFY_PORTED, Payload, ContentType).
+
+-spec publish_port_comment(api_terms()) -> 'ok'.
+-spec publish_port_comment(api_terms(), ne_binary()) -> 'ok'.
+publish_port_comment(JObj) -> publish_port_comment(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_port_comment(API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?PORT_COMMENT_VALUES, fun ?MODULE:port_comment/1),
+    amqp_util:notifications_publish(?NOTIFY_PORT_COMMENT, Payload, ContentType).
 
 -spec publish_cnam_request(api_terms()) -> 'ok'.
 -spec publish_cnam_request(api_terms(), ne_binary()) -> 'ok'.

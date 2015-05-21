@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz
+%%% @copyright (C) 2012-2015, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -53,7 +53,6 @@
         ]).
 
 -include("wh_couch.hrl").
--include_lib("whistle/include/wh_databases.hrl").
 
 -define(SLEEP_BETWEEN_COMPACTION
         ,whapps_config:get_integer(?CONFIG_CAT, <<"sleep_between_compaction">>, 60000)
@@ -1432,6 +1431,10 @@ wait_for_compaction(AdminConn, S) ->
 
 wait_for_compaction(_AdminConn, _S, {'error', 'db_not_found'}) ->
     lager:debug("shard '~s' wasn't found", [_S]);
+wait_for_compaction(AdminConn, S, {'error', 'timeout'}) ->
+    lager:warning("timed out querying db status; that seems irregular!"),
+    'ok' = timer:sleep(?SLEEP_BETWEEN_POLL * 2),
+    wait_for_compaction(AdminConn, S);
 wait_for_compaction(AdminConn, S, {'error', _E}) ->
     lager:debug("failed to query db status: ~p", [couch_util:format_error(_E)]),
     'ok' = timer:sleep(?SLEEP_BETWEEN_POLL),
@@ -1508,11 +1511,11 @@ get_node_connections(Host, Port, User, Pass, AdminPort, Retries) ->
             lager:warning("connection refused when connecting to ~s (on either ~p or ~p)"
                           ,[Host, Port, AdminPort]
                          ),
-            BCCookie = whapps_config:get(<<"whistle_couch">>, <<"bigcouch_cookie">>),
+            BCCookie = whapps_config:get(?CONFIG_CAT, <<"bigcouch_cookie">>),
             lager:warning("check that those ports are correct and the bigcouch_cookie(~s) is correct"
                           ,[BCCookie]
                          ),
-            lager:warning("'sup whapps_config set_default bigcouch_cookie <cookie>' if needed"),
+            lager:warning("'sup whapps_config set_default whistle_couch bigcouch_cookie <cookie>' if needed"),
             get_node_connections(Host, Port, User, Pass, AdminPort, Retries+1);
         _E:_R ->
             lager:warning("failed to connect to ~s: ~s: ~p", [Host, _E, _R]),
@@ -1525,11 +1528,11 @@ get_ports(Node, Cookie) ->
     case net_adm:ping(Node) =:= 'pong' andalso get_ports(Node) of
         'false' ->
             lager:warning("failed to ping '~s' using cookie '~s'", [Node, Cookie]),
-            BCCookie = whapps_config:get(<<"whistle_couch">>, <<"bigcouch_cookie">>),
+            BCCookie = whapps_config:get(?CONFIG_CAT, <<"bigcouch_cookie">>),
             lager:warning("check that the configured bigcouch_cookie(~s) is correct"
                           ,[BCCookie]
                          ),
-            lager:warning("'sup whapps_config set_default bigcouch_cookie <cookie>' if needed"),
+            lager:warning("'sup whapps_config set_default whistle_couch bigcouch_cookie <cookie>' if needed"),
             {wh_couch_connections:get_port(), wh_couch_connections:get_admin_port()};
         Ports -> Ports
     end.
@@ -1616,7 +1619,7 @@ compact_automatically() ->
 compact_automatically(Boolean) ->
     _ = (catch whapps_config:set(?CONFIG_CAT, <<"compact_automatically">>, Boolean)),
     CacheProps = [{'expires', 'infinity'}
-                  ,{'origin', {'db', ?WH_CONFIG_DB, <<"whistle_couch">>}}
+                  ,{'origin', {'db', ?WH_CONFIG_DB, ?CONFIG_CAT}}
                  ],
     wh_cache:store_local(?WH_COUCH_CACHE, <<"compact_automatically">>, Boolean, CacheProps).
 

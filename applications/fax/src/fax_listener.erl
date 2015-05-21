@@ -71,7 +71,7 @@ handle_printer_start(JObj, _Props) ->
     PrinterId = wh_json:get_value(<<"Application-Data">>, JObj),
     fax_xmpp_sup:start_printer(PrinterId).
 
--spec handle_printer_stop(wh_json:object(), wh_proplist()) -> sup_startchild_ret().
+-spec handle_printer_stop(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_printer_stop(JObj, _Props) ->
     'true' = wapi_xmpp:event_v(JObj),
     PrinterId = wh_json:get_value(<<"Application-Data">>, JObj),
@@ -179,7 +179,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 -spec start_all_printers() -> any().
 start_all_printers() ->
-    {'ok', Results} = couch_mgr:get_results(?WH_FAXES, <<"faxbox/cloud">>),
+    {'ok', Results} = couch_mgr:get_results(?WH_FAXES_DB, <<"faxbox/cloud">>),
     [ send_start_printer(Id, Jid)
        || {Id, Jid, <<"claimed">>}
               <- [{wh_json:get_value(<<"id">>, Result)
@@ -200,4 +200,4 @@ send_start_printer(PrinterId, JID) ->
                  ,{<<"JID">>, JID}
                  | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
                 ]),
-    wapi_xmpp:publish_event(Payload).
+    wh_amqp_worker:cast(Payload, fun wapi_xmpp:publish_event/1).

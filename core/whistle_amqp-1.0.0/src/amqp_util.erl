@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2014, 2600Hz INC
+%%% @copyright (C) 2010-2015, 2600Hz INC
 %%% @doc
 %%% Utilities to facilitate AMQP interaction
 %%% @end
@@ -110,6 +110,8 @@
 -export([queue_delete/1, queue_delete/2]).
 -export([new_exchange/2, new_exchange/3]).
 -export([declare_exchange/2, declare_exchange/3]).
+-export([confirm_select/0]).
+-export([flow_control/0, flow_control/1, flow_control_reply/1]).
 
 -export([access_request/0, access_request/1, basic_ack/1, basic_nack/1, basic_qos/1]).
 
@@ -914,6 +916,29 @@ basic_cancel(ConsumerTag) -> wh_amqp_channel:command(#'basic.cancel'{consumer_ta
 %%------------------------------------------------------------------------------
 %% @public
 %% @doc
+%% This method sets confirmation from server
+%% @end
+%%------------------------------------------------------------------------------
+-spec confirm_select() -> 'ok'.
+confirm_select() -> wh_amqp_channel:command(#'confirm.select'{}).
+
+%%------------------------------------------------------------------------------
+%% @public
+%% @doc
+%% This method sets flow control
+%% @end
+%%------------------------------------------------------------------------------
+-spec flow_control() -> 'ok'.
+-spec flow_control(boolean()) -> 'ok'.
+flow_control() -> flow_control('true').
+flow_control(Active) -> wh_amqp_channel:command(#'channel.flow'{active=Active}).
+
+-spec flow_control_reply(boolean()) -> 'ok'.
+flow_control_reply(Active) -> wh_amqp_channel:command(#'channel.flow_ok'{active=Active}).
+
+%%------------------------------------------------------------------------------
+%% @public
+%% @doc
 %%
 %% @end
 %%------------------------------------------------------------------------------
@@ -1005,16 +1030,3 @@ encode_char(C) ->
 
 hexint(C) when C < 10 -> ($0 + C);
 hexint(C) when C < 16 -> ($A + (C - 10)).
-
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
-
-encode_key_test() ->
-    ?assertEqual(<<"#">>, encode(<<"#">>)),
-    ?assertEqual(<<"*">>, encode(<<"*">>)),
-    ?assertEqual(<<"key">>, encode(<<"key">>)),
-    ?assertEqual(<<"routing%2Ekey">>, encode(<<"routing.key">>)),
-    ?assertEqual(<<"long%2Erouting%2Ekey">>, encode(<<"long.routing.key">>)),
-    ?assertEqual(<<"test%26%2E192%2E+168%2E+5%2E+5%23">>, encode(<<"test&.192. 168. 5. 5#">>)),
-    ok.
--endif.

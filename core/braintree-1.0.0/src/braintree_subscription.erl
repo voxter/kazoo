@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2015, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -19,6 +19,8 @@
 -export([update_addon_amount/3]).
 -export([get_discount/2]).
 -export([update_discount_amount/3]).
+-export([get_payment_token/1]).
+-export([update_payment_token/2]).
 -export([find/1]).
 -export([create/1, create/2]).
 -export([update/1]).
@@ -30,8 +32,8 @@
 -export([increment_addon_quantity/2]).
 -export([update_discount_quantity/3]).
 -export([increment_discount_quantity/2]).
+-export([is_cancelled/1]).
 
--import('braintree_util', [make_doc_xml/2]).
 -import('wh_util', [get_xml_value/2]).
 
 -include_lib("braintree/include/braintree.hrl").
@@ -77,7 +79,7 @@ url(SubscriptionId, Options) ->
 -spec new(ne_binary(), ne_binary(), ne_binary()) -> subscription().
 
 new(PlanId, PaymentToken) ->
-    new(wh_util:rand_hex_binary(16), PlanId, PaymentToken).
+    new(new_subscription_id(), PlanId, PaymentToken).
 
 new(SubscriptionId, PlanId, PaymentToken) ->
     #bt_subscription{id=SubscriptionId
@@ -85,6 +87,11 @@ new(SubscriptionId, PlanId, PaymentToken) ->
                      ,plan_id=PlanId
                      ,create='true'
                     }.
+
+%% @private
+-spec new_subscription_id() -> ne_binary().
+new_subscription_id() ->
+    wh_util:rand_hex_binary(16).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -193,6 +200,10 @@ update_discount_amount(#bt_subscription{discounts=Discounts}=Subscription, Disco
             Subscription#bt_subscription{discounts=lists:keyreplace(DiscountId, #bt_discount.id, Discounts, Discount1)}
     end.
 
+%% @public
+-spec get_payment_token(subscription()) -> api_binary().
+get_payment_token(#bt_subscription{payment_token = PT}) -> PT.
+
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
@@ -217,7 +228,7 @@ find(SubscriptionId) ->
 -spec create(ne_binary(), ne_binary()) -> subscription().
 
 create(#bt_subscription{id='undefined'}=Subscription) ->
-    create(Subscription#bt_subscription{id=wh_util:rand_hex_binary(16)});
+    create(Subscription#bt_subscription{id=new_subscription_id()});
 create(#bt_subscription{}=Subscription) ->
     Url = url(),
     Request = record_to_xml(Subscription, 'true'),
@@ -236,9 +247,17 @@ create(Plan, Token) ->
 -spec update(subscription()) -> subscription().
 update(#bt_subscription{create='true'}=Subscription) ->
     create(Subscription);
-update(#bt_subscription{id=SubscriptionId}=Subscription) ->
+update(#bt_subscription{}=Subscription) ->
+    update(Subscription, 'false').
+
+-spec update(subscription(), boolean()) -> subscription().
+update(#bt_subscription{id=SubscriptionId}=Subscription, ShouldSetFirstBillingDate) ->
     Url = url(SubscriptionId),
-    Request = record_to_xml(Subscription, 'true'),
+    Prepared = case ShouldSetFirstBillingDate of
+                   'false' -> Subscription#bt_subscription{billing_first_date = 'undefined'};
+                   'true'  -> Subscription
+               end,
+    Request = record_to_xml(Prepared, 'true'),
     Xml = braintree_request:put(Url, Request),
     xml_to_record(Xml).
 
@@ -352,8 +371,7 @@ increment_addon_quantity(SubscriptionId, AddOnId) ->
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
-%% Really ugly function to update an discount for a given subscription
-%% or subscription id
+%% Really ugly function to update a discount for a given subscription
 %% @end
 %%--------------------------------------------------------------------
 -spec update_discount_quantity(subscription() | ne_binary(), ne_binary(), api_integer()) -> subscription().
@@ -381,8 +399,7 @@ update_discount_quantity(SubscriptionId, DiscountId, Quantity) ->
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
-%% Really ugly function to increment an discount for a given subscription
-%% or subscription id
+%% Really ugly function to increment a discount for a given subscription
 %% @end
 %%--------------------------------------------------------------------
 -spec increment_discount_quantity(subscription() | ne_binary(), ne_binary()) -> subscription().
@@ -404,6 +421,31 @@ increment_discount_quantity(#bt_subscription{discounts=Discounts}=Subscription, 
 increment_discount_quantity(SubscriptionId, DiscountId) ->
     Subscription = find(SubscriptionId),
     increment_discount_quantity(Subscription, DiscountId).
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Update payment token and reset fields to be able to push update back
+%% @end
+%%--------------------------------------------------------------------
+-spec update_payment_token(subscription(), ne_binary()) -> subscription().
+update_payment_token(#bt_subscription{}=Subscription, PaymentToken) ->
+    NextBillingDate = Subscription#bt_subscription.next_bill_date,
+    Subscription#bt_subscription{ id = 'undefined'
+                                , start_immediately = 'false'
+                                , payment_token = PaymentToken
+                                , billing_first_date = NextBillingDate
+                                }.
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Update payment token and reset fields to be able to push update back
+%% @end
+%%--------------------------------------------------------------------
+-spec is_cancelled(subscription()) -> boolean().
+is_cancelled(#bt_subscription{status= <<"Canceled">>}) -> 'true';
+is_cancelled(_Subscription) -> 'false'.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -468,13 +510,11 @@ record_to_xml(#bt_subscription{}=Subscription, ToString) ->
     Props = [{'id', Subscription#bt_subscription.id}
              ,{'merchant-account-id', Subscription#bt_subscription.merchant_account_id}
              ,{'never-expires', Subscription#bt_subscription.never_expires}
+             ,{'first-billing-date', Subscription#bt_subscription.billing_first_date}
              ,{'number-of-billing-cycles', Subscription#bt_subscription.number_of_cycles}
              ,{'payment-method-token', Subscription#bt_subscription.payment_token}
              ,{'plan-id', Subscription#bt_subscription.plan_id}
              ,{'price', Subscription#bt_subscription.price}
-             ,{'trial-duration', Subscription#bt_subscription.trial_duration}
-             ,{'trial-duration-unit', Subscription#bt_subscription.trial_duration_unit}
-             ,{'trial-period', Subscription#bt_subscription.trial_period}
              ,{'add-ons', create_addon_changes(Subscription#bt_subscription.add_ons)}
              ,{'discounts', create_discount_changes(Subscription#bt_subscription.discounts)}
             ],
@@ -491,10 +531,21 @@ record_to_xml(#bt_subscription{}=Subscription, ToString) ->
                     ,fun(#bt_subscription{start_immediately=Value}, P) ->
                         update_options('start-immediately', Value, P)
                      end
+                    ,fun (S, P) ->
+                             case S#bt_subscription.trial_period of
+                                 <<"false">> -> P;
+                                 _ ->
+                                     [{'trial-duration', S#bt_subscription.trial_duration}
+                                      ,{'trial-duration-unit', S#bt_subscription.trial_duration_unit}
+                                      ,{'trial-period', S#bt_subscription.trial_period}
+                                      | P
+                                     ]
+                             end
+                     end
                    ],
     Props1 = lists:foldr(fun(F, P) -> F(Subscription, P) end, Props, Conditionals),
     case ToString of
-        'true' -> make_doc_xml(Props1, 'subscription');
+        'true' -> braintree_util:make_doc_xml(Props1, 'subscription');
         'false' -> Props1
     end.
 

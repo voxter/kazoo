@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2014, 2600Hz
+%%% @copyright (C) 2013-2015, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -44,6 +44,7 @@
 -define(CONSUME_OPTIONS, []).
 
 -define(ATOM(X), wh_util:to_atom(X, 'true')).
+-define(SMS_POOL(A,B,C), ?ATOM(<<A/binary,"_", B/binary, "_", C/binary>>) ).
 
 %%%===================================================================
 %%% API
@@ -230,8 +231,6 @@ handle_message_delivery(JObj, Props) ->
         'false' -> gen_listener:cast(Server, {'sms_success', JObj})
     end.
 
-
-
 -spec send(wh_json:object(), wh_proplist()) -> no_return().
 send(Endpoint, API) ->
     Type = wh_json:get_value(<<"Endpoint-Type">>, Endpoint, <<"sip">>),
@@ -248,34 +247,99 @@ send(<<"sip">>, Endpoint, API) ->
 send(<<"amqp">>, Endpoint, API) ->
     CallId = props:get_value(<<"Call-ID">>, API),
     Options = wh_json:to_proplist(wh_json:get_value(<<"Endpoint-Options">>, Endpoint, [])),
+    CCVs = wh_json:merge_jobjs(
+             wh_json:get_value(<<"Custom-Channel-Vars">>, Endpoint, wh_json:new())
+             ,wh_json:filter(fun filter_smpp/1, props:get_value(<<"Custom-Channel-Vars">>, API, wh_json:new()))
+            ),
     Props = wh_json:to_proplist(Endpoint) ++ Options,
-    Payload = props:set_values( Props, API),
+    Payload = props:set_value(<<"Custom-Channel-Vars">>, CCVs, props:set_values(Props, API)),
     Broker = wh_json:get_value([<<"Endpoint-Options">>, <<"AMQP-Broker">>], Endpoint),
+    BrokerName = wh_json:get_value([<<"Endpoint-Options">>, <<"Broker-Name">>], Endpoint),
     Exchange = wh_json:get_value([<<"Endpoint-Options">>, <<"Exchange-ID">>], Endpoint),
+    RouteId = wh_json:get_value([<<"Endpoint-Options">>, <<"Route-ID">>], Endpoint),
     ExchangeType = wh_json:get_value([<<"Endpoint-Options">>, <<"Exchange-Type">>], Endpoint, <<"topic">>),
-    maybe_add_broker(Broker, Exchange, ExchangeType),
+    ExchangeOptions = amqp_exchange_options(wh_json:get_value([<<"Endpoint-Options">>, <<"Exchange-Options">>], Endpoint)),
+    maybe_add_broker(Broker, Exchange, RouteId, ExchangeType, ExchangeOptions, BrokerName),
+
     lager:debug("sending sms and not waiting for response ~s", [CallId]),
-    wh_amqp_worker:cast(Payload, fun wapi_sms:publish_outbound/1, ?ATOM(Exchange)),
-    %% Message delivered
-    DeliveryProps = [{<<"Delivery-Result-Code">>, <<"sip:200">> }
+    case send_amqp_sms(Payload, ?SMS_POOL(Exchange, RouteId, BrokerName)) of
+        'ok' ->
+            send_success(API, CallId);
+        {'error', 'timeout'} ->
+            send_timeout_error(API, CallId);
+        {'error', Reason} ->
+            send_error(API, CallId, Reason)
+    end.
+
+-spec filter_smpp({ne_binary(), _}) -> boolean().
+filter_smpp({<<"SMPP-", _/binary>>, _}) -> 'true';
+filter_smpp(_) -> 'false'.
+
+-spec send_success(wh_proplist(), ne_binary()) -> 'ok'.
+send_success(API, CallId) ->
+    DeliveryProps = [{<<"Delivery-Result-Code">>, <<"sip:200">>}
                      ,{<<"Status">>, <<"Success">>}
-                     ,{<<"Message-ID">>, props:get_value(<<"Message-ID">>, API) }
-                     ,{<<"Call-ID">>, CallId }
-                    | wh_api:default_headers(<<"message">>, <<"delivery">>, ?APP_NAME, ?APP_VERSION)
-                     ],
-    gen_listener:cast(self(), {'sms_success', wh_json:set_values(DeliveryProps, wh_json:new())}).
+                     ,{<<"Message-ID">>, props:get_value(<<"Message-ID">>, API)}
+                     ,{<<"Call-ID">>, CallId}
+                     | wh_api:default_headers(<<"message">>, <<"delivery">>, ?APP_NAME, ?APP_VERSION)
+                    ],
+    gen_listener:cast(self(), {'sms_success', wh_json:from_list(DeliveryProps)}).
 
--spec maybe_add_broker(binary(), binary(), binary()) -> 'ok'.
-maybe_add_broker(Broker, Exchange, ExchangeType) ->
-    maybe_add_broker(Broker, Exchange, ExchangeType, wh_amqp_sup:pool_pid(?ATOM(Exchange)) =/= 'undefined').
+-spec send_timeout_error(wh_proplist(), ne_binary()) -> 'ok'.
+send_timeout_error(API, CallId) ->
+    DeliveryProps = [{<<"Delivery-Result-Code">>, <<"sip:500">>}
+                     ,{<<"Delivery-Failure">>, 'true'}
+                     ,{<<"Error-Code">>, 500}
+                     ,{<<"Error-Message">>, <<"timeout">>}
+                     ,{<<"Status">>, <<"Failed">>}
+                     ,{<<"Message-ID">>, props:get_value(<<"Message-ID">>, API)}
+                     ,{<<"Call-ID">>, CallId}
+                     | wh_api:default_headers(<<"message">>, <<"delivery">>, ?APP_NAME, ?APP_VERSION)
+                    ],
+    gen_listener:cast(self(), {'sms_error', wh_json:from_list(DeliveryProps)}).
 
+-spec send_error(wh_proplist(), ne_binary(), ne_binary()) -> 'ok'.
+send_error(API, CallId, Reason) ->
+    DeliveryProps = [{<<"Delivery-Result-Code">>, <<"sip:500">>}
+                     ,{<<"Delivery-Failure">>, 'true'}
+                     ,{<<"Error-Code">>, 500}
+                     ,{<<"Error-Message">>, wh_util:error_to_binary(Reason)}
+                     ,{<<"Status">>, <<"Failed">>}
+                     ,{<<"Message-ID">>, props:get_value(<<"Message-ID">>, API)}
+                     ,{<<"Call-ID">>, CallId}
+                     | wh_api:default_headers(<<"message">>, <<"delivery">>, ?APP_NAME, ?APP_VERSION)
+                    ],
+    gen_listener:cast(self(), {'sms_error', wh_json:from_list(DeliveryProps)}).
 
--spec maybe_add_broker(binary(), binary(), binary(), boolean()) -> 'ok'.
-maybe_add_broker(_Broker, _Exchange, _ExchangeType, 'true') -> 'ok';
-maybe_add_broker(Broker, Exchange, ExchangeType, 'false') ->
-    wh_amqp_connections:add(Broker, Exchange, [<<"hidden">>, Exchange]),
-    Exchanges = [{Exchange, ExchangeType, [{'passive', 'true'}]}],
-    wh_amqp_sup:add_amqp_pool(?ATOM(Exchange), Broker, 5, 5, [], Exchanges),
+-spec amqp_exchange_options(api_object()) -> wh_proplist().
+amqp_exchange_options('undefined') -> [];
+amqp_exchange_options(JObj) ->
+    [{wh_util:to_atom(K, 'true'), V}
+     || {K, V} <- wh_json:to_proplist(JObj)
+    ].
+
+-spec send_amqp_sms(wh_proplist(), atom()) ->
+                           'ok' |
+                           {'error', ne_binary() | 'timeout'}.
+send_amqp_sms(Payload, Pool) ->
+    case wh_amqp_worker:cast(Payload, fun wapi_sms:publish_outbound/1, Pool)
+    of
+        {'returned', _JObj, Deliver} ->
+            {'error', wh_json:get_value(<<"message">>, Deliver, <<"unknown">>)};
+        {'timeout',_} -> {'error', 'timeout'};
+        Else -> Else
+    end.
+
+-spec maybe_add_broker(api_binary(), api_binary(), api_binary(), ne_binary(), wh_proplist(), api_binary()) -> 'ok'.
+-spec maybe_add_broker(api_binary(), api_binary(), api_binary(), ne_binary(), wh_proplist(), api_binary(), boolean()) -> 'ok'.
+maybe_add_broker(Broker, Exchange, RouteId, ExchangeType, ExchangeOptions, BrokerName) ->
+    PoolExists = wh_amqp_sup:pool_pid(?SMS_POOL(Exchange, RouteId, BrokerName)) =/= 'undefined',
+    maybe_add_broker(Broker, Exchange, RouteId, ExchangeType, ExchangeOptions, BrokerName, PoolExists).
+
+maybe_add_broker(_Broker, _Exchange, _RouteId, _ExchangeType, _ExchangeOptions, _BrokerName, 'true') -> 'ok';
+maybe_add_broker(Broker, Exchange, RouteId, ExchangeType, ExchangeOptions, BrokerName, 'false') ->
+    Exchanges = [{Exchange, ExchangeType, ExchangeOptions}],
+    wh_amqp_sup:add_amqp_pool(?SMS_POOL(Exchange, RouteId, BrokerName), Broker, 5, 5, [], Exchanges, 'true'),
     'ok'.
 
 -spec build_sms(state()) -> state().
@@ -311,7 +375,7 @@ build_sms_base({CIDNum, CIDName}, JObj, Q) ->
        ,{<<"Caller-ID-Name">>, CIDName}
        ,{<<"Presence-ID">>, wh_json:get_value(<<"Presence-ID">>, JObj)}
        ,{<<"Custom-Channel-Vars">>, wh_json:set_values(CCVUpdates, CCVs)}
-       ,{<<"Custom-SIP-Headers">>, get_sip_headers(JObj)}
+       ,{<<"Custom-SIP-Headers">>, stepswitch_util:get_sip_headers(JObj)}
        ,{<<"Call-ID">>, wh_json:get_value(<<"Call-ID">>, JObj)}
        ,{<<"Outbound-Callee-ID-Number">>, wh_json:get_value(<<"Outbound-Callee-ID-Number">>, JObj)}
        ,{<<"Outbound-Callee-ID-Name">>, wh_json:get_value(<<"Outbound-Callee-ID-Name">>, JObj)}
@@ -455,45 +519,41 @@ emergency_cid_number(JObj) ->
     Requested = wh_json:get_first_defined([<<"Emergency-Caller-ID-Number">>
                                            ,<<"Outbound-Caller-ID-Number">>
                                           ], JObj),
-    lager:debug("ensuring requested CID is e911 enabled: ~s", [Requested]),
+    lager:debug("ensuring requested CID is emergency enabled: ~s", [Requested]),
     case couch_mgr:open_cache_doc(AccountDb, ?WNM_PHONE_NUMBER_DOC) of
         {'ok', PhoneNumbers} ->
             Numbers = wh_json:get_keys(wh_json:public_fields(PhoneNumbers)),
-            E911Enabled = [Number
-                           || Number <- Numbers
-                                  ,dash_e911_enabled(Number, PhoneNumbers)
+            EmergencyEnabled = [Number
+                           || Number <- Numbers,
+                              wnm_util:emergency_services_configured(Number, PhoneNumbers)
                           ],
-            emergency_cid_number(Requested, Candidates, E911Enabled);
+            emergency_cid_number(Requested, Candidates, EmergencyEnabled);
         {'error', _R} ->
             lager:error("unable to fetch the ~s from account ~s: ~p", [?WNM_PHONE_NUMBER_DOC, Account, _R]),
             emergency_cid_number(Requested, Candidates, [])
     end.
 
--spec dash_e911_enabled(ne_binary(), wh_json:object()) -> boolean().
-dash_e911_enabled(Number, PhoneNumbers) ->
-    lists:member(<<"dash_e911">>, wh_json:get_value([Number, <<"features">>], PhoneNumbers, [])).
-
 -spec emergency_cid_number(ne_binary(), api_binaries(), ne_binaries()) -> ne_binary().
-%% if there are no e911 enabled numbers then either use the global system default
+%% if there are no emergency enabled numbers then either use the global system default
 %% or the requested (if there isnt one)
 emergency_cid_number(Requested, _, []) ->
     case whapps_config:get_non_empty(<<"stepswitch">>, <<"default_emergency_cid_number">>) of
         'undefined' -> Requested;
-        DefaultE911 -> DefaultE911
+        DefaultEmergencyCID -> DefaultEmergencyCID
     end;
-%% If neither their emergency cid or outgoung cid is e911 enabled but their account
-%% has other numbers with e911 then use the first...
-emergency_cid_number(_, [], [E911Enabled|_]) -> E911Enabled;
+%% If neither their emergency cid or outgoung cid is emergency enabled but their account
+%% has other numbers with emergency then use the first...
+emergency_cid_number(_, [], [EmergencyEnabled|_]) -> EmergencyEnabled;
 %% due to the way we built the candidates list it can contain the atom 'undefined'
 %% handle that condition (ignore)
-emergency_cid_number(Requested, ['undefined'|Candidates], E911Enabled) ->
-    emergency_cid_number(Requested, Candidates, E911Enabled);
+emergency_cid_number(Requested, ['undefined'|Candidates], EmergencyEnabled) ->
+    emergency_cid_number(Requested, Candidates, EmergencyEnabled);
 %% check if the first non-atom undefined element in the list is in the list of
-%% e911 enabled numbers, if so use it otherwise keep checking.
-emergency_cid_number(Requested, [Candidate|Candidates], E911Enabled) ->
-    case lists:member(Candidate, E911Enabled) of
+%% emergency enabled numbers, if so use it otherwise keep checking.
+emergency_cid_number(Requested, [Candidate|Candidates], EmergencyEnabled) ->
+    case lists:member(Candidate, EmergencyEnabled) of
         'true' -> Candidate;
-        'false' -> emergency_cid_number(Requested, Candidates, E911Enabled)
+        'false' -> emergency_cid_number(Requested, Candidates, EmergencyEnabled)
     end.
 
 -spec contains_emergency_endpoints(wh_json:objects()) -> boolean().
@@ -551,29 +611,3 @@ sms_failure(JObj, Request) ->
      ,{<<"Resource-Response">>, JObj}
      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
     ].
-
--spec get_sip_headers(wh_json:object()) -> 'undefined' | wh_json:object().
-get_sip_headers(JObj) ->
-    case get_diversions(JObj) of
-        'undefined' -> 'undefined';
-        Diversion ->
-            wh_json:from_list([{<<"Diversion">>, Diversion}])
-    end.
-
--spec get_diversions(wh_json:object()) -> 'undefined' | wh_json:object().
-get_diversions(JObj) ->
-    Inception = wh_json:get_value(<<"Inception">>, JObj),
-    Diversions = wh_json:get_value([<<"Custom-SIP-Headers">>, <<"Diversion">>], JObj, []),
-    get_diversions(Inception, Diversions).
-
--spec get_diversions(api_binary(), wh_json:object()) -> 'undefined' | wh_json:object().
-get_diversions('undefined', _) -> 'undefined';
-get_diversions(Inception, Diversions) ->
-    wh_json:from_list([{<<"address">>, <<"sip:", Inception/binary>>}
-                       ,{<<"counter">>, find_diversion_count(Diversions) + 1}
-                      ]).
-
--spec find_diversion_count(wh_json:objects()) -> non_neg_integer().
-find_diversion_count([]) -> 0;
-find_diversion_count(Diversions) ->
-    lists:max([kzsip_diversion:counter(Diversion) || Diversion <- Diversions]).

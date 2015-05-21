@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2015, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -21,6 +21,10 @@
          ,delete/2
         ]).
 
+-ifdef(TEST).
+-export([merge_available/2]).
+-endif.
+
 -include("../crossbar.hrl").
 
 -define(NOTIFICATION_MIME_TYPES, [{<<"text">>, <<"html">>}
@@ -30,6 +34,11 @@
 -define(PREVIEW, <<"preview">>).
 
 -define(MACROS, <<"macros">>).
+
+-define(MOD_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".notifications">>).
+-define(NOTIFICATION_TIMEOUT
+        ,whapps_config:get_integer(?MOD_CONFIG_CAT, <<"notification_timeout_ms">>, 5 * ?MILLISECONDS_IN_SECOND)
+       ).
 
 %%%===================================================================
 %%% API
@@ -82,7 +91,6 @@ authorize(Context, AuthAccountId, [{<<"notifications">>, _Id}]) ->
     cb_context:req_verb(Context) =:= ?HTTP_GET
         orelse AuthAccountId =:= MasterAccountId;
 authorize(_Context, _AuthAccountId, _Nouns) ->
-    lager:debug("not authz ~s for ~p", [_AuthAccountId, _Nouns]),
     'false'.
 
 %%--------------------------------------------------------------------
@@ -149,7 +157,7 @@ content_types_provided(Context, _Id, _Verb) ->
 
 -spec maybe_set_content_types(cb_context:context()) -> cb_context:context().
 maybe_set_content_types(Context) ->
-    case wh_json:get_value(<<"_attachments">>, cb_context:doc(Context)) of
+    case wh_doc:attachments(cb_context:doc(Context)) of
         'undefined' -> Context;
         Attachments -> set_content_types(Context, Attachments)
     end.
@@ -229,7 +237,36 @@ validate_notification(Context, Id, ?HTTP_GET) ->
 validate_notification(Context, Id, ?HTTP_POST) ->
     maybe_update(Context, Id);
 validate_notification(Context, Id, ?HTTP_DELETE) ->
+    validate_delete_notification(Context, Id).
+
+-spec validate_delete_notification(cb_context:context(), path_token()) ->
+                                          cb_context:context().
+-spec validate_delete_notification(cb_context:context(), path_token(), ne_binary(), ne_binary()) ->
+                                          cb_context:context().
+validate_delete_notification(Context, Id) ->
+    {'ok', MasterAccountId} = whapps_util:get_master_account_id(),
+    validate_delete_notification(Context, Id, MasterAccountId, cb_context:account_id(Context)).
+
+validate_delete_notification(Context, Id, MasterAccountId, MasterAccountId) ->
+    disallow_delete(Context, kz_notification:resp_id(Id));
+validate_delete_notification(Context, Id, _MasterAccountId, 'undefined') ->
+    disallow_delete(Context, kz_notification:resp_id(Id));
+validate_delete_notification(Context, Id, _MasterAccuontId, _AccountId) ->
+    lager:debug("trying to remove notification from account ~s", [_AccountId]),
     read(Context, Id, 'account').
+
+-spec disallow_delete(cb_context:context(), path_token()) -> cb_context:context().
+disallow_delete(Context, Id) ->
+    lager:debug("deleting the master template is disallowed"),
+    cb_context:add_validation_error(Id
+                                    ,<<"disallow">>
+                                    ,wh_json:from_list(
+                                       [{<<"message">>, <<"Top-level notification template cannot be deleted">>}
+                                        ,{<<"target">>, Id}
+                                       ]
+                                      )
+                                    ,Context
+                                   ).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -268,21 +305,23 @@ post(Context, Id) ->
 do_post(Context) ->
     Context1 = crossbar_doc:save(Context),
     case cb_context:resp_status(Context1) of
-        'success' -> leak_doc_id(Context1);
+        'success' ->
+            maybe_note_notification_preference(Context1),
+            leak_doc_id(Context1);
         _Status -> Context1
     end.
 
 post(Context, Id, ?PREVIEW) ->
-    Preview = build_preview_payload(Context),
-
+    Notification = cb_context:doc(Context),
+    Preview = build_preview_payload(Context, Notification),
     {API, _} = lists:foldl(fun preview_fold/2
-                           ,{Preview, cb_context:doc(Context)}
-                           ,wapi_notifications:headers(Id)
+                           ,{Preview, Notification}
+                           ,headers(Id)
                           ),
-
     case wh_amqp_worker:call(API
                              ,publish_fun(Id)
                              ,fun wapi_notifications:notify_update_v/1
+                             ,?NOTIFICATION_TIMEOUT
                             )
     of
         {'ok', Resp} ->
@@ -293,9 +332,8 @@ post(Context, Id, ?PREVIEW) ->
             crossbar_util:response('error', <<"Failed to process notification preview">>, Context)
     end.
 
--spec build_preview_payload(cb_context:context()) -> wh_proplist().
-build_preview_payload(Context) ->
-    Notification = cb_context:doc(Context),
+-spec build_preview_payload(cb_context:context(), wh_json:object()) -> wh_proplist().
+build_preview_payload(Context, Notification) ->
     props:filter_empty(
       [{<<"To">>, wh_json:get_value(<<"to">>, Notification)}
        ,{<<"From">>, wh_json:get_value(<<"from">>, Notification)}
@@ -327,13 +365,51 @@ handle_preview_response(Context, Resp) ->
             crossbar_util:response_202(<<"Notification processing">>, Context)
     end.
 
+-spec headers(ne_binary()) -> wh_proplist().
+headers(<<"voicemail_to_email">>) ->
+    wapi_notifications:headers(<<"voicemail">>);
+headers(Id) ->
+    wapi_notifications:headers(Id).
+
 -spec publish_fun(ne_binary()) -> fun((api_terms()) -> 'ok').
-publish_fun(<<"voicemail">>) ->
+publish_fun(<<"voicemail_to_email">>) ->
     fun wapi_notifications:publish_voicemail/1;
 publish_fun(<<"voicemail_full">>) ->
     fun wapi_notifications:publish_voicemail_full/1;
 publish_fun(<<"fax_inbound_to_email">>) ->
     fun wapi_notifications:publish_fax_inbound/1;
+publish_fun(<<"fax_inbound_error_to_email">>) ->
+    fun wapi_notifications:publish_fax_inbound_error/1;
+publish_fun(<<"fax_outbound_to_email">>) ->
+    fun wapi_notifications:publish_fax_outbound/1;
+publish_fun(<<"fax_outbound_error_to_email">>) ->
+    fun wapi_notifications:publish_fax_outbound_error/1;
+publish_fun(<<"low_balance">>) ->
+    fun wapi_notifications:publish_low_balance/1;
+publish_fun(<<"new_account">>) ->
+    fun wapi_notifications:publish_new_account/1;
+publish_fun(<<"new_user">>) ->
+    fun wapi_notifications:publish_new_user/1;
+publish_fun(<<"deregister">>) ->
+    fun wapi_notifications:publish_deregister/1;
+publish_fun(<<"transaction">>) ->
+    fun wapi_notifications:publish_transaction/1;
+publish_fun(<<"password_recovery">>) ->
+    fun wapi_notifications:publish_pwd_recovery/1;
+publish_fun(<<"system_alert">>) ->
+    fun wapi_notifications:publish_system_alert/1;
+publish_fun(<<"cnam_request">>) ->
+    fun wapi_notifications:publish_cnam_request/1;
+publish_fun(<<"topup">>) ->
+    fun wapi_notifications:publish_topup/1;
+publish_fun(<<"port_request">>) ->
+    fun wapi_notifications:publish_port_request/1;
+publish_fun(<<"port_scheduled">>) ->
+    fun wapi_notifications:publish_port_scheduled/1;
+publish_fun(<<"port_cancel">>) ->
+    fun wapi_notifications:publish_port_cancel/1;
+publish_fun(<<"ported">>) ->
+    fun wapi_notifications:publish_ported/1;
 publish_fun(_Id) ->
     lager:debug("no wapi_notification:publish_~s/1 defined", [_Id]),
     fun(_Any) -> 'ok' end.
@@ -342,8 +418,10 @@ publish_fun(_Id) ->
                           {wh_proplist(), wh_json:object()}.
 preview_fold(Header, {Props, ReqData}) ->
     case wh_json:get_first_defined([Header, wh_json:normalize_key(Header)], ReqData) of
-        'undefined' -> {props:insert_value(Header, Header, Props), ReqData};
-        V -> {props:set_value(Header, V, Props), ReqData}
+        'undefined' ->
+            {props:insert_value(Header, Header, Props), ReqData};
+        V ->
+            {props:set_value(Header, V, Props), ReqData}
     end.
 
 %%--------------------------------------------------------------------
@@ -364,10 +442,7 @@ maybe_delete(Context, Id, [?MEDIA_VALUE(<<"application">>, <<"json">>, _, _, _)]
 maybe_delete(Context, Id, [?MEDIA_VALUE(<<"application">>, <<"x-json">>, _, _, _)]) ->
     delete_doc(Context, Id);
 maybe_delete(Context, Id, [?MEDIA_VALUE(Type, SubType, _, _, _)]) ->
-    maybe_delete_template(Context, Id, <<Type/binary, "/", SubType/binary>>);
-maybe_delete(Context, Id, []) ->
-    lager:debug("no content-type headers, using json"),
-    delete_doc(Context, Id).
+    maybe_delete_template(Context, Id, <<Type/binary, "/", SubType/binary>>).
 
 -spec delete_doc(cb_context:context(), ne_binary()) -> cb_context:context().
 delete_doc(Context, Id) ->
@@ -391,7 +466,11 @@ maybe_delete_template(Context, Id, ContentType, TemplateJObj) ->
     case wh_doc:attachment(TemplateJObj, AttachmentName) of
         'undefined' ->
             lager:debug("failed to find attachment ~s", [AttachmentName]),
-            cb_context:add_system_error('bad_identifier', [{'details', ContentType}],  Context);
+            cb_context:add_system_error(
+              'bad_identifier'
+              ,wh_json:from_list([{<<"cause">>, ContentType}])
+              , Context
+             );
         _Attachment ->
             lager:debug("attempting to delete attachment ~s", [AttachmentName]),
             crossbar_doc:delete_attachment(kz_notification:db_id(Id), AttachmentName, Context)
@@ -428,7 +507,7 @@ media_values(Media) ->
 
 media_values('undefined', 'undefined') ->
     lager:debug("no accept headers, assuming JSON"),
-    ?MEDIA_VALUE(<<"application">>, <<"json">>);
+    [?MEDIA_VALUE(<<"application">>, <<"json">>)];
 media_values(AcceptValue, 'undefined') ->
     case cb_modules_util:parse_media_type(AcceptValue) of
         {'error', 'badarg'} -> media_values('undefined', 'undefined');
@@ -489,7 +568,7 @@ read(Context, Id, LoadFrom) ->
     Context1 =
         case cb_context:account_db(Context) of
             'undefined' when LoadFrom =:= 'system'; LoadFrom =:= 'system_migrate' ->
-                lager:debug("no account id, loading ~ from system", [Id]),
+                lager:debug("no account id, loading ~s from system", [Id]),
                 read_system(Context, Id);
             _AccountDb ->
                 lager:debug("reading ~s from account first", [Id]),
@@ -601,14 +680,15 @@ maybe_note_notification_preference(Context) ->
 maybe_note_notification_preference(AccountDb, AccountJObj) ->
     case kz_account:notification_preference(AccountJObj) of
         'undefined' -> note_notification_preference(AccountDb, AccountJObj);
-        _Pref -> lager:debug("account already prefers ~s", [_Pref])
+        <<"teletype">> -> lager:debug("account already prefers teletype");
+        _Pref -> note_notification_preference(AccountDb, AccountJObj)
     end.
 
 -spec note_notification_preference(ne_binary(), wh_json:object()) -> 'ok'.
 note_notification_preference(AccountDb, AccountJObj) ->
     case couch_mgr:save_doc(AccountDb
                             ,kz_account:set_notification_preference(AccountJObj
-                                                                    ,kz_notification:pvt_type()
+                                                                    ,<<"teletype">>
                                                                    )
                            )
     of
@@ -675,18 +755,18 @@ maybe_read_template(Context, Id, Accept) ->
 read_template(Context, Id, Accept) ->
     Doc = cb_context:fetch(Context, 'db_doc'),
     AttachmentName = attachment_name_by_media_type(Accept),
-    case wh_json:get_value([<<"_attachments">>, AttachmentName], Doc) of
+    case wh_doc:attachment(Doc, AttachmentName) of
         'undefined' ->
             lager:debug("failed to find attachment ~s in ~s", [AttachmentName, Id]),
             crossbar_util:response_faulty_request(Context);
-        Meta ->
+        _Meta ->
             lager:debug("found attachment ~s in ~s", [AttachmentName, Id]),
 
             cb_context:add_resp_headers(
               read_account_attachment(Context, Id, AttachmentName)
               ,[{<<"Content-Disposition">>, attachment_filename(Id, Accept)}
-                ,{<<"Content-Type">>, wh_json:get_value(<<"content_type">>, Meta)}
-                ,{<<"Content-Length">>, wh_json:get_value(<<"length">>, Meta)}
+                ,{<<"Content-Type">>, wh_doc:attachment_content_type(Doc, AttachmentName)}
+                ,{<<"Content-Length">>, wh_doc:attachment_length(Doc, AttachmentName)}
                ])
     end.
 
@@ -799,7 +879,7 @@ fetch_summary_available(Context) ->
         crossbar_doc:load_view(?CB_LIST
                                ,[]
                                ,cb_context:set_account_db(Context, MasterAccountDb)
-                               ,fun normalize_available/2
+                               ,select_normalize_fun(Context)
                               ),
     cache_available(Context1),
     Context1.
@@ -824,7 +904,7 @@ summary_account(Context) ->
         crossbar_doc:load_view(?CB_LIST
                                ,[]
                                ,Context
-                               ,fun normalize_available/2
+                               ,select_normalize_fun(Context)
                               ),
     lager:debug("loaded account's summary"),
     summary_account(Context1, cb_context:doc(Context1)).
@@ -866,9 +946,28 @@ merge_fold(Overridden, Acc) ->
        ]
     ].
 
--spec normalize_available(wh_json:object(), wh_json:objects()) -> wh_json:objects().
-normalize_available(JObj, Acc) ->
+-type normalize_fun() :: fun((wh_json:object(), wh_json:objects()) -> wh_json:objects()).
+
+-spec select_normalize_fun(cb_context:context()) -> normalize_fun().
+select_normalize_fun(Context) ->
+    Account = cb_context:auth_account_id(Context),
+    case wh_util:is_system_admin(Account) of
+        'true' -> fun normalize_available_admin/2;
+        'false' -> fun normalize_available_non_admin/2
+    end.
+
+-spec normalize_available_admin(wh_json:object(), wh_json:objects()) -> wh_json:objects().
+-spec normalize_available_non_admin(wh_json:object(), wh_json:objects()) -> wh_json:objects().
+normalize_available_admin(JObj, Acc) ->
     [wh_json:get_value(<<"value">>, JObj) | Acc].
+
+normalize_available_non_admin(JObj, Acc) ->
+    Value = wh_json:get_value(<<"value">>, JObj),
+    case kz_notification:category(Value) of
+        <<"system">> -> Acc;
+        <<"skel">> -> Acc;
+        _Category -> [Value | Acc]
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -920,7 +1019,7 @@ on_successful_validation(Id, Context) ->
     end.
 
 -spec handle_missing_account_notification(cb_context:context(), ne_binary(), wh_proplist()) -> cb_context:context().
-handle_missing_account_notification(Context, Id, [{<<"notifications">>, [Id ,<<"preview">>]}|_]) ->
+handle_missing_account_notification(Context, Id, [{<<"notifications">>, [Id, ?PREVIEW]}|_]) ->
     lager:debug("preview request, ignoring if notification ~s is missing", [Id]),
     on_successful_validation(Id, Context);
 handle_missing_account_notification(Context, Id, _ReqNouns) ->
@@ -992,18 +1091,3 @@ leak_attachments_fold(_Attachment, Props, Acc) ->
                       ,wh_json:from_list([{<<"length">>, wh_json:get_integer_value(<<"length">>, Props)}])
                       ,Acc
                      ).
-
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
-
-merge_available_test() ->
-    Available = wh_json:decode(<<"[{\"id\":\"o1\",\"k1\":\"v1\"},{\"id\":\"o2\",\"k2\":\"v2\"},{\"id\":\"o3\",\"k3\":\"v3\"}]">>),
-    AccountAvailable = wh_json:decode(<<"[{\"id\":\"o1\",\"k1\":\"a1\"},{\"id\":\"o2\",\"k2\":\"a2\"}]">>),
-
-    Merged = merge_available(AccountAvailable, Available),
-
-    ?assertEqual(<<"a1">>, wh_json:get_value([2,<<"k1">>], Merged)),
-    ?assertEqual(<<"a2">>, wh_json:get_value([1,<<"k2">>], Merged)),
-    ?assertEqual(<<"v3">>, wh_json:get_value([3,<<"k3">>], Merged)).
-
--endif.

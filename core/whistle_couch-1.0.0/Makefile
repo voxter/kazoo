@@ -2,6 +2,7 @@ PROJECT = whistle_couch
 ROOT = ../..
 
 EBINS = $(shell find $(ROOT)/core/whistle-* -maxdepth 2 -name ebin -print) \
+	$(shell find $(ROOT)/core/whistle_number_manager-* -maxdepth 2 -name ebin -print) \
 	$(shell find $(ROOT)/deps/lager-* -maxdepth 2 -name ebin -print) \
 	$(shell find $(ROOT)/deps/couchbeam-* -maxdepth 2 -name ebin -print)
 PA = $(foreach EBIN,$(EBINS),-pa $(EBIN))
@@ -36,10 +37,12 @@ test/$(PROJECT).app: src/wh_gen_changes.erl src/*.erl
 
 clean:
 	rm -f ebin/*
-	rm -f test/*.beam test/$(PROJECT).app
 	rm -f erl_crash.dump
 
-test: clean compile-test eunit
+clean-test:
+	rm -f test/*.beam test/$(PROJECT).app
+
+test: clean-test compile-test eunit
 
 eunit: compile-test
-	erl -noshell -pa test -eval "eunit:test([$(MODULES)], [verbose])" -s init stop
+	erl -noshell $(PA) -pa test -eval "case eunit:test([$(MODULES)], [verbose]) of 'ok' -> init:stop(); _ -> init:stop(1) end."

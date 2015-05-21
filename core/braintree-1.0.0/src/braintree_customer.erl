@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz
+%%% @copyright (C) 2011-2015, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -26,7 +26,6 @@
 -export([json_to_record/1]).
 -export([record_to_json/1]).
 
--import('braintree_util', [make_doc_xml/2]).
 -import('wh_util', [get_xml_value/2]).
 
 -include_lib("braintree/include/braintree.hrl").
@@ -76,7 +75,7 @@ new_subscription(PlanId, Customer) ->
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
-%% Given a cutomer record find (if any) the default payment token
+%% Given a customer record find (if any) the default payment token
 %% @end
 %%--------------------------------------------------------------------
 -spec default_payment_token(ne_binary() | customer()) -> api_binary().
@@ -85,7 +84,7 @@ default_payment_token(#bt_customer{}=Customer) ->
 default_payment_token(CustomerId) ->
     default_payment_token(find(CustomerId)).
 
--spec default_payment_card(ne_binary() | customer()) -> braintree_card:card().
+-spec default_payment_card(ne_binary() | customer()) -> bt_card().
 default_payment_card(#bt_customer{}=Customer) ->
     braintree_card:default_payment_card(get_cards(Customer));
 default_payment_card(CustomerId) ->
@@ -107,7 +106,7 @@ get_id(#bt_customer{id=CustomerId}) ->
 %% Get credit cards
 %% @end
 %%--------------------------------------------------------------------
--spec get_cards(customer()) -> braintree_card:cards().
+-spec get_cards(customer()) -> bt_cards().
 get_cards(#bt_customer{credit_cards=Cards}) ->
     Cards.
 
@@ -163,7 +162,8 @@ all() ->
 %% Find a customer by id
 %% @end
 %%--------------------------------------------------------------------
--spec find(ne_binary() | nonempty_string()) -> customer().
+-spec find(ne_binary() | customer()) -> customer().
+find(#bt_customer{id = CustomerId}) -> find(CustomerId);
 find(CustomerId) ->
     Url = url(CustomerId),
     Xml = braintree_request:get(Url),
@@ -192,10 +192,25 @@ create(CustomerId) ->
 %%--------------------------------------------------------------------
 -spec update(customer()) -> customer().
 update(#bt_customer{id=CustomerId}=Customer) ->
+    %% Note: coming from cb_braintree, Customer only has (unsynced) card data
     Url = url(CustomerId),
     Request = record_to_xml(Customer, 'true'),
     Xml = braintree_request:put(Url, Request),
-    xml_to_record(Xml).
+    %% Gives back the altered subscriptions
+    UpdateRecord = xml_to_record(Xml),
+
+    NewCards = braintree_card:delete_unused_cards(get_cards(UpdateRecord)),
+    NewPaymentToken = braintree_card:default_payment_token(NewCards),
+    NewSubscriptions =
+        [braintree_subscription:create(
+           braintree_subscription:update_payment_token(Sub, NewPaymentToken))
+         || Sub <- get_subscriptions(UpdateRecord)
+                , not braintree_subscription:is_cancelled(Sub)
+        ],
+
+    UpdateRecord#bt_customer{credit_cards = NewCards
+                             ,subscriptions = NewSubscriptions
+                            }.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -203,7 +218,7 @@ update(#bt_customer{id=CustomerId}=Customer) ->
 %% Deletes a customer id from braintree's system
 %% @end
 %%--------------------------------------------------------------------
--spec delete(customer() | text()) -> customer().
+-spec delete(customer() | ne_binary()) -> customer().
 delete(#bt_customer{id=CustomerId}) ->
     delete(CustomerId);
 delete(CustomerId) ->
@@ -269,12 +284,13 @@ record_to_xml(Customer, ToString) ->
              ,{'phone', Customer#bt_customer.phone}
              ,{'fax', Customer#bt_customer.fax}
              ,{'website', Customer#bt_customer.website}
-             |[{'credit-card', braintree_card:record_to_xml(Card)}
-               || Card <- Customer#bt_customer.credit_cards, Card =/= 'undefined'
-              ]
+             |
+             [{'credit-card', braintree_card:record_to_xml(Card)}
+              || Card <- Customer#bt_customer.credit_cards, Card =/= 'undefined'
+             ]
             ],
     case ToString of
-        'true' -> make_doc_xml(Props, 'customer');
+        'true' -> braintree_util:make_doc_xml(Props, 'customer');
         'false' -> Props
     end.
 
