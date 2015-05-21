@@ -643,6 +643,8 @@ call_stat_to_doc(#call_stat{id=Id
                             ,abandoned_timestamp=AbandonedT
                             ,handled_timestamp=HandledT
                             ,processed_timestamp=ProcessedT
+                            ,entered_position=EnteredPos
+                            ,exited_position=ExitedPos
                             ,abandoned_reason=AbandonedR
                             ,misses=Misses
                             ,status=Status
@@ -660,6 +662,8 @@ call_stat_to_doc(#call_stat{id=Id
            ,{<<"abandoned_timestamp">>, AbandonedT}
            ,{<<"handled_timestamp">>, HandledT}
            ,{<<"processed_timestamp">>, ProcessedT}
+           ,{<<"entered_position">>, EnteredPos}
+           ,{<<"exited_position">>, ExitedPos}
            ,{<<"abandoned_reason">>, AbandonedR}
            ,{<<"misses">>, misses_to_docs(Misses)}
            ,{<<"status">>, Status}
@@ -683,6 +687,8 @@ call_stat_to_json(#call_stat{id=Id
                              ,abandoned_timestamp=AbandonedT
                              ,handled_timestamp=HandledT
                              ,processed_timestamp=ProcessedT
+                             ,entered_position=EnteredPos
+                             ,exited_position=ExitedPos
                              ,abandoned_reason=AbandonedR
                              ,misses=Misses
                              ,status=Status
@@ -700,6 +706,8 @@ call_stat_to_json(#call_stat{id=Id
          ,{<<"Abandoned-Timestamp">>, AbandonedT}
          ,{<<"Handled-Timestamp">>, HandledT}
          ,{<<"Processed-Timestamp">>, ProcessedT}
+         ,{<<"Entered-Position">>, EnteredPos}
+         ,{<<"Exited-Position">>, ExitedPos}
          ,{<<"Abandoned-Reason">>, AbandonedR}
          ,{<<"Misses">>, misses_to_docs(Misses)}
          ,{<<"Status">>, Status}
