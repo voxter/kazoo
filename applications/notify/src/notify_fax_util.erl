@@ -66,7 +66,7 @@ get_attachment(Category, Props) ->
 raw_attachment_binary(Props) ->
     Fax = props:get_value(<<"fax">>, Props),
     FaxId = props:get_first_defined([<<"fax_jobid">>, <<"fax_id">>], Fax),
-    Db = props:get_value(<<"account_db">>, Props, ?WH_FAXES),
+    Db = props:get_value(<<"account_db">>, Props, ?WH_FAXES_DB),
     lager:debug("raw attachment ~s / ~s", [Db, FaxId]),
     raw_attachment_binary(Db, FaxId).
 
@@ -75,12 +75,15 @@ raw_attachment_binary(Db, FaxId) ->
 
 raw_attachment_binary(Db, FaxId, Retries) when Retries > 0 ->
     case couch_mgr:open_doc(Db, FaxId) of
-        {'error','not_found'} when Db =/= ?WH_FAXES ->
-            raw_attachment_binary(?WH_FAXES, FaxId, Retries);
+        {'error','not_found'} when Db =/= ?WH_FAXES_DB ->
+            raw_attachment_binary(?WH_FAXES_DB, FaxId, Retries);
         {'ok', FaxJObj} ->
-            case wh_json:get_keys(<<"_attachments">>, FaxJObj) of
+            case wh_doc:attachment_names(FaxJObj) of
                 [AttachmentId | _] ->
-                    ContentType = wh_json:get_value([<<"_attachments">>, AttachmentId, <<"content_type">>], FaxJObj, <<"image/tiff">>),
+                    ContentType = case wh_doc:attachment_content_type(FaxJObj, AttachmentId) of
+                                      'undefined' -> <<"image/tiff">>;
+                                      CT -> CT
+                                  end,
                     {'ok', AttachmentBin} = couch_mgr:fetch_attachment(Db, FaxId, AttachmentId),
                     {'ok', AttachmentBin, ContentType};
                 [] ->

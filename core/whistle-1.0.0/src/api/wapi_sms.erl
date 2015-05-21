@@ -81,7 +81,7 @@
 %% Delivery
 -define(DELIVERY_REQ_EVENT_NAME, <<"delivery">>).
 -define(DELIVERY_HEADERS, [<<"Call-ID">>, <<"Message-ID">>]).
--define(OPTIONAL_DELIVERY_HEADERS, [<<"Geo-Location">>, <<"Orig-IP">>
+-define(OPTIONAL_DELIVERY_HEADERS, [<<"Geo-Location">>, <<"Orig-IP">>, <<"Orig-Port">>
                                     ,<<"Custom-Channel-Vars">>, <<"Custom-SIP-Headers">>
                                     ,<<"From-Network-Addr">>
                                     ,<<"Switch-Hostname">>, <<"Switch-Nodename">>
@@ -120,19 +120,20 @@
 
 %% Inbound
 -define(INBOUND_REQ_EVENT_NAME, <<"inbound">>).
--define(INBOUND_HEADERS, [<<"Message-ID">>]).
--define(OPTIONAL_INBOUND_HEADERS, [<<"Geo-Location">>, <<"Orig-IP">>
+-define(INBOUND_HEADERS, [<<"Message-ID">>, <<"Body">>, <<"Route-ID">>
+                          ,<<"Caller-ID-Number">>, <<"Callee-ID-Number">>
+                         ]).
+-define(OPTIONAL_INBOUND_HEADERS, [<<"Geo-Location">>, <<"Orig-IP">>, <<"Orig-Port">>
                                    ,<<"Custom-Channel-Vars">>, <<"Custom-SIP-Headers">>
                                    ,<<"From-Network-Addr">>
                                    ,<<"Switch-Hostname">>, <<"Switch-Nodename">>
-                                   ,<<"Caller-ID-Name">>, <<"Caller-ID-Number">>
-                                   ,<<"Callee-ID-Name">>, <<"Callee-ID-Number">>
+                                   ,<<"Caller-ID-Name">>, <<"Callee-ID-Name">>
                                    ,<<"Contact">>, <<"User-Agent">>
                                    ,<<"Contact-IP">>, <<"Contact-Port">>, <<"Contact-Username">>
                                    ,<<"To">>, <<"From">>, <<"Request">>
-                                   ,<<"Body">>, <<"Account-ID">>
+                                   ,<<"Account-ID">>
                                    ,<<"Delivery-Result-Code">>, <<"Delivery-Failure">>, <<"Status">>
-                                   ,<<"Route-ID">>, <<"Route-Type">>, <<"System-ID">>
+                                   ,<<"Route-Type">>, <<"System-ID">>
                                   ]).
 -define(INBOUND_TYPES, [{<<"To">>, fun is_binary/1}
                         ,{<<"From">>, fun is_binary/1}
@@ -146,6 +147,7 @@
                         ,{<<"Callee-ID-Number">>, fun is_binary/1}
                         ,{<<"Custom-Channel-Vars">>, fun wh_json:is_json_object/1}
                         ,{<<"Custom-SIP-Headers">>, fun wh_json:is_json_object/1}
+                        ,{<<"Body">>, fun is_binary/1}
                        ]).
 -define(INBOUND_REQ_VALUES, [{<<"Event-Category">>, ?EVENT_CATEGORY}
                              ,{<<"Event-Name">>, ?INBOUND_REQ_EVENT_NAME}
@@ -158,19 +160,20 @@
 
 %% Outbound
 -define(OUTBOUND_REQ_EVENT_NAME, <<"outbound">>).
--define(OUTBOUND_HEADERS, [<<"Message-ID">>]).
--define(OPTIONAL_OUTBOUND_HEADERS, [<<"Geo-Location">>, <<"Orig-IP">>
+-define(OUTBOUND_HEADERS, [<<"Message-ID">>, <<"Body">>, <<"Route-ID">>
+                          ,<<"Caller-ID-Number">>, <<"Callee-ID-Number">>
+                          ]).
+-define(OPTIONAL_OUTBOUND_HEADERS, [<<"Geo-Location">>, <<"Orig-IP">>, <<"Orig-Port">>
                                     ,<<"Custom-Channel-Vars">>, <<"Custom-SIP-Headers">>
                                     ,<<"From-Network-Addr">>
                                     ,<<"Switch-Hostname">>, <<"Switch-Nodename">>
-                                    ,<<"Caller-ID-Name">>, <<"Caller-ID-Number">>
-                                    ,<<"Callee-ID-Name">>, <<"Callee-ID-Number">>
+                                    ,<<"Caller-ID-Name">>, <<"Callee-ID-Name">>
                                     ,<<"Contact">>, <<"User-Agent">>
                                     ,<<"Contact-IP">>, <<"Contact-Port">>, <<"Contact-Username">>
                                     ,<<"To">>, <<"From">>, <<"Request">>
-                                    ,<<"Body">>, <<"Account-ID">>
+                                    ,<<"Account-ID">>
                                     ,<<"Delivery-Result-Code">>, <<"Delivery-Failure">>, <<"Status">>
-                                    ,<<"Route-ID">>, <<"Route-Type">>, <<"System-ID">>
+                                    ,<<"Route-Type">>, <<"System-ID">>
                                    ]).
 -define(OUTBOUND_TYPES, [{<<"To">>, fun is_binary/1}
                          ,{<<"From">>, fun is_binary/1}
@@ -184,6 +187,7 @@
                          ,{<<"Callee-ID-Number">>, fun is_binary/1}
                          ,{<<"Custom-Channel-Vars">>, fun wh_json:is_json_object/1}
                          ,{<<"Custom-SIP-Headers">>, fun wh_json:is_json_object/1}
+                         ,{<<"Body">>, fun is_binary/1}
                         ]).
 -define(OUTBOUND_REQ_VALUES, [{<<"Event-Category">>, ?EVENT_CATEGORY}
                               ,{<<"Event-Name">>, ?OUTBOUND_REQ_EVENT_NAME}
@@ -392,7 +396,9 @@ publish_outbound(Req, ContentType) ->
     MessageId = props:get_value(<<"Message-ID">>, Req),
     RouteId = props:get_value(<<"Route-ID">>, Req, <<"*">>),
     Exchange = props:get_value(<<"Exchange-ID">>, Req, ?SMS_EXCHANGE),
-    amqp_util:basic_publish(Exchange, ?OUTBOUND_ROUTING_KEY(RouteId, MessageId), Payload, ContentType).
+    RK = ?OUTBOUND_ROUTING_KEY(RouteId, MessageId),
+    Opts = amqp_options(whapps_config:get(<<"sms">>, [<<"outbound">>, <<"options">>])),
+    amqp_util:basic_publish(Exchange, RK, Payload, ContentType, Opts).
 
 -spec publish_delivery(api_terms()) -> 'ok'.
 -spec publish_delivery(api_terms(), binary()) -> 'ok'.
@@ -426,3 +432,10 @@ publish_resume(Req, ContentType) ->
     CallId = props:get_value(<<"Call-ID">>, Req),
     Exchange = props:get_value(<<"Exchange-ID">>, Req, ?SMS_EXCHANGE),
     amqp_util:basic_publish(Exchange, ?RESUME_ROUTING_KEY(CallId), Payload, ContentType).
+
+-spec amqp_options(api_object()) -> wh_proplist().
+amqp_options('undefined') -> [];
+amqp_options(JObj) ->
+    [{wh_util:to_atom(K, 'true'), V}
+     || {K, V} <- wh_json:to_proplist(JObj)
+    ].

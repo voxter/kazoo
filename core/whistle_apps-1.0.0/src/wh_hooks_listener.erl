@@ -27,7 +27,9 @@
 %% Three main call events
 -define(ALL_EVENTS, [<<"CHANNEL_CREATE">>
                      ,<<"CHANNEL_ANSWER">>
+                     ,<<"CHANNEL_BRIDGE">>
                      ,<<"CHANNEL_DESTROY">>
+                     ,<<"DTMF">>
                     ]).
 -define(CALL_BINDING(Events), {'call', [{'restrict_to', Events}
                                         ,'federate'

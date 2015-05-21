@@ -1,6 +1,5 @@
 -ifndef(DOODLE_HRL).
 -include_lib("whistle/include/wh_types.hrl").
--include_lib("whistle/include/wh_amqp.hrl").
 -include_lib("whistle/include/wh_log.hrl").
 -include_lib("whistle/include/wh_databases.hrl").
 -include_lib("whistle_number_manager/include/wh_number_manager.hrl").
@@ -24,6 +23,9 @@
 
 -type amqp_listener_connection() :: #amqp_listener_connection{}.
 -type amqp_listener_connections() :: [amqp_listener_connection(),...].
+
+-define(ATOM(X), wh_util:to_atom(X, 'true')).
+-define(APP, ?ATOM(?APP_NAME)).
 
 -define(DOODLE_HRL, 'true').
 -endif.

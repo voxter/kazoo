@@ -27,7 +27,7 @@
 -define(DOODLE_INBOUND_BROKER, whapps_config:get_ne_binary(?CONFIG_CAT, <<"inbound_broker">>, ?DEFAULT_BROKER)).
 -define(DOODLE_INBOUND_EXCHANGE, whapps_config:get_ne_binary(?CONFIG_CAT, <<"inbound_exchange">>, ?DEFAULT_EXCHANGE)).
 -define(DOODLE_INBOUND_EXCHANGE_TYPE, whapps_config:get_ne_binary(?CONFIG_CAT, <<"inbound_exchange_type">>, ?DEFAULT_EXCHANGE_TYPE)).
--define(DOODLE_INBOUND_EXCHANGE_OPTIONS,  whapps_config:get(?CONFIG_CAT, <<"inbound_exchange_options">>, ?DEFAULT_EXCHANGE_OPTIONS)).
+-define(DOODLE_INBOUND_EXCHANGE_OPTIONS,  whapps_config:get(?CONFIG_CAT, <<"inbound_exchange_options">>, ?DEFAULT_EXCHANGE_OPTIONS_JOBJ)).
 
 %% ===================================================================
 %% API functions
@@ -71,12 +71,11 @@ start_link() ->
 %%--------------------------------------------------------------------
 -spec init([]) -> sup_init_ret().
 init([]) ->
-    wh_util:set_startup(),
     RestartStrategy = 'simple_one_for_one',
     MaxRestarts = 5,
     MaxSecondsBetweenRestarts = 10,
     SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
-    {'ok', {SupFlags, [?WORKER('doodle_inbound_listener')]}}.
+    {'ok', {SupFlags, [?WORKER_TYPE('doodle_inbound_listener', 'temporary')]}}.
 
 -spec default_connection() -> amqp_listener_connection().
 default_connection() ->
@@ -85,7 +84,7 @@ default_connection() ->
                               ,exchange = ?DOODLE_INBOUND_EXCHANGE
                               ,type = ?DOODLE_INBOUND_EXCHANGE_TYPE
                               ,queue = ?DOODLE_INBOUND_QUEUE
-                              ,options = wh_json:to_proplist(?DEFAULT_EXCHANGE_OPTIONS_JOBJ)
+                              ,options = wh_json:to_proplist(?DOODLE_INBOUND_EXCHANGE_OPTIONS)
                              }.
 
 -spec connections() -> amqp_listener_connections().

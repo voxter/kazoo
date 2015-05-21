@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
+%%% @copyright (C) 2012-2015, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -21,6 +21,8 @@
          ,replace_call/2
          ,monitor_call/4
          ,channel_hungup/2
+         ,rebind_events/3
+         ,unbind_from_events/2
          ,originate_execute/2
          ,originate_uuid/3
          ,outbound_call/2
@@ -59,6 +61,9 @@
          ,terminate/2
          ,code_change/3
         ]).
+
+-type config() :: {ne_binary(), ne_binary(), ne_binary()}.
+-export_type([config/0]).
 
 -include("acdc.hrl").
 
@@ -249,6 +254,14 @@ monitor_call(Srv, Call, CDRUrl, RecordingUrl) ->
 channel_hungup(Srv, CallId) ->
     gen_listener:cast(Srv, {'channel_hungup', CallId}).
 
+-spec unbind_from_events(pid(), ne_binary()) -> 'ok'.
+unbind_from_events(Srv, CallId) ->
+    gen_listener:cast(Srv, {'unbind_from_events', CallId}).
+
+-spec rebind_events(pid(), ne_binary(), ne_binary()) -> 'ok'.
+rebind_events(Srv, OldCallId, NewCallId) ->
+    gen_listener:cast(Srv, {'rebind_events', OldCallId, NewCallId}).
+
 originate_execute(Srv, JObj) ->
     gen_listener:cast(Srv, {'originate_execute', JObj}).
 
@@ -264,7 +277,7 @@ send_sync_resp(Srv, Status, ReqJObj) -> send_sync_resp(Srv, Status, ReqJObj, [])
 send_sync_resp(Srv, Status, ReqJObj, Options) ->
     gen_listener:cast(Srv, {'send_sync_resp', Status, ReqJObj, Options}).
 
--spec config(pid()) -> {ne_binary(), ne_binary(), ne_binary()}.
+-spec config(pid()) -> config().
 config(Srv) -> gen_listener:call(Srv, 'config').
 
 refresh_config(_, 'undefined') -> 'ok';
@@ -478,6 +491,15 @@ handle_cast('bind_to_member_reqs', #state{agent_queues=Qs
                                          }=State) ->
     lager:debug("binding to queues: ~p", [Qs]),
     _ = [login_to_queue(AcctId, AgentId, Q) || Q <- Qs],
+    {'noreply', State};
+
+handle_cast({'rebind_events', OldCallId, NewCallId}, State) ->
+    acdc_util:unbind_from_call_events(OldCallId),
+    acdc_util:bind_to_call_events(NewCallId),
+    {'noreply', State};
+
+handle_cast({'unbind_from_events', CallId}, State) ->
+    acdc_util:unbind_from_call_events(CallId),
     {'noreply', State};
 
 handle_cast({'channel_hungup', CallId}, #state{call=Call

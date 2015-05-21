@@ -1,0 +1,12 @@
+{application, quilt,
+ [
+  {description, "Asterisk queue_log translator for Kazoo"},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, {quilt_app, []}},
+  {env, []}
+ ]}.

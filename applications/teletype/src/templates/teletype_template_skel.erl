@@ -14,19 +14,19 @@
 
 -include("../teletype.hrl").
 
--define(MOD_CONFIG_CAT, <<(?NOTIFY_CONFIG_CAT)/binary, ".skel">>).
-
 -define(TEMPLATE_ID, <<"skel">>).
+-define(MOD_CONFIG_CAT, <<(?NOTIFY_CONFIG_CAT)/binary, ".", (?TEMPLATE_ID)/binary>>).
+
 -define(TEMPLATE_MACROS
         ,wh_json:from_list(
            [?MACRO_VALUE(<<"user.first_name">>, <<"first_name">>, <<"First Name">>, <<"First Name">>)
             ,?MACRO_VALUE(<<"user.last_name">>, <<"last_name">>, <<"Last Name">>, <<"Last Name">>)
-            | ?SERVICE_MACROS
+            | ?USER_MACROS
            ])
        ).
 
--define(TEMPLATE_TEXT, <<"Hi {{user.first_name}} {{user.last_name}}.\n\nThis is the skeleton template\nBrought to you by {{service.name}}">>).
--define(TEMPLATE_HTML, <<"<p>Hi {{user.first_name}} {{user.last_name}}.</p><p>This is the skeleton template</p><p>Brought to you by {{service.name}}</p>">>).
+-define(TEMPLATE_TEXT, <<"Hi {{user.first_name}} {{user.last_name}}.\n\nThis is the skeleton template\nBrought to you by VoIP Services">>).
+-define(TEMPLATE_HTML, <<"<p>Hi {{user.first_name}} {{user.last_name}}.</p><p>This is the skeleton template</p><p>Brought to you by VoIP Services</p>">>).
 -define(TEMPLATE_SUBJECT, <<"Skeleton Template">>).
 -define(TEMPLATE_CATEGORY, <<"skel">>).
 -define(TEMPLATE_NAME, <<"Skeleton">>).
@@ -60,17 +60,22 @@ handle_req(JObj, _Props) ->
     wh_util:put_callid(JObj),
 
     %% Gather data for template
-    DataJObj = wh_json:normalize(wh_api:remove_defaults(JObj)),
+    DataJObj = wh_json:normalize(JObj),
+    AccountId = wh_json:get_value(<<"account_id">>, DataJObj),
 
-    case teletype_util:should_handle_notification(DataJObj) of
+    case teletype_util:should_handle_notification(DataJObj)
+        andalso teletype_util:is_notice_enabled(AccountId, JObj, ?TEMPLATE_ID)
+    of
         'false' -> lager:debug("notification handling not configured for this account");
-        'true' -> handle_req(DataJObj)
+        'true' -> process_req(DataJObj)
     end.
 
--spec handle_req(wh_json:object()) -> 'ok'.
-handle_req(DataJObj) ->
-    ServiceData = teletype_util:service_params(DataJObj, ?MOD_CONFIG_CAT),
-    Macros = [{<<"service">>, ServiceData} | build_macro_data(DataJObj)],
+-spec process_req(wh_json:object()) -> 'ok'.
+process_req(DataJObj) ->
+    Macros = [{<<"system">>, teletype_util:system_params()}
+              ,{<<"system">>, teletype_util:account_params(DataJObj)}
+              | build_macro_data(DataJObj)
+             ],
 
     %% Load templates
     Templates = teletype_util:fetch_templates(?TEMPLATE_ID, DataJObj),
@@ -87,10 +92,12 @@ handle_req(DataJObj) ->
                 ,Macros
                ),
 
-    Emails = teletype_util:find_addresses(set_to_address(DataJObj), TemplateMetaJObj, ?MOD_CONFIG_CAT),
+    Emails = teletype_util:find_addresses(DataJObj, TemplateMetaJObj, ?MOD_CONFIG_CAT),
 
-    %% Send email
-    teletype_util:send_email(Emails, Subject, ServiceData, RenderedTemplates).
+    case teletype_util:send_email(Emails, Subject, RenderedTemplates) of
+        'ok' -> teletype_util:send_update(DataJObj, <<"completed">>);
+        {'error', Reason} -> teletype_util:send_update(DataJObj, <<"failed">>, Reason)
+    end.
 
 -spec build_macro_data(wh_json:object()) -> wh_proplist().
 build_macro_data(DataJObj) ->
@@ -100,19 +107,6 @@ build_macro_data(DataJObj) ->
                   ,[]
                   ,?TEMPLATE_MACROS
                  ).
-
--spec set_to_address(wh_json:object()) -> wh_json:object().
-set_to_address(DataJObj) ->
-    AccountId = wh_json:get_value(<<"account_id">>, DataJObj),
-    UserId = wh_json:get_value(<<"user_id">>, DataJObj),
-    {'ok', UserJObj} = couch_mgr:open_cache_doc(wh_util:format_account_id(AccountId, 'encoded')
-                                                ,UserId
-                                               ),
-    wh_json:set_value(<<"to">>, [find_email(UserJObj)], DataJObj).
-
--spec find_email(wh_json:object()) -> api_binary().
-find_email(UserJObj) ->
-    wh_json:get_first_defined([<<"email">>, <<"username">>], UserJObj).
 
 -spec maybe_add_macro_key(wh_json:key(), wh_proplist(), wh_json:object()) -> wh_proplist().
 maybe_add_macro_key(<<"user.", UserKey/binary>>, Acc, DataJObj) ->
@@ -144,7 +138,7 @@ get_user(DataJObj) ->
         {'ok', UserJObj} -> UserJObj;
         {'error', _E} ->
             lager:debug("failed to find user ~s in ~s: ~p", [UserId, AccountId, _E]),
-            case wh_json:is_true(<<"preview">>, DataJObj) of
+            case teletype_util:is_preview(DataJObj) of
                 'false' -> throw({'error', 'not_found'});
                 'true' -> wh_json:new()
             end

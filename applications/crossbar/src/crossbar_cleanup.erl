@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
+%%% @copyright (C) 2012-2015, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -43,6 +43,11 @@
                 ,day_timer_ref=start_day_timer()
                }).
 -type state() :: #state{}.
+
+%% How long to pause before attempting to delete the next chunk of soft-deleted docs
+-define(SOFT_DELETE_PAUSE
+        ,whapps_config:get(?CONFIG_CAT, <<"soft_delete_pause_ms">>, 10 * ?MILLISECONDS_IN_SECOND)
+       ).
 
 %%%===================================================================
 %%% API
@@ -89,27 +94,41 @@ init([]) ->
 
 -define(BINDING_PREFIX, "v2_resource.cleanup.").
 
+-spec binding_account() -> ne_binary().
 binding_account() ->
     <<?BINDING_PREFIX, "account">>.
+
+-spec binding_account_mod() -> ne_binary().
 binding_account_mod() ->
     <<?BINDING_PREFIX, "account_mod">>.
+
+-spec binding_system() -> ne_binary().
 binding_system() ->
     <<?BINDING_PREFIX, "system">>.
+
+-spec binding_other() -> ne_binary().
 binding_other() ->
     <<?BINDING_PREFIX, "other">>.
+
+-spec binding_minute() -> ne_binary().
 binding_minute() ->
     <<?BINDING_PREFIX, "minute">>.
+
+-spec binding_hour() -> ne_binary().
 binding_hour() ->
     <<?BINDING_PREFIX, "hour">>.
+
+-spec binding_day() -> ne_binary().
 binding_day() ->
     <<?BINDING_PREFIX, "day">>.
+
+-spec binding_all_dbs() -> ne_binaries().
 binding_all_dbs() ->
     [binding_account()
      ,binding_account_mod()
      ,binding_system()
      ,binding_other()
     ].
-
 
 %%--------------------------------------------------------------------
 %% @private
@@ -226,6 +245,7 @@ start_cleanup_pass(Ref) ->
     lager:debug("pass completed for ~p", [Ref]),
     gen_server:cast(?MODULE, {'cleanup_finished', Ref}).
 
+-spec db_routing_key(ne_binary()) -> ne_binary().
 db_routing_key(Db) ->
     Classifiers = [{fun whapps_util:is_account_db/1, fun binding_account/0}
                    ,{fun whapps_util:is_account_mod/1, fun binding_account_mod/0}
@@ -277,9 +297,10 @@ start_day_timer() ->
 
 -spec cleanup_soft_deletes(ne_binary()) -> any().
 cleanup_soft_deletes(Account) ->
+    couch_mgr:suppress_change_notice(),
     case whapps_util:is_account_db(Account) of
         'true' -> cleanup_account_soft_deletes(Account);
-        'false' -> cleanup_db_soft_deletes(Account)
+        'false' -> 'ok' % no longer checking other dbs for soft deletes
     end.
 
 -spec cleanup_account_soft_deletes(ne_binary()) -> 'ok'.
@@ -287,18 +308,18 @@ cleanup_account_soft_deletes(Account) ->
     AccountDb = wh_util:format_account_id(Account, 'encoded'),
     do_cleanup(AccountDb).
 
--spec cleanup_db_soft_deletes(ne_binary()) -> 'ok'.
-cleanup_db_soft_deletes(_Db) ->
-    'ok'. %% no longer checking other dbs for soft deletes
-
 -spec do_cleanup(ne_binary()) -> 'ok'.
 do_cleanup(Db) ->
-    case couch_mgr:get_results(Db, <<"maintenance/soft_deletes">>, [{'limit', 1000}]) of
+    case couch_mgr:get_results(Db
+                               ,<<"maintenance/soft_deletes">>
+                               ,[{'limit', couch_util:max_bulk_insert()}]
+                              ) of
         {'ok', []} -> 'ok';
         {'ok', L} ->
             lager:debug("removing ~b soft-deleted docs from ~s", [length(L), Db]),
             _ = couch_mgr:del_docs(Db, L),
-            'ok';
+            'ok' = timer:sleep(?SOFT_DELETE_PAUSE),
+            do_cleanup(Db);
         {'error', 'not_found'} ->
             lager:warning("db ~s or view 'maintenance/soft_deletes' not found", [Db]);
         {'error', _E} ->

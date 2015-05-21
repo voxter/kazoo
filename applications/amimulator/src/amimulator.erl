@@ -10,7 +10,7 @@
 
 -include_lib("whistle/include/wh_types.hrl").
 
--export([start_link/0, stop/0]).
+-export([start_link/0, before_stop/0, stop/0]).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -21,7 +21,19 @@
 -spec start_link() -> startlink_ret().
 start_link() ->
     _ = start_deps(),
-    amimulator_serv:start_link().
+    amimulator_supersup:start_link().
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Perform pre-shutdown cleanup
+%%		This includes closing listening sockets for the translator
+%% @end
+%%--------------------------------------------------------------------
+-spec before_stop() -> ok.
+before_stop() ->
+	amimulator_supersup:before_stop(),
+	ok.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -31,7 +43,6 @@ start_link() ->
 %%--------------------------------------------------------------------
 -spec stop() -> 'ok'.
 stop() ->
-    exit(whereis('amimulator_serv'), 'shutdown'),
     'ok'.
 
 %%--------------------------------------------------------------------

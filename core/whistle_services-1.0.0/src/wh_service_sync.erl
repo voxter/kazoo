@@ -187,8 +187,10 @@ maybe_sync_service() ->
 bump_modified(JObj) ->
     AccountId = wh_json:get_value(<<"pvt_account_id">>, JObj),
     Services = wh_services:reconcile_only(AccountId),
+    'true' = (Services =/= 'false'),
+
     UpdatedJObj = wh_json:set_values([{<<"pvt_modified">>, wh_util:current_tstamp()}
-                                     ,{<<"_rev">>, wh_json:get_value(<<"_rev">>, JObj)}
+                                      ,{<<"_rev">>, wh_json:get_value(<<"_rev">>, JObj)}
                                      ], wh_services:to_json(Services)),
     case couch_mgr:save_doc(?WH_SERVICES_DB, UpdatedJObj) of
         {'error', _}=E ->
@@ -243,7 +245,7 @@ sync_services(AccountId, ServiceJObj, ServiceItems) ->
     try sync_services_bookkeeper(AccountId, ServiceJObj, ServiceItems) of
         'ok' ->
             _ = mark_clean_and_status(<<"good_standing">>, ServiceJObj),
-            io:format("synchronization with bookkeeper complete~n", []),
+            io:format("synchronization with bookkeeper complete\n"),
             lager:debug("synchronization with bookkeeper complete"),
             maybe_sync_reseller(AccountId, ServiceJObj)
     catch
@@ -359,7 +361,7 @@ maybe_update_billing_id(BillingId, AccountId, ServiceJObj) ->
             lager:debug("billing id ~s on ~s does not exist anymore, updating to bill self", [BillingId, AccountId]),
             couch_mgr:save_doc(?WH_SERVICES_DB, wh_json:set_value(<<"billing_id">>, AccountId, ServiceJObj));
         {'ok', JObj} ->
-            case wh_json:is_true(<<"pvt_deleted">>, JObj) of
+            case wh_doc:is_soft_deleted(JObj) of
                 'false' -> wh_services:reconcile(BillingId);
                 'true' ->
                     lager:debug("billing id ~s on ~s was deleted, updating to bill self", [BillingId, AccountId]),

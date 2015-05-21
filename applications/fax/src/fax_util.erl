@@ -23,9 +23,9 @@ fax_properties(JObj) ->
 
 -spec collect_channel_props(wh_json:object()) ->
                                    wh_proplist().
--spec collect_channel_props(wh_json:object(), wh_proplist()) ->
+-spec collect_channel_props(wh_json:object(), wh_proplist() | ne_binaries()) ->
                                    wh_proplist().
--spec collect_channel_props(wh_json:object(), wh_proplist(), wh_proplist()) ->
+-spec collect_channel_props(wh_json:object(), wh_proplist() | ne_binaries(), wh_proplist()) ->
                                    wh_proplist().
 collect_channel_props(JObj) ->
     collect_channel_props(JObj, ?FAX_CHANNEL_DESTROY_PROPS).
@@ -66,7 +66,7 @@ content_type_to_extension(CT) when is_binary(CT) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Convert known extensions to media types 
+%% Convert known extensions to media types
 %% @end
 %%--------------------------------------------------------------------
 -spec extension_to_content_type(ne_binary() | string() | list()) -> ne_binary().
@@ -108,18 +108,26 @@ maybe_attach_extension(A, CT) ->
         'true' -> <<A/binary, ".", (content_type_to_extension(CT))/binary>>
     end.
 
--spec save_fax_docs(api_objects(), binary(), ne_binary())-> 'ok' | 'error'.
-save_fax_docs([],_FileContents, _CT) -> 'ok';
+-spec save_fax_docs(wh_json:objects(), binary(), ne_binary()) ->
+                           'ok' |
+                           {'error', term()}.
+save_fax_docs([], _FileContents, _CT) -> 'ok';
 save_fax_docs([Doc|Docs], FileContents, CT) ->
-    case couch_mgr:save_doc(?WH_FAXES, Doc) of
+    case couch_mgr:save_doc(?WH_FAXES_DB, Doc) of
         {'ok', JObj} ->
-            save_fax_attachment(JObj, FileContents, CT),
-            save_fax_docs(Docs, FileContents, CT);
-        _Else -> 'error'
+            case save_fax_attachment(JObj, FileContents, CT) of
+                {'ok', _} -> save_fax_docs(Docs, FileContents, CT);
+                Error -> Error
+            end;
+        Else -> Else
     end.
 
--spec save_fax_attachment(api_object(), binary(), ne_binary(), integer())-> {'ok', wh_json:object()} | {'error', any()}.
--spec save_fax_attachment(api_object(), binary(), ne_binary())-> {'ok', wh_json:object()} | {'error', any()}.
+-spec save_fax_attachment(api_object(), binary(), ne_binary())->
+                                 {'ok', wh_json:object()} |
+                                 {'error', ne_binary()}.
+-spec save_fax_attachment(api_object(), binary(), ne_binary(), non_neg_integer())->
+                                 {'ok', wh_json:object()} |
+                                 {'error', ne_binary()}.
 save_fax_attachment(JObj, FileContents, CT) ->
     save_fax_attachment(JObj, FileContents, CT, whapps_config:get_integer(?CONFIG_CAT, <<"max_storage_retry">>, 5)).
 
@@ -135,29 +143,44 @@ save_fax_attachment(JObj, FileContents, CT, Count) ->
             ,{'rev', Rev}
            ],
     Name = attachment_name(<<>>, CT),
-    case couch_mgr:put_attachment(?WH_FAXES, DocId, Name, FileContents, Opts) of
-        {'ok', _DocObj} ->
-            save_fax_doc_completed(DocId);
-        {'error', E} ->
-            lager:debug("Error ~p saving fax attachment on fax id ~s rev ~s",[E, DocId, Rev]),
-            save_fax_attachment(JObj, FileContents, CT, Count-1)
+    _ = couch_mgr:put_attachment(?WH_FAXES_DB, DocId, Name, FileContents, Opts),
+    case check_fax_attachment(DocId, Name) of
+        {'ok', J} -> save_fax_doc_completed(J);
+        {'missing', J} ->
+            lager:debug("Missing fax attachment on fax id ~s rev ~s",[DocId, Rev]),
+            save_fax_attachment(J, FileContents, CT, Count-1);
+        {'error', _R} ->
+            lager:debug("Error ~p saving fax attachment on fax id ~s rev ~s",[_R, DocId, Rev]),
+            {'ok', J} = couch_mgr:open_doc(?WH_FAXES_DB, DocId),
+            save_fax_attachment(J, FileContents, CT, Count-1)
     end.
 
--spec save_fax_doc_completed(ne_binary())-> {'ok', wh_json:object()} | {'error', any()}.
-save_fax_doc_completed(DocId)->
-    case couch_mgr:open_doc(?WH_FAXES, DocId) of
-        {'error', E} ->
-            lager:debug("error ~p reading fax ~s while setting to pending",[E, DocId]),
-            {'error', E};
+-spec check_fax_attachment(ne_binary(), ne_binary())->
+                                  {'ok', wh_json:object()} |
+                                  {'missing', wh_json:object()} |
+                                  {'error', any()}.
+check_fax_attachment(DocId, Name) ->
+    case couch_mgr:open_doc(?WH_FAXES_DB, DocId) of
         {'ok', JObj} ->
-            case couch_mgr:save_doc(?WH_FAXES, wh_json:set_values([{<<"pvt_job_status">>, <<"pending">>}], JObj)) of
-                {'ok', Doc} ->
-                    lager:debug("fax jobid ~s set to pending", [DocId]),
-                    {'ok', Doc};
-                {'error', E} ->
-                    lager:debug("error ~p setting fax jobid ~s to pending",[E, DocId]),
-                    {'error', E}
-            end
+            case wh_doc:attachment(JObj, Name) of
+                'undefined' -> {'missing', JObj};
+                _Else -> {'ok', JObj}
+            end;
+        {'error', _}=E -> E
+    end.
+
+-spec save_fax_doc_completed(wh_json:object())->
+                                    {'ok', wh_json:object()} |
+                                    {'error', any()}.
+save_fax_doc_completed(JObj)->
+    DocId = wh_json:get_value(<<"_id">>, JObj),
+    case couch_mgr:save_doc(?WH_FAXES_DB, wh_json:set_values([{<<"pvt_job_status">>, <<"pending">>}], JObj)) of
+        {'ok', Doc} ->
+            lager:debug("fax jobid ~s set to pending", [DocId]),
+            {'ok', Doc};
+        {'error', E} ->
+            lager:debug("error ~p setting fax jobid ~s to pending",[E, DocId]),
+            {'error', E}
     end.
 
 -spec notify_email_list(api_binary(), api_binary(), ne_binary() | list()) -> list().
@@ -176,5 +199,5 @@ notify_email_list(From, OwnerEmail, List) ->
 filter_numbers(Number) ->
     << <<X>> || <<X>> <= Number, is_digit(X)>>.
 
--spec is_digit(binary()) -> boolean().
+-spec is_digit(integer()) -> boolean().
 is_digit(N) -> N >= $0 andalso N =< $9.

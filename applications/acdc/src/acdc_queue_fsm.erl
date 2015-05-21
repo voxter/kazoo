@@ -26,8 +26,6 @@
 
          %% Accessors
          ,cdr_url/1
-
-         ,replace_call/2
         ]).
 
 %% State handlers
@@ -96,6 +94,8 @@
          }).
 -type queue_fsm_state() :: #state{}.
 
+-define(WSD_ID, {'file', <<(get('callid'))/binary, "_queue_fsm">>}).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -120,7 +120,7 @@ refresh(FSM, QueueJObj) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec member_call(pid(), wh_json:object(), #'basic.deliver'{}) -> 'ok'.
+-spec member_call(pid(), wh_json:object(), gen_listener:basic_deliver()) -> 'ok'.
 member_call(FSM, CallJObj, Delivery) ->
     gen_fsm:send_event(FSM, {'member_call', CallJObj, Delivery}).
 
@@ -183,9 +183,6 @@ status(FSM) ->
 cdr_url(FSM) ->
     gen_fsm:sync_send_all_state_event(FSM, 'cdr_url').
 
-replace_call(FSM, Call) ->
-    gen_fsm:send_all_state_event(FSM, {'replace_call', Call}).
-
 %%%===================================================================
 %%% gen_fsm callbacks
 %%%===================================================================
@@ -208,9 +205,10 @@ init([MgrPid, ListenerPid, QueueJObj]) ->
     AccountId = wh_json:get_value(<<"pvt_account_id">>, QueueJObj),
     AccountDb = wh_json:get_value(<<"pvt_account_db">>, QueueJObj),
 
-    put('callid', <<"fsm_", QueueId/binary>>),
+    put('callid', <<"fsm_", QueueId/binary, "_", (wh_util:to_binary(self()))/binary>>),
 
-    %webseq:reg_who(self(), iolist_to_binary([<<"qFSM">>, pid_to_list(self())])),
+    %webseq:start(?WSD_ID),
+    %webseq:reg_who(?WSD_ID, self(), iolist_to_binary([<<"qFSM">>, pid_to_list(self())])),
 
     {'ok', 'ready'
      ,#state{queue_proc=ListenerPid
@@ -254,8 +252,8 @@ ready({'member_call', CallJObj, Delivery}, #state{queue_proc=QueueSrv
         'false' ->
             lager:debug("member call received: ~s", [whapps_call:call_id(Call)]),
 
-            %webseq:note(self(), 'right', [whapps_call:call_id(Call), <<": member call">>]),
-            %webseq:evt(whapps_call:call_id(Call), self(), <<"member call received">>),
+            %webseq:note(?WSD_ID, self(), 'right', [whapps_call:call_id(Call), <<": member call">>]),
+            %webseq:evt(?WSD_ID, whapps_call:call_id(Call), self(), <<"member call received">>),
 
             acdc_queue_listener:member_connect_req(QueueSrv, CallJObj, Delivery, Url),
 
@@ -312,7 +310,7 @@ ready('current_call', _, State) ->
 connect_req({'member_call', CallJObj, Delivery}, #state{queue_proc=Srv}=State) ->
     lager:debug("recv a member_call while processing a different member"),
 
-    %webseq:evt(wh_json:get_value(<<"Call-ID">>, CallJObj), self(), <<"member call recv while busy">>),
+    %webseq:evt(?WSD_ID, wh_json:get_value(<<"Call-ID">>, CallJObj), self(), <<"member call recv while busy">>),
 
     acdc_queue_listener:cancel_member_call(Srv, CallJObj, Delivery),
     {'next_state', 'connect_req', State};
@@ -347,7 +345,7 @@ connect_req({'timeout', Ref, ?COLLECT_RESP_MESSAGE}, #state{collect_ref=Ref
             {'next_state', 'ready', State};
         'false' ->
             lager:debug("done waiting, no agents responded, let's ask again"),
-            %webseq:note(self(), 'right', <<"no agents responded, trying again">>),
+            %webseq:note(?WSD_ID, self(), 'right', <<"no agents responded, trying again">>),
             acdc_queue_listener:member_connect_re_req(Srv),
             {'next_state', 'connect_req', State#state{collect_ref=start_collect_timer()}}
     end;
@@ -378,7 +376,7 @@ connect_req({'member_hungup', JObj}, #state{queue_proc=Srv
         'true' ->
             lager:debug("member hungup before we could assign an agent"),
 
-            %webseq:evt(self(), whapps_call:call_id(Call), <<"member call finish - abandon">>),
+            webseq:evt(?WSD_ID, self(), whapps_call:call_id(Call), <<"member call finish - abandon">>),
 
             acdc_queue_listener:finish_member_call(Srv, JObj),
             acdc_stats:call_abandoned(AccountId, QueueId, whapps_call:call_id(Call), ?ABANDON_HANGUP),
@@ -394,9 +392,9 @@ connect_req({'member_finished'}, #state{member_call=Call}=State) ->
     case catch whapps_call:call_id(Call) of
         CallId when is_binary(CallId) ->
             lager:debug("member finished while in connect_req: ~s", [CallId]);
-            %webseq:evt(self(), CallId, <<"member call finished - forced">>);
+            %webseq:evt(?WSD_ID, self(), CallId, <<"member call finished - forced">>);
         _E->
-            lgaer:debug("member finished, but callid became ~p", [_E])
+            lager:debug("member finished, but callid became ~p", [_E])
     end,
     {'next_state', 'ready', clear_member_call(State), 'hibernate'};
 
@@ -408,18 +406,11 @@ connect_req({'dtmf_pressed', DTMF}, #state{caller_exit_key=DTMF
                                           }=State) when is_binary(DTMF) ->
     lager:debug("member pressed the exit key (~s)", [DTMF]),
 
-    %% Do not exit if exit is suppressed
-    case wh_json:get_value(<<"No-Queue-Exit">>, whapps_call:ccvs(Call)) of
-        'undefined' ->
-            %webseq:evt(self(), whapps_call:call_id(Call), <<"member call finish - DTMF">>),
+    %webseq:evt(?WSD_ID, self(), whapps_call:call_id(Call), <<"member call finish - DTMF">>),
 
-            acdc_queue_listener:exit_member_call(Srv),
-            acdc_stats:call_abandoned(AccountId, QueueId, whapps_call:call_id(Call), ?ABANDON_EXIT),
-            {'next_state', 'ready', clear_member_call(State), 'hibernate'};
-        <<"true">> ->
-            lager:debug("Exit key ignored for this call"),
-            {'next_state', 'connect_req', State, 'hibernate'}
-    end;
+    acdc_queue_listener:exit_member_call(Srv),
+    acdc_stats:call_abandoned(AccountId, QueueId, whapps_call:call_id(Call), ?ABANDON_EXIT),
+    {'next_state', 'ready', clear_member_call(State), 'hibernate'};
 
 connect_req({'timeout', ConnRef, ?CONNECTION_TIMEOUT_MESSAGE}, #state{queue_proc=Srv
                                                                       ,connection_timer_ref=ConnRef
@@ -429,7 +420,7 @@ connect_req({'timeout', ConnRef, ?CONNECTION_TIMEOUT_MESSAGE}, #state{queue_proc
                                                                      }=State) ->
     lager:debug("connection timeout occurred, bounce the caller out of the queue"),
 
-    %webseq:evt(self(), whapps_call:call_id(Call), <<"member call finish - timeout">>),
+    %webseq:evt(?WSD_ID, self(), whapps_call:call_id(Call), <<"member call finish - timeout">>),
 
     acdc_queue_listener:timeout_member_call(Srv),
     acdc_stats:call_abandoned(AccountId, QueueId, whapps_call:call_id(Call), ?ABANDON_TIMEOUT),
@@ -485,18 +476,10 @@ connecting({'accepted', AcceptJObj}, #state{queue_proc=Srv
         'true' ->
             lager:debug("recv acceptance from agent"),
 
-            %webseq:evt(self(), whapps_call:call_id(Call), <<"member call - agent acceptance">>),
-
-            HandledCallId = case wh_json:get_value(<<"Old-Call-ID">>, AcceptJObj) of
-                undefined ->
-                    whapps_call:call_id(Call);
-                %% If the old call id is set, it has been replaced with Call-ID
-                _ ->
-                    wh_json:get_value(<<"Call-ID">>, AcceptJObj)
-            end,
+            %webseq:evt(?WSD_ID, self(), whapps_call:call_id(Call), <<"member call - agent acceptance">>),
 
             acdc_queue_listener:finish_member_call(Srv, AcceptJObj),
-            acdc_stats:call_handled(AccountId, QueueId, HandledCallId
+            acdc_stats:call_handled(AccountId, QueueId, whapps_call:call_id(Call)
                                     ,wh_json:get_value(<<"Agent-ID">>, AcceptJObj)
                                    ),
             {'next_state', 'ready', clear_member_call(State), 'hibernate'};
@@ -522,7 +505,7 @@ connecting({'retry', RetryJObj}, #state{agent_ring_timer_ref=AgentRef
             maybe_stop_timer(CollectRef),
             maybe_stop_timer(AgentRef),
 
-            %webseq:evt(%webseq:process_pid(RetryJObj), self(), <<"member call - retry">>),
+            %webseq:evt(?WSD_ID, webseq:process_pid(RetryJObj), self(), <<"member call - retry">>),
 
             {'next_state', 'connect_req', State#state{agent_ring_timer_ref='undefined'
                                                       ,member_call_winner='undefined'
@@ -552,17 +535,6 @@ connecting({'timeout', _OtherAgentRef, ?AGENT_RING_TIMEOUT_MESSAGE}, #state{agen
     lager:debug("unknown agent ref: ~p known: ~p", [_OtherAgentRef, _AgentRef]),
     {'next_state', 'connect_req', State};
 
-connecting({'member_hungup', _CallEvt}, #state{queue_proc=Srv
-                                              ,connection_timer_ref='undefined'
-                                              ,agent_ring_timer_ref='undefined'
-                                             }=State) ->
-    lager:debug("caller did not answer a callback"),
-    acdc_queue_listener:finish_member_call(Srv),
-
-    %webseq:evt(self(), whapps_call:call_id(Call), <<"member call - hungup">>),
-
-    {'next_state', 'ready', clear_member_call(State), 'hibernate'};
-
 connecting({'member_hungup', CallEvt}, #state{queue_proc=Srv
                                               ,account_id=AccountId
                                               ,queue_id=QueueId
@@ -572,7 +544,7 @@ connecting({'member_hungup', CallEvt}, #state{queue_proc=Srv
     acdc_queue_listener:cancel_member_call(Srv, CallEvt),
     acdc_stats:call_abandoned(AccountId, QueueId, whapps_call:call_id(Call), ?ABANDON_HANGUP),
 
-    %webseq:evt(self(), whapps_call:call_id(Call), <<"member call - hungup">>),
+    %webseq:evt(?WSD_ID, self(), whapps_call:call_id(Call), <<"member call - hungup">>),
 
     {'next_state', 'ready', clear_member_call(State), 'hibernate'};
 
@@ -580,7 +552,7 @@ connecting({'member_finished'}, #state{member_call=Call}=State) ->
     case catch whapps_call:call_id(Call) of
         CallId when is_binary(CallId) ->
             lager:debug("member finished while in connecting: ~s", [CallId]);
-            %webseq:evt(self(), CallId, <<"member call finished - forced">>);
+            %webseq:evt(?WSD_ID, self(), CallId, <<"member call finished - forced">>);
         _E->
             lager:debug("member finished, but callid became ~p", [_E])
     end,
@@ -592,19 +564,12 @@ connecting({'dtmf_pressed', DTMF}, #state{caller_exit_key=DTMF
                                           ,member_call=Call
                                          }=State) when is_binary(DTMF) ->
     lager:debug("member pressed the exit key (~s)", [DTMF]),
+    acdc_queue_listener:exit_member_call(Srv),
 
-    %% Do not exit if exit is suppressed
-    case wh_json:get_value(<<"No-Queue-Exit">>, whapps_call:ccvs(Call)) of
-        'undefined' ->
-            %webseq:evt(self(), whapps_call:call_id(Call), <<"member call finish - DTMF">>),
+    %webseq:evt(?WSD_ID, self(), whapps_call:call_id(Call), <<"member call finish - DTMF">>),
 
-            acdc_queue_listener:exit_member_call(Srv),
-            acdc_stats:call_abandoned(AccountId, QueueId, whapps_call:call_id(Call), ?ABANDON_EXIT),
-            {'next_state', 'ready', clear_member_call(State), 'hibernate'};
-        <<"true">> ->
-            lager:debug("Exit key ignored for this call"),
-            {'next_state', 'connecting', State, 'hibernate'}
-    end;
+    acdc_stats:call_abandoned(AccountId, QueueId, whapps_call:call_id(Call), ?ABANDON_EXIT),
+    {'next_state', 'ready', clear_member_call(State), 'hibernate'};
 connecting({'dtmf_pressed', _DTMF}, State) ->
     lager:debug("caller pressed ~s, ignoring", [_DTMF]),
     {'next_state', 'connecting', State};
@@ -614,12 +579,15 @@ connecting({'timeout', ConnRef, ?CONNECTION_TIMEOUT_MESSAGE}, #state{queue_proc=
                                                                      ,account_id=AccountId
                                                                      ,queue_id=QueueId
                                                                      ,member_call=Call
+                                                                     ,member_call_winner=Winner
                                                                     }=State) ->
     lager:debug("connection timeout occurred, bounce the caller out of the queue"),
-    acdc_queue_listener:timeout_member_call(Srv),
+
+    maybe_timeout_winner(Srv, Winner),
+
     acdc_stats:call_abandoned(AccountId, QueueId, whapps_call:call_id(Call), ?ABANDON_TIMEOUT),
 
-    %webseq:evt(self(), whapps_call:call_id(Call), <<"member call finish - timeout">>),
+    %webseq:evt(?WSD_ID, self(), whapps_call:call_id(Call), <<"member call finish - timeout">>),
 
     {'next_state', 'ready', clear_member_call(State), 'hibernate'};
 
@@ -668,17 +636,6 @@ connecting('current_call', _, #state{member_call=Call
 handle_event({'refresh', QueueJObj}, StateName, State) ->
     lager:debug("refreshing queue configs"),
     {'next_state', StateName, update_properties(QueueJObj, State), 'hibernate'};
-handle_event({'replace_call', Call}, StateName, #state{connection_timer_ref=ConnRef
-                                                       ,agent_ring_timer_ref=AgentRef
-                                                      }=State) ->
-    maybe_stop_timer(ConnRef),
-    maybe_stop_timer(AgentRef),
-    lager:debug("Cancelled timeout timers - agent has answered, ignoring lack of bridge to callback for now"),
-    lager:debug("Replacing call in queue FSM"),
-    {'next_state', StateName, State#state{member_call=Call
-                                          ,connection_timer_ref='undefined'
-                                          ,agent_ring_timer_ref='undefined'
-                                         }};
 handle_event(_Event, StateName, State) ->
     lager:debug("unhandled event in state ~s: ~p", [StateName, _Event]),
     {'next_state', StateName, State}.
@@ -777,6 +734,12 @@ maybe_stop_timer(ConnRef) ->
     _ = gen_fsm:cancel_timer(ConnRef),
     'ok'.
 
+-spec maybe_timeout_winner(pid(), api_object()) -> 'ok'.
+maybe_timeout_winner(Srv, 'undefined') ->
+    acdc_queue_listener:timeout_member_call(Srv);
+maybe_timeout_winner(Srv, Winner) ->
+    acdc_queue_listener:timeout_member_call(Srv, Winner).
+
 -spec clear_member_call(queue_fsm_state()) -> queue_fsm_state().
 clear_member_call(#state{connection_timer_ref=ConnRef
                          ,agent_ring_timer_ref=AgentRef
@@ -840,8 +803,7 @@ elapsed(Time) -> wh_util:elapsed_s(Time).
 
 -spec accept_is_for_call(wh_json:object(), whapps_call:call()) -> boolean().
 accept_is_for_call(AcceptJObj, Call) ->
-    (wh_json:get_value(<<"Call-ID">>, AcceptJObj) =:= whapps_call:call_id(Call)) or
-        (wh_json:get_value(<<"Old-Call-ID">>, AcceptJObj) =:= whapps_call:call_id(Call)).
+    wh_json:get_value(<<"Call-ID">>, AcceptJObj) =:= whapps_call:call_id(Call).
 
 -spec update_agent(wh_json:object(), wh_json:object()) -> wh_json:object().
 update_agent(Agent, Winner) ->

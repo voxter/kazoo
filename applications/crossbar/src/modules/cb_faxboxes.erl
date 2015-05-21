@@ -1,5 +1,5 @@
  %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
+%%% @copyright (C) 2012-2015, 2600Hz INC
 %%% @doc
 %%%
 %%% Fax Box API
@@ -16,6 +16,7 @@
          ,validate/1, validate/2
          ,put/1
          ,post/2
+         ,patch/2
          ,delete/2
         ]).
 
@@ -30,10 +31,15 @@
 -define(GPC_PROXY_HEADER,{"X-CloudPrint-Proxy","kazoo-cloud-fax-printer-proxy"}).
 -define(DEFAULT_FAX_SMTP_DOMAIN, <<"fax.kazoo.io">>).
 
--define(LEAKED_FIELDS, [<<"pvt_smtp_email_address">>
-                        ,<<"pvt_cloud_state">>
-                        ,<<"pvt_cloud_printer_id">>
-                        ,<<"pvt_cloud_connector_claim_url">>
+-define(CLOUD_STATE_FIELD, <<"pvt_cloud_state">>).
+-define(CLOUD_CLAIM_URL_FIELD, <<"pvt_cloud_connector_claim_url">>).
+-define(CLOUD_PRINTER_ID_FIELD, <<"pvt_cloud_printer_id">>).
+-define(SMTP_EMAIL_FIELD, <<"pvt_smtp_email_address">>).
+
+-define(LEAKED_FIELDS, [?CLOUD_STATE_FIELD
+                        ,?CLOUD_CLAIM_URL_FIELD
+                        ,?CLOUD_PRINTER_ID_FIELD
+                        ,?SMTP_EMAIL_FIELD
                        ]).
 
 -define(CLOUD_PROPERTIES, [<<"printer">>
@@ -70,6 +76,7 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.validate.faxboxes">>, ?MODULE, 'validate'),
     _ = crossbar_bindings:bind(<<"*.execute.put.faxboxes">>, ?MODULE, 'put'),
     _ = crossbar_bindings:bind(<<"*.execute.post.faxboxes">>, ?MODULE, 'post'),
+    _ = crossbar_bindings:bind(<<"*.execute.patch.faxboxes">>, ?MODULE, 'patch'),
     crossbar_bindings:bind(<<"*.execute.delete.faxboxes">>, ?MODULE, 'delete').
 
 %%--------------------------------------------------------------------
@@ -86,7 +93,7 @@ allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
 
 allowed_methods(_BoxId) ->
-    [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE].
+    [?HTTP_GET, ?HTTP_POST, ?HTTP_PATCH, ?HTTP_DELETE].
 
 %%--------------------------------------------------------------------
 %% @public
@@ -131,18 +138,53 @@ validate_faxbox(Context, Id, ?HTTP_GET) ->
     read(Id, Context);
 validate_faxbox(Context, Id, ?HTTP_POST) ->
     validate_email_address(update_faxbox(Id, remove_private_fields(Context)));
+validate_faxbox(Context, Id, ?HTTP_PATCH) ->
+    validate_patch(update_faxbox(Id, remove_private_fields(Context)));
 validate_faxbox(Context, Id, ?HTTP_DELETE) ->
     delete_faxbox(Id, Context).
 
 -spec validate_email_address(cb_context:context()) -> cb_context:context().
 validate_email_address(Context) ->
+    Email = wh_json:get_value(<<"custom_smtp_email_address">>, cb_context:doc(Context)),
+    IsValid =
+        case Email of
+            'undefined' -> 'true';
+            Email ->
+                DocId = wh_json:get_value(<<"_id">>, cb_context:doc(Context)),
+                is_faxbox_email_global_unique(Email, DocId)
+        end,
+    case IsValid of
+        'true' -> Context;
+        'false' ->
+            cb_context:add_validation_error(
+              <<"custom_smtp_email_address">>
+              ,<<"unique">>
+              ,wh_json:from_list(
+                 [{<<"message">>, <<"email address must be unique">>}
+                  ,{<<"cause">>, Email}
+                 ])
+              ,Context
+             )
+    end.
+
+-spec validate_patch(cb_context:context()) -> cb_context:context().
+validate_patch(Context) ->
     DocId = wh_json:get_value(<<"_id">>, cb_context:doc(Context)),
     IsValid = case wh_json:get_value(<<"custom_smtp_email_address">>, cb_context:doc(Context)) of
                   'undefined' -> 'true';
                   CustomEmail -> is_faxbox_email_global_unique(CustomEmail, DocId)
               end,
     case IsValid of
-        'true' -> Context;
+        'true' ->
+            Context1 = crossbar_doc:load(DocId, Context),
+            case cb_context:resp_status(Context1) of
+                'success' ->
+                    PatchJObj = cb_context:req_data(Context),
+                    ConfigsJObj = wh_json:merge_jobjs(PatchJObj, cb_context:doc(Context1)),
+                    cb_context:set_doc(Context, ConfigsJObj);
+                _Status ->
+                    Context1
+            end;
         'false' ->
             cb_context:add_validation_error(<<"custom_smtp_email_address">>
                                             ,<<"unique">>
@@ -159,14 +201,11 @@ validate_email_address(Context) ->
 %%--------------------------------------------------------------------
 -spec put(cb_context:context()) -> cb_context:context().
 put(Context) ->
-    Ctx = maybe_register_cloud_printer(Context),
-    Ctx2 = crossbar_doc:save(Ctx),
-    Ctx3 = crossbar_doc:save(
-             cb_context:set_doc(
-               cb_context:set_account_db(Ctx2, ?WH_FAXES),
-               wh_json:delete_key(<<"_rev">>, cb_context:doc(Ctx2))
-              )),
-    cb_context:set_resp_data(Ctx3, wh_json:public_fields(leak_private_fields(cb_context:doc(Ctx2)))).
+    Ctx = faxbox_doc_save(maybe_register_cloud_printer(Context)),
+    case cb_context:resp_status(Ctx) of
+        'success' -> cb_context:set_resp_data(Ctx, wh_json:public_fields(leak_private_fields(cb_context:doc(Ctx))));
+        _ -> Ctx
+    end.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -177,14 +216,22 @@ put(Context) ->
 %%--------------------------------------------------------------------
 -spec post(cb_context:context(), path_token()) -> cb_context:context().
 post(Context, _Id) ->
-    Ctx = maybe_register_cloud_printer(Context),
-    Ctx2 = crossbar_doc:save(Ctx),
-    Ctx3 = crossbar_doc:ensure_saved(
-             cb_context:set_doc(
-               cb_context:set_account_db(Ctx2, ?WH_FAXES),
-               wh_json:delete_key(<<"_rev">>, cb_context:doc(Ctx2))
-              )),
-    cb_context:set_resp_data(Ctx3, wh_json:public_fields(leak_private_fields(cb_context:doc(Ctx2)))).
+    Ctx = faxbox_doc_save(maybe_register_cloud_printer(Context)),
+    case cb_context:resp_status(Ctx) of
+        'success' -> cb_context:set_resp_data(Ctx, wh_json:public_fields(leak_private_fields(cb_context:doc(Ctx))));
+        _ -> Ctx
+    end.
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% If the HTTP verb is PATCH, execute the actual action, usually a db save
+%% (after a merge).
+%% @end
+%%--------------------------------------------------------------------
+-spec patch(cb_context:context(), path_token()) -> cb_context:context().
+patch(Context, Id) ->
+    post(Context, Id).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -194,11 +241,7 @@ post(Context, _Id) ->
 %%--------------------------------------------------------------------
 -spec delete(cb_context:context(), path_token()) -> cb_context:context().
 delete(Context, Id) ->
-    Ctx2 = crossbar_doc:delete(Context),
-    _ = crossbar_doc:delete(
-          read(Id, cb_context:set_account_db(Context, ?WH_FAXES))
-         ),
-    Ctx2.
+    faxbox_doc_delete(Context, Id).
 
 -spec create_faxbox(cb_context:context()) -> cb_context:context().
 create_faxbox(Context) ->
@@ -226,12 +269,25 @@ read(Id, Context) ->
 -spec leak_private_fields(wh_json:object()) -> wh_json:object().
 leak_private_fields(JObj) ->
     J = wh_json:set_value(<<"id">>, wh_json:get_value(<<"_id">>, JObj), JObj),
-    lists:foldl(fun(<<"pvt_", K1/binary>> = K, Acc) ->
-                        case wh_json:get_value(K, Acc) of
-                            'undefined' -> Acc;
-                            Value -> wh_json:set_value(K1, Value , Acc)
-                        end
-                end, J, ?LEAKED_FIELDS).
+    lists:foldl(fun leak_private_field/2, J, ?LEAKED_FIELDS).
+
+-spec leak_private_field(ne_binary(), wh_json:object()) -> wh_json:object().
+leak_private_field(<<"pvt_", K1/binary>> = K, Acc) ->
+    case wh_json:get_value(K, Acc) of
+        'undefined' -> Acc;
+        Value -> leak_private_field_value(K, K1, Value, Acc)
+    end;
+leak_private_field(_K, Acc) -> Acc.
+
+-spec leak_private_field_value(ne_binary(), ne_binary(), wh_json:json_term(), wh_json:object()) ->
+                                      wh_json:object().
+leak_private_field_value(?CLOUD_CLAIM_URL_FIELD, K1, V, Acc) ->
+    case wh_json:get_value(?CLOUD_STATE_FIELD, Acc) of
+        <<"registered">> ->  wh_json:set_value(K1, V, Acc);
+        _ -> Acc
+    end;
+leak_private_field_value(_K, K1, V, Acc) ->
+    wh_json:set_value(K1, V, Acc).
 
 -spec remove_private_fields(cb_context:context()) -> cb_context:context().
 remove_private_fields(Context) ->
@@ -285,7 +341,7 @@ on_faxbox_successful_validation(DocId, Context) ->
 -spec generate_email_address(cb_context:context()) -> ne_binary().
 generate_email_address(Context) ->
     ResellerId =  cb_context:reseller_id(Context),
-    Domain = whapps_account_config:get(ResellerId, <<"fax">>, <<"default_smtp_domain">>, ?DEFAULT_FAX_SMTP_DOMAIN),
+    Domain = whapps_account_config:get_global(ResellerId, <<"fax">>, <<"default_smtp_domain">>, ?DEFAULT_FAX_SMTP_DOMAIN),
     New = wh_util:rand_hex_binary(4),
     <<New/binary, ".", Domain/binary>>.
 
@@ -312,17 +368,38 @@ normalize_view_results(JObj, Acc) ->
 -spec is_faxbox_email_global_unique(ne_binary(), ne_binary()) -> boolean().
 is_faxbox_email_global_unique(Email, FaxBoxId) ->
     ViewOptions = [{'key', wh_util:to_lower_binary(Email)}],
-    case couch_mgr:get_results(?WH_FAXES, <<"faxbox/email_address">>, ViewOptions) of
+    case couch_mgr:get_results(?WH_FAXES_DB, <<"faxbox/email_address">>, ViewOptions) of
         {'ok', []} -> 'true';
         {'ok', [JObj]} -> wh_json:get_value(<<"id">>, JObj) =:= FaxBoxId;
         {'error', 'not_found'} -> 'true';
         _ -> 'false'
     end.
 
+-spec maybe_reregister_cloud_printer(cb_context:context()) -> cb_context:context().
+-spec maybe_reregister_cloud_printer(api_binary(), cb_context:context()) -> cb_context:context().
+maybe_reregister_cloud_printer(Context) ->
+    CurrentState = wh_json:get_value(<<"pvt_cloud_state">>, cb_context:doc(Context)),
+    Ctx = maybe_reregister_cloud_printer(CurrentState, Context),
+    Ctx1 = case wh_json:get_value(<<"pvt_cloud_state">>, cb_context:doc(Ctx)) of
+               CurrentState -> cb_context:set_resp_status(Context, 'success');
+               _ -> faxbox_doc_save(Ctx)
+           end,
+    case cb_context:resp_status(Ctx1) of
+        'success' ->
+            cb_context:set_resp_data(Ctx1, wh_doc:public_fields(leak_private_fields(cb_context:doc(Ctx1))));
+        _ -> Ctx1
+    end.
+
+maybe_reregister_cloud_printer('undefined', Context) ->
+    maybe_register_cloud_printer(Context);
+maybe_reregister_cloud_printer(<<"expired">>, Context) ->
+    maybe_register_cloud_printer(Context);
+maybe_reregister_cloud_printer(_, Context) -> Context.
+
 -spec maybe_register_cloud_printer(cb_context:context()) -> cb_context:context().
 maybe_register_cloud_printer(Context) ->
     ResellerId =  cb_context:reseller_id(Context),
-    CloudConnectorEnable = whapps_account_config:get(ResellerId, <<"fax">>, <<"enable_cloud_connector">>, 'false'), 
+    CloudConnectorEnable = whapps_account_config:get(ResellerId, <<"fax">>, <<"enable_cloud_connector">>, 'false'),
     case wh_util:is_true(CloudConnectorEnable) of
         'true' -> maybe_register_cloud_printer(Context, cb_context:doc(Context));
         'false' -> Context
@@ -455,13 +532,13 @@ build_file_parts(Boundary, Files, Acc0) ->
                 ,Files
                ).
 
--spec join_formdata_fold(ne_binary(), binary()) -> iolist().
+-spec join_formdata_fold(ne_binary(), iolist()) -> iolist().
 join_formdata_fold(Bin, Acc) ->
     string:join([binary_to_list(Bin), Acc], "\r\n").
 
 -spec maybe_oauth_req(wh_json:object(), api_binary(), cb_context:context()) -> cb_context:context().
-maybe_oauth_req(Doc, 'undefined', Context) ->
-    cb_context:set_resp_data(Context, wh_doc:public_fields(leak_private_fields(Doc)));
+maybe_oauth_req(_Doc, 'undefined', Context) ->
+    maybe_reregister_cloud_printer(Context);
 maybe_oauth_req(Doc, _, Context) ->
     oauth_req(Doc, wh_json:get_value(<<"pvt_cloud_refresh_token">>, Doc), Context).
 
@@ -476,3 +553,24 @@ oauth_req(Doc, OAuthRefresh, Context) ->
     cb_context:set_resp_data(Context, wh_json:set_values([{<<"expires">>, Expires}
                                                           ,{<<"token">>, TokenString}
                                                          ], wh_json:new())).
+
+-spec faxbox_doc_save(cb_context:context()) -> cb_context:context().
+faxbox_doc_save(Context) ->
+    Ctx2 = crossbar_doc:save(Context),
+    Ctx3 = crossbar_doc:ensure_saved(
+             cb_context:set_doc(
+               cb_context:set_account_db(Ctx2, ?WH_FAXES_DB),
+               wh_json:delete_key(<<"_rev">>, cb_context:doc(Ctx2))
+              )),
+    case cb_context:resp_status(Ctx3) of
+        'success' -> Ctx2;
+        _ -> Ctx3
+    end.
+
+-spec faxbox_doc_delete(cb_context:context(), ne_binary()) -> cb_context:context().
+faxbox_doc_delete(Context, Id) ->
+    Ctx2 = crossbar_doc:delete(Context),
+    _ = crossbar_doc:delete(
+          read(Id, cb_context:set_account_db(Context, ?WH_FAXES_DB))
+         ),
+    Ctx2.

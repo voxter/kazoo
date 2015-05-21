@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2015, 2600Hz INC
 %%% @doc
 %%% Utilities shared by a subset of whapps
 %%% @end
@@ -221,8 +221,13 @@ find_oldest_doc([First|Docs]) ->
 get_all_accounts() -> get_all_accounts(?REPLICATE_ENCODING).
 
 get_all_accounts(Encoding) ->
-    {'ok', Databases} = couch_mgr:db_info(),
-    [wh_util:format_account_id(Db, Encoding) || Db <- Databases, is_account_db(Db)].
+    {'ok', Dbs} = couch_mgr:admin_all_docs(<<"dbs">>, [{'startkey', <<"account/">>}
+                                                       ,{'endkey', <<"account/\ufff0">>}
+                                                      ]),
+    [wh_util:format_account_id(Id, Encoding)
+     || Db <- Dbs,
+        is_account_db((Id = wh_json:get_value(<<"id">>, Db)))
+    ].
 
 -spec get_all_accounts_and_mods() -> ne_binaries().
 -spec get_all_accounts_and_mods('unencoded' | 'encoded' | 'raw') -> ne_binaries().
@@ -278,8 +283,8 @@ is_account_db(Db) -> couch_util:db_classification(Db) =:= 'account'.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_account_by_realm(ne_binary()) ->
-                                  {'ok', wh_json:key()} |
-                                  {'multiples', wh_json:key()} |
+                                  {'ok', ne_binary()} |
+                                  {'multiples', ne_binaries()} |
                                   {'error', 'not_found'}.
 get_account_by_realm(RawRealm) ->
     Realm = wh_util:to_lower_binary(RawRealm),
@@ -304,8 +309,8 @@ get_account_by_realm(RawRealm) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_accounts_by_name(ne_binary()) ->
-                                  {'ok', wh_json:key()} |
-                                  {'multiples', wh_json:key()} |
+                                  {'ok', ne_binary()} |
+                                  {'multiples', ne_binaries()} |
                                   {'error', 'not_found'}.
 get_accounts_by_name(Name) ->
     case couch_mgr:get_results(?WH_ACCOUNTS_DB, ?AGG_LIST_BY_NAME, [{'key', Name}]) of
@@ -486,11 +491,9 @@ amqp_pool_send(Api, PubFun) when is_function(PubFun, 1) ->
     wh_amqp_worker:cast(Api, PubFun).
 
 -spec amqp_pool_request(api_terms(), wh_amqp_worker:publish_fun(), wh_amqp_worker:validate_fun()) ->
-                               {'ok', wh_json:object()} |
-                               {'error', any()}.
+                               wh_amqp_worker:request_return().
 -spec amqp_pool_request(api_terms(), wh_amqp_worker:publish_fun(), wh_amqp_worker:validate_fun(), wh_timeout()) ->
-                               {'ok', wh_json:object()} |
-                               {'error', any()}.
+                               wh_amqp_worker:request_return().
 amqp_pool_request(Api, PubFun, ValidateFun)
   when is_function(PubFun, 1),
        is_function(ValidateFun, 1) ->
@@ -503,11 +506,9 @@ amqp_pool_request(Api, PubFun, ValidateFun, Timeout)
     wh_amqp_worker:call(Api, PubFun, ValidateFun, Timeout).
 
 -spec amqp_pool_request_custom(api_terms(), wh_amqp_worker:publish_fun(), wh_amqp_worker:validate_fun(), gen_listener:binding()) ->
-                               {'ok', wh_json:object()} |
-                               {'error', any()}.
+                                      wh_amqp_worker:request_return().
 -spec amqp_pool_request_custom(api_terms(), wh_amqp_worker:publish_fun(), wh_amqp_worker:validate_fun(), wh_timeout(), gen_listener:binding()) ->
-                               {'ok', wh_json:object()} |
-                               {'error', any()}.
+                                      wh_amqp_worker:request_return().
 amqp_pool_request_custom(Api, PubFun, ValidateFun, Bind)
   when is_function(PubFun, 1),
        is_function(ValidateFun, 1) ->

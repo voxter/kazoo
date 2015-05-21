@@ -19,11 +19,13 @@
          ,parse_media_type/1
 
          ,bucket_name/1
-         ,token_cost/1, token_cost/2
+         ,token_cost/1, token_cost/2, token_cost/3
          ,reconcile_services/1
          ,bind/2
 
          ,range_view_options/1, range_view_options/2
+
+         ,range_modb_view_options/1, range_modb_view_options/2, range_modb_view_options/3
         ]).
 
 -include("../crossbar.hrl").
@@ -35,10 +37,10 @@
        ).
 
 -spec range_view_options(cb_context:context()) ->
-                                {pos_integer(), pos_integer()} |
+                                {gregorian_seconds(), gregorian_seconds()} |
                                 cb_context:context().
 -spec range_view_options(cb_context:context(), pos_integer()) ->
-                                {pos_integer(), pos_integer()} |
+                                {gregorian_seconds(), gregorian_seconds()} |
                                 cb_context:context().
 range_view_options(Context) ->
     range_view_options(Context, ?MAX_RANGE).
@@ -49,23 +51,66 @@ range_view_options(Context, MaxRange) ->
 
     case CreatedTo - CreatedFrom of
         N when N < 0 ->
-            Message = <<"created_from is prior to created_to">>,
-            cb_context:add_validation_error(<<"created_from">>
-                                            ,<<"date_range">>
-                                            ,Message
-                                            ,Context
-                                           );
+            cb_context:add_validation_error(
+              <<"created_from">>
+              ,<<"date_range">>
+              ,wh_json:from_list(
+                 [{<<"message">>, <<"created_from is prior to created_to">>}
+                  ,{<<"cause">>, CreatedFrom}
+                 ])
+              ,Context
+             );
         N when N > MaxRange ->
             Message = <<"created_to is more than "
                         ,(wh_util:to_binary(MaxRange))/binary
                         ," seconds from created_from"
                       >>,
-            cb_context:add_validation_error(<<"created_from">>
-                                            ,<<"date_range">>
-                                            ,Message
-                                            ,Context
-                                           );
+            cb_context:add_validation_error(
+              <<"created_from">>
+              ,<<"date_range">>
+              ,wh_json:from_list(
+                 [{<<"message">>, Message}
+                  ,{<<"cause">>, CreatedTo}
+                 ])
+              ,Context
+             );
         _N -> {CreatedFrom, CreatedTo}
+    end.
+
+-spec range_modb_view_options(cb_context:context()) ->
+                                     {'ok', wh_proplist()} |
+                                     cb_context:context().
+range_modb_view_options(Context) ->
+    range_modb_view_options(Context, 'undefined', 'undefined').
+
+-spec range_modb_view_options(cb_context:context(), api_binaries()) ->
+                                     {'ok', wh_proplist()} |
+                                     cb_context:context().
+range_modb_view_options(Context, PrefixKeys) ->
+    range_modb_view_options(Context, PrefixKeys, 'undefined').
+
+-spec range_modb_view_options(cb_context:context(), api_binaries(), api_binaries()) ->
+                                     {'ok', crossbar_doc:view_options()} |
+                                     cb_context:context().
+range_modb_view_options(Context, 'undefined', SuffixKeys) ->
+    range_modb_view_options(Context, [], SuffixKeys);
+range_modb_view_options(Context, PrefixKeys, 'undefined') ->
+    range_modb_view_options(Context, PrefixKeys, []);
+range_modb_view_options(Context, PrefixKeys, SuffixKeys) ->
+    case cb_modules_util:range_view_options(Context) of
+        {CreatedFrom, CreatedTo} ->
+            AccountId = cb_context:account_id(Context),
+            case PrefixKeys =:= [] andalso SuffixKeys =:= [] of
+                'true' -> {'ok', [{'startkey', CreatedFrom}
+                                  ,{'endkey', CreatedTo}
+                                  ,{'databases', kazoo_modb:get_range(AccountId, CreatedFrom, CreatedTo)}
+                                 ]};
+                'false' -> {'ok', [{'startkey', [Key || Key <- PrefixKeys ++ [CreatedFrom] ++ SuffixKeys] }
+                                   ,{'endkey', [Key || Key <- PrefixKeys  ++ [CreatedTo]   ++ SuffixKeys] }
+                                   ,{'databases', kazoo_modb:get_range(AccountId, CreatedFrom, CreatedTo)}
+                                  ]}
+            end;
+        Context1 -> Context1
     end.
 
 -spec created_to(cb_context:context(), pos_integer()) -> pos_integer().
@@ -161,6 +206,7 @@ create_call_from_context(Context) ->
         props:filter_undefined(
           [{fun whapps_call:set_account_db/2, cb_context:account_db(Context)}
            ,{fun whapps_call:set_account_id/2, cb_context:account_id(Context)}
+           ,{fun whapps_call:set_resource_type/2, <<"audio">>}
            ,{fun whapps_call:set_owner_id/2, wh_json:get_ne_value(<<"owner_id">>, cb_context:doc(Context))}
            | request_specific_extraction_funs(Context)
           ]),
@@ -242,6 +288,7 @@ default_bleg_cid(Call, Context) ->
 
 -spec originate_quickcall(wh_json:objects(), whapps_call:call(), cb_context:context()) -> cb_context:context().
 originate_quickcall(Endpoints, Call, Context) ->
+    AutoAnswer = wh_json:is_true(<<"auto_answer">>, cb_context:query_string(Context), 'true'),
     CCVs = [{<<"Account-ID">>, cb_context:account_id(Context)}
             ,{<<"Retain-CID">>, <<"true">>}
             ,{<<"Inherit-Codec">>, <<"false">>}
@@ -252,10 +299,11 @@ originate_quickcall(Endpoints, Call, Context) ->
                 'true' -> wh_util:rand_hex_binary(16);
                 'false' -> cb_context:req_id(Context)
             end,
+    CallId = <<(wh_util:rand_hex_binary(18))/binary, "-quickcall">>,
     Request = [{<<"Application-Name">>, <<"transfer">>}
                ,{<<"Application-Data">>, get_application_data(Context)}
                ,{<<"Msg-ID">>, MsgId}
-               ,{<<"Endpoints">>, maybe_auto_answer(Endpoints)}
+               ,{<<"Endpoints">>, maybe_auto_answer(Endpoints, AutoAnswer)}
                ,{<<"Timeout">>, get_timeout(Context)}
                ,{<<"Ignore-Early-Media">>, get_ignore_early_media(Context)}
                ,{<<"Media">>, get_media(Context)}
@@ -263,6 +311,7 @@ originate_quickcall(Endpoints, Call, Context) ->
                ,{<<"Outbound-Caller-ID-Number">>, whapps_call:request_user(Call)}
                ,{<<"Outbound-Callee-ID-Name">>, get_caller_id_name(Context)}
                ,{<<"Outbound-Callee-ID-Number">>, get_caller_id_number(Context)}
+               ,{<<"Outbound-Call-ID">>, CallId}
                ,{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
                ,{<<"Continue-On-Fail">>, 'false'}
                ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
@@ -270,12 +319,13 @@ originate_quickcall(Endpoints, Call, Context) ->
                | wh_api:default_headers(<<"resource">>, <<"originate_req">>, ?APP_NAME, ?APP_VERSION)
               ],
     wapi_resource:publish_originate_req(props:filter_undefined(Request)),
-    crossbar_util:response_202(<<"processing request">>, cb_context:set_resp_data(Context, Request)).
+    JObj = wh_json:normalize(wh_json:from_list(wh_api:remove_defaults(Request))),
+    crossbar_util:response_202(<<"quickcall initiated">>, JObj, cb_context:set_resp_data(Context, Request)).
 
--spec maybe_auto_answer(wh_json:objects()) -> wh_json:objects().
-maybe_auto_answer([Endpoint]) ->
-    [wh_json:set_value([<<"Custom-Channel-Vars">>, <<"Auto-Answer">>], 'true', Endpoint)];
-maybe_auto_answer(Endpoints) ->
+-spec maybe_auto_answer(wh_json:objects(), boolean()) -> wh_json:objects().
+maybe_auto_answer([Endpoint], AutoAnswer) ->
+    [wh_json:set_value([<<"Custom-Channel-Vars">>, <<"Auto-Answer">>], AutoAnswer, Endpoint)];
+maybe_auto_answer(Endpoints, _) ->
     Endpoints.
 
 -spec get_application_data(cb_context:context()) -> wh_json:object().
@@ -342,7 +392,7 @@ is_superduper_admin(AccountId, AccountDb) ->
     lager:debug("checking for superduper admin: ~s (~s)", [AccountId, AccountDb]),
     case couch_mgr:open_cache_doc(AccountDb, AccountId) of
         {'ok', JObj} ->
-            case wh_json:is_true(<<"pvt_superduper_admin">>, JObj) of
+            case kz_account:is_superduper_admin(JObj) of
                 'true' ->
                     lager:debug("the requestor is a superduper admin"),
                     'true';
@@ -397,6 +447,8 @@ content_type_to_extension(<<"audio/mp3">>) -> <<"mp3">>;
 content_type_to_extension(<<"audio/ogg">>) -> <<"ogg">>;
 content_type_to_extension(<<"application/x-pdf">>) -> <<"pdf">>;
 content_type_to_extension(<<"application/pdf">>) -> <<"pdf">>;
+content_type_to_extension(<<"image/tiff">>) -> <<"tif">>;
+content_type_to_extension(<<"image/tif">>) -> <<"tif">>;
 content_type_to_extension(<<"image/jpg">>) -> <<"jpg">>;
 content_type_to_extension(<<"image/jpeg">>) -> <<"jpg">>;
 content_type_to_extension(<<"image/png">>) -> <<"png">>;

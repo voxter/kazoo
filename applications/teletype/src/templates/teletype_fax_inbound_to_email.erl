@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2014, 2600Hz Inc
+%%% @copyright (C) 2014-2015, 2600Hz Inc
 %%% @doc
 %%%
 %%% @end
@@ -14,10 +14,9 @@
 
 -include("../teletype.hrl").
 
--define(MOD_CONFIG_CAT, <<(?NOTIFY_CONFIG_CAT)/binary, ".fax_inbound_to_email">>).
--define(FAX_CONFIG_CAT, <<(?NOTIFY_CONFIG_CAT)/binary, ".fax">>).
-
 -define(TEMPLATE_ID, <<"fax_inbound_to_email">>).
+-define(MOD_CONFIG_CAT, <<(?NOTIFY_CONFIG_CAT)/binary, ".", (?TEMPLATE_ID)/binary>>).
+-define(FAX_CONFIG_CAT, <<(?NOTIFY_CONFIG_CAT)/binary, ".fax">>).
 
 -define(TEMPLATE_MACROS
         ,wh_json:from_list(
@@ -34,12 +33,11 @@
             ,?MACRO_VALUE(<<"fax.encoding">>, <<"fax_encoding">>, <<"Fax Encoding">>, <<"Encoding of the fax">>)
             ,?MACRO_VALUE(<<"fax.doc_id">>, <<"fax_doc_id">>, <<"Document ID">>, <<"Crossbar ID of the Fax document">>)
             | ?DEFAULT_CALL_MACROS
-            ++ ?SERVICE_MACROS
            ]
           )).
 
--define(TEMPLATE_TEXT, <<"New Fax ({{fax.total_pages}} Pages)\n\nCaller ID: {{caller_id.number}}\nCaller Name: {{caller_id.name}}\n\nCalled To: {{to.user}}   (Originally dialed number)\nCalled On: {{date_called.local|date:\"l, F j, Y \\a\\t H:i\"}}\n\n\nFor help or questions about receiving faxes, please contact support at {{service.support_number}} or email {{service.support_email}}.">>).
--define(TEMPLATE_HTML, <<"<html><body><h3>New Fax ({{fax.total_pages}} Pages)</h3><table><tr><td>Caller ID</td><td>{{caller_id.name}} ({{caller_id.number}})</td></tr><tr><td>Callee ID</td><td>{{to.user}} (originally dialed number)</td></tr><tr><td>Call received</td><td>{{date_called.local|date:\"l, F j, Y \\a\\t H:i\"}}</td></tr></table><p>For help or questions about receiving faxes, please contact {{service.support_number}} or email <a href=\"mailto:{{service.support_email}}\">Support</a></p><p style=\"font-size: 9px;color:#C0C0C0\">{{fax.call_id}}</p></body></html>">>).
+-define(TEMPLATE_TEXT, <<"New Fax ({{fax.total_pages}} Pages)\n\nCaller ID: {{caller_id.number}}\nCaller Name: {{caller_id.name}}\n\nCalled To: {{to.user}}   (Originally dialed number)\nCalled On: {{date_called.local|date:\"l, F j, Y \\a\\t H:i\"}}\n\n\nFor help or questions about receiving faxes, please contact support at (415) 886-7900 or email support@2600hz.com.">>).
+-define(TEMPLATE_HTML, <<"<html><body><h3>New Fax ({{fax.total_pages}} Pages)</h3><table><tr><td>Caller ID</td><td>{{caller_id.name}} ({{caller_id.number}})</td></tr><tr><td>Callee ID</td><td>{{to.user}} (originally dialed number)</td></tr><tr><td>Call received</td><td>{{date_called.local|date:\"l, F j, Y \\a\\t H:i\"}}</td></tr></table><p>For help or questions about receiving faxes, please contact (415) 886-7900 or email <a href=\"mailto:support@2600hz.com\">Support</a></p><p style=\"font-size: 9px;color:#C0C0C0\">{{fax.call_id}}</p></body></html>">>).
 -define(TEMPLATE_SUBJECT, <<"New fax from {{caller_id.name}} ({{caller_id.number}})">>).
 -define(TEMPLATE_CATEGORY, <<"fax">>).
 -define(TEMPLATE_NAME, <<"Inbound Fax to Email">>).
@@ -67,75 +65,31 @@ init() ->
                                                ,{'reply_to', ?TEMPLATE_REPLY_TO}
                                               ]).
 
--spec get_fax_doc(wh_json:object()) -> wh_json:object().
-get_fax_doc(DataJObj) ->
-    AccountId = teletype_util:find_account_id(DataJObj),
-    AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
-    FaxId = wh_json:get_value(<<"fax_id">>, DataJObj),
-
-    case couch_mgr:open_doc(AccountDb, FaxId) of
-        {'ok', FaxJObj} -> FaxJObj;
-        {'error', 'not_found'} ->
-            get_fax_doc_from_modb(DataJObj, AccountId, FaxId);
-        {'error', _E} ->
-            lager:debug("failed to find fax ~s: ~p", [FaxId, _E]),
-            maybe_send_failure(DataJObj, <<"Fax-ID was invalid">>)
-    end.
-
--spec get_fax_doc_from_modb(wh_json:object(), ne_binary(), ne_binary()) -> wh_json:object().
-get_fax_doc_from_modb(DataJObj, AccountId, FaxId) ->
-    case kazoo_modb:open_doc(AccountId, FaxId) of
-        {'ok', FaxJObj} -> FaxJObj;
-        {'error', _E} ->
-            lager:debug("failed to find fax ~s: ~p", [FaxId, _E]),
-            maybe_send_failure(DataJObj, <<"Fax-ID was invalid">>)
-    end.
-
--spec maybe_send_failure(wh_json:object(), ne_binary()) -> wh_json:object().
-maybe_send_failure(DataJObj, Msg) ->
-    case wh_json:is_true(<<"preview">>, DataJObj) of
-        'true' ->
-            lager:debug("not sending failure as this is a preview"),
-            wh_json:new();
-        'false' ->
-            teletype_util:send_update(DataJObj, <<"failed">>, Msg),
-            throw({'error', 'no_fax_id'})
-    end.
-
 -spec handle_fax_inbound(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_fax_inbound(JObj, _Props) ->
     'true' = wapi_notifications:fax_inbound_v(JObj),
     wh_util:put_callid(JObj),
 
-    lager:debug("processing fax inbound to email"),
+    lager:debug("processing fax inbound to email ~p", [JObj]),
 
     %% Gather data for template
-    DataJObj =
-        wh_json:set_values([{<<"server_id">>, wh_json:get_value(<<"Server-ID">>, JObj)}
-                            ,{<<"msg_id">>, wh_json:get_value(<<"Msg-ID">>, JObj)}
-                           ]
-                           ,wh_json:normalize(
-                              wh_api:remove_defaults(JObj)
-                             )
-                          ),
+    DataJObj = wh_json:normalize(JObj),
+    AccountId = wh_json:get_value(<<"account_id">>, DataJObj),
 
-    case teletype_util:should_handle_notification(DataJObj) of
-        'true' -> handle_fax_inbound(DataJObj);
-        'false' -> lager:debug("notification handling not configured for this account")
+    case teletype_util:should_handle_notification(DataJObj)
+        andalso teletype_util:is_notice_enabled(AccountId, JObj, ?TEMPLATE_ID)
+    of
+        'false' -> lager:debug("notification handling not configured for this account");
+        'true' -> process_req(DataJObj)
     end.
 
--spec handle_fax_inbound(wh_json:object()) -> 'ok'.
-handle_fax_inbound(DataJObj) ->
-    FaxJObj = get_fax_doc(DataJObj),
-
-    AccountId = teletype_util:find_account_id(DataJObj),
-    AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
-    {'ok', AccountJObj} = couch_mgr:open_cache_doc(AccountDb, AccountId),
-
-    OwnerJObj = get_owner_doc(FaxJObj),
+-spec process_req(wh_json:object()) -> 'ok'.
+process_req(DataJObj) ->
+    FaxJObj = teletype_fax_util:get_fax_doc(DataJObj),
+    OwnerJObj = get_owner_doc(FaxJObj, DataJObj),
 
     Macros = build_template_data(
-               wh_json:set_values([{<<"account">>, wh_doc:public_fields(AccountJObj)}
+               wh_json:set_values([{<<"account">>, teletype_util:account_params(DataJObj)}
                                    ,{<<"fax">>, wh_doc:public_fields(FaxJObj)}
                                    ,{<<"owner">>, wh_doc:public_fields(OwnerJObj)}
                                   ]
@@ -160,147 +114,37 @@ handle_fax_inbound(DataJObj) ->
                ),
     lager:debug("rendered subject: ~s", [Subject]),
 
-    Emails = teletype_util:find_addresses(wh_json:set_value(<<"to">>
-                                                            ,to_email_addresses(DataJObj)
-                                                            ,DataJObj
-                                                           )
+    EmailsJObj =
+        case teletype_util:is_preview(DataJObj) of
+            'true' -> DataJObj;
+            'false' ->
+                wh_json:set_value(<<"to">>, to_email_addresses(FaxJObj), DataJObj)
+        end,
+
+    Emails = teletype_util:find_addresses(EmailsJObj
                                           ,TemplateMetaJObj
                                           ,?MOD_CONFIG_CAT
                                          ),
 
-    %% Send email
-    case teletype_util:send_email(Emails
-                                  ,Subject
-                                  ,props:get_value(<<"service">>, Macros)
-                                  ,RenderedTemplates
-                                  ,[get_attachment(DataJObj, Macros)]
-                                 )
-    of
+    EmailAttachements = teletype_fax_util:get_attachments(DataJObj, Macros),
+    case teletype_util:send_email(Emails, Subject, RenderedTemplates, EmailAttachements) of
         'ok' -> teletype_util:send_update(DataJObj, <<"completed">>);
         {'error', Reason} -> teletype_util:send_update(DataJObj, <<"failed">>, Reason)
     end.
 
--spec get_owner_doc(wh_json:object()) -> wh_json:object().
--spec get_owner_doc(ne_binary(), api_binary()) -> wh_json:object().
-get_owner_doc(FaxJObj) ->
-    AccountDb = wh_json:get_value(<<"pvt_account_db">>, FaxJObj),
+-spec get_owner_doc(wh_json:object(), wh_json:object()) -> wh_json:object().
+get_owner_doc(FaxJObj, DataJObj) ->
     OwnerId = wh_json:get_value(<<"owner_id">>, FaxJObj),
-
-    get_owner_doc(AccountDb, OwnerId).
-get_owner_doc(_AccountDb, 'undefined') ->
-    lager:debug("no owner found"),
-    wh_json:new();
-get_owner_doc(AccountDb, OwnerId) ->
-    case couch_mgr:open_cache_doc(AccountDb, OwnerId) of
+    case teletype_util:open_doc(<<"user">>, OwnerId, DataJObj) of
         {'ok', OwnerJObj} -> OwnerJObj;
-        {'error', 'not_found'} -> wh_json:new()
-    end.
-
--spec get_attachment(wh_json:object(), wh_proplist()) -> attachment().
-get_attachment(DataJObj, Macros) ->
-    FaxMacros = props:get_value(<<"fax">>, Macros),
-    FaxId = props:get_first_defined([<<"id">>, <<"fax_jobid">>, <<"fax_id">>], FaxMacros),
-    Db = fax_db(DataJObj),
-    lager:debug("accessing fax at ~s / ~s", [Db, FaxId]),
-    {'ok', ContentType, Bin} = get_attachment_binary(Db, FaxId),
-
-    ToFormat = whapps_config:get(?FAX_CONFIG_CAT, <<"attachment_format">>, <<"pdf">>),
-    FromFormat = from_format_from_content_type(ContentType),
-
-    lager:debug("converting from ~s to ~s", [FromFormat, ToFormat]),
-
-    {'ok', Converted} = teletype_fax_util:convert(FromFormat, ToFormat, Bin),
-
-    Filename = get_file_name(Macros, ToFormat),
-    lager:debug("adding attachment as ~s", [Filename]),
-    {content_type_from_extension(Filename)
-     ,Filename
-     ,Converted
-    }.
-
--spec from_format_from_content_type(ne_binary()) -> ne_binary().
-from_format_from_content_type(<<"application/pdf">>) ->
-    <<"pdf">>;
-from_format_from_content_type(<<"image/tiff">>) ->
-    <<"tif">>;
-from_format_from_content_type(ContentType) ->
-    [_Type, SubType] = binary:split(ContentType, <<"/">>),
-    SubType.
-
--spec content_type_from_extension(ne_binary()) -> ne_binary().
-content_type_from_extension(Ext) ->
-    {Type, SubType, _} = cow_mimetypes:all(Ext),
-    <<Type/binary, "/", SubType/binary>>.
-
--spec get_file_name(wh_proplist(), ne_binary()) -> ne_binary().
-get_file_name(Macros, Ext) ->
-    CallerIdMacros = props:get_value(<<"caller_id">>, Macros),
-    CallerID =
-        case {props:get_value(<<"name">>, CallerIdMacros)
-              ,props:get_value(<<"number">>, CallerIdMacros)
-             }
-        of
-            {'undefined', 'undefined'} -> <<"Unknown">>;
-            {'undefined', Num} -> wh_util:to_binary(Num);
-            {Name, _} -> wh_util:to_binary(Name)
-        end,
-    LocalDateTime = props:get_value([<<"date_called">>, <<"local">>], Macros, <<"0000-00-00_00-00-00">>),
-    FName = list_to_binary([CallerID, "_", wh_util:pretty_print_datetime(LocalDateTime), ".", Ext]),
-    re:replace(wh_util:to_lower_binary(FName), <<"\\s+">>, <<"_">>, [{'return', 'binary'}, 'global']).
-
--spec get_attachment_binary(ne_binary(), api_binary()) ->
-                                   {'ok', ne_binary(), binary()}.
-get_attachment_binary(Db, Id) ->
-    get_attachment_binary(Db, Id, 2).
-
-get_attachment_binary(_Db, _Id, 0) ->
-    lager:debug("failed to find ~s in ~s, retries expired", [_Id, _Db]),
-    throw({'error', 'no_attachment'});
-get_attachment_binary(Db, Id, Retries) ->
-    case couch_mgr:open_cache_doc(Db, Id) of
-        {'error', 'not_found'} when Db =/= ?WH_FAXES ->
-            get_attachment_binary(?WH_FAXES, Id, Retries);
-        {'error', 'not_found'} ->
-            lager:debug("no attachment binary to send"),
-            {'ok', <<"dev/null">>, <<"fax attachment">>};
-        {'ok', FaxJObj} ->
-            case wh_doc:attachment(FaxJObj) of
-                'undefined' -> delayed_retry(Db, Id, Retries);
-                AttachmentJObj ->
-                    get_attachment_binary(Db, Id, Retries, AttachmentJObj)
-            end
-    end.
-
--spec delayed_retry(ne_binary(), ne_binary(), 1..2) -> {'ok', ne_binary(), binary()}.
-delayed_retry(Db, Id, Retries) ->
-    lager:debug("waiting to query fax doc ~s for attachment", [Id]),
-    timer:sleep(?MILLISECONDS_IN_MINUTE * 5),
-    get_attachment_binary(Db, Id, Retries-1).
-
--spec get_attachment_binary(ne_binary(), ne_binary(), 1..2) -> {'ok', ne_binary(), binary()}.
-get_attachment_binary(Db, Id, Retries, AttachmentJObj) ->
-    [AttachmentName] = wh_json:get_keys(AttachmentJObj),
-    ContentType = wh_json:get_value([AttachmentName, <<"content_type">>], AttachmentJObj, <<"image/tiff">>),
-
-    case couch_mgr:fetch_attachment(Db, Id, AttachmentName) of
-        {'ok', Bin} -> {'ok', ContentType, Bin};
-        {'error', _E} ->
-            lager:debug("failed to fetch attachment ~s: ~p", [AttachmentName, _E]),
-            delayed_retry(Db, Id, Retries-1)
-    end.
-
--spec fax_db(wh_json:object()) -> ne_binary().
-fax_db(DataJObj) ->
-    case teletype_util:find_account_db(DataJObj) of
-        'undefined' -> ?WH_FAXES;
-        Db -> Db
+        {'error', _} -> wh_json:new()
     end.
 
 -spec build_template_data(wh_json:object()) -> wh_proplist().
 build_template_data(DataJObj) ->
-    [{<<"account">>, wh_json:to_proplist(wh_json:get_value(<<"account">>, DataJObj))}
+    [{<<"account">>, wh_json:get_value(<<"account">>, DataJObj)}
      ,{<<"fax">>, build_fax_template_data(DataJObj)}
-     ,{<<"service">>, teletype_util:service_params(DataJObj, ?MOD_CONFIG_CAT)}
+     ,{<<"system">>, teletype_util:system_params()}
      ,{<<"caller_id">>, caller_id_data(DataJObj)}
      ,{<<"callee_id">>, callee_id_data(DataJObj)}
      ,{<<"date_called">>, date_called_data(DataJObj)}
@@ -357,6 +201,8 @@ to_email_addresses(DataJObj) ->
     to_email_addresses(DataJObj
                        ,wh_json:get_first_defined([[<<"to">>, <<"email_addresses">>]
                                                    ,[<<"fax">>, <<"email">>, <<"send_to">>]
+                                                   ,[<<"fax_notifications">>, <<"email">>, <<"send_to">>]
+                                                   ,[<<"notifications">>, <<"email">>, <<"send_to">>]
                                                    ,[<<"owner">>, <<"email">>]
                                                    ,[<<"owner">>, <<"username">>]
                                                   ]

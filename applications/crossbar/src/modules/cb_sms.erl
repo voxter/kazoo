@@ -181,11 +181,28 @@ on_successful_validation(Context) ->
                 {<<"user">>, UserId, UserId}
         end,
 
-    ToUser = wh_json:get_value(<<"to">>, JObj),
+    {ToNum, ToOptions} = build_number(wh_json:get_value(<<"to">>, JObj)),
+    ToUser =
+        case whapps_account_config:get_global(AccountId, ?MOD_CONFIG_CAT, <<"api_e164_convert_to">>, 'false')
+            andalso wnm_util:is_reconcilable(filter_number(ToNum), AccountId)
+        of
+            'true' -> wnm_util:to_e164(filter_number(ToNum), AccountId);
+            'false' -> ToNum
+        end,
     To = <<ToUser/binary, "@", Realm/binary>>,
 
-    FromUser = wh_json:get_value(<<"from">>, JObj, get_default_caller_id(Context, OwnerId)),
+    {FromNum, FromOptions} = build_number(wh_json:get_value(<<"from">>, JObj, get_default_caller_id(Context, OwnerId))),
+    FromUser =
+        case whapps_account_config:get_global(AccountId, ?MOD_CONFIG_CAT, <<"api_e164_convert_from">>, 'false')
+            andalso wnm_util:is_reconcilable(filter_number(FromNum), AccountId)
+        of
+            'true' -> wnm_util:to_e164(filter_number(FromNum), AccountId);
+            'false' -> FromNum
+        end,
     From = <<FromUser/binary, "@", Realm/binary>>,
+
+    AddrOpts = [{<<"SMPP-Address-From-", K/binary>>, V} || {K, V} <- FromOptions]
+        ++ [{<<"SMPP-Address-To-", K/binary>>, V} || {K, V} <- ToOptions],
 
     SmsDocId = create_sms_doc_id(),
 
@@ -201,6 +218,7 @@ on_successful_validation(Context) ->
                              ,{<<"pvt_authorization_type">>, AuthorizationType}
                              ,{<<"pvt_authorization">>, Authorization}
                              ,{<<"pvt_origin">>, <<"api">>}
+                             ,{<<"pvt_address_options">>, wh_json:from_list(AddrOpts)}
                              ,{<<"request">>, To}
                              ,{<<"request_user">>, ToUser}
                              ,{<<"request_realm">>, Realm}
@@ -211,6 +229,8 @@ on_successful_validation(Context) ->
                              ,{<<"from_user">>, FromUser}
                              ,{<<"from_realm">>, Realm}
                              ,{<<"_id">>, SmsDocId}
+                             ,{<<"pvt_created">>, wh_util:current_tstamp()}
+                             ,{<<"pvt_modified">>, wh_util:current_tstamp()}
                             ])
                           ,JObj
                          )).
@@ -241,7 +261,8 @@ create_sms_doc_id() ->
       io_lib:format("~B~s-~s",[Year
                                ,wh_util:pad_month(Month)
                                ,wh_util:rand_hex_binary(16)
-                              ])).
+                              ])
+     ).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -253,7 +274,7 @@ create_sms_doc_id() ->
 -spec summary(cb_context:context()) -> cb_context:context().
 summary(Context) ->
     {View, PreFilter, PostFilter} = get_view_and_filter(Context),
-    case get_view_options(Context, PreFilter, PostFilter) of
+    case cb_modules_util:range_modb_view_options(Context, PreFilter, PostFilter) of
         {'ok', ViewOptions} ->
             crossbar_doc:load_view(View, ViewOptions, Context, fun normalize_view_results/2);
         Ctx -> Ctx
@@ -267,7 +288,12 @@ summary(Context) ->
 %%--------------------------------------------------------------------
 -spec normalize_view_results(wh_json:object(), wh_json:objects()) -> wh_json:objects().
 normalize_view_results(JObj, Acc) ->
-    [wh_json:get_value(<<"value">>, JObj)|Acc].
+    [normalize_view_result_value(wh_json:get_value(<<"value">>, JObj))|Acc].
+
+-spec normalize_view_result_value(wh_json:object()) -> wh_json:object().
+normalize_view_result_value(JObj) ->
+    Date = wh_util:rfc1036(wh_json:get_value(<<"created">>, JObj)),
+    wh_json:set_value(<<"date">>, Date, JObj).
 
 -spec get_view_and_filter(cb_context:context()) ->
                                  {ne_binary(), api_binaries(), api_binaries()}.
@@ -279,53 +305,26 @@ get_view_and_filter(Context) ->
         {Id, _} -> {?CB_LIST_BY_DEVICE, [Id], 'undefined'}
     end.
 
--spec get_view_options(cb_context:context(), api_binaries(), api_binaries()) ->
-                              {'ok', wh_proplist()} |
-                              cb_context:context().
-get_view_options(Context, 'undefined', SuffixKey) ->
-    get_view_options(Context, [], SuffixKey);
-get_view_options(Context, PrefixKey, 'undefined') ->
-    get_view_options(Context, PrefixKey, []);
-get_view_options(Context, PrefixKey, SuffixKey) ->
-    MaxRange = whapps_config:get_integer(?MOD_CONFIG_CAT, <<"maximum_range">>, (?SECONDS_IN_DAY * 31 + ?SECONDS_IN_HOUR)),
-    case cb_modules_util:range_view_options(Context, MaxRange) of
-        {CreatedFrom, CreatedTo} ->
-            case PrefixKey =:= [] andalso SuffixKey =:= [] of
-                'true' ->
-                    {'ok', [{'startkey', CreatedFrom}
-                            ,{'endkey', CreatedTo}
-                            ,{'limit', pagination_page_size(Context)}
-                            | get_modbs(Context, CreatedFrom, CreatedTo)
-                           ]};
-                'false' ->
-                    {'ok', [{'startkey', [Key || Key <- PrefixKey ++ [CreatedFrom | SuffixKey]]}
-                            ,{'endkey', [Key || Key <- PrefixKey ++ [CreatedTo | SuffixKey]]}
-                            ,{'limit', pagination_page_size(Context)}
-                            | get_modbs(Context, CreatedFrom, CreatedTo)
-                           ]}
-            end;
-        Context1 -> Context1
+-spec filter_number(binary()) -> binary().
+filter_number(Number) ->
+    << <<X>> || <<X>> <= Number, is_digit(X)>>.
+
+-spec is_digit(integer()) -> boolean().
+is_digit(N) -> N >= $0 andalso N =< $9.
+
+-spec build_number(ne_binary()) -> {api_binary(), wh_proplist()}.
+build_number(Number) ->
+    N = binary:split(Number, <<",">>, ['global']),
+    case length(N) of
+        1 -> {Number, []};
+        _ -> lists:foldl(fun parse_number/2, {'undefined', []}, N)
     end.
 
--spec get_modbs(cb_context:context(), pos_integer(), pos_integer()) -> [{'databases', ne_binaries()}].
-get_modbs(Context, From, To) ->
-    AccountId = cb_context:account_id(Context),
-    {{FromYear, FromMonth, _}, _} = calendar:gregorian_seconds_to_datetime(From),
-    {{ToYear, ToMonth, _}, _} = calendar:gregorian_seconds_to_datetime(To),
-    Range = crossbar_util:generate_year_month_sequence({FromYear, FromMonth}, {ToYear, ToMonth}, []),
-    [{'databases', [wh_util:format_account_mod_id(AccountId, Year, Month)
-                    || {Year, Month} <- Range
-                   ]
-     }].
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
--spec pagination_page_size(cb_context:context()) -> pos_integer().
-pagination_page_size(Context) ->
-    case crossbar_doc:pagination_page_size(Context) of
-        'undefined' -> 'undefined';
-        PageSize -> PageSize + 1
-    end.
+-spec parse_number(ne_binary(), {api_binary(), wh_proplist()}) ->
+                          {api_binary(), wh_proplist()}.
+parse_number(<<"TON=", N/binary>>, {Num, Options}) ->
+    {Num, [{<<"TON">>, wh_util:to_integer(N) } | Options]};
+parse_number(<<"NPI=", N/binary>>, {Num, Options}) ->
+    {Num, [{<<"NPI">>, wh_util:to_integer(N) } | Options]};
+parse_number(N, {_, Options}) ->
+    {N, Options}.

@@ -1,9 +1,8 @@
 -ifndef(STEPSWITCH_HRL).
--include_lib("rabbitmq_client/include/amqp_client.hrl").
 -include_lib("whistle/include/wh_types.hrl").
--include_lib("whistle/include/wh_amqp.hrl").
 -include_lib("whistle/include/wh_log.hrl").
 -include_lib("whistle/include/wh_databases.hrl").
+-include_lib("whistle_number_manager/include/wh_number_manager.hrl").
 
 -define(ROUTES_DB, ?WH_OFFNET_DB).
 -define(RESOURCES_DB, ?WH_OFFNET_DB).
@@ -23,6 +22,10 @@
 -define(CCV(Key), [<<"Custom-Channel-Vars">>, Key]).
 
 -type direction() :: 'inbound' | 'outbound' | 'both'.
+
+-define(DEFAULT_AMQP_EXCHANGE_OPTIONS
+        ,wh_json:from_list([{'passive', 'true'}])
+       ).
 
 -define(STEPSWITCH_HRL, 'true').
 -endif.

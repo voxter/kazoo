@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2015, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -13,8 +13,6 @@
 
 -export([handle/2]).
 
--define(DEFAULT_EVENT_WAIT, 10000).
-
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
@@ -23,19 +21,25 @@
 %%--------------------------------------------------------------------
 -spec handle(wh_json:object(), whapps_call:call()) -> 'ok'.
 handle(Data, Call1) ->
-    Call = doodle_util:set_caller_id(Data, Call1),
+    AccountId = whapps_call:account_id(Call1),
+    Call = case whapps_call:custom_channel_var(<<"API-Call">>, 'false', Call1)
+               andalso whapps_account_config:get_global(AccountId, ?CONFIG_CAT, <<"api_preserve_caller_id">>, 'true')
+           of
+               'true' -> doodle_util:set_caller_id(whapps_call:from_user(Call1), Call1);
+               'false' -> doodle_util:set_caller_id(Data, Call1)
+           end,
     case whapps_util:amqp_pool_request(
            build_offnet_request(Data, Call)
            ,fun wapi_offnet_resource:publish_req/1
            ,fun wapi_offnet_resource:resp_v/1
-           ,30000
+           ,30 * ?MILLISECONDS_IN_SECOND
           )
     of
         {'ok', Res} ->
             handle_result(Res, Call);
         {'error', E} ->
-            lager:debug("error executing offnet action : ~p",[E]),
-            doodle_exe:continue(doodle_util:set_flow_error(E, Call))
+            lager:debug("error executing offnet action : ~p", [E]),
+            doodle_util:maybe_reschedule_sms(doodle_util:set_flow_error(E, Call))
     end.
 
 -spec handle_result(wh_json:object(), whapps_call:call()) -> 'ok'.
@@ -58,7 +62,7 @@ handle_result(Message, Code, _Response, _JObj, Call) ->
 
 -spec handle_result_status(whapps_call:call(), ne_binary()) -> 'ok'.
 handle_result_status(Call, <<"pending">>) ->
-    doodle_exe:stop(Call);
+    doodle_util:maybe_reschedule_sms(Call);
 handle_result_status(Call, _Status) ->
     lager:info("completed successful message to the device"),
     doodle_exe:continue(Call).
@@ -70,7 +74,7 @@ handle_bridge_failure(Cause, Code, Call) ->
         'ok' ->
             lager:debug("found bridge failure child");
         'not_found' ->
-            doodle_exe:stop(doodle_util:set_flow_error(<<"error">>, Cause, Call))
+            doodle_util:maybe_reschedule_sms(Code, Cause, Call)
     end.
 
 %%--------------------------------------------------------------------
@@ -96,6 +100,7 @@ build_offnet_request(Data, Call) ->
        ,{<<"Hunt-Account-ID">>, get_hunt_account_id(Data, Call)}
        ,{<<"Flags">>, get_flags(Data, Call)}
        ,{<<"Custom-SIP-Headers">>, get_sip_headers(Data, Call)}
+       ,{<<"Custom-Channel-Vars">>, whapps_call:custom_channel_vars(Call)}
        ,{<<"To-DID">>, get_to_did(Data, Call)}
        ,{<<"From-URI-Realm">>, get_from_uri_realm(Data, Call)}
        ,{<<"Bypass-E164">>, get_bypass_e164(Data)}
@@ -120,7 +125,7 @@ get_from_uri_realm(Data, Call) ->
 -spec maybe_get_call_from_realm(whapps_call:call()) -> api_binary().
 maybe_get_call_from_realm(Call) ->
     case whapps_call:from_realm(Call) of
-        'undefined' -> get_account_realm(Call);
+        <<"norealm">> -> get_account_realm(Call);
         Realm -> Realm
     end.
 

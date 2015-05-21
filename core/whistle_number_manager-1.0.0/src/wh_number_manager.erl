@@ -60,13 +60,15 @@ find(Number, Quantity, Opts) ->
     AccountId = props:get_value(<<"Account-ID">>, Opts),
     Num = wnm_util:normalize_number(Number),
     lager:info("attempting to find ~p numbers with prefix '~s' for account ~p"
-              ,[Quantity, Number, AccountId]),
+               ,[Quantity, Number, AccountId]
+              ),
+
     Results = [{Module, catch(Module:find_numbers(Num, Quantity, Opts))}
                || Module <- wnm_util:list_carrier_modules()
               ],
     NewOpts = [{<<"classification">>, wnm_util:classify_number(Num)}
-              ,{<<"account-id">>, AccountId}
-              ,{<<"services">>, maybe_get_services(AccountId)}
+               ,{<<"account-id">>, AccountId}
+               ,{<<"services">>, maybe_get_services(AccountId)}
                | Opts
               ],
     prepare_find_results(Results, [], NewOpts).
@@ -134,12 +136,16 @@ lookup_account_by_number('undefined') ->
     {'error', 'not_reconcilable'};
 lookup_account_by_number(Num) ->
     Number = wnm_util:to_e164(Num),
-    case wh_cache:peek({'account_lookup', Number}) of
+    Key = {'account_lookup', Number},
+    case wh_cache:peek_local(?WNM_NUMBER_CACHE, Key) of
         {'ok', Ok} -> Ok;
         {'error', 'not_found'} ->
             case fetch_account_by_number(Number) of
                 {'ok', _, _}=Ok ->
-                    wh_cache:store({'account_lookup', Number}, Ok),
+                    CacheProps = [{'origin', [{'db', wnm_util:number_to_db_name(Number), Number}
+                                              ,{'type', <<"number">>}
+                                             ]}],
+                    wh_cache:store_local(?WNM_NUMBER_CACHE, Key, Ok, CacheProps),
                     Ok;
                 Else -> Else
             end
@@ -261,17 +267,33 @@ should_lookup_cnam(Module) ->
     end.
 
 -spec should_force_outbound(wnm_number()) -> boolean().
+should_force_outbound(#number{state = ?NUMBER_STATE_PORT_IN
+                              ,module_name=Mod
+                             }) ->
+    whapps_config:get_is_true(?WNM_CONFIG_CAT, <<"force_port_in_outbound">>, 'true')
+        orelse force_wnm_module_outbound(Mod);
+should_force_outbound(#number{state = ?NUMBER_STATE_PORT_OUT
+                              ,module_name=Mod
+                             }) ->
+    whapps_config:get_is_true(?WNM_CONFIG_CAT, <<"force_port_out_outbound">>, 'true')
+        orelse force_wnm_module_outbound(Mod);
 should_force_outbound(#number{module_name='wnm_local'}) ->
-    whapps_config:get_is_true(?WNM_CONFIG_CAT, <<"force_wnm_local_outbound">>, 'true');
-should_force_outbound(#number{state = ?NUMBER_STATE_PORT_IN}) ->
-    whapps_config:get_is_true(?WNM_CONFIG_CAT, <<"force_port_in_outbound">>, 'true');
-should_force_outbound(#number{state = ?NUMBER_STATE_PORT_OUT}) ->
-    whapps_config:get_is_true(?WNM_CONFIG_CAT, <<"force_port_out_outbound">>, 'true');
+    force_wnm_local_outbound();
 should_force_outbound(#number{number_doc=JObj}) ->
     case wh_json:get_ne_value(<<"force_outbound">>, JObj) of
         'undefined' -> default_force_outbound();
         ForceOutbound -> wh_util:is_true(ForceOutbound)
     end.
+
+-spec force_wnm_module_outbound(atom()) -> boolean().
+force_wnm_module_outbound('wnm_local') ->
+    force_wnm_local_outbound();
+force_wnm_module_outbound(_Mod) ->
+    'false'.
+
+-spec force_wnm_local_outbound() -> boolean().
+force_wnm_local_outbound() ->
+    whapps_config:get_is_true(?WNM_CONFIG_CAT, <<"force_wnm_local_outbound">>, 'true').
 
 -spec default_force_outbound() -> boolean().
 default_force_outbound() ->
@@ -286,14 +308,16 @@ find_transfer_ringback(#number{number_doc=JObj}) ->
     wh_json:get_ne_value([<<"ringback">>, <<"transfer">>], JObj).
 
 -spec prepend(wnm_number()) -> api_binary().
-prepend(#number{number_doc=JObj, features=Features}) ->
+prepend(#number{number_doc=JObj
+                ,features=Features
+               }) ->
     case
         sets:is_element(<<"prepend">>, Features)
         andalso wh_json:is_true([<<"prepend">>, <<"enabled">>], JObj)
     of
         'false' -> 'undefined';
         'true' ->
-             wh_json:get_ne_value([<<"prepend">>, <<"name">>], JObj)
+            wh_json:get_ne_value([<<"prepend">>, <<"name">>], JObj)
     end.
 
 %%--------------------------------------------------------------------
@@ -308,9 +332,13 @@ ported(Number) ->
                         lager:debug("number ~s not found, checking ports", [Number]),
                         check_ports(N);
                    ({_, #number{}}=E) -> E;
-                   (#number{state = ?NUMBER_STATE_PORT_IN, assigned_to=AssignedTo}=N) ->
+                   (#number{state = ?NUMBER_STATE_PORT_IN
+                            ,assigned_to=AssignedTo
+                           }=N) ->
                         lager:debug("attempting to move port_in number ~s to in_service for account ~s", [Number, AssignedTo]),
-                        N#number{auth_by=AssignedTo};
+                        N#number{auth_by='system'
+                                 ,assign_to=AssignedTo
+                                };
                    (#number{}=N) ->
                         wnm_number:error_unauthorized(N)
                 end
@@ -318,13 +346,13 @@ ported(Number) ->
                     (#number{}=N) -> wnm_number:in_service(N)
                  end
                 ,fun({_, #number{}}=E) -> E;
-                    (#number{}=N) -> wnm_number:save(N)
+                    (#number{}=N) -> wnm_number:simple_save(N)
                  end
                 ,fun({E, #number{error_jobj=Reason}}) ->
-                         lager:debug("create number prematurely ended: ~p", [E]),
+                         lager:debug("ported number update prematurely ended: ~p", [E]),
                          {E, Reason};
                     (#number{number_doc=JObj}) ->
-                         lager:debug("reserve successfully completed"),
+                         lager:debug("ported number update successfully completed"),
                          {'ok', wh_json:public_fields(JObj)}
                  end
                ],
@@ -333,7 +361,9 @@ ported(Number) ->
                 ,Routines
                ).
 
--spec check_ports(wnm_number()) -> operation_return().
+-spec check_ports(wnm_number()) ->
+                         wnm_number() |
+                         {'not_found', wnm_number()}.
 check_ports(#number{number=MaybePortNumber}=Number) ->
     case wnm_number:find_port_in_number(Number) of
         {'ok', PortDoc} ->
@@ -448,7 +478,7 @@ account_can_create_number(Account) ->
     AccountDb = wh_util:format_account_id(Account, 'encoded'),
 
     {'ok', JObj} = couch_mgr:open_cache_doc(AccountDb, AccountId),
-    wh_json:is_true(<<"pvt_wnm_allow_additions">>, JObj).
+    kz_account:allow_number_additions(JObj).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -750,7 +780,7 @@ list_attachments(Number, AuthBy) ->
                          {E, Reason};
                     (#number{number_doc=JObj}) ->
                          lager:debug("list attachements successfully completed"),
-                         {'ok', wh_json:get_value(<<"_attachments">>, JObj, wh_json:new())}
+                         {'ok', wh_doc:attachments(JObj, wh_json:new())}
                  end
                ],
     lists:foldl(fun(F, J) -> catch F(J) end, 'ok', Routines).

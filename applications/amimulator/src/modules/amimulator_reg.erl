@@ -1,24 +1,30 @@
 -module(amimulator_reg).
 
--export([get_bindings/1, handle_event/1]).
+-export([init/1
+         ,bindings/1
+         ,responders/1
+         ,handle_event/1
+        ]).
 
 -include("../amimulator.hrl").
 
-get_bindings(_AccountId) ->
-    {ok, NotifyPid} = notify_sup:listener_proc(),
-    [{
-        registrar_shared_listener,
-        {amimulator_reg, handle_event},
-        [
-            {<<"directory">>, <<"reg_success">>}
-        ]
-    },{
-        NotifyPid,
-        {amimulator_reg, handle_event},
-        [
-            {<<"notification">>, <<"deregister">>}
-        ]
-    }].
+%%
+%% Public functions
+%%
+
+init(_AccountId) ->
+    ok.
+
+bindings(Props) ->
+    AccountId = props:get_value("AccountId", Props),
+    [{notifications, [{restrict_to, [deregister]}]}
+     ,{registration, [{restrict_to, [reg_success]}
+        			  ,{realm, get_realm(AccountId)}
+     				 ]}].
+
+responders(_Props) ->
+    [{<<"directory">>, <<"reg_success">>}
+     ,{<<"notification">>, <<"deregister">>}].
 
 handle_event(EventJObj) ->
     {_EventType, EventName} = wh_util:get_event_type(EventJObj),
@@ -47,21 +53,34 @@ handle_specific_event(<<"reg_success">>, EventJObj) ->
             ok
     end;
 handle_specific_event(<<"deregister">>, EventJObj) ->
-    lager:debug("deregister ~p", [EventJObj]);
+    %lager:debug("deregister ~p", [EventJObj]);
+    AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
+    handle_unregister(AccountId, EventJObj);
 handle_specific_event(_, _EventJObj) ->
-    lager:debug("unhandled event").
+    lager:debug("Unhandled event").
 
 %%
 %% Private functions
 %%
 
+get_realm(AccountId) ->
+    {ok, AccountDoc} = couch_mgr:open_doc(<<"accounts">>, AccountId),
+    wh_json:get_value(<<"realm">>, AccountDoc).
+
 handle_register(AccountId, EventJObj) ->
     AccountDb = wh_util:format_account_id(AccountId, encoded),
-    Reg = cb_registrations:normalize_registration(EventJObj),
+
     case couch_mgr:get_results(AccountDb, <<"devices/sip_credentials">>, [{key, wh_json:get_value(<<"Username">>, EventJObj)}]) of
         {ok, [Result]} ->
-            {ok, EndpointDoc} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, Result)),
+        	EndpointId = wh_json:get_value(<<"id">>, Result),
+        	{'ok', EndpointDoc} = couch_mgr:open_doc(AccountDb, EndpointId),
             Exten = amimulator_util:endpoint_exten(EndpointDoc, AccountDb),
+    		Reg = cb_registrations:normalize_registration(EventJObj),
+    		ContactIP = wh_json:get_value(<<"contact_ip">>, Reg),
+    		ContactPort = wh_json:get_value(<<"contact_port">>, Reg),
+
+    		ami_sm:add_registration(AccountId, EndpointId, ContactIP, ContactPort),
+
             Peer = <<"SIP/", Exten/binary>>,
             Payload = [[
                 {<<"Event">>, <<"PeerStatus">>},
@@ -69,8 +88,7 @@ handle_register(AccountId, EventJObj) ->
                 {<<"ChannelType">>, <<"SIP">>},
                 {<<"Peer">>, Peer},
                 {<<"PeerStatus">>, <<"Registered">>},
-                {<<"Address">>, <<(wh_json:get_value(<<"contact_ip">>, Reg))/binary, ":",
-                    (wh_json:get_value(<<"contact_port">>, Reg))/binary>>}
+                {<<"Address">>, <<ContactIP/binary, ":", ContactPort/binary>>}
             ],[
                 {<<"Event">>, <<"ExtensionStatus">>},
                 {<<"Privilege">>, <<"call,all">>},
@@ -86,7 +104,7 @@ handle_register(AccountId, EventJObj) ->
                 {<<"PeerStatus">>, <<"Reachable">>},
                 {<<"Time">>, <<"2">>}
             ]],
-            amimulator_amqp:publish_amqp_event({publish, Payload});
+            ami_ev:publish_amqp_event({publish, Payload});
         _ ->
             ok
     end.
@@ -113,7 +131,7 @@ handle_unregister(AccountId, EventJObj) ->
                 {<<"Hint">>, <<Peer/binary, ",CustomPresence:", Exten/binary>>},
                 {<<"Status">>, 4}
             ]],
-            amimulator_amqp:publish_amqp_event({publish, Payload});
+            ami_ev:publish_amqp_event({publish, Payload});
         _ ->
             ok
     end.

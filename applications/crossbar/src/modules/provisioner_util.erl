@@ -21,6 +21,7 @@
 -export([maybe_send_contact_list/1]).
 -export([get_provision_defaults/1]).
 -export([delete_full_provision/2]).
+-export([is_mac_address_in_use/2]).
 
 -define(MOD_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".devices">>).
 -define(PROVISIONER_CONFIG, <<"provisioner">>).
@@ -106,7 +107,7 @@ maybe_provision(_Context, _Status) -> 'false'.
 maybe_provision_v5(Context, ?HTTP_PUT) ->
     JObj = cb_context:doc(Context),
     AuthToken =  cb_context:auth_token(Context),
-    _ = spawn('provisioner_v5', 'put', [JObj, AuthToken]),
+    _ = spawn('provisioner_v5', 'update_device', [JObj, AuthToken]),
     'ok';
 maybe_provision_v5(Context, ?HTTP_POST) ->
     JObj = cb_context:doc(Context),
@@ -115,11 +116,11 @@ maybe_provision_v5(Context, ?HTTP_POST) ->
     OldAddress = wh_json:get_ne_value(<<"mac_address">>, cb_context:fetch(Context, 'db_doc')),
     case NewAddress =:= OldAddress of
         'true' ->
-            _ = spawn('provisioner_v5', 'post', [JObj, AuthToken]);
+            _ = spawn('provisioner_v5', 'update_device', [JObj, AuthToken]);
         'false' ->
             JObj1 = wh_json:set_value(<<"mac_address">>, OldAddress, JObj),
-            _ = spawn('provisioner_v5', 'delete', [JObj1, AuthToken]),
-            _ = spawn('provisioner_v5', 'put', [JObj, AuthToken])
+            _ = spawn('provisioner_v5', 'delete_device', [JObj1, AuthToken]),
+            _ = spawn('provisioner_v5', 'update_device', [JObj, AuthToken])
     end,
     'ok'.
 
@@ -143,9 +144,9 @@ maybe_delete_provision(Context, 'success') ->
             _ = spawn(?MODULE, 'delete_full_provision', [MACAddress, Context]),
             'true';
         <<"provisioner_v5">>  ->
-            _ = spawn('provisioner_v5', 'delete', [cb_context:doc(Context)
-                                                   ,cb_context:auth_token(Context)
-                                                  ]),
+            _ = spawn('provisioner_v5', 'delete_device', [cb_context:doc(Context)
+                                                          ,cb_context:auth_token(Context)
+                                                         ]),
             'true';
         _ ->
             'false'
@@ -201,9 +202,16 @@ maybe_delete_account(Context) ->
 maybe_send_contact_list(Context) ->
     maybe_send_contact_list(Context, cb_context:resp_status(Context)).
 maybe_send_contact_list(Context, 'success') ->
-    _ = case get_provisioning_type() of
+    _ = case cb_context:is_context(Context)
+            andalso get_provisioning_type()
+        of
             <<"super_awesome_provisioner">> ->
                 spawn(fun() -> do_full_provision_contact_list(Context) end);
+            <<"provisioner_v5">> ->
+                spawn('provisioner_v5', 'update_user', [cb_context:account_id(Context)
+                                                        ,cb_context:doc(Context)
+                                                        ,cb_context:auth_token(Context)
+                                                       ]);
             _ -> 'ok'
         end,
     Context;
@@ -303,6 +311,23 @@ get_provision_defaults(Context) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @public
+%% @doc
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec is_mac_address_in_use(cb_context:context(), ne_binary()) -> boolean().
+is_mac_address_in_use(Context, MacAddress) ->
+    case cb_context:is_context(Context)
+        andalso get_provisioning_type()
+    of
+        <<"provisioner_v5">> ->
+            AuthToken = cb_context:auth_token(Context),
+            'false' =/= provisioner_v5:check_MAC(MacAddress, AuthToken);
+        _ -> 'false'
+    end.
+
+%%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% post data to a provisiong server
@@ -323,10 +348,10 @@ do_simple_provision(MACAddress, Context) ->
                         ]),
             HTTPOptions = [],
             Body = [{"device[mac]", MACAddress}
-                    ,{"device[label]", wh_json:get_string_value(<<"name">>, JObj)}
-                    ,{"sip[realm]", wh_json:get_string_value([<<"sip">>, <<"realm">>], JObj, AccountRealm)}
-                    ,{"sip[username]", wh_json:get_string_value([<<"sip">>, <<"username">>], JObj)}
-                    ,{"sip[password]", wh_json:get_string_value([<<"sip">>, <<"password">>], JObj)}
+                    ,{"device[label]", wh_json:get_value(<<"name">>, JObj)}
+                    ,{"sip[realm]", kz_device:sip_realm(JObj, AccountRealm)}
+                    ,{"sip[username]", kz_device:sip_username(JObj)}
+                    ,{"sip[password]", kz_device:sip_password(JObj)}
                     ,{"submit", "true"}
                    ],
             Encoded = mochiweb_util:urlencode(Body),
@@ -380,6 +405,8 @@ do_full_provision(MACAddress, JObj) ->
                  >>,
     maybe_send_to_full_provisioner(PartialURL, JObj).
 
+-spec maybe_send_to_full_provisioner(ne_binary()) -> boolean().
+-spec maybe_send_to_full_provisioner(ne_binary(), wh_json:object()) -> boolean().
 maybe_send_to_full_provisioner(PartialURL) ->
     case whapps_config:get_binary(?MOD_CONFIG_CAT, <<"provisioning_url">>) of
         'undefined' -> 'false';
@@ -398,7 +425,7 @@ maybe_send_to_full_provisioner(PartialURL, JObj) ->
                          ,{"User-Agent", wh_util:to_list(erlang:node())}
                          ,{"Content-Type", "application/json"}
                         ]),
-            FullUrl = wh_util:to_list(<<Url/binary, "/", PartialURL/binary>>),
+            FullUrl = wh_util:to_lower_string(<<Url/binary, "/", PartialURL/binary>>),
             {'ok', _, _, RawJObj} = ibrowse:send_req(FullUrl, Headers, 'get', "", [{'inactivity_timeout', 10000}]),
             case wh_json:get_integer_value([<<"error">>, <<"code">>], wh_json:decode(RawJObj)) of
                 'undefined' -> send_to_full_provisioner('post', FullUrl, JObj);
@@ -407,7 +434,7 @@ maybe_send_to_full_provisioner(PartialURL, JObj) ->
             end
     end.
 
--spec send_to_full_provisioner(ne_binary()) -> boolean().
+-spec send_to_full_provisioner(string()) -> boolean().
 send_to_full_provisioner(FullUrl) ->
     Headers = props:filter_undefined(
                 [{"Host", whapps_config:get_string(?MOD_CONFIG_CAT, <<"provisioning_host">>)}
@@ -420,7 +447,7 @@ send_to_full_provisioner(FullUrl) ->
     lager:debug("response from server: ~p", [Res]),
     'true'.
 
--spec send_to_full_provisioner('put' | 'post', ne_binary(), wh_json:object()) -> boolean().
+-spec send_to_full_provisioner('put' | 'post', string(), wh_json:object()) -> boolean().
 send_to_full_provisioner('put', FullUrl, JObj) ->
     Headers = props:filter_undefined(
                 [{"Host", whapps_config:get_string(?MOD_CONFIG_CAT, <<"provisioning_host">>)}
@@ -614,31 +641,31 @@ set_account_line_defaults(Context) ->
 set_device_line_defaults(Context) ->
     Device = cb_context:doc(Context),
     [fun(J) ->
-             case wh_json:get_ne_value([<<"sip">>, <<"username">>], Device) of
+             case kz_device:sip_username(Device) of
                  'undefined' -> J;
                  Value -> wh_json:set_value([<<"authname">>, <<"value">>], Value, J)
              end
      end
      ,fun(J) ->
-              case wh_json:get_ne_value([<<"sip">>, <<"username">>], Device) of
+              case kz_device:sip_username(Device) of
                   'undefined' -> J;
                   Value -> wh_json:set_value([<<"username">>, <<"value">>], Value, J)
               end
       end
      ,fun(J) ->
-              case wh_json:get_ne_value([<<"sip">>, <<"password">>], Device) of
+              case kz_device:sip_password(Device) of
                   'undefined' -> J;
                   Value -> wh_json:set_value([<<"secret">>, <<"value">>], Value, J)
               end
       end
      ,fun(J) ->
-              case wh_json:get_ne_value([<<"sip">>, <<"realm">>], Device) of
+              case kz_device:sip_realm(Device) of
                   'undefined' -> J;
                   Value -> wh_json:set_value([<<"server_host">>, <<"value">>], Value, J)
               end
       end
      ,fun(J) ->
-              case wh_json:get_ne_value(<<"name">>, Device) of
+              case kz_device:name(Device) of
                   'undefined' -> J;
                   Value -> wh_json:set_value([<<"displayname">>, <<"value">>], Value, J)
               end

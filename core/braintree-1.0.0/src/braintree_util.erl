@@ -1,10 +1,10 @@
 %%%-------------------------------------------------------------------
-%%% @author Karl Anderson <karl@2600hz.org>
-%%% @copyright (C) 2011, VoIP INC
+%%% @copyright (C) 2011-2015, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
-%%% Created : 22 Sep 2011 by Karl Anderson <karl@2600hz.org>
+%%% @contributors
+%%%   Karl Anderson
 %%%-------------------------------------------------------------------
 -module(braintree_util).
 
@@ -52,6 +52,8 @@ doc_xml_simple(Props, Root) ->
 props_to_xml([], Xml) ->
     Xml;
 props_to_xml([{_, 'undefined'}|T], Xml) ->
+    props_to_xml(T, Xml);
+props_to_xml([{_, _, 'undefined'}|T], Xml) ->
     props_to_xml(T, Xml);
 props_to_xml([{_, []}|T], Xml) ->
     props_to_xml(T, Xml);

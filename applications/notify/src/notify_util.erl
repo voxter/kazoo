@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
-%%% @doc
+%%% @copyright (C) 2012-2015, 2600Hz INC
+%%% @docg
 %%% @end
 %%% @contributors
 %%%   Karl Anderson <karl@2600hz.org>
@@ -22,6 +22,7 @@
          ,get_account_doc/1
          ,qr_code_image/1
          ,get_charset_params/1
+         ,post_json/3
         ]).
 
 -include("notify.hrl").
@@ -236,7 +237,7 @@ get_service_props(Request, Account, ConfigCat) ->
                                        ,whapps_config:get(ConfigCat, <<"default_template_charset">>, <<>>)),
     JObj = find_notification_settings(
              binary:split(ConfigCat, <<".">>)
-             ,wh_json:get_value(<<"pvt_tree">>, Account, [])
+             ,kz_account:tree(Account)
             ),
     [{<<"url">>, wh_json:get_value(<<"service_url">>, JObj, DefaultUrl)}
      ,{<<"name">>, wh_json:get_value(<<"service_name">>, JObj, DefaultName)}
@@ -289,32 +290,17 @@ maybe_find_deprecated_settings(_, _) -> wh_json:new().
 -spec get_rep_email(wh_json:object()) -> api_binary().
 get_rep_email(JObj) ->
     AccountId = wh_json:get_value(<<"pvt_account_id">>, JObj),
-    case wh_json:get_value(<<"pvt_tree">>, JObj, []) of
-        [] -> 'undefined';
-        Tree -> get_rep_email(lists:reverse(Tree), AccountId)
-    end.
 
-get_rep_email([], _) -> 'undefined';
-get_rep_email([Parent|Parents], AccountId) ->
-    ParentDb = wh_util:format_account_id(Parent, 'encoded'),
-    ViewOptions = ['include_docs'
-                   ,{'key', AccountId}
-                  ],
-    lager:debug("attempting to find sub account rep for ~s in parent account ~s", [AccountId, Parent]),
-    case couch_mgr:get_results(ParentDb, <<"sub_account_reps/find_assignments">>, ViewOptions) of
-        {'ok', [Result|_]} ->
-            case wh_json:get_value([<<"doc">>, <<"email">>], Result) of
-                'undefined' ->
-                    lager:debug("found rep but they have no email, attempting to get email of admin"),
-                    wh_json:get_value(<<"email">>, find_admin(ParentDb));
-                Else ->
-                    lager:debug("found rep but email: ~s", [Else]),
-                    Else
-            end;
-        _E ->
-            lager:debug("failed to find rep for sub account, attempting next parent"),
-            get_rep_email(Parents, Parents)
-    end.
+    Admin =
+        case wh_services:is_reseller(AccountId) of
+            'true' ->
+                lager:debug("finding admins for reseller account ~s", [AccountId]),
+                find_admin(AccountId);
+            'false' ->
+                lager:debug("finding admins for reseller of account ~s", [AccountId]),
+                find_admin(wh_services:find_reseller_id(AccountId))
+        end,
+    kzd_user:email(Admin).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -333,7 +319,7 @@ find_admin(Account) when is_binary(Account) ->
     case couch_mgr:open_cache_doc(AccountDb, AccountId) of
         {'error', _} -> find_admin([AccountId]);
         {'ok', JObj} ->
-            Tree = wh_json:get_value(<<"pvt_tree">>, JObj, []),
+            Tree = kz_account:tree(JObj),
             find_admin([AccountId | lists:reverse(Tree)])
     end;
 find_admin([AcctId|Tree]) ->
@@ -344,9 +330,9 @@ find_admin([AcctId|Tree]) ->
     case couch_mgr:get_results(AccountDb, <<"maintenance/listing_by_type">>, ViewOptions) of
         {'ok', Users} ->
             case [User
-                  || User <- Users
-                         ,wh_json:get_value([<<"doc">>, <<"priv_level">>], User) =:= <<"admin">>
-                         ,wh_json:get_ne_value([<<"doc">>, <<"email">>], User) =/= 'undefined'
+                  || User <- Users,
+                     wh_json:get_value([<<"doc">>, <<"priv_level">>], User) =:= <<"admin">>,
+                     wh_json:get_ne_value([<<"doc">>, <<"email">>], User) =/= 'undefined'
                  ]
             of
                 [] -> find_admin(Tree);
@@ -357,8 +343,8 @@ find_admin([AcctId|Tree]) ->
             find_admin(Tree)
     end;
 find_admin(Account) ->
-    find_admin([ wh_json:get_value(<<"pvt_account_id">>, Account)
-                 | lists:reverse(wh_json:get_value(<<"pvt_tree">>, Account, []))
+    find_admin([wh_json:get_value(<<"pvt_account_id">>, Account)
+                | lists:reverse(kz_account:tree(Account))
                ]).
 
 %%--------------------------------------------------------------------
@@ -424,7 +410,6 @@ category_to_file(<<"notify.topup">>) ->
 category_to_file(_) ->
     'undefined'.
 
-
 -spec qr_code_image(api_binary()) -> wh_proplist() | 'undefined'.
 qr_code_image('undefined') -> 'undefined';
 qr_code_image(Text) ->
@@ -447,7 +432,6 @@ qr_code_image(Text) ->
             'undefined'
     end.
 
-
 -spec get_charset_params(term()) -> tuple().
 get_charset_params(Service) ->
         case props:get_value(<<"template_charset">>, Service) of
@@ -458,3 +442,16 @@ get_charset_params(Service) ->
                 };
             _ -> {[], <<>>}
         end.
+
+-spec post_json(ne_binary(), wh_json:object(), fun((wh_json:object()) -> 'ok')) -> 'ok'.
+post_json(Url, JObj, OnErrorCallback) ->
+    Headers = [{"Content-Type", "application/json"}],
+    Encoded = wh_json:encode(JObj),
+
+    case ibrowse:send_req(wh_util:to_list(Url), Headers, 'post', Encoded) of
+        {'ok', "2" ++ _, _ResponseHeaders, _ResponseBody} ->
+            lager:debug("JSON data successfully POSTed to '~s'", [Url]);
+        _Error ->
+            lager:debug("failed to POST JSON data to ~p for reason: ~p", [Url,_Error]),
+            OnErrorCallback(JObj)
+    end.

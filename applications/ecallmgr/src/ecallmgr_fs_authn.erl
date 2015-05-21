@@ -255,6 +255,7 @@ query_registrar(Realm, Username, Node, Id, Method, Props) ->
            ,{<<"To">>, ecallmgr_util:get_sip_to(Props)}
            ,{<<"From">>, ecallmgr_util:get_sip_from(Props)}
            ,{<<"Orig-IP">>, ecallmgr_util:get_orig_ip(Props)}
+           ,{<<"Orig-Port">>, ecallmgr_util:get_orig_port(Props)}
            ,{<<"Method">>, Method}
            ,{<<"Auth-User">>, Username}
            ,{<<"Auth-Realm">>, Realm}
@@ -289,8 +290,13 @@ maybe_defered_error(Realm, Username, JObj) ->
             AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
             AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
             AuthorizingId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Authorizing-ID">>], JObj),
+            OwnerIdProp = case wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Owner-ID">>], JObj) of
+                              'undefined' -> [];
+                              OwnerId -> [{'db', AccountDb, OwnerId}]
+                          end,
             CacheProps = [{'origin', [{'db', AccountDb, AuthorizingId}
                                      ,{'db', AccountDb, AccountId}
+                                      | OwnerIdProp
                                      ]}
                          ],
             wh_cache:store_local(?ECALLMGR_AUTH_CACHE, ?CREDS_KEY(Realm, Username), JObj, CacheProps),

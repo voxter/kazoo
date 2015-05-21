@@ -110,7 +110,7 @@
                   ,verify = 'true' :: boolean()
                   ,update_existing = 'false' :: boolean() | ne_binary()
                   ,billing_address_id :: api_binary()
-                  ,billing_address :: bt_address()
+                  ,billing_address :: bt_address() | 'undefined'
                  }).
 -type bt_card() :: #bt_card{}.
 -type bt_cards() :: [bt_card(),...] | [].
@@ -233,6 +233,9 @@
                          ,settle = 'true' :: boolean()
                          ,change_billing_address = 'false' :: boolean()
                          ,store_shipping_address = 'false' :: boolean()
+                         ,is_api = 'false' :: boolean()
+                         ,is_automatic = 'false' :: boolean()
+                         ,is_recurring = 'false' :: boolean()
                         }).
 -type bt_transaction() :: #bt_transaction{}.
 -type bt_transactions() :: [bt_transaction(),...] | [].
