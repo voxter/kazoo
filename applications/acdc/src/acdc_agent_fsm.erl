@@ -953,7 +953,7 @@ awaiting_callback({'channel_answered', JObj}=Evt, #state{agent_call_id=ACallId
 	                                                     ,originate_call_ids=OriginateCallIds
 	                                                     ,control_q_map=ControlQMap
 	                                                    }=State) ->
-    CallId = callid(JObj),
+    CallId = call_id(JObj),
 
     case {CallId, lists:member(CallId, OriginateCallIds)} of
         {ACallId, _} ->
