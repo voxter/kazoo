@@ -338,14 +338,14 @@ handle_call(_Request, _From, State) ->
 handle_cast({'set_call', Call}, State) ->
     {'noreply', State#state{call=Call}};
 handle_cast({'continue', Key}, #state{cf_module_pid=OldPidRef
-									  ,call=Call
+				      ,call=Call
                                      }=State) ->
     lager:info("continuing to child '~s'", [Key]),
     maybe_stop_caring(OldPidRef),
 
     spawn(
       fun() ->
-    		  continue_if_still_active(Key, Call)
+          continue_if_still_active(Key, Call)
       end),
     {'noreply', State};
 handle_cast({'force_continue', Key}, #state{flow=Flow
@@ -439,7 +439,7 @@ handle_cast(_Msg, State) ->
 continue_if_still_active(Key, Call) ->
     case whapps_call_command:b_channel_status(Call) of
         {'error', E} ->
-            lager:info("channel no longer active (~p) - not continuing", [E]),
+            lager:info("channel no longer active (~p), not continuing", [E]),
             ?MODULE:hard_stop(Call);
         {'ok', _} ->
             ?MODULE:force_continue(Key, Call)
