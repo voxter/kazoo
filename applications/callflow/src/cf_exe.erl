@@ -338,7 +338,7 @@ handle_call(_Request, _From, State) ->
 handle_cast({'set_call', Call}, State) ->
     {'noreply', State#state{call=Call}};
 handle_cast({'continue', Key}, #state{cf_module_pid=OldPidRef
-				      ,call=Call
+                                      ,call=Call
                                      }=State) ->
     lager:info("continuing to child '~s'", [Key]),
     maybe_stop_caring(OldPidRef),
