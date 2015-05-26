@@ -36,7 +36,6 @@
 
 %% FSM helpers
 -export([pick_winner/2]).
--export([test_queue_member_position/3]).
 
 %% gen_server callbacks
 -export([init/1
@@ -70,8 +69,8 @@
           ,enter_when_empty = 'true' :: boolean() % allow caller into queue if no agents are logged in
           ,moh :: api_binary()
           ,current_member_calls = [] :: list() % ordered list of current members waiting
-
-          ,pos_announce_pid :: pid()
+          ,pos_announce_enabled = 'false' :: boolean()
+          ,pos_announce_pids = [] :: announce_pid_list()
          }).
 -type mgr_state() :: #state{}.
 
@@ -320,18 +319,6 @@ pick_winner(Srv, Resps) -> pick_winner(Srv, Resps, strategy(Srv), next_winner(Sr
 
 replace_call(Srv, OldCall, NewCall) ->
     gen_listener:cast(Srv, {'replace_call', OldCall, NewCall}).
-
-test_queue_member_position(AccountId, QueueId, CallId) ->
-	Req = [{<<"Account-ID">>, AccountId}
-		   ,{<<"Queue-ID">>, QueueId}
-		   ,{<<"Call-ID">>, CallId}
-		   | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-		  ],
-	whapps_util:amqp_pool_request(
-        Req,
-        fun wapi_acdc_queue:publish_call_position_req/1,
-        fun wapi_acdc_queue:call_position_resp_v/1
-    ).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -631,6 +618,8 @@ handle_cast({'remove_queue_member', CallId}, #state{account_id=AccountId
 handle_cast({'handle_queue_member_add', JObj, _Queue}, #state{account_id=AccountId
                                                               ,queue_id=QueueId
                                                               ,current_member_calls=CurrentCalls
+                                                              ,pos_announce_enabled=PosAnnounceEnabled
+                                                              ,pos_announce_pids=Pids
                                                              }=State) ->
     lager:debug("Received notification of new queue member"),
 
@@ -661,17 +650,14 @@ handle_cast({'handle_queue_member_add', JObj, _Queue}, #state{account_id=Account
 
     acdc_util:presence_update(AccountId, QueueId, ?PRESENCE_RED_FLASH),
 
-    announce_position(Call, Position),
-    Pid = schedule_position_announcements(Call),
-
     {'noreply', State#state{current_member_calls=UpdatedMemberCalls
-                            ,pos_announce_pid=Pid
+                            ,pos_announce_pids = maybe_schedule_position_announcements(Call, PosAnnounceEnabled, Pids)
                            }};
 
 handle_cast({'handle_queue_member_remove', JObj}, #state{account_id=AccountId
                                                          ,queue_id=QueueId
                                                          ,current_member_calls=CurrentCalls
-                                                         ,pos_announce_pid=Pid
+                                                         ,pos_announce_pids=Pids
                                                         }=State) ->
     lager:debug("Received notification of queue member being removed"),
 
@@ -692,9 +678,9 @@ handle_cast({'handle_queue_member_remove', JObj}, #state{account_id=AccountId
 
     UpdatedMemberCalls = lists:delete(Call, CurrentCalls),
 
-    cancel_position_announcements(Pid, Call),
-
-    {'noreply', State#state{current_member_calls=UpdatedMemberCalls}};
+    {'noreply', State#state{current_member_calls=UpdatedMemberCalls
+                            ,pos_announce_pids = maybe_cancel_position_announcements(Call, Pids)
+                           }};
 
 handle_cast({'queue_member_position', JObj}, #state{account_id=AccountId
 												    ,queue_id=QueueId
@@ -975,29 +961,38 @@ update_properties(QueueJObj, State) ->
     State#state{
       enter_when_empty=wh_json:is_true(<<"enter_when_empty">>, QueueJObj, 'true')
       ,moh=wh_json:get_ne_value(<<"moh">>, QueueJObj)
+      ,pos_announce_enabled=wh_json:is_true(<<"position_announcements_enabled">>, QueueJObj, 'false')
      }.
 
 announce_position(Call, Position) ->
-    AccountDb = whapps_call:account_db(Call),
-
-    Prompt = [{'play', <<$/, AccountDb/binary, $/, "8a8ca1bdd784871de87a229a680a4e85">>}
+    Prompt = [{'prompt', <<"queue-you_are_at_position">>}
               ,{'say', wh_util:to_binary(Position)}
-              ,{'play', <<$/, AccountDb/binary, $/, "2a05296cc7c5715a170fd0cbf570ef04">>}
+              ,{'prompt', <<"queue-in_the_queue">>}
              ],
     whapps_call_command:audio_macro(Prompt, Call).
 
 announce_position_loop(Srv, Call) ->
-    timer:sleep(120000),
     Position = gen_listener:call(Srv, {'queue_position', whapps_call:call_id(Call)}),
     announce_position(Call, Position),
+    timer:sleep(20000),
     announce_position_loop(Srv, Call).
 
-schedule_position_announcements(Call) ->
-    spawn(?MODULE, announce_position_loop, [self(), Call]).
+-spec maybe_schedule_position_announcements(whapps_call:call(), boolean(), announce_pid_list()) -> announce_pid_list().
+maybe_schedule_position_announcements(_Call, 'false', Pids) ->
+    Pids;
+maybe_schedule_position_announcements(Call, 'true', Pids) ->
+    [{whapps_call:call_id(Call), spawn(?MODULE, 'announce_position_loop', [self(), Call])} | Pids].
 
-cancel_position_announcements(Pid, Call) ->
-    erlang:exit(Pid, 'call_done'),
-    whapps_call_command:flush(Call).
+-spec maybe_cancel_position_announcements(whapps_call:call(), announce_pid_list()) -> announce_pid_list().
+maybe_cancel_position_announcements(Call, Pids) ->
+    case lists:keyfind(whapps_call:call_id(Call), 1, Pids) of
+        {_, Pid} ->
+            erlang:exit(Pid, 'call_done'),
+            whapps_call_command:flush(Call);
+        _ ->
+            'ok'
+    end,
+    lists:keydelete(whapps_call:call_id(Call), 1, Pids).
 
 maybe_konami_queue(AccountDb, QueueId, Call) ->
     case whapps_controller:app_running('konami') of

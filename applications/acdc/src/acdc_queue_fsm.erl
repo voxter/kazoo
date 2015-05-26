@@ -383,7 +383,7 @@ connect_req({'member_hungup', JObj}, #state{queue_proc=Srv
 
             webseq:evt(?WSD_ID, self(), whapps_call:call_id(Call), <<"member call finish - abandon">>),
 
-            acdc_queue_listener:finish_member_call(Srv, JObj),
+            acdc_queue_listener:cancel_member_call(Srv, JObj),
             acdc_stats:call_abandoned(AccountId, QueueId, whapps_call:call_id(Call), ?ABANDON_HANGUP),
             {'next_state', 'ready', clear_member_call(State), 'hibernate'};
         'false' ->
