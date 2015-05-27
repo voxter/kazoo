@@ -221,12 +221,12 @@ status_match_builder_fold(<<"Agent-ID">>, AgentId, {StatusStat, Contstraints}) -
     };
 status_match_builder_fold(<<"Start-Range">>, Start, {StatusStat, Contstraints}) ->
     Now = wh_util:current_tstamp(),
-    Past = Now - ?CLEANUP_WINDOW,
+    Past = Now - (?CLEANUP_WINDOW + 1),
 
     try wh_util:to_integer(Start) of
         N when N < Past ->
             {'error', wh_json:from_list([{<<"Start-Range">>, <<"supplied value is too far in the past">>}
-                                         ,{<<"Window-Size">>, ?CLEANUP_WINDOW}
+                                         ,{<<"Window-Size">>, ?CLEANUP_WINDOW + 1}
                                          ,{<<"Current-Timestamp">>, Now}
                                          ,{<<"Past-Timestamp">>, Past}
                                          ,{<<"Start-Range">>, N}
@@ -245,12 +245,12 @@ status_match_builder_fold(<<"Start-Range">>, Start, {StatusStat, Contstraints}) 
     end;
 status_match_builder_fold(<<"End-Range">>, End, {StatusStat, Contstraints}) ->
     Now = wh_util:current_tstamp(),
-    Past = Now - ?CLEANUP_WINDOW,
+    Past = Now - (?CLEANUP_WINDOW + 1),
 
     try wh_util:to_integer(End) of
         N when N < Past ->
             {'error', wh_json:from_list([{<<"End-Range">>, <<"supplied value is too far in the past">>}
-                                         ,{<<"Window-Size">>, ?CLEANUP_WINDOW}
+                                         ,{<<"Window-Size">>, ?CLEANUP_WINDOW + 1}
                                          ,{<<"Current-Timestamp">>, Now}
                                         ])};
         N when N > Now ->
