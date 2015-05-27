@@ -18,7 +18,6 @@
          ,handle_member_call/2
          ,handle_member_call_cancel/2
          ,handle_agent_change/2
-         ,handle_agent_status_stat/2
          ,handle_queue_member_add/2
          ,handle_queue_member_remove/2
          ,handle_queue_member_position/2
