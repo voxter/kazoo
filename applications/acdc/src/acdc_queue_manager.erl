@@ -109,9 +109,6 @@
                      ,{{'acdc_queue_manager', 'handle_agent_change'}
                        ,[{<<"queue">>, <<"agent_change">>}]
                       }
-                     ,{{'acdc_queue_manager', 'handle_agent_status_stat'}
-                       ,[{<<"acdc_status_stat">>, <<"connected">>}]
-                      }
                      ,{{'acdc_queue_manager', 'handle_queue_member_add'}
                        ,[{<<"queue">>, <<"member_add">>}]
                       }
@@ -257,9 +254,6 @@ handle_agent_change(JObj, Prop) ->
         <<"unavailable">> ->
             gen_listener:cast(props:get_value('server', Prop), {'agent_unavailable', JObj})
     end.
-
-handle_agent_status_stat(JObj, Prop) ->
-    lager:debug("agent status stat ~p with prop ~p", [JObj, Prop]).
 
 -spec handle_queue_member_add(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_queue_member_add(JObj, Prop) ->
@@ -682,38 +676,16 @@ handle_cast({'handle_queue_member_remove', JObj}, #state{account_id=AccountId
                             ,pos_announce_pids = maybe_cancel_position_announcements(Call, Pids)
                            }};
 
-handle_cast({'queue_member_position', JObj}, #state{account_id=AccountId
-												    ,queue_id=QueueId
-													,current_member_calls=CurrentCalls
-												   }=State) ->
-	CallId = wh_json:get_value(<<"Call-ID">>, JObj),
-    Call = lists:keyfind(CallId, 2, CurrentCalls),
-
-    {Map, _} = lists:mapfoldr(fun(X, I) -> {{X, I}, I + 1} end, 1, CurrentCalls),
-    Index = case lists:keyfind(Call, 1, Map) of
-    	'false' ->
-    		'not_found';
-		{_, I} ->
-			I
-	end,
-
-    Prop = [{<<"Account-ID">>, AccountId}
-            ,{<<"Queue-ID">>, QueueId}
-            ,{<<"Call-ID">>, CallId}
-            ,{<<"Position">>, Index}
-            ,{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, JObj)}
-            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-           ],
-
-    wapi_acdc_queue:publish_call_position_resp(wh_json:get_value(<<"Server-ID">>, JObj), Prop),
-
-    {'noreply', State};
-
-handle_cast({'replace_call', OldCall, NewCall}, #state{current_member_calls=CurrentCalls}=State) ->
+handle_cast({'replace_call', OldCall, NewCall}, #state{current_member_calls=CurrentCalls
+                                                       ,pos_announce_pids=Pids
+                                                      }=State) ->
     OldCallId = whapps_call:call_id(OldCall),
     OldCall2 = lists:keyfind(OldCallId, 2, CurrentCalls),
     UpdatedMemberCalls = [NewCall | lists:delete(OldCall2, CurrentCalls)],
-    {'noreply', State#state{current_member_calls=UpdatedMemberCalls}};
+
+    {'noreply', State#state{current_member_calls=UpdatedMemberCalls
+                            ,pos_announce_pids = maybe_cancel_position_announcements(OldCall, Pids)
+                           }};
 
 handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p", [_Msg]),
@@ -974,7 +946,7 @@ announce_position(Call, Position) ->
 announce_position_loop(Srv, Call) ->
     Position = gen_listener:call(Srv, {'queue_position', whapps_call:call_id(Call)}),
     announce_position(Call, Position),
-    timer:sleep(20000),
+    timer:sleep(120000),
     announce_position_loop(Srv, Call).
 
 -spec maybe_schedule_position_announcements(whapps_call:call(), boolean(), announce_pid_list()) -> announce_pid_list().

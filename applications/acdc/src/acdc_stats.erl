@@ -15,7 +15,7 @@
          ,call_abandoned/4
          ,call_handled/4
          ,call_missed/5
-         ,call_processed/4
+         ,call_processed/5
 
          ,call_id_change/4
 
@@ -108,13 +108,14 @@ call_missed(AccountId, QueueId, AgentId, CallId, ErrReason) ->
              ]),
     whapps_util:amqp_pool_send(Prop, fun wapi_acdc_stats:publish_call_missed/1).
 
-call_processed(AccountId, QueueId, AgentId, CallId) ->
+call_processed(AccountId, QueueId, AgentId, CallId, Initiator) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AccountId}
               ,{<<"Queue-ID">>, QueueId}
               ,{<<"Call-ID">>, CallId}
               ,{<<"Agent-ID">>, AgentId}
               ,{<<"Processed-Timestamp">>, wh_util:current_tstamp()}
+              ,{<<"Hung-Up-By">>, Initiator}
               | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     whapps_util:amqp_pool_send(Prop, fun wapi_acdc_stats:publish_call_processed/1).
@@ -479,12 +480,12 @@ call_match_builder_fold(<<"Status">>, Status, {CallStat, Contstraints}) ->
     end;
 call_match_builder_fold(<<"Start-Range">>, Start, {CallStat, Contstraints}) ->
     Now = wh_util:current_tstamp(),
-    Past = Now - ?CLEANUP_WINDOW,
+    Past = Now - (?CLEANUP_WINDOW + 1),
 
     try wh_util:to_integer(Start) of
         N when N < Past ->
             {'error', wh_json:from_list([{<<"Start-Range">>, <<"supplied value is too far in the past">>}
-                                         ,{<<"Window-Size">>, ?CLEANUP_WINDOW}
+                                         ,{<<"Window-Size">>, ?CLEANUP_WINDOW + 1}
                                          ,{<<"Current-Timestamp">>, Now}
                                          ,{<<"Past-Timestamp">>, Past}
                                         ])};
@@ -502,12 +503,12 @@ call_match_builder_fold(<<"Start-Range">>, Start, {CallStat, Contstraints}) ->
     end;
 call_match_builder_fold(<<"End-Range">>, End, {CallStat, Contstraints}) ->
     Now = wh_util:current_tstamp(),
-    Past = Now - ?CLEANUP_WINDOW,
+    Past = Now - (?CLEANUP_WINDOW + 1),
 
     try wh_util:to_integer(End) of
         N when N < Past ->
             {'error', wh_json:from_list([{<<"End-Range">>, <<"supplied value is too far in the past">>}
-                                         ,{<<"Window-Size">>, ?CLEANUP_WINDOW}
+                                         ,{<<"Window-Size">>, ?CLEANUP_WINDOW + 1}
                                          ,{<<"Current-Timestamp">>, Now}
                                         ])};
         N when N > Now ->
@@ -682,6 +683,7 @@ call_stat_to_doc(#call_stat{id=Id
                             ,abandoned_timestamp=AbandonedT
                             ,handled_timestamp=HandledT
                             ,processed_timestamp=ProcessedT
+                            ,hung_up_by=HungUpBy
                             ,entered_position=EnteredPos
                             ,exited_position=ExitedPos
                             ,abandoned_reason=AbandonedR
@@ -701,6 +703,7 @@ call_stat_to_doc(#call_stat{id=Id
            ,{<<"abandoned_timestamp">>, AbandonedT}
            ,{<<"handled_timestamp">>, HandledT}
            ,{<<"processed_timestamp">>, ProcessedT}
+           ,{<<"hung_up_by">>, HungUpBy}
            ,{<<"entered_position">>, EnteredPos}
            ,{<<"exited_position">>, ExitedPos}
            ,{<<"abandoned_reason">>, AbandonedR}
@@ -726,6 +729,7 @@ call_stat_to_json(#call_stat{id=Id
                              ,abandoned_timestamp=AbandonedT
                              ,handled_timestamp=HandledT
                              ,processed_timestamp=ProcessedT
+                             ,hung_up_by=HungUpBy
                              ,entered_position=EnteredPos
                              ,exited_position=ExitedPos
                              ,abandoned_reason=AbandonedR
@@ -745,6 +749,7 @@ call_stat_to_json(#call_stat{id=Id
          ,{<<"Abandoned-Timestamp">>, AbandonedT}
          ,{<<"Handled-Timestamp">>, HandledT}
          ,{<<"Processed-Timestamp">>, ProcessedT}
+         ,{<<"Hung-Up-By">>, HungUpBy}
          ,{<<"Entered-Position">>, EnteredPos}
          ,{<<"Exited-Position">>, ExitedPos}
          ,{<<"Abandoned-Reason">>, AbandonedR}
@@ -862,6 +867,7 @@ handle_processed_stat(JObj, Props) ->
     Updates = props:filter_undefined(
                 [{#call_stat.agent_id, wh_json:get_value(<<"Agent-ID">>, JObj)}
                  ,{#call_stat.processed_timestamp, wh_json:get_value(<<"Processed-Timestamp">>, JObj)}
+                 ,{#call_stat.hung_up_by, wh_json:get_value(<<"Hung-Up-By">>, JObj)}
                  ,{#call_stat.status, <<"processed">>}
                 ]),
     update_call_stat(Id, Updates, Props).

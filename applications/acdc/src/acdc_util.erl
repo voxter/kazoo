@@ -30,6 +30,7 @@
                                   ,'CHANNEL_DESTROY'
                                   ,'DTMF'
                                   ,'CHANNEL_EXECUTE_COMPLETE'
+                                  ,'PLAYBACK_STOP'
                                   ,'usurp_control'
                                  ]).
 

@@ -71,7 +71,6 @@ handle_member_retry(JObj, Props) ->
     acdc_queue_fsm:member_connect_retry(props:get_value('fsm_pid', Props), JObj).
 
 handle_member_callback_reg(JObj, Props) ->
-    lager:debug("Member callback reg received by queue"),
     Srv = props:get_value('server', Props),
     CallId = wh_json:get_value(<<"Call-ID">>, JObj),
     acdc_util:unbind_from_call_events(CallId, Srv),
