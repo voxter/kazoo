@@ -364,6 +364,9 @@ csv_to_rates(CSV, Context) ->
 %%    [Prefix, ISO, Desc, InternalRate, Rate]
 %%    [Prefix, ISO, Desc, Surcharge, InternalRate, Rate]
 %%    [Prefix, ISO, Desc, InternalSurcharge, Surcharge, InternalRate, Rate]
+%%    [Prefix, ISO, Desc, InternalSurcharge, Surcharge, InternalRate, Rate, Minimum]
+%%    [Prefix, ISO, Desc, InternalSurcharge, Surcharge, InternalRate, Rate, Minimum, Increment]
+%%    [Prefix, ISO, Desc, InternalSurcharge, Surcharge, InternalRate, Rate, Minimum, Increment, Direction]
 
 -type rate_row() :: [string(),...] | string().
 -type rate_row_acc() :: {integer(), wh_json:objects()}.
@@ -409,6 +412,7 @@ process_row(Row, {Count, JObjs}=Acc) ->
                        ,{<<"rate_cost">>, get_row_rate(Row)}
                        ,{<<"pvt_rate_surcharge">>, get_row_internal_surcharge(Row)}
                        ,{<<"routes">>, [<<"^\\+", (wh_util:to_binary(Prefix))/binary, "(\\d*)$">>]}
+                       ,{<<"direction">>, get_row_direction(Row)}
                        ,{?HTTP_OPTIONS, []}
                       ]),
 
@@ -490,6 +494,12 @@ get_row_increment([_, _, _, _, _, _, _, _, Increment | _]) -> wh_util:to_integer
 get_row_increment([_|_]=_R) ->
     lager:info("increment not found on row: ~p", [_R]),
     60.
+
+-spec get_row_direction(rate_row()) -> api_integer().
+get_row_direction([_, _, _, _, _, _, _, _, _, Direction | _]) -> [wh_util:to_binary(Direction)];
+get_row_direction([_|_]=_R) ->
+    lager:info("direction not found on row: ~p", [_R]),
+    undefined.
 
 -spec strip_quotes(ne_binary()) -> ne_binary().
 strip_quotes(Bin) ->
