@@ -315,7 +315,7 @@ upload_csv(Context) ->
     Now = erlang:now(),
     {'ok', {Count, Rates}} = process_upload_file(Context),
     lager:debug("trying to save ~b rates (took ~b ms to process)", [Count, wh_util:elapsed_ms(Now)]),
-    _  = crossbar_doc:save(cb_context:set_doc(Context, Rates), [{'publish_doc', 'false'}]),
+    lists:foreach(fun(Rate) -> crossbar_doc:ensure_saved(cb_context:set_doc(Context, Rate), [{'publish_doc', 'false'}]) end, Rates),
     lager:debug("it took ~b milli to process and save ~b rates", [wh_util:elapsed_ms(Now), Count]).
 
 -spec process_upload_file(cb_context:context()) ->
