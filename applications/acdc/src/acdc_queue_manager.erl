@@ -658,7 +658,16 @@ handle_cast({'handle_queue_member_remove', JObj}, #state{account_id=AccountId
     Call = lists:keyfind(CallId, 2, CurrentCalls),
 
     {Map, _} = lists:mapfoldr(fun(X, I) -> {{X, I}, I + 1} end, 1, CurrentCalls),
-    {_, Index} = lists:keyfind(Call, 1, Map),
+    Index = case lists:keyfind(Call, 1, Map) of
+        {_, Index2} ->
+            Index2;
+        _Result ->
+            lager:debug("call id ~p", [CallId]),
+            lists:foreach(fun(Call2) ->
+                lager:debug("current call id ~p", [whapps_call:call_id(Call2)])
+            end, CurrentCalls),
+            'true' = wh_json:get_value(<<"Stop">>, JObj)
+    end,
 
     Prop = [{<<"Account-ID">>, AccountId}
             ,{<<"Queue-ID">>, QueueId}
