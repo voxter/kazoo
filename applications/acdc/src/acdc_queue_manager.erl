@@ -46,7 +46,7 @@
          ,code_change/3
         ]).
 
--export([announce_position_loop/2]).
+-export([announce_position_loop/3]).
 
 -include("acdc.hrl").
 
@@ -636,7 +636,7 @@ handle_cast({'handle_queue_member_add', JObj, _Queue}, #state{account_id=Account
     acdc_util:presence_update(AccountId, QueueId, ?PRESENCE_RED_FLASH),
 
     {'noreply', State#state{current_member_calls=UpdatedMemberCalls
-                            ,pos_announce_pids = maybe_schedule_position_announcements(Call, PosAnnounceEnabled, Pids)
+                            ,pos_announce_pids = maybe_schedule_position_announcements(Call, QueueId, PosAnnounceEnabled, Pids)
                            }};
 
 handle_cast({'handle_queue_member_remove', JObj}, #state{account_id=AccountId
@@ -936,24 +936,90 @@ update_properties(QueueJObj, State) ->
       ,pos_announce_enabled=wh_json:is_true(<<"position_announcements_enabled">>, QueueJObj, 'false')
      }.
 
-announce_position(Call, Position) ->
-    Prompt = [{'prompt', <<"queue-you_are_at_position">>}
-              ,{'say', wh_util:to_binary(Position)}
-              ,{'prompt', <<"queue-in_the_queue">>}
-             ],
-    whapps_call_command:audio_macro(Prompt, Call).
+announce_position(Call, QueueId, Position) ->
+    Req = props:filter_undefined(
+            [{<<"Account-ID">>, whapps_call:account_id(Call)}
+             ,{<<"Queue-ID">>, QueueId}
+             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+            ]),
+    case whapps_util:amqp_pool_request(Req
+                                       ,fun wapi_acdc_stats:publish_current_calls_req/1
+                                       ,fun wapi_acdc_stats:current_calls_resp_v/1
+                                      )
+    of
+        {'error', _E} ->
+            lager:debug("failed to recv resp from AMQP: ~p", [_E]);
+        {'ok', Resp} ->
+            Prompt = [{'prompt', <<"queue-you_are_at_position">>}
+                      ,{'say', wh_util:to_binary(Position), <<"number">>}
+                      ,{'prompt', <<"queue-in_the_queue">>}
+                      | average_wait_announcement(Resp)
+                     ],
+            whapps_call_command:audio_macro(Prompt, Call)
+    end.
 
-announce_position_loop(Srv, Call) ->
+average_wait_announcement(JObj) ->
+    Abandoned = length(wh_json:get_value(<<"Abandoned">>, JObj, [])),
+    Total = length(wh_json:get_value(<<"Abandoned">>, JObj, [])) +
+              length(wh_json:get_value(<<"Handled">>, JObj, [])) +
+              length(wh_json:get_value(<<"Processed">>, JObj, [])),
+    TotalWait = lists:foldl(fun(Key, Acc) ->
+      CallList = wh_json:get_value(Key, JObj, []),
+      Acc + lists:foldl(fun(Call, Acc2) ->
+        Acc2 + wh_json:get_value(<<"wait_time">>, Call, 0)
+        end
+        ,0
+        ,CallList)
+      end
+      ,0
+      ,[<<"Waiting">>, <<"Handled">>, <<"Processed">>]),
+    time_prompts(format_time(calc_average_wait(Abandoned, Total, TotalWait))).
+
+calc_average_wait(Same, Same, TotalWait) ->
+    TotalWait;
+calc_average_wait(Abandoned, Total, TotalWait) ->
+    TotalWait div (Total - Abandoned).
+
+format_time(Time) ->
+    {Time div 3600, Time rem 3600 div 60, Time rem 60}.
+
+time_prompts({0, 0, 0}) ->
+    [];
+time_prompts(Time) ->
+    [{'prompt', <<"queue-the_estimated_wait_time_is">>}
+     | time_prompts2(Time)
+    ].
+    
+time_prompts2({0, 0, Sec}) ->
+    [{'say', wh_util:to_binary(Sec), <<"number">>}
+     ,{'prompt', <<"queue-seconds">>}
+    ];
+time_prompts2({0, Min, Sec}) ->
+    [{'say', wh_util:to_binary(Min), <<"number">>}
+     ,{'prompt', <<"queue_minutes">>}
+     | time_prompts({0, 0, Sec})
+    ];
+time_prompts2({Hour, Min, Sec}) ->
+    [{'say', wh_util:to_binary(Hour), <<"number">>}
+     ,{'prompt', <<"queue-hours">>}
+     | time_prompts({0, Min, Sec})
+    ].
+
+announce_position_loop(Srv, Call, QueueId) ->
     Position = gen_listener:call(Srv, {'queue_position', whapps_call:call_id(Call)}),
-    announce_position(Call, Position),
+    announce_position(Call, QueueId, Position),
     timer:sleep(120000),
-    announce_position_loop(Srv, Call).
+    announce_position_loop(Srv, Call, QueueId).
 
--spec maybe_schedule_position_announcements(whapps_call:call(), boolean(), announce_pid_list()) -> announce_pid_list().
-maybe_schedule_position_announcements(_Call, 'false', Pids) ->
+-spec maybe_schedule_position_announcements(whapps_call:call()
+                                            ,ne_binary()
+                                            ,boolean()
+                                            ,announce_pid_list()
+                                           ) -> announce_pid_list().
+maybe_schedule_position_announcements(_Call, _, 'false', Pids) ->
     Pids;
-maybe_schedule_position_announcements(Call, 'true', Pids) ->
-    [{whapps_call:call_id(Call), spawn(?MODULE, 'announce_position_loop', [self(), Call])} | Pids].
+maybe_schedule_position_announcements(Call, QueueId, 'true', Pids) ->
+    [{whapps_call:call_id(Call), spawn(?MODULE, 'announce_position_loop', [self(), Call, QueueId])} | Pids].
 
 -spec maybe_cancel_position_announcements(whapps_call:call(), announce_pid_list()) -> announce_pid_list().
 maybe_cancel_position_announcements(Call, Pids) ->
