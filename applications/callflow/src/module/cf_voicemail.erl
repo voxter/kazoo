@@ -1368,7 +1368,7 @@ has_message_meta(NewMsgCallId, Messages) ->
 %%--------------------------------------------------------------------
 -spec get_mailbox_profile(wh_json:object(), whapps_call:call()) -> mailbox().
 get_mailbox_profile(Data, Call) ->
-    Id = wh_json:get_value(<<"id">>, Data),
+    Id = maybe_use_variable(Data, Call),
     AccountDb = whapps_call:account_db(Call),
 
     case get_mailbox_doc(AccountDb, Id, Data, Call) of
@@ -1462,6 +1462,15 @@ get_mailbox_profile(Data, Call) ->
         {'error', R} ->
             lager:info("failed to load voicemail box ~s, ~p", [Id, R]),
             #mailbox{}
+    end.
+
+-spec maybe_use_variable(wh_json:object(), whapps_call:call()) -> api_binary().
+maybe_use_variable(Data, Call) ->
+    case wh_json:get_value(<<"var">>, Data) of
+        'undefined' ->
+            wh_json:get_value(<<"id">>, Data);
+        Variable ->
+            whapps_call:custom_channel_var(Variable, Call)
     end.
 
 %%--------------------------------------------------------------------

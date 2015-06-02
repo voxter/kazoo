@@ -35,7 +35,7 @@
 %%--------------------------------------------------------------------
 -spec handle(wh_json:object(), whapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
-    QueueId = wh_json:get_value(<<"id">>, Data),
+    QueueId = maybe_use_variable(Data, Call),
     lager:info("sending call to queue ~s", [QueueId]),
 
     MemberCall = props:filter_undefined(
@@ -69,6 +69,15 @@ handle(Data, Call) ->
                                   }
                       ,is_queue_full(MaxQueueSize, CurrQueueSize)
                      ).
+
+-spec maybe_use_variable(wh_json:object(), whapps_call:call()) -> api_binary().
+maybe_use_variable(Data, Call) ->
+    case wh_json:get_value(<<"var">>, Data) of
+        'undefined' ->
+            wh_json:get_value(<<"id">>, Data);
+        Variable ->
+            whapps_call:custom_channel_var(Variable, Call)
+    end.
 
 -spec maybe_enter_queue(member_call(), boolean()) -> any().
 maybe_enter_queue(#member_call{call=Call}, 'true') ->

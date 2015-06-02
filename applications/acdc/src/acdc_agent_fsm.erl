@@ -195,6 +195,8 @@ call_event(FSM, <<"call_event">>, <<"CHANNEL_TRANSFEREE">>, JObj) ->
     gen_fsm:send_event(FSM, {'channel_unbridged', call_id(JObj)});
 call_event(FSM, <<"call_event">>, <<"PLAYBACK_STOP">>, JObj) ->
     gen_fsm:send_event(FSM, {'playback_stop', JObj});
+call_event(_FSM, <<"call_event">>, <<"CALL_UPDATE">>, JObj) ->
+    lager:debug("Unhandled CALL_UPDATE: ~p", [JObj]);
 call_event(_, _C, _E, _) ->
     lager:info("Unhandled combo: ~s/~s", [_C, _E]).
 
@@ -822,29 +824,32 @@ ringing({'dtmf_pressed', DTMF}, #state{caller_exit_key=DTMF
 ringing({'dtmf_pressed', DTMF}, #state{caller_exit_key=_ExitKey}=State) ->
     lager:debug("caller pressed ~s, exit key is ~s", [DTMF, _ExitKey]),
     {'next_state', 'ringing', State};
-ringing({'channel_answered', ACallId}, #state{agent_call_id=ACallId
-                                              ,member_call_id=MemberCallId
-                                              ,member_call=MemberCall
-                                              ,account_id=AccountId
-                                              ,agent_id=AgentId
-                                              ,agent_listener=AgentListener
-                                             }=State) ->
-    lager:debug("agent answered phone on ~s", [ACallId]),
+ringing({'channel_answered', JObj}=Evt, #state{agent_call_id=ACallId
+                                               ,member_call_id=MemberCallId
+                                               ,member_call=MemberCall
+                                               ,account_id=AccountId
+                                               ,agent_id=AgentId
+                                               ,agent_listener=AgentListener
+                                              }=State) ->
+    case call_id(JObj) of
+        ACallId ->
+            lager:debug("agent answered phone on ~s", [ACallId]),
 
-    CIDName = whapps_call:caller_id_name(MemberCall),
-    CIDNum = whapps_call:caller_id_number(MemberCall),
+            CIDName = whapps_call:caller_id_name(MemberCall),
+            CIDNum = whapps_call:caller_id_number(MemberCall),
 
-    acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNum),
+            acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNum),
 
-    acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_RED_SOLID),
+            acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_RED_SOLID),
 
-    {'next_state', 'answered', State#state{connect_failures=0}};
-ringing({'channel_answered', MemberCallId}, #state{member_call_id=MemberCallId}=State) ->
-    lager:debug("caller's channel answered"),
-    {'next_state', 'ringing', State};
-ringing({'channel_answered', ACallId}=Evt, #state{agent_call_id=_NotACallId}=State) ->
-    lager:debug("recv answer for ~s, not ~s", [ACallId, _NotACallId]),
-    ringing(Evt, State#state{agent_call_id=ACallId});
+            {'next_state', 'answered', State#state{connect_failures=0}};
+        MemberCallId ->
+            lager:debug("caller's channel answered"),
+            {'next_state', 'ringing', State};
+        _NotACallId ->
+            lager:debug("recv answer for ~s, not ~s", [ACallId, _NotACallId]),
+            ringing(Evt, State#state{agent_call_id=ACallId})
+    end;
 ringing({'sync_req', JObj}, #state{agent_listener=AgentListener}=State) ->
     lager:debug("recv sync_req from ~s", [wh_json:get_value(<<"Process-ID">>, JObj)]),
     acdc_agent_listener:send_sync_resp(AgentListener, 'ringing', JObj),
@@ -1157,12 +1162,20 @@ answered({'channel_unbridged', CallId}, #state{member_call_id=CallId}=State) ->
 answered({'channel_unbridged', CallId}, #state{agent_call_id=CallId}=State) ->
     lager:info("agent channel unbridged"),
     {'next_state', 'answered', State};
-answered({'channel_answered', MemberCallId}, #state{member_call_id=MemberCallId}=State) ->
-    lager:debug("member's channel has answered"),
-    {'next_state', 'answered', State};
-answered({'channel_answered', ACallId}, #state{agent_call_id=ACallId}=State) ->
-    lager:debug("agent's channel ~s has answered", [ACallId]),
-    {'next_state', 'answered', State};
+answered({'channel_answered', JObj}=Evt, #state{agent_call_id=AgentCallId
+                                              ,member_call_id=MemberCallId
+                                             }=State) ->
+    case call_id(JObj) of
+        AgentCallId ->
+            lager:debug("agent's channel ~s has answered", [AgentCallId]),
+            {'next_state', 'answered', State};
+        MemberCallId ->
+            lager:debug("member's channel has answered"),
+            {'next_state', 'answered', State};
+        _ ->
+            lager:debug("unhandled event while answered: ~p", [Evt]),
+            {'next_state', 'answered', State}
+    end;
 answered({'originate_started', _CallId}, State) ->
     {'next_state', 'answered', State};
 answered(_Evt, State) ->
