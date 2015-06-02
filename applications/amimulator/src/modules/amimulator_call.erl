@@ -28,7 +28,7 @@ handle_event(EventJObj, _Props) ->
     
 handle_specific_event(<<"CHANNEL_CREATE">>=EventName, EventJObj) ->
 	%lager:debug("Channel create for channel ~p", [wh_json:get_value(<<"Call-ID">>, EventJObj)]),
-	lager:debug("Channel create ~p", [EventJObj]),
+	lager:debug("New call id ~p", [wh_json:get_value(<<"Call-ID">>, EventJObj)]),
 	Call = new_channel(EventJObj),
 
 	spawn(fun() ->
@@ -36,10 +36,10 @@ handle_specific_event(<<"CHANNEL_CREATE">>=EventName, EventJObj) ->
 	    extension_status(Call),
 	    maybe_dial_event(EventJObj, Call),
 	    new_state(EventName, EventJObj, Call),
-	    maybe_change_agent_status(EventName, Call)
+	    maybe_change_agent_status(Call)
 	end);
 
-handle_specific_event(<<"CHANNEL_ANSWER">>=EventName, EventJObj) ->
+handle_specific_event(<<"CHANNEL_ANSWER">>, EventJObj) ->
 	CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
 	lager:debug("Channel answer for channel ~p", [CallId]),
 	% lager:debug("Event data: ~p", [EventJObj]),
@@ -48,7 +48,7 @@ handle_specific_event(<<"CHANNEL_ANSWER">>=EventName, EventJObj) ->
 
 	spawn(fun() ->
     	busy_state(EventJObj, Call, CallId),
-    	maybe_change_agent_status(EventName, Call)
+    	maybe_change_agent_status(Call)
 	end);
 
 handle_specific_event(<<"CHANNEL_BRIDGE">>, EventJObj) ->
@@ -477,7 +477,7 @@ busy_state(EventJObj, Call, CallId) ->
     ],
     ami_ev:publish_amqp_event({publish, Payload}).
 
-destroy_channel(EventName, EventJObj) ->
+destroy_channel(_EventName, EventJObj) ->
     CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
     Call = ami_sm:call(CallId),
 
@@ -504,37 +504,44 @@ destroy_channel(EventName, EventJObj) ->
     {Cause, CauseText} = case wh_json:get_value(<<"Hangup-Cause">>, EventJObj) of
         <<"NORMAL_CLEARING">> ->
             {<<"16">>, <<"Normal Clearing">>};
+        <<"ORIGINATOR_CANCEL">> ->
+            {<<"31">>, <<"Normal, unspecified">>};
+        <<"CALL_REJECTED">> ->
+            {<<"21">>, <<"Call Rejected">>};
         _ ->
             {<<"0">>, <<"Not Defined">>}
     end,
 
-    case {ami_sm:call_id_in_channel(CallId, EndpointName), ami_sm:answered_or_ignored(EndpointName, CallId)} of
-        {true, true} ->
-        	lager:debug("Sending hangup for reason ~p", [wh_json:get_value(<<"Hangup-Cause">>, EventJObj)]),
-            Payload = [[
-                {<<"Event">>, <<"Hangup">>},
-                {<<"Privilege">>, <<"call,all">>},
-                {<<"Channel">>, EndpointName},
-                {<<"Uniqueid">>, CallId},
-                {<<"CallerIDNum">>, SourceCID},
-                {<<"CallerIDName">>, SourceCID},
-                {<<"ConnectedLineNum">>, DestCID},
-                {<<"ConnectedLineName">>, DestCID},
-                {<<"Cause">>, Cause},
-                {<<"Cause-txt">>, CauseText}
-            ]] ++ maybe_leave_conference(CallId),
+    CallIds = ami_sm:channel_call_ids(EndpointName),
+    case ami_sm:answered_or_ignored(EndpointName, CallId) of
+        'true' ->
+            case CallIds of
+                [CallId] ->
+                    lager:debug("channel ~p's last call id ~p destroyed", [EndpointName, CallId]),
 
-            maybe_change_agent_status(EventName, Call),
+                    Payload = [[
+                        {<<"Event">>, <<"Hangup">>},
+                        {<<"Privilege">>, <<"call,all">>},
+                        {<<"Channel">>, EndpointName},
+                        {<<"Uniqueid">>, CallId},
+                        {<<"CallerIDNum">>, SourceCID},
+                        {<<"CallerIDName">>, SourceCID},
+                        {<<"ConnectedLineNum">>, DestCID},
+                        {<<"ConnectedLineName">>, DestCID},
+                        {<<"Cause">>, Cause},
+                        {<<"Cause-txt">>, CauseText}
+                    ]] ++ maybe_leave_conference(CallId),
 
-            ami_ev:publish_amqp_event({publish, Payload});
-        {false, _} ->
-        	ok;
-        	%lager:debug("eventjobj ~p", [EventJObj]),
-        	%lager:debug("Call not destroyed because it was not for the channel (~p)", [EndpointName]);
-        {_, false} ->
-        	ok
-        	%lager:debug("eventjobj ~p", [EventJObj]),
-            %lager:debug("Call not destroyed because it was not the correct answered channel")
+                    maybe_change_agent_status(Call),
+
+                    ami_ev:publish_amqp_event({publish, Payload});
+                _ when is_list(CallIds) ->
+                    lager:debug("channel ~p has call ids remaining: ~p", [EndpointName, lists:delete(CallId, CallIds)]);
+                _ ->
+                    lager:debug("unexpected result when checking for channel ~p's call ids", [EndpointName])
+            end;
+        _ ->
+            'ok'
     end,
 
     ami_sm:delete_call(CallId).
@@ -563,16 +570,8 @@ maybe_leave_conference(CallId) ->
             ]]
     end.
 
-maybe_change_agent_status(EventName, Call) ->
+maybe_change_agent_status(Call) ->
 	WhappsCall = props:get_value(<<"call">>, Call),
-    Status = case EventName of
-        <<"CHANNEL_CREATE">> ->
-            6;
-        <<"CHANNEL_ANSWER">> ->
-            2;
-        <<"CHANNEL_DESTROY">> ->
-            1
-    end,
 
     %% TODO this does not work for cell phone of agent (on destroy there is no authorizing id)
     case whapps_call:authorizing_id(WhappsCall) of
@@ -596,6 +595,29 @@ maybe_change_agent_status(EventName, Call) ->
                                 [] ->
                                     ok;
                                 Queues ->
+                                    AccountId = whapps_call:account_id(WhappsCall),
+                                    {'ok', StatusValue} = acdc_agent_util:most_recent_status(AccountId, OwnerId),
+                                    Status = case StatusValue of
+                                        <<"ready">> ->
+                                            1;
+                                        <<"logged_in">> ->
+                                            1;
+                                        <<"connected">> ->
+                                            2;
+                                        <<"outbound">> ->
+                                            2;
+                                        <<"logged_out">> ->
+                                            5;
+                                        <<"paused">> ->
+                                            5;
+                                        <<"wrapup">> ->
+                                            1;
+                                        <<"connecting">> ->
+                                            6;
+                                        _ ->
+                                            lager:debug("unspecified status ~p", [StatusValue]),
+                                            5
+                                    end,
                                     change_agent_status(AccountDb, UserDoc, Queues, Status)
                             end
                     end

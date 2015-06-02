@@ -89,42 +89,11 @@ handle_specific_event(<<"call">>, EventJObj) ->
 		    ami_ev:publish_amqp_event({publish, Payload})
 	end;
 handle_specific_event(<<"call_cancel">>, EventJObj) ->
+    AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
     QueueId = wh_json:get_value(<<"Queue-ID">>, EventJObj),
     CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
+    maybe_cancel_queue_call(AccountId, QueueId, CallId, wh_json:get_value(<<"Reason">>, EventJObj));
 
-    Call = ami_sm:fetch_queue_call_data(QueueId, CallId),
-    Position = ami_sm:queue_pos(QueueId, CallId),
-    ami_sm:queue_leave(QueueId, CallId),
-    
-    AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
-    case amimulator_util:find_id_number(
-        wh_json:get_value(<<"Queue-ID">>, EventJObj),
-        wh_util:format_account_id(AccountId, encoded)
-    ) of
-    	{error, E} ->
-    		lager:debug("Could not find queue extension ~p", [E]);
-    	{ok, Number} ->
-		    EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
-
-		    Payload = [[
-		        {<<"Event">>, <<"QueueCallerAbandon">>},
-		        {<<"Privilege">>, <<"agent,all">>},
-		        {<<"Queue">>, Number},
-		        {<<"Uniqueid">>, CallId},
-		        {<<"Position">>, Position},
-		        {<<"OriginalPosition">>, 1},
-		        {<<"HoldTime">>, 14}
-		    ],[
-		        {<<"Event">>, <<"Leave">>},
-		        {<<"Privilege">>, <<"call,all">>},
-		        {<<"Channel">>, EndpointName},
-		        {<<"Queue">>, Number},
-		        {<<"Count">>, 0},
-		        {<<"Position">>, Position},
-		        {<<"Uniqueid">>, CallId}
-		    ]],
-		    ami_ev:publish_amqp_event({publish, Payload})
-	end;
 handle_specific_event(<<"connecting">>, EventJObj) ->
 	AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
 	AccountDb = wh_util:format_account_id(AccountId, encoded),
@@ -360,3 +329,66 @@ handle_specific_event(<<"resume">>, EventJObj) ->
     ami_ev:publish_amqp_event({publish, Payload});
 handle_specific_event(_, _EventJObj) ->
     lager:debug("AMI: unhandled acdc event").
+
+-spec maybe_cancel_queue_call(ne_binary(), ne_binary(), ne_binary(), binary()) -> boolean().
+maybe_cancel_queue_call(AccountId, QueueId, CallId, Reason) ->
+    maybe_cancel_queue_call(AccountId, QueueId, CallId, Reason, 0).
+
+-spec maybe_cancel_queue_call(ne_binary(), ne_binary(), ne_binary(), binary(), non_neg_integer()) -> boolean().
+maybe_cancel_queue_call(_, _, _, _, 3) ->
+    'false';
+maybe_cancel_queue_call(AccountId, QueueId, CallId, Reason, Attempts) ->
+    case ami_sm:fetch_queue_call_data(QueueId, CallId) of
+        'undefined' ->
+            timer:sleep(200),
+            maybe_cancel_queue_call(AccountId, QueueId, CallId, Reason, Attempts+1);
+        Call ->
+            cancel_queue_call(AccountId, QueueId, CallId, Call, Reason),
+            'true'
+    end.
+
+-spec cancel_queue_call(ne_binary(), ne_binary(), ne_binary(), whapps_call:call(), binary()) -> 'ok'.
+cancel_queue_call(AccountId, QueueId, CallId, Call, Reason) ->
+    Position = ami_sm:queue_pos(QueueId, CallId),
+    ami_sm:queue_leave(QueueId, CallId),
+    
+    case amimulator_util:find_id_number(
+        QueueId,
+        wh_util:format_account_id(AccountId, encoded)
+    ) of
+        {error, E} ->
+            lager:debug("Could not find queue extension ~p", [E]);
+        {ok, Number} ->
+            EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
+            ami_ev:publish_amqp_event({publish, cancel_queue_call_payload(Number, CallId, Position, EndpointName, Reason)})
+    end.
+
+-spec cancel_queue_call_payload(binary(), ne_binary(), pos_integer(), binary(), binary()) -> list().
+cancel_queue_call_payload(Number, CallId, Position, EndpointName, <<"no agents">>) ->
+    [
+        {<<"Event">>, <<"Leave">>},
+        {<<"Privilege">>, <<"call,all">>},
+        {<<"Channel">>, EndpointName},
+        {<<"Queue">>, Number},
+        {<<"Count">>, 0},
+        {<<"Position">>, Position},
+        {<<"Uniqueid">>, CallId}
+    ];
+cancel_queue_call_payload(Number, CallId, Position, EndpointName, _) ->
+    [[
+        {<<"Event">>, <<"QueueCallerAbandon">>},
+        {<<"Privilege">>, <<"agent,all">>},
+        {<<"Queue">>, Number},
+        {<<"Uniqueid">>, CallId},
+        {<<"Position">>, Position},
+        {<<"OriginalPosition">>, 1},
+        {<<"HoldTime">>, 14}
+    ],[
+        {<<"Event">>, <<"Leave">>},
+        {<<"Privilege">>, <<"call,all">>},
+        {<<"Channel">>, EndpointName},
+        {<<"Queue">>, Number},
+        {<<"Count">>, 0},
+        {<<"Position">>, Position},
+        {<<"Uniqueid">>, CallId}
+    ]].

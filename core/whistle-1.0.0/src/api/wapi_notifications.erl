@@ -83,7 +83,6 @@
                                   ]).
 
 -define(NOTIFY_VOICEMAIL_SAVED, <<"notifications.voicemail.saved">>).
--define(NOTIFY_VOICEMAIL_NEW, <<"notifications.voicemail.new">>).
 -define(NOTIFY_VOICEMAIL_FULL, <<"notifications.voicemail.full">>).
 -define(NOTIFY_FAX_INBOUND, <<"notifications.fax.inbound">>).
 -define(NOTIFY_FAX_OUTBOUND, <<"notifications.fax.outbound">>).
@@ -466,6 +465,14 @@ headers(_Notification) ->
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec voicemail_routing_key(api_terms()) -> ne_binary().
+voicemail_routing_key(Props) when is_list(Props) ->
+    AcctId = props:get_value(<<"Account-ID">>, Props, <<"*">>),
+    <<"notifications.voicemail.new.", AcctId/binary>>;
+voicemail_routing_key(JObj) ->
+    AcctId = wh_json:get_value(<<"Account-ID">>, JObj, <<"*">>),
+    <<"notifications.voicemail.new.", AcctId/binary>>.
+
 voicemail(Prop) when is_list(Prop) ->
     case voicemail_v(Prop) of
         'true' -> wh_api:build_message(Prop, ?VOICEMAIL_HEADERS, ?OPTIONAL_VOICEMAIL_HEADERS);
@@ -907,184 +914,184 @@ skel_v(JObj) -> skel_v(wh_json:to_proplist(JObj)).
 
 -spec bind_q(ne_binary(), wh_proplist()) -> 'ok'.
 bind_q(Queue, Props) ->
-    bind_to_q(Queue, props:get_value('restrict_to', Props)).
+    bind_to_q(Queue, props:get_value('restrict_to', Props), Props).
 
-bind_to_q(Q, 'undefined') ->
+bind_to_q(Q, 'undefined', _) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, <<"notifications.*.*">>);
-bind_to_q(Q, ['new_voicemail'|T]) ->
-    'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_VOICEMAIL_NEW),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['voicemail_saved'|T]) ->
+bind_to_q(Q, ['new_voicemail'|T], Props) ->
+    'ok' = amqp_util:bind_q_to_notifications(Q, voicemail_routing_key([{<<"Account-ID">>, props:get_value('account_id', Props, <<"*">>)}])),
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['voicemail_saved'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_VOICEMAIL_SAVED),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['voicemail_full'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['voicemail_full'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_VOICEMAIL_FULL),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['inbound_fax'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['inbound_fax'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_FAX_INBOUND),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['outbound_fax'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['outbound_fax'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_FAX_OUTBOUND),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['new_fax'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['new_fax'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_FAX_INBOUND),
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_FAX_OUTBOUND),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['inbound_fax_error'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['inbound_fax_error'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_FAX_INBOUND_ERROR),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['outbound_fax_error'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['outbound_fax_error'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_FAX_OUTBOUND_ERROR),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['fax_error'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['fax_error'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_FAX_INBOUND_ERROR),
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_FAX_OUTBOUND_ERROR),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['register'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['register'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_REGISTER),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['deregister'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['deregister'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_DEREGISTER),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['pwd_recovery'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['pwd_recovery'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_PWD_RECOVERY),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['new_account'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['new_account'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_NEW_ACCOUNT),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['new_user'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['new_user'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_NEW_USER),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['port_request'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['port_request'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_PORT_REQUEST),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['port_pending'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['port_pending'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_PORT_PENDING),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['port_scheduled'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['port_scheduled'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_PORT_SCHEDULED),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['port_cancel'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['port_cancel'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_PORT_CANCEL),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['ported'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['ported'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_PORTED),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['port_comment'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['port_comment'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_PORT_COMMENT),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['cnam_requests'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['cnam_requests'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_CNAM_REQUEST),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['low_balance'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['low_balance'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_LOW_BALANCE),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['topup'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['topup'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_TOPUP),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['transaction'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['transaction'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_TRANSACTION),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['system_alerts'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['system_alerts'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_SYSTEM_ALERT),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['webhook'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['webhook'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_WEBHOOK_CALLFLOW),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['skel'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['skel'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_SKEL),
-    bind_to_q(Q, T);
-bind_to_q(_Q, []) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(_Q, [], _) ->
     'ok'.
 
 -spec unbind_q(ne_binary(), wh_proplist()) -> 'ok'.
 
 unbind_q(Queue, Props) ->
-    unbind_q_from(Queue, props:get_value('restrict_to', Props)).
+    unbind_q_from(Queue, props:get_value('restrict_to', Props), Props).
 
-unbind_q_from(Q, 'undefined') ->
+unbind_q_from(Q, 'undefined', _) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, <<"notifications.*.*">>);
-unbind_q_from(Q, ['new_voicemail'|T]) ->
-    'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_VOICEMAIL_NEW),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['voicemail_full'|T]) ->
+unbind_q_from(Q, ['new_voicemail'|T], Props) ->
+    'ok' = amqp_util:unbind_q_from_notifications(Q, voicemail_routing_key([{<<"Account-ID">>, props:get_value('account_id', Props, <<"*">>)}])),
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['voicemail_full'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_VOICEMAIL_FULL),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['inbound_fax'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['inbound_fax'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q,?NOTIFY_FAX_INBOUND),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['outbound_fax'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['outbound_fax'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q,?NOTIFY_FAX_OUTBOUND),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['new_fax'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['new_fax'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q,?NOTIFY_FAX_INBOUND),
     'ok' = amqp_util:unbind_q_from_notifications(Q,?NOTIFY_FAX_OUTBOUND),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['inbound_fax_error'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['inbound_fax_error'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q,?NOTIFY_FAX_INBOUND_ERROR),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['outbound_fax_error'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['outbound_fax_error'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q,?NOTIFY_FAX_OUTBOUND_ERROR),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['fax_error'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['fax_error'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q,?NOTIFY_FAX_OUTBOUND_ERROR),
     'ok' = amqp_util:unbind_q_from_notifications(Q,?NOTIFY_FAX_INBOUND_ERROR),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['register'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['register'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_REGISTER),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['deregister'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['deregister'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_DEREGISTER),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['pwd_recovery'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['pwd_recovery'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_PWD_RECOVERY),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['new_account'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['new_account'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_NEW_ACCOUNT),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['new_user'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['new_user'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_NEW_USER),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['port_request'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['port_request'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_PORT_REQUEST),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['port_pending'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['port_pending'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_PORT_PENDING),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['port_scheduled'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['port_scheduled'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_PORT_SCHEDULED),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['port_cancel'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['port_cancel'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_PORT_CANCEL),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['ported'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['ported'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_PORTED),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['port_comment'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['port_comment'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_PORT_COMMENT),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['cnam_request'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['cnam_request'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_CNAM_REQUEST),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['low_balance'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['low_balance'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_LOW_BALANCE),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['topup'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['topup'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_TOPUP),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['transaction'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['transaction'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_TRANSACTION),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['system_alert'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['system_alert'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_SYSTEM_ALERT),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['webhook'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['webhook'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_WEBHOOK_CALLFLOW),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['skel'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['skel'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_SKEL),
-    unbind_q_from(Q, T);
-unbind_q_from(_Q, []) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(_Q, [], _) ->
     'ok'.
 
 %%--------------------------------------------------------------------
@@ -1108,7 +1115,7 @@ publish_voicemail_saved(Voicemail, ContentType) ->
 publish_voicemail(JObj) -> publish_voicemail(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_voicemail(Voicemail, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(Voicemail, ?VOICEMAIL_VALUES, fun ?MODULE:voicemail/1),
-    amqp_util:notifications_publish(?NOTIFY_VOICEMAIL_NEW, Payload, ContentType).
+    amqp_util:notifications_publish(voicemail_routing_key(Voicemail), Payload, ContentType).
 
 -spec publish_voicemail_full(api_terms()) -> 'ok'.
 -spec publish_voicemail_full(api_terms(), ne_binary()) -> 'ok'.

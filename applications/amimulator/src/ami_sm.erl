@@ -121,7 +121,7 @@ calls(AccountId) ->
     gen_server:call(?MODULE, {get_calls, AccountId}).
 
 channel_call_ids(Channel) ->
-    gen_server:call(?MODULE, {get_call_ids_by_channel, Channel}).
+    gen_server:call(?MODULE, {'get_call_ids_by_channel', Channel}).
 
 add_channel_call_id(Channel, CallId) ->
     gen_server:cast(?MODULE, {'add_channel_call_id', Channel, CallId}).
