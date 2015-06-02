@@ -12,18 +12,16 @@ init(_AccountId) ->
     ok.
 
 bindings(Props) ->
-    AccountId = props:get_value("AccountId", Props),
     [
         {notifications, [
-            {restrict_to, [voicemail_new]},
-            {realm, get_realm(AccountId)}
+            {restrict_to, ['new_voicemail']},
+            {account_id, props:get_value("AccountId", Props)}
         ]}
     ].
 
 responders(_Props) ->
     [
-        {<<"directory">>, <<"reg_success">>},
-        {<<"notification">>, <<"deregister">>}
+        {<<"notification">>, <<"voicemail_new">>}
     ].
 
 handle_event(EventJObj) ->
@@ -34,98 +32,45 @@ handle_event(EventJObj) ->
 %% Event type handlers
 %%
 
-handle_specific_event(<<"reg_success">>, EventJObj) ->
-    %lager:debug("reg success ~p", [EventJObj]);
-    Realm = wh_json:get_value(<<"Realm">>, EventJObj),
-    case couch_mgr:get_results(<<"accounts">>, <<"accounts/listing_by_realm">>, [{key, Realm}]) of
-        {ok, [Result]} ->
-            AccountId = wh_json:get_value([<<"value">>, <<"account_id">>], Result),
-            case wh_json:get_integer_value(<<"Expires">>, EventJObj, 0) of
-                %% TODO
-                0 ->
-                    %% Manually requested deregister
-                    handle_unregister(AccountId, EventJObj);
-                _ ->
-                    handle_register(AccountId, EventJObj)
-            end;
-        _ ->
-            lager:debug("Couldn't find the realm that the registration was for"),
-            ok
-    end;
-handle_specific_event(<<"deregister">>, EventJObj) ->
-    %lager:debug("deregister ~p", [EventJObj]);
-    AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
-    handle_unregister(AccountId, EventJObj);
+%% Start of a VM has the following:
+% 127.0.0.1            <- Event: Newexten
+% 127.0.0.1            <- Privilege: dialplan,all
+% 127.0.0.1            <- Channel: SIP/102-00000004
+% 127.0.0.1            <- Context: macro-vm
+% 127.0.0.1            <- Extension: s-NOANSWER
+% 127.0.0.1            <- Priority: 2
+% 127.0.0.1            <- Application: VoiceMail
+% 127.0.0.1            <- AppData: 100@default,u
+% 127.0.0.1            <- Uniqueid: 1433191552.4
+
+handle_specific_event(<<"voicemail_new">>, EventJObj) ->
+    new_voicemail(EventJObj);
 handle_specific_event(_, _EventJObj) ->
     lager:debug("unhandled event").
 
-%%
-%% Private functions
-%%
+-spec new_voicemail(wh_json:object()) -> 'ok'.
+new_voicemail(JObj) ->
+    AccountDb = wh_json:get_value(<<"Account-DB">>, JObj),
+    case couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"Voicemail-Box">>, JObj)) of
+        {'ok', VoicemailBox} ->
+            Mailbox = wh_json:get_value(<<"mailbox">>, VoicemailBox),
 
-get_realm(AccountId) ->
-    {ok, AccountDoc} = couch_mgr:open_doc(<<"accounts">>, AccountId),
-    wh_json:get_value(<<"realm">>, AccountDoc).
-
-handle_register(AccountId, EventJObj) ->
-    AccountDb = wh_util:format_account_id(AccountId, encoded),
-    Reg = cb_registrations:normalize_registration(EventJObj),
-    case couch_mgr:get_results(AccountDb, <<"devices/sip_credentials">>, [{key, wh_json:get_value(<<"Username">>, EventJObj)}]) of
-        {ok, [Result]} ->
-            {ok, EndpointDoc} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, Result)),
-            Exten = amimulator_util:endpoint_exten(EndpointDoc, AccountDb),
-            Peer = <<"SIP/", Exten/binary>>,
-            Payload = [[
-                {<<"Event">>, <<"PeerStatus">>},
-                {<<"Privilege">>, "system,all"},
-                {<<"ChannelType">>, <<"SIP">>},
-                {<<"Peer">>, Peer},
-                {<<"PeerStatus">>, <<"Registered">>},
-                {<<"Address">>, <<(wh_json:get_value(<<"contact_ip">>, Reg))/binary, ":",
-                    (wh_json:get_value(<<"contact_port">>, Reg))/binary>>}
-            ],[
-                {<<"Event">>, <<"ExtensionStatus">>},
-                {<<"Privilege">>, <<"call,all">>},
-                {<<"Exten">>, Exten},
-                {<<"Context">>, <<"from-internal">>},
-                {<<"Hint">>, <<Peer/binary, ",CustomPresence:", Exten/binary>>},
-                {<<"Status">>, 0}
-            ],[
-                {<<"Event">>, <<"PeerStatus">>},
-                {<<"Privilege">>, "system,all"},
-                {<<"ChannelType">>, <<"SIP">>},
-                {<<"Peer">>, Peer},
-                {<<"PeerStatus">>, <<"Reachable">>},
-                {<<"Time">>, <<"2">>}
-            ]],
-            ami_ev:publish_amqp_event({publish, Payload});
+            case couch_mgr:get_results(AccountDb, <<"vmboxes/crossbar_listing">>, [{'key', Mailbox}]) of
+                {'ok', [Result]} ->
+                    Value = wh_json:get_value(<<"value">>, Result),
+                    Payload = [
+                        {<<"Event">>, <<"MessageWaiting">>},
+                        {<<"Privilege">>, <<"call,all">>},
+                        {<<"Mailbox">>, <<Mailbox/binary, "@default">>},
+                        {<<"Waiting">>, 1},
+                        %% Assuming that this will always be behind by 1
+                        {<<"New">>, wh_json:get_value(<<"new_messages">>, Value) + 1},
+                        {<<"Old">>, wh_json:get_value(<<"old_messages">>, Value)}
+                    ],
+                    ami_ev:publish_amqp_event({'publish', Payload});
+                _ ->
+                    lager:debug("Could not get voicemail count")
+            end;
         _ ->
-            ok
-    end.
-
-handle_unregister(AccountId, EventJObj) ->
-    AccountDb = wh_util:format_account_id(AccountId, encoded),
-    case couch_mgr:get_results(AccountDb, <<"devices/sip_credentials">>, [{key, wh_json:get_value(<<"Username">>, EventJObj)}]) of
-        {ok, [Result]} ->
-            {ok, EndpointDoc} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, Result)),
-            Exten = amimulator_util:endpoint_exten(EndpointDoc, AccountDb),
-            Peer = <<"SIP/", Exten/binary>>,
-            Payload = [[
-                {<<"Event">>, <<"PeerStatus">>},
-                {<<"Privilege">>, "system,all"},
-                {<<"ChannelType">>, <<"SIP">>},
-                {<<"Peer">>, Peer},
-                {<<"PeerStatus">>, <<"Unregistered">>},
-                {<<"Cause">>, <<"Expired">>}
-            ],[
-                {<<"Event">>, <<"ExtensionStatus">>},
-                {<<"Privilege">>, <<"call,all">>},
-                {<<"Exten">>, Exten},
-                {<<"Context">>, <<"from-internal">>},
-                {<<"Hint">>, <<Peer/binary, ",CustomPresence:", Exten/binary>>},
-                {<<"Status">>, 4}
-            ]],
-            ami_ev:publish_amqp_event({publish, Payload});
-        _ ->
-            ok
+            lager:debug("Could not find voicemail box")
     end.

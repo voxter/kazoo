@@ -655,6 +655,8 @@ translate_status(Status) ->
     case Status of
         <<"ready">> ->
             1;
+        <<"logged_in">> ->
+            1;
         <<"connected">> ->
             2;
         <<"outbound">> ->

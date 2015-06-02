@@ -18,7 +18,8 @@
     amimulator_call,
     amimulator_acdc,
     amimulator_reg,
-    amimulator_conf
+    amimulator_conf,
+    amimulator_vm
 ]).
 
 -record(state, {
@@ -115,6 +116,9 @@ handle_amqp_event_type(EventJObj, Props, <<"conference.event.", _/binary>>) ->
 
 handle_amqp_event_type(EventJObj, _Props, <<"acdc.agent.action.", _/binary>>) ->
     amimulator_acdc:handle_event(EventJObj);
+
+handle_amqp_event_type(EventJObj, _Props, <<"notifications.voicemail.new.", _/binary>>) ->
+    amimulator_vm:handle_event(EventJObj);
 
 handle_amqp_event_type(_EventJObj, _Props, _RoutingKey) ->
     ok.
