@@ -22,7 +22,7 @@
          ,handle_queue_member_remove/2
          ,handle_queue_member_position/2
          ,handle_manager_success_notify/2
-         ,handle_manager_fail_notify/2
+         % ,handle_manager_fail_notify/2
          ,handle_config_change/2
          ,should_ignore_member_call/3, should_ignore_member_call/4
          ,config/1
@@ -120,9 +120,9 @@
                      ,{{'acdc_queue_manager', 'handle_manager_success_notify'}
                        ,[{<<"member">>, <<"call_success">>}]
                       }
-                     ,{{'acdc_queue_manager', 'handle_manager_fail_notify'}
-                       ,[{<<"member">>, <<"call_fail">>}]
-                      }
+                     % ,{{'acdc_queue_manager', 'handle_manager_fail_notify'}
+                     %   ,[{<<"member">>, <<"call_fail">>}]
+                     %  }
                     ]).
 
 -define(SECONDARY_BINDINGS(AccountId, QueueId)
@@ -241,7 +241,7 @@ handle_member_call_cancel(JObj, Props) ->
                        ),
 
     gen_listener:cast(props:get_value('server', Props), {'member_call_cancel', K, JObj}),
-    gen_listener:cast(props:get_value('server', Props), {'remove_queue_member', wh_json:get_value(<<"Call-ID">>, JObj)}).
+    gen_listener:cast(props:get_value('server', Props), {'remove_queue_member', JObj}).
 
 handle_agent_change(JObj, Prop) ->
     'true' = wapi_acdc_queue:agent_change_v(JObj),
@@ -268,11 +268,11 @@ handle_queue_member_position(JObj, Prop) ->
 
 -spec handle_manager_success_notify(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_manager_success_notify(JObj, Prop) ->
-    gen_listener:cast(props:get_value('server', Prop), {'remove_queue_member', wh_json:get_value(<<"Call-ID">>, JObj)}).
+    gen_listener:cast(props:get_value('server', Prop), {'remove_queue_member', JObj}).
 
--spec handle_manager_fail_notify(wh_json:object(), wh_proplist()) -> 'ok'.
-handle_manager_fail_notify(JObj, Prop) ->
-    gen_listener:cast(props:get_value('server', Prop), {'remove_queue_member', wh_json:get_value(<<"Call-ID">>, JObj)}).
+% -spec handle_manager_fail_notify(wh_json:object(), wh_proplist()) -> 'ok'.
+% handle_manager_fail_notify(JObj, Prop) ->
+%     gen_listener:cast(props:get_value('server', Prop), {'remove_queue_member', JObj}).
 
 -spec handle_config_change(server_ref(), wh_json:object()) -> 'ok'.
 handle_config_change(Srv, JObj) ->
@@ -565,7 +565,7 @@ handle_cast({'reject_member_call', Call, JObj}, #state{account_id=AccountId
 
 handle_cast({'sync_with_agent', A}, #state{account_id=AccountId}=State) ->
     case acdc_agent_util:most_recent_status(AccountId, A) of
-        {'ok', <<"logout">>} -> gen_listener:cast(self(), {'agent_unavailable', A});
+        {'ok', <<"logged_out">>} -> gen_listener:cast(self(), {'agent_unavailable', A});
         _ -> gen_listener:cast(self(), {'agent_available', A})
     end,
     {'noreply', State};
@@ -594,18 +594,10 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
     wapi_acdc_queue:publish_queue_member_add(Prop),
     {'noreply', State};
 
-handle_cast({'remove_queue_member', CallId}, #state{account_id=AccountId
+handle_cast({'remove_queue_member', JObj}, #state{account_id=AccountId
                                                     ,queue_id=QueueId
                                                    }=State) ->
-    lager:debug("Publishing remove of queue member"),
-
-    Prop = [{<<"Account-ID">>, AccountId}
-            ,{<<"Queue-ID">>, QueueId}
-            ,{<<"Call-ID">>, CallId}
-            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-           ],
-
-    wapi_acdc_queue:publish_queue_member_remove(Prop),
+    maybe_publish_queue_member_remove(AccountId, QueueId, wh_json:get_value(<<"Call-ID">>, JObj), wh_json:get_value(<<"Reason">>, JObj)),
     {'noreply', State};
 
 handle_cast({'handle_queue_member_add', JObj, _Queue}, #state{account_id=AccountId
@@ -992,6 +984,20 @@ maybe_queue_has_metaflows(AccountDb, QueueId, Call) ->
             apply_new_metaflows(whapps_call:call_id(Call), CVs, whapps_call:controller_queue(Call), Metaflows),
             'true'
     end.
+
+-spec maybe_publish_queue_member_remove(ne_binary(), ne_binary(), ne_binary(), binary()) -> 'ok'.
+maybe_publish_queue_member_remove(_, _, _, <<"no agents">>) ->
+    'ok';
+maybe_publish_queue_member_remove(AccountId, QueueId, CallId, _) ->
+    lager:debug("Publishing remove of queue member"),
+
+    Prop = [{<<"Account-ID">>, AccountId}
+            ,{<<"Queue-ID">>, QueueId}
+            ,{<<"Call-ID">>, CallId}
+            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+
+    wapi_acdc_queue:publish_queue_member_remove(Prop).
 
 apply_new_metaflows(CallId, CVs, ControllerQueue, Metaflows) ->
     Numbers = update_with_cq(update_with_cvs(wh_json:get_value(<<"numbers">>, Metaflows), CVs), ControllerQueue),
