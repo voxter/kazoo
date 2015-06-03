@@ -22,7 +22,6 @@
          ,handle_queue_member_remove/2
          ,handle_queue_member_position/2
          ,handle_manager_success_notify/2
-         % ,handle_manager_fail_notify/2
          ,handle_config_change/2
          ,should_ignore_member_call/3, should_ignore_member_call/4
          ,config/1
@@ -122,9 +121,6 @@
                      ,{{'acdc_queue_manager', 'handle_manager_success_notify'}
                        ,[{<<"member">>, <<"call_success">>}]
                       }
-                     % ,{{'acdc_queue_manager', 'handle_manager_fail_notify'}
-                     %   ,[{<<"member">>, <<"call_fail">>}]
-                     %  }
                     ]).
 
 -define(SECONDARY_BINDINGS(AccountId, QueueId)
@@ -271,10 +267,6 @@ handle_queue_member_position(JObj, Prop) ->
 -spec handle_manager_success_notify(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_manager_success_notify(JObj, Prop) ->
     gen_listener:cast(props:get_value('server', Prop), {'remove_queue_member', JObj}).
-
-% -spec handle_manager_fail_notify(wh_json:object(), wh_proplist()) -> 'ok'.
-% handle_manager_fail_notify(JObj, Prop) ->
-%     gen_listener:cast(props:get_value('server', Prop), {'remove_queue_member', JObj}).
 
 -spec handle_config_change(server_ref(), wh_json:object()) -> 'ok'.
 handle_config_change(Srv, JObj) ->
@@ -583,39 +575,17 @@ handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
     {'noreply', State};
 
 handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
-                                             ,queue_id=QueueId
-                                            }=State) ->
-    lager:debug("Publishing add of new queue member"),
-
-    Prop = [{<<"Account-ID">>, AccountId}
-            ,{<<"Queue-ID">>, QueueId}
-            ,{<<"JObj">>, JObj}
-            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-           ],
-
-    wapi_acdc_queue:publish_queue_member_add(Prop),
-    {'noreply', State};
-
-handle_cast({'remove_queue_member', JObj}, #state{account_id=AccountId
-                                                    ,queue_id=QueueId
-                                                   }=State) ->
-    maybe_publish_queue_member_remove(AccountId, QueueId, wh_json:get_value(<<"Call-ID">>, JObj), wh_json:get_value(<<"Reason">>, JObj)),
-    {'noreply', State};
-
-handle_cast({'handle_queue_member_add', JObj, _Queue}, #state{account_id=AccountId
-                                                              ,queue_id=QueueId
-                                                              ,current_member_calls=CurrentCalls
-                                                              ,pos_announce_enabled=PosAnnounceEnabled
-                                                              ,wait_announce_enabled=WaitAnnounceEnabled
-                                                              ,announcements_timer=AnnouncementsTimer
-                                                              ,pos_announce_pids=Pids
-                                                             }=State) ->
-    lager:debug("Received notification of new queue member"),
-
-    JObj2 = wh_json:get_value(<<"JObj">>, JObj),
+                                               ,queue_id=QueueId
+                                               ,pos_announce_enabled=PosAnnounceEnabled
+                                               ,wait_announce_enabled=WaitAnnounceEnabled
+                                               ,announcements_timer=AnnouncementsTimer
+                                               ,current_member_calls=CurrentCalls
+                                               ,pos_announce_pids=Pids
+                                              }=State) ->
+    %% Add call to my own list, won't be added in the handler
     Position = length(CurrentCalls)+1,
 
-    Call = whapps_call:set_custom_channel_var(<<"Queue-Position">>, Position, whapps_call:from_json(wh_json:get_value(<<"Call">>, JObj2))),
+    Call = whapps_call:set_custom_channel_var(<<"Queue-Position">>, Position, whapps_call:from_json(wh_json:get_value(<<"Call">>, JObj))),
     CallId = whapps_call:call_id(Call),
 
     Prop = [{<<"Account-ID">>, AccountId}
@@ -629,29 +599,62 @@ handle_cast({'handle_queue_member_add', JObj, _Queue}, #state{account_id=Account
     
     UpdatedMemberCalls = [Call | CurrentCalls],
 
-    AccountId = whapps_call:account_id(Call),
-    QueueId = wh_json:get_value(<<"Queue-ID">>, JObj2),
-
-    wapi_acdc_queue:publish_shared_member_call(AccountId, QueueId, JObj2),
+    %% Add call to shared queue
+    wapi_acdc_queue:publish_shared_member_call(AccountId, QueueId, JObj),
     lager:debug("put call into shared messaging queue"),
 
     gen_listener:cast(self(), {'monitor_call', Call}),
 
     acdc_util:presence_update(AccountId, QueueId, ?PRESENCE_RED_FLASH),
 
+    %% Notify other queue manager of added call
+    lager:debug("Publishing add of new queue member"),
+    Prop2 = [{<<"Account-ID">>, AccountId}
+            ,{<<"Queue-ID">>, QueueId}
+            ,{<<"JObj">>, JObj}
+            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+    wapi_acdc_queue:publish_queue_member_add(Prop2),
+
+    %% Schedule position announcements
+    UpdatedAnnouncePids = maybe_schedule_position_announcements(
+                            Call
+                            ,QueueId
+                            ,{PosAnnounceEnabled, WaitAnnounceEnabled}
+                            ,AnnouncementsTimer
+                            ,Pids),
+
     {'noreply', State#state{current_member_calls=UpdatedMemberCalls
-                            ,pos_announce_pids = maybe_schedule_position_announcements(
-                                                   Call
-                                                   ,QueueId
-                                                   ,{PosAnnounceEnabled, WaitAnnounceEnabled}
-                                                   ,AnnouncementsTimer
-                                                   ,Pids)
+                            ,pos_announce_pids=UpdatedAnnouncePids
                            }};
+
+handle_cast({'remove_queue_member', JObj}, #state{account_id=AccountId
+                                                  ,queue_id=QueueId
+                                                  ,current_member_calls=CurrentCalls
+                                                  ,pos_announce_pids=Pids
+                                                 }=State) ->
+    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+
+    maybe_publish_queue_member_remove(AccountId, QueueId, wh_json:get_value(<<"Call-ID">>, JObj), wh_json:get_value(<<"Reason">>, JObj)),
+
+    %% Cancel position announcements
+    Call = lists:keyfind(CallId, 2, CurrentCalls),
+    UpdatedAnnouncePids = maybe_cancel_position_announcements(Call, Pids),
+
+    {'noreply', State#state{pos_announce_pids=UpdatedAnnouncePids}};
+
+handle_cast({'handle_queue_member_add', JObj, _Queue}, #state{current_member_calls=CurrentCalls}=State) ->
+    lager:debug("Received notification of new queue member"),
+
+    JObj2 = wh_json:get_value(<<"JObj">>, JObj),
+    Call = whapps_call:from_json(wh_json:get_value(<<"Call">>, JObj2)),
+    CallId = whapps_call:call_id(Call),
+
+    {'noreply', State#state{current_member_calls = [Call | lists:keydelete(CallId, 2, CurrentCalls)]}};
 
 handle_cast({'handle_queue_member_remove', JObj}, #state{account_id=AccountId
                                                          ,queue_id=QueueId
                                                          ,current_member_calls=CurrentCalls
-                                                         ,pos_announce_pids=Pids
                                                         }=State) ->
     lager:debug("Received notification of queue member being removed"),
 
@@ -682,7 +685,6 @@ handle_cast({'handle_queue_member_remove', JObj}, #state{account_id=AccountId
     UpdatedMemberCalls = lists:delete(Call, CurrentCalls),
 
     {'noreply', State#state{current_member_calls=UpdatedMemberCalls
-                            ,pos_announce_pids = maybe_cancel_position_announcements(Call, Pids)
                            }};
 
 handle_cast({'replace_call', OldCall, NewCall}, #state{current_member_calls=CurrentCalls
