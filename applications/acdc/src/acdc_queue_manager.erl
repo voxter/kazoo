@@ -427,7 +427,16 @@ handle_call({'queue_position', CallId}, _, #state{current_member_calls=CurrentCa
     Call = lists:keyfind(CallId, 2, CurrentCalls),
 
     {Map, _} = lists:mapfoldr(fun(X, I) -> {{X, I}, I + 1} end, 1, CurrentCalls),
-    {_, Index} = lists:keyfind(Call, 1, Map),
+    Index = case lists:keyfind(Call, 1, Map) of
+        {_, Index2} ->
+            Index2;
+        _Result ->
+            lager:debug("call id ~p", [CallId]),
+            lists:foreach(fun(Call2) ->
+                lager:debug("current call id ~p", [whapps_call:call_id(Call2)])
+            end, CurrentCalls),
+            'true' = wh_json:get_value(<<"Stop">>, wh_json:new())
+    end,
 
     {'reply', Index, State};
 
@@ -630,18 +639,9 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
 
 handle_cast({'remove_queue_member', JObj}, #state{account_id=AccountId
                                                   ,queue_id=QueueId
-                                                  ,current_member_calls=CurrentCalls
-                                                  ,pos_announce_pids=Pids
                                                  }=State) ->
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
-
     maybe_publish_queue_member_remove(AccountId, QueueId, wh_json:get_value(<<"Call-ID">>, JObj), wh_json:get_value(<<"Reason">>, JObj)),
-
-    %% Cancel position announcements
-    Call = lists:keyfind(CallId, 2, CurrentCalls),
-    UpdatedAnnouncePids = maybe_cancel_position_announcements(Call, Pids),
-
-    {'noreply', State#state{pos_announce_pids=UpdatedAnnouncePids}};
+    {'noreply', State};
 
 handle_cast({'handle_queue_member_add', JObj, _Queue}, #state{current_member_calls=CurrentCalls}=State) ->
     lager:debug("Received notification of new queue member"),
@@ -655,6 +655,7 @@ handle_cast({'handle_queue_member_add', JObj, _Queue}, #state{current_member_cal
 handle_cast({'handle_queue_member_remove', JObj}, #state{account_id=AccountId
                                                          ,queue_id=QueueId
                                                          ,current_member_calls=CurrentCalls
+                                                         ,pos_announce_pids=Pids
                                                         }=State) ->
     lager:debug("Received notification of queue member being removed"),
 
@@ -684,7 +685,12 @@ handle_cast({'handle_queue_member_remove', JObj}, #state{account_id=AccountId
 
     UpdatedMemberCalls = lists:delete(Call, CurrentCalls),
 
+    %% Cancel position announcements
+    Call = lists:keyfind(CallId, 2, CurrentCalls),
+    UpdatedAnnouncePids = maybe_cancel_position_announcements(Call, Pids),
+
     {'noreply', State#state{current_member_calls=UpdatedMemberCalls
+                            ,pos_announce_pids=UpdatedAnnouncePids
                            }};
 
 handle_cast({'replace_call', OldCall, NewCall}, #state{current_member_calls=CurrentCalls
@@ -1068,11 +1074,13 @@ maybe_schedule_position_announcements(Call, QueueId, AnnouncesEnabled, Announcem
 
 -spec maybe_cancel_position_announcements(whapps_call:call(), announce_pid_list()) -> announce_pid_list().
 maybe_cancel_position_announcements(Call, Pids) ->
-    case lists:keyfind(whapps_call:call_id(Call), 1, Pids) of
+    CallId = whapps_call:call_id(Call),
+    case lists:keyfind(CallId, 1, Pids) of
         {_, Pid} ->
             erlang:exit(Pid, 'call_done'),
             whapps_call_command:flush(Call);
         _ ->
+            lager:debug("she caught me without the pid... it wasn't me"),
             'ok'
     end,
     lists:keydelete(whapps_call:call_id(Call), 1, Pids).
