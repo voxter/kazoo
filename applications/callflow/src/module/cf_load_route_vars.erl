@@ -24,7 +24,7 @@ load_route_vars(Data, Call) ->
 load_route_vars_fold([], _, Call) ->
     Call;
 load_route_vars_fold([Key|Keys], Data, Call) ->
-    Value = wh_json:get_value(Key, Data),
+    Value = wh_json:get_value([Key, <<"value">>], Data),
     lager:debug("setting route var ~p to ~p", [Key, Value]),
     Call2 = whapps_call:set_custom_channel_var(Key, Value, Call),
     load_route_vars_fold(Keys, Data, Call2).
