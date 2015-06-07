@@ -25,7 +25,7 @@ start_link(Socket) ->
 %%
 
 init(Socket) ->
-    process_flag(trap_exit, true),
+    process_flag('trap_exit', 'true'),
     %% Random seed used to change md5 challenge
     <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
     random:seed({A,B,C}),
@@ -33,17 +33,17 @@ init(Socket) ->
     %% Register this handler with the state master
     ami_sm:register(),
 
-    gen_server:cast(self(), accept),
-    {ok, #state{listen_socket=Socket}}.
+    gen_server:cast(self(), 'accept'),
+    {'ok', #state{listen_socket=Socket}}.
 
 handle_call(Request, _From, State) ->
     lager:debug("unhandled call"),
-    {stop, {unknown_call, Request}, State}.
+    {'stop', {'unknown_call', Request}, State}.
 
 %% Start the listener waiting for socket accept
-handle_cast(accept, #state{listen_socket=Socket}=State) ->
+handle_cast('accept', #state{listen_socket=Socket}=State) ->
     case gen_tcp:accept(Socket) of
-        {ok, AcceptSocket} ->
+        {'ok', AcceptSocket} ->
             lager:debug("Client accepted for socket"),
 
             %% Send announcement to clients of who we are
@@ -51,80 +51,80 @@ handle_cast(accept, #state{listen_socket=Socket}=State) ->
             gen_tcp:send(AcceptSocket, <<"Asterisk Call Manager/1.1\r\n">>),
             
             %% Need to wait for login now
-            {noreply, State#state{accept_socket=AcceptSocket}};
-        {error, closed} ->
+            {'noreply', State#state{accept_socket=AcceptSocket}};
+        {'error', 'closed'} ->
         	% lager:debug("Listen socket closed"),
-            {noreply, State};
+            {'noreply', State};
         {_, _} ->
             lager:debug("Exception occurred when waiting for socket accept"),
-            {noreply, State}
+            {'noreply', State}
     end;
-handle_cast({login, AccountId}, State) ->
+handle_cast({'login', AccountId}, State) ->
     maybe_init_state(AccountId),
-    {noreply, State};
-handle_cast({logout}, #state{accept_socket=AcceptSocket}=State) ->
-    inet:setopts(AcceptSocket, [{nodelay, true}]),
+    {'noreply', State};
+handle_cast({'logout'}, #state{accept_socket=AcceptSocket}=State) ->
+    inet:setopts(AcceptSocket, [{'nodelay', 'true'}]),
     gen_tcp:send(AcceptSocket, <<"Response: Goodbye\r\nMessage: Thanks for all the fish.\r\n\r\n">>),
-    inet:setopts(AcceptSocket, [{nodelay, false}]),
+    inet:setopts(AcceptSocket, [{'nodelay', 'false'}]),
 
     case AcceptSocket of
-        undefined ->
-            ok;
+        'undefined' ->
+            'ok';
         _ ->
             lager:debug("Closing an accept socket"),
             gen_tcp:close(AcceptSocket),
-            ok
+            'ok'
     end,
 
-    gen_server:cast(self(), accept),
-    {noreply, State#state{accept_socket=undefined, bundle = <<>>}};
+    gen_server:cast(self(), 'accept'),
+    {'noreply', State#state{accept_socket='undefined', bundle = <<>>}};
 %% Synchronously publish AMI events to socket
-handle_cast({publish, Events}, #state{accept_socket=AcceptSocket}=State) ->
+handle_cast({'publish', Events}, #state{accept_socket=AcceptSocket}=State) ->
     publish_events(Events, AcceptSocket),
-    {noreply, State};
+    {'noreply', State};
 handle_cast(Event, State) ->
     lager:debug("unhandled cast ~p", [Event]),
-    {noreply, State}.
+    {'noreply', State}.
     
 %% Route socket data to command processor
-handle_info({tcp, _Socket, Data}, #state{bundle=Bundle}=State) ->
+handle_info({'tcp', _Socket, Data}, #state{bundle=Bundle}=State) ->
     AccountId = ami_sm:account_id(),
 
     %% Received commands are buffered until a flush (data containing only \r\n)
     case list_to_binary(Data) of
         <<"\r\n">> ->
             maybe_send_response(amimulator_commander:handle(Bundle, AccountId)),
-            {noreply, State#state{bundle = <<>>}};
+            {'noreply', State#state{bundle = <<>>}};
         NewData ->
-            {noreply, State#state{bundle = <<Bundle/binary, NewData/binary>>}}
+            {'noreply', State#state{bundle = <<Bundle/binary, NewData/binary>>}}
     end;
-handle_info({tcp_closed, _Socket}, State) ->
+handle_info({'tcp_closed', _Socket}, State) ->
     lager:debug("Disconnected client"),
     lager:debug("One less consumer for the account."),
-    {stop, normal, State};
-handle_info({tcp_error, _Socket, _}, State) ->
+    {'stop', 'normal', State};
+handle_info({'tcp_error', _Socket, _}, State) ->
     lager:debug("tcp_error"),
-    {stop, normal, State};
+    {'stop', 'normal', State};
 handle_info(_Info, State) ->
-    {noreply, State}.
+    {'noreply', State}.
 
-terminate(shutdown, #state{accept_socket=AcceptSocket}) ->
+terminate('shutdown', #state{accept_socket=AcceptSocket}) ->
 	% TODO: actually close these accept sockets on restart
     case AcceptSocket of
-        undefined ->
-            ok;
+        'undefined' ->
+            'ok';
         _ ->
             lager:debug("Closing an accept socket"),
             gen_tcp:close(AcceptSocket),
-            ok
+            'ok'
     end,
     ami_sm:unregister();
 terminate(Reason, State) ->
     lager:debug("Unexpected terminate (~p)", [Reason]),
-    terminate(shutdown, State).
+    terminate('shutdown', State).
 
 code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+    {'ok', State}.
 
 %%
 %% Private functions
@@ -136,23 +136,23 @@ maybe_init_state(AccountId) ->
         [] ->
             ami_sm:init_state(AccountId);
         _ ->
-            ok
+            'ok'
     end.
     
 maybe_send_response(HandleResp) ->
     case HandleResp of
-        {ok, Resp} ->
+        {'ok', Resp} ->
             %% Can disable events from AMI
             case ami_sm:events() of
                 'on' ->
-                    gen_server:cast(self(), {publish, Resp});
+                    gen_server:cast(self(), {'publish', Resp});
                 'off' ->
-                    ok;
+                    'ok';
                 'undefined' ->
-                    ok
+                    'ok'
             end;
         _ ->
-            ok
+            'ok'
     end.
 
 publish_events({[Event|_]=Events, Mode}, Socket) when is_list(Event) ->
@@ -161,17 +161,17 @@ publish_events({Event, Mode}, Socket) ->
     publish_event(Event, Mode, Socket).
   
 %% It looks like sometimes, Asterisk sends the messages broken up by newlines...  
-publish_event(Props, broken, Socket) ->
+publish_event(Props, 'broken', Socket) ->
     lists:foreach(fun(Part) ->
         gen_tcp:send(Socket, amimulator_util:format_prop(Part))
         end, Props),
     gen_tcp:send(Socket, <<"\r\n">>);
-publish_event(Props, raw, Socket) ->
-    inet:setopts(Socket, [{nodelay, true}]),
+publish_event(Props, 'raw', Socket) ->
+    inet:setopts(Socket, [{'nodelay', 'true'}]),
     lists:foreach(fun(Part) ->
         gen_tcp:send(Socket, Part)
         end, Props),
-    inet:setopts(Socket, [{nodelay, false}]);
+    inet:setopts(Socket, [{'nodelay', 'false'}]);
 publish_event(Props, _, Socket) ->
     %lager:debug("AMI: publish ~p", [Props]),
     gen_tcp:send(Socket, amimulator_util:format_binary(Props)).

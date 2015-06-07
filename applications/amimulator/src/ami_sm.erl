@@ -9,7 +9,7 @@
 	     ,events/0
 	     ,account_consumers/1
 	     ,registration/2, add_registration/4
-	     ,call/1, call_by_channel/1, new_call/2, new_call/3, update_call/2, delete_call/1
+	     ,call/1, call_by_channel/1, new_call/1, update_call/1, delete_call/1
 	     ,queue_call/3, queue_pos/2, fetch_queue_call_data/2, queue_leave/2
 	     ,conf_parts/1, update_conf_parts/2, conf_cache/1, cache_conf_part/2
 	     ,calls/1, channel_call_ids/1, add_channel_call_id/2, call_id_in_channel/2
@@ -21,6 +21,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -include("amimulator.hrl").
+-include("amimulator_call.hrl").
 
 -record(state, {}).
 
@@ -30,43 +31,43 @@
 
 start_link() ->
     lager:debug("Starting state master"),
-	gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+	gen_server:start_link({'local', ?MODULE}, ?MODULE, [], []).
 
 %% Register an AMI handler and initialize its state
 register() ->
-    gen_server:cast(?MODULE, {register, self()}).
+    gen_server:cast(?MODULE, {'register', self()}).
 
 unregister() ->
-    gen_server:cast(?MODULE, {unregister, self()}).
+    gen_server:cast(?MODULE, {'unregister', self()}).
 
 ev_going_down(AccountId, Timestamp) ->
-    gen_server:cast(?MODULE, {event_listener_kill_req, AccountId, Timestamp}).
+    gen_server:cast(?MODULE, {'event_listener_kill_req', AccountId, Timestamp}).
 
 ev_staying_up(AccountId) ->
-    gen_server:cast(?MODULE, {event_listener_kill_cancel_req, AccountId}).
+    gen_server:cast(?MODULE, {'event_listener_kill_cancel_req', AccountId}).
 
 is_ev_down(AccountId, Timestamp) ->
-    gen_server:call(?MODULE, {is_ev_down, AccountId, Timestamp}).
+    gen_server:call(?MODULE, {'is_ev_down', AccountId, Timestamp}).
 
 account_id() ->
     gen_server:call(?MODULE, 'get_account_id', 60000).
 
 set_account_id(AccountId) ->
-    gen_server:cast(?MODULE, {reg_account_id, AccountId, self()}).
+    gen_server:cast(?MODULE, {'reg_account_id', AccountId, self()}).
 
 %% Fetches the existing calls, queue state, etc and puts in ETS
 init_state(AccountId) ->
-    gen_server:cast(?MODULE, {init_state, AccountId}).
+    gen_server:cast(?MODULE, {'init_state', AccountId}).
 
 purge_state(AccountId) ->
-	gen_server:cast(?MODULE, {purge_state, AccountId}).
+	gen_server:cast(?MODULE, {'purge_state', AccountId}).
 
 %% Whether events should be published to this client
 events() ->
     gen_server:call(?MODULE, 'get_event_mask').
 
 account_consumers(AccountId) ->
-    gen_server:call(?MODULE, {get_account_consumers, AccountId}).
+    gen_server:call(?MODULE, {'get_account_consumers', AccountId}).
 
 registration(AccountId, EndpointId) ->
 	gen_server:call(?MODULE, {'get_registration', AccountId, EndpointId}).
@@ -75,50 +76,46 @@ add_registration(AccountId, EndpointId, ContactIP, ContactPort) ->
 	gen_server:cast(?MODULE, {'add_registration', AccountId, EndpointId, ContactIP, ContactPort}).
 
 call(CallId) ->
-    gen_server:call(?MODULE, {get_call, CallId}).
+    gen_server:call(?MODULE, {'get_call', CallId}).
 
 call_by_channel(Channel) ->
-    gen_server:call(?MODULE, {get_call_by_channel, Channel}).
+    gen_server:call(?MODULE, {'get_call_by_channel', Channel}).
 
-new_call(CallId, Data) ->
-    AccountId = whapps_call:account_id(props:get_value(<<"call">>, Data)),
-    gen_server:cast(?MODULE, {new_call, CallId, AccountId, Data}).
+new_call(Call) ->
+    gen_server:cast(?MODULE, {'new_call', Call}).
 
-new_call(CallId, AccountId, Data) ->
-    gen_server:cast(?MODULE, {new_call, CallId, AccountId, Data}).
-
-update_call(CallId, Data) ->
-    gen_server:cast(?MODULE, {update_call, CallId, Data}).
+update_call(Call) ->
+    gen_server:cast(?MODULE, {'update_call', Call}).
 
 delete_call(CallId) ->
-    gen_server:cast(?MODULE, {delete_call, CallId}).
+    gen_server:cast(?MODULE, {'delete_call', CallId}).
 
 queue_call(QueueId, CallId, Call) ->
-    gen_server:call(?MODULE, {queue_call, QueueId, CallId, Call}).
+    gen_server:call(?MODULE, {'queue_call', QueueId, CallId, Call}).
 
 queue_pos(QueueId, CallId) ->
-    gen_server:call(?MODULE, {queue_pos, QueueId, CallId}).
+    gen_server:call(?MODULE, {'queue_pos', QueueId, CallId}).
 
 fetch_queue_call_data(QueueId, CallId) ->
-	gen_server:call(?MODULE, {get_queue_call, QueueId, CallId}).
+	gen_server:call(?MODULE, {'get_queue_call', QueueId, CallId}).
 
 queue_leave(QueueId, CallId) ->
-	gen_server:cast(?MODULE, {queue_leave, QueueId, CallId}).
+	gen_server:cast(?MODULE, {'queue_leave', QueueId, CallId}).
 
 conf_parts(ConfId) ->
-    gen_server:call(?MODULE, {conf_parts, ConfId}).
+    gen_server:call(?MODULE, {'conf_parts', ConfId}).
 
 update_conf_parts(ConfId, Data) ->
-    gen_server:cast(?MODULE, {update_conf_parts, ConfId, Data}).
+    gen_server:cast(?MODULE, {'update_conf_parts', ConfId, Data}).
 
 conf_cache(CallId) ->
-    gen_server:call(?MODULE, {conf_cache, CallId}).
+    gen_server:call(?MODULE, {'conf_cache', CallId}).
 
 cache_conf_part(CallId, Data) ->
-    gen_server:cast(?MODULE, {cache_conf_part, CallId, Data}).
+    gen_server:cast(?MODULE, {'cache_conf_part', CallId, Data}).
 
 calls(AccountId) ->
-    gen_server:call(?MODULE, {get_calls, AccountId}).
+    gen_server:call(?MODULE, {'get_calls', AccountId}).
 
 channel_call_ids(Channel) ->
     gen_server:call(?MODULE, {'get_call_ids_by_channel', Channel}).
@@ -127,13 +124,13 @@ add_channel_call_id(Channel, CallId) ->
     gen_server:cast(?MODULE, {'add_channel_call_id', Channel, CallId}).
 
 call_id_in_channel(CallId, Channel) ->
-	gen_server:call(?MODULE, {call_id_in_channel, CallId, Channel}).
+	gen_server:call(?MODULE, {'call_id_in_channel', CallId, Channel}).
 
 maybe_ringing(Channel, CallId) ->
-    gen_server:call(?MODULE, {maybe_ringing, Channel, CallId}).
+    gen_server:call(?MODULE, {'maybe_ringing', Channel, CallId}).
 
 answer(Channel, CallId) ->
-	gen_server:cast(?MODULE, {answer, Channel, CallId}).
+	gen_server:cast(?MODULE, {'answer', Channel, CallId}).
 
 answered_or_ignored(Channel, CallId) ->
 	gen_server:call(?MODULE, {'answered_or_ignored', Channel, CallId}).
@@ -143,10 +140,10 @@ flag_early_answer(CallId) ->
 	gen_server:cast(?MODULE, {'flag_early_answer', CallId}).
 
 db_put(AccountId, Family, Key, Value) ->
-	gen_server:cast(?MODULE, {db_put, AccountId, Family, Key, Value}).
+	gen_server:cast(?MODULE, {'db_put', AccountId, Family, Key, Value}).
 
 db_del(AccountId, Family, Key) ->
-	gen_server:cast(?MODULE, {db_del, AccountId, Family, Key}).
+	gen_server:cast(?MODULE, {'db_del', AccountId, Family, Key}).
 
 debug(TableName) ->
     gen_server:call(?MODULE, {'debug', TableName}).
@@ -162,7 +159,7 @@ debug_clear_call(_CallId) ->
 init([]) ->
     process_flag('trap_exit', 'true'),
     ets:new('registrations', ['named_table']),
-    ets:new('calls', ['named_table']),
+    ets:new('calls', ['named_table', {'keypos', 2}]),
     ets:new('flags', ['named_table']),
     ets:new('channels', ['named_table', 'bag']),
     ets:new('ringing_channels', ['named_table']),
@@ -178,11 +175,11 @@ init([]) ->
 handle_call({'is_ev_down', AccountId, Timestamp}, _From, State) ->
 	Reply = case ets:match('event_listener_kill_reqs', {AccountId, Timestamp}) of
 		[] ->
-			false;
+			'false';
         [[]] ->
-            true
+            'true'
     end,
-    {reply, Reply, State};
+    {'reply', Reply, State};
 
 handle_call('get_account_id', {Pid, _Tag}, State) ->
 	Reply = case ets:match('account_consumers', {'$1', Pid, '_'}) of
@@ -203,9 +200,9 @@ handle_call('get_event_mask', {Pid, _Tag}, State) ->
 	end,
 	{'reply', Reply, State};
 
-handle_call({get_account_consumers, AccountId}, _From, State) ->
+handle_call({'get_account_consumers', AccountId}, _From, State) ->
 	Reply = lists:flatten(ets:match('account_consumers', {AccountId, '$1', '_'})),
-    {reply, Reply, State};
+    {'reply', Reply, State};
 
 handle_call({'get_registration', AccountId, EndpointId}, _From, State) ->
 	Reply = case ets:match('registrations', {EndpointId, AccountId, '$1', '$2'}) of
@@ -216,128 +213,120 @@ handle_call({'get_registration', AccountId, EndpointId}, _From, State) ->
 	end,
 	{'reply', Reply, State};
    
-handle_call({get_call, CallId}, _From, State) ->
-	Reply = case ets:match('calls', {CallId, '_', '$1'}) of
-		[] ->
-			undefined;
-		[[Match]] ->
-			Match
-	end,
-    {reply, Reply, State};
+handle_call({'get_call', CallId}, _From, State) ->
+    Spec = new_call_match_spec(),
+    Reply = case ets:select('calls', [{Spec#call{call_id=CallId}, [], ['$_']}]) of
+        [] -> 'undefined';
+        [Match] -> Match
+    end,
+    {'reply', Reply, State};
 
-handle_call({get_calls, AccountId}, _From, State) ->
-	Reply = case ets:match('calls', {'_', AccountId, '$1'}) of
-		[] ->
-			[];
-		Results ->
-			lists:foldl(fun(Result, Acc) ->
-				Result ++ Acc
-			end, [], Results)
-	end,
-    {reply, Reply, State};
+handle_call({'get_calls', AccountId}, _From, State) ->
+    Spec = new_call_match_spec(),
+    Reply = ets:select('calls', [{Spec#call{account_id=AccountId}, [], ['$_']}]),
+    {'reply', Reply, State};
 
-handle_call({call_id_in_channel, CallId, Channel}, _From, State) ->
+handle_call({'call_id_in_channel', CallId, Channel}, _From, State) ->
 	Reply = case ets:match('channels', {Channel, '$1'}) of
 		[] ->
-			false;
+			'false';
 		List ->
 			lists:member([CallId], List)
 	end,
-	{reply, Reply, State};
+	{'reply', Reply, State};
 
-handle_call({get_call_ids_by_channel, Channel}, _From, State) ->
-	lager:debug("match ~p", [ets:match('channels', {Channel, '$1'})]),
+handle_call({'get_call_ids_by_channel', Channel}, _From, State) ->
 	Reply = lists:flatten(ets:match('channels', {Channel, '$1'})),
-    {reply, Reply, State};
+    {'reply', Reply, State};
 
-handle_call({get_call_by_channel, Channel}, From, State) ->
+handle_call({'get_call_by_channel', Channel}, From, State) ->
 	Reply = case ets:match('channels', {Channel, '$1'}) of
 		[] ->
 			lager:debug("Channel ~p not matched exactly, attempting short version", [Channel]),
 			case ets:match('channels', {'$1', '$2'}) of
 				[] ->
-					undefined;
+					'undefined';
 				List ->
 					lists:foldl(fun([Channel2, CallId], Result) ->
 						case binary:match(Channel2, Channel) of
-							nomatch ->
+							'nomatch' ->
 								Result;
 							_ ->
-								{_, Result2, _} = handle_call({get_call, CallId}, From, State),
+								{_, Result2, _} = handle_call({'get_call', CallId}, From, State),
 								Result2
 						end
-					end, undefined, List)
+					end, 'undefined', List)
 			end;
 		List ->
-			{_, Result, _} = handle_call({get_call, hd(hd(List))}, From, State),
+			{_, Result, _} = handle_call({'get_call', hd(hd(List))}, From, State),
 			Result
 	end,
-    {reply, Reply, State};
+    {'reply', Reply, State};
 
-handle_call({queue_call, QueueId, CallId, Call}, _From, State) ->
+handle_call({'queue_call', QueueId, CallId, Call}, _From, State) ->
 	Size = length(ets:match('queue_calls', {QueueId, '_', '_'})),
 	ets:insert('queue_calls', {QueueId, CallId, Call}),
-    {reply, Size+1, State};
+    {'reply', Size+1, State};
 
-handle_call({queue_pos, QueueId, CallId}, _From, State) ->
+handle_call({'queue_pos', QueueId, CallId}, _From, State) ->
 	Reply = case ets:match('queue_calls', {QueueId, '$1', '_'}) of
 		[] ->
-			undefined;
+			'undefined';
 		List ->
 			amimulator_util:index_of([CallId], List)
 	end,
-    {reply, Reply, State};
+    {'reply', Reply, State};
 
-handle_call({get_queue_call, QueueId, CallId}, _From, State) ->
+handle_call({'get_queue_call', QueueId, CallId}, _From, State) ->
 	Reply = case ets:match('queue_calls', {QueueId, CallId, '$1'}) of
 		[] ->
-			undefined;
+			'undefined';
 		[[Match]] ->
 			Match
 	end,
-	{reply, Reply, State};
+	{'reply', Reply, State};
 
-handle_call({conf_parts, ConfId}, _From, State) ->
+handle_call({'conf_parts', ConfId}, _From, State) ->
 	Reply = lists:flatten(ets:match('conference_participants', {ConfId, '$1'})),
-    {reply, Reply, State};
+    {'reply', Reply, State};
 
-handle_call({conf_cache, CallId}, _From, State) ->
+handle_call({'conf_cache', CallId}, _From, State) ->
 	Reply = case ets:match('conference_cache_data', {CallId, '$1'}) of
 		[] ->
 			'undefined';
 		[[Match]] ->
 			Match
 	end,
-    {reply, Reply, State};
+    {'reply', Reply, State};
 
 handle_call({'maybe_ringing', Channel, CallId}, _From, State) ->
 	Reply = case ets:match('ringing_channels', {Channel, '$1'}) of
 		[] ->
 			ets:insert('ringing_channels', {Channel, CallId}),
-			true;
+			'true';
 		[[CallId]] ->
-			true;
+			'true';
 		_ ->
-			false
+			'false'
 	end,
-    {reply, Reply, State};
+    {'reply', Reply, State};
 
 handle_call({'answered_or_ignored', Channel, CallId}, _From, State) ->
 	Reply = case ets:match('answered_channels', {Channel, '$1'}) of
 		[] ->
-			true;
+			'true';
 		[[CallId]] ->
-			true;
+			'true';
 		_ ->
-			false
+			'false'
 	end,
-	{reply, Reply, State};
+	{'reply', Reply, State};
 
 handle_call({'debug', TableName}, _From, State) ->
     {'reply', ets:tab2list(TableName), State};
 
 handle_call(_Request, _From, State) ->
-    {noreply, State}.
+    {'noreply', State}.
 
 
 
@@ -346,27 +335,27 @@ handle_call(_Request, _From, State) ->
 
 handle_cast({'register', Pid}, State) ->
     ets:insert('account_consumers', {'undefined', Pid, 'on'}),
-    {noreply, State};
+    {'noreply', State};
 
-handle_cast({unregister, Pid}, State) ->
+handle_cast({'unregister', Pid}, State) ->
 	case ets:match('account_consumers', {'$1', Pid, '$2'}) of
 		[] ->
-			ok;
+			'ok';
 		[[AccountId, EventMask]] ->
 			amimulator_sup:pause_ev(AccountId),
 			ets:delete_object('account_consumers', {AccountId, Pid, EventMask})
 	end,
-    {noreply, State};
+    {'noreply', State};
 
-handle_cast({event_listener_kill_req, AccountId, Timestamp}, State) ->
+handle_cast({'event_listener_kill_req', AccountId, Timestamp}, State) ->
 	ets:insert('event_listener_kill_reqs', {AccountId, Timestamp}),
-    {noreply, State};
+    {'noreply', State};
 
-handle_cast({event_listener_kill_cancel_req, AccountId}, State) ->
+handle_cast({'event_listener_kill_cancel_req', AccountId}, State) ->
 	ets:delete('event_listener_kill_reqs', AccountId),
-    {noreply, State};
+    {'noreply', State};
 
-handle_cast({reg_account_id, AccountId, Pid}, State) ->
+handle_cast({'reg_account_id', AccountId, Pid}, State) ->
 	case ets:match('account_consumers', {'undefined', Pid, '$1'}) of
 		[] ->
 			ets:insert('account_consumers', {AccountId, Pid, 'on'});
@@ -376,88 +365,90 @@ handle_cast({reg_account_id, AccountId, Pid}, State) ->
 	end,
 	{'noreply', State};
 
-handle_cast({init_state, AccountId}, State) ->
+handle_cast({'init_state', AccountId}, State) ->
     pvt_init_state(AccountId),
-    {noreply, State};
+    {'noreply', State};
 
-handle_cast({purge_state, AccountId}, State) ->
+handle_cast({'purge_state', AccountId}, State) ->
 	pvt_purge_state(AccountId),
-	{noreply, State};
+	{'noreply', State};
 
 handle_cast({'add_registration', AccountId, EndpointId, ContactIP, ContactPort}, State) ->
 	ets:insert('registrations', {EndpointId, AccountId, ContactIP, ContactPort}),
 	{'noreply', State};
 
-handle_cast({new_call, CallId, AccountId, Call}, State) ->
+handle_cast({'new_call', Call}, State) ->
+    CallId = amimulator_call:call_id(Call),
 	case ets:match('flags', {CallId, 'early_answer'}) of
 		[] ->
-			ok;
+			'ok';
 		[[]] ->
 			lager:debug("The early-answered call (~p) was registered somewhere", [CallId])
 	end,
 
-	ets:insert('calls', {CallId, AccountId, Call}),
-	ets:insert('channels', {props:get_value(<<"aleg_ami_channel">>, Call), CallId}),
-    {noreply, State};
+	ets:insert('calls', Call),
+	ets:insert('channels', {amimulator_call:channel(Call), CallId}),
+    {'noreply', State};
 
-handle_cast({update_call, CallId, Call}, State) ->
-	case ets:match('calls', {CallId, '$1', '_'}) of
-		[] ->
-			lager:debug("Trying to update a call (~p) that is not in the calls table", [CallId]);
-		[[AccountId]] ->
-			ets:insert('calls', {CallId, AccountId, Call})
-	end,
-    {noreply, State};
+handle_cast({'update_call', Call}, State) ->
+    CallId = amimulator_call:call_id(Call),
+    Spec = new_call_match_spec(),
+    case ets:select('calls', [{Spec#call{call_id=CallId}, [], ['$_']}]) of
+        [] -> lager:debug("Trying to update a call (~p) that is not in the calls table", [CallId]);
+        [_] -> ets:insert('calls', Call)
+    end,
+    {'noreply', State};
 
-handle_cast({delete_call, CallId}, State) ->
-	case ets:match('calls', {CallId, '_', '$1'}) of
-		[] ->
-			lager:debug("Trying to delete a call (~p) that is not in the calls table", [CallId]);
-		[[Call]] ->
-			ets:delete('calls', CallId),
-			ets:delete_object('channels', {props:get_value(<<"aleg_ami_channel">>, Call), CallId}),
-			ets:delete_object('ringing_channels', {props:get_value(<<"aleg_ami_channel">>, Call), CallId}),
-			ets:delete_object('answered_channels', {props:get_value(<<"aleg_ami_channel">>, Call), CallId})
-	end,
-    {noreply, State};
+handle_cast({'delete_call', CallId}, State) ->
+    Spec = new_call_match_spec(),
+    case ets:select('calls', [{Spec#call{call_id=CallId}, [], ['$_']}]) of
+        [] -> lager:debug("Trying to delete a call (~p) that is not in the calls table", [CallId]);
+        [Match] ->
+            Channel = amimulator_call:channel(Match),
+            ets:delete('calls', CallId),
+            ets:delete_object('channels', {Channel, CallId}),
+            ets:delete_object('ringing_channels', {Channel, CallId}),
+            ets:delete_object('answered_channels', {Channel, CallId})
+    end,
+    {'noreply', State};
 
 handle_cast({'add_channel_call_id', Channel, CallId}, State) ->
 	ets:insert('channels', {Channel, CallId}),
 	{'noreply', State};
 
-handle_cast({queue_leave, QueueId, CallId}, State) ->
+handle_cast({'queue_leave', QueueId, CallId}, State) ->
 	case ets:match('queue_calls', {QueueId, CallId, '$1'}) of
 		[] ->
 			lager:debug("Trying to clean up a queue call (~p) that is not in the queue_calls table", [CallId]);
 		[[Call]] ->
 			ets:delete_object('queue_calls', {QueueId, CallId, Call})
 	end,
-	{noreply, State};
+	{'noreply', State};
 
-handle_cast({update_conf_parts, ConfId, Data}, State) ->
+handle_cast({'update_conf_parts', ConfId, Data}, State) ->
 	ets:insert('conference_participants', {ConfId, Data}),
-    {noreply, State};
+    {'noreply', State};
 
-handle_cast({cache_conf_part, CallId, Data}, State) ->
+handle_cast({'cache_conf_part', CallId, Data}, State) ->
 	ets:insert('conference_cache_data', {CallId, Data}),
-    {noreply, State};
+    {'noreply', State};
 
-handle_cast({answer, Channel, CallId}, State) ->
+handle_cast({'answer', Channel, CallId}, State) ->
 	case ets:match('answered_channels', {Channel, '_'}) of
 		[] ->
 			ets:insert('answered_channels', {Channel, CallId});
 		_ ->
-			ok
+			'ok'
 	end,
-	{noreply, State};
+	{'noreply', State};
 
 handle_cast({'flag_early_answer', CallId}, State) ->
 	ets:insert('flags', {CallId, 'early_answer'}),
 	{'noreply', State};
 
-handle_cast({db_put, AccountId, Family, Key, Value}, State) ->
+handle_cast({'db_put', AccountId, Family, Key, Value}, State) ->
 	ets:insert('database', {{AccountId, Family, Key}, Value}),
-	{noreply, State};
+	{'noreply', State};
 
 handle_cast({'db_del', AccountId, Family, Key}, State) ->
 	ets:delete('database', {AccountId, Family, Key}),
@@ -497,10 +488,10 @@ handle_cast({'db_del', AccountId, Family, Key}, State) ->
 %     ets:new('account_consumers', ['named_table', 'bag']),
 
 handle_cast(_Request, State) ->
-    {noreply, State}.
+    {'noreply', State}.
     
 handle_info(_Info, State) ->
-    {noreply, State}.
+    {'noreply', State}.
     
 terminate('shutdown', _State) ->
 	lager:debug("Received shutdown request"),
@@ -516,34 +507,95 @@ code_change(_OldVsn, State, _Extra) ->
 %% Private functions
 %%
 
+-spec new_call_match_spec() -> amimulator_call().
+new_call_match_spec() ->
+    #call{call_id='_'
+          ,other_leg_call_id='_'
+          ,channel='_'
+          ,other_channel='_'
+          ,account_id='_'
+          ,authorizing_id='_'
+          ,authorizing_type='_'
+          ,custom_channel_vars='_'
+          ,control_q='_'
+          ,acdc_queue_id='_'
+          ,conference_id='_'
+          ,username='_'
+          ,to='_'
+          ,from='_'
+          ,direction='_'
+          ,answered='_'
+          ,elapsed_s='_'
+          ,caller_id_name='_'
+          ,caller_id_number='_'
+          ,callee_id_name='_'
+          ,callee_id_number='_'
+         }.
+
 %% By doing the state initialization here, we ensure that it is atomic, and no commander/ami_ev
 %% functions can read from the data store before it is ready
 pvt_init_state(AccountId) ->
-    Calls = amimulator_util:initial_calls2(AccountId),
+    Calls = amimulator_util:initial_calls(AccountId),
 
     lists:foreach(fun(Call) ->
-        WhappsCall = props:get_value(<<"call">>, Call),
-        CallId = whapps_call:call_id(WhappsCall),
-        Channel = props:get_value(<<"aleg_ami_channel">>, Call),
-
-        ets:insert('calls', {CallId, AccountId, Call}),
-        ets:insert('channels', {Channel, CallId})
+        ets:insert('calls', Call),
+        ets:insert('channels', {amimulator_call:channel(Call), amimulator_call:call_id(Call)}),
+        ringing_on_init(amimulator_call:answered(Call), Call),
+        answered_on_init(amimulator_call:answered(Call), Call),
+        queue_on_init(amimulator_call:acdc_queue_id(Call), Call),
+        %% TODO implement
+        conf_on_init('undefined', Call)
     end, Calls),
 
     initial_registrations(AccountId).
 
 pvt_purge_state(AccountId) ->
-	lists:foreach(fun([CallId, Call]) ->
-		ets:delete_object('calls', {CallId, AccountId, Call}),
-		ets:delete_object('channels', {props:get_value(<<"aleg_ami_channel">>, Call), CallId}),
-		ets:delete_object('ringing_channels', {props:get_value(<<"aleg_ami_channel">>, Call), CallId}),
-		ets:delete_object('answered_channels', {props:get_value(<<"aleg_ami_channel">>, Call), CallId})
-		%% queue_calls
-		%% conference_participants
-	end, ets:match('calls', {'$1', AccountId, '$2'})).
+    Spec = new_call_match_spec(),
+	lists:foreach(fun(Call) ->
+        CallId = amimulator_call:call_id(Call),
+        Channel = amimulator_call:channel(Call),
+		ets:delete('calls', CallId),
+		ets:delete_object('channels', {Channel, CallId}),
+		ets:delete_object('ringing_channels', {Channel, CallId}),
+		ets:delete_object('answered_channels', {Channel, CallId}),
+        maybe_purge_queue_call(amimulator_call:acdc_queue_id(Call), Call)
+		%% TODO conference_participants
+	end, ets:select('calls', [{Spec#call{account_id=AccountId}, [], ['$_']}])).
+
+-spec ringing_on_init(api_boolean(), amimulator_call()) -> boolean().
+ringing_on_init('true', _) ->
+    'false';
+ringing_on_init('false', Call) ->
+    ets:insert('ringing_channels', {amimulator_call:channel(Call), amimulator_call:call_id(Call)}).
+
+-spec answered_on_init(api_boolean(), amimulator_call()) -> boolean().
+answered_on_init('true', Call) ->
+    ets:insert('answered_channels', {amimulator_call:channel(Call), amimulator_call:call_id(Call)});
+answered_on_init('false', _) ->
+    'false'.
+
+-spec queue_on_init(api_binary(), amimulator_call()) -> boolean().
+queue_on_init('undefined', _) ->
+    'false';
+queue_on_init(QueueId, Call) ->
+    ets:insert('queue_calls', {QueueId, amimulator_call:call_id(Call), Call}).
+
+%% TODO implement
+conf_on_init(_, _) ->
+    'false'.
+
+-spec maybe_purge_queue_call(api_binary(), amimulator_call:call()) -> boolean().
+maybe_purge_queue_call('undefined', _) ->
+    'false';
+maybe_purge_queue_call(QueueId, Call) ->
+    CallId = amimulator_call:call_id(Call),
+    case ets:match('queue_calls', {QueueId, CallId, '$1'}) of
+        [] -> 'false';
+        [[Call2]] -> ets:delete_object('queue_calls', {QueueId, CallId, Call2})
+    end.
 
 initial_registrations(AccountId) ->
-	{ok, AccountDoc} = couch_mgr:open_doc(<<"accounts">>, AccountId),
+	{'ok', AccountDoc} = couch_mgr:open_doc(<<"accounts">>, AccountId),
     AccountRealm = wh_json:get_value(<<"realm">>, AccountDoc),
 
     Req = [

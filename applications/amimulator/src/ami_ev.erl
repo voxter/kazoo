@@ -9,18 +9,17 @@
 
 -define(QUEUE_NAME, <<"amimulator-queue">>).
 -define(QUEUE_OPTIONS, []).
--define(CONSUME_OPTIONS, [{exclusive, false}]).
+-define(CONSUME_OPTIONS, [{'exclusive', 'false'}]).
 
 -define(EXCHANGE_AMI, <<"ami">>).
 -define(TYPE_AMI, <<"topic">>).
 
--define(MODULES, [
-    amimulator_call,
-    amimulator_acdc,
-    amimulator_reg,
-    amimulator_conf,
-    amimulator_vm
-]).
+-define(MODULES, ['amimulator_call_hook'
+                  ,'amimulator_acdc'
+                  ,'amimulator_reg'
+                  ,'amimulator_conf'
+                  ,'amimulator_vm'
+                 ]).
 
 -record(state, {
     account_id
@@ -33,7 +32,7 @@
 %% Start an event consumer for the account, or restart a paused one
 maybe_start(AccountId) ->
     case amimulator_sup:find_ev(AccountId) of
-        undefined ->
+        'undefined' ->
             amimulator_sup:start_ev(AccountId);
         _EvPid ->
             ami_sm:ev_staying_up(AccountId)
@@ -45,7 +44,7 @@ maybe_start(AccountId) ->
         {<<"Privilege">>, <<"system,all">>},
         {<<"Status">>, <<"Fully Booted">>}
     ],
-    gen_server:cast(self(), {publish, {Payload, n}}).
+    gen_server:cast(self(), {'publish', {Payload, 'n'}}).
 
 start_link(AccountId) ->
     Props = [
@@ -58,8 +57,8 @@ start_link(AccountId) ->
     gen_listener:start_link(
         ?MODULE,
         [
-            {'bindings', [{self, []}] ++ Bindings},
-            {'responders', [{{?MODULE, handle_amqp_event},
+            {'bindings', [{'self', []}] ++ Bindings},
+            {'responders', [{{?MODULE, 'handle_amqp_event'},
                 [{<<"amimulator">>, <<"*">>}] ++ Responders}]},
             {'queue_name', ?QUEUE_NAME},       % optional to include
             {'queue_options', ?QUEUE_OPTIONS}, % optional to include
@@ -89,10 +88,10 @@ handle_amqp_event_type(EventJObj, Props, <<"amimulator.events.test">>) ->
             CommPids = ami_sm:account_consumers(AccountId),
 
             lists:foreach(fun(CommPid) ->
-                gen_server:cast(CommPid, {publish, {ParsedEvents, n}})
+                gen_server:cast(CommPid, {'publish', {ParsedEvents, 'n'}})
             end, CommPids);
         _ ->
-            ok
+            'ok'
     end;
 
 handle_amqp_event_type(EventJObj, _Props, <<"registration.success.", _/binary>>) ->
@@ -121,13 +120,13 @@ handle_amqp_event_type(EventJObj, _Props, <<"notifications.voicemail.new.", _/bi
     amimulator_vm:handle_event(EventJObj);
 
 handle_amqp_event_type(_EventJObj, _Props, _RoutingKey) ->
-    ok.
+    'ok'.
     
 publish_amqp_event({_, []}) ->
     lager:debug("Not publishing empty payload"),
-    ok;
-publish_amqp_event({publish, Events}=_Req) ->
-    {ok, Payload} = wh_api:prepare_api_payload(
+    'ok';
+publish_amqp_event({'publish', Events}=_Req) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(
         [{<<"RequestType">>, <<"publish">>},
          {<<"Events">>, amimulator_util:format_json_events(Events)} |
          wh_api:default_headers(<<"amimulator">>, <<"events">>, ?APP_NAME, ?APP_VERSION)],
@@ -143,44 +142,43 @@ init([AccountId]) ->
     amqp_util:new_exchange(?EXCHANGE_AMI, ?TYPE_AMI),
     amqp_util:new_queue(?QUEUE_NAME),
     amqp_util:bind_q_to_exchange(?QUEUE_NAME, <<"amimulator.events.test">>, ?EXCHANGE_AMI),
-    gen_listener:cast(self(), {init_modules, AccountId}),
-    {ok, #state{account_id=AccountId}}.
+    gen_listener:cast(self(), {'init_modules', AccountId}),
+    {'ok', #state{account_id=AccountId}}.
 
 handle_call(_Request, _From, State) ->
     lager:debug("unhandled call"),
-    {reply, {error, not_implemented}, State}.
+    {'reply', {'error', 'not_implemented'}, State}.
 
 %% Register bindings of handler modules for varying event types
-handle_cast({init_modules, AccountId}, State) ->
+handle_cast({'init_modules', AccountId}, State) ->
     lists:foreach(fun(Module) ->
         Module:init(AccountId) end,
         ?MODULES
     ),
-    {noreply, State};
-handle_cast({handle, Mod, Fun, Params}, State) ->
+    {'noreply', State};
+handle_cast({'handle', Mod, Fun, Params}, State) ->
     Mod:Fun(Params),
-    {noreply, State};
-handle_cast({gen_listener, {created_queue, _QueueName}}, State) ->
-    {noreply, State};
-handle_cast({gen_listener, {is_consuming, _IsConsuming}}, State) ->
-    {noreply, State};
+    {'noreply', State};
+handle_cast({'gen_listener', {'created_queue', _QueueName}}, State) ->
+    {'noreply', State};
+handle_cast({'gen_listener', {'is_consuming', _IsConsuming}}, State) ->
+    {'noreply', State};
 handle_cast(_Msg, State) ->
     lager:debug("unhandled cast"),
-    {noreply, State}.
+    {'noreply', State}.
 
 handle_info(?HOOK_EVT(_AccountId, _EventType, JObj), State) ->
-    %spawn(amimulator_call, 'handle_event', [JObj]),
-    amimulator_call:handle_event(JObj),
-    {noreply, State};
+    amimulator_call_hook:handle_event(JObj),
+    {'noreply', State};
 handle_info(_Info, State) ->
     %lager:debug("unhandled info"),
-    {noreply, State}.
+    {'noreply', State}.
     
 handle_event(_JObj, #state{account_id=AccountId}) ->
-    {reply, [{<<"AccountId">>, AccountId}]}.
+    {'reply', [{<<"AccountId">>, AccountId}]}.
 
 terminate(Reason, _State) ->
     lager:debug("AMQP listener on pid ~p terminating: ~p", [self(), Reason]).
 
 code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+    {'ok', State}.

@@ -204,12 +204,10 @@ handle_event("hangup", Props) ->
     EndpointName = props:get_value(<<"Channel">>, Props),
     lager:debug("Hanging up channel ~p", [EndpointName]),
     Call = ami_sm:call_by_channel(EndpointName),
-    WhappsCall = props:get_value(<<"call">>, Call),
-    {ok, ControlQueueResp} = amimulator_util:control_queue(WhappsCall),
-    ControlQueue = wh_json:get_value(<<"Control-Queue">>, ControlQueueResp),
+    ControlQueue = amimulator_util:control_queue(Call),
     lager:debug("Control queue for call: ~p", [ControlQueue]),
 
-    whapps_call_command:hangup(whapps_call:set_control_queue(ControlQueue, WhappsCall));
+    whapps_call_command:hangup(amimulator_call:to_whapps_call(amimulator_call:set_control_queue(ControlQueue, Call)));
     % CallId = ami_sm:call_by_channel(EndpointName),
     % Call = amimulator_util:whapps_call_from_cf_exe(CallId),
     % whapps_call_command:hangup(Call);
@@ -257,19 +255,16 @@ handle_event(Event, Props) ->
 initial_channel_status(Calls, Props, Format) ->
     AccountId = proplists:get_value(<<"AccountId">>, Props),
     FilteredCalls = lists:filter(fun(Call) ->  
-        case whapps_call:account_id(props:get_value(<<"call">>, Call)) of
+        case amimulator_call:account_id(Call) of
             AccountId -> true;
             _ -> false
         end
     end, Calls),
-    
 
     case Format of
         <<"Status">> ->
             FormattedCalls = lists:foldl(fun(Call, List) ->
-                WhappsCall = props:get_value(<<"call">>, Call),
-
-                case {whapps_call:other_leg_call_id(WhappsCall) /= undefined, props:get_value(<<"username">>, Call)} of
+                case {amimulator_call:other_leg_call_id(Call) /= undefined, amimulator_call:username(Call)} of
                     %{true, undefined} -> [ami_channel_status(Call, bridged, Format)] ++ List;
                     {_, undefined} -> List;
                     {true, _} -> [ami_channel_status(Call, bridged_extension, Format)] ++ List;
@@ -287,9 +282,7 @@ initial_channel_status(Calls, Props, Format) ->
             ]];
         <<"concise">> ->
             FormattedCalls = lists:foldl(fun(Call, List) ->
-                WhappsCall = props:get_value(<<"call">>, Call),
-
-                case {whapps_call:other_leg_call_id(WhappsCall) /= undefined, props:get_value(<<"username">>, Call)} of
+                case {amimulator_call:other_leg_call_id(Call) /= undefined, amimulator_call:username(Call)} of
                     %{true, undefined} -> [ami_channel_status(Call, bridged, Format)] ++ List;
                     {_, undefined} -> List;
                     {true, _} -> [ami_channel_status(Call, bridged_extension, Format)] ++ List;
@@ -307,11 +300,10 @@ initial_channel_status(Calls, Props, Format) ->
 
 % Existing whapps_call to AMI status translator
 ami_channel_status(Call, Schema, <<"Status">>) ->
-    ALegCID = props:get_value(<<"aleg_cid">>, Call),
-    BLegCID = props:get_value(<<"bleg_cid">>, Call),
-    WhappsCall = props:get_value(<<"call">>, Call),
+    ALegCID = amimulator_call:id_name(Call),
+    BLegCID = amimulator_call:other_id_name(Call),
 
-    {ChannelState, ChannelStateDesc} = case props:get_value(<<"answered">>, Call) of
+    {ChannelState, ChannelStateDesc} = case amimulator_call:answered(Call) of
         false ->
             {0, <<"Down">>};
         true ->
@@ -320,41 +312,41 @@ ami_channel_status(Call, Schema, <<"Status">>) ->
             {6, <<"Up">>}
     end,
 
-    BridgedChannel = case props:get_value(<<"direction">>, Call) of
+    BridgedChannel = case amimulator_call:direction(Call) of
     	<<"inbound">> ->
-    		props:get_value(<<"bleg_ami_channel">>, Call);
+    		amimulator_call:other_channel(Call);
     	<<"outbound">> ->
-    		props:get_value(<<"aleg_ami_channel">>, Call)
+    		amimulator_call:channel(Call)
     end,
 
     ami_channel_status(
 		<<"Status">>,
 		Schema,
-		props:get_value(<<"aleg_ami_channel">>, Call),
+		amimulator_call:channel(Call),
 		ALegCID,
 		BLegCID,
-		whapps_call:account_id(WhappsCall),
+		amimulator_call:account_id(Call),
 		ChannelState,
 		ChannelStateDesc,
-		props:get_value(<<"aleg_exten">>, Call),
-		props:get_value(<<"elapsed_s">>, Call),
+		amimulator_call:id_number(Call),
+		amimulator_call:elapsed_s(Call),
 		BridgedChannel,
-		whapps_call:call_id(WhappsCall),
-		whapps_call:other_leg_call_id(WhappsCall)
+		amimulator_call:call_id(Call),
+		amimulator_call:other_leg_call_id(Call)
 	);
 
 ami_channel_status(Call, _Schema, <<"concise">>) ->
-    Channel = binary_to_list(props:get_value(<<"aleg_ami_channel">>, Call)),
-    Exten = binary_to_list(props:get_value(<<"aleg_exten">>, Call)),
-    {DestChannel, BridgedTo} = case props:get_value(<<"bleg_ami_channel">>, Call) of
+    Channel = binary_to_list(amimulator_call:channel(Call)),
+    Exten = binary_to_list(amimulator_call:id_number(Call)),
+    {DestChannel, BridgedTo} = case amimulator_call:other_channel(Call) of
         undefined ->
-            {binary_to_list(props:get_value(<<"bleg_exten">>, Call)), "(None)"};
+            {binary_to_list(amimulator_call:other_id_number(Call)), "(None)"};
         BlegChannel ->
             {binary_to_list(BlegChannel), binary_to_list(BlegChannel)}
     end,
-    CID = binary_to_list(props:get_value(<<"aleg_cid">>, Call)),
-    Direction = props:get_value(<<"direction">>, Call),
-    RunTime = wh_util:to_list(props:get_value(<<"elapsed_s">>, Call)),
+    CID = binary_to_list(amimulator_call:id_name(Call)),
+    Direction = amimulator_call:direction(Call),
+    RunTime = wh_util:to_list(amimulator_call:elapsed_s(Call)),
 
     Data = case Direction of
         <<"outbound">> ->
@@ -363,7 +355,7 @@ ami_channel_status(Call, _Schema, <<"concise">>) ->
             DestChannel
     end,
 
-    ChannelStateDesc = case props:get_value(<<"answered">>, Call) of
+    ChannelStateDesc = case amimulator_call:answered(Call) of
         false ->
             "Down";
         true ->
@@ -376,17 +368,17 @@ ami_channel_status(Call, _Schema, <<"concise">>) ->
         "!Dial!" ++ Data ++ "!" ++
         CID ++ "!!!3!" ++ RunTime ++ "!" ++ BridgedTo ++ "\n");
 ami_channel_status(Call, _Schema, <<"verbose">>) ->
-    Channel = binary_to_list(props:get_value(<<"aleg_ami_channel">>, Call)),
-    Exten = binary_to_list(props:get_value(<<"aleg_exten">>, Call)),
-    {DestChannel, BridgedTo} = case props:get_value(<<"bleg_ami_channel">>, Call) of
+    Channel = binary_to_list(amimulator_call:channel(Call)),
+    Exten = binary_to_list(amimulator_call:id_number(Call)),
+    {DestChannel, BridgedTo} = case amimulator_call:other_channel(Call) of
         undefined ->
-            {binary_to_list(props:get_value(<<"bleg_exten">>, Call)), "(None)"};
+            {binary_to_list(amimulator_call:other_id_number(Call)), "(None)"};
         BlegChannel ->
             {binary_to_list(BlegChannel), binary_to_list(BlegChannel)}
     end,
-    CID = binary_to_list(props:get_value(<<"bleg_cid">>, Call)),
-    Direction = props:get_value(<<"direction">>, Call),
-    RunTime = props:get_value(<<"elapsed_s">>, Call),
+    CID = binary_to_list(amimulator_call:id_name(Call)),
+    Direction = amimulator_call:direction(Call),
+    RunTime = wh_util:to_list(amimulator_call:elapsed_s(Call)),
 
     Data = case Direction of
         <<"outbound">> ->
@@ -395,7 +387,7 @@ ami_channel_status(Call, _Schema, <<"verbose">>) ->
             DestChannel
     end,
 
-    ChannelStateDesc = case props:get_value(<<"answered">>, Call) of
+    ChannelStateDesc = case amimulator_call:answered(Call) of
         false ->
             "Down";
         true ->
@@ -882,7 +874,7 @@ getvar(<<"CDR(dst)">>, Props) ->
             [
                 {<<"Response">>, <<"Success">>},
                 {<<"Variable">>, props:get_value(<<"Variable">>, Props)},
-                {<<"Value">>, props:get_value(<<"bleg_cid">>, Call)},
+                {<<"Value">>, amimulator_call:other_id_name(Call)},
                 {<<"ActionID">>, props:get_value(<<"ActionID">>, Props)}
             ]
     end;
@@ -1082,8 +1074,8 @@ participant_payloads(Participants, RunTime, ActionId) ->
 
         ParticipantId = wh_util:to_binary(wh_json:get_value(<<"Participant-ID">>, Participant)),
         %ParticipantId = <<"1">>,
-        CallerId = props:get_value(<<"aleg_cid">>, Call),
-        EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
+        CallerId = amimulator_call:id_name(Call),
+        EndpointName = amimulator_call:channel(Call),
 
         [
             <<ParticipantId/binary, "!!", CallerId/binary, "!",

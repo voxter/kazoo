@@ -16,46 +16,45 @@
 -record(state, {}).
 
 start_link() ->
-    gen_listener:start_link(
-    	{local, ?MODULE},
-    	?MODULE,
-        [{bindings, []}, {responders, []}],
-        []
-	).
+    gen_listener:start_link({'local', ?MODULE}
+    	                    ,?MODULE
+                            ,[{'bindings', []}, {'responders', []}]
+                            ,[]
+	                       ).
 
 init([]) ->
     lager:debug("AMI: Started originator for handling AMI dials ~p", [self()]),
-    {ok, #state{}}.
+    {'ok', #state{}}.
 
 handle_call(_Request, _From, State) ->
     lager:debug("AMI: unhandled call"),
-    {reply, {error, not_implemented}, State}.
+    {'reply', {'error', 'not_implemented'}, State}.
 
 handle_cast({"originate", Props}, State) ->
 	dial(update_props(Props)),
-	{noreply, State};
+	{'noreply', State};
 handle_cast({"blindxfer", Props}, State) ->
-    control_queue_exec(update_props(Props), fun blind_transfer/3),
-    {noreply, State};
+    control_queue_exec(update_props(Props), fun blind_transfer/2),
+    {'noreply', State};
 handle_cast({"atxfer", Props}, State) ->
     attended_transfer(update_props(Props)),
-    {noreply, State};
+    {'noreply', State};
 handle_cast({"vmxfer", Props}, State) ->
-    control_queue_exec(update_props(Props), fun vm_transfer/3),
-    {noreply, State};
+    control_queue_exec(update_props(Props), fun vm_transfer/2),
+    {'noreply', State};
 handle_cast({"pickupchan", Props}, State) ->
 	pickup_channel(update_props(Props)),
-	{noreply, State};
+	{'noreply', State};
 handle_cast({"eavesdrop", Props}, State) ->
     eavesdrop_req(update_props(Props)),
-    {noreply, State};
-handle_cast({gen_listener, {created_queue, _QueueName}}, State) ->
-    {noreply, State};
-handle_cast({gen_listener, {is_consuming, _IsConsuming}}, State) ->
-    {noreply, State};
+    {'noreply', State};
+handle_cast({'gen_listener', {'created_queue', _QueueName}}, State) ->
+    {'noreply', State};
+handle_cast({'gen_listener', {'is_consuming', _IsConsuming}}, State) ->
+    {'noreply', State};
 handle_cast(Msg, State) ->
     lager:debug("Unhandled cast ~p", [Msg]),
-    {noreply, State}.
+    {'noreply', State}.
 
 dial(Props) ->
     Call = create_call_from_props(Props),
@@ -110,21 +109,19 @@ create_call_from_props(Props) ->
 %% If we can get the authorizing id from the originating channel, set some extra props
 maybe_assign_aleg_props(Props, Call) ->
     case aleg_authorizing_id(Props) of
-        {error, E} ->
+        {'error', E} ->
             lager:debug("AMI: origination could not find aleg authorizing id (~p)", [E]),
             Call;
-        {ok, AuthorizingId} ->
+        {'ok', AuthorizingId} ->
             assign_aleg_props(AuthorizingId, Props, Call)
     end.
 
 %% _id from couch for destination endpoint
 aleg_authorizing_id(Props) ->
-    ViewOptions = [{key, proplists:get_value(<<"SourceExten">>, Props)}],
+    ViewOptions = [{'key', proplists:get_value(<<"SourceExten">>, Props)}],
     case couch_mgr:get_results(proplists:get_value(<<"AccountDb">>, Props), <<"users/list_by_username">>, ViewOptions) of
-        {ok, []} ->
-            {error, endpoint_not_found};
-        {ok, [Result]} ->
-            {ok, wh_json:get_value(<<"id">>, Result)}
+        {'ok', []} -> {'error', 'endpoint_not_found'};
+        {'ok', [Result]} -> {'ok', wh_json:get_value(<<"id">>, Result)}
     end.
 
 %% Set extra props for originating channel
@@ -157,9 +154,9 @@ channel_to_exten(Channel) ->
 %% Find the endpoints associated with the user placing the originate request
 get_endpoints(Props, Call) ->
     UserId = whapps_call:authorizing_id(Call),
-    Number = proplists:get_value(<<"SourceExten">>, Props),
+    % Number = proplists:get_value(<<"SourceExten">>, Props),
     Properties = wh_json:from_list([
-        {<<"can_call_self">>, true}
+        {<<"can_call_self">>, 'true'}
     ]),
     lists:foldr(fun(EndpointId, Acc) ->
                         case cf_endpoint:build(EndpointId, Properties, aleg_cid("000", Call)) of
@@ -178,30 +175,29 @@ aleg_cid(CID, Call) ->
 
 control_queue_exec(Props, Function) ->
 	Call = props:get_value(<<"Call">>, Props),
-	WhappsCall = props:get_value(<<"call">>, Call),
 
-	case amimulator_util:control_queue(WhappsCall) of
-		{'error', E} ->
-			lager:debug("Could not fetch control queue for call (~p)", [E]);
-		{'ok', JObj} ->
-			CtrlQ = wh_json:get_value(<<"Control-Queue">>, JObj),
+	case amimulator_call:control_queue(Call) of
+		'undefined' -> 'error';
+		CtrlQ ->
     		lager:debug("Got control queue ~p", [CtrlQ]),
-			Function(Props, Call, whapps_call:set_control_queue(CtrlQ, WhappsCall))
+            Function(Props, amimulator_call:set_control_queue(CtrlQ, Call))
 	end.
 
-blind_transfer(Props, Call, WhappsCall) ->
+blind_transfer(Props, Call) ->
+    WhappsCall = amimulator_call:to_whapps_call(Call),
 	% whapps_call_command:unbridge(WhappsCall2),
 	whapps_call_command:hangup('true', WhappsCall),
 
-	SourceExten = props:get_value(<<"aleg_exten">>, Call),
-	SourceCID = props:get_value(<<"aleg_cid">>, Call),
+	SourceExten = amimulator_call:id_number(Call),
+	SourceCID = amimulator_call:id_name(Call),
 	DestExten = props:get_value(<<"Exten">>, Props),
-	CallId = whapps_call:call_id(WhappsCall),
+	CallId = amimulator_call:call_id(Call),
 	TargetCallId = <<"blind-transfer-", (wh_util:rand_hex_binary(4))/binary>>,
 
-    CCVs = props:filter_undefined([{<<"Account-ID">>, whapps_call:account_id(WhappsCall)}
-					               ,{<<"Authorizing-ID">>, whapps_call:authorizing_id(WhappsCall)}
+    CCVs = props:filter_undefined([{<<"Account-ID">>, amimulator_call:account_id(Call)}
+					               ,{<<"Authorizing-ID">>, amimulator_call:authorizing_id(Call)}
 					               ,{<<"Channel-Authorized">>, 'true'}
+                                   %% TODO add account realm to amimulator_call
 					               ,{<<"From-URI">>, <<SourceExten/binary, "@", (whapps_call:account_realm(WhappsCall))/binary>>}
 					               ,{<<"Ignore-Early-Media">>, 'true'}
 					               % ,{<<"Amimulator-Blind-Transfer">>, <<"true">>}
@@ -250,9 +246,8 @@ blind_transfer(Props, Call, WhappsCall) ->
 
 attended_transfer(Props) ->
     Call = props:get_value(<<"Call">>, Props),
-    WhappsCall = props:get_value(<<"call">>, Call),
 
-    CallId = whapps_call:call_id(WhappsCall),
+    CallId = amimulator_call:call_id(Call),
     DestExten = props:get_value(<<"Exten">>, Props),
 
     API = [{<<"Call-ID">>, CallId}
@@ -267,19 +262,20 @@ attended_transfer(Props) ->
     lager:debug("Attempting to transfer ~s to ~s", [CallId, DestExten]),
     wh_amqp_worker:cast(API, fun wapi_metaflow:publish_req/1).
 
-vm_transfer(Props, Call, WhappsCall) ->
+vm_transfer(Props, Call) ->
+    WhappsCall = amimulator_call:to_whapps_call(Call),
 	%whapps_call_command:unbridge(WhappsCall2),
 	whapps_call_command:hangup('true', WhappsCall),
 
-	SourceExten = props:get_value(<<"aleg_exten">>, Call),
-	SourceCID = props:get_value(<<"aleg_cid">>, Call),
+	SourceExten = amimulator_call:id_number(Call),
+    SourceCID = amimulator_call:id_name(Call),
     DestExten = props:get_value(<<"Exten">>, Props),
-	CallId = whapps_call:call_id(WhappsCall),
+	CallId = amimulator_call:call_id(Call),
 	TargetCallId = <<"vm-transfer-", (wh_util:rand_hex_binary(4))/binary>>,
 
     CCVs = props:filter_undefined(
-             [{<<"Account-ID">>, whapps_call:account_id(WhappsCall)}
-              ,{<<"Authorizing-ID">>, whapps_call:authorizing_id(WhappsCall)}
+             [{<<"Account-ID">>, amimulator_call:account_id(Call)}
+              ,{<<"Authorizing-ID">>, amimulator_call:authorizing_id(Call)}
               ,{<<"Channel-Authorized">>, 'true'}
               ,{<<"From-URI">>, <<SourceExten/binary, "@", (whapps_call:account_realm(WhappsCall))/binary>>}
               ,{<<"Ignore-Early-Media">>, 'true'}
@@ -329,15 +325,14 @@ vm_transfer(Props, Call, WhappsCall) ->
 pickup_channel(Props) ->
 	NewCall = create_call_from_props(Props),
 	Call = ami_sm:call_by_channel(props:get_value(<<"Data">>, Props)),
-	WhappsCall = props:get_value(<<"call">>, Call),
 
     DestExten = props:get_value(<<"aleg_exten">>, Call),
 
     CCVs = [{<<"Account-ID">>, proplists:get_value(<<"AccountId">>, Props)}
 	        ,{<<"Retain-CID">>, <<"true">>}
 	        ,{<<"Inherit-Codec">>, <<"false">>}
-	        ,{<<"Authorizing-Type">>, whapps_call:authorizing_type(WhappsCall)}
-	        ,{<<"Authorizing-ID">>, whapps_call:authorizing_id(WhappsCall)}
+	        ,{<<"Authorizing-Type">>, amimulator_call:authorizing_type(Call)}
+	        ,{<<"Authorizing-ID">>, amimulator_call:authorizing_id(Call)}
 	       ],
 
     Request = [{<<"Application-Name">>, <<"transfer">>}
@@ -370,7 +365,7 @@ eavesdrop_req(Props) ->
 
     Channel = hd(binary:split(props:get_value(<<"Data">>, Props), <<",">>)),
     DestExten = lists:nth(2, binary:split(Channel, <<"/">>)),
-    EavesdropCallId = whapps_call:call_id(props:get_value(<<"call">>, ami_sm:call_by_channel(Channel))),
+    EavesdropCallId = amimulator_call:call_id(ami_sm:call_by_channel(Channel)),
     EavesdropMode = case lists:nth(2, binary:split(props:get_value(<<"Data">>, Props), <<",">>)) of
     	<<"w">> ->
     		<<"whisper">>;
@@ -437,13 +432,13 @@ send_originate_execute(JObj, Q) ->
 
 handle_info(_Info, State) ->
     lager:debug("AMI: unhandled info"),
-    {noreply, State}.
+    {'noreply', State}.
 
 handle_event(_JObj, _State) ->
-    {reply, []}.
+    {'reply', []}.
 
 terminate(Reason, _State) ->
     lager:debug("AMI: Originator on pid ~p terminating: ~p", [self(), Reason]).
 
 code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+    {'ok', State}.
