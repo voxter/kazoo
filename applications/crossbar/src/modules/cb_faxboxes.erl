@@ -29,7 +29,7 @@
 -define(GPC_URL_REGISTER, <<?GPC_URL,"register">>).
 -define(GPC_PROXY, <<"kazoo-cloud-fax-printer-proxy">>).
 -define(GPC_PROXY_HEADER,{"X-CloudPrint-Proxy","kazoo-cloud-fax-printer-proxy"}).
--define(DEFAULT_FAX_SMTP_DOMAIN, <<"fax.kazoo.io">>).
+-define(DEFAULT_FAX_SMTP_DOMAIN, <<"fax.voxter.com">>).
 
 -define(CLOUD_STATE_FIELD, <<"pvt_cloud_state">>).
 -define(CLOUD_CLAIM_URL_FIELD, <<"pvt_cloud_connector_claim_url">>).

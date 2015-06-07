@@ -112,7 +112,7 @@ format_json_rec([Prim|Others], _) ->
     format_type(Prim) ++ "," ++ format_json_rec(Others, [Prim]);
 
 format_json_rec(V, _) ->
-    "\"" ++ binary_to_list(V) ++ "\"".
+    "\"" ++ wh_util:to_list(V) ++ "\"".
     
 format_type(Data) when not is_binary(Data) ->
     wh_util:to_list(Data);
