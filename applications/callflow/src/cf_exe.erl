@@ -17,7 +17,6 @@
 -export([queue_name/1]).
 -export([control_queue/1, control_queue/2]).
 -export([continue/1, continue/2]).
--export([force_continue/2]).
 -export([continue_with_flow/2]).
 -export([branch/2]).
 -export([stop/1]).
@@ -59,6 +58,8 @@
                 ,status = <<"sane">> :: ne_binary()
                 ,queue :: api_binary()
                 ,self = self()
+                ,stop_on_destroy = 'false' :: boolean()
+                ,destroyed = 'false' :: boolean()
                }).
 -type state() :: #state{}.
 
@@ -107,13 +108,6 @@ continue(Key, Srv) when is_pid(Srv) ->
 continue(Key, Call) ->
     Srv = whapps_call:kvs_fetch('consumer_pid', Call),
     continue(Key, Srv).
-
--spec force_continue(ne_binary(), whapps_call:call() | pid()) -> 'ok'.
-force_continue(Key, Srv) when is_pid(Srv) ->
-	gen_listener:cast(Srv, {'force_continue', Key});
-force_continue(Key, Call) ->
-	Srv = whapps_call:kvs_fetch('consumer_pid', Call),
-	force_continue(Key, Srv).
 
 -spec continue_with_flow(wh_json:object(), whapps_call:call() | pid()) -> 'ok'.
 continue_with_flow(Flow, Srv) when is_pid(Srv) ->
@@ -240,7 +234,8 @@ relay_amqp(JObj, Props) ->
                P when is_pid(P) -> [P | props:get_value('cf_event_pids', Props, [])];
                _ -> props:get_value('cf_event_pids', Props, [])
            end,
-    [whapps_call_command:relay_event(Pid, JObj) || Pid <- Pids, is_pid(Pid)].
+    [whapps_call_command:relay_event(Pid, JObj) || Pid <- Pids, is_pid(Pid)],
+    maybe_flag_destroyed(props:get_value('server', Props), wh_util:get_event_type(JObj)).
 
 -spec send_amqp(pid() | whapps_call:call(), api_terms(), wh_amqp_worker:publish_fun()) -> 'ok'.
 send_amqp(Srv, API, PubFun) when is_pid(Srv), is_function(PubFun, 1) ->
@@ -337,20 +332,19 @@ handle_call(_Request, _From, State) ->
 %%--------------------------------------------------------------------
 handle_cast({'set_call', Call}, State) ->
     {'noreply', State#state{call=Call}};
-handle_cast({'continue', Key}, #state{cf_module_pid=OldPidRef
-									  ,call=Call
+handle_cast({'continue', _}, #state{stop_on_destroy='true'
+                                    ,destroyed='true'
+                                   }=State) ->
+    lager:info("channel no longer active, not continuing"),
+    ?MODULE:hard_stop(self()),
+    {'noreply', State};
+handle_cast({'continue', Key}, #state{flow=Flow
+                                      ,cf_module_pid=OldPidRef
                                      }=State) ->
     lager:info("continuing to child '~s'", [Key]),
     maybe_stop_caring(OldPidRef),
 
-    spawn(
-      fun() ->
-    		  continue_if_still_active(Key, Call)
-      end),
-    {'noreply', State};
-handle_cast({'force_continue', Key}, #state{flow=Flow
-										   }=State) ->
-	case wh_json:get_value([<<"children">>, Key], Flow) of
+    case wh_json:get_value([<<"children">>, Key], Flow) of
         'undefined' when Key =:= <<"_">> ->
             lager:info("wildcard child does not exist, we are lost...hanging up"),
             ?MODULE:stop(self()),
@@ -377,6 +371,8 @@ handle_cast('transfer', State) ->
     {'stop', {'shutdown', 'transfer'}, State};
 handle_cast('control_usurped', State) ->
     {'stop', {'shutdown', 'control_usurped'}, State};
+handle_cast('flag_destroyed', State) ->
+    {'noreply', State#state{destroyed='true'}};
 handle_cast({'continue_with_flow', NewFlow}, State) ->
     lager:info("callflow has been reset"),
     {'noreply', launch_cf_module(State#state{flow=NewFlow})};
@@ -416,8 +412,10 @@ handle_cast('initialize', #state{call=Call}) ->
                ],
     CallWithHelpers = lists:foldr(fun(F, C) -> F(C) end, Call, Updaters),
     spawn('cf_singular_call_hooks', 'maybe_hook_call', [CallWithHelpers]),
+    StopOnDestroy = whapps_config:get_is_true(<<"callflow">>, <<"stop_on_destroy">>, 'false'),
     {'noreply', #state{call=CallWithHelpers
                        ,flow=Flow
+                       ,stop_on_destroy=StopOnDestroy
                       }};
 handle_cast({'gen_listener', {'created_queue', Q}}, #state{call=Call}=State) ->
     {'noreply', State#state{queue=Q
@@ -435,16 +433,6 @@ handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p", [_Msg]),
     {'noreply', State}.
 
--spec continue_if_still_active(ne_binary(), whapps_call:call()) -> 'ok'.
-continue_if_still_active(Key, Call) ->
-    case whapps_call_command:b_channel_status(Call) of
-        {'error', E} ->
-            lager:info("channel no longer active (~p) - not continuing", [E]),
-            ?MODULE:hard_stop(Call);
-        {'ok', _} ->
-            ?MODULE:force_continue(Key, Call)
-    end.
-
 stop_if_inactive(Call, Flow, Flows, State) ->
     try gen_server:call(whapps_call:kvs_fetch('consumer_pid', Call), 'callid', 3000) of
         CallId ->
@@ -460,7 +448,6 @@ stop_if_inactive(Call, Flow, Flows, State) ->
         lager:info("channel no longer active, hard stop!"),
         {'stop', 'normal', State}
     end.
-    
     
 -spec event_listener_name(whapps_call:call(), atom() | ne_binary()) -> ne_binary().
 event_listener_name(Call, Module) ->
@@ -542,6 +529,10 @@ handle_event(JObj, #state{cf_module_pid=PidRef
                                ,{'cf_event_pids', Others}
                               ]}
             end;
+        {{<<"call_event">>, <<"CHANNEL_DESTROY">>}, CallId} ->
+            {'reply', [{'cf_module_pid', get_pid(PidRef)}
+                       ,{'cf_event_pids', Others}
+                      ]};
         {{<<"call_event">>, <<"usurp_control">>}, CallId} ->
             _ = case whapps_call:custom_channel_var(<<"Fetch-ID">>, Call)
                     =:= wh_json:get_value(<<"Fetch-ID">>, JObj)
@@ -549,6 +540,9 @@ handle_event(JObj, #state{cf_module_pid=PidRef
                     'false' -> control_usurped(Self);
                     'true' -> 'ok'
                 end,
+            'ignore';
+        {{<<"konami">>, <<"callback_reg">>}, _} ->
+            relay_amqp(JObj, [{'cf_module_pid', get_pid(PidRef)}]),
             'ignore';
         {{<<"error">>, _}, _} ->
             case wh_json:get_value([<<"Request">>, <<"Call-ID">>], JObj) of
@@ -711,6 +705,12 @@ spawn_cf_module(CFModule, Data, Call) ->
 -spec send_amqp_message(api_terms(), wh_amqp_worker:publish_fun(), ne_binary()) -> 'ok'.
 send_amqp_message(API, PubFun, Q) ->
     PubFun(add_server_id(API, Q)).
+
+-spec maybe_flag_destroyed(pid(), {api_binary(), api_binary()}) -> any().
+maybe_flag_destroyed(Srv, {<<"call_event">>, <<"CHANNEL_DESTROY">>}) ->
+    gen_listener:cast(Srv, 'flag_destroyed');
+maybe_flag_destroyed(_, _) ->
+    'ok'.
 
 -spec send_command(wh_proplist(), api_binary(), api_binary()) -> 'ok'.
 send_command(_, 'undefined', _) -> lager:debug("no control queue to send command to");

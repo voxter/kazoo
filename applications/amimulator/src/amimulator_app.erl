@@ -12,7 +12,7 @@
 
 -include_lib("whistle/include/wh_types.hrl").
 
--export([start/2, stop/1]).
+-export([start/2, prep_stop/1, stop/1]).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -25,6 +25,17 @@
                    {'error', startlink_err()}.
 start(_Type, _Args) ->
     amimulator:start_link().
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Implement the application prep_stop behaviour
+%% @end
+%%--------------------------------------------------------------------
+-spec prep_stop(term()) -> term().
+prep_stop(State) ->
+    amimulator:before_stop(),
+    State.
 
 %%--------------------------------------------------------------------
 %% @public

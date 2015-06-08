@@ -50,7 +50,7 @@ maybe_handle_bridge_failure(Reason, Call) ->
 -spec bridge_to_endpoints(wh_json:object(), whapps_call:call()) ->
                                  cf_api_bridge_return().
 bridge_to_endpoints(Data, Call) ->
-    EndpointId = wh_json:get_value(<<"id">>, Data),
+    EndpointId = maybe_use_variable(Data, Call),
     Params = wh_json:set_value(<<"source">>, ?MODULE, Data),
     case cf_endpoint:build(EndpointId, Params, Call) of
         {'error', _}=E -> E;
@@ -58,4 +58,13 @@ bridge_to_endpoints(Data, Call) ->
             Timeout = wh_json:get_integer_value(<<"timeout">>, Data, ?DEFAULT_TIMEOUT_S),
             IgnoreEarlyMedia = cf_util:ignore_early_media(Endpoints),
             whapps_call_command:b_bridge(Endpoints, Timeout, <<"simultaneous">>, IgnoreEarlyMedia, Call)
+    end.
+
+-spec maybe_use_variable(wh_json:object(), whapps_call:call()) -> api_binary().
+maybe_use_variable(Data, Call) ->
+    case wh_json:get_value(<<"var">>, Data) of
+        'undefined' ->
+            wh_json:get_value(<<"id">>, Data);
+        Variable ->
+            whapps_call:custom_channel_var(Variable, Call)
     end.

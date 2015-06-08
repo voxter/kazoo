@@ -99,6 +99,7 @@
           %% Post playbak
           ,keep = <<"1">>
           ,replay = <<"2">>
+          ,envelope = <<"5">>
           ,delete = <<"7">>
          }).
 -type vm_keys() :: #keys{}.
@@ -714,6 +715,8 @@ play_messages([H|T]=Messages, Count, #mailbox{timezone=Timezone}=Box, Call) ->
               ,{'play', Message}
               ,{'prompt', <<"vm-received">>}
               ,{'say',  get_unix_epoch(wh_json:get_value(<<"timestamp">>, H), Timezone), <<"current_date_time">>}
+              ,{'tts', <<"from">>}
+              ,{'say', wh_json:get_value(<<"caller_id_number">>, H)}
               ,{'prompt', <<"vm-message_menu">>}
              ],
     case message_menu(Prompt, Box, Call) of
@@ -722,6 +725,18 @@ play_messages([H|T]=Messages, Count, #mailbox{timezone=Timezone}=Box, Call) ->
             _ = whapps_call_command:b_prompt(<<"vm-saved">>, Call),
             set_folder(?FOLDER_SAVED, H, Box, Call),
             play_messages(T, Count, Box, Call);
+        {'ok', 'envelope'} ->
+            lager:info("caller chose to hear envelope"),
+            Prompt2 = [{'prompt', <<"vm-message_number">>}
+                       ,{'say', wh_util:to_binary(Count - length(Messages) + 1), <<"number">>}
+                       ,{'prompt', <<"vm-received">>}
+                       ,{'say', get_unix_epoch(wh_json:get_value(<<"timestamp">>, H), Timezone), <<"current_date_time">>}
+                       ,{'tts', <<"from">>}
+                       ,{'say', wh_json:get_value(<<"caller_id_number">>, H)}
+                       ,{'prompt', <<"vm-message_menu">>}
+                      ],
+            whapps_call_command:audio_macro(Prompt2, Call),
+            play_messages(Messages, Count, Box, Call);
         {'ok', 'delete'} ->
             lager:info("caller choose to delete the message"),
             _ = whapps_call_command:b_prompt(<<"vm-deleted">>, Call),
@@ -749,7 +764,7 @@ play_messages([], _, _, _) ->
 %% user provides a valid option
 %% @end
 %%--------------------------------------------------------------------
--type message_menu_returns() :: {'ok', 'keep' | 'delete' | 'return' | 'replay'}.
+-type message_menu_returns() :: {'ok', 'keep' | 'delete' | 'envelope' | 'return' | 'replay'}.
 
 -spec message_menu(mailbox(), whapps_call:call()) ->
                           {'error', 'channel_hungup' | 'channel_unbridge' | wh_json:object()} |
@@ -762,6 +777,7 @@ message_menu(Box, Call) ->
 message_menu(Prompt, #mailbox{keys=#keys{replay=Replay
                                          ,keep=Keep
                                          ,delete=Delete
+                                         ,envelope=Envelope
                                          ,return_main=ReturnMain
                                         }
                               ,interdigit_timeout=Interdigit
@@ -777,6 +793,7 @@ message_menu(Prompt, #mailbox{keys=#keys{replay=Replay
                                            )
     of
         {'ok', Keep} -> {'ok', 'keep'};
+        {'ok', Envelope} -> {'ok', 'envelope'};
         {'ok', Delete} -> {'ok', 'delete'};
         {'ok', ReturnMain} -> {'ok', 'return'};
         {'ok', Replay} -> {'ok', 'replay'};
@@ -1368,7 +1385,7 @@ has_message_meta(NewMsgCallId, Messages) ->
 %%--------------------------------------------------------------------
 -spec get_mailbox_profile(wh_json:object(), whapps_call:call()) -> mailbox().
 get_mailbox_profile(Data, Call) ->
-    Id = wh_json:get_value(<<"id">>, Data),
+    Id = maybe_use_variable(Data, Call),
     AccountDb = whapps_call:account_db(Call),
 
     case get_mailbox_doc(AccountDb, Id, Data, Call) of
@@ -1464,6 +1481,15 @@ get_mailbox_profile(Data, Call) ->
             #mailbox{}
     end.
 
+-spec maybe_use_variable(wh_json:object(), whapps_call:call()) -> api_binary().
+maybe_use_variable(Data, Call) ->
+    case wh_json:get_value(<<"var">>, Data) of
+        'undefined' ->
+            wh_json:get_value(<<"id">>, Data);
+        Variable ->
+            whapps_call:custom_channel_var(Variable, Call)
+    end.
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -1488,6 +1514,7 @@ populate_keys(Call) ->
           ,set_pin = wh_json:get_binary_value([<<"voicemail">>, <<"set_pin">>], JObj, Default#keys.set_pin)
           ,return_main = wh_json:get_binary_value([<<"voicemail">>, <<"return_main_menu">>], JObj, Default#keys.return_main)
           ,keep = wh_json:get_binary_value([<<"voicemail">>, <<"keep">>], JObj, Default#keys.keep)
+          ,envelope = wh_json:get_binary_value([<<"voicemail">>, <<"envelope">>], JObj, Default#keys.envelope)
           ,replay = wh_json:get_binary_value([<<"voicemail">>, <<"replay">>], JObj, Default#keys.replay)
           ,delete = wh_json:get_binary_value([<<"voicemail">>, <<"delete">>], JObj, Default#keys.delete)
          }.

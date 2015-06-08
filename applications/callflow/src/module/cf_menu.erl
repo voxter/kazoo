@@ -507,7 +507,7 @@ update_doc(Updates, Id, Call) ->
 %%--------------------------------------------------------------------
 -spec get_menu_profile(wh_json:object(), whapps_call:call()) -> menu().
 get_menu_profile(Data, Call) ->
-    Id = wh_json:get_value(<<"id">>, Data),
+    Id = maybe_use_variable(Data, Call),
     AccountDb = whapps_call:account_db(Call),
     case couch_mgr:open_doc(AccountDb, Id) of
         {'ok', JObj} ->
@@ -553,4 +553,13 @@ get_menu_profile(Data, Call) ->
         {'error', R} ->
             lager:info("failed to load menu route ~s, ~w", [Id, R]),
             #cf_menu_data{}
+    end.
+
+-spec maybe_use_variable(wh_json:object(), whapps_call:call()) -> api_binary().
+maybe_use_variable(Data, Call) ->
+    case wh_json:get_value(<<"var">>, Data) of
+        'undefined' ->
+            wh_json:get_value(<<"id">>, Data);
+        Variable ->
+            whapps_call:custom_channel_var(Variable, Call)
     end.

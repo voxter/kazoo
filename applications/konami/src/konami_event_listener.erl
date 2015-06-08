@@ -21,6 +21,7 @@
          ,bindings/0, bindings/1
          ,originate/1
 
+         ,fsms_for_callid/1
          ,fsms/0, metaflows/0
         ]).
 

@@ -35,7 +35,7 @@
 %%--------------------------------------------------------------------
 -spec handle(wh_json:object(), whapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
-    QueueId = wh_json:get_value(<<"id">>, Data),
+    QueueId = maybe_use_variable(Data, Call),
     lager:info("sending call to queue ~s", [QueueId]),
 
     MemberCall = props:filter_undefined(
@@ -51,7 +51,12 @@ handle(Data, Call) ->
     MaxWait = max_wait(wh_json:get_integer_value(<<"connection_timeout">>, QueueJObj, 3600)),
     MaxQueueSize = max_queue_size(wh_json:get_integer_value(<<"max_queue_size">>, QueueJObj, 0)),
 
-    Call1 = whapps_call:kvs_store('caller_exit_key', wh_json:get_value(<<"caller_exit_key">>, QueueJObj, <<"#">>), Call),
+    Call1 = case wh_json:get_value(<<"metaflows">>, QueueJObj) of
+        'undefined' ->
+            whapps_call:kvs_store('caller_exit_key', wh_json:get_value(<<"caller_exit_key">>, QueueJObj, <<"#">>), Call);
+        _Metaflows ->
+            Call
+    end,
 
     CurrQueueSize = wapi_acdc_queue:queue_size(whapps_call:account_id(Call1), QueueId),
 
@@ -64,6 +69,15 @@ handle(Data, Call) ->
                                   }
                       ,is_queue_full(MaxQueueSize, CurrQueueSize)
                      ).
+
+-spec maybe_use_variable(wh_json:object(), whapps_call:call()) -> api_binary().
+maybe_use_variable(Data, Call) ->
+    case wh_json:get_value(<<"var">>, Data) of
+        'undefined' ->
+            wh_json:get_value(<<"id">>, Data);
+        Variable ->
+            whapps_call:custom_channel_var(Variable, Call)
+    end.
 
 -spec maybe_enter_queue(member_call(), boolean()) -> any().
 maybe_enter_queue(#member_call{call=Call}, 'true') ->
@@ -109,6 +123,9 @@ end_member_call(Call) ->
                       ,wh_now(), wh_json:object()
                       ,{ne_binary(), ne_binary()}
                      ) -> 'ok'.
+process_message(#member_call{call=Call}, _, _Start, _Wait, _JObj, {<<"konami">>,<<"callback_reg">>}) ->
+    lager:debug("a callback was requested. Terminating callflow"),
+    cf_exe:control_usurped(Call);
 process_message(#member_call{call=Call}, _, Start, _Wait, _JObj, {<<"call_event">>,<<"CHANNEL_BRIDGE">>}) ->
     lager:info("member was bridged to agent, yay! took ~b s", [wh_util:elapsed_s(Start)]),
     cf_exe:control_usurped(Call);
