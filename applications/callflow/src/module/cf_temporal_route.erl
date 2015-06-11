@@ -55,7 +55,7 @@ handle(Data, Call) ->
             cf_exe:stop(Call);
         _ ->
             Rules = get_temporal_rules(Temporal, Call),
-            case process_rules(Temporal, Rules, Call) of
+            case process_rules(Temporal, Rules, Call, []) of
                 'default' ->
                     cf_exe:continue(Call);
                 ChildId ->
@@ -67,27 +67,24 @@ handle(Data, Call) ->
 %% @private
 %% @doc
 %% Test all rules in reference to the current temporal routes, and
-%% returns the first valid callflow, or the default.
+%% extracts potential valid routes. If none, returns default route.
 %% @end
 %%--------------------------------------------------------------------
--spec process_rules(temporal(), rules(), whapps_call:call()) ->
+-spec process_rules(temporal(), rules(), whapps_call:call(), rules()) ->
                            'default' | binary().
 process_rules(Temporal, [#rule{enabled='false'
                                ,id=Id
                                ,name=Name
-                              }|Rs], Call) ->
+                              }|Rs], Call, ApplicableRules) ->
     lager:info("time based rule ~s (~s) disabled", [Id, Name]),
-    process_rules(Temporal, Rs, Call);
-process_rules(_, [#rule{enabled='true'
-                        ,id=Id
-                        ,name=Name
-                        ,rule_set=RuleSet
-                       }|_], _) ->
+    process_rules(Temporal, Rs, Call, ApplicableRules);
+process_rules(Temporal, [#rule{enabled='true'
+                               ,id=Id
+                               ,name=Name
+                               ,rule_set=RuleSet
+                              }=R|Rs], Call, ApplicableRules) ->
     lager:info("time based rule ~s (~s) is forced active part of rule set? ~p", [Id, Name, RuleSet]),
-    case RuleSet of
-        'true' -> <<"rule_set">>;
-        'false' -> Id
-    end;
+    process_rules(Temporal, Rs, Call, [R | ApplicableRules]);
 process_rules(#temporal{local_sec=LSec, local_date={Y, M, D}}=T
               ,[#rule{id=Id
                       ,name=Name
@@ -95,7 +92,8 @@ process_rules(#temporal{local_sec=LSec, local_date={Y, M, D}}=T
                       ,wtime_stop=TStop
                       ,rule_set=RuleSet
                      }=R|Rs]
-              ,Call) ->
+              ,Call
+              ,ApplicableRules) ->
     lager:info("processing temporal rule ~s (~s) part of rule set? ~p", [Id, Name, RuleSet]),
     PrevDay = normalize_date({Y, M, D - 1}),
     BaseDate = next_rule_date(R, PrevDay),
@@ -103,20 +101,107 @@ process_rules(#temporal{local_sec=LSec, local_date={Y, M, D}}=T
     case {BastTime + TStart, BastTime + TStop} of
         {Start, _} when LSec < Start ->
             lager:info("rule applies in the future ~w", [calendar:gregorian_seconds_to_datetime(Start)]),
-            process_rules(T, Rs, Call);
+            process_rules(T, Rs, Call, ApplicableRules);
         {_, End} when LSec > End ->
             lager:info("rule was valid today but expired ~w", [calendar:gregorian_seconds_to_datetime(End)]),
-            process_rules(T, Rs, Call);
+            process_rules(T, Rs, Call, ApplicableRules);
         {_, End} ->
             lager:info("within active time window until ~w", [calendar:gregorian_seconds_to_datetime(End)]),
-            case RuleSet of
-                'true' -> <<"rule_set">>;
-                'false' -> Id
-            end
+            process_rules(T, Rs, Call, [R | ApplicableRules])
     end;
-process_rules(_, [], _) ->
+process_rules(_, [], _, []) ->
     lager:info("continuing with default callflow"),
-    'default'.
+    'default';
+process_rules(Temporal, [], _, ApplicableRules) ->
+    process_most_specific_rule(Temporal, ApplicableRules).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns the route that is most specific (occurs the fewest times)
+%% in the calendar year
+%% @end
+%%--------------------------------------------------------------------
+-spec process_most_specific_rule(temporal(), rules()) -> binary() | 'default'.
+process_most_specific_rule(Temporal, ApplicableRules) ->
+    process_most_specific_rule(Temporal, ApplicableRules, 'default').
+
+-spec process_most_specific_rule(temporal(), rules(), rule() | 'default') -> binary() | 'default'.
+process_most_specific_rule(_Temporal, [], 'default') ->
+    'default';
+process_most_specific_rule(_Temporal, [], #rule{id=Id
+                                                ,rule_set=RuleSet
+                                               }) ->
+    case RuleSet of
+        'true' -> <<"rule_set">>;
+        'false' -> Id
+    end;
+process_most_specific_rule(#temporal{local_date=Date}=Temporal, [R|Rs], Candidate) ->
+    process_most_specific_rule(Temporal, Rs, most_specific_rule(Date, R, Candidate)).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec most_specific_rule(wh_date(), rule(), rule() | 'default') -> rule().
+most_specific_rule(_Date, #rule{name=Name}=Rule, 'default') ->
+    lager:debug("rule ~s is initial candidate", [Name]),
+    Rule;
+most_specific_rule(Date, #rule{name=Name}=Rule, #rule{name=OldName}=OldRule) ->
+    Rate1 = occurrence_rate(Date, Rule),
+    Rate2 = occurrence_rate(Date, OldRule),
+    if Rate1 < Rate2 ->
+        lager:debug("rule ~s is more specific than ~s", [Name, OldName]),
+        Rule;
+    'true' ->
+        OldRule
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Number of seconds per year that a rule is applicable
+%% @end
+%%--------------------------------------------------------------------
+-spec occurrence_rate(wh_date(), rule()) -> pos_integer().
+occurrence_rate(_Date, #rule{cycle = <<"date">>
+                             ,wtime_start=Start
+                             ,wtime_stop=Stop
+                            }) ->
+    (Stop - Start);
+% occurrence_rate({Y, _M, _D}, #rule{cycle = <<"daily">>
+%                                  ,interval=I0
+%                                  ,start_date={Y, M0, D0}
+%                                 }) ->
+%     (calendar:datetime_to_gregorian_seconds({{Y+1, 1, 1}, {0, 0, 0}}) -
+%       calendar:datetime_to_gregorian_seconds({{Y, M0, D0}, {0, 0, 0}})) /
+%       I0;
+occurrence_rate(_Date, #rule{cycle = <<"daily">>
+                             ,interval=I0
+                             ,wtime_start=Start
+                             ,wtime_stop=Stop
+                            }) ->
+    (Stop - Start) * 365 / I0;
+occurrence_rate(_Date, #rule{cycle = <<"weekly">>
+                             ,interval=I0
+                             ,wdays=Weekdays
+                             ,wtime_start=Start
+                             ,wtime_stop=Stop
+                            }) ->
+    %% Estimating number of weeks in a year
+    (Stop - Start) * (365 / 7) * length(Weekdays) / I0;
+occurrence_rate(_Date, #rule{cycle = <<"monthly">>
+                             ,interval=I0
+                             ,wtime_start=Start
+                             ,wtime_stop=Stop
+                            }) ->
+    (Stop - Start) * 12 / I0;
+occurrence_rate(_Date, #rule{cycle = <<"yearly">>
+                             ,wtime_start=Start
+                             ,wtime_stop=Stop
+                            }) ->
+    (Stop - Start).
 
 %%--------------------------------------------------------------------
 %% @private
