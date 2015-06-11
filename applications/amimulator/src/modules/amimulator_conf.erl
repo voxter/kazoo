@@ -1,6 +1,6 @@
 -module(amimulator_conf).
 
--export([init/1, bindings/1, responders/1, handle_event/1]).
+-export([init/1, bindings/1, responders/1, handle_event/2]).
 
 -include("../amimulator.hrl").
 
@@ -22,9 +22,10 @@ bindings(Props) ->
 responders(_Props) ->
     [{<<"conference">>, <<"participants_event">>}].
 
-handle_event(EventJObj) ->
+handle_event(EventJObj, Props) ->
+    AccountId = props:get_value(<<"AccountId">>, Props),
     {_EventType, EventName} = wh_util:get_event_type(EventJObj),
-    handle_specific_event(EventName, EventJObj).
+    handle_specific_event(EventName, wh_json:set_value(<<"Account-ID">>, AccountId, EventJObj)).
 
 %%
 %% Event type handlers
@@ -32,7 +33,7 @@ handle_event(EventJObj) ->
 
 handle_specific_event(<<"participants_event">>, EventJObj) ->
     Payload = participants_cache_change(EventJObj),
-    ami_ev:publish_amqp_event({publish, Payload});
+    amimulator_event_listener:publish_amqp_event({publish, Payload});
 handle_specific_event(_, EventJObj) ->
     lager:debug("unhandled event ~p", [EventJObj]).
 
@@ -150,9 +151,9 @@ added(CallIds, ConferenceNumber) when is_list(CallIds) ->
 added(CallId, ConferenceNumber) ->
     Call = ami_sm:call(CallId),
 
-    _Exten = props:get_value(<<"aleg_exten">>, Call),
-    EndpointName = props:get_value(<<"aleg_ami_channel">>, Call),
-    CallerId = props:get_value(<<"aleg_cid">>, Call),
+    _Exten = amimulator_call:id_number(Call),
+    EndpointName = amimulator_call:channel(Call),
+    CallerId = amimulator_call:id_name(Call),
 
     [
         {<<"Event">>, <<"MeetmeJoin">>},

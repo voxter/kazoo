@@ -4,17 +4,19 @@
 
 -include("../amimulator.hrl").
 
--export([start_link/2]).
+-export([start_link/2, start_link/3]).
 -export([new_call/2
          ,answer/2
          ,bridge/3
          ,destroy/3
+         ,join_queue/3
          ,monitoring/2
         ]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 -export([pre_create/2
          ,created/2
          ,answered/2
+         ,queued/2
         ]).
 
 -define(STATE_UP, 6).
@@ -32,6 +34,9 @@
 start_link(Super, Call) ->
     gen_fsm:start_link(?MODULE, [Super, Call], []).
 
+start_link(Super, Call, 'initial') ->
+    gen_fsm:start_link(?MODULE, [Super, Call, 'initial'], []).
+
 -spec new_call(pid(), amimulator_call:call()) -> 'ok'.
 new_call(FSM, Call) ->
     gen_fsm:send_event(FSM, {'new_call', Call}).
@@ -48,6 +53,10 @@ bridge(FSM, Call, OtherCall) ->
 destroy(FSM, Reason, Call) ->
     gen_fsm:send_event(FSM, {'destroy', Reason, Call}).
 
+-spec join_queue(pid(), api_binary(), amimulator_call:call()) -> 'ok'.
+join_queue(FSM, QueueId, Call) ->
+    gen_fsm:send_event(FSM, {'join_queue', QueueId, Call}).
+
 -spec monitoring(pid(), amimulator_call:call()) -> boolean().
 monitoring(FSM, Call) ->
     gen_fsm:sync_send_all_state_event(FSM, {'monitoring', amimulator_call:channel(Call)}).
@@ -59,8 +68,21 @@ monitoring(FSM, Call) ->
 init([Super, Call]) ->
     {'ok', 'pre_create', #state{supervisor=Super
                           ,monitored_channel = amimulator_call:channel(Call)
-                         }}.
+                         }};
+init([Super, Call, 'initial']) ->
+    lager:debug("catching up to correct start for call ~p", [amimulator_call:call_id(Call)]),
+    initialize(Super, Call).
 
+handle_event({'initialize', Call}, _, #state{calls=Calls
+                                             ,answered='undefined'
+                                            }=State) ->
+    lager:debug("received initialize with call ~p", [Call]),
+    case amimulator_call:answered(Call) of
+        'true' -> {'next_state', 'answered', State#state{calls = [Call], answered=Call}};
+        'false' -> {'next_state', 'created', State#state{calls = [Call | Calls]}}
+    end;
+handle_event({'initialize', _}, StateName, State) ->
+    {'next_state', StateName, State};
 handle_event(Event, StateName, State) ->
     lager:debug("unhandled event in state ~s: ~p", [StateName, Event]),
     {'next_state', StateName, State}.
@@ -93,12 +115,15 @@ pre_create({'new_call', Call}, #state{calls=Calls
                                       ,answered=Answered
                                      }=State) ->
     new_channel_event(amimulator_call:direction(Call), Call),
-    extension_status(Call),
     maybe_dial_event(Call),
+    extension_status(Call),
     new_state(amimulator_call:direction(Call), Call),
     maybe_change_agent_status(Call),
 
     maybe_already_answered(Answered),
+
+    %% The second leg of a call might update CID of first
+    maybe_update_other_call_dest(amimulator_call:call_id(Call), amimulator_call:other_leg_call_id(Call), Call),
 
     {'next_state', 'created', State#state{calls = [Call | Calls]}};
 
@@ -133,7 +158,13 @@ created({'destroy', _, Call}, #state{monitored_channel=Channel
 
 created({'destroy', Reason, Call}, State) ->
     destroy_channel(Reason, Call),
-    {'stop', 'destroyed', State}.
+    {'stop', 'destroyed', State};
+
+created({'join_queue', QueueId, Call}, State) ->
+    QueueCall = fork_queue_call(QueueId, Call),
+    new_channel_event(amimulator_call:direction(QueueCall), QueueCall),
+    ami_sm:update_call(amimulator_call:set_other_leg_call_id(amimulator_call:call_id(QueueCall), Call)),
+    {'next_state', 'created', State#state{queue_call=QueueCall}}.
 
 answered({'new_call', Call}, #state{calls=Calls}=State) ->
     {'next_state', 'answered', State#state{calls = [Call | Calls]}};
@@ -152,22 +183,63 @@ answered({'bridge', Call, OtherCall}, State) ->
 
     {'next_state', 'answered', State#state{answered=Call2}};
 
-answered({'destroy', Reason, Call}, #state{answered=Call}=State) ->
-    destroy_channel(Reason, Call),
-    {'stop', 'destroyed', State};
-
-answered({'destroy', _, _}, State) ->
-    {'next_state', 'answered', State}.
+answered({'destroy', Reason, Call}, #state{answered=Answered}=State) ->
+    CallId = amimulator_call:call_id(Call),
+    AnsweredCallId = amimulator_call:call_id(Answered),
+    if CallId =:= AnsweredCallId ->
+        destroy_channel(Reason, Call),
+        {'stop', 'destroyed', State};
+    'true' ->
+        ami_sm:delete_call(CallId),
+        {'next_state', 'answered', State}
+    end.
 
 %%
 %% private functions
 %%
 
--spec maybe_already_answered(amimulator_call:call() | 'undefined') -> 'ok'.
-maybe_already_answered('undefined') ->
+% -spec initialize(
+initialize(Super, Call) ->
+    State = #state{supervisor=Super
+                   ,monitored_channel = amimulator_call:channel(Call)
+                   ,calls = [Call]
+                  },
+    maybe_already_answered(Call, State).
+
+% -spec maybe_already_answered(amimulator_call:call() | 'undefined') -> 'ok'.
+maybe_already_answered() ->
+    case amimulator_call:answered(Call) of
+        'true' -> 
+
+
+
+
     'ok';
 maybe_already_answered(Call) ->
     answer(self(), Call).
+
+-spec maybe_update_other_call_dest(api_binary(), api_binary(), amimulator_call:call()) -> 'ok'.
+maybe_update_other_call_dest(_, 'undefined', _) ->
+    'ok';
+maybe_update_other_call_dest(CallId, CallId, _) ->
+    'ok';
+maybe_update_other_call_dest(_, OtherCallId, Call) ->
+    OtherCall = ami_sm:call(OtherCallId),
+    ami_sm:update_call(amimulator_call:update_from_other(Call, OtherCall)).
+
+-spec fork_queue_call(api_binary(), amimulator_call:call()) -> amimulator_call:call().
+fork_queue_call(QueueId, Call) ->
+    Updaters = [fun(Call2) ->
+                    QueueCallId = <<(amimulator_call:call_id(Call2))/binary, "-queue">>,
+                    amimulator_call:set_call_id(QueueCallId, Call2)
+                end
+                ,fun(Call2) -> amimulator_call:set_other_leg_call_id(amimulator_call:call_id(Call), Call2) end
+                ,fun(Call2) -> amimulator_call:set_acdc_queue_id(QueueId, Call2) end
+                ,fun(Call2) -> amimulator_call:set_channel(Call2) end
+               ],
+    QueueCall = lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters),
+    ami_sm:new_call(QueueCall),
+    QueueCall.
 
 new_channel_event(<<"inbound">>, Call) ->
     CallId = amimulator_call:call_id(Call),
@@ -182,7 +254,7 @@ new_channel_event(<<"inbound">>, Call) ->
     end,
 
     Payload = new_channel_payload(EndpointName, SourceCID, SourceCID, DestExten, CallId),
-    ami_ev:publish_amqp_event({'publish', Payload});
+    amimulator_event_listener:publish_amqp_event({'publish', Payload});
 new_channel_event(<<"outbound">>, Call) ->
     CallId = amimulator_call:call_id(Call),
     SourceCID = amimulator_call:other_id_name(Call),
@@ -197,7 +269,7 @@ new_channel_event(<<"outbound">>, Call) ->
     % end,
 
     Payload = new_channel_payload(EndpointName, SourceCID, SourceCID, CallId),
-    ami_ev:publish_amqp_event({'publish', Payload}).
+    amimulator_event_listener:publish_amqp_event({'publish', Payload}).
 
 new_channel_payload(Channel, CallerIDNum, CallerIDName, Uniqueid) ->
     new_channel_payload(Channel, CallerIDNum, CallerIDName, <<"">>, Uniqueid).
@@ -231,13 +303,29 @@ extension_status(Call) ->
         {<<"Hint">>, <<"SIP/", SourceExten/binary, ",CustomPresence:", SourceExten/binary>>},
         {<<"Status">>, Status}
     ],
-    ami_ev:publish_amqp_event({'publish', Payload}).
+    amimulator_event_listener:publish_amqp_event({'publish', Payload}).
 
 maybe_dial_event(Call) ->
     dial_event(amimulator_call:other_leg_call_id(Call), Call).
 
-dial_event('undefined', _) ->
-    'ok';
+dial_event('undefined', Call) ->
+    CallId = amimulator_call:call_id(Call),
+    EndpointName = amimulator_call:channel(Call),
+    SourceExten = amimulator_call:id_number(Call),
+    DestExten = amimulator_call:other_id_number(Call),
+    SourceCID = if (DestExten =:= SourceExten) or (DestExten =:= <<"*97">>) ->
+        <<"Voicemail">>;
+    'true' ->
+        amimulator_call:id_name(Call)
+    end,
+    DestCID = amimulator_call:other_id_name(Call),
+
+    case amimulator_call:direction(Call) of
+        <<"inbound">> ->
+            Payload = dial(EndpointName, 'undefined', SourceCID, SourceCID, DestCID, DestCID, CallId, 'undefined', DestCID),
+            amimulator_event_listener:publish_amqp_event({'publish', Payload});
+        _ -> 'ok'
+    end;
 dial_event(OtherCallId, Call) ->
     CallId = amimulator_call:call_id(Call),
     SourceExten = amimulator_call:id_number(Call),
@@ -295,7 +383,7 @@ dial_event(OtherCallId, Call) ->
                     'ok';
                 _ ->
                     Payload = dial(OtherEndpointName, EndpointName, OtherCID, OtherCID, CID, CID, OtherCallId, CallId, CID),
-                    ami_ev:publish_amqp_event({'publish', Payload})
+                    amimulator_event_listener:publish_amqp_event({'publish', Payload})
             end
     end.
 
@@ -357,7 +445,7 @@ bridge_and_dial(SourceChannel, DestChannel, SourceCallId, DestCallId, SourceCID,
         {<<"DestUniqueid">>, DestCallId},
         {<<"Dialstring">>, DestCID}
     ]],
-    ami_ev:publish_amqp_event({publish, Payload}).
+    amimulator_event_listener:publish_amqp_event({publish, Payload}).
 
 new_state(<<"inbound">>, Call) ->
     CallId = amimulator_call:call_id(Call),
@@ -368,7 +456,7 @@ new_state(<<"inbound">>, Call) ->
     OtherCID = if (DestExten =:= SourceExten) or (DestExten =:= <<"*97">>) ->
         <<"Voicemail">>;
     'true' ->
-        amimulator_call:id_name(Call)
+        amimulator_call:other_id_name(Call)
     end,
 
     % OtherCID = case DestExten of
@@ -391,10 +479,9 @@ new_state(<<"inbound">>, Call) ->
         {<<"ConnectedLineName">>, <<"">>},
         {<<"Uniqueid">>, CallId}
     ],
-    ami_ev:publish_amqp_event({'publish', Payload});
+    amimulator_event_listener:publish_amqp_event({'publish', Payload});
 new_state(<<"outbound">>, Call) ->
     CallId = amimulator_call:call_id(Call),
-    SourceCID = amimulator_call:id_name(Call),
     OtherCID = amimulator_call:other_id_name(Call),
     EndpointName = amimulator_call:channel(Call),
 
@@ -425,27 +512,21 @@ new_state(<<"outbound">>, Call) ->
     %         end
     % end,
 
-    case ami_sm:maybe_ringing(EndpointName, CallId) of
-        'true' ->
-            Payload = [
-                {<<"Event">>, <<"Newstate">>},
-                {<<"Privilege">>, <<"call,all">>},
-                {<<"Channel">>, EndpointName},
-                {<<"ChannelState">>, 5},
-                {<<"ChannelStateDesc">>, <<"Ringing">>},
-                {<<"CallerIDNum">>, SourceCID},
-                {<<"CallerIDName">>, SourceCID},
-                {<<"ConnectedLineNum">>, OtherCID},
-                {<<"ConnectedLineName">>, OtherCID},
-                {<<"Uniqueid">>, CallId}
-            ],
-            ami_ev:publish_amqp_event({'publish', Payload});
-        'false' ->
-            'ok'
-    end.
+    Payload = [
+        {<<"Event">>, <<"Newstate">>},
+        {<<"Privilege">>, <<"call,all">>},
+        {<<"Channel">>, EndpointName},
+        {<<"ChannelState">>, 5},
+        {<<"ChannelStateDesc">>, <<"Ringing">>},
+        {<<"CallerIDNum">>, OtherCID},
+        {<<"CallerIDName">>, OtherCID},
+        {<<"ConnectedLineNum">>, OtherCID},
+        {<<"ConnectedLineName">>, OtherCID},
+        {<<"Uniqueid">>, CallId}
+    ],
+    amimulator_event_listener:publish_amqp_event({'publish', Payload}).
 
 busy_state(Call, CallId) ->
-    SourceCID = amimulator_call:id_name(Call),
     EndpointName = amimulator_call:channel(Call),
     OtherCID = amimulator_call:other_id_name(Call),
 
@@ -477,13 +558,13 @@ busy_state(Call, CallId) ->
         {<<"Channel">>, EndpointName},
         {<<"ChannelState">>, ?STATE_UP},
         {<<"ChannelStateDesc">>, <<"Up">>},
-        {<<"CallerIDNum">>, SourceCID},
-        {<<"CallerIDName">>, SourceCID},
-        {<<"ConnectedLineNum">>, OtherCID},
-        {<<"ConnectedLineName">>, OtherCID},
+        {<<"CallerIDNum">>, OtherCID},
+        {<<"CallerIDName">>, OtherCID},
+        % {<<"ConnectedLineNum">>, OtherCID},
+        % {<<"ConnectedLineName">>, OtherCID},
         {<<"Uniqueid">>, CallId}
     ],
-    ami_ev:publish_amqp_event({publish, Payload}).
+    amimulator_event_listener:publish_amqp_event({publish, Payload}).
 
 destroy_channel(Reason, Call) ->
     CallId = amimulator_call:call_id(Call),
@@ -536,7 +617,7 @@ destroy_channel(Reason, Call) ->
 
     maybe_change_agent_status(Call),
 
-    ami_ev:publish_amqp_event({publish, Payload}),
+    amimulator_event_listener:publish_amqp_event({publish, Payload}),
 
     ami_sm:delete_call(CallId).
 
@@ -619,4 +700,4 @@ change_agent_status(AccountDb, UserDoc, Queues, Status) ->
                 ] | Acc]
         end end, [], Queues),
 
-    ami_ev:publish_amqp_event({publish, Payload}).
+    amimulator_event_listener:publish_amqp_event({publish, Payload}).

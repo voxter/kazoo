@@ -2,12 +2,8 @@
 -behaviour(gen_server).
 
 -export([start_link/0]).
--export([register/0, unregister/0
-	     ,ev_going_down/2, ev_staying_up/1, is_ev_down/2
-	     ,account_id/0, set_account_id/1
+-export([ev_going_down/2, ev_staying_up/1, is_ev_down/2
 	     ,init_state/1, purge_state/1
-	     ,events/0
-	     ,account_consumers/1
 	     ,registration/2, add_registration/4
 	     ,call/1, call_by_channel/1, new_call/1, update_call/1, delete_call/1
 	     ,queue_call/3, queue_pos/2, fetch_queue_call_data/2, queue_leave/2
@@ -33,13 +29,6 @@ start_link() ->
     lager:debug("Starting state master"),
 	gen_server:start_link({'local', ?MODULE}, ?MODULE, [], []).
 
-%% Register an AMI handler and initialize its state
-register() ->
-    gen_server:cast(?MODULE, {'register', self()}).
-
-unregister() ->
-    gen_server:cast(?MODULE, {'unregister', self()}).
-
 ev_going_down(AccountId, Timestamp) ->
     gen_server:cast(?MODULE, {'event_listener_kill_req', AccountId, Timestamp}).
 
@@ -49,25 +38,12 @@ ev_staying_up(AccountId) ->
 is_ev_down(AccountId, Timestamp) ->
     gen_server:call(?MODULE, {'is_ev_down', AccountId, Timestamp}).
 
-account_id() ->
-    gen_server:call(?MODULE, 'get_account_id', 60000).
-
-set_account_id(AccountId) ->
-    gen_server:cast(?MODULE, {'reg_account_id', AccountId, self()}).
-
 %% Fetches the existing calls, queue state, etc and puts in ETS
 init_state(AccountId) ->
     gen_server:cast(?MODULE, {'init_state', AccountId}).
 
 purge_state(AccountId) ->
 	gen_server:cast(?MODULE, {'purge_state', AccountId}).
-
-%% Whether events should be published to this client
-events() ->
-    gen_server:call(?MODULE, 'get_event_mask').
-
-account_consumers(AccountId) ->
-    gen_server:call(?MODULE, {'get_account_consumers', AccountId}).
 
 registration(AccountId, EndpointId) ->
 	gen_server:call(?MODULE, {'get_registration', AccountId, EndpointId}).
@@ -168,7 +144,6 @@ init([]) ->
     ets:new('conference_participants', ['named_table', 'bag']),
     ets:new('conference_cache_data', ['named_table']),
     ets:new('event_listener_kill_reqs', ['named_table', 'bag']),
-    ets:new('account_consumers', ['named_table', 'bag']),
     ets:new('database', ['named_table', 'bag']),
     {'ok', #state{}}.
 
@@ -179,29 +154,6 @@ handle_call({'is_ev_down', AccountId, Timestamp}, _From, State) ->
         [[]] ->
             'true'
     end,
-    {'reply', Reply, State};
-
-handle_call('get_account_id', {Pid, _Tag}, State) ->
-	Reply = case ets:match('account_consumers', {'$1', Pid, '_'}) of
-		[] ->
-			'undefined';
-		[[AccountId]] ->
-			AccountId
-	end,
-	{'reply', Reply, State};
-
-handle_call('get_event_mask', {Pid, _Tag}, State) ->
-	Reply = case ets:match('account_consumers', {'_', Pid, '$1'}) of
-		[] ->
-			lager:debug("No event mask setting found for ~p", [Pid]),
-			'undefined';
-		[[EventMask]] ->
-			EventMask
-	end,
-	{'reply', Reply, State};
-
-handle_call({'get_account_consumers', AccountId}, _From, State) ->
-	Reply = lists:flatten(ets:match('account_consumers', {AccountId, '$1', '_'})),
     {'reply', Reply, State};
 
 handle_call({'get_registration', AccountId, EndpointId}, _From, State) ->
@@ -266,6 +218,7 @@ handle_call({'get_call_by_channel', Channel}, From, State) ->
 handle_call({'queue_call', QueueId, CallId, Call}, _From, State) ->
 	Size = length(ets:match('queue_calls', {QueueId, '_', '_'})),
 	ets:insert('queue_calls', {QueueId, CallId, Call}),
+    handle_cast({'update_call', Call}, State),
     {'reply', Size+1, State};
 
 handle_call({'queue_pos', QueueId, CallId}, _From, State) ->
@@ -328,25 +281,6 @@ handle_call({'debug', TableName}, _From, State) ->
 handle_call(_Request, _From, State) ->
     {'noreply', State}.
 
-
-
-
-
-
-handle_cast({'register', Pid}, State) ->
-    ets:insert('account_consumers', {'undefined', Pid, 'on'}),
-    {'noreply', State};
-
-handle_cast({'unregister', Pid}, State) ->
-	case ets:match('account_consumers', {'$1', Pid, '$2'}) of
-		[] ->
-			'ok';
-		[[AccountId, EventMask]] ->
-			amimulator_sup:pause_ev(AccountId),
-			ets:delete_object('account_consumers', {AccountId, Pid, EventMask})
-	end,
-    {'noreply', State};
-
 handle_cast({'event_listener_kill_req', AccountId, Timestamp}, State) ->
 	ets:insert('event_listener_kill_reqs', {AccountId, Timestamp}),
     {'noreply', State};
@@ -355,17 +289,8 @@ handle_cast({'event_listener_kill_cancel_req', AccountId}, State) ->
 	ets:delete('event_listener_kill_reqs', AccountId),
     {'noreply', State};
 
-handle_cast({'reg_account_id', AccountId, Pid}, State) ->
-	case ets:match('account_consumers', {'undefined', Pid, '$1'}) of
-		[] ->
-			ets:insert('account_consumers', {AccountId, Pid, 'on'});
-		[[EventMask]] ->
-			ets:delete_object('account_consumers', {'undefined', Pid, EventMask}),
-			ets:insert('account_consumers', {AccountId, Pid, EventMask})
-	end,
-	{'noreply', State};
-
 handle_cast({'init_state', AccountId}, State) ->
+    lager:debug("initializing account ~s state", [AccountId]),
     pvt_init_state(AccountId),
     {'noreply', State};
 
@@ -485,7 +410,6 @@ handle_cast({'db_del', AccountId, Family, Key}, State) ->
 %     ets:new('conference_participants', ['named_table', 'bag']),
 %     ets:new('conference_cache_data', ['named_table']),
 %     ets:new('event_listener_kill_reqs', ['named_table', 'bag']),
-%     ets:new('account_consumers', ['named_table', 'bag']),
 
 handle_cast(_Request, State) ->
     {'noreply', State}.
@@ -532,7 +456,7 @@ new_call_match_spec() ->
           ,callee_id_number='_'
          }.
 
-%% By doing the state initialization here, we ensure that it is atomic, and no commander/ami_ev
+%% By doing the state initialization here, we ensure that it is atomic, and no
 %% functions can read from the data store before it is ready
 pvt_init_state(AccountId) ->
     Calls = amimulator_util:initial_calls(AccountId),
@@ -544,7 +468,9 @@ pvt_init_state(AccountId) ->
         answered_on_init(amimulator_call:answered(Call), Call),
         queue_on_init(amimulator_call:acdc_queue_id(Call), Call),
         %% TODO implement
-        conf_on_init('undefined', Call)
+        conf_on_init('undefined', Call),
+
+        amimulator_call_sup:initial_call(Call)
     end, Calls),
 
     initial_registrations(AccountId).

@@ -6,9 +6,9 @@
 -export([from_json/1]).
 -export([to_whapps_call/1]).
 -export([update_from_other/2]).
--export([call_id/1]).
+-export([call_id/1, set_call_id/2]).
 -export([other_leg_call_id/1, set_other_leg_call_id/2]).
--export([channel/1, set_channel/2]).
+-export([channel/1, set_channel/1, set_channel/2]).
 -export([other_channel/1, set_other_channel/2]).
 -export([account_id/1, account_db/1]).
 -export([authorizing_id/1, authorizing_type/1]).
@@ -19,7 +19,7 @@
 -export([from_user/1]).
 -export([id_name/1, id_number/1]).
 -export([other_id_name/1, other_id_number/1]).
--export([direction/1]).
+-export([direction/1, set_direction/2]).
 -export([answered/1, set_answered/2]).
 -export([elapsed_s/1]).
 -export([caller_id_name/1, caller_id_number/1, set_caller_id_name/2, set_caller_id_number/2]).
@@ -142,6 +142,10 @@ update_from_other(OtherCall, #call{direction=Direction}=Call) ->
 call_id(#call{call_id=CallId}) ->
     CallId.
 
+-spec set_call_id(api_binary(), call()) -> call().
+set_call_id(CallId, Call) ->
+    Call#call{call_id=CallId}.
+
 -spec other_leg_call_id(call()) -> api_binary().
 other_leg_call_id(#call{other_leg_call_id=OtherLegCallId}) ->
     OtherLegCallId.
@@ -154,7 +158,11 @@ set_other_leg_call_id(CallId, Call) ->
 channel(#call{channel=Channel}) ->
     Channel.
 
+-spec set_channel(call()) -> call().
 -spec set_channel(api_binary(), call()) -> call().
+set_channel(Call) ->
+    set_channel(amimulator_util:channel_string(Call), Call).
+
 set_channel(Channel, Call) ->
     Call#call{channel=Channel}.
 
@@ -286,6 +294,10 @@ other_id_number(#call{direction = <<"outbound">>
 -spec direction(call()) -> api_binary().
 direction(#call{direction=Direction}) ->
     Direction.
+
+-spec set_direction(api_binary(), call()) -> call().
+set_direction(Direction, Call) ->
+    Call#call{direction=Direction}.
 
 -spec answered(call()) -> api_boolean().
 answered(#call{answered=Answered}) ->
@@ -425,10 +437,6 @@ set_other_id(<<"outbound">>, #call{caller_id_name=CIDName
 set_other_id(<<"outbound">>, Call) ->
     Call.
 
--spec set_channel(call()) -> call().
-set_channel(Call) ->
-    set_channel(channel_string(id_number(Call), call_id(Call)), Call).
-
 -spec endpoint_caller_id(wh_json:object(), call()) -> {api_binary(), api_binary()} | 'undefined'.
 endpoint_caller_id(Endpoint, Call) ->
     case wh_json:get_value(<<"owner_id">>, Endpoint) of
@@ -441,24 +449,7 @@ endpoint_caller_id(Endpoint, Call) ->
              ,<<(wh_json:get_value(<<"username">>, Owner))/binary>>}
     end.
 
--spec channel_string(api_binary(), api_binary()) -> binary().
-channel_string(Number, CallId) ->
-    <<"SIP/", Number/binary, "-", (channel_tail(CallId))/binary>>.
 
--spec channel_tail(api_binary()) -> binary().
-%% Returns an 8-digit tail for channels for AMI calls
-channel_tail(CallId) ->
-    Seed = case binary:split(CallId, <<"-">>, ['global']) of
-        List when length(List) =:= 5 ->
-            %% When the call id looks like 4cad762c-f415-11e4-b890-cdee54d38ecb there may be many legs created
-            %% The 2nd and 3rd parts are unique to a call as a whole even though the 1st and 5th change per leg
-            <<(lists:nth(2, List))/binary, "-", (lists:nth(3, List))/binary>>;
-        _ ->
-            CallId
-    end,
-    Digest = crypto:hash('md5', wh_util:to_binary(Seed)),
-    MD5 = lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest]),
-    list_to_binary(lists:sublist(MD5, length(MD5)-7, 8)).
 
 -spec parse_user_at_realm(atom(), ne_binary()) -> ne_binary().
 parse_user_at_realm('user', Data) ->

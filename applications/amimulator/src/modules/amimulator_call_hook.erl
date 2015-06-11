@@ -30,11 +30,13 @@ handle_specific_event(<<"CHANNEL_CREATE">>, EventJObj) ->
 	lager:debug("new channel with id ~p", [wh_json:get_value(<<"Call-ID">>, EventJObj)]),
 	Call = amimulator_util:create_call(EventJObj),
     ami_sm:new_call(Call),
+
+    lager:debug("new channel ~p", [EventJObj]),
+
     amimulator_call_sup:relay_new_call(Call);
 
 handle_specific_event(<<"CHANNEL_ANSWER">>, EventJObj) ->
     lager:debug("channel answer for channel with id ~p", [wh_json:get_value(<<"Call-ID">>, EventJObj)]),
-    lager:debug("channel answer ~p", [EventJObj]),
     CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
     Call = ami_sm:call(CallId),
     amimulator_call_sup:relay_answer(Call);
@@ -92,7 +94,7 @@ handle_specific_event(<<"DTMF">>, EventJObj) ->
     ],
     % TODO: Also need to do this with begin/end reversed
     
-    ami_ev:publish_amqp_event({publish, Payload});
+    amimulator_event_listener:publish_amqp_event({publish, Payload});
     
 handle_specific_event(EventName, _EventJObj) ->
     lager:debug("unhandled call event ~p", [EventName]).

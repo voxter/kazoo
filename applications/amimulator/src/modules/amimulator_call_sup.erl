@@ -9,6 +9,8 @@
          ,relay_answer/1
          ,relay_bridge/2
          ,relay_destroy/2
+         ,relay_join_queue/2
+         ,initial_call/1
         ]).
 -export([init/1]).
 
@@ -35,6 +37,14 @@ relay_bridge(Call, OtherCall) ->
 relay_destroy(Reason, Call) ->
     amimulator_call_fsm:destroy(find_call_handler('fsm', Call), Reason, Call).
 
+-spec relay_join_queue(api_binary(), amimulator_call:call()) -> 'ok'.
+relay_join_queue(QueueId, Call) ->
+    amimulator_call_fsm:join_queue(find_call_handler('fsm', Call), QueueId, Call).
+
+-spec initial_call(amimulator_call:call()) -> 'ok'.
+initial_call(Call) ->
+    create_call_fsm(Call, 'initial').
+
 %%
 %% supervisor callbacks
 %%
@@ -60,9 +70,10 @@ find_call_handler('fsm', Call) ->
 find_typed_call_handler(_, []) ->
     'undefined';
 find_typed_call_handler(Call, [{Pid, Mod}|Handlers]) ->
-    case Mod:monitoring(Pid, Call) of
+    case catch Mod:monitoring(Pid, Call) of
         'true' -> Pid;
-        'false' -> find_typed_call_handler(Call, Handlers)
+        'false' -> find_typed_call_handler(Call, Handlers);
+        _E -> find_typed_call_handler(Call, Handlers)
     end.
 
 -spec workers() -> pids().
@@ -81,14 +92,26 @@ try_create_call_handlers(Call) ->
     end.
 
 -spec create_call_fsm(amimulator_call:call()) -> api_pid().
+-spec create_call_fsm(amimulator_call:call(), 'undefined' | 'initial')
 create_call_fsm(Call) ->
+    create_call_fsm(Call, 'undefined').
+
+create_call_fsm(Call, 'undefined') ->
     case supervisor:start_child(?MODULE, [Call]) of
         {'ok', Pid} -> Pid;
         {'ok', Pid, _} -> Pid;
         {'error', E} ->
             lager:debug("could not create fsm for id ~p (~p)", [amimulator_call:call_id(Call), E]),
             'undefined'
-    end.
+    end;
+create_call_fsm(Call, 'initial') ->
+    case supervisor:start_child(?MODULE, [Call, 'initial']) of
+        {'ok', Pid} -> Pid;
+        {'ok', Pid, _} -> Pid;
+        {'error', E} ->
+            lager:debug("could not create fsm for id ~p (~p)", [amimulator_call:call_id(Call), E]),
+            'undefined'
+    end;
 
 -spec relay_new_call(api_pid(), amimulator_call:call()) -> 'ok'.
 relay_new_call('undefined', _) ->

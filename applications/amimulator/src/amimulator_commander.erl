@@ -56,11 +56,7 @@ handle_event("login", Props) ->
             
             %% Record account id that is being used for logged in account
             AccountId = wh_json:get_value(<<"account_id">>, AMIDoc),
-            ami_sm:set_account_id(AccountId),
-            gen_server:cast(self(), {login, AccountId}),
-
-            %% Maybe launch the account's AMQP consumer
-            ami_ev:maybe_start(AccountId),
+            amimulator_socket_listener:login(AccountId),
             
             Payload = [[
                 {<<"Response">>, <<"Success">>}
@@ -252,27 +248,12 @@ handle_event(Event, Props) ->
     lager:debug("no handler defined for event ~p, props ~p", [Event, Props]),
     {error, no_action}.
 
-initial_channel_status(Calls, Props, Format) ->
-    AccountId = proplists:get_value(<<"AccountId">>, Props),
-    FilteredCalls = lists:filter(fun(Call) ->  
-        case amimulator_call:account_id(Call) of
-            AccountId -> true;
-            _ -> false
-        end
-    end, Calls),
-
+initial_channel_status(Calls, _Props, Format) ->
+    FormattedCalls = lists:foldl(fun(Call, List) ->
+        [ami_channel_status(Call, Format)] ++ List
+        end, [], Calls),
     case Format of
         <<"Status">> ->
-            FormattedCalls = lists:foldl(fun(Call, List) ->
-                case {amimulator_call:other_leg_call_id(Call) /= undefined, amimulator_call:username(Call)} of
-                    %{true, undefined} -> [ami_channel_status(Call, bridged, Format)] ++ List;
-                    {_, undefined} -> List;
-                    {true, _} -> [ami_channel_status(Call, bridged_extension, Format)] ++ List;
-                    {false, _} -> [ami_channel_status(Call, bridged_extension, Format)] ++ List;
-                    {_, _} -> lager:debug("undefined channel status format for call ~p", [Call])
-                end
-            end, [], FilteredCalls),
-
             [[
                 {<<"Response">>, <<"Success">>},
                 {<<"Message">>, <<"Channel status will follow">>}
@@ -281,133 +262,203 @@ initial_channel_status(Calls, Props, Format) ->
                 {<<"Items">>, length(FormattedCalls)}
             ]];
         <<"concise">> ->
-            FormattedCalls = lists:foldl(fun(Call, List) ->
-                case {amimulator_call:other_leg_call_id(Call) /= undefined, amimulator_call:username(Call)} of
-                    %{true, undefined} -> [ami_channel_status(Call, bridged, Format)] ++ List;
-                    {_, undefined} -> List;
-                    {true, _} -> [ami_channel_status(Call, bridged_extension, Format)] ++ List;
-                    {false, _} -> [ami_channel_status(Call, bridged_extension, Format)] ++ List;
-                    {_, _} -> lager:debug("undefined channel status format for call ~p", [Call])
-                end
-            end, [], FilteredCalls),
-
             {[
                 <<"Response: Follows\r\nPrivilege: Command\r\n">>
             ] ++ FormattedCalls ++ [
                 <<"--END COMMAND--\r\n\r\n">>
-            ], raw}
+            ], 'raw'}
     end.
 
-% Existing whapps_call to AMI status translator
-ami_channel_status(Call, Schema, <<"Status">>) ->
-    ALegCID = amimulator_call:id_name(Call),
-    BLegCID = amimulator_call:other_id_name(Call),
+ami_channel_status(Call, Format) ->
+    CallId = amimulator_call:call_id(Call),
+    BridgedCallId = amimulator_call:other_leg_call_id(Call),
+    Channel = amimulator_call:channel(Call),
+    BridgedChannel = other_channel(amimulator_call:other_channel(Call), Format),
+    CID = amimulator_call:id_name(Call),
+    OtherCID = other_cid(Call, Format),
+    {ChannelState, ChannelStateDesc} = channel_state(Call),
+    {Application, Context} = application_and_context(Call),
+    DestExten = dest_exten(Call),
+    ElapsedSeconds = amimulator_call:elapsed_s(Call),
 
-    {ChannelState, ChannelStateDesc} = case amimulator_call:answered(Call) of
-        false ->
-            {0, <<"Down">>};
-        true ->
-            {6, <<"Up">>};
-        _ ->
-            {6, <<"Up">>}
-    end,
+    status_payload(Format, Channel, BridgedChannel, CID, CID, OtherCID, OtherCID
+                   ,ChannelState, ChannelStateDesc, Application, Context, DestExten, ElapsedSeconds
+                   ,CallId, BridgedCallId).
 
-    BridgedChannel = case amimulator_call:direction(Call) of
-    	<<"inbound">> ->
-    		amimulator_call:other_channel(Call);
-    	<<"outbound">> ->
-    		amimulator_call:channel(Call)
-    end,
+other_channel('undefined', <<"concise">>) ->
+    <<"(None)">>;
+other_channel(Channel, _) ->
+    Channel.
 
-    ami_channel_status(
-		<<"Status">>,
-		Schema,
-		amimulator_call:channel(Call),
-		ALegCID,
-		BLegCID,
-		amimulator_call:account_id(Call),
-		ChannelState,
-		ChannelStateDesc,
-		amimulator_call:id_number(Call),
-		amimulator_call:elapsed_s(Call),
-		BridgedChannel,
-		amimulator_call:call_id(Call),
-		amimulator_call:other_leg_call_id(Call)
-	);
+other_cid(Call, Format) ->
+    other_cid(amimulator_call:answered(Call), amimulator_call:direction(Call), amimulator_call:acdc_queue_id(Call)
+              ,Format, Call).
 
-ami_channel_status(Call, _Schema, <<"concise">>) ->
-    Channel = binary_to_list(amimulator_call:channel(Call)),
-    Exten = binary_to_list(amimulator_call:id_number(Call)),
-    {DestChannel, BridgedTo} = case amimulator_call:other_channel(Call) of
-        undefined ->
-            {binary_to_list(amimulator_call:other_id_number(Call)), "(None)"};
-        BlegChannel ->
-            {binary_to_list(BlegChannel), binary_to_list(BlegChannel)}
-    end,
-    CID = binary_to_list(amimulator_call:id_name(Call)),
-    Direction = amimulator_call:direction(Call),
-    RunTime = wh_util:to_list(amimulator_call:elapsed_s(Call)),
+other_cid('true', _, _, _, Call) ->
+    amimulator_call:other_id_name(Call);
+other_cid(_, _, _, <<"Status">>, Call) ->
+    amimulator_call:other_id_name(Call);
+other_cid('false', _, 'undefined', _, _) ->
+    <<"<unknown>">>;
+other_cid('false', <<"inbound">>, _, _, Call) ->
+    amimulator_call:other_id_name(Call);
+other_cid('false', <<"outbound">>, _, _, _) ->
+    <<"(Outgoing Line)">>.
 
-    Data = case Direction of
-        <<"outbound">> ->
-            "(Outgoing Line)";
-        <<"inbound">> ->
-            DestChannel
-    end,
+dest_exten(Call) ->
+    dest_exten(amimulator_call:answered(Call), amimulator_call:direction(Call), amimulator_call:acdc_queue_id(Call)
+               ,Call).
 
-    ChannelStateDesc = case amimulator_call:answered(Call) of
-        false ->
-            "Down";
-        true ->
-            "Up";
-        _ ->
-            "Up"
-    end,
+dest_exten(_, _, 'undefined', Call) ->
+    amimulator_call:other_id_number(Call);
+dest_exten(_, <<"outbound">>, _, _) ->
+    <<"s">>;
+dest_exten(_, _, _, Call) ->
+    amimulator_call:other_id_number(Call).
 
-    wh_util:to_binary(Channel ++ "!from-internal!" ++ Exten ++ "!1!" ++ ChannelStateDesc ++
-        "!Dial!" ++ Data ++ "!" ++
-        CID ++ "!!!3!" ++ RunTime ++ "!" ++ BridgedTo ++ "\n");
-ami_channel_status(Call, _Schema, <<"verbose">>) ->
-    Channel = binary_to_list(amimulator_call:channel(Call)),
-    Exten = binary_to_list(amimulator_call:id_number(Call)),
-    {DestChannel, BridgedTo} = case amimulator_call:other_channel(Call) of
-        undefined ->
-            {binary_to_list(amimulator_call:other_id_number(Call)), "(None)"};
-        BlegChannel ->
-            {binary_to_list(BlegChannel), binary_to_list(BlegChannel)}
-    end,
-    CID = binary_to_list(amimulator_call:id_name(Call)),
-    Direction = amimulator_call:direction(Call),
-    RunTime = wh_util:to_list(amimulator_call:elapsed_s(Call)),
+channel_state(Call) ->
+    channel_state(amimulator_call:answered(Call), amimulator_call:direction(Call)).
+    
+channel_state('true', _) ->
+    {6, <<"Up">>};
+channel_state(_, <<"inbound">>) ->
+    {4, <<"Ring">>};
+channel_state(_, <<"outbound">>) ->
+    {5, <<"Ringing">>}.
 
-    Data = case Direction of
-        <<"outbound">> ->
-            "(Outgoing Line)";
-        <<"inbound">> ->
-            DestChannel
-    end,
+application_and_context(Call) ->
+    application_and_context(amimulator_call:answered(Call), amimulator_call:direction(Call), amimulator_call:acdc_queue_id(Call)
+                            ,amimulator_call:other_channel(Call)).
+    
+application_and_context(_, _, 'undefined', _) ->
+    {<<"Dial">>, <<"from_internal">>};
+application_and_context('false', <<"inbound">>, _, _) ->
+    {<<"Dial">>, <<"macro-dial-one">>};
+application_and_context('false', <<"outbound">>, _, _) ->
+    {<<"AppQueue">>, <<"from-queue">>};
+application_and_context('true', _, _, 'undefined') ->
+    {<<"Queue">>, <<"ext-queues">>};
+application_and_context('true', <<"inbound">>, _, <<"Local", _/binary>>) ->
+    {<<"Queue">>, <<"ext-queues">>};
+application_and_context('true', <<"inbound">>, _, <<"SIP", _/binary>>) ->
+    {<<"AppQueue">>, <<"from-queue">>};
+application_and_context('true', <<"outbound">>, _, <<"Local", _/binary>>) ->
+    {<<"AppDial">>, <<"macro-dial-one">>};
+application_and_context('true', <<"outbound">>, _, <<"SIP", _/binary>>) ->
+    {<<"Dial">>, <<"macro-dial-one">>}.
 
-    ChannelStateDesc = case amimulator_call:answered(Call) of
-        false ->
-            "Down";
-        true ->
-            "Up";
-        _ ->
-            "Up"
-    end,
 
-    {H, M, S} = {RunTime div 3600, RunTime rem 3600 div 60, RunTime rem 60},
-    TimeString = wh_util:to_list(if H > 99 ->
+status_payload(<<"Status">>, <<"Local", _/binary>>=Channel, BridgedChannel, CallerIDNum, CallerIDName, ConnectedLineNum, ConnectedLineName
+               ,ChannelState, ChannelStateDesc, <<"Dial">>, <<"macro-dial-one">>, <<"s">>, Seconds, UniqueId, BridgedUniqueId) ->
+    [{<<"Event">>, <<"Status">>}
+     ,{<<"Privilege">>, <<"Call">>}
+     ,{<<"Channel">>, Channel}
+     ,{<<"CallerIDNum">>, CallerIDNum}
+     ,{<<"CallerIDName">>, CallerIDName}
+     ,{<<"ConnectedLineNum">>, ConnectedLineNum}
+     ,{<<"ConnectedLineName">>, ConnectedLineName}
+     ,{<<"Accountcode">>, <<>>}
+     ,{<<"ChannelState">>, ChannelState}
+     ,{<<"ChannelStateDesc">>, ChannelStateDesc}
+     ,{<<"Context">>, <<"macro-dial-one">>}
+     ,{<<"Extension">>, <<"s">>}
+     ,{<<"Priority">>, 12}
+     ,{<<"Seconds">>, Seconds}
+     ,{<<"BridgedChannel">>, BridgedChannel}
+     ,{<<"BridgedUniqueId">>, BridgedUniqueId}
+     ,{<<"Uniqueid">>, UniqueId}
+    ];
+status_payload(<<"Status">>, <<"SIP", _/binary>>=Channel, BridgedChannel, CallerIDNum, CallerIDName, ConnectedLineNum, ConnectedLineName
+               ,_, ChannelStateDesc, <<"AppDial">>, <<"macro-dial-one">>, <<"s">>, _, UniqueId, BridgedUniqueId) ->
+    [{<<"Event">>, <<"Status">>}
+     ,{<<"Privilege">>, <<"Call">>}
+     ,{<<"Channel">>, Channel}
+     ,{<<"CallerIDNum">>, CallerIDNum}
+     ,{<<"CallerIDName">>, CallerIDName}
+     ,{<<"ConnectedLineNum">>, ConnectedLineNum}
+     ,{<<"ConnectedLineName">>, ConnectedLineName}
+     ,{<<"Account">>, <<>>}
+     ,{<<"State">>, ChannelStateDesc}
+     ,{<<"BridgedChannel">>, BridgedChannel}
+     ,{<<"BridgedUniqueId">>, BridgedUniqueId}
+     ,{<<"Uniqueid">>, UniqueId}
+    ];
+status_payload(<<"Status">>, <<"Local", _/binary>>=Channel, BridgedChannel, CallerIDNum, CallerIDName, ConnectedLineNum, ConnectedLineName
+               ,_, ChannelStateDesc, <<"AppQueue">>, <<"from-queue">>, _, _, UniqueId, BridgedUniqueId) ->
+    [{<<"Event">>, <<"Status">>}
+     ,{<<"Privilege">>, <<"Call">>}
+     ,{<<"Channel">>, Channel}
+     ,{<<"CallerIDNum">>, CallerIDNum}
+     ,{<<"CallerIDName">>, CallerIDName}
+     ,{<<"ConnectedLineNum">>, ConnectedLineNum}
+     ,{<<"ConnectedLineName">>, ConnectedLineName}
+     ,{<<"Account">>, <<>>}
+     ,{<<"State">>, ChannelStateDesc}
+     ,{<<"BridgedChannel">>, BridgedChannel}
+     ,{<<"BridgedUniqueId">>, BridgedUniqueId}
+     ,{<<"Uniqueid">>, UniqueId}
+    ];
+status_payload(<<"Status">>, <<"SIP", _/binary>>=Channel, BridgedChannel, CallerIDNum, CallerIDName, ConnectedLineNum, ConnectedLineName
+               ,ChannelState, ChannelStateDesc, <<"Queue">>, <<"ext-queues">>, Extension, Seconds, UniqueId, BridgedUniqueId) ->
+    [{<<"Event">>, <<"Status">>}
+     ,{<<"Privilege">>, <<"Call">>}
+     ,{<<"Channel">>, Channel}
+     ,{<<"CallerIDNum">>, CallerIDNum}
+     ,{<<"CallerIDName">>, CallerIDName}
+     ,{<<"ConnectedLineNum">>, ConnectedLineNum}
+     ,{<<"ConnectedLineName">>, ConnectedLineName}
+     ,{<<"Accountcode">>, <<>>}
+     ,{<<"ChannelState">>, ChannelState}
+     ,{<<"ChannelStateDesc">>, ChannelStateDesc}
+     ,{<<"Context">>, <<"ext-queues">>}
+     ,{<<"Extension">>, Extension}
+     ,{<<"Priority">>, 12}
+     ,{<<"Seconds">>, Seconds}
+     ,{<<"BridgedChannel">>, BridgedChannel}
+     ,{<<"BridgedUniqueId">>, BridgedUniqueId}
+     ,{<<"Uniqueid">>, UniqueId}
+    ];
+status_payload(<<"Status">>, Channel, BridgedChannel, CallerIDNum, CallerIDName, ConnectedLineNum, ConnectedLineName
+               ,ChannelState, ChannelStateDesc, _, Context, Extension, Seconds, UniqueId, BridgedUniqueId) ->
+    [{<<"Event">>, <<"Status">>}
+     ,{<<"Privilege">>, <<"Call">>}
+     ,{<<"Channel">>, Channel}
+     ,{<<"CallerIDNum">>, CallerIDNum}
+     ,{<<"CallerIDName">>, CallerIDName}
+     ,{<<"ConnectedLineNum">>, ConnectedLineNum}
+     ,{<<"ConnectedLineName">>, ConnectedLineName}
+     ,{<<"Accountcode">>, <<>>}
+     ,{<<"ChannelState">>, ChannelState}
+     ,{<<"ChannelStateDesc">>, ChannelStateDesc}
+     ,{<<"Context">>, Context}
+     ,{<<"Extension">>, Extension}
+     ,{<<"Priority">>, 12}
+     ,{<<"Seconds">>, Seconds}
+     ,{<<"BridgedChannel">>, BridgedChannel}
+     ,{<<"BridgedUniqueId">>, BridgedUniqueId}
+     ,{<<"Uniqueid">>, UniqueId}
+    ];
+status_payload(<<"concise">>, Channel, BridgedChannel, _, _, _, ConnectedLineName
+               ,_, ChannelStateDesc, Application, Context, Extension, Seconds, _, _) ->
+    <<Channel/binary, "!", Context/binary, "!", Extension/binary, "!1!", ChannelStateDesc/binary, "!", Application/binary
+      ,"!", ConnectedLineName/binary, "!", ConnectedLineName/binary, "!!!3!", (wh_util:to_binary(Seconds))/binary
+      ,"!", BridgedChannel/binary, "\n">>;
+status_payload(<<"verbose">>, Channel, BridgedChannel, _, _, _, ConnectedLineName
+               ,_, ChannelStateDesc, Application, Context, Extension, Seconds, _, _) ->
+    {H, M, S} = {Seconds div 3600, Seconds rem 3600 div 60, Seconds rem 60},
+    TimeString = wh_util:to_binary(if H > 99 ->
         io_lib:format("~B:~2..0B:~2..0B", [H, M, S]);
     true ->
         io_lib:format("~2..0B:~2..0B:~2..0B", [H, M, S])
     end),
 
-    wh_util:to_binary(fit_list(Channel, 20) ++ " from-internal        " ++ fit_list(Exten, 16) ++ " " ++
-        "   1 " ++ fit_list(ChannelStateDesc, 7) ++ " Dial         " ++ fit_list(Data, 25) ++ " " ++
-        fit_list(CID, 15) ++ " " ++ fit_list(TimeString, 8) ++ "                      " ++
-        fit_list(BridgedTo, 20) ++ "\n").
+    <<(fit_list(Channel, 20))/binary, " ", (fit_list(Context, 20))/binary, " ", (fit_list(Extension, 16))/binary, " "
+      ,"   1 ", (fit_list(ChannelStateDesc, 7))/binary, " ", (fit_list(Application, 12))/binary, " ", (fit_list(ConnectedLineName, 25))/binary
+      ," ", (fit_list(ConnectedLineName, 15))/binary, " ", (fit_list(TimeString, 8))/binary, "                      "
+      ,(fit_list(BridgedChannel, 20))/binary, "\n">>.
 
+fit_list(Binary, Size) when is_binary(Binary) ->
+    wh_util:to_binary(fit_list(wh_util:to_list(Binary), Size));
 fit_list(List, Size) ->
     fit_list(List, length(List), Size).
 
@@ -425,51 +476,6 @@ append_space(RevList, Count, Count) ->
     RevList;
 append_space(RevList, Count, Index) ->
     append_space(" " ++ RevList, Count, Index+1).
-
-ami_channel_status(<<"Status">>, Schema, SourceChannel, SourceCID, DestCID, AccountId, ChannelState, ChannelStateDesc, SourceExtension,
-	ElapsedSeconds, DestChannel, SourceCallId, DestCallId) ->
-	AMI_Status_Header = [
-        {<<"Event">>, <<"Status">>},
-        {<<"Privilege">>, <<"Call">>}
-    ],
-    AMI_Status_Body = case Schema of
-        bridged_extension -> [
-             {<<"Channel">>, SourceChannel},
-             {<<"CallerIDNum">>, SourceCID},
-             {<<"CallerIDName">>, SourceCID},
-             {<<"ConnectedLineNum">>, DestCID},
-             {<<"ConnectedLineName">>, DestCID},
-             {<<"Accountcode">>, AccountId},
-             {<<"ChannelState">>, ChannelState}, % Numeric channel state
-             {<<"ChannelStateDesc">>, ChannelStateDesc},
-             %{<<"Context">>, proplists:get_value(<<"context">>, Call)},
-             {<<"Context">>, <<"from-internal">>},
-             {<<"Extension">>, SourceExtension},
-             {<<"Priority">>, <<"12">>},
-             {<<"Seconds">>, ElapsedSeconds},
-             {<<"BridgedChannel">>, DestChannel},
-             {<<"BridgedUniqueid">>, DestCallId}
-         ];
-         extension -> [
-             {<<"Accountcode">>, AccountId}
-         ];
-         bridged -> [
-             {<<"Channel">>, SourceChannel},
-             {<<"CallerIDNum">>, SourceCID},
-             {<<"CallerIDName">>, SourceCID},
-             {<<"ConnectedLineNum">>, DestCID},
-             {<<"ConnectedLineName">>, DestCID},
-             {<<"Account">>, <<"">>},
-             {<<"State">>, ChannelStateDesc},
-             {<<"BridgedChannel">>, DestChannel},
-             {<<"BridgedUniqueid">>, DestCallId}
-         ];
-         _ -> []
-     end,
-     AMI_Status_Footer = [
-         {<<"Uniqueid">>, SourceCallId}
-     ],
-     AMI_Status_Header ++ AMI_Status_Body ++ AMI_Status_Footer.
     
 queues_status(Props) ->
     AccountId = proplists:get_value(<<"AccountId">>, Props),

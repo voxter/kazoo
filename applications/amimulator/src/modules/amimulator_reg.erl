@@ -3,7 +3,7 @@
 -export([init/1
          ,bindings/1
          ,responders/1
-         ,handle_event/1
+         ,handle_event/2
         ]).
 
 -include("../amimulator.hrl").
@@ -26,7 +26,7 @@ responders(_Props) ->
     [{<<"directory">>, <<"reg_success">>}
      ,{<<"notification">>, <<"deregister">>}].
 
-handle_event(EventJObj) ->
+handle_event(EventJObj, Props) ->
     {_EventType, EventName} = wh_util:get_event_type(EventJObj),
     handle_specific_event(EventName, EventJObj).
 
@@ -74,7 +74,7 @@ handle_register(AccountId, EventJObj) ->
         {ok, [Result]} ->
         	EndpointId = wh_json:get_value(<<"id">>, Result),
         	{'ok', EndpointDoc} = couch_mgr:open_doc(AccountDb, EndpointId),
-            Exten = amimulator_util:endpoint_exten(EndpointDoc, AccountDb),
+            Exten = amimulator_util:endpoint_exten(EndpointDoc),
     		Reg = cb_registrations:normalize_registration(EventJObj),
     		ContactIP = wh_json:get_value(<<"contact_ip">>, Reg),
     		ContactPort = wh_json:get_value(<<"contact_port">>, Reg),
@@ -104,7 +104,7 @@ handle_register(AccountId, EventJObj) ->
                 {<<"PeerStatus">>, <<"Reachable">>},
                 {<<"Time">>, <<"2">>}
             ]],
-            ami_ev:publish_amqp_event({publish, Payload});
+            amimulator_event_listener:publish_amqp_event({publish, Payload});
         _ ->
             ok
     end.
@@ -131,7 +131,7 @@ handle_unregister(AccountId, EventJObj) ->
                 {<<"Hint">>, <<Peer/binary, ",CustomPresence:", Exten/binary>>},
                 {<<"Status">>, 4}
             ]],
-            ami_ev:publish_amqp_event({publish, Payload});
+            amimulator_event_listener:publish_amqp_event({publish, Payload});
         _ ->
             ok
     end.

@@ -12,6 +12,7 @@
 -export([handle_status_update/2
          ,handle_sync_req/2
          ,handle_sync_resp/2
+         ,handle_stats_req/2
          ,handle_call_event/2
          ,handle_new_channel/2
          ,handle_originate_resp/2
@@ -203,6 +204,29 @@ handle_sync_req(JObj, Props) ->
 handle_sync_resp(JObj, Props) ->
     'true' = wapi_acdc_agent:sync_resp_v(JObj),
     acdc_agent_fsm:sync_resp(props:get_value('fsm_pid', Props), JObj).
+
+-spec handle_stats_req(wh_json:object(), wh_proplist()) -> 'ok'.
+handle_stats_req(JObj, Props) ->
+    'true' = wapi_acdc_agent:stats_req_v(JObj),
+
+    AgentCallIds = lists:foldl(fun({CallId, _}, Acc) ->
+        [CallId | Acc];
+    (CallId, Acc) ->
+        case binary:split(CallId, <<"-">>) of
+            List when is_list(List) and length(List) =:= 3 ->
+                [CallId | Acc];
+            _ ->
+                Acc
+        end
+    end, [], props:get_value('agent_call_ids', Props)),
+
+    Prop = [{<<"Account-ID">>, props:get_value('acct_id', Props)}
+            ,{<<"Agent-Call-IDs">>, AgentCallIds}
+            ,{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, JObj)}
+            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+    Q = wh_json:get_value(<<"Server-ID">>, JObj),
+    wapi_acdc_agent:publish_stats_resp(Q, Prop).
 
 -spec handle_call_event(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_call_event(JObj, Props) ->

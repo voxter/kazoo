@@ -39,7 +39,7 @@ handle_cast('start_listeners', #state{listen_socket=ListenSocket}=State) ->
 	{'noreply', State};
 handle_cast('close_listen_socket', #state{listen_socket=ListenSocket}=State) ->
 	gen_tcp:close(ListenSocket),
-	lager:debug("Listen socket was closed"),
+	lager:debug("listen socket was closed"),
 	{'noreply', State};
 handle_cast(_Request, State) ->
     {'noreply', State}.

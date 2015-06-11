@@ -1,17 +1,19 @@
--module(amimulator_comm).
+-module(amimulator_socket_listener).
 -behaviour(gen_server).
 
 -export([start_link/1]).
+-export([login/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
          
 -include("amimulator.hrl").
          
--record(state, {
-    listen_socket,
-    accept_socket,
-    %% A collection of data packets that represent a single command
-    bundle = <<>>
-}).
+-record(state, {listen_socket
+                ,accept_socket
+                %% A collection of data packets that represent a single command
+                ,bundle = <<>>
+                ,account_id
+                ,event_mask = 'on' :: list() | 'on' | 'off'
+               }).
 
 %%
 %% Public functions
@@ -19,6 +21,10 @@
 
 start_link(Socket) ->
     gen_server:start_link(?MODULE, Socket, []).
+
+-spec login(ne_binary()) -> 'ok'.
+login(AccountId) ->
+    gen_server:cast(self(), {'login', AccountId}).
 
 %%
 %% gen_server and gen_tcp callbacks
@@ -29,9 +35,6 @@ init(Socket) ->
     %% Random seed used to change md5 challenge
     <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
     random:seed({A,B,C}),
-
-    %% Register this handler with the state master
-    ami_sm:register(),
 
     gen_server:cast(self(), 'accept'),
     {'ok', #state{listen_socket=Socket}}.
@@ -60,9 +63,11 @@ handle_cast('accept', #state{listen_socket=Socket}=State) ->
             {'noreply', State}
     end;
 handle_cast({'login', AccountId}, State) ->
-    maybe_init_state(AccountId),
-    {'noreply', State};
-handle_cast({'logout'}, #state{accept_socket=AcceptSocket}=State) ->
+    amimulator_sup:register_event_listener(AccountId, self()),
+    {'noreply', State#state{account_id=AccountId}};
+handle_cast({'logout'}, #state{accept_socket=AcceptSocket
+                               ,account_id=AccountId
+                              }=State) ->
     inet:setopts(AcceptSocket, [{'nodelay', 'true'}]),
     gen_tcp:send(AcceptSocket, <<"Response: Goodbye\r\nMessage: Thanks for all the fish.\r\n\r\n">>),
     inet:setopts(AcceptSocket, [{'nodelay', 'false'}]),
@@ -76,8 +81,9 @@ handle_cast({'logout'}, #state{accept_socket=AcceptSocket}=State) ->
             'ok'
     end,
 
+    amimulator_sup:unregister_event_listener(AccountId, self()),
     gen_server:cast(self(), 'accept'),
-    {'noreply', State#state{accept_socket='undefined', bundle = <<>>}};
+    {'noreply', State#state{accept_socket='undefined', bundle = <<>>, account_id='undefined', event_mask='on'}};
 %% Synchronously publish AMI events to socket
 handle_cast({'publish', Events}, #state{accept_socket=AcceptSocket}=State) ->
     publish_events(Events, AcceptSocket),
@@ -87,13 +93,14 @@ handle_cast(Event, State) ->
     {'noreply', State}.
     
 %% Route socket data to command processor
-handle_info({'tcp', _Socket, Data}, #state{bundle=Bundle}=State) ->
-    AccountId = ami_sm:account_id(),
-
+handle_info({'tcp', _Socket, Data}, #state{bundle=Bundle
+                                           ,account_id=AccountId
+                                           ,event_mask=EventMask
+                                          }=State) ->
     %% Received commands are buffered until a flush (data containing only \r\n)
     case list_to_binary(Data) of
         <<"\r\n">> ->
-            maybe_send_response(amimulator_commander:handle(Bundle, AccountId)),
+            maybe_send_response(EventMask, amimulator_commander:handle(Bundle, AccountId)),
             {'noreply', State#state{bundle = <<>>}};
         NewData ->
             {'noreply', State#state{bundle = <<Bundle/binary, NewData/binary>>}}
@@ -108,7 +115,9 @@ handle_info({'tcp_error', _Socket, _}, State) ->
 handle_info(_Info, State) ->
     {'noreply', State}.
 
-terminate('shutdown', #state{accept_socket=AcceptSocket}) ->
+terminate('shutdown', #state{accept_socket=AcceptSocket
+                             ,account_id=AccountId
+                            }) ->
 	% TODO: actually close these accept sockets on restart
     case AcceptSocket of
         'undefined' ->
@@ -117,8 +126,7 @@ terminate('shutdown', #state{accept_socket=AcceptSocket}) ->
             lager:debug("Closing an accept socket"),
             gen_tcp:close(AcceptSocket),
             'ok'
-    end,
-    ami_sm:unregister();
+    end;
 terminate(Reason, State) ->
     lager:debug("Unexpected terminate (~p)", [Reason]),
     terminate('shutdown', State).
@@ -130,29 +138,20 @@ code_change(_OldVsn, State, _Extra) ->
 %% Private functions
 %%
 
-%% Build up state for this account if it is not in the state master
-maybe_init_state(AccountId) ->
-    case ami_sm:calls(AccountId) of
-        [] ->
-            ami_sm:init_state(AccountId);
-        _ ->
-            'ok'
-    end.
+-spec maybe_send_response(list() | 'on' | 'off', tuple()) -> 'ok'.
+maybe_send_response('off', _) ->
+    'ok';
+maybe_send_response('on', HandleResp) ->
+    send_response(HandleResp);
+maybe_send_response(_EventMask, HandleResp) ->
+    %% TODO implement
+    send_response(HandleResp).
     
-maybe_send_response(HandleResp) ->
+-spec send_response(tuple()) -> 'ok'.
+send_response(HandleResp) ->
     case HandleResp of
-        {'ok', Resp} ->
-            %% Can disable events from AMI
-            case ami_sm:events() of
-                'on' ->
-                    gen_server:cast(self(), {'publish', Resp});
-                'off' ->
-                    'ok';
-                'undefined' ->
-                    'ok'
-            end;
-        _ ->
-            'ok'
+        {'ok', Resp} -> gen_server:cast(self(), {'publish', Resp});
+        _ -> 'ok'
     end.
 
 publish_events({[Event|_]=Events, Mode}, Socket) when is_list(Event) ->
