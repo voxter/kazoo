@@ -228,7 +228,17 @@ handle_event(?EVENT(CallId, <<"CHANNEL_BRIDGE">>, Evt)
              ,StateName
              ,#state{call_id=CallId}=State
             ) ->
-    {'next_state', StateName, handle_channel_bridge(State, CallId, kz_call_event:other_leg_call_id(Evt))};
+    case wh_json:get_value(<<"Endpoint-Disposition">>, Evt) of
+        <<"EARLY MEDIA">> ->
+            lager:debug("we'll let that one slide... (early media should be treated like an answer)"),
+            OtherLegCallId = kz_call_event:other_leg_call_id(Evt),
+            maybe_add_call_event_bindings(OtherLegCallId),
+            {'next_state'
+             ,StateName
+             ,handle_channel_bridge(State#state{other_leg=OtherLegCallId}, CallId, OtherLegCallId)
+            };
+        _ -> {'next_state', StateName, handle_channel_bridge(State, CallId, kz_call_event:other_leg_call_id(Evt))}
+    end;
 handle_event(?EVENT(OtherLeg, <<"CHANNEL_BRIDGE">>, Evt)
              ,StateName
              ,#state{other_leg=OtherLeg}=State

@@ -78,7 +78,7 @@
                                       ,<<"Other-Leg-Call-ID">> %% BRIDGE
                                       ,<<"Target-Call-ID">> %% TRANSFEREE
                                       ,<<"Detected-Tone">>, <<"DTMF-Duration">>, <<"DTMF-Digit">> %% DTMF and Tones
-                                      ,<<"Terminator">>, <<"Disposition">>
+                                      ,<<"Terminator">>, <<"Disposition">>, <<"Endpoint-Disposition">>
                                       ,<<"Hangup-Cause">>, <<"Hangup-Code">> %% Hangup
                                       ,<<"Raw-Application-Name">>, <<"Raw-Application-Data">>
                                       ,<<"Length">>, <<"Silence-Terminated">> %% Record-related
