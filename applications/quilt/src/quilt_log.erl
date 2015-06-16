@@ -29,20 +29,40 @@ handle_event(JObj, _Props) ->
 		undefined -> "NONE";
 		_ -> lookup_agent_name(AccountId, wh_json:get_value(<<"Agent-ID">>, JObj)) end,
 	case Event of
-		{<<"acdc_call_stat">>, <<"waiting">>} ->
+		{<<"acdc_call_stat">>, <<"entered-position">>} ->
 			EventName = "ENTERQUEUE", % ENTERQUEUE(url|callerid)
-			EventParams = {<<"">>, wh_json:get_value(<<"Caller-ID-Name">>, JObj)},
+			Call = acdc_stats:find_call(CallId),
+			CallerIdName = wh_json:get_value(<<"Caller-ID-Name">>, Call),
+			EventParams = {<<"">>, CallerIdName},
 			lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
 			write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
 
-		{<<"acdc_call_stat">>, <<"abandoned">>} ->
-			EventName = "ABANDON", % ABANDON(position|origposition|waittime)
-			WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, acdc_stats:find_call(CallId))),
-			OriginalPos = integer_to_list(wh_json:get_value(<<"Entered-Position">>, acdc_stats:find_call(CallId))),
-			Position = integer_to_list(wh_json:get_value(<<"Exited-Position">>, acdc_stats:find_call(CallId))),
-			EventParams = {Position, OriginalPos, WaitTime}, 
-			lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
-			write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
+		{<<"acdc_call_stat">>, <<"exited-position">>} ->
+			Call = acdc_stats:find_call(CallId),
+			case wh_json:get_value(<<"Status">>, Call) of
+				<<"abandoned">> ->
+					case wh_json:get_value(<<"Abandoned-Reason">>, Call) of
+						<<"member_hangup">> -> 
+							EventName = "ABANDON", % ABANDON(position|origposition|waittime)
+							WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, Call)),
+							OriginalPos = integer_to_list(wh_json:get_value(<<"Entered-Position">>, Call)),
+							Position = integer_to_list(wh_json:get_value(<<"Exited-Position">>, JObj)),
+							EventParams = {Position, OriginalPos, WaitTime},
+							lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
+							write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
+						<<"member_timeout">> -> 
+							EventName = "EXITWITHTIMEOUT", % EXITWITHTIMEOUT(position)
+							EventParams = {integer_to_list(wh_json:get_value(<<"Exited-Position">>, JObj))},
+							lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
+							write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams)
+						end;
+				<<"handled">> ->
+					EventName = "CONNECT", % CONNECT(holdtime|bridgedchanneluniqueid)
+					WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, Call)),
+					EventParams = {WaitTime, wh_json:get_value(<<"Agent-ID">>, Call)},
+					lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
+					write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams)
+				end;
 
 		{<<"acdc_call_stat">>, <<"missed">>} ->
 			EventName = "RINGNOANSWER", % RINGNOANSWER(ringtime)
@@ -60,22 +80,16 @@ handle_event(JObj, _Props) ->
 			lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
 			write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
 
-		{<<"acdc_call_stat">>, <<"handled">>} ->
-			EventName = "CONNECT", % CONNECT(holdtime|bridgedchanneluniqueid)
-			WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, acdc_stats:find_call(CallId))),
-			EventParams = {WaitTime, wh_json:get_value(<<"Agent-ID">>, JObj)},
-			lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
-			write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
-
 		{<<"acdc_call_stat">>, <<"processed">>} ->
-			HungUpBy = wh_json:get_value(<<"Hung-Up-By">>, acdc_stats:find_call(CallId)),
+			Call = acdc_stats:find_call(CallId),
+			HungUpBy = wh_json:get_value(<<"Hung-Up-By">>, Call),
 			EventName = case HungUpBy of
 				<<"member">> -> "COMPLETECALLER"; % COMPLETECALLER(holdtime|calltime|origposition)
 				_ -> "COMPLETEAGENT" % COMPLETECALLER(holdtime|calltime|origposition)
 			end,
-			WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, acdc_stats:find_call(CallId))),
-			TalkTime = integer_to_list(wh_json:get_value(<<"Talk-Time">>, acdc_stats:find_call(CallId))),
-			OriginalPos = integer_to_list(wh_json:get_value(<<"Entered-Position">>, acdc_stats:find_call(CallId))),
+			WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, Call)),
+			TalkTime = integer_to_list(wh_json:get_value(<<"Talk-Time">>, Call)),
+			OriginalPos = integer_to_list(wh_json:get_value(<<"Entered-Position">>, Call)),
 			EventParams = {WaitTime, TalkTime, OriginalPos},
 			lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
 			write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
@@ -88,9 +102,6 @@ handle_event(JObj, _Props) ->
 
 		% {<<"">>, <<"">>} ->
 			%EventName = "EXITEMPTY", % EXITEMPTY(position|origposition|waittime)
-
-		% {<<"">>, <<"">>} ->
-			%EventName = "EXITWITHTIMEOUT", % EXITWITHTIMEOUT(position)
 
 		% {<<"">>, <<"">>} ->
 			%EventName = "EXITWITHKEY", % EXITWITHKEY(key|position)
