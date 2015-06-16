@@ -119,6 +119,7 @@ handle_event(JObj, _Props) ->
 					"NONE" -> "NONE";
 					_ -> lookup_queue_name(AccountId, Q)
 				end,
+				quilt_store:delete(erlang:iolist_to_binary([AgentId, <<"-">>, QueueName2])),
 				EventParams = {ChannelName}, 
 				lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
 				write_log(AccountId, CallId, QueueName2, BridgedChannel, EventName, EventParams)
@@ -136,9 +137,14 @@ handle_event(JObj, _Props) ->
 					"NONE" -> "NONE";
 					_ -> lookup_queue_name(AccountId, Q)
 				end,
-				EventParams = {ChannelName, LoginTime},
-				lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
-				write_log(AccountId, CallId, QueueName2, BridgedChannel, EventName, EventParams)
+				case quilt_store:get(erlang:iolist_to_binary([AgentId, <<"-">>, QueueName2])) of 
+					undefined -> % No previous record of logout
+						quilt_store:put(erlang:iolist_to_binary([AgentId, <<"-">>, QueueName2]), EventName),
+						EventParams = {ChannelName, LoginTime},
+						lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
+						write_log(AccountId, CallId, QueueName2, BridgedChannel, EventName, EventParams);
+					_ -> lager:debug("suppressing duplicate agent logoff event", [])
+				end
 			end, get_queue_list_by_agent_id(AccountId, AgentId));
 
 		{_, _} ->
