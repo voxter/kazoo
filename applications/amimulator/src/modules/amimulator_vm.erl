@@ -1,6 +1,6 @@
 -module(amimulator_vm).
 
--export([init/1, bindings/1, responders/1, handle_event/1]).
+-export([init/1, bindings/1, responders/1, handle_event/2]).
 
 -include("../amimulator.hrl").
 
@@ -24,7 +24,7 @@ responders(_Props) ->
         {<<"notification">>, <<"voicemail_new">>}
     ].
 
-handle_event(EventJObj) ->
+handle_event(EventJObj, Props) ->
     {_EventType, EventName} = wh_util:get_event_type(EventJObj),
     handle_specific_event(EventName, EventJObj).
 
@@ -67,7 +67,7 @@ new_voicemail(JObj) ->
                         {<<"New">>, wh_json:get_value(<<"new_messages">>, Value) + 1},
                         {<<"Old">>, wh_json:get_value(<<"old_messages">>, Value)}
                     ],
-                    ami_ev:publish_amqp_event({'publish', Payload});
+                    amimulator_event_listener:publish_amqp_event({'publish', Payload});
                 _ ->
                     lager:debug("Could not get voicemail count")
             end;
