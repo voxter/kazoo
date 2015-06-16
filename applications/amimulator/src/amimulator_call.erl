@@ -12,8 +12,10 @@
 -export([other_channel/1, set_other_channel/2]).
 -export([account_id/1, account_db/1]).
 -export([authorizing_id/1, authorizing_type/1]).
+-export([ccv/2]).
 -export([control_queue/1, set_control_queue/2]).
 -export([acdc_queue_id/1, set_acdc_queue_id/2]).
+-export([agent_id/1, set_agent_id/2]).
 -export([username/1]).
 -export([to_user/1]).
 -export([from_user/1]).
@@ -53,19 +55,32 @@ from_json(JObj) ->
                  ,authorizing_type = wh_json:get_first_defined([<<"authorizing_type">>, <<"Authorizing-Type">>], JObj)
                  ,custom_channel_vars = wh_json:get_value(<<"Custom-Channel-Vars">>, JObj, wh_json:new())
                  ,control_q = wh_json:get_value(<<"Control-Queue">>, JObj)
-                 ,acdc_queue_id = wh_json:get_value(<<"Queue-ID">>, JObj)
+                 ,acdc_queue_id = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], JObj)
+                 ,agent_id = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Agent-ID">>], JObj)
                  %,conference_id
                  ,username = wh_json:get_first_defined([<<"username">>, <<"Username">>], JObj)
                  ,to = case binary:split(wh_json:get_first_defined([<<"destination">>, <<"To">>], JObj, <<"@">>), <<"@">>) of
                            [ToUser, ToRealm] -> <<ToUser/binary, "@", ToRealm/binary>>;
                            [ToUser] -> <<ToUser/binary, "@">>
                        end
-                 ,from = wh_json:get_value(<<"From">>, JObj, <<"@">>)
+                 ,from = case wh_json:get_value(<<"From">>, JObj) of
+                             'undefined' ->
+                                 case wh_json:get_first_defined([<<"direction">>, <<"Call-Direction">>], JObj) of
+                                     <<"inbound">> -> wh_json:get_first_defined([<<"Caller-ID-Number">>, <<"caller_id">>], JObj);
+                                     <<"outbound">> -> <<"@">>
+                                 end;
+                             From -> From
+                         end
                  ,direction = wh_json:get_first_defined([<<"direction">>, <<"Call-Direction">>], JObj)
                  ,answered = wh_json:is_true(<<"answered">>, JObj, 'undefined')
-                 ,elapsed_s = wh_json:get_integer_value(<<"elapsed_s">>, JObj)
-                 ,caller_id_name = wh_json:get_value(<<"Caller-ID-Name">>, JObj)
-                 ,caller_id_number = wh_json:get_value(<<"Caller-ID-Number">>, JObj)
+                 ,timestamp = case wh_json:get_integer_value(<<"timestamp">>, JObj) of
+                                  'undefined' ->
+                                      Sec = wh_json:get_first_defined([<<"elapsed_s">>, <<"Duration-Seconds">>], JObj, 0),
+                                      wh_util:current_tstamp() - Sec;
+                                  Timestamp -> Timestamp
+                              end
+                 ,caller_id_name = wh_json:get_first_defined([<<"Caller-ID-Name">>, <<"caller_id">>], JObj)
+                 ,caller_id_number = wh_json:get_first_defined([<<"Caller-ID-Number">>, <<"caller_id">>], JObj)
                  ,callee_id_name = wh_json:get_value(<<"Callee-ID-Name">>, JObj)
                  ,callee_id_number = wh_json:get_value(<<"Callee-ID-Number">>, JObj)
                 },
@@ -89,7 +104,11 @@ to_whapps_call(#call{call_id=CallId
     Setters = [fun(Call) -> whapps_call:set_call_id(CallId, Call) end
                ,fun(Call) -> whapps_call:set_other_leg_call_id(OtherLegCallId, Call) end
                ,fun(Call) -> whapps_call:set_account_id(AccountId, Call) end
-               ,fun(Call) -> whapps_call:set_authorizing_id(AuthorizingId, Call) end
+               ,fun(Call) ->
+                    case AuthorizingId of
+                        'undefined' -> Call;
+                        _ -> whapps_call:set_authorizing_id(AuthorizingId, Call) end
+                    end
                ,fun(Call) ->
                     case AuthorizingType of
                         'undefined' -> Call;
@@ -104,7 +123,14 @@ to_whapps_call(#call{call_id=CallId
                     end
                 end
                ,fun(Call) -> whapps_call:set_to(To, Call) end
-               ,fun(Call) -> whapps_call:set_from(From, Call) end
+               ,fun(Call) ->
+                    case binary:split(From, <<"@">>) of
+                        [_ToUser, _ToRealm] ->
+                            whapps_call:set_from(From, Call);
+                        [_ToUser] ->
+                            whapps_call:set_from(<<From/binary, "@">>, Call)
+                    end
+                end
                ,fun(Call) ->
                     case CIDName of
                         'undefined' -> Call;
@@ -190,6 +216,10 @@ authorizing_id(#call{authorizing_id=AuthorizingId}) ->
 authorizing_type(#call{authorizing_type=AuthorizingType}) ->
     AuthorizingType.
 
+-spec ccv(binary(), call()) -> wh_json:json_term() | 'undefined'.
+ccv(Key, #call{custom_channel_vars=CCVs}) ->
+    wh_json:get_value(Key, CCVs).
+
 -spec control_queue(call()) -> api_binary().
 control_queue(#call{call_id=CallId
                     ,control_q='undefined'
@@ -238,6 +268,14 @@ acdc_queue_id(#call{acdc_queue_id=QueueId}) ->
 -spec set_acdc_queue_id(api_binary(), call()) -> call().
 set_acdc_queue_id(QueueId, Call) ->
     Call#call{acdc_queue_id=QueueId}.
+
+-spec agent_id(call()) -> api_binary().
+agent_id(#call{agent_id=AgentId}) ->
+    AgentId.
+
+-spec set_agent_id(api_binary(), call()) -> call().
+set_agent_id(AgentId, Call) ->
+    Call#call{agent_id=AgentId}.
 
 -spec username(call()) -> api_binary().
 username(#call{username=Username}) ->
@@ -308,8 +346,8 @@ set_answered(Answered, Call) ->
     Call#call{answered=Answered}.
 
 -spec elapsed_s(call()) -> api_integer().
-elapsed_s(#call{elapsed_s=ElapsedS}) ->
-    ElapsedS.
+elapsed_s(#call{timestamp=Timestamp}) ->
+    wh_util:current_tstamp() - Timestamp.
 
 -spec caller_id_name(call()) -> api_binary().
 caller_id_name(#call{caller_id_name=CIDName}) ->
@@ -464,7 +502,10 @@ parse_user_at_realm('user', Data) ->
 maybe_cellphone_endpoint(Call) ->
     AccountDb = account_db(Call),
     {'ok', Results} = couch_mgr:get_results(AccountDb, <<"devices/call_forwards">>),
-    E164 = wnm_util:to_e164(to_user(Call)),
+    E164 = case direction(Call) of
+        <<"inbound">> -> wnm_util:to_e164(from_user(Call));
+        <<"outbound">> -> wnm_util:to_e164(to_user(Call))
+    end,
     find_cellphone_endpoint_fold(AccountDb, E164, Results).
 
 -spec find_cellphone_endpoint_fold(api_binary(), ne_binary(), wh_json:objects()) -> api_object().

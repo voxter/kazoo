@@ -6,7 +6,7 @@
 	     ,init_state/1, purge_state/1
 	     ,registration/2, add_registration/4
 	     ,call/1, call_by_channel/1, new_call/1, update_call/1, delete_call/1
-	     ,queue_call/3, queue_pos/2, fetch_queue_call_data/2, queue_leave/2
+	     ,queue_call/3, queue_calls/1, queue_pos/2, fetch_queue_call_data/2, queue_leave/2
 	     ,conf_parts/1, update_conf_parts/2, conf_cache/1, cache_conf_part/2
 	     ,calls/1, channel_call_ids/1, add_channel_call_id/2, call_id_in_channel/2
 	     ,maybe_ringing/2
@@ -68,6 +68,9 @@ delete_call(CallId) ->
 
 queue_call(QueueId, CallId, Call) ->
     gen_server:call(?MODULE, {'queue_call', QueueId, CallId, Call}).
+
+queue_calls(QueueId) ->
+    gen_server:call(?MODULE, {'queue_calls', QueueId}).
 
 queue_pos(QueueId, CallId) ->
     gen_server:call(?MODULE, {'queue_pos', QueueId, CallId}).
@@ -220,6 +223,10 @@ handle_call({'queue_call', QueueId, CallId, Call}, _From, State) ->
 	ets:insert('queue_calls', {QueueId, CallId, Call}),
     handle_cast({'update_call', Call}, State),
     {'reply', Size+1, State};
+    
+handle_call({'queue_calls', QueueId}, _From, State) ->
+    Reply = ets:select('queue_calls', [{{QueueId, '$1', '_'}, [], ['$1']}]),
+    {'reply', Reply, State};
 
 handle_call({'queue_pos', QueueId, CallId}, _From, State) ->
 	Reply = case ets:match('queue_calls', {QueueId, '$1', '_'}) of
@@ -443,13 +450,14 @@ new_call_match_spec() ->
           ,custom_channel_vars='_'
           ,control_q='_'
           ,acdc_queue_id='_'
+          ,agent_id='_'
           ,conference_id='_'
           ,username='_'
           ,to='_'
           ,from='_'
           ,direction='_'
           ,answered='_'
-          ,elapsed_s='_'
+          ,timestamp='_'
           ,caller_id_name='_'
           ,caller_id_number='_'
           ,callee_id_name='_'
@@ -466,7 +474,7 @@ pvt_init_state(AccountId) ->
         ets:insert('channels', {amimulator_call:channel(Call), amimulator_call:call_id(Call)}),
         ringing_on_init(amimulator_call:answered(Call), Call),
         answered_on_init(amimulator_call:answered(Call), Call),
-        queue_on_init(amimulator_call:acdc_queue_id(Call), Call),
+        queue_on_init(amimulator_call:acdc_queue_id(Call), amimulator_call:other_channel(Call), Call),
         %% TODO implement
         conf_on_init('undefined', Call),
 
@@ -500,11 +508,12 @@ answered_on_init('true', Call) ->
 answered_on_init('false', _) ->
     'false'.
 
--spec queue_on_init(api_binary(), amimulator_call()) -> boolean().
-queue_on_init('undefined', _) ->
+queue_on_init('undefined', _, _) ->
     'false';
-queue_on_init(QueueId, Call) ->
-    ets:insert('queue_calls', {QueueId, amimulator_call:call_id(Call), Call}).
+queue_on_init(QueueId, 'undefined', Call) ->
+    ets:insert('queue_calls', {QueueId, amimulator_call:call_id(Call), Call});
+queue_on_init(_, _, _) ->
+    false.
 
 %% TODO implement
 conf_on_init(_, _) ->

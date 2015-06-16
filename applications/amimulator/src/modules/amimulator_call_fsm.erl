@@ -9,22 +9,21 @@
          ,answer/2
          ,bridge/3
          ,destroy/3
-         ,join_queue/3
          ,monitoring/2
+         ,accepts/2
         ]).
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 -export([pre_create/2
          ,created/2
          ,answered/2
-         ,queued/2
         ]).
 
 -define(STATE_UP, 6).
 
 -record(state, {supervisor :: api_pid()
                 ,monitored_channel :: api_binary()
-                ,calls = [] :: list()
-                ,answered :: amimulator_call:call() | 'undefined'
+                ,call_ids = [] :: list()
+                ,answered :: api_binary()
                }).
 
 %%
@@ -41,25 +40,23 @@ start_link(Super, Call, 'initial') ->
 new_call(FSM, Call) ->
     gen_fsm:send_event(FSM, {'new_call', Call}).
 
--spec answer(pid(), amimulator_call:call()) -> 'ok'.
-answer(FSM, Call) ->
-    gen_fsm:send_event(FSM, {'answer', Call}).
+% -spec answer(pid(), amimulator_call:call()) -> 'ok'.
+answer(FSM, CallId) ->
+    gen_fsm:send_event(FSM, {'answer', CallId}).
 
--spec bridge(pid(), amimulator_call:call(), amimulator_call:call()) -> 'ok'.
-bridge(FSM, Call, OtherCall) ->
-    gen_fsm:send_event(FSM, {'bridge', Call, OtherCall}).
+bridge(FSM, CallId, OtherCallId) ->
+    gen_fsm:send_event(FSM, {'bridge', CallId, OtherCallId}).
 
--spec destroy(pid(), api_binary(), amimulator_call:call()) -> 'ok'.
-destroy(FSM, Reason, Call) ->
-    gen_fsm:send_event(FSM, {'destroy', Reason, Call}).
-
--spec join_queue(pid(), api_binary(), amimulator_call:call()) -> 'ok'.
-join_queue(FSM, QueueId, Call) ->
-    gen_fsm:send_event(FSM, {'join_queue', QueueId, Call}).
+% -spec destroy(pid(), api_binary(), amimulator_call:call()) -> 'ok'.
+destroy(FSM, Reason, CallId) ->
+    gen_fsm:send_event(FSM, {'destroy', Reason, CallId}).
 
 -spec monitoring(pid(), amimulator_call:call()) -> boolean().
 monitoring(FSM, Call) ->
     gen_fsm:sync_send_all_state_event(FSM, {'monitoring', amimulator_call:channel(Call)}).
+
+accepts(FSM, CallId) ->
+    gen_fsm:sync_send_all_state_event(FSM, {'accepts', CallId}).
 
 %%
 %% gen_fsm callbacks
@@ -67,22 +64,22 @@ monitoring(FSM, Call) ->
 
 init([Super, Call]) ->
     {'ok', 'pre_create', #state{supervisor=Super
-                          ,monitored_channel = amimulator_call:channel(Call)
-                         }};
+                                ,monitored_channel = amimulator_call:channel(Call)
+                               }};
 init([Super, Call, 'initial']) ->
     lager:debug("catching up to correct start for call ~p", [amimulator_call:call_id(Call)]),
     initialize(Super, Call).
 
-handle_event({'initialize', Call}, _, #state{calls=Calls
-                                             ,answered='undefined'
-                                            }=State) ->
-    lager:debug("received initialize with call ~p", [Call]),
-    case amimulator_call:answered(Call) of
-        'true' -> {'next_state', 'answered', State#state{calls = [Call], answered=Call}};
-        'false' -> {'next_state', 'created', State#state{calls = [Call | Calls]}}
-    end;
-handle_event({'initialize', _}, StateName, State) ->
-    {'next_state', StateName, State};
+% handle_event({'initialize', Call}, _, #state{calls=Calls
+%                                              ,answered='undefined'
+%                                             }=State) ->
+%     lager:debug("received initialize with call ~p", [Call]),
+%     case amimulator_call:answered(Call) of
+%         'true' -> {'next_state', 'answered', State#state{calls = [Call], answered=Call}};
+%         'false' -> {'next_state', 'created', State#state{calls = [Call | Calls]}}
+%     end;
+% handle_event({'initialize', _}, StateName, State) ->
+%     {'next_state', StateName, State};
 handle_event(Event, StateName, State) ->
     lager:debug("unhandled event in state ~s: ~p", [StateName, Event]),
     {'next_state', StateName, State}.
@@ -91,6 +88,8 @@ handle_sync_event({'monitoring', Channel}, _From, StateName, #state{monitored_ch
     {'reply', 'true', StateName, State};
 handle_sync_event({'monitoring', _}, _From, StateName, State) ->
     {'reply', 'false', StateName, State};
+handle_sync_event({'accepts', CallId}, _From, StateName, #state{call_ids=CallIds}=State) ->
+    {'reply', lists:member(CallId, CallIds), StateName, State};
 handle_sync_event(Event, _From, StateName, State) ->
     lager:debug("unhandled sync event in state ~s: ~p", [StateName, Event]),
     {'reply', 'ok', StateName, State}.
@@ -111,84 +110,118 @@ code_change(_, StateName, State, _) ->
 %% gen_fsm states
 %%
 
-pre_create({'new_call', Call}, #state{calls=Calls
-                                      ,answered=Answered
-                                     }=State) ->
+pre_create({'new_call', Call}, #state{call_ids=CallIds}=State) ->
+    CallId = amimulator_call:call_id(Call),
+
     new_channel_event(amimulator_call:direction(Call), Call),
     maybe_dial_event(Call),
     extension_status(Call),
     new_state(amimulator_call:direction(Call), Call),
     maybe_change_agent_status(Call),
 
-    maybe_already_answered(Answered),
-
     %% The second leg of a call might update CID of first
-    maybe_update_other_call_dest(amimulator_call:call_id(Call), amimulator_call:other_leg_call_id(Call), Call),
+    maybe_update_other_call_dest(CallId, amimulator_call:other_leg_call_id(Call), Call),
+    {'next_state', 'created', State#state{call_ids = add_call_id(CallId, CallIds)}};
 
-    {'next_state', 'created', State#state{calls = [Call | Calls]}};
+% pre_create({'new_forked_call', Call, ForkedFSMs}, #state{calls=Calls}=State) ->
+%     new_channel_event(amimulator_call:direction(Call), Call),
+%     maybe_dial_event(Call),
+%     extension_status(Call),
+%     new_state(amimulator_call:direction(Call), Call),
+%     maybe_change_agent_status(Call),
 
-pre_create({'answer', Call}, State) ->
-    CallId = amimulator_call:call_id(Call),
+%     %% The second leg of a call might update CID of first
+%     % maybe_update_other_call_dest(amimulator_call:call_id(Call), amimulator_call:other_leg_call_id(Call), Call),
+
+%     CallId = amimulator_call:call_id(Call),
+%     {'next_state', 'created', State#state{calls = [Call | Calls]
+%                                           ,forked_fsms = [{CallId, ForkedFSMs}]
+%                                          }};
+
+pre_create({'answer', CallId}, State) ->
     lager:debug("early answer for call with id ~p", [CallId]),
     ami_sm:flag_early_answer(CallId),
-    {'next_state', 'pre_create', State#state{answered=Call}}.
+    {'next_state', 'pre_create', State#state{answered=CallId}}.
 
-created({'new_call', Call}, #state{calls=Calls}=State) ->
-    {'next_state', 'created', State#state{calls = [Call | Calls]}};
+created({'new_call', Call}, #state{call_ids=CallIds}=State) ->
+    CallId = amimulator_call:call_id(Call),
+    {'next_state', 'created', State#state{call_ids = add_call_id(CallId, CallIds)}};
 
-created({'answer', Call}, State) ->
+created({'answer', CallId}, State) ->
+    Call = ami_sm:call(CallId),
     Call2 = amimulator_call:set_answered('true', Call),
-    CallId = amimulator_call:call_id(Call2),
 
     ami_sm:answer(amimulator_call:channel(Call2), CallId),
     ami_sm:update_call(Call2),
     busy_state(Call2, CallId),
     maybe_change_agent_status(Call2),
 
-    {'next_state', 'answered', State#state{answered=Call2}};
+    lager:debug("moving to answered for call ~p", [CallId]),
+    {'next_state', 'answered', State#state{answered=CallId}};
 
-created({'destroy', _, Call}, #state{monitored_channel=Channel
-                                  ,calls=Calls
-                                 }=State) when length(Calls) > 1 ->
-    CallId = amimulator_call:call_id(Call),
-    Calls2 = lists:keydelete(CallId, 2, Calls),
+created({'bridge', _, _}, State) ->
+    lager:debug("call using offnet"),
+    {'next_state', 'created', State};
+
+created({'destroy', Reason, CallId}, #state{monitored_channel=Channel
+                                            ,call_ids=CallIds
+                                           }=State) ->
+    Call = ami_sm:call(CallId),
     ami_sm:delete_call(CallId),
-    lager:debug("channel ~p has call ids remaining: ~p", [Channel, [amimulator_call:call_id(Call2) || Call2 <- Calls2]]),
-    {'next_state', 'created', State#state{calls=Calls2}};
+    case delete_call_id(CallId, CallIds) of
+        [] ->
+            destroy_channel(Reason, Call),
+            lager:debug("channel ~p's last call id ~p destroyed", [Channel, CallId]),
+            {'stop', 'normal', State};
+        CallIds2 ->
+            lager:debug("channel ~p has call ids remaining: ~p", [Channel, CallIds2]),
+            {'next_state', 'created', State#state{call_ids=CallIds2}}
+    end.
 
-created({'destroy', Reason, Call}, State) ->
-    destroy_channel(Reason, Call),
-    {'stop', 'destroyed', State};
+answered({'new_call', Call}, #state{call_ids=CallIds}=State) ->
+    CallId = amimulator_call:call_id(Call),
+    {'next_state', 'answered', State#state{call_ids = add_call_id(CallId, CallIds)}};
 
-created({'join_queue', QueueId, Call}, State) ->
-    QueueCall = fork_queue_call(QueueId, Call),
-    new_channel_event(amimulator_call:direction(QueueCall), QueueCall),
-    ami_sm:update_call(amimulator_call:set_other_leg_call_id(amimulator_call:call_id(QueueCall), Call)),
-    {'next_state', 'created', State#state{queue_call=QueueCall}}.
-
-answered({'new_call', Call}, #state{calls=Calls}=State) ->
-    {'next_state', 'answered', State#state{calls = [Call | Calls]}};
-
-answered({'answer', Call}, #state{monitored_channel=Channel}=State) ->
-    lager:debug("received a second answer for channel ~p on call with id ~p", [Channel, amimulator_call:call_id(Call)]),
+answered({'answer', CallId}, #state{monitored_channel=Channel}=State) ->
+    lager:debug("received a second answer for channel ~p on call with id ~p", [Channel, CallId]),
     {'next_state', 'answered', State};
 
-answered({'bridge', Call, OtherCall}, State) ->
-    Call2 = amimulator_call:update_from_other(OtherCall, Call),
-    OtherCall2 = amimulator_call:update_from_other(Call, OtherCall),
-    ami_sm:update_call(Call2),
-    ami_sm:update_call(OtherCall2),
+answered({'bridge', CallId, OtherCallId}, State) ->
+    Call = ami_sm:call(CallId),
+    OtherCall = ami_sm:call(OtherCallId),
 
-    maybe_bridge_and_dial(Call2, OtherCall2),
+    lager:debug("bridge, updating answered id to ~p", [CallId]),
+    case ami_sm:call(<<CallId/binary, "-queue;2">>) of
+        'undefined' ->
+            Call2 = amimulator_call:update_from_other(OtherCall, Call),
+            OtherCall2 = amimulator_call:update_from_other(Call, OtherCall),
+            ami_sm:update_call(Call2),
+            ami_sm:update_call(OtherCall2),
 
-    {'next_state', 'answered', State#state{answered=Call2}};
+            maybe_bridge_and_dial(Call2, OtherCall2),
+            {'next_state', 'answered', State#state{answered=CallId}};
+        LocalCall2 ->
+            MemberCall = ami_sm:call(OtherCallId),
+            LocalCall1 = ami_sm:call(<<CallId/binary, "-queue;1">>),
 
-answered({'destroy', Reason, Call}, #state{answered=Answered}=State) ->
-    CallId = amimulator_call:call_id(Call),
-    AnsweredCallId = amimulator_call:call_id(Answered),
-    if CallId =:= AnsweredCallId ->
+            MemberCall2 = amimulator_call:set_other_leg_call_id(amimulator_call:call_id(LocalCall1), MemberCall),
+            MemberCall3 = amimulator_call:set_other_channel(amimulator_call:channel(LocalCall1), MemberCall2),
+
+            Call2 = amimulator_call:set_other_leg_call_id(amimulator_call:call_id(LocalCall2), Call),
+            Call3 = amimulator_call:set_other_channel(amimulator_call:channel(LocalCall2), Call2),
+
+            ami_sm:update_call(MemberCall3),
+            ami_sm:update_call(Call3),
+            {'next_state', 'answered', State#state{answered=CallId}}
+    end;
+answered({'destroy', Reason, CallId}, #state{monitored_channel=Channel
+                                             ,answered=Answered
+                                            }=State) ->
+    if CallId =:= Answered ->
+        Call = ami_sm:call(CallId),
         destroy_channel(Reason, Call),
-        {'stop', 'destroyed', State};
+        lager:debug("channel ~p's answered call (~p) destroyed", [Channel, CallId]),
+        {'stop', 'normal', State};
     'true' ->
         ami_sm:delete_call(CallId),
         {'next_state', 'answered', State}
@@ -199,24 +232,8 @@ answered({'destroy', Reason, Call}, #state{answered=Answered}=State) ->
 %%
 
 % -spec initialize(
-initialize(Super, Call) ->
-    State = #state{supervisor=Super
-                   ,monitored_channel = amimulator_call:channel(Call)
-                   ,calls = [Call]
-                  },
-    maybe_already_answered(Call, State).
-
-% -spec maybe_already_answered(amimulator_call:call() | 'undefined') -> 'ok'.
-maybe_already_answered() ->
-    case amimulator_call:answered(Call) of
-        'true' -> 
-
-
-
-
-    'ok';
-maybe_already_answered(Call) ->
-    answer(self(), Call).
+initialize(_Super, Call) ->
+    'ok'.
 
 -spec maybe_update_other_call_dest(api_binary(), api_binary(), amimulator_call:call()) -> 'ok'.
 maybe_update_other_call_dest(_, 'undefined', _) ->
@@ -227,19 +244,33 @@ maybe_update_other_call_dest(_, OtherCallId, Call) ->
     OtherCall = ami_sm:call(OtherCallId),
     ami_sm:update_call(amimulator_call:update_from_other(Call, OtherCall)).
 
--spec fork_queue_call(api_binary(), amimulator_call:call()) -> amimulator_call:call().
-fork_queue_call(QueueId, Call) ->
-    Updaters = [fun(Call2) ->
-                    QueueCallId = <<(amimulator_call:call_id(Call2))/binary, "-queue">>,
-                    amimulator_call:set_call_id(QueueCallId, Call2)
-                end
-                ,fun(Call2) -> amimulator_call:set_other_leg_call_id(amimulator_call:call_id(Call), Call2) end
-                ,fun(Call2) -> amimulator_call:set_acdc_queue_id(QueueId, Call2) end
-                ,fun(Call2) -> amimulator_call:set_channel(Call2) end
-               ],
-    QueueCall = lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters),
-    ami_sm:new_call(QueueCall),
-    QueueCall.
+add_call_id(CallId, CallIds) ->
+    NoDupes = delete_call_id(CallId, CallIds),
+    [CallId | NoDupes].
+
+delete_call_id(CallId, CallIds) ->
+    delete_call_id(CallId, CallIds, []).
+
+delete_call_id(_, [], CallIds) ->
+    CallIds;
+delete_call_id(CallId, [CallId|B], CallIds) ->
+    delete_call_id(CallId, B, CallIds);
+delete_call_id(CallId, [A|B], CallIds) ->
+    delete_call_id(CallId, B, [A | CallIds]).
+
+% -spec fork_queue_call(api_binary(), amimulator_call:call()) -> amimulator_call:call().
+% fork_queue_call(QueueId, Call) ->
+%     Updaters = [fun(Call2) ->
+%                     QueueCallId = <<(amimulator_call:call_id(Call2))/binary, "-queue">>,
+%                     amimulator_call:set_call_id(QueueCallId, Call2)
+%                 end
+%                 ,fun(Call2) -> amimulator_call:set_other_leg_call_id(amimulator_call:call_id(Call), Call2) end
+%                 ,fun(Call2) -> amimulator_call:set_acdc_queue_id(QueueId, Call2) end
+%                 ,fun(Call2) -> amimulator_call:set_channel(Call2) end
+%                ],
+%     QueueCall = lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters),
+%     ami_sm:new_call(QueueCall),
+%     QueueCall.
 
 new_channel_event(<<"inbound">>, Call) ->
     CallId = amimulator_call:call_id(Call),
@@ -382,7 +413,12 @@ dial_event(OtherCallId, Call) ->
                 OtherEndpointName ->
                     'ok';
                 _ ->
-                    Payload = dial(OtherEndpointName, EndpointName, OtherCID, OtherCID, CID, CID, OtherCallId, CallId, CID),
+                    Payload = case amimulator_call:direction(Call) of
+                        <<"inbound">> ->
+                            dial(EndpointName, OtherEndpointName, CID, CID, OtherCID, OtherCID, CallId, OtherCallId, OtherCID);
+                        <<"outbound">> ->
+                            dial(OtherEndpointName, EndpointName, OtherCID, OtherCID, CID, CID, OtherCallId, CallId, CID)
+                    end,
                     amimulator_event_listener:publish_amqp_event({'publish', Payload})
             end
     end.
@@ -599,8 +635,6 @@ destroy_channel(Reason, Call) ->
         _ ->
             {<<"0">>, <<"Not Defined">>}
     end,
-
-    lager:debug("channel ~p's last call id ~p destroyed", [EndpointName, CallId]),
 
     Payload = [[
         {<<"Event">>, <<"Hangup">>},

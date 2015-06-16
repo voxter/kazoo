@@ -53,13 +53,11 @@ handle_specific_event(<<"call">>, EventJObj) ->
     CallId = wh_json:get_value([<<"Call">>, <<"Call-ID">>], EventJObj),
     AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
     QueueId = wh_json:get_value(<<"Queue-ID">>, EventJObj),
-    Call = ami_sm:call(CallId),
+    Call = amimulator_call:set_acdc_queue_id(QueueId, ami_sm:call(CallId)),
     EndpointName = amimulator_call:channel(Call),
     CallerIdNum = amimulator_call:id_number(Call),
     CallerId = amimulator_call:id_name(Call),
     Position = ami_sm:queue_call(QueueId, CallId, Call),
-
-    amimulator_call_sup:relay_join_queue(QueueId, Call),
 
     case amimulator_util:queue_number(wh_util:format_account_id(AccountId, 'encoded'), QueueId) of
         'undefined' -> 'ok';
@@ -92,7 +90,7 @@ handle_specific_event(<<"connecting">>, EventJObj) ->
 	AgentId = wh_json:get_value(<<"Agent-ID">>, EventJObj),
 
 	{'ok', Owner} = couch_mgr:open_doc(AccountDb, AgentId),
-	Call = ami_sm:call(CallId),
+    Call = ami_sm:call(CallId),
 	Payload = [
 		{<<"Event">>, <<"AgentCalled">>},
 		{<<"AgentCalled">>, <<"Local/", (wh_json:get_value(<<"username">>, Owner))/binary, "@from-queue/n">>},

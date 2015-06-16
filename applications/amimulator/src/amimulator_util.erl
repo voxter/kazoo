@@ -12,7 +12,9 @@
          ,initial_calls/1
          % ,initial_calls2/1
          ,update_initial_call/1
-         ,channel_string/1, channel_string/2
+         ,fork_agent_call_leg1/2
+         ,fork_agent_call_leg2/2
+         ,channel_string/1
          ,endpoint_exten/1
          ,queue_number/2
 ,
@@ -111,29 +113,71 @@ initial_calls(AccountId) ->
                 end
             end, [], RespJObjs),
 
-            %% Update calls with each other
-            lists:foldl(
-              fun(Call, Calls) ->
-                case amimulator_call:acdc_queue_id(Call) of
-                    'undefined' -> 'ok';
-                    QueueId ->
-                        AgentCallIds = find_agent_call_ids(Call),
-                        LocalAgentCalls = fork_local_agent_calls(AgentCallIds, BasicCalls, Call),
-
-
-
-
-
-                case lists:keyfind(amimulator_call:other_leg_call_id(BasicCall), 2, BasicCalls) of
-                    'false' -> [BasicCall | Calls];
-                    OtherCall -> [amimulator_call:update_from_other(OtherCall, BasicCall) | Calls]
+            PrioritySortedBasicCalls = lists:sort(fun(A, _) ->
+                case amimulator_call:acdc_queue_id(A) of
+                    'undefined' -> 'false';
+                    _ -> 'true'
                 end
-              end
-              ,[]
-              ,BasicCalls);
+            end, BasicCalls),
+
+            process_basic_calls(PrioritySortedBasicCalls, PrioritySortedBasicCalls, []);
+
+            % %% Update calls with each other
+            % lists:foldl(
+            %   fun(Call, Calls) ->
+            %     case amimulator_call:acdc_queue_id(Call) of
+            %         'undefined' ->
+            %             case lists:keyfind(amimulator_call:other_leg_call_id(Call), 2, BasicCalls) of
+            %                 'false' -> [Call | Calls];
+            %                 OtherCall -> [amimulator_call:update_from_other(OtherCall, Call) | Calls]
+            %             end;
+            %         _ ->
+            %             AgentCallIds = find_agent_call_ids(Call),
+            %             LocalAgentCalls = fork_local_agent_calls(AgentCallIds, BasicCalls, Call),
+            %             [Call] ++ LocalAgentCalls ++ Calls
+            %     end
+            %   end
+            %   ,[]
+            %   ,BasicCalls);
         E ->
             lager:debug("Could not get channel statuses: ~p", [E])
     end.
+
+% -spec
+process_basic_calls([], _, Calls) ->
+    Calls;
+process_basic_calls([BasicCall|BasicCalls], AllBasicCalls, Calls) ->
+    case amimulator_call:acdc_queue_id(BasicCall) of
+        'undefined' -> process_regular_basic_call(BasicCall, BasicCalls, AllBasicCalls, Calls);
+        QueueId ->
+            BasicCall2 = amimulator_call:set_acdc_queue_id(QueueId, BasicCall),
+            process_queue_basic_call(BasicCall2, BasicCalls, AllBasicCalls, [BasicCall2 | Calls])
+    end.
+
+% -spec
+process_regular_basic_call(BasicCall, BasicCalls, AllBasicCalls, Calls) ->
+    case lists:keyfind(amimulator_call:other_leg_call_id(BasicCall), 2, AllBasicCalls) of
+        'false' -> process_basic_calls(BasicCalls, AllBasicCalls, [BasicCall | Calls]);
+        OtherCall -> process_basic_calls(BasicCalls, AllBasicCalls, [amimulator_call:update_from_other(OtherCall, BasicCall) | Calls])
+    end.
+
+% -spec
+process_queue_basic_call(BasicCall, BasicCalls, AllBasicCalls, Calls) ->
+    AgentCallIds = find_agent_call_ids(BasicCall),
+    {NewCalls, RemainingBasicCalls2} = lists:foldl(fun(AgentCallId, {LocalAgentCalls, RemainingBasicCalls}) ->
+        SipAgentCall = lists:keyfind(AgentCallId, 2, BasicCalls),
+
+        case SipAgentCall of
+            'false' -> {LocalAgentCalls, RemainingBasicCalls};
+            _ ->
+                SipAgentCall2 = amimulator_call:set_acdc_queue_id(amimulator_call:acdc_queue_id(BasicCall), SipAgentCall),
+                LocalCall1 = fork_agent_call_leg1(SipAgentCall2, BasicCall),
+                LocalCall2 = fork_agent_call_leg2(SipAgentCall2, BasicCall),
+
+                {[SipAgentCall2, LocalCall1, LocalCall2 | LocalAgentCalls], lists:keydelete(AgentCallId, 2, BasicCalls)}
+        end
+    end, {[], BasicCalls}, AgentCallIds),
+    process_basic_calls(RemainingBasicCalls2, AllBasicCalls, NewCalls ++ Calls).
 
 -spec update_initial_call(amimulator_call:call()) -> amimulator_call:call().
 update_initial_call(Call) ->
@@ -163,62 +207,127 @@ find_agent_call_ids(Call) ->
     Req = [{<<"Call-ID">>, amimulator_call:call_id(Call)}
            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
-    case whapps_util:amqp_pool_request(Req
+    case whapps_util:amqp_pool_collect(Req
                                        ,fun wapi_acdc_agent:publish_stats_req/1
-                                       ,fun wapi_acdc_agent:stats_resp_v/1
+                                       ,500
                                       ) of
-        {'ok', Resp} -> wh_json:get_value(<<"Agent-Call-Ids">>, Resp);
+        {'ok', RespJObjs} ->
+            lists:foldl(fun(Resp, Acc) ->
+                case wh_json:get_value(<<"Agent-Call-IDs">>, Resp) of
+                    'undefined' -> Acc;
+                    AgentCallIds -> AgentCallIds ++ Acc
+                end
+            end, [], RespJObjs);
         {'error', E} ->
             lager:debug("could not find agent call ids (~p)", [E]),
             [];
-        {'timeout', JObj} ->
-            lager:debug("timed out finding agent call ids, received ~p", [JObj]),
-            []
+        {'timeout', RespJObjs} ->
+            lists:foldl(fun(Resp, Acc) ->
+                case wh_json:get_value(<<"Agent-Call-IDs">>, Resp) of
+                    'undefined' -> Acc;
+                    AgentCallIds -> AgentCallIds ++ Acc
+                end
+            end, [], RespJObjs)
     end.
 
 % -spec
-% -spec
-fork_local_agent_calls(AgentCallIds, BasicCalls, Call) ->
-    fork_local_agent_calls(AgentCallIds, BasicCalls, Call, []).
 
-fork_local_agent_calls([], _, _, LocalAgentCalls) ->
-    LocalAgentCalls;
-fork_local_agent_calls([AgentCallId|AgentCallIds], BasicCalls, Call) ->
-    SipAgentCall = lists:keyfind(AgentCallId, 2, BasicCalls),
-    LocalCall1 = fork_agent_call_leg1(SipAgentCall, Call),
-    LocalCall2 = fork_agent_call_leg2(SipAgentCall, Call),
+% fork_local_agent_calls([], _, Call, LocalAgentCalls) ->
+%     if length(LocalAgentCalls) =:= 0 ->
+%         lager:debug("no agent calls were found for member call ~p", [amimulator_call:call_id(Call)]);
+%     'true' ->
+%         'ok'
+%     end,
+%     LocalAgentCalls;
+% fork_local_agent_calls([AgentCallId|AgentCallIds], BasicCalls, Call, LocalAgentCalls) ->
+%     SipAgentCall = lists:keyfind(AgentCallId, 2, BasicCalls),
+
+%     case SipAgentCall of
+%         'false' -> fork_local_agent_calls(AgentCallIds, BasicCalls, Call, [LocalAgentCalls]);
+%         _ ->
+%             SipAgentCall2 = amimulator_call:set_acdc_queue_id()
+%             LocalCall1 = fork_agent_call_leg1(SipAgentCall, Call),
+%             LocalCall2 = fork_agent_call_leg2(SipAgentCall, Call),
+
+%             fork_local_agent_calls(AgentCallIds, BasicCalls, Call, [LocalCall1, LocalCall2 | LocalAgentCalls])
+%     end.
 
 % -spec
 % -spec
 fork_agent_call_leg1(SipAgentCall, Call) ->
     fork_agent_call_leg1(amimulator_call:answered(SipAgentCall), SipAgentCall, Call).
 
-fork_agent_call_leg1('false', SipAgentCall, Call)
-    Updaters = [fun(LC) -> amimulator_call:set_channel(channel_string('local', SipAgentCall), LC) end
-                % ,fun(LC) -> amimulator_call:set_answered('false', LC) end
+fork_agent_call_leg1('false', SipAgentCall, Call) ->
+    Updaters = [fun(LC) -> amimulator_call:set_call_id(<<(amimulator_call:call_id(SipAgentCall))/binary, "-queue;1">>, LC) end
+                ,fun(LC) -> amimulator_call:set_other_leg_call_id('undefined', LC) end
+                ,fun(LC) -> amimulator_call:set_channel(channel_string('local', SipAgentCall, 1), LC) end
+                ,fun(LC) -> amimulator_call:set_other_channel('undefined', LC) end
+                ,fun(LC) -> amimulator_call:set_answered('false', LC) end
                 % ,fun(LC) -> amimulator_call:set_direction(<<"outbound">>, LC) end
                 ,fun(LC) -> amimulator_call:set_caller_id_name(amimulator_call:id_name(Call), LC) end
                 ,fun(LC) -> amimulator_call:set_caller_id_number(amimulator_call:id_number(Call), LC) end
-                ]
+               ],
+    lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, SipAgentCall, Updaters);
+fork_agent_call_leg1(_, SipAgentCall, Call) ->
+    Updaters = [fun(LC) -> amimulator_call:set_call_id(<<(amimulator_call:call_id(SipAgentCall))/binary, "-queue;1">>, LC) end
+                ,fun(LC) -> amimulator_call:set_other_leg_call_id(amimulator_call:call_id(Call), LC) end
+                ,fun(LC) -> amimulator_call:set_channel(channel_string('local', SipAgentCall, 1), LC) end
+                ,fun(LC) -> amimulator_call:set_other_channel(amimulator_call:channel(Call), LC) end
+                ,fun(LC) -> amimulator_call:set_answered('true', LC) end
+                % ,fun(LC) -> amimulator_call:set_direction(<<"outbound">>, LC) end
+                ,fun(LC) -> amimulator_call:set_caller_id_name(amimulator_call:id_name(Call), LC) end
+                ,fun(LC) -> amimulator_call:set_caller_id_number(amimulator_call:id_number(Call), LC) end
+                ,fun(LC) -> amimulator_call:set_other_leg_call_id(amimulator_call:call_id(Call), LC) end
+                ,fun(LC) -> amimulator_call:set_other_channel(amimulator_call:channel(Call), LC) end
+               ],
+    lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, SipAgentCall, Updaters).
+
+% -spec
+% -spec
+fork_agent_call_leg2(SipAgentCall, Call) ->
+    fork_agent_call_leg2(amimulator_call:answered(SipAgentCall), SipAgentCall, Call).
+
+fork_agent_call_leg2('false', SipAgentCall, Call) ->
+    Updaters = [fun(LC) -> amimulator_call:set_call_id(<<(amimulator_call:call_id(SipAgentCall))/binary, "-queue;2">>, LC) end
+                ,fun(LC) -> amimulator_call:set_other_leg_call_id('undefined', LC) end
+                ,fun(LC) -> amimulator_call:set_channel(channel_string('local', SipAgentCall, 2), LC) end
+                ,fun(LC) -> amimulator_call:set_other_channel('undefined', LC) end
+                ,fun(LC) -> amimulator_call:set_answered('false', LC) end
+                % ,fun(LC) -> amimulator_call:set_direction(<<"outbound">>, LC) end
+                ,fun(LC) -> amimulator_call:set_callee_id_name(amimulator_call:id_name(SipAgentCall), LC) end
+                ,fun(LC) -> amimulator_call:set_callee_id_number(amimulator_call:id_number(SipAgentCall), LC) end
+               ],
+    lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters);
+fork_agent_call_leg2(_, SipAgentCall, Call) ->
+    Updaters = [fun(LC) -> amimulator_call:set_call_id(<<(amimulator_call:call_id(SipAgentCall))/binary, "-queue;2">>, LC) end
+                ,fun(LC) -> amimulator_call:set_other_leg_call_id(amimulator_call:call_id(SipAgentCall), LC) end
+                ,fun(LC) -> amimulator_call:set_channel(channel_string('local', SipAgentCall, 2), LC) end
+                ,fun(LC) -> amimulator_call:set_other_channel(amimulator_call:channel(SipAgentCall), LC) end
+                ,fun(LC) -> amimulator_call:set_answered('true', LC) end
+                % ,fun(LC) -> amimulator_call:set_direction(<<"outbound">>, LC) end
+                ,fun(LC) -> amimulator_call:set_callee_id_name(amimulator_call:id_name(SipAgentCall), LC) end
+                ,fun(LC) -> amimulator_call:set_callee_id_number(amimulator_call:id_number(SipAgentCall), LC) end
+               ],
+    lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters).
 
 -spec channel_string(amimulator_call:call()) -> binary().
--spec channel_string('sip' | 'local', amimulator_call:call()) -> binary().
+% -spec
 -spec channel_string('sip' | 'local', api_binary(), api_binary(), api_binary()) -> binary().
 channel_string(Call) ->
     channel_string('sip', amimulator_call:id_number(Call), amimulator_call:call_id(Call), amimulator_call:direction(Call)).
 
-channel_string('sip', Call) ->
-    channel_string('sip', amimulator_call:id_number(Call), amimulator_call:call_id(Call), amimulator_call:direction(Call));
-channel_string('local', Call) ->
-    channel_string('local', amimulator_call:id_number(Call), amimulator_call:call_id(Call), amimulator_call:direction(Call)).
+channel_string('sip', Call, Index) ->
+    channel_string('sip', amimulator_call:id_number(Call), amimulator_call:call_id(Call), Index);
+channel_string('local', Call, Index) ->
+    channel_string('local', amimulator_call:id_number(Call), amimulator_call:call_id(Call), Index).
 
 channel_string('sip', Number, CallId, _) ->
     <<"SIP/", Number/binary, "-", (channel_tail(CallId))/binary>>;
-channel_string('local', Number, CallId, Direction) ->
-    <<"Local/", Number/binary, "@from-queue-", (channel_tail(QueueId, Direction, CallId))/binary>>.
+channel_string('local', Number, CallId, Index) ->
+    <<"Local/", Number/binary, "@from-queue-", (channel_tail(Index, CallId))/binary>>.
 
 -spec channel_tail(api_binary()) -> binary().
--spec channel_tail(binary(), api_binary(), api_binary()) -> binary().
+-spec channel_tail(api_binary(), api_binary()) -> binary().
 %% Returns an 8-digit tail for channels for AMI calls
 channel_tail(CallId) ->
     Seed = case binary:split(CallId, <<"-">>, ['global']) of
@@ -233,7 +342,7 @@ channel_tail(CallId) ->
     MD5 = lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest]),
     list_to_binary(lists:sublist(MD5, length(MD5)-7, 8)).
 
-channel_tail(QueueId, Direction, CallId) ->
+channel_tail(Index, CallId) ->
     Seed = case binary:split(CallId, <<"-">>, ['global']) of
         List when length(List) =:= 5 ->
             %% When the call id looks like 4cad762c-f415-11e4-b890-cdee54d38ecb-queue there may be many legs created
@@ -244,12 +353,7 @@ channel_tail(QueueId, Direction, CallId) ->
     end,
     Digest = crypto:hash('md5', wh_util:to_binary(Seed)),
     MD5 = lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest]),
-    DirDigit = if Direction =:= <<"inbound">> ->
-        "1";
-    'true' ->
-        "2"
-    end,
-    list_to_binary(lists:sublist(MD5, length(MD5)-3, 4) ++ ";" ++ DirDigit).
+    list_to_binary(lists:sublist(MD5, length(MD5)-3, 4) ++ ";" ++ wh_util:to_list(Index)).
 
 -spec endpoint_exten(wh_json:object()) -> api_binary().
 -spec endpoint_exten(api_binary(), wh_json:object()) -> api_binary().

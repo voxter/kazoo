@@ -244,6 +244,8 @@ handle_event("events", Props) ->
         {<<"Events">>, Events}
     ],
     {ok, {Payload, n}};
+handle_event("listcommands", Props) ->
+    list_commands(Props);
 handle_event(Event, Props) ->
     lager:debug("no handler defined for event ~p, props ~p", [Event, Props]),
     {error, no_action}.
@@ -262,6 +264,7 @@ initial_channel_status(Calls, _Props, Format) ->
                 {<<"Items">>, length(FormattedCalls)}
             ]];
         <<"concise">> ->
+            lager:debug("~p", [FormattedCalls]),
             {[
                 <<"Response: Follows\r\nPrivilege: Command\r\n">>
             ] ++ FormattedCalls ++ [
@@ -275,45 +278,55 @@ ami_channel_status(Call, Format) ->
     Channel = amimulator_call:channel(Call),
     BridgedChannel = other_channel(amimulator_call:other_channel(Call), Format),
     CID = amimulator_call:id_name(Call),
-    OtherCID = other_cid(Call, Format),
+    OtherCID = other_cid(Call),
     {ChannelState, ChannelStateDesc} = channel_state(Call),
     {Application, Context} = application_and_context(Call),
     DestExten = dest_exten(Call),
     ElapsedSeconds = amimulator_call:elapsed_s(Call),
 
-    status_payload(Format, Channel, BridgedChannel, CID, CID, OtherCID, OtherCID
+    PL = status_payload(Format, Channel, BridgedChannel, CID, CID, OtherCID, OtherCID
                    ,ChannelState, ChannelStateDesc, Application, Context, DestExten, ElapsedSeconds
-                   ,CallId, BridgedCallId).
+                   ,CallId, BridgedCallId),
+    % lager:debug("direction ~p gave ~p", [amimulator_call:direction(Call), PL]),
+    PL.
 
 other_channel('undefined', <<"concise">>) ->
     <<"(None)">>;
 other_channel(Channel, _) ->
     Channel.
 
-other_cid(Call, Format) ->
+other_cid(Call) ->
     other_cid(amimulator_call:answered(Call), amimulator_call:direction(Call), amimulator_call:acdc_queue_id(Call)
-              ,Format, Call).
+              ,amimulator_call:account_id(Call), amimulator_call:other_channel(Call), Call).
 
-other_cid('true', _, _, _, Call) ->
+other_cid(_, _, 'undefined', _, _, Call) ->
     amimulator_call:other_id_name(Call);
-other_cid(_, _, _, <<"Status">>, Call) ->
-    amimulator_call:other_id_name(Call);
-other_cid('false', _, 'undefined', _, _) ->
-    <<"<unknown>">>;
-other_cid('false', <<"inbound">>, _, _, Call) ->
-    amimulator_call:other_id_name(Call);
-other_cid('false', <<"outbound">>, _, _, _) ->
-    <<"(Outgoing Line)">>.
+other_cid('true', <<"outbound">>, _, _, _, _) ->
+    <<"(Outgoing Line)">>;
+other_cid(_, _, _, _, _, Call) ->
+    lager:debug("undeterminable other call CID"),
+    amimulator_call:other_id_name(Call).
 
 dest_exten(Call) ->
     dest_exten(amimulator_call:answered(Call), amimulator_call:direction(Call), amimulator_call:acdc_queue_id(Call)
-               ,Call).
+               ,amimulator_call:account_id(Call), amimulator_call:other_channel(Call), Call).
 
-dest_exten(_, _, 'undefined', Call) ->
+dest_exten(_, _, 'undefined', _, _, Call) ->
     amimulator_call:other_id_number(Call);
-dest_exten(_, <<"outbound">>, _, _) ->
+dest_exten('true', <<"inbound">>, QueueId, AccountId, <<"Local", _/binary>>, Call) ->
+    case amimulator_util:queue_number(wh_util:format_account_id(AccountId, 'encoded'), QueueId) of
+        'undefined' -> amimulator_call:other_id_number(Call);
+        Number -> Number
+    end;
+dest_exten('true', <<"outbound">>, QueueId, AccountId, <<"SIP", _/binary>>, Call) ->
+    case amimulator_util:queue_number(wh_util:format_account_id(AccountId, 'encoded'), QueueId) of
+        'undefined' -> amimulator_call:other_id_number(Call);
+        Number -> Number
+    end;
+dest_exten('true', _, _, _, _, _) ->
     <<"s">>;
-dest_exten(_, _, _, Call) ->
+dest_exten(_, _, _, _, _, Call) ->
+    lager:debug("undeterminable destination extension"),
     amimulator_call:other_id_number(Call).
 
 channel_state(Call) ->
@@ -328,24 +341,39 @@ channel_state(_, <<"outbound">>) ->
 
 application_and_context(Call) ->
     application_and_context(amimulator_call:answered(Call), amimulator_call:direction(Call), amimulator_call:acdc_queue_id(Call)
-                            ,amimulator_call:other_channel(Call)).
+                            ,amimulator_call:account_id(Call), amimulator_call:other_channel(Call), Call).
     
-application_and_context(_, _, 'undefined', _) ->
-    {<<"Dial">>, <<"from_internal">>};
-application_and_context('false', <<"inbound">>, _, _) ->
+application_and_context(_, _, 'undefined', _, _, _) ->
+    {<<"Dial">>, <<"from-internal">>};
+application_and_context('true', <<"inbound">>, _, _, <<"Local", _/binary>>, _) ->
+    {<<"Queue">>, <<"ext-queues">>};
+application_and_context('true', <<"inbound">>, _, _, <<"SIP", _/binary>>, _) ->
     {<<"Dial">>, <<"macro-dial-one">>};
-application_and_context('false', <<"outbound">>, _, _) ->
+application_and_context('true', <<"outbound">>, _, _, <<"SIP", _/binary>>, _) ->
     {<<"AppQueue">>, <<"from-queue">>};
-application_and_context('true', _, _, 'undefined') ->
-    {<<"Queue">>, <<"ext-queues">>};
-application_and_context('true', <<"inbound">>, _, <<"Local", _/binary>>) ->
-    {<<"Queue">>, <<"ext-queues">>};
-application_and_context('true', <<"inbound">>, _, <<"SIP", _/binary>>) ->
-    {<<"AppQueue">>, <<"from-queue">>};
-application_and_context('true', <<"outbound">>, _, <<"Local", _/binary>>) ->
+application_and_context('true', <<"outbound">>, _, _, <<"Local", _/binary>>, _) ->
     {<<"AppDial">>, <<"macro-dial-one">>};
-application_and_context('true', <<"outbound">>, _, <<"SIP", _/binary>>) ->
-    {<<"Dial">>, <<"macro-dial-one">>}.
+application_and_context(_, _, _, _, _, _) ->
+    lager:debug("undeterminable application and context"),
+    {<<"Dial">>, <<"from-internal">>}.
+
+
+
+
+% application_and_context(_, _, 'undefined', _) ->
+%     {<<"Dial">>, <<"from_internal">>};
+% application_and_context('true', <<"inbound">>, _, <<"SIP", _/binary>>) ->
+%     {<<"Dial">>, <<"macro-dial-one">>};
+% application_and_context('true', <<"inbound">>, _, <<"Local", _/binary>>) ->
+%     {<<"Queue">>, <<"ext-queues">>};
+% application_and_context('true', <<"outbound">>, _, <<"SIP", _/binary>>) ->
+%     {<<"AppQueue">>, <<"from-queue">>};
+% application_and_context('true', <<"outbound">>, _, <<"Local", _/binary>>) ->
+%     {<<"Queue">>, <<"ext-queues">>};
+% application_and_context(_, <<"inbound">>, _, _) ->
+%     {<<"Dial">>, <<"macro-dial-one">>};
+% application_and_context(_, <<"outbound">>, _, _) ->
+%     {<<"AppQueue">>, <<"from-queue">>}.
 
 
 status_payload(<<"Status">>, <<"Local", _/binary>>=Channel, BridgedChannel, CallerIDNum, CallerIDName, ConnectedLineNum, ConnectedLineName
@@ -438,12 +466,12 @@ status_payload(<<"Status">>, Channel, BridgedChannel, CallerIDNum, CallerIDName,
      ,{<<"BridgedUniqueId">>, BridgedUniqueId}
      ,{<<"Uniqueid">>, UniqueId}
     ];
-status_payload(<<"concise">>, Channel, BridgedChannel, _, _, _, ConnectedLineName
+status_payload(<<"concise">>, Channel, BridgedChannel, _, CallerIDName, _, ConnectedLineName
                ,_, ChannelStateDesc, Application, Context, Extension, Seconds, _, _) ->
     <<Channel/binary, "!", Context/binary, "!", Extension/binary, "!1!", ChannelStateDesc/binary, "!", Application/binary
-      ,"!", ConnectedLineName/binary, "!", ConnectedLineName/binary, "!!!3!", (wh_util:to_binary(Seconds))/binary
+      ,"!", ConnectedLineName/binary, "!", CallerIDName/binary, "!!!3!", (wh_util:to_binary(Seconds))/binary
       ,"!", BridgedChannel/binary, "\n">>;
-status_payload(<<"verbose">>, Channel, BridgedChannel, _, _, _, ConnectedLineName
+status_payload(<<"verbose">>, Channel, BridgedChannel, _, CallerIDName, _, ConnectedLineName
                ,_, ChannelStateDesc, Application, Context, Extension, Seconds, _, _) ->
     {H, M, S} = {Seconds div 3600, Seconds rem 3600 div 60, Seconds rem 60},
     TimeString = wh_util:to_binary(if H > 99 ->
@@ -453,7 +481,7 @@ status_payload(<<"verbose">>, Channel, BridgedChannel, _, _, _, ConnectedLineNam
     end),
 
     <<(fit_list(Channel, 20))/binary, " ", (fit_list(Context, 20))/binary, " ", (fit_list(Extension, 16))/binary, " "
-      ,"   1 ", (fit_list(ChannelStateDesc, 7))/binary, " ", (fit_list(Application, 12))/binary, " ", (fit_list(ConnectedLineName, 25))/binary
+      ,"   1 ", (fit_list(ChannelStateDesc, 7))/binary, " ", (fit_list(Application, 12))/binary, " ", (fit_list(CallerIDName, 25))/binary
       ," ", (fit_list(ConnectedLineName, 15))/binary, " ", (fit_list(TimeString, 8))/binary, "                      "
       ,(fit_list(BridgedChannel, 20))/binary, "\n">>.
 
@@ -522,7 +550,7 @@ queues_status(Props) ->
 					        {<<"Strategy">>, wh_json:get_value(<<"strategy">>, QueueDoc)},
 					        %% Calls actually represents number of waiting calls
 					        {<<"Calls">>, WaitingCalls},
-					        {<<"Holdtime">>, AverageHold},
+					        {<<"Holdtime">>, round(AverageHold)},
 					        {<<"TalkTime">>, TalkTime},
 					        {<<"Completed">>, CompletedCalls},
 					        {<<"Abandoned">>, Abandoned},
@@ -530,6 +558,7 @@ queues_status(Props) ->
 					        {<<"ServiceLevel">>, 60},
 					        {<<"ServicelevelPerf">>, 69.0}
         				]]
+                        ++ queue_entries(QueueId, Number, wh_json:get_value(<<"Waiting">>, element(2, RawStats), []))
         				++ agent_statuses(QueueId, AccountId, Number, AgentStats)
         				++ Acc;
         			{'ok', Results2} ->
@@ -608,6 +637,32 @@ count_stats([Stat|Stats], {Calls, Holdtime, TalkTime, Completed, Abandoned, Agen
                         wh_json:get_value(<<"entered_timestamp">>, Stat),
                     count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime, Completed+1, Abandoned+1, AgentStats2})
             end
+    end.
+
+queue_entries(QueueId, Number, WaitingCalls) ->
+    CallIds = ami_sm:queue_calls(QueueId),
+    lists:foldl(fun(CallId, Acc) ->
+        Call = ami_sm:call(CallId),
+        [queue_entry(Call, Number, waiting_call_stat(CallId, WaitingCalls)) | Acc]
+    end, [], CallIds).
+
+queue_entry(Call, Number, WaitingCallStat) ->
+    [{<<"Event">>, <<"QueueEntry">>}
+     ,{<<"Queue">>, Number}
+     ,{<<"Position">>, ami_sm:queue_pos(amimulator_call:acdc_queue_id(Call), amimulator_call:call_id(Call))}
+     ,{<<"Channel">>, amimulator_call:channel(Call)}
+     ,{<<"CallerID">>, amimulator_call:id_number(Call)}
+     ,{<<"CallerIDName">>, amimulator_call:id_name(Call)}
+     ,{<<"Wait">>, wh_util:current_tstamp() - wh_json:get_value(<<"entered_timestamp">>, WaitingCallStat)}
+    ].
+
+waiting_call_stat(CallId, []) ->
+    lager:debug("could not find waiting call for id ~p", [CallId]),
+    'undefined';
+waiting_call_stat(CallId, [JObj|JObjs]) ->
+    case wh_json:get_value(<<"call_id">>, JObj) of
+        CallId -> JObj;
+        _ -> waiting_call_stat(CallId, JObjs)
     end.
 
 agent_statuses(QueueId, AccountId, Number, AgentStats) ->
@@ -904,7 +959,7 @@ command(<<"meetme list ", MeetMeSpec/binary>>, Props) ->
     [Number, _Mode] = binary:split(MeetMeSpec, <<" ">>),
     maybe_list_conf(Number, Props);
 command(<<"core show channels ", Verbosity/binary>>, Props) ->
-    initial_channel_status(amimulator_util:initial_calls(proplists:get_value(<<"AccountId">>, Props)), Props, Verbosity);
+    initial_channel_status(ami_sm:calls(proplists:get_value(<<"AccountId">>, Props)), Props, Verbosity);
 command(<<"database put ", Variable/binary>>, Props) ->
 	[Family, Key, Value] = parse_command(wh_util:to_list(Variable)),
 	ami_sm:db_put(props:get_value(<<"AccountId">>, Props), Family, Key, Value),
@@ -1092,6 +1147,92 @@ participant_payloads(Participants, RunTime, ActionId) ->
         <<"--END COMMAND--\r\n\r\n">>
     ], raw}.
 
+list_commands(Props) ->
+    Payload = [{<<"Response">>, <<"Success">>}
+               ,{<<"ActionID">>, props:get_value(<<"ActionID">>, Props)}
+               ,{<<"WaitEvent">>, <<"Wait for an event to occur.  (Priv: <none>)">>}
+               ,{<<"QueueReset">>, <<"Reset queue statistics.  (Priv: <none>)">>}
+               ,{<<"QueueReload">>, <<"Reload a queue, queues, or any sub-section of a queue or queues.  (Priv: <none>)">>}
+               ,{<<"QueueRule">>, <<"Queue Rules.  (Priv: <none>)">>}
+               ,{<<"QueuePenalty">>, <<"Set the penalty for a queue member.  (Priv: agent,all)">>}
+               ,{<<"QueueLog">>, <<"Adds custom entry in queue_log.  (Priv: agent,all)">>}
+               ,{<<"QueuePause">>, <<"Makes a queue member temporarily unavailable.  (Priv: agent,all)">>}
+               ,{<<"QueueRemove">>, <<"Remove interface from queue.  (Priv: agent,all)">>}
+               ,{<<"QueueAdd">>, <<"Add interface to queue.  (Priv: agent,all)">>}
+               ,{<<"QueueSummary">>, <<"Show queue summary.  (Priv: <none>)">>}
+               ,{<<"QueueStatus">>, <<"Show queue status.  (Priv: <none>)">>}
+               ,{<<"Queues">>, <<"Queues.  (Priv: <none>)">>}
+               ,{<<"VoicemailUsersList">>, <<"List All Voicemail User Information.  (Priv: call,reporting,all)">>}
+               ,{<<"PlayDTMF">>, <<"Play DTMF signal on a specific channel.  (Priv: call,all)">>}
+               ,{<<"MixMonitorMute">>, <<"Mute / unMute a Mixmonitor recording.  (Priv: <none>)">>}
+               ,{<<"MuteAudio">>, <<"Mute an audio stream (Priv: system,all)">>}
+               ,{<<"MeetmeList">>, <<"List participants in a conference.  (Priv: reporting,all)">>}
+               ,{<<"MeetmeUnmute">>, <<"Unmute a Meetme user.  (Priv: call,all)">>}
+               ,{<<"MeetmeMute">>, <<"Mute a Meetme user.  (Priv: call,all)">>}
+               ,{<<"SIPnotify">>, <<"Send a SIP notify.  (Priv: system,all)">>}
+               ,{<<"SIPshowregistry">>, <<"Show SIP registrations (text format).  (Priv: system,reporting,all)">>}
+               ,{<<"SIPqualifypeer">>, <<"Qualify SIP peers.  (Priv: system,reporting,all)">>}
+               ,{<<"SIPshowpeer">>, <<"show SIP peer (text format).  (Priv: system,reporting,all)">>}
+               ,{<<"SIPpeers">>, <<"List SIP peers (text format).  (Priv: system,reporting,all)">>}
+               ,{<<"DAHDIRestart">>, <<"Fully Restart DAHDI channels (terminates calls).  (Priv: <none>)">>}
+               ,{<<"DAHDIShowChannels">>, <<"Show status of DAHDI channels.  (Priv: <none>)">>}
+               ,{<<"DAHDIDNDoff">>, <<"Toggle DAHDI channel Do Not Disturb status OFF.  (Priv: <none>)">>}
+               ,{<<"DAHDIDNDon">>, <<"Toggle DAHDI channel Do Not Disturb status ON.  (Priv: <none>)">>}
+               ,{<<"DAHDIDialOffhook">>, <<"Dial over DAHDI channel while offhook.  (Priv: <none>)">>}
+               ,{<<"DAHDIHangup">>, <<"Hangup DAHDI Channel.  (Priv: <none>)">>}
+               ,{<<"DAHDITransfer">>, <<"Transfer DAHDI Channel.  (Priv: <none>)">>}
+               ,{<<"IAXregistry">>, <<"Show IAX registrations.  (Priv: system,reporting,all)">>}
+               ,{<<"IAXnetstats">>, <<"Show IAX Netstats.  (Priv: system,reporting,all)">>}
+               ,{<<"IAXpeerlist">>, <<"List IAX Peers.  (Priv: system,reporting,all)">>}
+               ,{<<"IAXpeers">>, <<"List IAX peers.  (Priv: system,reporting,all)">>}
+               ,{<<"UnpauseMonitor">>, <<"Unpause monitoring of a channel.  (Priv: call,all)">>}
+               ,{<<"PauseMonitor">>, <<"Pause monitoring of a channel.  (Priv: call,all)">>}
+               ,{<<"ChangeMonitor">>, <<"Change monitoring filename of a channel.  (Priv: call,all)">>}
+               ,{<<"StopMonitor">>, <<"Stop monitoring a channel.  (Priv: call,all)">>}
+               ,{<<"Monitor">>, <<"Monitor a channel.  (Priv: call,all)">>}
+               ,{<<"DBDelTree">>, <<"Delete DB Tree.  (Priv: system,all)">>}
+               ,{<<"DBDel">>, <<"Delete DB entry.  (Priv: system,all)">>}
+               ,{<<"DBPut">>, <<"Put DB entry.  (Priv: system,all)">>}
+               ,{<<"DBGet">>, <<"Get DB Entry.  (Priv: system,reporting,all)">>}
+               ,{<<"Bridge">>, <<"Bridge two channels already in the PBX.  (Priv: call,all)">>}
+               ,{<<"Park">>, <<"Park a channel.  (Priv: call,all)">>}
+               ,{<<"ParkedCalls">>, <<"List parked calls.  (Priv: <none>)">>}
+               ,{<<"ShowDialPlan">>, <<"Show dialplan contexts and extensions  (Priv: config,reporting,all)">>}
+               ,{<<"ModuleCheck">>, <<"Check if module is loaded.  (Priv: system,all)">>}
+               ,{<<"ModuleLoad">>, <<"Module management.  (Priv: system,all)">>}
+               ,{<<"CoreShowChannels">>, <<"List currently active channels.  (Priv: system,reporting,all)">>}
+               ,{<<"Reload">>, <<"Send a reload event.  (Priv: system,config,all)">>}
+               ,{<<"CoreStatus">>, <<"Show PBX core status variables.  (Priv: system,reporting,all)">>}
+               ,{<<"CoreSettings">>, <<"Show PBX core settings (version etc).  (Priv: system,reporting,all)">>}
+               ,{<<"UserEvent">>, <<"Send an arbitrary event.  (Priv: user,all)">>}
+               ,{<<"UpdateConfig">>, <<"Update basic configuration.  (Priv: config,all)">>}
+               ,{<<"SendText">>, <<"Send text message to channel.  (Priv: call,all)">>}
+               ,{<<"ListCommands">>, <<"List available manager commands.  (Priv: <none>)">>}
+               ,{<<"MailboxCount">>, <<"Check Mailbox Message Count.  (Priv: call,reporting,all)">>}
+               ,{<<"MailboxStatus">>, <<"Check mailbox.  (Priv: call,reporting,all)">>}
+               ,{<<"AbsoluteTimeout">>, <<"Set absolute timeout.  (Priv: system,call,all)">>}
+               ,{<<"ExtensionState">>, <<"Check Extension Status.  (Priv: call,reporting,all)">>}
+               ,{<<"Command">>, <<"Execute Asterisk CLI Command.  (Priv: command,all)">>}
+               ,{<<"Originate">>, <<"Originate a call.  (Priv: originate,all)">>}
+               ,{<<"Atxfer">>, <<"Attended transfer.  (Priv: call,all)">>}
+               ,{<<"Redirect">>, <<"Redirect (transfer) a call.  (Priv: call,all)">>}
+               ,{<<"ListCategories">>, <<"List categories in configuration file.  (Priv: config,all)">>}
+               ,{<<"CreateConfig">>, <<"Creates an empty file in the configuration directory.  (Priv: config,all)">>}
+               ,{<<"Status">>, <<"List channel status.  (Priv: system,call,reporting,all)">>}
+               ,{<<"GetConfigJSON">>, <<"Retrieve configuration (JSON format).  (Priv: system,config,all)">>}
+               ,{<<"GetConfig">>, <<"Retrieve configuration.  (Priv: system,config,all)">>}
+               ,{<<"Getvar">>, <<"Gets a channel variable.  (Priv: call,reporting,all)">>}
+               ,{<<"Setvar">>, <<"Set a channel variable.  (Priv: call,all)">>}
+               ,{<<"Ping">>, <<"Keepalive command.  (Priv: <none>)">>}
+               ,{<<"Hangup">>, <<"Hangup channel.  (Priv: system,call,all)">>}
+               ,{<<"Challenge">>, <<"Generate Challenge for MD5 Auth.  (Priv: <none>)">>}
+               ,{<<"Login">>, <<"Login Manager.  (Priv: <none>)">>}
+               ,{<<"Logoff">>, <<"Logoff Manager.  (Priv: <none>)">>}
+               ,{<<"Events">>, <<"Control Event Flow.  (Priv: <none>)">>}
+               ,{<<"LocalOptimizeAway">>, <<"Optimize away a local channel when possible.  (Priv: system,call,all)">>}
+               ,{<<"DataGet">>, <<"Retrieve the data api tree.  (Priv: <none>)">>}
+              ],
+    {'ok', {props:filter_undefined(Payload), 'n'}}.
 
 
 

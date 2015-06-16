@@ -131,7 +131,8 @@ assign_aleg_props(AuthorizingId, Props, Call) ->
         fun(C) -> whapps_call:set_authorizing_id(AuthorizingId, C) end,
         fun(C) -> whapps_call:set_authorizing_type(<<"user">>, C) end,
         fun(C) -> whapps_call:set_request(<<To/binary, "@blackholeami">>, C) end,
-        fun(C) -> whapps_call:set_to(<<To/binary, "@blackholeami">>, C) end
+        fun(C) -> whapps_call:set_to(<<To/binary, "@blackholeami">>, C) end,
+        fun(C) -> whapps_call:set_resource_type(<<"audio">>, C) end
     ],
     lists:foldl(fun(F, C) -> F(C) end, Call, Routines).
 

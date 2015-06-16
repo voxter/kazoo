@@ -114,7 +114,7 @@ handle_unregister(AccountId, EventJObj) ->
     case couch_mgr:get_results(AccountDb, <<"devices/sip_credentials">>, [{key, wh_json:get_value(<<"Username">>, EventJObj)}]) of
         {ok, [Result]} ->
             {ok, EndpointDoc} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, Result)),
-            Exten = amimulator_util:endpoint_exten(EndpointDoc, AccountDb),
+            Exten = amimulator_util:endpoint_exten(EndpointDoc),
             Peer = <<"SIP/", Exten/binary>>,
             Payload = [[
                 {<<"Event">>, <<"PeerStatus">>},
