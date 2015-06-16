@@ -7,18 +7,24 @@
 	     ,format_binary/1
 	     ,format_json_events/1
 	     ,index_of/2
-	     ,control_queue/1
-	     ,initial_calls/1, create_call/1,
-    get_call/1, bleg_ami_channel/3, bleg_cid/3, endpoint_exten/2, whapps_call/1,
-    maybe_get_exten/1, maybe_get_endpoint_name/1, endpoint_name/2, maybe_get_cid_name/1,
-    find_id_number/2, queue_for_number/2,
-    filter_registered_events/4, channel_tail/1]).
+         ,create_call/1
 
--export([initial_calls2/1]).
+         ,initial_calls/1
+         % ,initial_calls2/1
+         ,update_initial_call/1
+         ,fork_agent_call_leg1/2
+         ,fork_agent_call_leg2/2
+         ,channel_string/1
+         ,endpoint_exten/1
+         ,queue_number/2
+,
+   
+    find_id_number/2, queue_for_number/2]).
 
 %% AMI commands broken up by newlines
+-spec parse_payload(binary()) -> list().
 parse_payload(Payload) ->
-    Lines = filter_empty(binary:split(Payload, <<"\r\n">>, [global])),
+    Lines = filter_empty(binary:split(Payload, <<"\r\n">>, ['global'])),
     lists:foldl(fun(Parameter, Acc) ->
         KV = binary:split(Parameter, <<":">>),
         {K, V} = {lists:nth(1, KV), lists:nth(2, KV)},
@@ -27,6 +33,7 @@ parse_payload(Payload) ->
         end, [], Lines).
     
 %% Eliminates trailing lines from client payload
+-spec filter_empty(list()) -> list().
 filter_empty(Parameters) ->
     lists:foldl(fun(Param, Acc) ->
         case Param of
@@ -37,11 +44,13 @@ filter_empty(Parameters) ->
         end end, [], Parameters).
 
 %% Recursive proplist formatting for writes to socket
+-spec format_prop(tuple()) -> binary().
 format_prop({V}) ->
     <<(wh_util:to_binary(V))/binary, "\r\n">>;
 format_prop({K, V}) ->
     <<(wh_util:to_binary(K))/binary, ": ", (wh_util:to_binary(V))/binary, "\r\n">>.
 
+-spec format_binary(list()) -> binary().
 format_binary([KV|Rest]) ->
     Head = format_prop(KV),
     Tail = format_binary(Rest),
@@ -50,6 +59,8 @@ format_binary([]) ->
     <<"\r\n">>.
 
 %% Format a set of events for publishing to AMQP
+-spec format_json_events(list()) -> list().
+-spec format_json_events(list(), list()) -> list().
 format_json_events(Events) ->
     format_json_events(Events, []).
 
@@ -60,267 +71,502 @@ format_json_events([{_K, _V}|_Other]=KVs, _Acc) ->
 format_json_events([Event|Events], Acc) ->
     format_json_events(Events, Acc ++ [{Event}]).
 
-
-
-
+%% Find the index of an element in a list
+-spec index_of(any(), list()) -> pos_integer() | 'not_found'.
+-spec index_of(any(), list(), pos_integer()) -> pos_integer() | 'not_found'.
 index_of(Element, List) ->
 	index_of(Element, List, 1).
 
 index_of(_, [], _) ->
-	not_found;
+	'not_found';
 index_of(Element, [Element|_], Index) ->
 	Index;
 index_of(Element, [_|T], Index) ->
 	index_of(Element, T, Index+1).
 
-
-
-
-
-
-
-
-
-
-control_queue(WhappsCall) ->
-	Req = props:filter_undefined([{<<"Call-ID">>, whapps_call:call_id(WhappsCall)}
-		   						  | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-		  						 ]),
-    ReqResp = whapps_util:amqp_pool_request(Req
-                                            ,fun wapi_amimulator:publish_control_queue_req/1
-                                            ,fun wapi_amimulator:control_queue_resp_v/1
-                                           ),
-    case ReqResp of
-    	{'error', 'timeout'} ->
-    		case whapps_call:other_leg_call_id(WhappsCall) of
-    			'undefined' ->
-    				{'error', 'not_found'};
-    			OtherCallId ->
-		    		ReqResp2 = whapps_util:amqp_pool_request(props:set_value(<<"Call-ID">>, OtherCallId, Req)
-		    												 ,fun wapi_amimulator:publish_control_queue_req/1
-		    												 ,fun wapi_amimulator:control_queue_resp_v/1
-		    												),
-		    		case ReqResp2 of
-		    			{'error', _E}=Error -> Error;
-		    			{'ok', Resp} ->
-		    				{'ok', Resp}
-		    		end
-		    end;
-        {'error', _E}=Error -> Error;
-        {'ok', Resp} ->
-        	{'ok', Resp}
-    end.
-
-
-
-
-
-
-
-
-
-
+-spec create_call(wh_json:object()) -> amimulator_call:call().
 create_call(EventJObj) ->
-    {CallId, WhappsCall} = call_from_json(EventJObj),
+    Call = amimulator_call:from_json(EventJObj),
+    amimulator_call:update_from_other(ami_sm:call(amimulator_call:other_leg_call_id(Call)), Call).
 
-    BCs = case whapps_call:other_leg_call_id(WhappsCall) of
-        CallId ->
-            lager:debug("Why are the legs the same ID"),
-            [{CallId, WhappsCall}];
-        undefined ->
-            [{CallId, WhappsCall}];
-        OtherLegCallId ->
-            [{OtherLegCallId, ami_sm:call(OtherLegCallId)}, {CallId, WhappsCall}]
-    end,
-
-    better_call(EventJObj, BCs).
-
-get_call(CallId) ->
-    ami_sm:call(CallId).
-
-initial_calls2(AccountId) ->
-	Req = [
-        {<<"Account-ID">>, AccountId},
-        {<<"Active-Only">>, 'true'}
-        | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-    ],
-    case wh_amqp_worker:call_collect(
-        Req,
-        fun wapi_call:publish_query_account_channels_req/1,
-        {'ecallmgr', fun wapi_call:query_account_channels_resp_v/1}
-    ) of
+%% Fetches all active calls for an account
+-spec initial_calls(ne_binary()) -> [amimulator_call:call(),...] | [].
+initial_calls(AccountId) ->
+    Req = [{<<"Account-ID">>, AccountId}
+           ,{<<"Active-Only">>, 'true'}
+           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+          ],
+    case wh_amqp_worker:call_collect(Req
+                                     ,fun wapi_call:publish_query_account_channels_req/1
+                                     ,{'ecallmgr', fun wapi_call:query_account_channels_resp_v/1}
+                                    ) of
         {'ok', RespJObjs} ->
-        	%% Now we can produce all the channels and update the state master
-            LookupChannels = lists:foldl(fun(RespJObj, ChannelsAcc) ->
+            %% Now we can produce all the channels and update the state master
+            BasicCalls = lists:foldl(fun(RespJObj, Calls) ->
                 Channels = wh_json:get_value(<<"Channels">>, RespJObj),
                 case Channels of
-                    undefined ->
-                    	ChannelsAcc;
+                    'undefined' -> Calls;
                     _ ->
-                    	NewChannels = lists:foldl(fun(Channel, Acc) ->
-                    		CallId = wh_json:get_value(<<"uuid">>, Channel),
-                    		[{CallId, Channel} | Acc]
-                    	end, ChannelsAcc, Channels),
-                    	NewChannels
+                        lists:foldl(fun(Call, Calls2) ->
+                            [update_initial_call(Call) | Calls2]
+                        end, Calls, amimulator_call:from_json(Channels))
                 end
             end, [], RespJObjs),
 
-            lists:foldl(fun({_CallId, Channel}, Acc) ->
-            	[call_from_channel(Channel, LookupChannels) | Acc]
-            end, [], LookupChannels);
+            PrioritySortedBasicCalls = lists:sort(fun(A, _) ->
+                case amimulator_call:acdc_queue_id(A) of
+                    'undefined' -> 'false';
+                    _ -> 'true'
+                end
+            end, BasicCalls),
+
+            process_basic_calls(PrioritySortedBasicCalls, PrioritySortedBasicCalls, []);
+
+            % %% Update calls with each other
+            % lists:foldl(
+            %   fun(Call, Calls) ->
+            %     case amimulator_call:acdc_queue_id(Call) of
+            %         'undefined' ->
+            %             case lists:keyfind(amimulator_call:other_leg_call_id(Call), 2, BasicCalls) of
+            %                 'false' -> [Call | Calls];
+            %                 OtherCall -> [amimulator_call:update_from_other(OtherCall, Call) | Calls]
+            %             end;
+            %         _ ->
+            %             AgentCallIds = find_agent_call_ids(Call),
+            %             LocalAgentCalls = fork_local_agent_calls(AgentCallIds, BasicCalls, Call),
+            %             [Call] ++ LocalAgentCalls ++ Calls
+            %     end
+            %   end
+            %   ,[]
+            %   ,BasicCalls);
         E ->
             lager:debug("Could not get channel statuses: ~p", [E])
     end.
 
-
-call_from_channel(JObj, Lookup) ->
-	Routines = [
-		fun({Call, WhappsCall}) ->
-			{Call, whapps_call:set_call_id(wh_json:get_value(<<"uuid">>, JObj), WhappsCall)} end,
-		fun({Call, WhappsCall}) ->
-			{Call, whapps_call:set_other_leg_call_id(wh_json:get_value(<<"other_leg">>, JObj), WhappsCall)} end,
-		fun({Call, WhappsCall}) ->
-			{Call, whapps_call:set_bridge_id(wh_json:get_value(<<"bridge_id">>, JObj), WhappsCall)} end,
-		fun({Call, WhappsCall}) ->
-			{Call, whapps_call:set_account_id(wh_json:get_value(<<"account_id">>, JObj), WhappsCall)} end,
-		fun({Call, WhappsCall}) ->
-			{Call, whapps_call:set_authorizing_id(wh_json:get_value(<<"authorizing_id">>, JObj, <<>>), WhappsCall)} end,
-		fun({Call, WhappsCall}) ->
-			{Call, whapps_call:set_authorizing_type(wh_json:get_value(<<"authorizing_type">>, JObj, <<>>), WhappsCall)} end,
-		fun({Call, WhappsCall}) ->
-			{Call, whapps_call:set_to_user(wh_json:get_value(<<"destination">>, JObj), WhappsCall)} end,
-
-		fun({Call, WhappsCall}) ->
-			{props:set_value(<<"direction">>, wh_json:get_value(<<"direction">>, JObj), Call), WhappsCall} end,
-        fun({Call, WhappsCall}) ->
-        	{props:set_value(<<"username">>, wh_json:get_value(<<"username">>, JObj), Call), WhappsCall} end,
-        fun({Call, WhappsCall}) ->
-        	{props:set_value(<<"answered">>, wh_json:get_value(<<"answered">>, JObj), Call), WhappsCall} end,
-        fun({Call, WhappsCall}) ->
-        	{props:set_value(<<"elapsed_s">>, wh_json:get_value(<<"elapsed_s">>, JObj), Call), WhappsCall} end,
-		fun({Call, WhappsCall}) ->
-			CallId = wh_json:get_value(<<"uuid">>, JObj),
-			AccountDb = whapps_call:account_db(WhappsCall),
-			Props = case whapps_call:authorizing_id(WhappsCall) of
-				<<>> ->
-					ALeg = case maybe_cellphone_endpoint2(
-						whapps_call:to_user(WhappsCall), props:get_value(<<"direction">>, Call),
-						CallId, wh_json:get_value(<<"presence_id">>, JObj), AccountDb) of
-						{direction, D} ->
-							[
-								{<<"aleg_cid">>, props:get_value(<<"cid">>, D)},
-								{<<"aleg_exten">>, props:get_value(<<"cid">>, D)},
-								{<<"aleg_ami_channel">>, props:get_value(<<"channel">>, D)}
-							];
-						{endpoint, Endpoint} ->
-							[
-								{<<"aleg_cid">>, endpoint_cid(Endpoint, AccountDb)},
-								{<<"aleg_exten">>, endpoint_exten(Endpoint, AccountDb)},
-								{<<"aleg_ami_channel">>, endpoint_channel(Endpoint, AccountDb, CallId)}
-							]
-					end,
-					BLeg = case couch_mgr:open_doc(AccountDb,
-						wh_json:get_value(<<"authorizing_id">>,
-							props:get_value(whapps_call:other_leg_call_id(WhappsCall), Lookup))) of
-						{error, empty_doc_id} ->
-							[];
-						{ok, Endpoint2} ->
-							[
-								{<<"bleg_cid">>, endpoint_cid(Endpoint2, AccountDb)},
-								{<<"bleg_exten">>, endpoint_exten(Endpoint2, AccountDb)},
-								{<<"bleg_ami_channel">>, endpoint_channel(Endpoint2, AccountDb, CallId)}
-							]
-					end,
-					ALeg ++ BLeg;
-				_ ->
-					Endpoint = case cf_endpoint:get(WhappsCall) of
-						{error, E} ->
-							lager:debug("Error when getting endpoint: ~p", [WhappsCall]),
-							undefined;
-						{ok, Endpoint2} ->
-							Endpoint2
-					end,
-					ALeg = [
-						{<<"aleg_cid">>, endpoint_cid(Endpoint, AccountDb)},
-						{<<"aleg_exten">>, endpoint_exten(Endpoint, AccountDb)},
-						{<<"aleg_ami_channel">>, endpoint_channel(Endpoint, AccountDb, CallId)}
-					],
-					OtherLegCallId = whapps_call:other_leg_call_id(WhappsCall),
-					OtherChannel = props:get_value(OtherLegCallId, Lookup),
-					BLeg = case maybe_cellphone_endpoint2(
-						wh_json:get_value(<<"destination">>, OtherChannel), wh_json:get_value(<<"direction">>, OtherChannel),
-						CallId, wh_json:get_value(<<"presence_id">>, OtherChannel), AccountDb) of
-						{direction, D} ->
-							[
-								{<<"bleg_cid">>, props:get_value(<<"cid">>, D)},
-								{<<"bleg_exten">>, props:get_value(<<"cid">>, D)},
-								{<<"bleg_ami_channel">>, props:get_value(<<"channel">>, D)}
-							];
-						{endpoint, Endpoint} ->
-							[
-								{<<"bleg_cid">>, endpoint_cid(Endpoint, AccountDb)},
-								{<<"bleg_exten">>, endpoint_exten(Endpoint, AccountDb)},
-								{<<"bleg_ami_channel">>, endpoint_channel(Endpoint, AccountDb, OtherLegCallId)}
-							]
-					end,
-					ALeg ++ BLeg
-			end,
-			{props:set_values(Props, Call), WhappsCall}
-		end
-	],
-    {Call, WhappsCall} = lists:foldl(fun(F, {Call, WhappsCall}) -> F({Call, WhappsCall}) end, {[], whapps_call:new()}, Routines),
-    props:set_value(<<"call">>, WhappsCall, Call).
-
-maybe_cellphone_endpoint2(To, Direction, CallId, PresenceId, AccountDb) ->
-    {ok, Results} = couch_mgr:get_results(AccountDb, <<"devices/call_forwards">>),
-
-    Number = case Direction of
-    	<<"inbound">> ->
-    		hd(binary:split(PresenceId, <<"@">>));
-    	<<"outbound">> ->
-    		To
-    end,
-
-    E164 = wnm_util:to_e164(Number),
-    case find_call_forward(E164, AccountDb, Results) of
-    	false ->
-    		{direction, call_direction_endpoint2(To, Direction, CallId, PresenceId)};
-    	Endpoint ->
-    		{endpoint, Endpoint}
+% -spec
+process_basic_calls([], _, Calls) ->
+    Calls;
+process_basic_calls([BasicCall|BasicCalls], AllBasicCalls, Calls) ->
+    case amimulator_call:acdc_queue_id(BasicCall) of
+        'undefined' -> process_regular_basic_call(BasicCall, BasicCalls, AllBasicCalls, Calls);
+        QueueId ->
+            BasicCall2 = amimulator_call:set_acdc_queue_id(QueueId, BasicCall),
+            process_queue_basic_call(BasicCall2, BasicCalls, AllBasicCalls, [BasicCall2 | Calls])
     end.
 
+% -spec
+process_regular_basic_call(BasicCall, BasicCalls, AllBasicCalls, Calls) ->
+    case lists:keyfind(amimulator_call:other_leg_call_id(BasicCall), 2, AllBasicCalls) of
+        'false' -> process_basic_calls(BasicCalls, AllBasicCalls, [BasicCall | Calls]);
+        OtherCall -> process_basic_calls(BasicCalls, AllBasicCalls, [amimulator_call:update_from_other(OtherCall, BasicCall) | Calls])
+    end.
+
+% -spec
+process_queue_basic_call(BasicCall, BasicCalls, AllBasicCalls, Calls) ->
+    AgentCallIds = find_agent_call_ids(BasicCall),
+    {NewCalls, RemainingBasicCalls2} = lists:foldl(fun(AgentCallId, {LocalAgentCalls, RemainingBasicCalls}) ->
+        SipAgentCall = lists:keyfind(AgentCallId, 2, BasicCalls),
+
+        case SipAgentCall of
+            'false' -> {LocalAgentCalls, RemainingBasicCalls};
+            _ ->
+                SipAgentCall2 = amimulator_call:set_acdc_queue_id(amimulator_call:acdc_queue_id(BasicCall), SipAgentCall),
+                LocalCall1 = fork_agent_call_leg1(SipAgentCall2, BasicCall),
+                LocalCall2 = fork_agent_call_leg2(SipAgentCall2, BasicCall),
+
+                {[SipAgentCall2, LocalCall1, LocalCall2 | LocalAgentCalls], lists:keydelete(AgentCallId, 2, BasicCalls)}
+        end
+    end, {[], BasicCalls}, AgentCallIds),
+    process_basic_calls(RemainingBasicCalls2, AllBasicCalls, NewCalls ++ Calls).
+
+-spec update_initial_call(amimulator_call:call()) -> amimulator_call:call().
+update_initial_call(Call) ->
+    Updaters = [fun maybe_queue_call/1
+                ,fun maybe_conf_call/1
+               ],
+    lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters).
+
+-spec maybe_queue_call(amimulator_call:call()) -> amimulator_call:call().
+-spec maybe_queue_call(api_object(), amimulator_call:call()) -> amimulator_call:call().
+maybe_queue_call(Call) ->
+    %% TODO change to AMQP request
+    maybe_queue_call(acdc_stats:find_call(amimulator_call:call_id(Call)), Call).
+
+maybe_queue_call('undefined', Call) ->
+    Call;
+maybe_queue_call(Stat, Call) ->
+    QueueId = wh_json:get_value(<<"Queue-ID">>, Stat),
+    amimulator_call:set_acdc_queue_id(QueueId, Call).
+
+%% TODO implement
+maybe_conf_call(Call) ->
+    Call.
+
+% -spec
+find_agent_call_ids(Call) ->
+    Req = [{<<"Call-ID">>, amimulator_call:call_id(Call)}
+           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+          ],
+    case whapps_util:amqp_pool_collect(Req
+                                       ,fun wapi_acdc_agent:publish_stats_req/1
+                                       ,500
+                                      ) of
+        {'ok', RespJObjs} ->
+            lists:foldl(fun(Resp, Acc) ->
+                case wh_json:get_value(<<"Agent-Call-IDs">>, Resp) of
+                    'undefined' -> Acc;
+                    AgentCallIds -> AgentCallIds ++ Acc
+                end
+            end, [], RespJObjs);
+        {'error', E} ->
+            lager:debug("could not find agent call ids (~p)", [E]),
+            [];
+        {'timeout', RespJObjs} ->
+            lists:foldl(fun(Resp, Acc) ->
+                case wh_json:get_value(<<"Agent-Call-IDs">>, Resp) of
+                    'undefined' -> Acc;
+                    AgentCallIds -> AgentCallIds ++ Acc
+                end
+            end, [], RespJObjs)
+    end.
+
+% -spec
+
+% fork_local_agent_calls([], _, Call, LocalAgentCalls) ->
+%     if length(LocalAgentCalls) =:= 0 ->
+%         lager:debug("no agent calls were found for member call ~p", [amimulator_call:call_id(Call)]);
+%     'true' ->
+%         'ok'
+%     end,
+%     LocalAgentCalls;
+% fork_local_agent_calls([AgentCallId|AgentCallIds], BasicCalls, Call, LocalAgentCalls) ->
+%     SipAgentCall = lists:keyfind(AgentCallId, 2, BasicCalls),
+
+%     case SipAgentCall of
+%         'false' -> fork_local_agent_calls(AgentCallIds, BasicCalls, Call, [LocalAgentCalls]);
+%         _ ->
+%             SipAgentCall2 = amimulator_call:set_acdc_queue_id()
+%             LocalCall1 = fork_agent_call_leg1(SipAgentCall, Call),
+%             LocalCall2 = fork_agent_call_leg2(SipAgentCall, Call),
+
+%             fork_local_agent_calls(AgentCallIds, BasicCalls, Call, [LocalCall1, LocalCall2 | LocalAgentCalls])
+%     end.
+
+% -spec
+% -spec
+fork_agent_call_leg1(SipAgentCall, Call) ->
+    fork_agent_call_leg1(amimulator_call:answered(SipAgentCall), SipAgentCall, Call).
+
+fork_agent_call_leg1('false', SipAgentCall, Call) ->
+    Updaters = [fun(LC) -> amimulator_call:set_call_id(<<(amimulator_call:call_id(SipAgentCall))/binary, "-queue;1">>, LC) end
+                ,fun(LC) -> amimulator_call:set_other_leg_call_id('undefined', LC) end
+                ,fun(LC) -> amimulator_call:set_channel(channel_string('local', SipAgentCall, 1), LC) end
+                ,fun(LC) -> amimulator_call:set_other_channel('undefined', LC) end
+                ,fun(LC) -> amimulator_call:set_answered('false', LC) end
+                % ,fun(LC) -> amimulator_call:set_direction(<<"outbound">>, LC) end
+                ,fun(LC) -> amimulator_call:set_caller_id_name(amimulator_call:id_name(Call), LC) end
+                ,fun(LC) -> amimulator_call:set_caller_id_number(amimulator_call:id_number(Call), LC) end
+               ],
+    lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, SipAgentCall, Updaters);
+fork_agent_call_leg1(_, SipAgentCall, Call) ->
+    Updaters = [fun(LC) -> amimulator_call:set_call_id(<<(amimulator_call:call_id(SipAgentCall))/binary, "-queue;1">>, LC) end
+                ,fun(LC) -> amimulator_call:set_other_leg_call_id(amimulator_call:call_id(Call), LC) end
+                ,fun(LC) -> amimulator_call:set_channel(channel_string('local', SipAgentCall, 1), LC) end
+                ,fun(LC) -> amimulator_call:set_other_channel(amimulator_call:channel(Call), LC) end
+                ,fun(LC) -> amimulator_call:set_answered('true', LC) end
+                % ,fun(LC) -> amimulator_call:set_direction(<<"outbound">>, LC) end
+                ,fun(LC) -> amimulator_call:set_caller_id_name(amimulator_call:id_name(Call), LC) end
+                ,fun(LC) -> amimulator_call:set_caller_id_number(amimulator_call:id_number(Call), LC) end
+                ,fun(LC) -> amimulator_call:set_other_leg_call_id(amimulator_call:call_id(Call), LC) end
+                ,fun(LC) -> amimulator_call:set_other_channel(amimulator_call:channel(Call), LC) end
+               ],
+    lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, SipAgentCall, Updaters).
+
+% -spec
+% -spec
+fork_agent_call_leg2(SipAgentCall, Call) ->
+    fork_agent_call_leg2(amimulator_call:answered(SipAgentCall), SipAgentCall, Call).
+
+fork_agent_call_leg2('false', SipAgentCall, Call) ->
+    Updaters = [fun(LC) -> amimulator_call:set_call_id(<<(amimulator_call:call_id(SipAgentCall))/binary, "-queue;2">>, LC) end
+                ,fun(LC) -> amimulator_call:set_other_leg_call_id('undefined', LC) end
+                ,fun(LC) -> amimulator_call:set_channel(channel_string('local', SipAgentCall, 2), LC) end
+                ,fun(LC) -> amimulator_call:set_other_channel('undefined', LC) end
+                ,fun(LC) -> amimulator_call:set_answered('false', LC) end
+                % ,fun(LC) -> amimulator_call:set_direction(<<"outbound">>, LC) end
+                ,fun(LC) -> amimulator_call:set_callee_id_name(amimulator_call:id_name(SipAgentCall), LC) end
+                ,fun(LC) -> amimulator_call:set_callee_id_number(amimulator_call:id_number(SipAgentCall), LC) end
+               ],
+    lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters);
+fork_agent_call_leg2(_, SipAgentCall, Call) ->
+    Updaters = [fun(LC) -> amimulator_call:set_call_id(<<(amimulator_call:call_id(SipAgentCall))/binary, "-queue;2">>, LC) end
+                ,fun(LC) -> amimulator_call:set_other_leg_call_id(amimulator_call:call_id(SipAgentCall), LC) end
+                ,fun(LC) -> amimulator_call:set_channel(channel_string('local', SipAgentCall, 2), LC) end
+                ,fun(LC) -> amimulator_call:set_other_channel(amimulator_call:channel(SipAgentCall), LC) end
+                ,fun(LC) -> amimulator_call:set_answered('true', LC) end
+                % ,fun(LC) -> amimulator_call:set_direction(<<"outbound">>, LC) end
+                ,fun(LC) -> amimulator_call:set_callee_id_name(amimulator_call:id_name(SipAgentCall), LC) end
+                ,fun(LC) -> amimulator_call:set_callee_id_number(amimulator_call:id_number(SipAgentCall), LC) end
+               ],
+    lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters).
+
+-spec channel_string(amimulator_call:call()) -> binary().
+% -spec
+-spec channel_string('sip' | 'local', api_binary(), api_binary(), api_binary()) -> binary().
+channel_string(Call) ->
+    channel_string('sip', amimulator_call:id_number(Call), amimulator_call:call_id(Call), amimulator_call:direction(Call)).
+
+channel_string('sip', Call, Index) ->
+    channel_string('sip', amimulator_call:id_number(Call), amimulator_call:call_id(Call), Index);
+channel_string('local', Call, Index) ->
+    channel_string('local', amimulator_call:id_number(Call), amimulator_call:call_id(Call), Index).
+
+channel_string('sip', Number, CallId, _) ->
+    <<"SIP/", Number/binary, "-", (channel_tail(CallId))/binary>>;
+channel_string('local', Number, CallId, Index) ->
+    <<"Local/", Number/binary, "@from-queue-", (channel_tail(Index, CallId))/binary>>.
+
+-spec channel_tail(api_binary()) -> binary().
+-spec channel_tail(api_binary(), api_binary()) -> binary().
+%% Returns an 8-digit tail for channels for AMI calls
+channel_tail(CallId) ->
+    Seed = case binary:split(CallId, <<"-">>, ['global']) of
+        List when length(List) =:= 5 ->
+            %% When the call id looks like 4cad762c-f415-11e4-b890-cdee54d38ecb there may be many legs created
+            %% The 2nd and 3rd parts are unique to a call as a whole even though the 1st and 5th change per leg
+            <<(lists:nth(2, List))/binary, "-", (lists:nth(3, List))/binary>>;
+        _ ->
+            CallId
+    end,
+    Digest = crypto:hash('md5', wh_util:to_binary(Seed)),
+    MD5 = lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest]),
+    list_to_binary(lists:sublist(MD5, length(MD5)-7, 8)).
+
+channel_tail(Index, CallId) ->
+    Seed = case binary:split(CallId, <<"-">>, ['global']) of
+        List when length(List) =:= 5 ->
+            %% When the call id looks like 4cad762c-f415-11e4-b890-cdee54d38ecb-queue there may be many legs created
+            %% The 2nd and 3rd parts are unique to a call as a whole even though the 1st and 5th change per leg
+            <<(lists:nth(2, List))/binary, "-", (lists:nth(3, List))/binary>>;
+        _ ->
+            CallId
+    end,
+    Digest = crypto:hash('md5', wh_util:to_binary(Seed)),
+    MD5 = lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest]),
+    list_to_binary(lists:sublist(MD5, length(MD5)-3, 4) ++ ";" ++ wh_util:to_list(Index)).
+
+-spec endpoint_exten(wh_json:object()) -> api_binary().
+-spec endpoint_exten(api_binary(), wh_json:object()) -> api_binary().
+endpoint_exten(Endpoint) ->
+    endpoint_exten(wh_json:get_value(<<"owner_id">>, Endpoint), Endpoint).
+
+endpoint_exten('undefined', Endpoint) ->
+    wh_json:get_value(<<"name">>, Endpoint);
+endpoint_exten(OwnerId, Endpoint) ->
+    case couch_mgr:open_doc(wh_json:get_value(<<"pvt_account_db">>, Endpoint), OwnerId) of
+        {'ok', UserDoc} -> <<(wh_json:get_value(<<"username">>, UserDoc))/binary>>;
+        _ ->
+            lager:debug("could not find owner doc for device ~p (~p)", [wh_json:get_value(<<"_id">>, Endpoint)
+                                                                        ,wh_json:get_value(<<"name">>, Endpoint)]),
+            endpoint_exten('undefined', Endpoint)
+    end.
+
+-spec queue_number(ne_binary(), ne_binary()) -> wh_json:json_term() | 'undefined'.
+queue_number(AccountDb, QueueId) ->
+    case couch_mgr:get_results(AccountDb, <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
+        {'error', E} ->
+            lager:debug("could not load queue callflows (~p)", [E]),
+            'undefined';
+        {'ok', []} ->
+            lager:debug("the queue does not have a callflow specified"),
+            'undefined';
+        {ok, Results} ->
+            Value = wh_json:get_value(<<"value">>, hd(Results)),
+            hd(Value)
+    end.
+
+% initial_calls2(AccountId) ->
+% 	Req = [
+%         {<<"Account-ID">>, AccountId},
+%         {<<"Active-Only">>, 'true'}
+%         | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+%     ],
+%     case wh_amqp_worker:call_collect(
+%         Req,
+%         fun wapi_call:publish_query_account_channels_req/1,
+%         {'ecallmgr', fun wapi_call:query_account_channels_resp_v/1}
+%     ) of
+%         {'ok', RespJObjs} ->
+%         	%% Now we can produce all the channels and update the state master
+%             LookupChannels = lists:foldl(fun(RespJObj, ChannelsAcc) ->
+%                 Channels = wh_json:get_value(<<"Channels">>, RespJObj),
+%                 case Channels of
+%                     undefined ->
+%                     	ChannelsAcc;
+%                     _ ->
+%                     	NewChannels = lists:foldl(fun(Channel, Acc) ->
+%                     		CallId = wh_json:get_value(<<"uuid">>, Channel),
+%                     		[{CallId, Channel} | Acc]
+%                     	end, ChannelsAcc, Channels),
+%                     	NewChannels
+%                 end
+%             end, [], RespJObjs),
+
+%             lists:foldl(fun({_CallId, Channel}, Acc) ->
+%             	[call_from_channel(Channel, LookupChannels) | Acc]
+%             end, [], LookupChannels);
+%         E ->
+%             lager:debug("Could not get channel statuses: ~p", [E])
+%     end.
+
+% call_from_channel(JObj, Lookup) ->
+% 	Routines = [
+% 		fun({Call, WhappsCall}) ->
+% 			{Call, whapps_call:set_call_id(wh_json:get_value(<<"uuid">>, JObj), WhappsCall)} end,
+% 		fun({Call, WhappsCall}) ->
+% 			{Call, whapps_call:set_other_leg_call_id(wh_json:get_value(<<"other_leg">>, JObj), WhappsCall)} end,
+% 		fun({Call, WhappsCall}) ->
+% 			{Call, whapps_call:set_bridge_id(wh_json:get_value(<<"bridge_id">>, JObj), WhappsCall)} end,
+% 		fun({Call, WhappsCall}) ->
+% 			{Call, whapps_call:set_account_id(wh_json:get_value(<<"account_id">>, JObj), WhappsCall)} end,
+% 		fun({Call, WhappsCall}) ->
+% 			{Call, whapps_call:set_authorizing_id(wh_json:get_value(<<"authorizing_id">>, JObj, <<>>), WhappsCall)} end,
+% 		fun({Call, WhappsCall}) ->
+% 			{Call, whapps_call:set_authorizing_type(wh_json:get_value(<<"authorizing_type">>, JObj, <<>>), WhappsCall)} end,
+% 		fun({Call, WhappsCall}) ->
+% 			{Call, whapps_call:set_to_user(wh_json:get_value(<<"destination">>, JObj), WhappsCall)} end,
+
+% 		fun({Call, WhappsCall}) ->
+% 			{props:set_value(<<"direction">>, wh_json:get_value(<<"direction">>, JObj), Call), WhappsCall} end,
+%         fun({Call, WhappsCall}) ->
+%         	{props:set_value(<<"username">>, wh_json:get_value(<<"username">>, JObj), Call), WhappsCall} end,
+%         fun({Call, WhappsCall}) ->
+%         	{props:set_value(<<"answered">>, wh_json:get_value(<<"answered">>, JObj), Call), WhappsCall} end,
+%         fun({Call, WhappsCall}) ->
+%         	{props:set_value(<<"elapsed_s">>, wh_json:get_value(<<"elapsed_s">>, JObj), Call), WhappsCall} end,
+% 		fun({Call, WhappsCall}) ->
+% 			CallId = wh_json:get_value(<<"uuid">>, JObj),
+% 			AccountDb = whapps_call:account_db(WhappsCall),
+% 			Props = case whapps_call:authorizing_id(WhappsCall) of
+% 				<<>> ->
+% 					ALeg = case maybe_cellphone_endpoint2(
+% 						whapps_call:to_user(WhappsCall), props:get_value(<<"direction">>, Call),
+% 						CallId, wh_json:get_value(<<"presence_id">>, JObj), AccountDb) of
+% 						{direction, D} ->
+% 							[
+% 								{<<"aleg_cid">>, props:get_value(<<"cid">>, D)},
+% 								{<<"aleg_exten">>, props:get_value(<<"cid">>, D)},
+% 								{<<"aleg_ami_channel">>, props:get_value(<<"channel">>, D)}
+% 							];
+% 						{endpoint, Endpoint} ->
+% 							[
+% 								{<<"aleg_cid">>, endpoint_cid(Endpoint, AccountDb)},
+% 								{<<"aleg_exten">>, endpoint_exten(Endpoint, AccountDb)},
+% 								{<<"aleg_ami_channel">>, endpoint_channel(Endpoint, AccountDb, CallId)}
+% 							]
+% 					end,
+% 					BLeg = case couch_mgr:open_doc(AccountDb,
+% 						wh_json:get_value(<<"authorizing_id">>,
+% 							props:get_value(whapps_call:other_leg_call_id(WhappsCall), Lookup))) of
+% 						{error, empty_doc_id} ->
+% 							[];
+% 						{ok, Endpoint2} ->
+% 							[
+% 								{<<"bleg_cid">>, endpoint_cid(Endpoint2, AccountDb)},
+% 								{<<"bleg_exten">>, endpoint_exten(Endpoint2, AccountDb)},
+% 								{<<"bleg_ami_channel">>, endpoint_channel(Endpoint2, AccountDb, CallId)}
+% 							]
+% 					end,
+% 					ALeg ++ BLeg;
+% 				_ ->
+% 					Endpoint = case cf_endpoint:get(WhappsCall) of
+% 						{error, E} ->
+% 							lager:debug("Error when getting endpoint: ~p", [WhappsCall]),
+% 							undefined;
+% 						{ok, Endpoint2} ->
+% 							Endpoint2
+% 					end,
+% 					ALeg = [
+% 						{<<"aleg_cid">>, endpoint_cid(Endpoint, AccountDb)},
+% 						{<<"aleg_exten">>, endpoint_exten(Endpoint, AccountDb)},
+% 						{<<"aleg_ami_channel">>, endpoint_channel(Endpoint, AccountDb, CallId)}
+% 					],
+% 					OtherLegCallId = whapps_call:other_leg_call_id(WhappsCall),
+% 					OtherChannel = props:get_value(OtherLegCallId, Lookup),
+% 					BLeg = case maybe_cellphone_endpoint2(
+% 						wh_json:get_value(<<"destination">>, OtherChannel), wh_json:get_value(<<"direction">>, OtherChannel),
+% 						CallId, wh_json:get_value(<<"presence_id">>, OtherChannel), AccountDb) of
+% 						{direction, D} ->
+% 							[
+% 								{<<"bleg_cid">>, props:get_value(<<"cid">>, D)},
+% 								{<<"bleg_exten">>, props:get_value(<<"cid">>, D)},
+% 								{<<"bleg_ami_channel">>, props:get_value(<<"channel">>, D)}
+% 							];
+% 						{endpoint, Endpoint} ->
+% 							[
+% 								{<<"bleg_cid">>, endpoint_cid(Endpoint, AccountDb)},
+% 								{<<"bleg_exten">>, endpoint_exten(Endpoint, AccountDb)},
+% 								{<<"bleg_ami_channel">>, endpoint_channel(Endpoint, AccountDb, OtherLegCallId)}
+% 							]
+% 					end,
+% 					ALeg ++ BLeg
+% 			end,
+% 			{props:set_values(Props, Call), WhappsCall}
+% 		end
+% 	],
+%     {Call, WhappsCall} = lists:foldl(fun(F, {Call, WhappsCall}) -> F({Call, WhappsCall}) end, {[], whapps_call:new()}, Routines),
+%     props:set_value(<<"call">>, WhappsCall, Call).
+
+% maybe_cellphone_endpoint2(To, Direction, CallId, PresenceId, AccountDb) ->
+%     {ok, Results} = couch_mgr:get_results(AccountDb, <<"devices/call_forwards">>),
+
+%     Number = case Direction of
+%     	<<"inbound">> ->
+%     		hd(binary:split(PresenceId, <<"@">>));
+%     	<<"outbound">> ->
+%     		To
+%     end,
+
+%     E164 = wnm_util:to_e164(Number),
+%     case find_call_forward(E164, AccountDb, Results) of
+%     	false ->
+%     		{direction, call_direction_endpoint2(To, Direction, CallId, PresenceId)};
+%     	Endpoint ->
+%     		{endpoint, Endpoint}
+%     end.
 
 
 
 
-find_call_forward(_, _, []) ->
-	false;
-find_call_forward(E164, AccountDb, [Result|Others]) ->
-	case wnm_util:to_e164(wh_json:get_value(<<"key">>, Result)) of
-		E164 ->
-			Value = wh_json:get_value(<<"value">>, Result),
-			{ok, Device} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, Value)),
-			Device;
-		_ ->
-			find_call_forward(E164, AccountDb, Others)
-	end.
+
+% find_call_forward(_, _, []) ->
+% 	false;
+% find_call_forward(E164, AccountDb, [Result|Others]) ->
+% 	case wnm_util:to_e164(wh_json:get_value(<<"key">>, Result)) of
+% 		E164 ->
+% 			Value = wh_json:get_value(<<"value">>, Result),
+% 			{ok, Device} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, Value)),
+% 			Device;
+% 		_ ->
+% 			find_call_forward(E164, AccountDb, Others)
+% 	end.
 
 
 
 
-call_direction_endpoint2(To, Direction, CallId, PresenceId) ->
-    case Direction of
-        <<"inbound">> ->
-            [
-            	{<<"channel">>, channel_string(hd(binary:split(PresenceId, <<"@">>)), CallId)},
-	            {<<"cid">>, hd(binary:split(PresenceId, <<"@">>))}
-            ];
-        <<"outbound">> ->
-            [
-            	{<<"channel">>, channel_string(To, CallId)},
-            	{<<"cid">>, To}
-            ]
-    end.%,
+% call_direction_endpoint2(To, Direction, CallId, PresenceId) ->
+%     case Direction of
+%         <<"inbound">> ->
+%             [
+%             	{<<"channel">>, channel_string(hd(binary:split(PresenceId, <<"@">>)), CallId)},
+% 	            {<<"cid">>, hd(binary:split(PresenceId, <<"@">>))}
+%             ];
+%         <<"outbound">> ->
+%             [
+%             	{<<"channel">>, channel_string(To, CallId)},
+%             	{<<"cid">>, To}
+%             ]
+%     end.%,
  %    case props:get_value(<<"cid">>, Props) of
  %    	<<"Unknown">> ->
  %    		call_direction_cid(Call, WhappsCall, Props);
@@ -349,459 +595,239 @@ call_direction_endpoint2(To, Direction, CallId, PresenceId) ->
 
 
 
-%% Fetches all whapps calls for an account and adds them to the data store
-initial_calls(AccountId) ->
-    Req = [
-        {<<"Account-ID">>, AccountId},
-        {<<"Active-Only">>, true}
-        | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-    ],
-    case wh_amqp_worker:call_collect(
-        Req,
-        fun wapi_call:publish_query_account_channels_req/1,
-        {ecallmgr, fun wapi_call:query_account_channels_resp_v/1}
-    ) of
-        {ok, RespJObjs} ->
+
+
+% better_call(JObj, BasicCalls) ->
+%     CallId = wh_json:get_first_defined([<<"uuid">>, <<"Call-ID">>], JObj),
+%     Call = props:get_value(CallId, BasicCalls),
+
+%     Routines = [
+%         % fun(Call2, JObj2, _BC) -> 
+%         %     CallDirection = wh_json:get_first_defined([<<"direction">>, <<"Call-Direction">>], JObj2,
+%         %         <<"inbound">>),
+%         %     props:set_value(<<"direction">>, CallDirection, Call2) end,
+%         % fun aleg_cid/3,
+%         % fun aleg_exten/3,
+%         % fun aleg_ami_channel/3,
+%         fun bleg_cid/3,
+%         fun bleg_exten/3,
+%         fun bleg_ami_channel/3,
+%         % fun(Call2, JObj2, _BC) -> props:set_value(<<"username">>, 
+%         %     wh_json:get_first_defined([<<"username">>, <<"Username">>], JObj2), Call2) end,
+%         % fun(Call2, JObj2, _BC) -> props:set_value(<<"answered">>, 
+%         %     wh_json:get_first_defined([<<"answered">>], JObj2), Call2) end,
+%         % fun(Call2, JObj2, _BC) -> props:set_value(<<"elapsed_s">>, 
+%         %     wh_json:get_first_defined([<<"elapsed_s">>], JObj2), Call2) end
+%     ],
+%     lists:foldl(
+%         fun(F, BCall) -> F(BCall, JObj, BasicCalls) end,
+%         [{<<"call">>, Call}],
+%         Routines
+%     ).
+
+% aleg_cid(Call, _ChannelJObj, _BC) ->
+%     WhappsCall = props:get_value(<<"call">>, Call),
+%     case WhappsCall of
+%         undefined ->
+%             try throw(42) catch 42 -> wh_util:log_stacktrace() end;
+%         _ ->
+%             ok
+%     end,
+%     case cf_endpoint:get(WhappsCall) of
+%         %% An external endpoint
+%         {error, _E} ->
+%         	props:set_value(<<"aleg_cid">>, props:get_value(<<"cid">>, maybe_cellphone_endpoint(Call)), Call);
+%         %% Some internal extension
+%         {ok, Endpoint} ->
+%             props:set_value(<<"aleg_cid">>, endpoint_cid(Endpoint, whapps_call:account_db(WhappsCall)), Call)
+%     end.
+
+% aleg_exten(Call, _ChannelJObj, _BC) ->
+%     WhappsCall = props:get_value(<<"call">>, Call),
+%     case cf_endpoint:get(WhappsCall) of
+%         %% An external endpoint
+%         {error, _E} ->
+%             case props:get_value(<<"direction">>, Call) of
+%                 <<"inbound">> ->
+%                     props:set_value(<<"aleg_exten">>, whapps_call:from_user(WhappsCall), Call);
+%                 <<"outbound">> ->
+%                     props:set_value(<<"aleg_exten">>, whapps_call:to_user(WhappsCall), Call)
+%             end;
+%         %% Some internal extension
+%         {ok, Endpoint} ->
+%             props:set_value(<<"aleg_exten">>, endpoint_exten(Endpoint, whapps_call:account_db(WhappsCall)), Call)
+%     end.
+
+% aleg_ami_channel(Call, _ChannelJObj, _BC) ->
+%     WhappsCall = props:get_value(<<"call">>, Call),
+%     case cf_endpoint:get(WhappsCall) of
+%         %% An external endpoint
+%         {error, _E} ->
+%             props:set_value(<<"aleg_ami_channel">>, props:get_value(<<"channel">>, maybe_cellphone_endpoint(Call)), Call);
+%         %% Some internal extension
+%         {ok, Endpoint} ->
+%             props:set_value(<<"aleg_ami_channel">>, endpoint_channel(Endpoint, whapps_call:account_db(WhappsCall), whapps_call:call_id(WhappsCall)), Call)
+%     end.
+
+% maybe_cellphone_endpoint(Call) ->
+%     WhappsCall = props:get_value(<<"call">>, Call),
+%     AccountDb = wh_util:format_account_id(whapps_call:account_id(WhappsCall), encoded),
+%     {ok, Results} = couch_mgr:get_results(AccountDb, <<"devices/call_forwards">>),
+%     E164 = wnm_util:to_e164(whapps_call:to_user(WhappsCall)),
+%     case lists:foldl(fun(Result, Found) ->
+%         case Found of
+%             false ->
+%                 {ok, Device} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, Result)),
+%                 case {wnm_util:to_e164(wh_json:get_value([<<"call_forward">>, <<"number">>], Device)),
+%                     wh_json:get_value(<<"owner_id">>, Device)} of
+%                     {_, undefined} ->
+%                         false;
+%                     {E164, _} ->
+%                         [{<<"channel">>, endpoint_channel(Device, AccountDb, whapps_call:call_id(WhappsCall))}
+%                          ,{<<"cid">>, endpoint_cid(Device, AccountDb)}
+%                         ];
+%                     _ ->
+%                         false
+%                 end;
+%             _ ->
+%                 Found
+%         end
+%     end, false, Results) of
+%         false ->
+%             %if length(Results) > 0 ->
+%             %    {ok, Device} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, hd(Results))),
+%             %    props:set_value(<<"aleg_ami_channel">>,
+%             %        endpoint_channel(Device, AccountDb, whapps_call:call_id(WhappsCall)), Call);
+%             %true ->
+%                 call_direction_endpoint(Call);
+%             %end;
+%         CellphoneEndpoint ->
+%             CellphoneEndpoint
+%     end.
+
+% call_direction_endpoint(Call) ->
+%     WhappsCall = props:get_value(<<"call">>, Call),
+%     Props = case props:get_value(<<"direction">>, Call) of
+%         <<"inbound">> ->
+%             [{<<"channel">>, channel_string(
+%                 whapps_call:from_user(WhappsCall),
+%                 whapps_call:call_id(WhappsCall)
+%              )}
+%              ,{<<"cid">>, whapps_call:caller_id_name(WhappsCall)}
+%             ];
+%         <<"outbound">> ->
+%             [{<<"channel">>, channel_string(
+%                 whapps_call:to_user(WhappsCall),
+%                 whapps_call:call_id(WhappsCall)
+%              )}
+%              ,{<<"cid">>, whapps_call:callee_id_name(WhappsCall)}
+%             ]
+%     end,
+%     case props:get_value(<<"cid">>, Props) of
+%     	<<"Unknown">> ->
+%     		call_direction_cid(Call, WhappsCall, Props);
+%     	<<"Device QuickCall">> ->
+%     		call_direction_cid(Call, WhappsCall, Props);
+% 		_ ->
+% 			Props
+% 	end.
+
+% call_direction_cid(Call, WhappsCall, Props) ->
+% 	case props:get_value(<<"direction">>, Call) of
+% 	    <<"inbound">> ->
+% 	        props:set_value(<<"cid">>, whapps_call:from_user(WhappsCall), Props);
+% 	    <<"outbound">> ->
+% 	        props:set_value(<<"cid">>, whapps_call:to_user(WhappsCall), Props)
+% 	end.
+
+% bleg_cid(Call, ChannelJObj, BC) ->
+%     case props:get_value(whapps_call:other_leg_call_id(props:get_value(<<"call">>, Call)),
+%         BC) of
+%         undefined ->
+%         	% case props:get_value(<<"direction">>, Call) of
+%         	% 	<<"inbound">> ->
+%         	% 		WhappsCall = props:get_value(<<"call">>, Call),
+%         	% 		BLegCid = case whapps_call:callee_id_name(WhappsCall) of
+%         	% 			<<>> ->
+%         	% 				whapps_call:to_user(WhappsCall);
+%         	% 			CalleeId ->
+%         	% 				CalleeId
+%         	% 		end,
+%         	% 		props:set_value(<<"bleg_cid">>, BLegCid, Call);
+%         	% 	<<"outbound">> ->
+%         	% 		% WhappsCall = props:get_value(<<"call">>, Call),
+%         	% 		% BLegCid = case whapps_call:caller_id_name(WhappsCall) of
+%         	% 		% 	<<>> ->
+%         	% 		% 		whapps_call:from_user(WhappsCall);
+%         	% 		% 	CallerId ->
+%         	% 		% 		CallerId
+%         	% 		% end,
+%         	% 		% props:set_value(<<"bleg_cid">>, BLegCid)
+%         	% 		props:set_value(<<"bleg_cid">>, whapps_call:caller_id_name(props:get_value(<<"call">>, Call)), Call)
+%         	% end;
+%             % props:set_value(<<"bleg_cid">>, whapps_call:to_user(props:get_value(<<"call">>, Call)), Call);
+%         OtherCall ->
+%             Direction = case props:get_value(<<"direction">>, Call) of
+%                 <<"inbound">> -> <<"outbound">>;
+%                 <<"outbound">> -> <<"inbound">>
+%             end,
+
+%             case is_tuple(OtherCall) of
+%                 true ->
+%                     props:set_value(<<"bleg_cid">>, props:get_value(<<"aleg_cid">>,
+%                         aleg_cid([{<<"call">>, OtherCall},
+%                         {<<"direction">>, Direction}], undefined, undefined)), Call);
+%                 _ ->
+%                     props:set_value(<<"bleg_cid">>, props:get_value(<<"aleg_cid">>, OtherCall), Call)
+%             end
+%     end.
+
+% bleg_exten(Call, _ChannelJObj, BC) ->
+%     case props:get_value(whapps_call:other_leg_call_id(props:get_value(<<"call">>, Call)),
+%         BC) of
+%         undefined ->
+%             % props:set_value(<<"bleg_exten">>, whapps_call:to_user(props:get_value(<<"call">>, Call)), Call);
+%         OtherCall ->
+%             Direction = case props:get_value(<<"direction">>, Call) of
+%                 <<"inbound">> -> <<"outbound">>;
+%                 <<"outbound">> -> <<"inbound">>
+%             end,
+
+%             case is_tuple(OtherCall) of
+%                 true ->
+%                     props:set_value(<<"bleg_exten">>, props:get_value(<<"aleg_exten">>,
+%                     aleg_exten([{<<"call">>, OtherCall},
+%                     {<<"direction">>, Direction}], undefined, undefined)), Call);
+%                 _ ->
+%                     props:set_value(<<"bleg_exten">>, props:get_value(<<"aleg_exten">>, OtherCall), Call)
+%             end
+%     end.
+
+% bleg_ami_channel(Call, _ChannelJObj, BC) ->
+%     case props:get_value(whapps_call:other_leg_call_id(props:get_value(<<"call">>, Call)),
+%         BC) of
+%         undefined ->
+%             %% TODO, find the call somehow
+%             % Call;
+%         OtherCall ->
+%             Direction = case props:get_value(<<"direction">>, Call) of
+%                 <<"inbound">> -> <<"outbound">>;
+%                 <<"outbound">> -> <<"inbound">>
+%             end,
+
+%             case is_tuple(OtherCall) of
+%                 true ->
+%                     props:set_value(<<"bleg_ami_channel">>, props:get_value(<<"aleg_ami_channel">>,
+%                         aleg_ami_channel([{<<"call">>, OtherCall},
+%                         {<<"direction">>, Direction}], undefined, undefined)), Call);
+%                 _ ->
+%                     props:set_value(<<"bleg_ami_channel">>, props:get_value(<<"aleg_ami_channel">>, OtherCall), Call)
+%             end
+%     end.
 
 
 
 
-            %% Now we can produce all the channels and update the state master
-            BasicCalls = lists:foldl(fun(RespJObj, Calls) ->
-                Channels = wh_json:get_value(<<"Channels">>, RespJObj),
-                case Channels of
-                    undefined -> Calls;
-                    _ -> calls_from_json(Channels) ++ Calls
-                end
-            end, [], RespJObjs),
-
-            %% Finally, make these calls not suck
-            lists:foldl(fun(RespJObj, Acc) ->
-                Channels = wh_json:get_value(<<"Channels">>, RespJObj),
-                case Channels of
-                    undefined -> Acc;
-                    _ -> better_calls(Channels, BasicCalls) ++ Acc
-                end
-            end, [], RespJObjs);
-        E ->
-            lager:debug("Could not get channel statuses: ~p", [E])
-    end.
-
-calls_from_json(JObjs) ->
-    lists:foldl(fun(JObj, Calls) ->
-        [call_from_json(JObj) | Calls]
-    end, [], JObjs).
-
-call_from_json(JObj) ->
-    Routines = [
-        fun(Call) -> whapps_call:set_authorizing_id(
-            wh_json:get_first_defined([<<"authorizing_id">>, [<<"Custom-Channel-Vars">>, <<"Authorizing-ID">>]], JObj, <<>>), Call) end,
-        fun(Call) -> whapps_call:set_account_id(
-            wh_json:get_first_defined([<<"account_id">>, [<<"Custom-Channel-Vars">>, <<"Account-ID">>]], JObj), Call) end,
-        fun(Call) ->
-        	case wh_json:get_value(<<"Custom-Channel-Vars">>, JObj) of
-        		undefined ->
-        			Call;
-        		CCVs ->
-		        	whapps_call:set_custom_channel_vars(wh_json:to_proplist(CCVs), Call)
-		    end end,
-        fun(Call) -> whapps_call:set_account_db(
-            wh_util:format_account_id(whapps_call:account_id(Call), encoded), Call) end,
-        fun(Call) -> whapps_call:set_call_id(
-            wh_json:get_first_defined([<<"uuid">>, <<"Call-ID">>], JObj), Call) end,
-        fun(Call) -> whapps_call:set_other_leg_call_id(
-            wh_json:get_first_defined([<<"other_leg">>, <<"Other-Leg-Call-ID">>], JObj), Call) end,
-        fun(Call) ->
-        	ToString = wh_json:get_first_defined([<<"destination">>, <<"To">>], JObj, <<"@">>),
-        	To = case binary:split(ToString, <<"@">>) of
-                [_ToUser, _ToRealm] ->
-                    ToString;
-                [ToUser] ->
-                    <<ToUser/binary, "@">>
-            end,
-            whapps_call:set_to(To, Call) end,
-        fun(Call) ->
-            FromString = wh_json:get_first_defined([<<"From">>], JObj, <<"@">>),
-            From = case binary:split(FromString, <<"@">>) of
-                [_FromUser, _FromRealm] ->
-                    FromString;
-                [FromUser] ->
-                    <<FromUser/binary, "@">>
-            end,
-            whapps_call:set_from(From, Call) end,
-        fun(Call) -> whapps_call:set_caller_id_name(wh_json:get_value(<<"Caller-ID-Name">>, JObj, <<>>), Call) end,
-        fun(Call) -> whapps_call:set_caller_id_number(wh_json:get_value(<<"Caller-ID-Number">>, JObj, <<>>), Call) end,
-        fun(Call) -> whapps_call:set_callee_id_name(wh_json:get_value(<<"Callee-ID-Name">>, JObj, <<>>), Call) end,
-        fun(Call) -> whapps_call:set_callee_id_number(wh_json:get_value(<<"Callee-ID-Number">>, JObj, <<>>), Call) end
-    ],
-    Call = lists:foldl(fun(F, Call) -> F(Call) end, whapps_call:new(), Routines),
-
-    %% Remove other leg if it's just the same leg
-    CallId = whapps_call:call_id(Call),
-    Call2 = case whapps_call:other_leg_call_id(Call) of
-        CallId ->
-            whapps_call:set_other_leg_call_id(undefined, Call);
-        _ ->
-            Call
-    end,
-
-    {whapps_call:call_id(Call2), Call2}.
-
-%% Adds a whole bunch of extra data to make whapps_calls more useful
-better_calls(JObjs, BasicCalls) ->
-    lists:foldl(fun(JObj, Calls) ->
-            [better_call(JObj, BasicCalls)] ++ Calls
-    end, [], JObjs).
-
-better_call(JObj, BasicCalls) ->
-    CallId = wh_json:get_first_defined([<<"uuid">>, <<"Call-ID">>], JObj),
-    Call = props:get_value(CallId, BasicCalls),
-
-    Routines = [
-        fun(Call2, JObj2, _BC) -> 
-            CallDirection = wh_json:get_first_defined([<<"direction">>, <<"Call-Direction">>], JObj2,
-                <<"inbound">>),
-            props:set_value(<<"direction">>, CallDirection, Call2) end,
-        fun aleg_cid/3,
-        fun aleg_exten/3,
-        fun aleg_ami_channel/3,
-        fun bleg_cid/3,
-        fun bleg_exten/3,
-        fun bleg_ami_channel/3,
-        fun(Call2, JObj2, _BC) -> props:set_value(<<"username">>, 
-            wh_json:get_first_defined([<<"username">>, <<"Username">>], JObj2), Call2) end,
-        fun(Call2, JObj2, _BC) -> props:set_value(<<"answered">>, 
-            wh_json:get_first_defined([<<"answered">>], JObj2), Call2) end,
-        fun(Call2, JObj2, _BC) -> props:set_value(<<"elapsed_s">>, 
-            wh_json:get_first_defined([<<"elapsed_s">>], JObj2), Call2) end
-    ],
-    lists:foldl(
-        fun(F, BCall) -> F(BCall, JObj, BasicCalls) end,
-        [{<<"call">>, Call}],
-        Routines
-    ).
-
-aleg_cid(Call, _ChannelJObj, _BC) ->
-    WhappsCall = props:get_value(<<"call">>, Call),
-    case WhappsCall of
-        undefined ->
-            try throw(42) catch 42 -> wh_util:log_stacktrace() end;
-        _ ->
-            ok
-    end,
-    case cf_endpoint:get(WhappsCall) of
-        %% An external endpoint
-        {error, _E} ->
-        	props:set_value(<<"aleg_cid">>, props:get_value(<<"cid">>, maybe_cellphone_endpoint(Call)), Call);
-        %% Some internal extension
-        {ok, Endpoint} ->
-            props:set_value(<<"aleg_cid">>, endpoint_cid(Endpoint, whapps_call:account_db(WhappsCall)), Call)
-    end.
-
-aleg_exten(Call, _ChannelJObj, _BC) ->
-    WhappsCall = props:get_value(<<"call">>, Call),
-    case cf_endpoint:get(WhappsCall) of
-        %% An external endpoint
-        {error, _E} ->
-            case props:get_value(<<"direction">>, Call) of
-                <<"inbound">> ->
-                    props:set_value(<<"aleg_exten">>, whapps_call:from_user(WhappsCall), Call);
-                <<"outbound">> ->
-                    props:set_value(<<"aleg_exten">>, whapps_call:to_user(WhappsCall), Call)
-            end;
-        %% Some internal extension
-        {ok, Endpoint} ->
-            props:set_value(<<"aleg_exten">>, endpoint_exten(Endpoint, whapps_call:account_db(WhappsCall)), Call)
-    end.
-
-aleg_ami_channel(Call, _ChannelJObj, _BC) ->
-    WhappsCall = props:get_value(<<"call">>, Call),
-    case cf_endpoint:get(WhappsCall) of
-        %% An external endpoint
-        {error, _E} ->
-            props:set_value(<<"aleg_ami_channel">>, props:get_value(<<"channel">>, maybe_cellphone_endpoint(Call)), Call);
-        %% Some internal extension
-        {ok, Endpoint} ->
-            props:set_value(<<"aleg_ami_channel">>, endpoint_channel(Endpoint, whapps_call:account_db(WhappsCall), whapps_call:call_id(WhappsCall)), Call)
-    end.
-
-maybe_cellphone_endpoint(Call) ->
-    WhappsCall = props:get_value(<<"call">>, Call),
-    AccountDb = wh_util:format_account_id(whapps_call:account_id(WhappsCall), encoded),
-    {ok, Results} = couch_mgr:get_results(AccountDb, <<"devices/call_forwards">>),
-    E164 = wnm_util:to_e164(whapps_call:to_user(WhappsCall)),
-    case lists:foldl(fun(Result, Found) ->
-        case Found of
-            false ->
-                {ok, Device} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, Result)),
-                case {wnm_util:to_e164(wh_json:get_value([<<"call_forward">>, <<"number">>], Device)),
-                    wh_json:get_value(<<"owner_id">>, Device)} of
-                    {_, undefined} ->
-                        false;
-                    {E164, _} ->
-                        [{<<"channel">>, endpoint_channel(Device, AccountDb, whapps_call:call_id(WhappsCall))}
-                         ,{<<"cid">>, endpoint_cid(Device, AccountDb)}
-                        ];
-                    _ ->
-                        false
-                end;
-            _ ->
-                Found
-        end
-    end, false, Results) of
-        false ->
-            %if length(Results) > 0 ->
-            %    {ok, Device} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, hd(Results))),
-            %    props:set_value(<<"aleg_ami_channel">>,
-            %        endpoint_channel(Device, AccountDb, whapps_call:call_id(WhappsCall)), Call);
-            %true ->
-                call_direction_endpoint(Call);
-            %end;
-        CellphoneEndpoint ->
-            CellphoneEndpoint
-    end.
-
-call_direction_endpoint(Call) ->
-    WhappsCall = props:get_value(<<"call">>, Call),
-    Props = case props:get_value(<<"direction">>, Call) of
-        <<"inbound">> ->
-            [{<<"channel">>, channel_string(
-                whapps_call:from_user(WhappsCall),
-                whapps_call:call_id(WhappsCall)
-             )}
-             ,{<<"cid">>, whapps_call:caller_id_name(WhappsCall)}
-            ];
-        <<"outbound">> ->
-            [{<<"channel">>, channel_string(
-                whapps_call:to_user(WhappsCall),
-                whapps_call:call_id(WhappsCall)
-             )}
-             ,{<<"cid">>, whapps_call:callee_id_name(WhappsCall)}
-            ]
-    end,
-    case props:get_value(<<"cid">>, Props) of
-    	<<"Unknown">> ->
-    		call_direction_cid(Call, WhappsCall, Props);
-    	<<"Device QuickCall">> ->
-    		call_direction_cid(Call, WhappsCall, Props);
-		_ ->
-			Props
-	end.
-
-call_direction_cid(Call, WhappsCall, Props) ->
-	case props:get_value(<<"direction">>, Call) of
-	    <<"inbound">> ->
-	        props:set_value(<<"cid">>, whapps_call:from_user(WhappsCall), Props);
-	    <<"outbound">> ->
-	        props:set_value(<<"cid">>, whapps_call:to_user(WhappsCall), Props)
-	end.
-
-bleg_cid(Call, ChannelJObj, BC) ->
-    case props:get_value(whapps_call:other_leg_call_id(props:get_value(<<"call">>, Call)),
-        BC) of
-        undefined ->
-        	case props:get_value(<<"direction">>, Call) of
-        		<<"inbound">> ->
-        			WhappsCall = props:get_value(<<"call">>, Call),
-        			BLegCid = case whapps_call:callee_id_name(WhappsCall) of
-        				<<>> ->
-        					whapps_call:to_user(WhappsCall);
-        				CalleeId ->
-        					CalleeId
-        			end,
-        			props:set_value(<<"bleg_cid">>, BLegCid, Call);
-        		<<"outbound">> ->
-        			% WhappsCall = props:get_value(<<"call">>, Call),
-        			% BLegCid = case whapps_call:caller_id_name(WhappsCall) of
-        			% 	<<>> ->
-        			% 		whapps_call:from_user(WhappsCall);
-        			% 	CallerId ->
-        			% 		CallerId
-        			% end,
-        			% props:set_value(<<"bleg_cid">>, BLegCid)
-        			props:set_value(<<"bleg_cid">>, whapps_call:caller_id_name(props:get_value(<<"call">>, Call)), Call)
-        	end;
-            % props:set_value(<<"bleg_cid">>, whapps_call:to_user(props:get_value(<<"call">>, Call)), Call);
-        OtherCall ->
-            Direction = case props:get_value(<<"direction">>, Call) of
-                <<"inbound">> -> <<"outbound">>;
-                <<"outbound">> -> <<"inbound">>
-            end,
-
-            case is_tuple(OtherCall) of
-                true ->
-                    props:set_value(<<"bleg_cid">>, props:get_value(<<"aleg_cid">>,
-                        aleg_cid([{<<"call">>, OtherCall},
-                        {<<"direction">>, Direction}], undefined, undefined)), Call);
-                _ ->
-                    props:set_value(<<"bleg_cid">>, props:get_value(<<"aleg_cid">>, OtherCall), Call)
-            end
-    end.
-
-bleg_exten(Call, _ChannelJObj, BC) ->
-    case props:get_value(whapps_call:other_leg_call_id(props:get_value(<<"call">>, Call)),
-        BC) of
-        undefined ->
-            props:set_value(<<"bleg_exten">>, whapps_call:to_user(props:get_value(<<"call">>, Call)), Call);
-        OtherCall ->
-            Direction = case props:get_value(<<"direction">>, Call) of
-                <<"inbound">> -> <<"outbound">>;
-                <<"outbound">> -> <<"inbound">>
-            end,
-
-            case is_tuple(OtherCall) of
-                true ->
-                    props:set_value(<<"bleg_exten">>, props:get_value(<<"aleg_exten">>,
-                    aleg_exten([{<<"call">>, OtherCall},
-                    {<<"direction">>, Direction}], undefined, undefined)), Call);
-                _ ->
-                    props:set_value(<<"bleg_exten">>, props:get_value(<<"aleg_exten">>, OtherCall), Call)
-            end
-    end.
-
-bleg_ami_channel(Call, _ChannelJObj, BC) ->
-    case props:get_value(whapps_call:other_leg_call_id(props:get_value(<<"call">>, Call)),
-        BC) of
-        undefined ->
-            %% TODO, find the call somehow
-            Call;
-        OtherCall ->
-            Direction = case props:get_value(<<"direction">>, Call) of
-                <<"inbound">> -> <<"outbound">>;
-                <<"outbound">> -> <<"inbound">>
-            end,
-
-            case is_tuple(OtherCall) of
-                true ->
-                    props:set_value(<<"bleg_ami_channel">>, props:get_value(<<"aleg_ami_channel">>,
-                        aleg_ami_channel([{<<"call">>, OtherCall},
-                        {<<"direction">>, Direction}], undefined, undefined)), Call);
-                _ ->
-                    props:set_value(<<"bleg_ami_channel">>, props:get_value(<<"aleg_ami_channel">>, OtherCall), Call)
-            end
-    end.
-
-endpoint_cid(Endpoint, AccountDb) ->
-    case wh_json:get_value(<<"owner_id">>, Endpoint) of
-        undefined ->
-            wh_json:get_value(<<"name">>, Endpoint);
-        OwnerId ->
-            {ok, Owner} = couch_mgr:open_doc(AccountDb, OwnerId),
-            <<(wh_json:get_value(<<"username">>, Owner))/binary, " ",
-                (wh_json:get_value(<<"first_name">>, Owner))/binary, " ",
-                (wh_json:get_value(<<"last_name">>, Owner))/binary>>
-    end.
-
-endpoint_channel(Endpoint, AccountDb, CallId) ->
-    channel_string(endpoint_exten(Endpoint, AccountDb), CallId).
-
-channel_string(Exten, CallId) ->
-    <<"SIP/", Exten/binary, "-", (channel_tail(CallId))/binary>>.
-
-endpoint_exten(Endpoint, AccountDb) ->
-    case wh_json:get_value(<<"owner_id">>, Endpoint) of
-        undefined ->
-            wh_json:get_value(<<"name">>, Endpoint);
-        OwnerId ->
-            case couch_mgr:open_doc(AccountDb, OwnerId) of
-                {ok, Owner} ->
-                    <<(wh_json:get_value(<<"username">>, Owner))/binary>>;
-                _ ->
-                    wh_json:get_value(<<"name">>, Endpoint)
-            end
-    end.
-
-
-
-
-
-whapps_call(CallRef) ->
-    Call = case wh_json:is_json_object(CallRef) of
-        true ->
-            whapps_call_from_json(CallRef);
-        false ->
-            whapps_call_from_ecallmgr(CallRef)
-    end,
-    Updaters = [
-        fun(Call2) -> case whapps_call:account_id(Call2) of
-            undefined ->
-                Call2;
-            AccountId ->
-                whapps_call:set_account_db(wh_util:format_account_id(AccountId, encoded), Call2)
-        end end
-    ],
-    lists:foldl(fun(F, Call2) -> F(Call2) end, Call, Updaters).
-
-whapps_call_from_json(EventJObj) ->
-    Call = whapps_call:from_json(EventJObj),
-    CCVs = whapps_call:ccvs(Call),
-    Call2 = case wh_json:get_value(<<"Authorizing-ID">>, CCVs) of
-        undefined ->
-            Call;
-        AuthId ->
-            whapps_call:set_authorizing_id(AuthId, Call)
-    end,
-    case wh_json:get_value(<<"Account-ID">>, CCVs) of
-        undefined ->
-            Call2;
-        AccountId ->
-            whapps_call:set_account_id(AccountId, Call2)
-    end.
-
-whapps_call_from_ecallmgr(CallId) ->
-    case ecallmgr_rpc(ecallmgr_fs_channel, fetch, [CallId, record]) of
-        {error, E} ->
-            lager:debug("Error ~p when fetching channel from ecallmgr", [E]),
-            error;
-        {ok, Channel} ->
-            whapps_call:from_json(wh_json:from_list(ecallmgr_fs_channel:to_api_props(Channel)))
-    end.
-
-ecallmgr_rpc(Mod, Fun, Params) ->
-    {ok, Shortname} = inet:gethostbyname(element(2, inet:gethostname())),
-    case element(2, Shortname) of
-        undefined ->
-            {error, undefined_hostname};
-        Hostname ->
-            RemoteNode = wh_util:to_atom("ecallmgr@" ++ Hostname),
-            Result = rpc:call(RemoteNode, Mod, Fun, Params),
-            % TODO: disconnect from all new nodes
-            erlang:disconnect_node(RemoteNode),
-            Result
-    end.
-
-maybe_get_exten(Call) ->
-    case cf_endpoint:get(Call) of
-        %% An external endpoint
-        {error, _E} ->
-            whapps_call:callee_id_name(Call);
-        %% Some internal extension
-        {ok, Endpoint} ->
-            endpoint_name(whapps_call:account_db(Call), Endpoint)
-    end.
-
-maybe_get_endpoint_name(Call) ->
-    Exten = maybe_get_exten(Call),
-    <<"SIP/", Exten/binary, "-", (channel_tail(whapps_call:call_id(Call)))/binary>>.
-
-endpoint_name(AcctDb, Endpoint) ->
-    case wh_json:get_value(<<"pvt_type">>, Endpoint) of
-        <<"device">> ->
-            {ok, EndpointDevice} = couch_mgr:open_doc(AcctDb, wh_json:get_value(<<"_id">>, Endpoint)),
-            wh_json:get_value(<<"name">>, EndpointDevice);
-        _ ->
-            wh_json:get_value(<<"name">>, Endpoint)
-    end.
-
-maybe_get_cid_name(Call) ->
-    case cf_endpoint:get(Call) of
-        %% An external endpoint
-        {error, _E} ->
-            whapps_call:callee_id_name(Call);
-        %% Some internal extension
-        {ok, Endpoint} ->
-            cid_name(whapps_call:account_db(Call), Endpoint)
-    end.
 
 cid_name(AcctDb, Endpoint) ->
     case wh_json:get_value(<<"owner_id">>, Endpoint) of
@@ -859,6 +885,11 @@ recurse_to_child_callflow(Id, Flow) ->
             maybe_id_in_callflow(Id, SubFlow)
     end.
 
+
+   
+
+
+
 queue_for_number(Number, AccountDb) ->
     case couch_mgr:get_results(AccountDb, <<"callflow/listing_by_number">>, [{key, Number}]) of
         {ok, []} ->
@@ -886,39 +917,20 @@ maybe_queue_in_flow(Flow) ->
             end
     end.
 
-%% Ensures the message belongs to the current listener process
-%% and publishes it to the Mod:handle_specific_event/2 function
-%% in the Mod supplied
-filter_registered_events(EventName, EventJObj, CommPid, Mod) ->
-    AccountId = gen_server:call(CommPid, account_id),
-    case wh_json:get_value(
-        [<<"Custom-Channel-Vars">>, <<"Account-ID">>],
-        EventJObj
-    ) of
-        %% Maybe sometimes, the events come in via different formats
-        undefined ->
-            lager:debug("May need to add additional account id check for event! ~p", [EventJObj]);
-        %% Event is destined to be published!
-        AccountId ->
-            Mod:handle_specific_event(EventName, EventJObj);
-        %% Event does not belong to this listener
-        _ ->
-            ok
-    end.
 
-%% Returns an 8-digit tail for channels for AMI calls
-channel_tail(CallId) ->
-	Seed = case binary:split(CallId, <<"-">>, [global]) of
-		List when length(List) =:= 5 ->
-			%% When the call id looks like 4cad762c-f415-11e4-b890-cdee54d38ecb there may be many legs created
-			%% The 2nd and 3rd parts are unique to a call as a whole even though the 1st and 5th change per leg
-			<<(lists:nth(2, List))/binary, "-", (lists:nth(3, List))/binary>>;
-		_ ->
-			CallId
-	end,
-    Digest = crypto:hash('md5', wh_util:to_binary(Seed)),
-    MD5 = lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest]),
-    list_to_binary(lists:sublist(MD5, length(MD5)-7, 8)).
+% %% Returns an 8-digit tail for channels for AMI calls
+% channel_tail(CallId) ->
+% 	Seed = case binary:split(CallId, <<"-">>, [global]) of
+% 		List when length(List) =:= 5 ->
+% 			%% When the call id looks like 4cad762c-f415-11e4-b890-cdee54d38ecb there may be many legs created
+% 			%% The 2nd and 3rd parts are unique to a call as a whole even though the 1st and 5th change per leg
+% 			<<(lists:nth(2, List))/binary, "-", (lists:nth(3, List))/binary>>;
+% 		_ ->
+% 			CallId
+% 	end,
+%     Digest = crypto:hash('md5', wh_util:to_binary(Seed)),
+%     MD5 = lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest]),
+%     list_to_binary(lists:sublist(MD5, length(MD5)-7, 8)).
 
 
 
