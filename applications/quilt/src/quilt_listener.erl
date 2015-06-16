@@ -68,7 +68,7 @@ handle_event(JObj, State) ->
     {noreply, []}.
 
 terminate(Reason, _State) ->
-    lager:debug("quilt_listener listener on pid ~p terminating: ~p", [self(), Reason]),
+    lager:debug("~p listener on pid ~p terminating: ~p", [?MODULE, self(), Reason]),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->

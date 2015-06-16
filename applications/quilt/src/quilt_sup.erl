@@ -15,14 +15,16 @@
 -include("quilt.hrl").
 
 %% Helper macro for declaring children of supervisor
--define(CHILDREN, [?WORKER_TYPE('quilt_listener', temporary)]).
+-define(CHILDREN, [
+	?WORKER_TYPE('quilt_listener', temporary)
+	,?WORKER_TYPE('quilt_store', temporary)
+	]).
 
 start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []),
-    supervisor:start_child(?MODULE, []).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 init([]) ->
-    RestartStrategy = 'simple_one_for_one',
+    RestartStrategy = 'one_for_one',
     MaxRestarts = 5,
     MaxSecondsBetweenRestarts = 10,
 
