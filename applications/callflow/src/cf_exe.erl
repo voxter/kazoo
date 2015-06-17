@@ -603,6 +603,7 @@ hangup_call(Call) ->
     Cmd = [{<<"Event-Name">>, <<"command">>}
            ,{<<"Event-Category">>, <<"call">>}
            ,{<<"Application-Name">>, <<"hangup">>}
+           ,{<<"Insert-At">>, <<"now">>}
           ],
     send_command(Cmd, whapps_call:control_queue_direct(Call), whapps_call:call_id_direct(Call)).
 
