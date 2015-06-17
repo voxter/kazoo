@@ -39,9 +39,11 @@ handle_event(JObj, _Props) ->
 
 		{<<"acdc_call_stat">>, <<"exited-position">>} ->
 			Call = acdc_stats:find_call(CallId),
+			lager:debug("acdc call stats: ~p", [Call]),
 			case wh_json:get_value(<<"Status">>, Call) of
 				<<"abandoned">> ->
 					case wh_json:get_value(<<"Abandoned-Reason">>, Call) of
+						%EventName = "EXITEMPTY", % EXITEMPTY(position|origposition|waittime)
 						<<"member_hangup">> -> 
 							EventName = "ABANDON", % ABANDON(position|origposition|waittime)
 							WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, Call)),
@@ -99,9 +101,6 @@ handle_event(JObj, _Props) ->
 
 		% {<<"">>, <<"">>} ->
 			%EventName = "REMOVEMEMBER", % REMOVEMEMBER
-
-		% {<<"">>, <<"">>} ->
-			%EventName = "EXITEMPTY", % EXITEMPTY(position|origposition|waittime)
 
 		% {<<"">>, <<"">>} ->
 			%EventName = "EXITWITHKEY", % EXITWITHKEY(key|position)
