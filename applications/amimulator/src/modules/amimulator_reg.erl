@@ -104,7 +104,7 @@ handle_register(AccountId, EventJObj) ->
                 {<<"PeerStatus">>, <<"Reachable">>},
                 {<<"Time">>, <<"2">>}
             ]],
-            amimulator_event_listener:publish_amqp_event({publish, Payload});
+            amimulator_event_listener:publish_amqp_event({publish, Payload}, AccountId);
         _ ->
             ok
     end.
@@ -131,7 +131,7 @@ handle_unregister(AccountId, EventJObj) ->
                 {<<"Hint">>, <<Peer/binary, ",CustomPresence:", Exten/binary>>},
                 {<<"Status">>, 4}
             ]],
-            amimulator_event_listener:publish_amqp_event({publish, Payload});
+            amimulator_event_listener:publish_amqp_event({publish, Payload}, AccountId);
         _ ->
             ok
     end.

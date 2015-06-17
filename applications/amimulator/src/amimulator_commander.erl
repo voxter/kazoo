@@ -198,9 +198,9 @@ handle_event("atxfer", Props) ->
     end;
 handle_event("hangup", Props) ->
     EndpointName = props:get_value(<<"Channel">>, Props),
-    lager:debug("Hanging up channel ~p", [EndpointName]),
     Call = ami_sm:call_by_channel(EndpointName),
-    ControlQueue = amimulator_util:control_queue(Call),
+    lager:debug("Hanging up channel ~p (call id ~p)", [EndpointName, amimulator_call:call_id(Call)]),
+    ControlQueue = amimulator_call:control_queue(Call),
     lager:debug("Control queue for call: ~p", [ControlQueue]),
 
     whapps_call_command:hangup(amimulator_call:to_whapps_call(amimulator_call:set_control_queue(ControlQueue, Call)));

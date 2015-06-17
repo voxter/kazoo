@@ -5,13 +5,12 @@
 -export([start_link/1
          ,register/2, unregister/2
          ,account_id/1
-         ,handle_amqp_event/2, publish_amqp_event/1
+         ,handle_amqp_event/2, publish_amqp_event/2
         ]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, handle_event/2, terminate/2, code_change/3]).
 
 -include("amimulator.hrl").
 
--define(QUEUE_NAME, <<"amimulator-queue">>).
 -define(QUEUE_OPTIONS, []).
 -define(CONSUME_OPTIONS, [{'exclusive', 'false'}]).
 
@@ -46,7 +45,7 @@ start_link(AccountId) ->
                                                | Responders
                                               ]
                                }
-                              ,{'queue_name', ?QUEUE_NAME}       % optional to include
+                              ,{'queue_name', <<"amimulator-queue", AccountId/binary>>}       % optional to include
                               ,{'queue_options', ?QUEUE_OPTIONS} % optional to include
                               ,{'consume_options', ?CONSUME_OPTIONS} % optional to include
                              ]
@@ -84,16 +83,16 @@ handle_amqp_event(EventJObj, Props) ->
             'ok'
     end.
     
-publish_amqp_event({_, []}) ->
+publish_amqp_event({_, []}, _) ->
     lager:debug("not publishing empty payload"),
     'ok';
-publish_amqp_event({'publish', Events}=_Req) ->
+publish_amqp_event({'publish', Events}=_Req, AccountId) ->
     {'ok', Payload} = wh_api:prepare_api_payload(
         [{<<"RequestType">>, <<"publish">>},
          {<<"Events">>, amimulator_util:format_json_events(Events)} |
          wh_api:default_headers(<<"amimulator">>, <<"events">>, ?APP_NAME, ?APP_VERSION)],
          [], fun amqp_event/1),
-    amqp_util:basic_publish(?EXCHANGE_AMI, <<"amimulator.events.test">>, Payload).
+    amqp_util:basic_publish(?EXCHANGE_AMI, <<"amimulator.events.", AccountId/binary>>, Payload).
     
 -define(OPTIONAL_HEADERS, [<<"RequestType">>, <<"Events">>]).
 amqp_event(Prop) when is_list(Prop) ->
@@ -106,8 +105,8 @@ amqp_event(Prop) when is_list(Prop) ->
 init([AccountId]) ->
     lager:debug("event listener started with pid ~p", [self()]),
     amqp_util:new_exchange(?EXCHANGE_AMI, ?TYPE_AMI),
-    amqp_util:new_queue(?QUEUE_NAME),
-    amqp_util:bind_q_to_exchange(?QUEUE_NAME, <<"amimulator.events.test">>, ?EXCHANGE_AMI),
+    amqp_util:new_queue(<<"amimulator-queue", AccountId/binary>>),
+    amqp_util:bind_q_to_exchange(<<"amimulator-queue", AccountId/binary>>, <<"amimulator.events.", AccountId/binary>>, ?EXCHANGE_AMI),
     ami_sm:init_state(AccountId),
 
     %% Send fully booted event to client
@@ -116,7 +115,7 @@ init([AccountId]) ->
         {<<"Privilege">>, <<"system,all">>},
         {<<"Status">>, <<"Fully Booted">>}
     ],
-    publish_amqp_event({'publish', Payload}),
+    publish_amqp_event({'publish', Payload}, AccountId),
 
     gen_listener:cast(self(), {'init_modules', AccountId}),
     {'ok', #state{account_id=AccountId}}.

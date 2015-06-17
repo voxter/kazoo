@@ -33,7 +33,7 @@ handle_event(EventJObj, Props) ->
 
 handle_specific_event(<<"participants_event">>, EventJObj) ->
     Payload = participants_cache_change(EventJObj),
-    amimulator_event_listener:publish_amqp_event({publish, Payload});
+    amimulator_event_listener:publish_amqp_event({publish, Payload}, wh_json:get_value(<<"Account-ID">>, EventJObj));
 handle_specific_event(_, EventJObj) ->
     lager:debug("unhandled event ~p", [EventJObj]).
 
