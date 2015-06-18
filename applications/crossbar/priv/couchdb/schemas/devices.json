@@ -394,6 +394,13 @@
                 }
             }
         },
+        "exclude_from_queues": {
+            "type": "boolean",
+            "required": false,
+            "name": "Exclude from Queues",
+            "description": "Do not ring this device when calling user/agent in queue",
+            "default": false
+        },
         "ringtones": {
             "type": "object",
             "required": false,
