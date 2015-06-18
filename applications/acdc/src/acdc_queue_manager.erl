@@ -212,12 +212,15 @@ start_queue_call(JObj, Props, Call) ->
             whapps_call_command:hold(MOH, Call)
     end,
 
-    JObj2 = case maybe_konami_queue(whapps_call:account_db(Call), QueueId, Call) of
-        'false' ->
-            JObj;
-        'true' ->
-            wh_json:set_value([<<"Call">>, <<"Custom-Channel-Vars">>, <<"No-Queue-Exit">>], <<"true">>, JObj)
-    end,
+    Updaters = [fun(JObj2) ->
+                    case maybe_konami_queue(whapps_call:account_db(Call), QueueId, Call) of
+                        'false' -> JObj2;
+                        'true' -> wh_json:set_value([<<"Call">>, <<"Custom-Channel-Vars">>, <<"No-Queue-Exit">>], <<"true">>, JObj2)
+                    end
+                end
+                ,fun(JObj2) -> wh_json:set_value([<<"Call">>, <<"Custom-Channel-Vars">>, <<"Queue-ID">>], QueueId, JObj2) end
+               ],
+    JObj2 = lists:foldl(fun(Updater, JObj2) -> Updater(JObj2) end, Updaters, JObj),
 
     _ = whapps_call_command:set('undefined'
                                 ,wh_json:from_list([{<<"Eavesdrop-Group-ID">>, QueueId}
