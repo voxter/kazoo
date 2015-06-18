@@ -26,12 +26,15 @@
 -define(BINDINGS, [
     {'self', []}
     ,{acdc_stats, [{restrict_to, [call_stat, status_stat]}]}
+    ,{acdc_agent, [{restrict_to, [status]}]}
 ]).
 
 -define(RESPONDERS, [{
     {?MODULE, 'handle_event'}, [
         {<<"acdc_call_stat">>, <<"*">>}
         ,{<<"acdc_status_stat">>, <<"*">>}
+        ,{<<"agent">>, <<"login_queue">>}
+        ,{<<"agent">>, <<"logout_queue">>}
     ]
 }]).
 

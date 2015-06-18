@@ -110,9 +110,6 @@ handle_event(JObj, _Props) ->
         % {<<"">>, <<"">>} ->
             %EventName = "REMOVEMEMBER", % REMOVEMEMBER
 
-        % {<<"">>, <<"">>} ->
-            %EventName = "TRANSFER", % TRANSFER(extension|context|holdtime|calltime)
-
         {<<"acdc_status_stat">>, <<"paused">>} -> 
             EventName = "PAUSEALL", 
             % There is no pause for a single queue, pause all by default
