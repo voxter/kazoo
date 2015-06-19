@@ -670,8 +670,11 @@ agent_statuses(QueueId, AccountId, Number, AgentStats) ->
     {ok, Results} = couch_mgr:get_results(AccountDb, <<"queues/agents_listing">>, [{key, QueueId}]),
     lists:foldl(fun(Result, Acc) ->
         AgentId = wh_json:get_value(<<"id">>, Result),
-        [agent_status(AgentId, AccountId, Number, AgentStats) | Acc]
-        end, [], Results).
+        case agent_status(AgentId, AccountId, Number, AgentStats) of
+            'logged_out' -> Acc;
+            AgentStatus -> [AgentStatus | Acc]
+        end
+    end, [], Results).
         
 agent_status(AgentId, AccountId, Number, AgentStats) ->
     AccountDb = wh_util:format_account_id(AccountId, encoded), 
@@ -681,27 +684,32 @@ agent_status(AgentId, AccountId, Number, AgentStats) ->
     Username = wh_json:get_value(<<"username">>, UserDoc),
 
     {'ok', Status} = acdc_agent_util:most_recent_status(AccountId, AgentId),
-    % TODO: properly assigned paused based on status
-    Paused = case Status of
-        <<"paused">> ->
-            1;
-        _ ->
-            0
-    end,
 
-    [
-        {<<"Event">>, <<"QueueMember">>},
-        {<<"Queue">>, Number},
-        {<<"Name">>, <<FirstName/binary, " ", LastName/binary>>},
-        {<<"Location">>, <<"Local/", Username/binary, "@from-queue/n">>},
-        %% Membership static is also possible
-        {<<"Membership">>, <<"dynamic">>},
-        {<<"Penalty">>, 0},
-        {<<"CallsTaken">>, props:get_value(<<"CallsTaken">>, props:get_value(AgentId, AgentStats, []), 0)},
-        {<<"LastCall">>, props:get_value(<<"LastCall">>, props:get_value(AgentId, AgentStats, []), 0)},
-        {<<"Status">>, translate_status(Status)},
-        {<<"Paused">>, Paused}
-    ].
+    case Status of
+        <<"logged_out">> -> 'logged_out';
+        _ ->
+            % TODO: properly assigned paused based on status
+            Paused = case Status of
+                <<"paused">> ->
+                    1;
+                _ ->
+                    0
+            end,
+
+            [
+                {<<"Event">>, <<"QueueMember">>},
+                {<<"Queue">>, Number},
+                {<<"Name">>, <<FirstName/binary, " ", LastName/binary>>},
+                {<<"Location">>, <<"Local/", Username/binary, "@from-queue/n">>},
+                %% Membership static is also possible
+                {<<"Membership">>, <<"dynamic">>},
+                {<<"Penalty">>, 0},
+                {<<"CallsTaken">>, props:get_value(<<"CallsTaken">>, props:get_value(AgentId, AgentStats, []), 0)},
+                {<<"LastCall">>, props:get_value(<<"LastCall">>, props:get_value(AgentId, AgentStats, []), 0)},
+                {<<"Status">>, translate_status(Status)},
+                {<<"Paused">>, Paused}
+            ]
+    end.
     
 translate_status(Status) ->
     % TODO: properly translate statuses

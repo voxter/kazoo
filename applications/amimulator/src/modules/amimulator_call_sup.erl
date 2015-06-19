@@ -43,7 +43,10 @@ relay_destroy(Reason, CallId) ->
 
 -spec initial_call(amimulator_call:call()) -> 'ok'.
 initial_call(Call) ->
-    create_call_fsm(Call, 'initial').
+    case find_call_handler('fsm', Call) of
+        'undefined' -> create_call_fsm(Call, 'initial');
+        FSM -> amimulator_call_fsm:add_initial(FSM, Call)
+    end.
 
 %%
 %% supervisor callbacks
@@ -67,7 +70,7 @@ find_call_handlers(CallId) ->
         case catch amimulator_call_fsm:accepts(Pid, CallId) of
             'true' -> [Pid | Pids];
             'false' -> Pids;
-            E ->
+            _E ->
                 % lager:debug("couldn't get call handler (~p)", [E]),
                 Pids
         end
@@ -87,8 +90,8 @@ find_typed_call_handler(Call, [{Pid, Mod}|Handlers]) ->
         _E -> find_typed_call_handler(Call, Handlers)
     end.
 
--spec workers() -> pids().
-workers() -> [Pid || {_, Pid, 'worker', [_]} <- supervisor:which_children(?MODULE)].
+% -spec workers() -> pids().
+% workers() -> [Pid || {_, Pid, 'worker', [_]} <- supervisor:which_children(?MODULE)].
 
 -spec fsms() -> [{pid(), atom()},...] | [].
 fsms() -> [{Pid, 'amimulator_call_fsm'} || {_, Pid, 'worker', ['amimulator_call_fsm']} <- supervisor:which_children(?MODULE)].

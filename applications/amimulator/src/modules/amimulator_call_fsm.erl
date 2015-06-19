@@ -6,6 +6,7 @@
 
 -export([start_link/2, start_link/3]).
 -export([new_call/2
+         ,add_initial/2
          ,answer/2
          ,bridge/3
          ,destroy/3
@@ -39,6 +40,10 @@ start_link(Super, Call, 'initial') ->
 -spec new_call(pid(), amimulator_call:call()) -> 'ok'.
 new_call(FSM, Call) ->
     gen_fsm:send_event(FSM, {'new_call', Call}).
+
+-spec add_initial(pid(), amimulator_call:call()) -> 'ok'.
+add_initial(FSM, Call) ->
+    gen_fsm:send_event(FSM, {'add_initial', Call}).
 
 % -spec answer(pid(), amimulator_call:call()) -> 'ok'.
 answer(FSM, CallId) ->
@@ -145,6 +150,15 @@ created({'new_call', Call}, #state{call_ids=CallIds}=State) ->
     CallId = amimulator_call:call_id(Call),
     {'next_state', 'created', State#state{call_ids = add_call_id(CallId, CallIds)}};
 
+created({'add_initial', Call}, #state{call_ids=CallIds}=State) ->
+    CallId = amimulator_call:call_id(Call),
+    case amimulator_call:answered(Call) of
+        'true' -> {'next_state', 'answered', State#state{call_ids = add_call_id(CallId, CallIds)
+                                                         ,answered=CallId
+                                                        }};
+        _ -> {'next_state', 'created', State#state{call_ids = add_call_id(CallId, CallIds)}}
+    end;
+
 created({'answer', CallId}, State) ->
     Call = ami_sm:call(CallId),
     Call2 = amimulator_call:set_answered('true', Call),
@@ -176,6 +190,10 @@ created({'destroy', Reason, CallId}, #state{monitored_channel=Channel
     end.
 
 answered({'new_call', Call}, #state{call_ids=CallIds}=State) ->
+    CallId = amimulator_call:call_id(Call),
+    {'next_state', 'answered', State#state{call_ids = add_call_id(CallId, CallIds)}};
+
+answered({'add_initial', Call}, #state{call_ids=CallIds}=State) ->
     CallId = amimulator_call:call_id(Call),
     {'next_state', 'answered', State#state{call_ids = add_call_id(CallId, CallIds)}};
 
@@ -221,6 +239,8 @@ answered({'bridge', CallId, OtherCallId}, State) ->
 
                             ami_sm:update_call(MemberCall3),
                             ami_sm:update_call(Call3),
+
+                            maybe_bridge_and_dial(Call3, LocalCall2),
                             {'next_state', 'answered', State#state{answered=CallId}}
                     end
             end
@@ -243,8 +263,15 @@ answered({'destroy', Reason, CallId}, #state{monitored_channel=Channel
 %%
 
 % -spec initialize(
-initialize(_Super, Call) ->
-    'ok'.
+initialize(Super, Call) ->
+    State = #state{supervisor=Super
+                   ,monitored_channel=amimulator_call:channel(Call)
+                   ,call_ids = [amimulator_call:call_id(Call)]
+                  },
+    case amimulator_call:answered(Call) of
+        'true' -> {'ok', 'answered', State#state{answered=amimulator_call:call_id(Call)}};
+        _ -> {'ok', 'created', State}
+    end.
 
 -spec maybe_update_other_call_dest(api_binary(), api_binary(), amimulator_call:call()) -> 'ok'.
 maybe_update_other_call_dest(_, 'undefined', _) ->
@@ -413,6 +440,14 @@ dial_event(OtherCallId, Call) ->
        %            {<<"Queue ", Number/binary, " Call">>, <<>>}
     %         end
     % end,
+
+    case OtherCall of
+        'undefined' ->
+            lager:debug("couldn't find other call"),
+            lager:debug("this call: ~p", [Call]);
+        _ ->
+            'ok'
+    end,
 
     %% We need to publish only if the exten matches originally dialed one
     OtherDialed = amimulator_call:other_id_number(OtherCall),

@@ -75,6 +75,7 @@ handle_specific_event(<<"CHANNEL_BRIDGE">>, EventJObj) ->
 
 handle_specific_event(<<"CHANNEL_DESTROY">>, EventJObj) ->
     lager:debug("channel destroy for channel with id ~p", [wh_json:get_value(<<"Call-ID">>, EventJObj)]),
+    % lager:debug("channel destroy ~p", [EventJObj]),
     CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
     HangupCause = wh_json:get_value(<<"Hangup-Cause">>, EventJObj),
 
