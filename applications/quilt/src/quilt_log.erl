@@ -67,11 +67,12 @@ handle_event(JObj, _Props) ->
                             write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams)
                         end;
                 <<"handled">> ->
+                    AgentName = lookup_agent_name(AccountId, wh_json:get_value(<<"Agent-ID">>, Call)),
                     EventName = "CONNECT", % CONNECT(holdtime|bridgedchanneluniqueid)
                     WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, Call)),
                     EventParams = {WaitTime, wh_json:get_value(<<"Agent-ID">>, Call)},
                     lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
-                    write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams)
+                    write_log(AccountId, CallId, QueueName, AgentName, EventName, EventParams)
                 end;
 
         {<<"acdc_call_stat">>, <<"missed">>} ->
