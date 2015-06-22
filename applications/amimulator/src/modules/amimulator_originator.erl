@@ -327,7 +327,7 @@ pickup_channel(Props) ->
 	NewCall = create_call_from_props(Props),
 	Call = ami_sm:call_by_channel(props:get_value(<<"Data">>, Props)),
 
-    DestExten = props:get_value(<<"aleg_exten">>, Call),
+    DestExten = amimulator_call:id_number(Call),
 
     CCVs = [{<<"Account-ID">>, proplists:get_value(<<"AccountId">>, Props)}
 	        ,{<<"Retain-CID">>, <<"true">>}

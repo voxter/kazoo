@@ -121,24 +121,6 @@ initial_calls(AccountId) ->
             end, BasicCalls),
 
             process_basic_calls(PrioritySortedBasicCalls, PrioritySortedBasicCalls, []);
-
-            % %% Update calls with each other
-            % lists:foldl(
-            %   fun(Call, Calls) ->
-            %     case amimulator_call:acdc_queue_id(Call) of
-            %         'undefined' ->
-            %             case lists:keyfind(amimulator_call:other_leg_call_id(Call), 2, BasicCalls) of
-            %                 'false' -> [Call | Calls];
-            %                 OtherCall -> [amimulator_call:update_from_other(OtherCall, Call) | Calls]
-            %             end;
-            %         _ ->
-            %             AgentCallIds = find_agent_call_ids(Call),
-            %             LocalAgentCalls = fork_local_agent_calls(AgentCallIds, BasicCalls, Call),
-            %             [Call] ++ LocalAgentCalls ++ Calls
-            %     end
-            %   end
-            %   ,[]
-            %   ,BasicCalls);
         E ->
             lager:debug("Could not get channel statuses: ~p", [E])
     end.
@@ -149,9 +131,7 @@ process_basic_calls([], _, Calls) ->
 process_basic_calls([BasicCall|BasicCalls], AllBasicCalls, Calls) ->
     case amimulator_call:acdc_queue_id(BasicCall) of
         'undefined' -> process_regular_basic_call(BasicCall, BasicCalls, AllBasicCalls, Calls);
-        QueueId ->
-            BasicCall2 = amimulator_call:set_acdc_queue_id(QueueId, BasicCall),
-            process_queue_basic_call(BasicCall2, BasicCalls, AllBasicCalls, [BasicCall2 | Calls])
+        _QueueId -> process_queue_basic_call(BasicCall, BasicCalls, AllBasicCalls, Calls)
     end.
 
 % -spec
@@ -174,7 +154,24 @@ process_queue_basic_call(BasicCall, BasicCalls, AllBasicCalls, Calls) ->
                 LocalCall1 = fork_agent_call_leg1(SipAgentCall2, BasicCall),
                 LocalCall2 = fork_agent_call_leg2(SipAgentCall2, BasicCall),
 
-                {[SipAgentCall2, LocalCall1, LocalCall2 | LocalAgentCalls], lists:keydelete(AgentCallId, 2, BasicCalls)}
+                case amimulator_call:answered(SipAgentCall2) of
+                    'true' ->
+                        MemberCall2 = amimulator_call:set_other_leg_call_id(amimulator_call:call_id(LocalCall1), BasicCall),
+                        MemberCall3 = amimulator_call:set_other_channel(amimulator_call:channel(LocalCall1), MemberCall2),
+
+                        Call2 = amimulator_call:set_other_leg_call_id(amimulator_call:call_id(LocalCall2), SipAgentCall2),
+                        Call3 = amimulator_call:set_other_channel(amimulator_call:channel(LocalCall2), Call2),
+
+                        {[MemberCall3, Call3, LocalCall1, LocalCall2 | LocalAgentCalls], lists:keydelete(AgentCallId, 2, BasicCalls)};
+                    _ ->
+                        MemberCall2 = amimulator_call:set_other_leg_call_id('undefined', BasicCall),
+                        MemberCall3 = amimulator_call:set_other_channel('undefined', MemberCall2),
+
+                        Call2 = amimulator_call:set_other_leg_call_id('undefined', SipAgentCall2),
+                        Call3 = amimulator_call:set_other_channel('undefined', Call2),
+
+                        {[MemberCall3, Call3, LocalCall1, LocalCall2 | LocalAgentCalls], lists:keydelete(AgentCallId, 2, BasicCalls)}
+                end
         end
     end, {[], BasicCalls}, AgentCallIds),
     process_basic_calls(RemainingBasicCalls2, AllBasicCalls, NewCalls ++ Calls).
@@ -229,28 +226,6 @@ find_agent_call_ids(Call) ->
                 end
             end, [], RespJObjs)
     end.
-
-% -spec
-
-% fork_local_agent_calls([], _, Call, LocalAgentCalls) ->
-%     if length(LocalAgentCalls) =:= 0 ->
-%         lager:debug("no agent calls were found for member call ~p", [amimulator_call:call_id(Call)]);
-%     'true' ->
-%         'ok'
-%     end,
-%     LocalAgentCalls;
-% fork_local_agent_calls([AgentCallId|AgentCallIds], BasicCalls, Call, LocalAgentCalls) ->
-%     SipAgentCall = lists:keyfind(AgentCallId, 2, BasicCalls),
-
-%     case SipAgentCall of
-%         'false' -> fork_local_agent_calls(AgentCallIds, BasicCalls, Call, [LocalAgentCalls]);
-%         _ ->
-%             SipAgentCall2 = amimulator_call:set_acdc_queue_id()
-%             LocalCall1 = fork_agent_call_leg1(SipAgentCall, Call),
-%             LocalCall2 = fork_agent_call_leg2(SipAgentCall, Call),
-
-%             fork_local_agent_calls(AgentCallIds, BasicCalls, Call, [LocalCall1, LocalCall2 | LocalAgentCalls])
-%     end.
 
 % -spec
 % -spec
