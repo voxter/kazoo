@@ -220,7 +220,7 @@ start_queue_call(JObj, Props, Call) ->
                 end
                 ,fun(JObj2) -> wh_json:set_value([<<"Call">>, <<"Custom-Channel-Vars">>, <<"Queue-ID">>], QueueId, JObj2) end
                ],
-    JObj2 = lists:foldl(fun(Updater, JObj2) -> Updater(JObj2) end, Updaters, JObj),
+    JObj2 = lists:foldl(fun(Updater, JObj2) -> Updater(JObj2) end, JObj, Updaters),
 
     _ = whapps_call_command:set('undefined'
                                 ,wh_json:from_list([{<<"Eavesdrop-Group-ID">>, QueueId}

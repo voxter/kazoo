@@ -2,9 +2,8 @@
 -behaviour(gen_server).
 
 -export([start_link/0]).
--export([ev_going_down/2, ev_staying_up/1, is_ev_down/2
-	     ,init_state/1, purge_state/1
-	     ,registration/2, add_registration/4
+-export([init_state/1, purge_state/1
+	     ,registration/2, add_registration/4, delete_registration/1
 	     ,call/1, call_by_channel/1, new_call/1, update_call/1, delete_call/1
 	     ,queue_call/3, queue_calls/1, queue_pos/2, fetch_queue_call_data/2, queue_leave/2
 	     ,conf_parts/1, update_conf_parts/2, conf_cache/1, cache_conf_part/2
@@ -29,15 +28,6 @@ start_link() ->
     lager:debug("Starting state master"),
 	gen_server:start_link({'local', ?MODULE}, ?MODULE, [], []).
 
-ev_going_down(AccountId, Timestamp) ->
-    gen_server:cast(?MODULE, {'event_listener_kill_req', AccountId, Timestamp}).
-
-ev_staying_up(AccountId) ->
-    gen_server:cast(?MODULE, {'event_listener_kill_cancel_req', AccountId}).
-
-is_ev_down(AccountId, Timestamp) ->
-    gen_server:call(?MODULE, {'is_ev_down', AccountId, Timestamp}).
-
 %% Fetches the existing calls, queue state, etc and puts in ETS
 init_state(AccountId) ->
     gen_server:cast(?MODULE, {'init_state', AccountId}).
@@ -50,6 +40,9 @@ registration(AccountId, EndpointId) ->
 
 add_registration(AccountId, EndpointId, ContactIP, ContactPort) ->
 	gen_server:cast(?MODULE, {'add_registration', AccountId, EndpointId, ContactIP, ContactPort}).
+
+delete_registration(EndpointId) ->
+    gen_server:cast(?MODULE, {'delete_registration', EndpointId}).
 
 call(CallId) ->
     gen_server:call(?MODULE, {'get_call', CallId}).
@@ -146,18 +139,8 @@ init([]) ->
     ets:new('queue_calls', ['named_table', 'bag']),
     ets:new('conference_participants', ['named_table', 'bag']),
     ets:new('conference_cache_data', ['named_table']),
-    ets:new('event_listener_kill_reqs', ['named_table', 'bag']),
     ets:new('database', ['named_table', 'bag']),
     {'ok', #state{}}.
-
-handle_call({'is_ev_down', AccountId, Timestamp}, _From, State) ->
-	Reply = case ets:match('event_listener_kill_reqs', {AccountId, Timestamp}) of
-		[] ->
-			'false';
-        [[]] ->
-            'true'
-    end,
-    {'reply', Reply, State};
 
 handle_call({'get_registration', AccountId, EndpointId}, _From, State) ->
 	Reply = case ets:match('registrations', {EndpointId, AccountId, '$1', '$2'}) of
@@ -288,14 +271,6 @@ handle_call({'debug', TableName}, _From, State) ->
 handle_call(_Request, _From, State) ->
     {'noreply', State}.
 
-handle_cast({'event_listener_kill_req', AccountId, Timestamp}, State) ->
-	ets:insert('event_listener_kill_reqs', {AccountId, Timestamp}),
-    {'noreply', State};
-
-handle_cast({'event_listener_kill_cancel_req', AccountId}, State) ->
-	ets:delete('event_listener_kill_reqs', AccountId),
-    {'noreply', State};
-
 handle_cast({'init_state', AccountId}, State) ->
     lager:debug("initializing account ~s state", [AccountId]),
     pvt_init_state(AccountId),
@@ -308,6 +283,10 @@ handle_cast({'purge_state', AccountId}, State) ->
 handle_cast({'add_registration', AccountId, EndpointId, ContactIP, ContactPort}, State) ->
 	ets:insert('registrations', {EndpointId, AccountId, ContactIP, ContactPort}),
 	{'noreply', State};
+
+handle_cast({'delete_registration', EndpointId}, State) ->
+    ets:delete('registrations', EndpointId),
+    {'noreply', State};
 
 handle_cast({'new_call', Call}, State) ->
     CallId = amimulator_call:call_id(Call),
@@ -416,7 +395,6 @@ handle_cast({'db_del', AccountId, Family, Key}, State) ->
 %     ets:new('queue_calls', ['named_table', 'bag']),
 %     ets:new('conference_participants', ['named_table', 'bag']),
 %     ets:new('conference_cache_data', ['named_table']),
-%     ets:new('event_listener_kill_reqs', ['named_table', 'bag']),
 
 handle_cast(_Request, State) ->
     {'noreply', State}.

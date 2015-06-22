@@ -66,7 +66,11 @@ from_json(JObj) ->
                  ,from = case wh_json:get_value(<<"From">>, JObj) of
                              'undefined' ->
                                  case wh_json:get_first_defined([<<"direction">>, <<"Call-Direction">>], JObj) of
-                                     <<"inbound">> -> wh_json:get_first_defined([<<"Caller-ID-Number">>, <<"caller_id">>], JObj);
+                                     <<"inbound">> ->
+                                        case wh_json:get_first_defined([<<"Caller-ID-Number">>, <<"caller_id">>], JObj) of
+                                            'undefined' -> <<"@">>;
+                                            CallerIdNumber -> <<CallerIdNumber/binary, "@">>
+                                        end;
                                      <<"outbound">> -> <<"@">>
                                  end;
                              From -> From
@@ -81,8 +85,23 @@ from_json(JObj) ->
                               end
                  ,caller_id_name = wh_json:get_first_defined([<<"Caller-ID-Name">>, <<"caller_id">>], JObj)
                  ,caller_id_number = wh_json:get_first_defined([<<"Caller-ID-Number">>, <<"caller_id">>], JObj)
-                 ,callee_id_name = wh_json:get_value(<<"Callee-ID-Name">>, JObj)
-                 ,callee_id_number = wh_json:get_value(<<"Callee-ID-Number">>, JObj)
+
+                 ,callee_id_name = case wh_json:get_value(<<"Callee-ID-Name">>, JObj) of
+                    'undefined' ->
+                       case binary:split(wh_json:get_first_defined([<<"destination">>, <<"To">>], JObj, <<"@">>), <<"@">>) of
+                           [ToUser, _] -> ToUser;
+                           [ToUser] -> ToUser
+                       end;
+                    CalleeIdName -> CalleeIdName
+                  end
+                 ,callee_id_number = case wh_json:get_value(<<"Callee-ID-Number">>, JObj) of
+                    'undefined' ->
+                       case binary:split(wh_json:get_first_defined([<<"destination">>, <<"To">>], JObj, <<"@">>), <<"@">>) of
+                           [ToUser, _] -> ToUser;
+                           [ToUser] -> ToUser
+                       end;
+                    CalleeIdName -> CalleeIdName
+                  end
                 },
     update_post_create(Call).
 
@@ -187,6 +206,7 @@ channel(#call{channel=Channel}) ->
 -spec set_channel(call()) -> call().
 -spec set_channel(api_binary(), call()) -> call().
 set_channel(Call) ->
+    lager:debug("call ~p", [Call]),
     set_channel(amimulator_util:channel_string(Call), Call).
 
 set_channel(Channel, Call) ->

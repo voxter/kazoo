@@ -104,7 +104,7 @@ handle_register(AccountId, EventJObj) ->
                 {<<"PeerStatus">>, <<"Reachable">>},
                 {<<"Time">>, <<"2">>}
             ]],
-            amimulator_event_listener:publish_amqp_event({publish, Payload});
+            amimulator_event_listener:publish_amqp_event({publish, Payload}, AccountId);
         _ ->
             ok
     end.
@@ -114,6 +114,9 @@ handle_unregister(AccountId, EventJObj) ->
     case couch_mgr:get_results(AccountDb, <<"devices/sip_credentials">>, [{key, wh_json:get_value(<<"Username">>, EventJObj)}]) of
         {ok, [Result]} ->
             {ok, EndpointDoc} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, Result)),
+
+            ami_sm:delete_registration(wh_json:get_value(<<"id">>, Result)),
+
             Exten = amimulator_util:endpoint_exten(EndpointDoc),
             Peer = <<"SIP/", Exten/binary>>,
             Payload = [[
@@ -131,7 +134,7 @@ handle_unregister(AccountId, EventJObj) ->
                 {<<"Hint">>, <<Peer/binary, ",CustomPresence:", Exten/binary>>},
                 {<<"Status">>, 4}
             ]],
-            amimulator_event_listener:publish_amqp_event({publish, Payload});
+            amimulator_event_listener:publish_amqp_event({publish, Payload}, AccountId);
         _ ->
             ok
     end.
