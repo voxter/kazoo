@@ -28,22 +28,29 @@ bindings(Props) ->
     ].
 
 responders(_Props) ->
-    [
-        {<<"member">>, <<"call">>},
-        {<<"member">>, <<"call_cancel">>},
-        {<<"acdc_call_stat">>, <<"handled">>},
-        {<<"acdc_status_stat">>, <<"connecting">>},
-        {<<"agent">>, <<"login">>},
-        {<<"agent">>, <<"logout">>},
-        {<<"agent">>, <<"pause">>},
-        {<<"agent">>, <<"resume">>},
-        {<<"agent">>, <<"login_queue">>},
-        {<<"agent">>, <<"logout_queue">>}
+    [{<<"member">>, <<"call">>}
+     ,{<<"member">>, <<"call_cancel">>}
+     ,{<<"acdc_call_stat">>, <<"handled">>}
+     ,{<<"acdc_status_stat">>, <<"ready">>}
+     ,{<<"acdc_status_stat">>, <<"connected">>}
+     ,{<<"acdc_status_stat">>, <<"outbound">>}
+     ,{<<"acdc_status_stat">>, <<"wrapup">>}
+     ,{<<"acdc_status_stat">>, <<"connecting">>}
+     ,{<<"agent">>, <<"login">>}
+     ,{<<"agent">>, <<"logout">>}
+     ,{<<"agent">>, <<"pause">>}
+     ,{<<"agent">>, <<"resume">>}
+     ,{<<"agent">>, <<"login_queue">>}
+     ,{<<"agent">>, <<"logout_queue">>}
     ].
 
 handle_event(EventJObj, _) ->
-    {_EventType, EventName} = wh_util:get_event_type(EventJObj),
-    handle_specific_event(EventName, EventJObj).
+    {EventType, EventName} = wh_util:get_event_type(EventJObj),
+
+    case EventType of
+        <<"acdc_status_stat">> -> handle_status_event(EventName, EventJObj);
+        _ -> handle_specific_event(EventName, EventJObj)
+    end.
 
 %%
 %% Event type handlers
@@ -75,32 +82,13 @@ handle_specific_event(<<"call">>, EventJObj) ->
 		        {<<"Count">>, Position},
 		        {<<"Uniqueid">>, CallId}
 		    ],
-		    amimulator_event_listener:publish_amqp_event({'publish', Payload})
+		    amimulator_event_listener:publish_amqp_event({'publish', Payload}, AccountId)
 	end;
 handle_specific_event(<<"call_cancel">>, EventJObj) ->
     AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
     QueueId = wh_json:get_value(<<"Queue-ID">>, EventJObj),
     CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
     maybe_cancel_queue_call(AccountId, QueueId, CallId, wh_json:get_value(<<"Reason">>, EventJObj));
-
-handle_specific_event(<<"connecting">>, EventJObj) ->
-	AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
-	AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
-	CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
-	AgentId = wh_json:get_value(<<"Agent-ID">>, EventJObj),
-
-	{'ok', Owner} = couch_mgr:open_doc(AccountDb, AgentId),
-    Call = ami_sm:call(CallId),
-	Payload = [
-		{<<"Event">>, <<"AgentCalled">>},
-		{<<"AgentCalled">>, <<"Local/", (wh_json:get_value(<<"username">>, Owner))/binary, "@from-queue/n">>},
-		{<<"ChannelCalling">>, amimulator_call:channel(Call)},
-		{<<"CallerID">>, amimulator_call:id_name(Call)},
-		{<<"Context">>, <<"default">>},
-		{<<"Extension">>, amimulator_call:id_number(Call)},
-		{<<"Priority">>, 1}
-	],
-	amimulator_event_listener:publish_amqp_event({'publish', Payload});
 handle_specific_event(<<"handled">>, EventJObj) ->
     CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
     AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
@@ -124,7 +112,7 @@ handle_specific_event(<<"handled">>, EventJObj) ->
 		        {<<"Position">>, Position},
 		        {<<"Uniqueid">>, CallId}
 		    ],
-		    amimulator_event_listener:publish_amqp_event({publish, Payload})
+		    amimulator_event_listener:publish_amqp_event({publish, Payload}, AccountId)
 	end;
 handle_specific_event(<<"login">>, EventJObj) ->
     %lager:debug("Agent logged in to queues ~p", [EventJObj]),
@@ -153,7 +141,7 @@ handle_specific_event(<<"login">>, EventJObj) ->
                 ]]
         end end, [], wh_json:get_value(<<"queues">>, AgentDoc, [])
     ),
-    amimulator_event_listener:publish_amqp_event({publish, WholePayload});
+    amimulator_event_listener:publish_amqp_event({publish, WholePayload}, AccountId);
 handle_specific_event(<<"logout">>, EventJObj) ->
     %lager:debug("Agent logged out from queues ~p", [EventJObj]),
     AgentId = wh_json:get_value(<<"Agent-ID">>, EventJObj),
@@ -179,7 +167,7 @@ handle_specific_event(<<"logout">>, EventJObj) ->
             ]]
         end end, [], wh_json:get_value(<<"queues">>, AgentDoc, [])
     ),
-    amimulator_event_listener:publish_amqp_event({publish, WholePayload});
+    amimulator_event_listener:publish_amqp_event({publish, WholePayload}, AccountId);
 handle_specific_event(<<"login_queue">>, EventJObj) ->
     AgentId = wh_json:get_value(<<"Agent-ID">>, EventJObj),
     AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
@@ -210,7 +198,7 @@ handle_specific_event(<<"login_queue">>, EventJObj) ->
                 {<<"Status">>, 1},
                 {<<"Paused">>, 0}
             ],
-            amimulator_event_listener:publish_amqp_event({publish, Payload})
+            amimulator_event_listener:publish_amqp_event({publish, Payload}, AccountId)
     end;
 handle_specific_event(<<"logout_queue">>, EventJObj) ->
     AgentId = wh_json:get_value(<<"Agent-ID">>, EventJObj),
@@ -236,7 +224,7 @@ handle_specific_event(<<"logout_queue">>, EventJObj) ->
                 {<<"Location">>, <<"Local/", Exten/binary, "@from-queue/n">>},
                 {<<"MemberName">>, AgentName}
             ],
-            amimulator_event_listener:publish_amqp_event({publish, Payload})
+            amimulator_event_listener:publish_amqp_event({publish, Payload}, AccountId)
     end;
 handle_specific_event(<<"pause">>, EventJObj) ->
     AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
@@ -262,7 +250,7 @@ handle_specific_event(<<"pause">>, EventJObj) ->
             _ ->
                 Acc
         end end, [], wh_json:get_value(<<"queues">>, AgentDoc, [])),
-    amimulator_event_listener:publish_amqp_event({publish, Payload});
+    amimulator_event_listener:publish_amqp_event({publish, Payload}, AccountId);
 handle_specific_event(<<"resume">>, EventJObj) ->
     AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
     AccountDb = wh_util:format_account_id(AccountId, encoded),
@@ -287,9 +275,83 @@ handle_specific_event(<<"resume">>, EventJObj) ->
             _ ->
                 Acc
         end end, [], wh_json:get_value(<<"queues">>, AgentDoc, [])),
-    amimulator_event_listener:publish_amqp_event({publish, Payload});
+    amimulator_event_listener:publish_amqp_event({publish, Payload}, AccountId);
 handle_specific_event(_, _EventJObj) ->
     lager:debug("AMI: unhandled acdc event").
+
+handle_status_event(EventName, EventJObj) ->
+    maybe_agent_called(EventName, EventJObj),
+    AccountDb = wh_util:format_account_id(wh_json:get_value(<<"Account-ID">>, EventJObj), 'encoded'),
+    AgentId = wh_json:get_value(<<"Agent-ID">>, EventJObj),
+    case couch_mgr:open_doc(AccountDb, AgentId) of
+        {'error', E} -> lager:debug("error getting agent ~p user doc (~p)", [AgentId, E]);
+        {'ok', AgentDoc} -> publish_status_events(translate_status(EventName), AgentDoc, get_queues(AgentDoc))
+    end.
+
+maybe_agent_called(<<"connecting">>, EventJObj) ->
+    AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
+    AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
+    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
+    AgentId = wh_json:get_value(<<"Agent-ID">>, EventJObj),
+
+    {'ok', Owner} = couch_mgr:open_doc(AccountDb, AgentId),
+    Call = ami_sm:call(CallId),
+    Payload = [
+        {<<"Event">>, <<"AgentCalled">>},
+        {<<"AgentCalled">>, <<"Local/", (wh_json:get_value(<<"username">>, Owner))/binary, "@from-queue/n">>},
+        {<<"ChannelCalling">>, amimulator_call:channel(Call)},
+        {<<"CallerID">>, amimulator_call:id_name(Call)},
+        {<<"Context">>, <<"default">>},
+        {<<"Extension">>, amimulator_call:id_number(Call)},
+        {<<"Priority">>, 1}
+    ],
+    amimulator_event_listener:publish_amqp_event({'publish', Payload}, AccountId);
+maybe_agent_called(_, _) ->
+    'ok'.
+
+translate_status(<<"ready">>) -> 1;
+translate_status(<<"connected">>) -> 2;
+translate_status(<<"outbound">>) -> 2;
+translate_status(<<"wrapup">>) -> 1;
+translate_status(<<"connecting">>) -> 6.
+
+get_queues(AgentDoc) ->
+    case wh_json:get_value(<<"queues">>, AgentDoc) of
+        'undefined' ->
+            lager:debug("agent ~p doc is missing queues list", [wh_json:get_value(<<"_id">>, AgentDoc)]),
+            [];
+        Queues -> Queues
+    end.
+
+publish_status_events(Status, AgentDoc, Queues) ->
+    AccountDb = wh_json:get_value(<<"pvt_account_db">>, AgentDoc),
+    Username = wh_json:get_value(<<"username">>, AgentDoc),
+    FirstName = wh_json:get_value(<<"first_name">>, AgentDoc),
+    LastName = wh_json:get_value(<<"last_name">>, AgentDoc),
+
+    Payload = lists:foldl(fun(QueueId, Acc) ->
+        case couch_mgr:get_results(AccountDb, <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
+            {'error', _E} -> Acc;
+            {'ok', []} -> Acc;
+            {'ok', Results} ->
+                Value = wh_json:get_value(<<"value">>, hd(Results)),
+                Number = hd(Value),
+                %% TODO add the stats in here
+                [[
+                    {<<"Event">>, <<"QueueMemberStatus">>},
+                    {<<"Queue">>, Number},
+                    {<<"Location">>, <<"Local/", Username/binary, "@from-queue/n">>},
+                    {<<"MemberName">>, <<FirstName/binary, " ", LastName/binary>>},
+                    {<<"Membership">>, <<"dynamic">>},
+                    {<<"Penalty">>, 0},
+                    %{<<"CallsTaken">>, 0},
+                    %{<<"LastCall">>, LastCall},
+                    {<<"Status">>, Status},
+                    {<<"Paused">>, 0}
+                ] | Acc]
+        end end, [], Queues),
+
+    amimulator_event_listener:publish_amqp_event({'publish', Payload}, wh_json:get_value(<<"pvt_account_id">>, AgentDoc)).
 
 -spec maybe_cancel_queue_call(ne_binary(), ne_binary(), ne_binary(), binary()) -> boolean().
 maybe_cancel_queue_call(AccountId, QueueId, CallId, Reason) ->
@@ -321,7 +383,7 @@ cancel_queue_call(AccountId, QueueId, CallId, Call, Reason) ->
             lager:debug("Could not find queue extension ~p", [E]);
         {ok, Number} ->
             EndpointName = amimulator_call:channel(Call),
-            amimulator_event_listener:publish_amqp_event({publish, cancel_queue_call_payload(Number, CallId, Position, EndpointName, Reason)})
+            amimulator_event_listener:publish_amqp_event({publish, cancel_queue_call_payload(Number, CallId, Position, EndpointName, Reason)}, AccountId)
     end.
 
 -spec cancel_queue_call_payload(binary(), ne_binary(), pos_integer(), binary(), binary()) -> list().
