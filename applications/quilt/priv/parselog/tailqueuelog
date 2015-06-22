@@ -81,6 +81,7 @@ if ($write) {
         print DEFAULT "dbuser=$config{'dbuser'}\n"   if $config{'dbuser'};
         print DEFAULT "dbpass=$config{'dbpass'}\n"   if $config{'dbpass'};
         print DEFAULT "dbhost=$config{'dbhost'}\n"   if $config{'dbhost'};
+        print DEFAULT "dbname=$config{'dbname'}\n"   if $config{'dbname'};
         print DEFAULT "logfile=$config{'logfile'}\n" if $config{'logfile'};
         close DEFAULT;
     }
@@ -435,7 +436,7 @@ if($daemon == 1) {
 &last_event();
 &initial_load();
 
-$file = File::Tail->new( $config{'logfile'} );
+$file = File::Tail->new( name=>$config{'logfile'}, maxinterval=>2, interval=>5 );
 while ( defined( $message = $file->read ) ) {
     next unless defined $message;
     chomp $message;
