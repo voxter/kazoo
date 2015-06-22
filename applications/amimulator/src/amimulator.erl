@@ -30,10 +30,10 @@ start_link() ->
 %%		This includes closing listening sockets for the translator
 %% @end
 %%--------------------------------------------------------------------
--spec before_stop() -> ok.
+-spec before_stop() -> 'ok'.
 before_stop() ->
 	amimulator_supersup:before_stop(),
-	ok.
+	'ok'.
 
 %%--------------------------------------------------------------------
 %% @public

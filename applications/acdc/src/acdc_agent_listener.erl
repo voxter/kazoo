@@ -120,7 +120,7 @@
 -define(BINDINGS(AcctId, AgentId), [{'self', []}
                                     ,{'acdc_agent', [{'account_id', AcctId}
                                                      ,{'agent_id', AgentId}
-                                                     ,{'restrict_to', ['sync', 'stats_req']}
+                                                     ,{'restrict_to', ['sync']}
                                                     ]}
                                     ,{'conf', [{'action', <<"*">>}
                                                ,{'db', wh_util:format_account_id(AcctId, 'encoded')}
@@ -651,6 +651,10 @@ handle_cast({'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}, #sta
 
     AgentCallIds = maybe_connect_to_agent(MyQ, EPs, Call, RingTimeout, AgentId, CDRUrl),
 
+    gen_listener:add_binding(self(), 'acdc_agent', [{'callid', call_id(Call)}
+                                                    ,{'restrict_to', ['stats_req']}
+                                                   ]),
+
     lager:debug("originate sent, waiting on successful bridge now"),
     update_my_queues_of_change(AcctId, AgentId, Qs),
     {'noreply', State#state{call=Call
@@ -935,11 +939,13 @@ handle_event(_JObj, #state{fsm_pid=FSM
                            ,agent_id=AgentId
                            ,acct_id=AcctId
                            ,cdr_urls=Urls
+                           ,agent_call_ids=AgentCallIds
                           }) ->
     {'reply', [{'fsm_pid', FSM}
                ,{'agent_id', AgentId}
                ,{'acct_id', AcctId}
                ,{'cdr_urls', Urls}
+               ,{'agent_call_ids', AgentCallIds}
               ]}.
 
 %%--------------------------------------------------------------------
@@ -1110,6 +1116,7 @@ maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
                                    ,{<<"Request-ID">>, ReqId}
                                    ,{<<"Retain-CID">>, <<"true">>}
                                    ,{<<"Agent-ID">>, AgentId}
+                                   ,{<<"Member-Call-ID">>, MCallId}
                                   ]),
 
     {ACallIds, Endpoints} = lists:foldl(fun(EP, {Cs, Es}) ->

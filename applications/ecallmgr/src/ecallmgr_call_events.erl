@@ -607,6 +607,7 @@ generic_call_event_props(Props) ->
      ,{<<"Hangup-Cause">>, get_hangup_cause(Props)}
      ,{<<"Hangup-Code">>, get_hangup_code(Props)}
      ,{<<"Disposition">>, get_disposition(Props)}
+     ,{<<"Endpoint-Disposition">>, props:get_value(<<"variable_endpoint_disposition">>, Props)}
      ,{<<"Raw-Application-Name">>, get_raw_application_name(Props)}
      ,{<<"Channel-Moving">>, get_channel_moving(Props)}
      ,{<<"Call-Direction">>, props:get_value(<<"Call-Direction">>, Props)}

@@ -26,12 +26,15 @@
 -define(BINDINGS, [
     {'self', []}
     ,{acdc_stats, [{restrict_to, [call_stat, status_stat]}]}
+    ,{acdc_agent, [{restrict_to, [status]}]}
 ]).
 
 -define(RESPONDERS, [{
     {?MODULE, 'handle_event'}, [
         {<<"acdc_call_stat">>, <<"*">>}
         ,{<<"acdc_status_stat">>, <<"*">>}
+        ,{<<"agent">>, <<"login_queue">>}
+        ,{<<"agent">>, <<"logout_queue">>}
     ]
 }]).
 
@@ -68,7 +71,7 @@ handle_event(JObj, State) ->
     {noreply, []}.
 
 terminate(Reason, _State) ->
-    lager:debug("quilt_listener listener on pid ~p terminating: ~p", [self(), Reason]),
+    lager:debug("~p listener on pid ~p terminating: ~p", [?MODULE, self(), Reason]),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
