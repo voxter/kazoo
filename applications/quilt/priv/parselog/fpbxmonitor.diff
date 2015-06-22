@@ -1,0 +1,18 @@
+# This diff file is for updating freepbx queue modue
+# copy it to /var/www/html/admin/modules/queues
+# then cd to that directory 
+# and apply with "patch < fpbxmonitor.diff"
+
+--- functions.inc.php.orig	2009-07-06 18:34:41.000000000 -0300
++++ functions.inc.php	2009-07-06 18:39:44.000000000 -0300
+@@ -307,7 +307,9 @@
+ 						$ext->add('ext-queues', $exten, '', new ext_setvar('__ALERT_INFO', str_replace(';', '\;', $alertinfo)));
+ 					}
+ 
+-					$ext->add('ext-queues', $exten, '', new ext_setvar('MONITOR_FILENAME','/var/spool/asterisk/monitor/q${EXTEN}-${STRFTIME(${EPOCH},,%Y%m%d-%H%M%S)}-${UNIQUEID}'));
++					$ext->add('ext-queues', $exten, '', new ext_setvar('__MONITOR_FILENAME','/var/spool/asterisk/monitor/q${EXTEN}-${STRFTIME(${EPOCH},,%Y%m%d-%H%M%S)}-${UNIQUEID}'));
++					$ext->add('ext-queues', $exten, '', new ext_setvar('__MONITOR_EXEC','/usr/local/parselog/update_mix_mixmonitor.pl ^{UNIQUEID} ^{MIXMONITOR_FILENAME}'));
++
+ 					$joinannounce_id = (isset($q['joinannounce_id'])?$q['joinannounce_id']:'');
+ 					if($joinannounce_id) {
+ 						$joinannounce = recordings_get_file($joinannounce_id);

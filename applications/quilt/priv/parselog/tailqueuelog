@@ -1,0 +1,453 @@
+#!/usr/bin/perl
+# Copyright 2008 House Internet S.R.L.
+# This program is not redistributable.
+# http://www.asternic.org
+# Contact Nicolas Gudino for more information <nicolas@house.com.ar>
+use FindBin;
+use lib $FindBin::Bin;
+use POSIX;
+use DBI;
+use Time::Local;
+use Getopt::Long;
+use Tail;
+
+my %config;
+my %event_hash = ();
+my %queuecache;
+my %agentcache;
+my $dbh;
+my $conectado     = 0;
+my $last_event_ts = 0;
+my $daemon        = 0;
+
+$SIG{ALRM} = 'reconecta';
+
+sub daemonize
+{
+    fork and exit;
+    POSIX::setsid();
+    fork and exit;
+    umask 0;
+    chdir '/';
+    close STDIN;
+    close STDOUT;
+    close STDERR;
+}
+
+GetOptions(
+    "u|user=s"     => \$config{'dbuser'},
+    "p|password=s" => \$config{'dbpass'},
+    "h|host=s"     => \$config{'dbhost'},
+    "d|dbname=s"   => \$config{'dbname'},
+    "l|logfile=s"  => \$config{'logfile'},
+    "D"            => \$daemon,
+    "help|?"       => \$help,
+    "purge"        => \$purge,
+    "w|write"      => \$write
+);
+
+usage() if $help;
+
+load_config('/etc/tailqueuelog.conf');
+load_config("$ENV{HOME}/.tailqueuelog") if defined $ENV{HOME};
+
+$config{'dbname'}  = $config{'dbname'}  ? $config{'dbname'}  : "qstats";
+$config{'dbhost'}  = $config{'dbhost'}  ? $config{'dbhost'}  : "localhost";
+$config{'dbpass'}  = $config{'dbpass'}  ? $config{'dbpass'}  : "";
+$config{'dbuser'}  = $config{'dbuser'}  ? $config{'dbuser'}  : "root";
+$config{'logfile'} = $config{'logfile'} ? $config{'logfile'} : "/var/log/asterisk/queue_log";
+
+if ( $purge && defined( $config{'dbuser'} ) ) {
+    print "Purge all data from tables.\n";
+    print "Are you sure? (yes|no)\n";
+    $answer = lc(<>);
+    chop($answer);
+    if ( $answer eq "y" || $answer eq "yes" ) {
+        &purgedb();
+    }
+    exit;
+}
+
+if ( !-f $config{'logfile'} ) {
+    print "File " . $config{'logfile'} . " not found\n";
+    exit 1;
+}
+
+if ($write) {
+    if ( -d $ENV{HOME} ) {
+        open DEFAULT, ">$ENV{HOME}/.tailqueuelog";
+        print DEFAULT "dbuser=$config{'dbuser'}\n"   if $config{'dbuser'};
+        print DEFAULT "dbpass=$config{'dbpass'}\n"   if $config{'dbpass'};
+        print DEFAULT "dbhost=$config{'dbhost'}\n"   if $config{'dbhost'};
+        print DEFAULT "logfile=$config{'logfile'}\n" if $config{'logfile'};
+        close DEFAULT;
+    }
+}
+
+sub purgedb() {
+    print "Purging data\n";
+    my $return = connect_db();
+    if ($return) {
+        print "" . $DBI::errstr . "\n";
+        exit;
+    }
+    else {
+        $query = "DELETE FROM qname";
+        $dbh->do($query);
+        print $query. "\n";
+        $query = "ALTER TABLE qname AUTO_INCREMENT = 1";
+        $dbh->do($query);
+        print $query. "\n";
+        $query = "INSERT INTO qname VALUES (-1,'ALL')";
+        $dbh->do($query);
+        print $query. "\n";
+        $query = "DELETE FROM qagent";
+        $dbh->do($query);
+        print $query. "\n";
+        $query = "ALTER TABLE qagent AUTO_INCREMENT = 1";
+        $dbh->do($query);
+        print $query. "\n";
+        $query = "INSERT INTO qagent VALUES (-1,'ALL')";
+        $dbh->do($query);
+        print $query. "\n";
+        $query = "DELETE FROM queue_stats";
+        $dbh->do($query);
+        print $query. "\n";
+        $query = "ALTER TABLE queue_stats AUTO_INCREMENT = 1";
+        $dbh->do($query);
+        print $query. "\n";
+        print "Done...\n";
+    }
+}
+
+sub load_config() {
+    $file = shift;
+    return unless ( -r $file );
+    open( CFG, "<$file" ) or return;
+    while (<CFG>) {
+        chomp;
+        my ( $var, $val ) = split(/\s*\=\s*/);
+        $val =~ s/'([^']*)';/$1/g;
+        $var = lc($var);
+        $config{$var} = $val;
+    }
+    close(CFG);
+}
+
+sub reconecta() {
+    my $return = connect_db();
+
+    if ($return) {
+        print "" . $DBI::errstr . "\n";
+        alarm(5);
+    }
+    else {
+        print "Mysql successful connect!\n";
+        $conectado = 1;
+        open( LOSTEVENTS, "</var/log/asterisk/queue_log_failed" );
+        while (<LOSTEVENTS>) {
+            chomp;
+            print "Processing lost line: $_\n";
+            procesa($_);
+        }
+        close(LOSTEVENTS);
+        open( LOSTEVENTS, ">/var/log/asterisk/queue_log_failed" );
+        close(LOSTEVENTS);
+        print "Reseting /var/log/asterisk/queue_log_failed\n";
+        &set_events();
+    }
+}
+
+sub initial_load() {
+    open( EVENTS, "<$config{'logfile'}" );
+    while (<EVENTS>) {
+        chomp;
+        procesa($_);
+    }
+    close(EVENTS);
+}
+
+sub connect_db() {
+    my $return = 0;
+    my %attr   = (
+        PrintError => 0,
+        RaiseError => 0,
+    );
+    my $dsn = "DBI:mysql:database=$config{'dbname'};host=$config{'dbhost'}";
+    print "Connecting to DB $dsn\n";
+    $dbh->disconnect if $dbh;
+    $dbh = DBI->connect( $dsn, $config{'dbuser'}, $config{'dbpass'}, \%attr ) or $return = 1;
+    return $return;
+}
+
+sub check_queue {
+
+    $queue_name = shift;
+
+    if ( !defined($queue_name) ) {
+        return 0;
+    }
+
+    if ( exists( $queuecache{$queue_name} ) ) {
+        return $queuecache{$queue_name};
+    }
+
+    if ( $conectado == 1 ) {
+
+        $sth = $dbh->prepare("SELECT queue_id FROM qname WHERE queue=?");
+        $sth->execute($queue_name);
+        my @result  = $sth->fetchrow_array;
+        my $cuantos = @result;
+        $sth->finish;
+
+        if ($cuantos) {
+            $queue_id = $result[0];
+        }
+        else {
+            $sth = $dbh->prepare("INSERT INTO qname (queue) VALUES (?)");
+            $sth->execute($queue_name);
+            $queue_id = $dbh->{q{mysql_insertid}};
+        }
+        $queuecache{$queue_name} = $queue_id;
+        return $queue_id;
+    }
+}
+
+sub check_event {
+    $event = shift;
+
+    if ( !defined($event) ) {
+        return 0;
+    }
+
+    if ( exists( $event_hash{$event} ) ) {
+        $event_id = $event_hash{$event};
+    }
+    else {
+
+        # Try harder to find the event
+        print "No existe el evento $event, pruebo de nuevo\n";
+        &set_events();
+
+        if ( exists( $event_hash{$event} ) ) {
+            print "Por suerte lo encontro\n";
+            $event_id = $event_hash{$event};
+        }
+        else {
+            $sth = $dbh->prepare("INSERT INTO qevent (event) VALUES (?)");
+            $sth->execute($event);
+            $event_id = $dbh->{q{mysql_insertid}};
+            $event_hash{$event} = $event_id;
+        }
+    }
+    return $event_id;
+}
+
+sub check_agent {
+
+    $agent_name = shift;
+
+    if ( !defined($agent_name) ) {
+        return 0;
+    }
+
+    if ( $agent_name =~ /^Local/ ) {
+        $agent_name =~ s/^Local\///g;
+        @partes = split( /\@/, $agent_name, 2 );
+        $agent_name = $partes[0];
+    }
+
+    if ( $agent_name =~ /^\d+$/ ) {
+        $agent_name = "Agent/" . $agent_name;
+    }
+
+    print "Check agent $agent_name\n";
+
+    if ( exists( $agentcache{$agent_name} ) ) {
+        print "Exists in cache $agent_name = " . $agentcache{$agent_name} . "\n";
+        return $agentcache{$agent_name};
+    }
+
+    print "Agent $agent_name is not in cache, query database\n";
+
+    $sth = $dbh->prepare("SELECT agent_id FROM qagent WHERE agent=?");
+    $sth->execute($agent_name);
+    my @result  = $sth->fetchrow_array;
+    my $cuantos = @result;
+    $sth->finish;
+
+    if ($cuantos) {
+        $agent_id = $result[0];
+        print "found on database $agent_id\n";
+    }
+    else {
+        $sth = $dbh->prepare("INSERT INTO qagent (agent) VALUES (?)");
+        $sth->execute($agent_name);
+
+        $agent_id = $dbh->{q{mysql_insertid}};
+        print "NOT found on database inserting $agent_id\n";
+        print "Query $query\n";
+    }
+    if ( !$dbh->err() ) {
+        print "No error, set cache\n";
+        $agentcache{$agent_name} = $agent_id;
+    }
+    else {
+        print "Error, not set cache and return -1\n";
+        $agent_id = -1;
+    }
+    return $agent_id;
+}
+
+sub return_timestamp {
+    my $date_string = shift;
+    my ( $year, $month, $day, $hour, $min, $sec ) = split( /[-: ]/, $date_string, 6 );
+    $year = $year - 1900;
+    $month--;
+    my $u_timestamp = timelocal( $sec, $min, $hour, $day, $month, $year );
+    return $u_timestamp;
+}
+
+sub set_events {
+    if ( $DBI::err ne "2002" ) {
+
+        %event_hash = ();
+
+        # Populates an array with the EVENTS ids
+        $query = "SELECT * FROM qevent ORDER BY event_id";
+        $sth   = $dbh->prepare($query);
+        $sth->execute;
+        while ( my @row = $sth->fetchrow ) {
+            $event_hash{ $row[1] } = $row[0];
+        }
+
+        %queuecache = ();
+        %agentcache = ();
+    }
+}
+
+sub handle_error {
+    $error       = shift;
+    $errorstring = shift;
+    $linea       = shift;
+    if ( $error == "2006" ) {
+        print "Lost connection... save $linea\n";
+        if ( open( LOG, ">> /var/log/asterisk/queue_log_failed" ) ) {
+            print LOG "$linea\n";
+            close(LOG);
+        }
+        &reconecta();
+    }
+    else {
+        print "Record not inserted, error: $errorstring\n";
+    }
+}
+
+sub last_event {
+
+    # Select the most recent event saved
+    $query = "SELECT datetime FROM queue_stats ORDER BY datetime DESC LIMIT 1";
+    $sth   = $dbh->prepare($query);
+    $sth->execute;
+    my @result  = $sth->fetchrow_array;
+    my $cuantos = @result;
+    $sth->finish;
+
+    if ( $cuantos > 0 ) {
+        print "last $result[0]\n";
+        $last_event_ts = return_timestamp( $result[0] );
+        print "last $last_event_ts\n";
+        $last_event_ts -= 10;
+    }
+    else {
+        $last_event_ts = 0;
+    }
+}
+
+sub procesa {
+
+    my $max_infos = 5;
+    my $linea = shift;
+
+    print $linea. "\n";
+
+    my ( @parametros) = split( /\|/, $linea );
+
+    my $date       = shift(@parametros);
+    my $uniqueid   = shift(@parametros);
+    my $queue_name = shift(@parametros);
+    my $agent      = shift(@parametros);
+    my $event      = shift(@parametros);
+
+    my $infoqr = "";
+    my $repqr  = "";
+    my $cuantos_infos = $#parametros + 1;
+
+    if($cuantos_infos > $max_infos) {
+        my $sacar_infos = $cuantos_infos - $max_infos;
+        for($a=1;$a<=$sacar_infos;$a++) {
+            pop @parametros;
+        }
+        $cuantos_infos = $max_infos; 
+    }
+
+    for($a=1;$a<=$cuantos_infos;$a++) {
+       $infoqr.=",info$a";
+       $repqr.=",?";
+    }
+
+    if ( $date < $last_event_ts ) {
+        return;
+    }
+
+    if ( $event eq "RINGNOANSWER" && $parametros[0] eq "0" ) {
+        return;
+    }
+
+    my @timeData = localtime($date);
+    my $sec      = $timeData[0];
+    my $min      = $timeData[1];
+    my $hour     = $timeData[2];
+    my $day      = $timeData[3];
+    my $month    = $timeData[4] + 1;
+    my $year     = $timeData[5] + 1900;
+
+    $date = "$year-$month-$day $hour:$min:$sec";
+
+    $queue_id = check_queue($queue_name);
+    $agent_id = check_agent($agent);
+    $event_id = check_event($event);
+
+    $sth = $dbh->prepare(qq{
+        INSERT INTO queue_stats (uniqueid, datetime, qname, qagent, qevent$infoqr) VALUES (?,?,?,?,?$repqr);
+    });
+    $sth->execute($uniqueid, $date, $queue_id, $agent_id, $event_id, @parametros) or handle_error( $dbh->err(), $dbh->errstr(), $linea );
+
+}
+
+if($daemon) {
+    &daemonize();
+}
+
+&reconecta();
+&last_event();
+&initial_load();
+
+$file = File::Tail->new( $config{'logfile'} );
+while ( defined( $message = $file->read ) ) {
+    next unless defined $message;
+    chomp $message;
+    procesa($message);
+}
+
+sub usage {
+    print STDERR "tailqueuelog [<options>] \n";
+    print STDERR "       -u <name>     - Connect to mysql as username <name> [root]\n";
+    print STDERR "       -p <pw>       - Connect to mysql with password <pw>\n";
+    print STDERR "       -h <host>     - Connect to mysql host <host> [localhost]\n";
+    print STDERR "       -d <dbname>   - Connect to mysql database <dbname> [qstats]\n";
+    print STDERR "       -l <queuelog> - Path and name for queue_log [/var/log/asterisk/queue_log]\n";
+    print STDERR "       -w            - Write configuration to disk\n";
+    print STDERR "       --purge       - Purge all data from tables\n";
+    exit;
+}
