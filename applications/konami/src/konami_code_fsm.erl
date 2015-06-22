@@ -54,6 +54,7 @@
 
                 ,call_id :: ne_binary()
                 ,other_leg :: api_binary()
+                ,other_leg_e164_destination :: api_binary()
                }).
 -type state() :: #state{}.
 
@@ -103,6 +104,7 @@ start_fsm(Call, JObj) ->
                                        whapps_call:kvs_store(?MODULE, self(), Call)
                                       )
                                ,call_id=whapps_call:call_id_direct(Call)
+                               ,other_leg_e164_destination=wnm_util:to_e164(whapps_call:to_user(Call))
 
                                ,b_endpoint_id=BEndpointId
                               }).
@@ -235,15 +237,17 @@ handle_event(?EVENT(CallId, <<"CHANNEL_BRIDGE">>, Evt)
             maybe_add_call_event_bindings(OtherLegCallId),
             {'next_state'
              ,StateName
-             ,handle_channel_bridge(State#state{other_leg=OtherLegCallId}, CallId, OtherLegCallId)
+             ,handle_channel_bridge(State#state{other_leg=OtherLegCallId}, CallId, OtherLegCallId, 'undefined')
             };
-        _ -> {'next_state', StateName, handle_channel_bridge(State, CallId, kz_call_event:other_leg_call_id(Evt))}
+        _ ->
+            {'next_state', StateName, handle_channel_bridge(State, CallId, kz_call_event:other_leg_call_id(Evt)
+                                                            ,wnm_util:to_e164(wh_json:get_value(<<"Other-Leg-Destination-Number">>, Evt, <<>>)))}
     end;
 handle_event(?EVENT(OtherLeg, <<"CHANNEL_BRIDGE">>, Evt)
              ,StateName
              ,#state{other_leg=OtherLeg}=State
             ) ->
-    {'next_state', StateName, handle_channel_bridge(State, kz_call_event:other_leg_call_id(Evt), OtherLeg)};
+    {'next_state', StateName, handle_channel_bridge(State, kz_call_event:other_leg_call_id(Evt), OtherLeg, 'undefined')};
 handle_event(?EVENT(CallId, <<"CHANNEL_DESTROY">>, _Evt)
              ,StateName
              ,#state{call_id=CallId}=State
@@ -549,49 +553,69 @@ handle_channel_answer(#state{call_id=CallId}=State, CallId, _Evt) ->
 handle_channel_answer(#state{other_leg=OtherLeg}=State, OtherLeg, _Evt) ->
     lager:debug("'b' leg ~s answered", [OtherLeg]),
     State;
-handle_channel_answer(#state{other_leg='undefined'}=State
+handle_channel_answer(#state{other_leg=_OtherLeg}=State
                       ,CallId
                       ,Evt
                      ) ->
+    Destination = case binary:split(wh_json:get_value(<<"To">>, Evt, <<"@">>), <<"@">>) of
+        [H,_T] -> H;
+        [H] -> H
+    end,
     maybe_other_leg_answered(State
                              ,CallId
                              ,kz_call_event:authorizing_id(Evt)
-                            );
-handle_channel_answer(#state{call_id=_CallId
-                             ,other_leg=_OtherLeg
-                            }=State
-                      ,_AnsweredId
-                      ,_Evt
-                     ) ->
-    lager:debug("channel ~s answered while on ~s and ~s", [_AnsweredId, _CallId, _OtherLeg]),
-    State.
+                             ,wnm_util:to_e164(Destination)
+                            ).
+% handle_channel_answer(#state{call_id=_CallId
+%                              ,other_leg=_OtherLeg
+%                             }=State
+%                       ,_AnsweredId
+%                       ,_Evt
+%                      ) ->
+%     lager:debug("channel ~s answered while on ~s and ~s", [_AnsweredId, _CallId, _OtherLeg]),
+%     State.
 
--spec maybe_other_leg_answered(state(), ne_binary(), ne_binary()) -> state().
+-spec maybe_other_leg_answered(state(), ne_binary(), ne_binary(), binary()) -> state().
 maybe_other_leg_answered(#state{b_endpoint_id=EndpointId
                                 ,call=Call
                                }=State
                          ,OtherLeg
                          ,EndpointId
+                         ,Destination
                         ) ->
     lager:debug("yay, our endpoint ~s answered on ~s", [EndpointId, OtherLeg]),
     maybe_add_call_event_bindings(OtherLeg),
     State#state{other_leg=OtherLeg
                 ,call=whapps_call:set_other_leg_call_id(OtherLeg, Call)
+                ,other_leg_e164_destination=Destination
                };
-maybe_other_leg_answered(State, _CallId, _EndpointId) ->
-    lager:debug("ignoring channel ~s answering for endpoint ~s", [_CallId, _EndpointId]),
+maybe_other_leg_answered(State, _CallId, _EndpointId, _) ->
+    % lager:debug("ignoring channel ~s answering for endpoint ~s", [_CallId, _EndpointId]),
     State.
 
--spec handle_channel_bridge(state(), ne_binary(), ne_binary()) -> state().
+-spec handle_channel_bridge(state(), ne_binary(), ne_binary(), api_binary()) -> state().
+handle_channel_bridge(#state{call_id=CallId
+                            }=State, CallId, CallId, _) ->
+    lager:debug("bridging to self - ignoring"),
+    State;
+handle_channel_bridge(#state{call_id=CallId
+                             ,call=Call
+                             ,other_leg_e164_destination=Destination
+                            }=State, CallId, OtherLeg, Destination) ->
+    lager:debug("probably found the next leg (~s) of an offnet call", [OtherLeg]),
+    maybe_add_call_event_bindings(OtherLeg),
+    State#state{call=whapps_call:set_other_leg_call_id(OtherLeg, Call)
+                ,other_leg=OtherLeg
+               };
 handle_channel_bridge(#state{call_id=CallId
                              ,other_leg=OtherLeg
-                            }=State, CallId, OtherLeg) ->
+                            }=State, CallId, OtherLeg, _) ->
     lager:debug("joy, 'a' and 'b' legs bridged"),
     State;
 handle_channel_bridge(#state{call_id=CallId
                              ,listen_on='a'
                              ,call=Call
-                            }=State, CallId, OtherLeg) ->
+                            }=State, CallId, OtherLeg, _) ->
     lager:debug("joy, 'a' is bridged to ~s", [OtherLeg]),
     maybe_add_call_event_bindings(OtherLeg),
     State#state{call=whapps_call:set_other_leg_call_id(OtherLeg, Call)
@@ -600,6 +624,7 @@ handle_channel_bridge(#state{call_id=CallId
 handle_channel_bridge(#state{other_leg='undefined'}
                       ,_CallId
                       ,_OtherLeg
+                      ,_
                      ) ->
     lager:debug("'a' leg has bridged to other leg ~s...done here", [_OtherLeg]),
     exit('normal');
@@ -609,6 +634,7 @@ handle_channel_bridge(#state{call_id=_CallId
                             }
                       ,UUID
                       ,OtherLeg
+                      ,_
                      ) ->
     lager:debug("our 'b' leg ~s bridged to ~s instead of ~s", [OtherLeg, UUID, _CallId]),
     exit('normal');
@@ -618,6 +644,7 @@ handle_channel_bridge(#state{call_id=_CallId
                             }=State
                       ,UUID
                       ,OtherLeg
+                      ,_
                      ) ->
     lager:debug("our 'b' leg ~s bridged to ~s instead of ~s", [OtherLeg, UUID, _CallId]),
     State#state{call_id=UUID
@@ -655,6 +682,11 @@ handle_channel_destroy(#state{other_leg=OtherLeg
                        ,OtherLeg
                       ) ->
     lager:debug("'b' ~s has ended, so should we", [OtherLeg]),
+    exit('normal');
+handle_channel_destroy(#state{call_id='undefined'
+                              ,other_leg=OtherLeg
+                             }, OtherLeg) ->
+    lager:debug("'b' leg has ended and we have no 'a' leg anymore"),
     exit('normal');
 handle_channel_destroy(#state{other_leg=OtherLeg
                               ,call=Call
