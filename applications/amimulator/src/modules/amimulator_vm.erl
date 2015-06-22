@@ -67,7 +67,7 @@ new_voicemail(JObj) ->
                         {<<"New">>, wh_json:get_value(<<"new_messages">>, Value) + 1},
                         {<<"Old">>, wh_json:get_value(<<"old_messages">>, Value)}
                     ],
-                    amimulator_event_listener:publish_amqp_event({'publish', Payload});
+                    amimulator_event_listener:publish_amqp_event({'publish', Payload}, wh_json:get_value(<<"Account-ID">>, JObj));
                 _ ->
                     lager:debug("Could not get voicemail count")
             end;

@@ -775,6 +775,7 @@ add_leg(Props, LegId, #state{other_legs=Legs
         'true' -> State;
         'false' ->
             lager:debug("added leg ~s to call", [LegId]),
+            gen_listener:add_binding(self(), {'amimulator', [{'callid', LegId}]}),
             ConsumerPid = wh_amqp_channel:consumer_pid(),
             _ = spawn(fun() ->
                               _ = put('callid', CallId),
@@ -856,6 +857,7 @@ remove_leg(Props, #state{other_legs=Legs
         'false' -> State;
         'true' ->
             lager:debug("removed leg ~s from call", [LegId]),
+            gen_listener:rm_binding(self(), {'amimulator', [{'callid', LegId}]}),
             ConsumerPid = wh_amqp_channel:consumer_pid(),
             _ = spawn(fun() ->
                               put('callid', CallId),
