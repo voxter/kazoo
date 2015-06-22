@@ -224,22 +224,24 @@ lookup_queue_name(AccountId, QueueId) ->
 write_log(AccountId, CallId, QueueName, BridgedChannel, Event) ->
     LogFile = "/tmp/queue_log." ++ binary_to_list(AccountId),
     {MegaSec, Sec, _} = os:timestamp(),
-    lager:debug("queue_log event: ~p~p|~s|~s|~s|~s|", [MegaSec, Sec, CallId, QueueName, BridgedChannel, Event]),
-    file:write_file(LogFile, io_lib:fwrite("~p~p|~s|~s|~s|~s|\n", [MegaSec, Sec, CallId, QueueName, BridgedChannel, Event]), [append]).
+    Timestamp = MegaSec * 1000000 + Sec,    
+    lager:debug("queue_log event: ~p|~s|~s|~s|~s|", [Timestamp, CallId, QueueName, BridgedChannel, Event]),
+    file:write_file(LogFile, io_lib:fwrite("~p|~s|~s|~s|~s|\n", [Timestamp, CallId, QueueName, BridgedChannel, Event]), [append]).
 
 write_log(AccountId, CallId, QueueName, BridgedChannel, Event, EventParams) ->
     LogFile = "/tmp/queue_log." ++ binary_to_list(AccountId),
     {MegaSec, Sec, _} = os:timestamp(),
+    Timestamp = MegaSec * 1000000 + Sec,
     case EventParams of
         {Param1, Param2, Param3} -> 
-            lager:debug("fwrite params ~p~p|~s|~s|~s|~s|~s|~s|~s", [MegaSec, Sec, CallId, QueueName, BridgedChannel, Event, Param1, Param2, Param3]),
-            file:write_file(LogFile, io_lib:fwrite("~p~p|~s|~s|~s|~s|~s|~s|~s\n", [MegaSec, Sec, CallId, QueueName, BridgedChannel, Event, Param1, Param2, Param3]), [append]);
+            lager:debug("fwrite params ~p|~s|~s|~s|~s|~s|~s|~s", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1, Param2, Param3]),
+            file:write_file(LogFile, io_lib:fwrite("~p|~s|~s|~s|~s|~s|~s|~s\n", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1, Param2, Param3]), [append]);
         {Param1, Param2} -> 
-            lager:debug("fwrite params ~p~p|~s|~s|~s|~s|~s|~s", [MegaSec, Sec, CallId, QueueName, BridgedChannel, Event, Param1, Param2]),
-            file:write_file(LogFile, io_lib:fwrite("~p~p|~s|~s|~s|~s|~s|~s\n", [MegaSec, Sec, CallId, QueueName, BridgedChannel, Event, Param1, Param2]), [append]);
+            lager:debug("fwrite params ~p|~s|~s|~s|~s|~s|~s", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1, Param2]),
+            file:write_file(LogFile, io_lib:fwrite("~p|~s|~s|~s|~s|~s|~s\n", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1, Param2]), [append]);
         {Param1} -> 
-            lager:debug("fwrite params ~p~p|~s|~s|~s|~s|~s", [MegaSec, Sec, CallId, QueueName, BridgedChannel, Event, Param1]),
-            file:write_file(LogFile, io_lib:fwrite("~p~p|~s|~s|~s|~s|~s\n", [MegaSec, Sec, CallId, QueueName, BridgedChannel, Event, Param1]), [append]);
+            lager:debug("fwrite params ~p|~s|~s|~s|~s|~s", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1]),
+            file:write_file(LogFile, io_lib:fwrite("~p|~s|~s|~s|~s|~s\n", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1]), [append]);
         _ -> 
             lager:debug("unexpected event parameters: ~p", [EventParams])
     end.
