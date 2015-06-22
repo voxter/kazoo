@@ -603,7 +603,7 @@ hangup_call(Call) ->
     Cmd = [{<<"Event-Name">>, <<"command">>}
            ,{<<"Event-Category">>, <<"call">>}
            ,{<<"Application-Name">>, <<"hangup">>}
-           ,{<<"Insert-At">>, <<"now">>}
+%           ,{<<"Insert-At">>, <<"now">>}   %% PISTON-17 - TODO: needs more investigation
           ],
     send_command(Cmd, whapps_call:control_queue_direct(Call), whapps_call:call_id_direct(Call)).
 
