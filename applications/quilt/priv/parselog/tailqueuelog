@@ -40,6 +40,7 @@ GetOptions(
     "h|host=s"     => \$config{'dbhost'},
     "d|dbname=s"   => \$config{'dbname'},
     "l|logfile=s"  => \$config{'logfile'},
+    "q|accountid=s"  => \$config{'accountid'},
     "D"            => \$daemon,
     "help|?"       => \$help,
     "purge"        => \$purge,
@@ -48,19 +49,20 @@ GetOptions(
 
 usage() if $help;
 
-load_config('/etc/tailqueuelog.conf');
-load_config("$ENV{HOME}/.tailqueuelog") if defined $ENV{HOME};
+#load_config('/etc/tailqueuelog.conf');
+#load_config("$ENV{HOME}/.tailqueuelog") if defined $ENV{HOME};
 
-$config{'dbname'}  = $config{'dbname'}  ? $config{'dbname'}  : "qstats";
-$config{'dbhost'}  = $config{'dbhost'}  ? $config{'dbhost'}  : "localhost";
+$config{'accountid'} = $config{'accountid'} ? $config{'accountid'} : "undefined";
+$config{'dbname'}  = $config{'dbname'}  ? $config{'dbname'}  : "qstats_" . $config{'accountid'};
+$config{'dbhost'}  = $config{'dbhost'}  ? $config{'dbhost'}  : "res02.van1.voxter.net";
 $config{'dbpass'}  = $config{'dbpass'}  ? $config{'dbpass'}  : "";
-$config{'dbuser'}  = $config{'dbuser'}  ? $config{'dbuser'}  : "root";
-$config{'logfile'} = $config{'logfile'} ? $config{'logfile'} : "/var/log/asterisk/queue_log";
+$config{'dbuser'}  = $config{'dbuser'}  ? $config{'dbuser'}  : "qstatsUser";
+$config{'logfile'} = $config{'logfile'} ? $config{'logfile'} : "/var/log/queue_log." . $config{'accountid'};
 
 if ( $purge && defined( $config{'dbuser'} ) ) {
     print "Purge all data from tables.\n";
     print "Are you sure? (yes|no)\n";
-    $answer = lc(<>);
+    $answer = lc(<STDIN>);
     chop($answer);
     if ( $answer eq "y" || $answer eq "yes" ) {
         &purgedb();
@@ -75,7 +77,7 @@ if ( !-f $config{'logfile'} ) {
 
 if ($write) {
     if ( -d $ENV{HOME} ) {
-        open DEFAULT, ">$ENV{HOME}/.tailqueuelog";
+        open DEFAULT, ">$ENV{HOME}/.tailqueuelog_" . $config{'accountid'};
         print DEFAULT "dbuser=$config{'dbuser'}\n"   if $config{'dbuser'};
         print DEFAULT "dbpass=$config{'dbpass'}\n"   if $config{'dbpass'};
         print DEFAULT "dbhost=$config{'dbhost'}\n"   if $config{'dbhost'};
@@ -144,16 +146,16 @@ sub reconecta() {
     else {
         print "Mysql successful connect!\n";
         $conectado = 1;
-        open( LOSTEVENTS, "</var/log/asterisk/queue_log_failed" );
+        open( LOSTEVENTS, "</var/log/queue_log_failed_" . $config{'accountid'} );
         while (<LOSTEVENTS>) {
             chomp;
             print "Processing lost line: $_\n";
             procesa($_);
         }
         close(LOSTEVENTS);
-        open( LOSTEVENTS, ">/var/log/asterisk/queue_log_failed" );
+        open( LOSTEVENTS, ">/var/log/queue_log_failed_" . $config{'accountid'} );
         close(LOSTEVENTS);
-        print "Reseting /var/log/asterisk/queue_log_failed\n";
+        print "Reseting /var/log/queue_log_failed_" . $config{'accountid'} . "\n";
         &set_events();
     }
 }
@@ -332,7 +334,7 @@ sub handle_error {
     $linea       = shift;
     if ( $error == "2006" ) {
         print "Lost connection... save $linea\n";
-        if ( open( LOG, ">> /var/log/asterisk/queue_log_failed" ) ) {
+        if ( open( LOG, ">> /var/log/queue_log_failed_" . $config{'accountid'} ) ) {
             print LOG "$linea\n";
             close(LOG);
         }
@@ -425,7 +427,7 @@ sub procesa {
 
 }
 
-if($daemon) {
+if($daemon == 1) {
     &daemonize();
 }
 
@@ -442,12 +444,13 @@ while ( defined( $message = $file->read ) ) {
 
 sub usage {
     print STDERR "tailqueuelog [<options>] \n";
-    print STDERR "       -u <name>     - Connect to mysql as username <name> [root]\n";
-    print STDERR "       -p <pw>       - Connect to mysql with password <pw>\n";
-    print STDERR "       -h <host>     - Connect to mysql host <host> [localhost]\n";
-    print STDERR "       -d <dbname>   - Connect to mysql database <dbname> [qstats]\n";
-    print STDERR "       -l <queuelog> - Path and name for queue_log [/var/log/asterisk/queue_log]\n";
-    print STDERR "       -w            - Write configuration to disk\n";
-    print STDERR "       --purge       - Purge all data from tables\n";
+    print STDERR "       -q <accountid> - Piston ACDC <accountid>\n";
+    print STDERR "       -u <name>      - Connect to mysql as username <name> [qstatsUser]\n";
+    print STDERR "       -p <pw>        - Connect to mysql with password <pw>\n";
+    print STDERR "       -h <host>      - Connect to mysql host <host> [res02.van1.voxter.net]\n";
+    print STDERR "       -d <dbname>    - Connect to mysql database <dbname> [qstats_<accountid>]\n";
+    print STDERR "       -l <queuelog>  - Path and name for queue_log [/var/log/queue_log.<accountid>]\n";
+    print STDERR "       -w             - Write configuration to disk\n";
+    print STDERR "       --purge        - Purge all data from tables\n";
     exit;
 }
