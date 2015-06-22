@@ -198,10 +198,15 @@ get_queue_list_by_agent_id(AccountId, AgentId) ->
     {ok, Result} = couch_mgr:get_results(wh_util:format_account_id(AccountId, encoded), <<"agents/crossbar_listing">>, [{'key', AgentId}]),
     wh_json:get_value([<<"value">>, <<"queues">>], hd(Result)).
 
+% lookup_agent_name(AccountId, AgentId) ->
+%     AccountDb = wh_util:format_account_id(AccountId, encoded),
+%     {ok, Result} = couch_mgr:open_doc(AccountDb, AgentId),
+%     <<"Local/", (wh_json:get_value(<<"username">>, Result))/binary, "@from-queue/n">>.
+
 lookup_agent_name(AccountId, AgentId) ->
     AccountDb = wh_util:format_account_id(AccountId, encoded),
     {ok, Result} = couch_mgr:open_doc(AccountDb, AgentId),
-    <<"Local/", (wh_json:get_value(<<"username">>, Result))/binary, "@from-queue/n">>.
+    <<(wh_json:get_value(<<"first_name">>, Result))/binary, " ", (wh_json:get_value(<<"last_name">>, Result))/binary>>.
 
 lookup_queue_name(AccountId, QueueId) ->
     case couch_mgr:get_results(wh_util:format_account_id(AccountId, encoded), <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
