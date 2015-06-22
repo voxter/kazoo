@@ -111,6 +111,11 @@ maybe_create_agent_calls('undefined', Call) ->
     [Call];
 maybe_create_agent_calls(MemberCallId, Call) ->
     MemberCall = ami_sm:call(MemberCallId),
+    create_agent_calls(MemberCall, Call).
+
+create_agent_calls('undefined', Call) ->
+    [Call];
+create_agent_calls(MemberCall, Call) ->
     LocalCall1 = amimulator_util:fork_agent_call_leg1(Call, MemberCall),
     LocalCall2 = amimulator_util:fork_agent_call_leg2(Call, MemberCall),
 
