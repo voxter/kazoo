@@ -105,11 +105,17 @@ handle_event(JObj, _Props) ->
             lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
             write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
 
-        % {<<"">>, <<"">>} ->
-            %EventName = "ADDMEMBER", % ADDMEMBER
+        {<<"agent">>, <<"login_queue">>} ->
+            EventName = "ADDMEMBER", % ADDMEMBER
+            EventParams = {<<"">>},         
+            lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
+            write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
 
-        % {<<"">>, <<"">>} ->
-            %EventName = "REMOVEMEMBER", % REMOVEMEMBER
+        {<<"agent">>, <<"logout_queue">>} ->
+            EventName = "REMOVEMEMBER", % REMOVEMEMBER
+            EventParams = {<<"">>},
+            lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
+            write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
 
         {<<"acdc_status_stat">>, <<"paused">>} -> 
             EventName = "PAUSEALL", 
