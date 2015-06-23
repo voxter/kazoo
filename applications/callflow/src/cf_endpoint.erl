@@ -1119,6 +1119,7 @@ create_call_fwd_endpoint(Endpoint, Properties, Call) ->
             ,{<<"Endpoint-Progress-Timeout">>, get_progress_timeout(Endpoint)}
             ,{<<"Endpoint-Timeout">>, get_timeout(Properties)}
             ,{<<"Endpoint-Delay">>, get_delay(Properties)}
+            ,{<<"Endpoint-ID">>, wh_json:get_value(<<"_id">>, Endpoint)}
             ,{<<"Presence-ID">>, cf_attributes:presence_id(Endpoint, Call)}
             ,{<<"Callee-ID-Name">>, Clid#clid.callee_name}
             ,{<<"Callee-ID-Number">>, Clid#clid.callee_number}
@@ -1128,6 +1129,7 @@ create_call_fwd_endpoint(Endpoint, Properties, Call) ->
             ,{<<"Outbound-Caller-ID-Name">>, Clid#clid.caller_name}
             ,{<<"Custom-SIP-Headers">>, generate_sip_headers(Endpoint, Call)}
             ,{<<"Custom-Channel-Vars">>, generate_ccvs(Endpoint, Call, CallForward)}
+            ,{<<"Metaflows">>, wh_json:get_value(<<"metaflows">>, Endpoint)}
            ],
     wh_json:from_list(props:filter_undefined(Prop)).
 
