@@ -29,7 +29,7 @@ handle_event(JObj, _Props) ->
         undefined -> "NONE";
         _ -> lookup_agent_name(AccountId, wh_json:get_value(<<"Agent-ID">>, JObj)) end,
     case Event of
-        {<<"acdc_call_stat">>, <<"entered-position">>} ->
+        {<<"acdc_call_stat">>, <<"waiting">>} ->
             EventName = "ENTERQUEUE", % ENTERQUEUE(url|callerid)
             Call = acdc_stats:find_call(CallId),
             CallerIdName = wh_json:get_value(<<"Caller-ID-Name">>, Call),
