@@ -1,0 +1,3 @@
+#!/bin/bash
+
+./tailqueuelog -q c48604c3bf28f38dde93d2f1a2fc20fe --dbname qstats -p v0xr0x -l /tmp/queue_log.c48604c3bf28f38dde93d2f1a2fc20fe -h localhost -D

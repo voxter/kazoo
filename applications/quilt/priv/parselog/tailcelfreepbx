@@ -1,0 +1,496 @@
+#!/usr/bin/perl
+# Copyright 2008 House Internet S.R.L.
+# This program is not redistributable.
+# http://www.asternic.org
+# Contact Nicolas Gudino for more information <nicolas@house.com.ar>
+
+# This script will parse the Master.csv for CEL custom and it will insert queue_log entries for outbound activities
+#
+# In /etc/asterisk/cel_custom.conf you need this config:
+#
+#[mappings]
+#Master.csv => ${CSV_QUOTE(${eventtype})},${CSV_QUOTE(${eventtime})},${CSV_QUOTE(${CALLERID(name)})},${CSV_QUOTE(${CALLERID(num)})},${CSV_QUOTE(${CALLERID(ANI)})},${CSV_QUOTE(${CALLERID(RDNIS)})},${CSV_QUOTE(${CALLERID(DNID)})},${CSV_QUOTE(${CHANNEL(exten)})},${CSV_QUOTE(${CHANNEL(context)})},${CSV_QUOTE(${CHANNEL(channame)})},${CSV_QUOTE(${CHANNEL(appname)})},${CSV_QUOTE(${CHANNEL(appdata)})},${CSV_QUOTE(${CHANNEL(amaflags)})},${CSV_QUOTE(${CHANNEL(accountcode)})},${CSV_QUOTE(${CHANNEL(uniqueid)})},${CSV_QUOTE(${CHANNEL(linkedid)})},${CSV_QUOTE(${BRIDGEPEER})},${CSV_QUOTE(${CHANNEL(userfield)})},${CSV_QUOTE(${userdeftype})},${CSV_QUOTE(${eventextra})}
+#
+# In /etc/asterisk/cel.conf you need at least:
+#
+#[general]
+#enable=yes
+#apps=Dial
+#events=ALL
+#
+# Also you need to set the accountcode for the extensions you want to track to OUTBOUND
+
+use FindBin;
+use lib $FindBin::Bin;
+use POSIX;
+use DBI;
+use Time::Local;
+use Getopt::Long;
+use Tail;
+use Data::Dumper;
+use Text::ParseWords qw(quotewords);
+
+
+my %event_hash = ();
+my %queuecache;
+my %agentcache;
+my $dbh;
+my $conectado     = 0;
+my $last_event_ts = 0;
+
+my %config;
+my %started;
+my %savedtime;
+my %savedcontext;
+my %waittime;
+
+GetOptions(
+    "u|user=s"     => \$config{'dbuser'},
+    "p|password=s" => \$config{'dbpass'},
+    "h|host=s"     => \$config{'dbhost'},
+    "d|dbname=s"   => \$config{'dbname'},
+    "l|logfile=s"  => \$config{'logfile'},
+    "help|?"       => \$help,
+    "purge"        => \$purge,
+    "w|write"      => \$write
+);
+
+usage() if $help;
+
+load_config('/etc/tailcel.conf');
+load_config("$ENV{HOME}/.tailcel") if defined $ENV{HOME};
+
+$config{'dbname'}  = $config{'dbname'}  ? $config{'dbname'}  : "qstats";
+$config{'dbhost'}  = $config{'dbhost'}  ? $config{'dbhost'}  : "localhost";
+$config{'dbpass'}  = $config{'dbpass'}  ? $config{'dbpass'}  : "";
+$config{'dbuser'}  = $config{'dbuser'}  ? $config{'dbuser'}  : "root";
+$config{'logfile'} = $config{'logfile'} ? $config{'logfile'} : "/var/log/asterisk/cel-custom/Master.csv";
+
+if ( !-f $config{'logfile'} ) {
+    print "File " . $config{'logfile'} . " not found\n";
+    exit 1;
+}
+
+if ($write) {
+    if ( -d $ENV{HOME} ) {
+        open DEFAULT, ">$ENV{HOME}/.tailcel";
+        print DEFAULT "dbuser=$config{'dbuser'}\n"   if $config{'dbuser'};
+        print DEFAULT "dbpass=$config{'dbpass'}\n"   if $config{'dbpass'};
+        print DEFAULT "dbhost=$config{'dbhost'}\n"   if $config{'dbhost'};
+        print DEFAULT "logfile=$config{'logfile'}\n" if $config{'logfile'};
+        close DEFAULT;
+    }
+}
+
+
+sub reconecta() {
+    my $return = connect_db();
+
+    if ($return) {
+        print "" . $DBI::errstr . "\n";
+        alarm(5);
+    }
+    else {
+        print "Mysql successful connect!\n";
+        $conectado = 1;
+        open( LOSTEVENTS, "</var/log/asterisk/queue_log_cel_failed" );
+        while (<LOSTEVENTS>) {
+            chomp;
+            print "Processing lost line: $_\n";
+            procesa_cel($_);
+        }
+        close(LOSTEVENTS);
+        open( LOSTEVENTS, ">/var/log/asterisk/queue_log_cel_failed" );
+        close(LOSTEVENTS);
+        print "Reseting /var/log/asterisk/queue_log_cel_failed\n";
+        &set_events();
+    }
+}
+
+sub set_events {
+    if ( $DBI::err ne "2002" ) {
+
+        %event_hash = ();
+
+        # Populates an array with the EVENTS ids
+        $query = "SELECT * FROM qevent ORDER BY event_id";
+        $sth   = $dbh->prepare($query);
+        $sth->execute;
+        while ( my @row = $sth->fetchrow ) {
+            $event_hash{ $row[1] } = $row[0];
+        }
+
+        %queuecache = ();
+        %agentcache = ();
+    }
+}
+
+sub load_config() {
+    $file = shift;
+    return unless ( -r $file );
+    open( CFG, "<$file" ) or return;
+    while (<CFG>) {
+        chomp;
+        my ( $var, $val ) = split(/\s*\=\s*/);
+        $val =~ s/'([^']*)';/$1/g;
+        $var = lc($var);
+        $config{$var} = $val;
+    }
+    close(CFG);
+}
+
+sub connect_db() {
+    my $return = 0;
+    my %attr   = (
+        PrintError => 0,
+        RaiseError => 0,
+    );
+    my $dsn = "DBI:mysql:database=$config{'dbname'};host=$config{'dbhost'}";
+    print "Connecting to DB $dsn\n";
+    $dbh->disconnect if $dbh;
+    $dbh = DBI->connect( $dsn, $config{'dbuser'}, $config{'dbpass'}, \%attr ) or $return = 1;
+    return $return;
+}
+
+sub initial_load() {
+    open( EVENTS, "<$config{'logfile'}" );
+    while (<EVENTS>) {
+        chomp;
+        procesa_cel($_);
+    }
+    close(EVENTS);
+}
+
+sub handle_error {
+    $error       = shift;
+    $errorstring = shift;
+    $linea       = shift;
+    if ( $error == "2006" ) {
+        print "Lost connection... save $linea\n";
+        if ( open( LOG, ">> /var/log/asterisk/queue_log_cel_failed" ) ) {
+            print LOG "$linea\n";
+            close(LOG);
+        }
+        &reconecta();
+    }
+    else {
+        print "Record not inserted, error: $errorstring\n";
+    }
+}
+
+sub last_event {
+
+    # Select the most recent event saved
+    $query = "SELECT datetime FROM queue_stats ORDER BY datetime DESC LIMIT 1";
+    $sth   = $dbh->prepare($query);
+    $sth->execute;
+    my @result  = $sth->fetchrow_array;
+    my $cuantos = @result;
+    $sth->finish;
+
+    if ( $cuantos > 0 ) {
+        print "last $result[0]\n";
+        $last_event_ts = return_timestamp( $result[0] );
+        print "last $last_event_ts\n";
+        $last_event_ts -= 10;
+    }
+    else {
+        $last_event_ts = 0;
+    }
+}
+
+sub connect_db() {
+    my $return = 0;
+    my %attr   = (
+        PrintError => 0,
+        RaiseError => 0,
+    );
+    my $dsn = "DBI:mysql:database=$config{'dbname'};host=$config{'dbhost'}";
+    print "Connecting to DB $dsn\n";
+    $dbh->disconnect if $dbh;
+    $dbh = DBI->connect( $dsn, $config{'dbuser'}, $config{'dbpass'}, \%attr ) or $return = 1;
+    return $return;
+}
+
+sub return_timestamp {
+    my $date_string = shift;
+    my ( $year, $month, $day, $hour, $min, $sec ) = split( /[-: ]/, $date_string, 6 );
+    $year = $year - 1900;
+    $month--;
+    my $u_timestamp = timelocal( $sec, $min, $hour, $day, $month, $year );
+    return $u_timestamp;
+}
+
+
+sub check_agent {
+
+    $agent_name = shift;
+
+    if ( !defined($agent_name) ) {
+        return 0;
+    }
+
+    if ( $agent_name =~ /^Local/ ) {
+        $agent_name =~ s/^Local\///g;
+        @partes = split( /\@/, $agent_name, 2 );
+        $agent_name = $partes[0];
+    }
+
+    if ( $agent_name =~ /^\d+$/ ) {
+        $agent_name = "Agent/" . $agent_name;
+    }
+
+    print "Check agent $agent_name\n";
+
+    if ( exists( $agentcache{$agent_name} ) ) {
+        print "Exists in cache $agent_name = " . $agentcache{$agent_name} . "\n";
+        return $agentcache{$agent_name};
+    }
+
+    print "Agent $agent_name is not in cache, query database\n";
+
+    $sth = $dbh->prepare("SELECT agent_id FROM qagent WHERE agent=?");
+    $sth->execute($agent_name);
+
+    my @result  = $sth->fetchrow_array;
+    my $cuantos = @result;
+    $sth->finish;
+
+    if ($cuantos) {
+        $agent_id = $result[0];
+        print "found on database $agent_id\n";
+    }
+    else {
+        $sth = $dbh->prepare("INSERT INTO qagent (agent) VALUES (?)");
+        $sth->execute($agent_name);
+        $agent_id = $dbh->{q{mysql_insertid}};
+        print "NOT found on database inserting $agent_id\n";
+        print "Query $query\n";
+    }
+
+    if ( !$dbh->err() ) {
+        print "No error, set cache\n";
+        $agentcache{$agent_name} = $agent_id;
+    }
+    else {
+        print "Error, not set cache and return -1\n";
+        $agent_id = -1;
+    }
+    return $agent_id;
+}
+
+sub check_event {
+    $event = shift;
+
+    if ( !defined($event) ) {
+        return 0;
+    }
+
+    if ( exists( $event_hash{$event} ) ) {
+        $event_id = $event_hash{$event};
+    }
+    else {
+
+        # Try harder to find the event
+        print "No existe el evento $event, pruebo de nuevo\n";
+        &set_events();
+
+        if ( exists( $event_hash{$event} ) ) {
+            print "Por suerte lo encontro\n";
+            $event_id = $event_hash{$event};
+        }
+        else {
+            $query = "INSERT INTO qevent (event) VALUES ('$event')";
+            print "No lo encontro, lo inserta\n$query\n";
+            $dbh->do($query);
+            $event_id = $dbh->{q{mysql_insertid}};
+            $event_hash{$event} = $event_id;
+        }
+    }
+    return $event_id;
+}
+
+sub check_queue {
+
+    $queue_name = shift;
+
+    if ( !defined($queue_name) ) {
+        return 0;
+    }
+
+    if ( exists( $queuecache{$queue_name} ) ) {
+        return $queuecache{$queue_name};
+    }
+
+    if ( $conectado == 1 ) {
+        $sth = $dbh->prepare("SELECT queue_id FROM qname WHERE queue=?");
+        $sth->execute($queue_name);
+        my @result  = $sth->fetchrow_array;
+        my $cuantos = @result;
+        $sth->finish;
+
+        if ($cuantos) {
+            $queue_id = $result[0];
+        }
+        else {
+            $sth = $dbh->prepare("INSERT INTO qname (queue) VALUES (?)");
+            $sth->execute($queue_name);
+            $queue_id = $dbh->{q{mysql_insertid}};
+        }
+        $queuecache{$queue_name} = $queue_id;
+        return $queue_id;
+    }
+}
+
+sub procesa_queuelog {
+
+    my $linea = shift;
+    print $linea. "\n";
+    my ( $date, $uniqueid, $queue_name, $agent, $event, $data1, $data2, $data3, $data4 ) = split( /\|/, $linea, 9 );
+
+    if ( $date < $last_event_ts ) {
+        return;
+    }
+
+    my @timeData = localtime($date);
+    my $sec      = $timeData[0];
+    my $min      = $timeData[1];
+    my $hour     = $timeData[2];
+    my $day      = $timeData[3];
+    my $month    = $timeData[4] + 1;
+    my $year     = $timeData[5] + 1900;
+
+    $date = "$year-$month-$day $hour:$min:$sec";
+
+    $queue_id = check_queue($queue_name);
+    $agent_id = check_agent($agent);
+    $event_id = check_event($event);
+
+    $query = "INSERT INTO queue_stats (uniqueid, datetime, qname, qagent, qevent, info1, info2, info3, info4) ";
+    $query .= "VALUES ('$uniqueid','$date','$queue_id','$agent_id','$event_id','$data1','$data2','$data3','$data4')";
+    $dbh->do($query) or handle_error( $dbh->err(), $dbh->errstr(), $linea );
+
+}
+
+sub procesa_cel {
+
+    my $linea = shift;
+    my @f = quotewords( ',', 0, $linea);
+
+    my $event_type       = $f[0];
+    my $event_time       = $f[1];
+    my $callerid_name    = $f[2];
+    my $callerid_number  = $f[3];
+    my $callerid_ani     = $f[4];
+    my $callerid_rdnis   = $f[5];
+    my $callerid_dnid    = $f[6];
+    my $exten            = $f[7];
+    my $context          = $f[8];
+    my $channel_name     = $f[9];
+    my $app_name         = $f[10];
+    my $app_data         = $f[11];
+    my $amaflags         = $f[12];
+    my $accountcode      = $f[13];
+    my $uniqueid         = $f[14];
+    my $linkedid         = $f[15];
+    my $bridgepeer       = $f[16];
+    my $userfield        = $f[17];
+    my $userdeftype      = $f[18];
+    my $event_extra      = $f[19];
+
+    if ( $date < $last_event_ts ) {
+    #    return;
+    }
+
+    my @partes = split(/-/,$channel_name);
+    pop(@partes);
+    my $canal = join("-",@partes);
+
+    if($event_type eq "APP_START" && $app_name eq "Dial" && ( $context =~ /dialout/ || $context =~ /macro-dial-one/) && $accountcode eq 'OUTBOUND') {
+
+        # 1347183373|1347183353.638678|sales-endzone|NONE|ENTERQUEUE||18882223333|1
+
+        my $qname;
+        if($context =~ /dialout/) {
+            $qname="outbound";
+        } else {
+            $qname="internal";
+        }
+
+        procesa_queuelog("$event_time|$uniqueid|$qname|$canal|ENTERQUEUE||$callerid_dnid|1");
+        $started{$uniqueid}=1;
+        $savedtime{$uniqueid}=$event_time;
+        $savedcontext{$uniqueid}=$qname;
+
+    } elsif ($event_type eq "ANSWER" && defined($started{$linkedid})) {
+
+         if($uniqueid!=$linkedid) {
+             $started{$linkedid}=$uniqueid;
+         }
+
+    } elsif ($event_type eq "BRIDGE_START" && ($context =~ /dialout/ || $context =~ /macro-dial-one/) && $accountcode eq 'OUTBOUND') {
+
+        # 1347393190|1347393164.720895|sales-endzone|SIP/1002-endzone|CONNECT|6|1347393184.720930|6
+
+        my $qname;
+        if($context =~ /dialout/) {
+            $qname="outbound";
+        } else {
+            $qname="internal";
+        }
+
+        my $link = $started{$uniqueid};
+        my $wait = int ($event_time - $savedtime{$uniqueid});
+        $savedtime{$uniqueid} = $event_time;
+        $waittime{$uniqueid} = $wait;
+
+        procesa_queuelog("$event_time|$uniqueid|$qname|$canal|CONNECT|$wait|$link|1");
+
+    } elsif ($event_type eq "HANGUP") {
+        if(defined($started{$uniqueid})) {
+            delete $started{$uniqueid};
+            if($uniqueid eq $linkedid) {
+                my @pertes = split(/,/,$event_extra);
+
+                my $qname = $savedcontext{$uniqueid};
+                delete $savedcontext{$uniqueid};
+
+                if($pertes[2] eq "ANSWER") {
+                    my $wait = $waittime{$uniqueid};
+                    my $dur  = int($event_time - $savedtime{$uniqueid});
+                    procesa_queuelog("$event_time|$uniqueid|$qname|$canal|COMPLETECALLER|$wait|$dur|1");
+                    delete $savedtime{$uniqueid};
+                    delete $waittime{$uniqueid};
+                } else {
+                    my $wait = int($event_time - $savedtime{$uniqueid});
+                    procesa_queuelog("$event_time|$uniqueid|$qname|$canal|ABANDON|1|1|$wait");
+                    delete $savedtime{$uniqueid};
+                }
+            } 
+        } 
+    }
+
+}
+
+&reconecta();
+&last_event();
+&initial_load();
+
+$file = File::Tail->new( $config{'logfile'} );
+while ( defined( $message = $file->read ) ) {
+    next unless defined $message;
+    chomp $message;
+    procesa_cel($message);
+}
+
+sub usage {
+    print STDERR "tailcel [<options>] \n";
+    print STDERR "       -u <name>     - Connect to mysql as username <name> [root]\n";
+    print STDERR "       -p <pw>       - Connect to mysql with password <pw>\n";
+    print STDERR "       -h <host>     - Connect to mysql host <host> [localhost]\n";
+    print STDERR "       -d <dbname>   - Connect to mysql database <dbname> [qstats]\n";
+    print STDERR "       -l <cellog>   - Path and name for cel custom Masterc.csv [/var/log/asterisk/cel_custom/Master.csv]\n";
+    print STDERR "       -w            - Write configuration to disk\n";
+    print STDERR "       --purge       - Purge all data from tables\n";
+    exit;
+}
