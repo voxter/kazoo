@@ -15,7 +15,6 @@
          ,call_handled/1, call_handled_v/1
          ,call_processed/1, call_processed_v/1
 
-         ,call_entered_position/1, call_entered_position_v/1
          ,call_exited_position/1, call_exited_position_v/1
 
          ,call_id_change/1, call_id_change_v/1
@@ -52,7 +51,6 @@
          ,publish_call_handled/1, publish_call_handled/2
          ,publish_call_processed/1, publish_call_processed/2
 
-         ,publish_call_entered_position/1, publish_call_entered_position/2
          ,publish_call_exited_position/1, publish_call_exited_position/2
 
          ,publish_call_id_change/1, publish_call_id_change/2
@@ -86,7 +84,7 @@
                                ]).
 
 -define(WAITING_HEADERS, [<<"Caller-ID-Name">>, <<"Caller-ID-Number">>
-                          ,<<"Entered-Timestamp">>
+                          ,<<"Entered-Timestamp">>, <<"Entered-Position">>
                          ]).
 -define(WAITING_VALUES, ?CALL_REQ_VALUES(<<"waiting">>)).
 -define(WAITING_TYPES, []).
@@ -106,10 +104,6 @@
 -define(PROCESS_HEADERS, [<<"Agent-ID">>, <<"Processed-Timestamp">>, <<"Hung-Up-By">>]).
 -define(PROCESS_VALUES, ?CALL_REQ_VALUES(<<"processed">>)).
 -define(PROCESS_TYPES, []).
-
--define(ENTERED_HEADERS, [<<"Entered-Position">>]).
--define(ENTERED_VALUES, ?CALL_REQ_VALUES(<<"entered-position">>)).
--define(ENTERED_TYPES, []).
 
 -define(EXITED_HEADERS, [<<"Exited-Position">>]).
 -define(EXITED_VALUES, ?CALL_REQ_VALUES(<<"exited-position">>)).
@@ -207,23 +201,6 @@ call_processed_v(Prop) when is_list(Prop) ->
     wh_api:validate(Prop, ?CALL_REQ_HEADERS, ?PROCESS_VALUES, ?PROCESS_TYPES);
 call_processed_v(JObj) ->
     call_processed_v(wh_json:to_proplist(JObj)).
-
--spec call_entered_position(api_terms()) ->
-                            {'ok', iolist()} |
-                            {'error', string()}.
-call_entered_position(Props) when is_list(Props) ->
-    case call_entered_position_v(Props) of
-        'true' -> wh_api:build_message(Props, ?CALL_REQ_HEADERS, ?ENTERED_HEADERS);
-        'false' -> {'error', "Proplist failed validation for call_entered_position"}
-    end;
-call_entered_position(JObj) ->
-    call_entered_position(wh_json:to_proplist(JObj)).
-
--spec call_entered_position_v(api_terms()) -> boolean().
-call_entered_position_v(Prop) when is_list(Prop) ->
-    wh_api:validate(Prop, ?CALL_REQ_HEADERS, ?ENTERED_VALUES, ?ENTERED_TYPES);
-call_entered_position_v(JObj) ->
-    call_entered_position_v(wh_json:to_proplist(JObj)).
 
 -spec call_exited_position(api_terms()) ->
                             {'ok', iolist()} |
@@ -690,12 +667,6 @@ publish_call_processed(JObj) ->
     publish_call_processed(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_call_processed(API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?PROCESS_VALUES, fun call_processed/1),
-    amqp_util:whapps_publish(call_stat_routing_key(API), Payload, ContentType).
-
-publish_call_entered_position(JObj) ->
-    publish_call_entered_position(JObj, ?DEFAULT_CONTENT_TYPE).
-publish_call_entered_position(API, ContentType) ->
-    {'ok', Payload} = wh_api:prepare_api_payload(API, ?ENTERED_VALUES, fun call_entered_position/1),
     amqp_util:whapps_publish(call_stat_routing_key(API), Payload, ContentType).
 
 publish_call_exited_position(JObj) ->
