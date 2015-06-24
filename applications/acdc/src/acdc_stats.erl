@@ -11,7 +11,8 @@
 -behaviour(gen_listener).
 
 %% Public API
--export([call_waiting/6
+-export([call_waiting/5
+         ,call_waiting/6
          ,call_abandoned/4
          ,call_handled/4
          ,call_missed/5
@@ -62,6 +63,18 @@
 -include("acdc_stats.hrl").
 
 %% Public API
+call_waiting(AccountId, QueueId, CallId, CallerIdName, CallerIdNumber) ->
+    Prop = props:filter_undefined(
+             [{<<"Account-ID">>, AccountId}
+              ,{<<"Queue-ID">>, QueueId}
+              ,{<<"Call-ID">>, CallId}
+              ,{<<"Caller-ID-Name">>, CallerIdName}
+              ,{<<"Caller-ID-Number">>, CallerIdNumber}
+              ,{<<"Entered-Timestamp">>, wh_util:current_tstamp()}
+              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+             ]),
+    whapps_util:amqp_pool_send(Prop, fun wapi_acdc_stats:publish_call_waiting/1).
+
 call_waiting(AccountId, QueueId, Position, CallId, CallerIdName, CallerIdNumber) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AccountId}
