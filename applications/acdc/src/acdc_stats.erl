@@ -935,6 +935,7 @@ create_call_stat(Id, JObj, Props) ->
                                           ,acct_id = wh_json:get_value(<<"Account-ID">>, JObj)
                                           ,queue_id = wh_json:get_value(<<"Queue-ID">>, JObj)
                                           ,entered_timestamp = wh_json:get_value(<<"Entered-Timestamp">>, JObj)
+                                          ,entered_position = wh_json:get_value(<<"Entered-Position">>, JObj)
                                           ,misses = []
                                           ,status = <<"waiting">>
                                           ,caller_id_name = wh_json:get_value(<<"Caller-ID-Name">>, JObj)
