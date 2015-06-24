@@ -1,0 +1,1254 @@
+#!/usr/bin/perl
+# Copyright 2008 House Internet S.R.L.
+# This program is not redistributable.
+# http://www.asternic.org
+# Contact Nicolas Gudino for more information <nicolas@house.com.ar>
+
+package astcli;
+
+use IO::Socket;
+
+# Created by: David Van Ginneken
+# Bird's the Word Technologies
+# davevg@btwtech.com
+#
+# And distributed under the terms of the GPL
+#
+
+my $EOL = "\r\n";    # Standard End of Line
+
+sub new {
+    my ($class)  = shift;
+    my (%params) = @_;
+
+    bless {
+        "USER" => $params{USER},
+        "PWD"  => $params{PWD},
+        "HOST" => $params{HOST},
+        "PORT" => $params{PORT},
+        "CONN" => $params{CONN},
+    }, $class;
+}
+
+# $|++; # Auto Flush Output
+
+sub connect {
+    my ($self) = @_;
+    my $user   = $self->{USER};
+    my $pw     = $self->{PWD};
+    my $host   = $self->{HOST};
+    my $port   = $self->{PORT};
+
+    my $tc = new IO::Socket::INET(
+        PeerAddr => $host,
+        PeerPort => $port,
+        Timeout  => 30,
+        Proto    => 'tcp'
+    ) or warn "Could not connect to Host: $host on port $port\n";
+    $self->{CONN} = $tc;
+    if ( my $error = login( $self, $user, $pw ) ) {
+        print STDERR $error;
+        $self->{CONN} = 0;
+    }
+}
+
+sub isconnected {
+    my ($self) = @_;
+    if ( $self->{CONN} == 0 ) {
+        return 0;
+    }
+    return 1;
+}
+
+sub send_command {
+    my ( $self, $command ) = @_;
+    my $tc = $self->{CONN};
+    $tc->send( 'Action: Command' . $EOL );
+    $tc->send( "Command: $command" . $EOL );
+    $tc->send($EOL);
+    my $response = '';
+    while (<$tc>) {
+        if ( $_ =~ /--END COMMAND--/ ) {
+            $_ =~ s/--END COMMAND--\s*//;
+            $response .= $_;
+            last;
+        }
+        $response .= $_;
+    }
+    $response =~ s/Privilege: Command$EOL//;
+    $response =~ s/Response: Follows$EOL//;
+    return $response;
+}
+
+sub login {
+    my ( $self, $user, $pw ) = @_;
+    my ( $response, $message );
+    my $tc = $self->{CONN};
+    $tc->send( "Action: Login" . $EOL );
+    $tc->send( "Username: $user" . $EOL );
+    $tc->send( "Secret: $pw" . $EOL );
+    $tc->send( "Events: off" . $EOL );
+    $tc->send($EOL);
+
+    while (<$tc>) {
+        last if $_ eq $EOL;
+        $_ =~ s/$EOL//g;
+        ($response) = $_ =~ /^Response: (.*?)$/ if $_ =~ /^Response:/;
+        ($message)  = $_ =~ /^Message: (.*?)$/  if $_ =~ /^Message:/;
+    }
+    return 0 if $response eq 'Success';
+    return $message;
+}
+
+sub logoff {
+    my ($self) = @_;
+    my ( $response, $message );
+    my $tc = $self->{CONN};
+    $tc->send( "Action: Logoff" . $EOL . $EOL );
+    return 1;
+}
+
+package File::Tail;
+
+use vars qw($VERSION @ISA @EXPORT @EXPORT_OK);
+
+require Exporter;
+
+@ISA = qw(Exporter);
+
+# Items to export into callers namespace by default. Note: do not export
+# names by default without a very good reason. Use EXPORT_OK instead.
+# Do not simply export all your public functions/methods/constants.
+$VERSION = '0.99.3';
+
+# Preloaded methods go here.
+
+use FileHandle;
+
+#use IO::Seekable; # does not define SEEK_SET in 5005.02
+use File::stat;
+use Carp;
+use Time::HiRes qw ( time sleep );    #import hires microsecond timers
+
+sub SEEK_SET () { 0; }
+sub SEEK_CUR () { 1; }
+sub SEEK_END () { 2; }
+
+sub interval {
+    my $object = shift @_;
+    if (@_) {
+        $object->{interval} = shift;
+        $object->{interval} = $object->{maxinterval}
+          if $object->{interval} > $object->{maxinterval};
+    }
+    $object->{interval};
+}
+
+sub logit {
+    my $object = shift;
+    my @call   = caller(1);
+    print    # STDERR
+
+      #	time()." ".
+      "\033[7m" . $call[3] . " " . $object->{"input"} . " " . join( "", @_ ) . "\033[0m" . "\n"
+      if $object->debug;
+}
+
+sub adjustafter {
+    my $self = shift;
+    $self->{adjustafter} = shift if @_;
+    return $self->{adjustafter};
+}
+
+sub debug {
+    my $self = shift;
+    $self->{"debug"} = shift if @_;
+    return $self->{"debug"};
+}
+
+sub errmode {
+    my ( $self, $mode ) = @_;
+    my ($prev) = $self->{errormode};
+
+    if ( @_ >= 2 ) {
+        ## Set the error mode.
+        defined $mode or $mode = '';
+        if ( ref($mode) eq 'CODE' ) {
+            $self->{errormode} = $mode;
+        }
+        elsif ( ref($mode) eq 'ARRAY' ) {
+            unless ( ref( $mode->[0] ) eq 'CODE' ) {
+                croak 'bad errmode: first item in list must be a code ref';
+                $mode = 'die';
+            }
+            $self->{errormode} = $mode;
+        }
+        else {
+            $self->{errormode} = lc $mode;
+        }
+    }
+    $prev;
+}
+
+sub errmsg {
+    my ( $self, @errmsgs ) = @_;
+    my ($prev) = $self->{errormsg};
+
+    if ( @_ > 0 ) {
+        $self->{errormsg} = join '', @errmsgs;
+    }
+
+    $prev;
+}    # end sub errmsg
+
+sub error {
+    my ( $self, @errmsg ) = @_;
+    my ( $errmsg, $func, $mode, @args, );
+
+    if ( @_ >= 1 ) {
+        ## Put error message in the object.
+        $errmsg = join '', @errmsg;
+        $self->{"errormsg"} = $errmsg;
+
+        ## Do the error action as described by error mode.
+        $mode = $self->{"errormode"};
+        if ( ref($mode) eq 'CODE' ) {
+            &$mode($errmsg);
+            return;
+        }
+        elsif ( ref($mode) eq 'ARRAY' ) {
+            ( $func, @args ) = @$mode;
+            &$func(@args);
+            return;
+        }
+        elsif ( $mode eq "return" ) {
+            return;
+        }
+        elsif ( $mode eq "warn" ) {
+            carp $errmsg;
+        }
+        else {    # die
+            croak $errmsg;
+        }
+    }
+    else {
+        return $self->{"errormsg"} ne '';
+    }
+}    # end sub error
+
+sub copy {
+    my $self = shift;
+    $self->{copy} = shift if @_;
+    return $self->{copy};
+}
+
+sub tail {
+    my $self = shift;
+    $self->{"tail"} = shift if @_;
+    return $self->{"tail"};
+}
+
+sub reset_tail {
+    my $self = shift;
+    $self->{reset_tail} = shift if @_;
+    return $self->{reset_tail};
+}
+
+sub nowait {
+    my $self = shift;
+    $self->{nowait} = shift if @_;
+    return $self->{nowait};
+}
+
+sub method {
+    my $self = shift;
+    $self->{method} = shift if @_;
+    return $self->{method};
+}
+
+sub input {
+    my $self = shift;
+    $self->{input} = shift if @_;
+    return $self->{input};
+}
+
+sub maxinterval {
+    my $self = shift;
+    $self->{maxinterval} = shift if @_;
+    return $self->{maxinterval};
+}
+
+sub resetafter {
+    my $self = shift;
+    $self->{resetafter} = shift if @_;
+    return $self->{resetafter};
+}
+
+sub ignore_nonexistant {
+    my $self = shift;
+    $self->{ignore_nonexistant} = shift if @_;
+    return $self->{ignore_nonexistant};
+}
+
+sub name_changes {
+    my $self = shift;
+    $self->{name_changes_callback} = shift if @_;
+    return $self->{name_changes_callback};
+}
+
+sub TIEHANDLE {
+    my $ref = new(@_);
+}
+
+sub READLINE {
+    $_[0]->read();
+}
+
+sub PRINT {
+    $_[0]->error("PRINT makes no sense in File::Tail");
+}
+
+sub PRINTF {
+    $_[0]->error("PRINTF makes no sense in File::Tail");
+}
+
+sub READ {
+    $_[0]->error("READ not implemented in File::Tail -- use READLINE (<HANDLE>) instead");
+}
+
+sub GETC {
+    $_[0]->error("GETC not (yet) implemented in File::Tail -- use READLINE (<HANDLE>) instead");
+}
+
+sub DESTROY {
+    my ($this) = $_[0];
+    close( $this->{"handle"} ) if ( defined($this) && defined( $this->{'handle'} ) );
+
+    #  undef $_[0];
+    return;
+}
+
+sub CLOSE {
+    &DESTROY(@_);
+}
+
+sub new {
+    my ($pkg) = shift @_;
+    $pkg = ref($pkg) || $pkg;
+    unless ($pkg) {
+        $pkg = "File::Tail";
+    }
+    my %params;
+    if ( $#_ == 0 ) {
+        $params{"name"} = $_[0];
+    }
+    else {
+        if ( ( $#_ % 2 ) != 1 ) {
+            croak "Odd number of parameters for new";
+            return;
+        }
+        %params = @_;
+    }
+    my $object = {};
+    bless $object, $pkg;
+    unless ( defined( $params{'name'} ) ) {
+        croak "No file name given. Pass filename as \"name\" parameter";
+        return;
+    }
+    $object->input( $params{'name'} );
+    $object->copy( $params{'cname'} );
+    $object->method( $params{'method'} || "tail" );
+    $object->{buffer} = "";
+    $object->maxinterval( $params{'maxinterval'} || 3 );
+    $object->interval( $params{'interval'}       || 1 );
+    $object->adjustafter( $params{'adjustafter'} || 1 );
+    $object->errmode( $params{'errmode'}         || "die" );
+    $object->resetafter( $params{'resetafter'}   || ( $object->maxinterval * $object->adjustafter ) );
+    $object->{"debug"}                 = ( $params{'debug'}        || 0 );
+    $object->{"tail"}                  = ( $params{'tail'}         || 0 );
+    $object->{"nowait"}                = ( $params{'nowait'}       || 0 );
+    $object->{"maxbuf"}                = ( $params{'maxbuf'}       || 16384 );
+    $object->{"name_changes_callback"} = ( $params{'name_changes'} || undef );
+
+    if ( defined $params{'reset_tail'} ) {
+        $object->{"reset_tail"} = $params{'reset_tail'};
+    }
+    else {
+        $object->{"reset_tail"} = -1;
+    }
+    $object->{'ignore_nonexistant'} = ( $params{'ignore_nonexistant'} || 0 );
+    $object->{"lastread"}           = 0;
+    $object->{"sleepcount"}         = 0;
+    $object->{"lastcheck"}          = 0;
+    $object->{"lastreset"}          = 0;
+    $object->{"nextcheck"}          = time();
+    if ( $object->{"method"} eq "tail" ) {
+        $object->reset_pointers;
+    }
+
+    #    $object->{curpos}=0;        # ADDED 25May01: undef warnings when
+    #    $object->{endpos}=0;        #   starting up on a nonexistant file
+    return $object;
+}
+
+# Sets position in file when first opened or after that when reset:
+# Sets {endpos} and {curpos} for current {handle} based on {tail}.
+# Sets {tail} to value of {reset_tail}; effect is that first call
+# uses {tail} and subsequent calls use {reset_tail}.
+sub position {
+    my $object = shift;
+    $object->{"endpos"} = sysseek( $object->{handle}, 0, SEEK_END );
+    unless ( $object->{"tail"} ) {
+        $object->{endpos} = $object->{curpos} = sysseek( $object->{handle}, 0, SEEK_END );
+    }
+    elsif ( $object->{"tail"} < 0 ) {
+        $object->{endpos} = sysseek( $object->{handle}, 0, SEEK_END );
+        $object->{curpos} = sysseek( $object->{handle}, 0, SEEK_SET );
+    }
+    else {
+        my $crs = 0;
+        my $maxlen = sysseek( $object->{handle}, 0, SEEK_END );
+        while ( $crs < $object->{"tail"} + 1 ) {
+            my $avlen = length( $object->{"buffer"} ) / ( $crs + 1 );
+            $avlen = 80 unless $avlen;
+            my $calclen = $avlen * $object->{"tail"};
+            $calclen += 1024 if $calclen <= length( $object->{"buffer"} );
+            $calclen = $maxlen if $calclen > $maxlen;
+            $object->{curpos} = sysseek( $object->{handle}, -$calclen, SEEK_END );
+            sysread( $object->{handle}, $object->{"buffer"}, $calclen );
+            $object->{curpos} = sysseek( $object->{handle}, 0, SEEK_CUR );
+            $crs = $object->{"buffer"} =~ tr/\n//;
+            last if ( $calclen >= $maxlen );
+        }
+        $object->{curpos} = sysseek( $object->{handle}, 0, SEEK_CUR );
+        $object->{endpos} = sysseek( $object->{handle}, 0, SEEK_END );
+        if ( $crs > $object->{"tail"} ) {
+            my $toskip = $crs - $object->{"tail"};
+            my $pos;
+            $pos = index( $object->{"buffer"}, "\n" );
+            while ( --$toskip ) {
+                $pos = index( $object->{"buffer"}, "\n", $pos + 1 );
+            }
+            $object->{"buffer"} = substr( $object->{"buffer"}, $pos + 1 );
+        }
+    }
+    $object->{"tail"} = $object->{"reset_tail"};
+}
+
+# Tries to open or reopen the file; failure is an error unless
+# {ignore_nonexistant} is set.
+#
+# For a new file (ie, first time opened) just does some book-keeping
+# and calls position for initial position setup.  Otherwise does some
+# checks whether file has been replaced, and if so changes to the new
+# file.  (Calls position for reset setup).
+#
+# Always updates {lastreset} to current time.
+#
+sub reset_pointers {
+    my $object = shift @_;
+    $object->{lastreset} = time();
+
+    my $st;
+
+    my $oldhandle = $object->{handle};
+    my $newhandle = FileHandle->new;
+
+    my $newname;
+    if ( $oldhandle && $$object{'name_changes_callback'} ) {
+        $newname = $$object{'name_changes_callback'}();
+    }
+    else {
+        $newname = $object->input;
+    }
+
+    unless ( open( $newhandle, "<$newname" ) ) {
+        if ( $object->{'ignore_nonexistant'} ) {
+
+            # If we have an oldhandle, leave endpos and curpos to what they
+            # were, since oldhandle will still be the "current" handle elsewhere,
+            # eg, checkpending.  This also allows tailing a file which is removed
+            # but still being written to.
+            if ( !$oldhandle ) {
+                $object->{'endpos'} = 0;
+                $object->{'curpos'} = 0;
+            }
+            return;
+        }
+        $object->error( "Error opening " . $object->input . ": $!" );
+        $object->{'endpos'} = 0 unless defined( $object->{'endpos'} );
+        $object->{'curpos'} = 0 unless defined( $object->{'curpos'} );
+        return;
+    }
+    binmode($newhandle);
+
+    if ( defined($oldhandle) ) {
+
+        # If file has not been changed since last OK read do not do anything
+        $st = stat($newhandle);
+
+        # lastread uses fractional time, stat doesn't. This can cause false
+        # negatives.
+        # If the file was changed the same second as it was last read,
+        # we only reopen it if it's length has changed. The alternative is that
+        # sometimes, files would be reopened needlessly, and with reset_tail
+        # set to -1, we would see the whole file again.
+        # Of course, if the file was removed the same second as when it was
+        # last read, and replaced (within that second) with a file of equal
+        # length, we're out of luck. I don't see how to fix this.
+        if ( $st->mtime <= int( $object->{'lastread'} ) ) {
+            if ( $st->size == $object->{"curpos"} ) {
+                $object->{lastread} = $st->mtime;
+                return;
+            }
+            else {
+
+                # will continue further to reset
+            }
+        }
+        else {
+        }
+        $object->{handle} = $newhandle;
+        $object->position;
+        $object->{lastread} = $st->mtime;
+        close($oldhandle);
+    }
+    else {    # This is the first time we are opening this file
+        $st = stat($newhandle);
+        $object->{handle} = $newhandle;
+        $object->position;
+        $object->{lastread} = $st->mtime;    # for better estimate on initial read
+    }
+
+}
+
+sub checkpending {
+    my $object = shift @_;
+
+    my $old_lastcheck = $object->{lastcheck};
+    $object->{"lastcheck"} = time;
+    unless ( $object->{handle} ) {
+        $object->reset_pointers;
+        unless ( $object->{handle} ) {       # This try did not open the file either
+            return 0;
+        }
+    }
+
+    $object->{"endpos"} = sysseek( $object->{handle}, 0, SEEK_END );
+    if ( $object->{"endpos"} < $object->{curpos} ) {    # file was truncated
+        $object->position;
+    }
+    elsif (( $object->{curpos} == $object->{"endpos"} )
+        && ( time() - $object->{lastread} ) > $object->{'resetafter'} )
+    {
+        $object->reset_pointers;
+        $object->{"endpos"} = sysseek( $object->{handle}, 0, SEEK_END );
+    }
+
+    if ( $object->{"endpos"} - $object->{curpos} ) {
+        sysseek( $object->{handle}, $object->{curpos}, SEEK_SET );
+        readin( $object, $object->{"endpos"} - $object->{curpos} );
+    }
+    return ( $object->{"endpos"} - $object->{curpos} );
+}
+
+sub predict {
+    my $object = shift;
+    my $crs    = $object->{"buffer"} =~ tr/\n//;    # Count newlines in buffer
+    my @call   = caller(1);
+    return 0 if $crs;
+    my $ttw = $object->{"nextcheck"} - time();
+    return $ttw if $ttw > 0;
+    if ( my $len = $object->checkpending ) {
+        readin( $object, $len );
+        return 0;
+    }
+    if ( $object->{"sleepcount"} > $object->adjustafter ) {
+        $object->{"sleepcount"} = 0;
+        $object->interval( $object->interval * 10 );
+    }
+    $object->{"sleepcount"}++;
+    $object->{"nextcheck"} = time() + $object->interval;
+    return ( $object->interval );
+}
+
+sub bitprint {
+    return "undef" unless defined( $_[0] );
+    return unpack( "b*", $_[0] );
+}
+
+sub select {
+    my $object = shift @_ if ref( $_[0] );
+    my ( $timeout, @fds ) = splice( @_, 3 );
+    $object = $fds[0] unless defined($object);
+    my ( $savein, $saveout, $saveerr ) = @_;
+    my ( $minpred, $mustreturn );
+    if ( defined($timeout) ) {
+        $minpred    = $timeout;
+        $mustreturn = time() + $timeout;
+    }
+    else {
+        $minpred = $fds[0]->predict;
+    }
+    foreach (@fds) {
+        my $val = $_->predict;
+        $minpred = $val if $minpred > $val;
+    }
+    my ( $nfound, $timeleft );
+    my @retarr;
+    while ( defined($timeout) ? ( !$nfound && ( time() < $mustreturn ) ) : !$nfound ) {
+
+        # Restore bitmaps in case we called select before
+        splice( @_, 0, 3, $savein, $saveout, $saveerr );
+
+        ( $nfound, $timeleft ) = select( $_[0], $_[1], $_[2], $minpred );
+
+        if ( defined($timeout) ) {
+            $minpred = $timeout;
+        }
+        else {
+            $minpred = $fds[0]->predict;
+        }
+        undef @retarr;
+        foreach (@fds) {
+            my $val = $_->predict;
+            $nfound++ unless $val;
+            $minpred = $val if $minpred > $val;
+            push( @retarr, $_ ) unless $val;
+        }
+    }
+    if (wantarray) {
+        return ( $nfound, $timeleft, @retarr );
+    }
+    else {
+        return $nfound;
+    }
+}
+
+sub readin {
+    my $crs;
+    my ( $object, $len ) = @_;
+    if ( length( $object->{"buffer"} ) ) {
+
+        # this means the file was reset AND a tail -n was active
+        $crs = $object->{"buffer"} =~ tr/\n//;    # Count newlines in buffer
+        return $crs if $crs;
+    }
+    $len = $object->{"maxbuf"} if ( $len > $object->{"maxbuf"} );
+    my $nlen = $len;
+    while ( $nlen > 0 ) {
+        $len = sysread( $object->{handle}, $object->{"buffer"}, $nlen, length( $object->{"buffer"} ) );
+        return 0 if $len == 0;                    # Some busy filesystems return 0 sometimes,
+                                                  # and never give anything more from then on if
+                                                  # you don't give them time to rest. This return
+                                                  # allows File::Tail to use the usual exponential
+                                                  # backoff.
+        $nlen = $nlen - $len;
+    }
+    $object->{curpos} = sysseek( $object->{handle}, 0, SEEK_CUR );
+
+    $crs = $object->{"buffer"} =~ tr/\n//;
+
+    if ($crs) {
+        my $tmp = time;
+        $object->{lastread} = $tmp if $object->{lastread} > $tmp;    #???
+        $object->interval( ( $tmp - ( $object->{lastread} ) ) / $crs );
+        $object->{lastread} = $tmp;
+    }
+    return ($crs);
+}
+
+sub read {
+    my $object = shift @_;
+    my $len;
+    my $pending = $object->{"endpos"} - $object->{"curpos"};
+    my $crs = $object->{"buffer"} =~ m/\n/;
+    while ( !$pending && !$crs ) {
+        $object->{"sleepcount"} = 0;
+        while ( $object->predict ) {
+            if ( $object->nowait ) {
+                if (wantarray) {
+                    return ();
+                }
+                else {
+                    return "";
+                }
+            }
+            sleep( $object->interval ) if ( $object->interval > 0 );
+        }
+        $pending = $object->{"endpos"} - $object->{"curpos"};
+        $crs = $object->{"buffer"} =~ m/\n/;
+    }
+
+    if ( !length( $object->{"buffer"} ) || index( $object->{"buffer"}, "\n" ) < 0 ) {
+        readin( $object, $pending );
+    }
+    unless (wantarray) {
+        my $str = substr( $object->{"buffer"}, 0, 1 + index( $object->{"buffer"}, "\n" ) );
+        $object->{"buffer"} = substr( $object->{"buffer"}, 1 + index( $object->{"buffer"}, "\n" ) );
+        return $str;
+    }
+    else {
+        my @str;
+        while ( index( $object->{"buffer"}, "\n" ) > -1 ) {
+            push( @str, substr( $object->{"buffer"}, 0, 1 + index( $object->{"buffer"}, "\n" ) ) );
+            $object->{"buffer"} = substr( $object->{"buffer"}, 1 + index( $object->{"buffer"}, "\n" ) );
+
+        }
+        return @str;
+    }
+}
+
+1;
+
+package main;
+
+use FindBin;
+use lib $FindBin::Bin;
+use POSIX;
+use DBI;
+use Time::Local;
+use Getopt::Long;
+
+my %config;
+my %event_hash = ();
+my %queuecache;
+my %agentcache;
+my %agentnamecache;
+my $dbh;
+my $conectado     = 0;
+my $last_event_ts = 0;
+my $daemon        = 0;
+
+$SIG{ALRM} = 'reconecta';
+
+sub daemonize
+{
+    fork and exit;
+    POSIX::setsid();
+    fork and exit;
+    umask 0;
+    chdir '/';
+    close STDIN;
+    close STDOUT;
+    close STDERR;
+}
+
+GetOptions(
+    "u|user=s"     => \$config{'dbuser'},
+    "p|password=s" => \$config{'dbpass'},
+    "h|host=s"     => \$config{'dbhost'},
+    "d|dbname=s"   => \$config{'dbname'},
+    "amiuser=s"    => \$config{'amiuser'},
+    "amipass=s"    => \$config{'amipass'},
+    "amihost=s"    => \$config{'amihost'},
+    "amiport=s"    => \$config{'amiport'},
+    "l|logfile=s"  => \$config{'logfile'},
+    "D"            => \$daemon,
+    "help|?"       => \$help,
+    "purge"        => \$purge,
+    "w|write"      => \$write
+);
+
+usage() if $help;
+
+sub load_config {
+    $file = shift;
+    return unless ( -r $file );
+    open( CFG, "<$file" ) or return;
+    while (<CFG>) {
+        chomp;
+        my ( $var, $val ) = split(/\s*\=\s*/);
+        $val =~ s/'([^']*)';/$1/g;
+        $var = lc($var);
+        $config{$var} = $val;
+    }
+    close(CFG);
+}
+
+sub purgedb {
+
+    print "Purging data\n";
+    my $return = connect_db();
+    if ($return) {
+        print "" . $DBI::errstr . "\n";
+        exit;
+    }
+    else {
+        $query = "DELETE FROM qname";
+        $dbh->do($query);
+        print $query. "\n";
+        $query = "ALTER TABLE qname AUTO_INCREMENT = 1";
+        $dbh->do($query);
+        print $query. "\n";
+        $query = "INSERT INTO qname VALUES (-1,'ALL')";
+        $dbh->do($query);
+        print $query. "\n";
+        $query = "DELETE FROM qagent";
+        $dbh->do($query);
+        print $query. "\n";
+        $query = "ALTER TABLE qagent AUTO_INCREMENT = 1";
+        $dbh->do($query);
+        print $query. "\n";
+        $query = "INSERT INTO qagent VALUES (-1,'ALL')";
+        $dbh->do($query);
+        print $query. "\n";
+        $query = "DELETE FROM queue_stats";
+        $dbh->do($query);
+        print $query. "\n";
+        $query = "ALTER TABLE queue_stats AUTO_INCREMENT = 1";
+        $dbh->do($query);
+        print $query. "\n";
+        print "Done...\n";
+    }
+}
+
+sub reconecta {
+
+    my $return = connect_db();
+
+    if ($return) {
+        print "" . $DBI::errstr . "\n";
+        alarm(5);
+    }
+    else {
+        print "Mysql successful connect!\n";
+        $conectado = 1;
+        open( LOSTEVENTS, "</var/log/asterisk/queue_log_failed" );
+        while (<LOSTEVENTS>) {
+            chomp;
+            print "Processing lost line: $_\n";
+            procesa($_);
+        }
+        close(LOSTEVENTS);
+        open( LOSTEVENTS, ">/var/log/asterisk/queue_log_failed" );
+        close(LOSTEVENTS);
+        print "Reseting /var/log/asterisk/queue_log_failed\n";
+        &set_events();
+    }
+}
+
+sub initial_load {
+
+    open( EVENTS, "<$config{'logfile'}" );
+    while (<EVENTS>) {
+        chomp;
+        procesa($_);
+    }
+    close(EVENTS);
+}
+
+sub connect_db {
+
+    my $return = 0;
+    my %attr   = (
+        PrintError => 0,
+        RaiseError => 0,
+    );
+    my $dsn = "DBI:mysql:database=$config{'dbname'};host=$config{'dbhost'}";
+    print "Connecting to DB $dsn\n";
+    $dbh->disconnect if $dbh;
+    $dbh = DBI->connect( $dsn, $config{'dbuser'}, $config{'dbpass'}, \%attr ) or $return = 1;
+    return $return;
+}
+
+sub check_queue {
+
+    $queue_name = shift;
+
+    if ( !defined($queue_name) ) {
+        return 0;
+    }
+
+    if ( exists( $queuecache{$queue_name} ) ) {
+        return $queuecache{$queue_name};
+    }
+
+    if ( $conectado == 1 ) {
+        $sth = $dbh->prepare("SELECT queue_id FROM qname WHERE queue=?");
+        $sth->execute($queue_name);
+        my @result  = $sth->fetchrow_array;
+        my $cuantos = @result;
+        $sth->finish;
+
+        if ($cuantos) {
+            $queue_id = $result[0];
+        }
+        else {
+            $sth = $dbh->prepare("INSERT INTO qname (queue) VALUES (?)");
+            $sth->execute($queue_name);
+            $queue_id = $dbh->{q{mysql_insertid}};
+        }
+        $queuecache{$queue_name} = $queue_id;
+        return $queue_id;
+    }
+}
+
+sub check_event {
+
+    $event = shift;
+
+    if ( !defined($event) ) {
+        return 0;
+    }
+
+    if ( exists( $event_hash{$event} ) ) {
+        $event_id = $event_hash{$event};
+    }
+    else {
+
+        # Try harder to find the event
+        print "No existe el evento $event, pruebo de nuevo\n";
+        &set_events();
+
+        if ( exists( $event_hash{$event} ) ) {
+            print "Por suerte lo encontro\n";
+            $event_id = $event_hash{$event};
+        }
+        else {
+            $query = "INSERT INTO qevent (event) VALUES ('$event')";
+            print "No lo encontro, lo inserta\n$query\n";
+            $dbh->do($query);
+            $event_id = $dbh->{q{mysql_insertid}};
+            $event_hash{$event} = $event_id;
+        }
+    }
+    return $event_id;
+}
+
+sub check_agent {
+
+    $agent_name = shift;
+    $queue_name = shift;
+    $event      = shift;
+
+    if ( !defined($agent_name) ) {
+        return 0;
+    }
+
+    $original_agent_name = $agent_name;
+    print "check agent $original_agent_name y agent name $agent_name\n";
+    if ( $event eq "ADDMEMBER" ) {
+        $agent_name = get_agent_name( $original_agent_name, $queue_name );
+        $agentnamecache{$original_agent_name} = $agent_name;
+        print "seteo agent name cache ( $original_agent_name) = $agent_name\n";
+    }
+
+    if ( $event eq "REMOVEMEMBER" || $event eq "PAUSEALL" || $event eq "UNPAUSEALL" ) {
+        if ( exists( $agentnamecache{$agent_name} ) ) {
+            $agent_name = $agentnamecache{$agent_name};
+            print "tenia en cache de agent name ($original_agent_name) y me queda $agent_name\n";
+        }
+    }
+
+    if ( $agent_name =~ /^Local/ ) {
+        $agent_name =~ s/^Local\///g;
+        @partes = split( /\@/, $agent_name, 2 );
+        $agent_name = $partes[0];
+    }
+
+    if ( $agent_name =~ /^\d+$/ ) {
+        $agent_name = "Agent/" . $agent_name;
+    }
+
+    if ( exists( $agentcache{$agent_name} ) ) {
+        # print "Exists in cache $agent_name = " . $agentcache{$agent_name} . "\n";
+        return $agentcache{$agent_name};
+    }
+
+    # print "Agent $agent_name is not in cache, query database\n";
+    $sth = $dbh->prepare("SELECT agent_id FROM qagent WHERE agent=?");
+    $sth->execute($agent_name);
+
+    my @result  = $sth->fetchrow_array;
+    my $cuantos = @result;
+    $sth->finish;
+
+    if ($cuantos) {
+        $agent_id = $result[0];
+        print "found on database $agent_id\n";
+    }
+    else {
+        $sth = $dbh->prepare("INSERT INTO qagent (agent) VALUES (?)");
+        $sth->execute($agent_name);
+        $agent_id = $dbh->{q{mysql_insertid}};
+
+        # print "NOT found on database inserting $agent_id\n";
+        # print "Query $query\n";
+    }
+    if ( !$dbh->err() ) {
+
+        # print "No error, set cache\n";
+        $agentcache{$agent_name} = $agent_id;
+    }
+    else {
+
+        # print "Error, not set cache and return -1\n";
+        $agent_id = -1;
+    }
+    return $agent_id;
+}
+
+sub return_timestamp {
+
+    my $date_string = shift;
+    my ( $year, $month, $day, $hour, $min, $sec ) = split( /[-: ]/, $date_string, 6 );
+    $year = $year - 1900;
+    $month--;
+    my $u_timestamp = timelocal( $sec, $min, $hour, $day, $month, $year );
+    return $u_timestamp;
+}
+
+sub set_events {
+
+    if ( $DBI::err ne "2002" ) {
+
+        %event_hash = ();
+
+        # Populates an array with the EVENTS ids
+        $query = "SELECT * FROM qevent ORDER BY event_id";
+        $sth   = $dbh->prepare($query);
+        $sth->execute;
+        while ( my @row = $sth->fetchrow ) {
+            $event_hash{ $row[1] } = $row[0];
+        }
+
+        %queuecache = ();
+        %agentcache = ();
+    }
+}
+
+sub handle_error {
+
+    $error       = shift;
+    $errorstring = shift;
+    $linea       = shift;
+    if ( $error == "2006" ) {
+        print "Lost connection... save $linea\n";
+        if ( open( LOG, ">> /var/log/asterisk/queue_log_failed" ) ) {
+            print LOG "$linea\n";
+            close(LOG);
+        }
+        &reconecta();
+    }
+    else {
+        print "Record not inserted, error: $errorstring\n";
+    }
+}
+
+sub last_event {
+
+    # Select the most recent event saved
+    $query = "SELECT datetime FROM queue_stats ORDER BY datetime DESC LIMIT 1";
+    $sth   = $dbh->prepare($query);
+    $sth->execute;
+    my @result  = $sth->fetchrow_array;
+    my $cuantos = @result;
+    $sth->finish;
+
+    if ( $cuantos > 0 ) {
+        print "last $result[0]\n";
+        $last_event_ts = return_timestamp( $result[0] );
+        print "last $last_event_ts\n";
+        $last_event_ts -= 10;
+    }
+    else {
+        $last_event_ts = 0;
+    }
+}
+
+sub procesa {
+
+    my $max_infos = 5;
+    my $linea = shift;
+
+    print $linea. "\n";
+
+    my ( @parametros) = split( /\|/, $linea );
+
+    my $date       = shift(@parametros);
+    my $uniqueid   = shift(@parametros);
+    my $queue_name = shift(@parametros);
+    my $agent      = shift(@parametros);
+    my $event      = shift(@parametros);
+
+    my $infoqr = "";
+    my $repqr  = "";
+    my $cuantos_infos = $#parametros + 1;
+
+    if($cuantos_infos > $max_infos) {
+        my $sacar_infos = $cuantos_infos - $max_infos;
+        for($a=1;$a<=$sacar_infos;$a++) {
+            pop @parametros;
+        }
+        $cuantos_infos = $max_infos;
+    }
+
+    for($a=1;$a<=$cuantos_infos;$a++) {
+       $infoqr.=",info$a";
+       $repqr.=",?";
+    }
+
+    if ( $date < $last_event_ts ) {
+        return;
+    }
+
+    if ( $event eq "RINGNOANSWER" && $parametros[0] eq "0" ) {
+        return;
+    }
+
+    my @timeData = localtime($date);
+    my $sec      = $timeData[0];
+    my $min      = $timeData[1];
+    my $hour     = $timeData[2];
+    my $day      = $timeData[3];
+    my $month    = $timeData[4] + 1;
+    my $year     = $timeData[5] + 1900;
+
+    $date = "$year-$month-$day $hour:$min:$sec";
+
+    $queue_id = check_queue($queue_name);
+    $agent_id = check_agent( $agent, $queue_name, $event );
+    $event_id = check_event($event);
+
+    $sth = $dbh->prepare(qq{
+        INSERT INTO queue_stats (uniqueid, datetime, qname, qagent, qevent$infoqr) VALUES (?,?,?,?,?$repqr);
+    });
+    $sth->execute($uniqueid, $date, $queue_id, $agent_id, $event_id, @parametros) or handle_error( $dbh->err(), $dbh->errstr(), $linea );
+}
+
+sub usage {
+    print STDERR "tailqueuelog [<options>] \n";
+    print STDERR "       -u <name>     - Connect to mysql as username <name> [root]\n";
+    print STDERR "       -p <pw>       - Connect to mysql with password <pw>\n";
+    print STDERR "       -h <host>     - Connect to mysql host <host> [localhost]\n";
+    print STDERR "       -d <dbname>   - Connect to mysql database <dbname> [qstats]\n";
+    print STDERR "       -l <queuelog> - Path and name for queue_log [/var/log/asterisk/queue_log]\n";
+    print STDERR "       -w            - Write configuration to disk\n";
+    print STDERR "       --amiuser     - Manager User\n";
+    print STDERR "       --amipass     - Manager Password\n";
+    print STDERR "       --amihost     - Manager Host\n";
+    print STDERR "       --amiport     - Manager Port\n";
+    print STDERR "       --purge       - Purge all data from tables\n";
+    exit;
+}
+
+sub get_all_agents {
+    my $pepe = astcli->new( 'USER', $config{'amiuser'}, 'PWD', $config{'amipass'}, 'HOST', $config{'amihost'}, 'PORT', $config{'amiport'} );
+    $pepe->connect();
+    if ( $pepe->isconnected() ) {
+        my $ret = $pepe->send_command("queue show $queue");
+        my @lines = split /\n/, $ret;
+        foreach (@lines) {
+            if ( $_ =~ /has taken/ ) {
+                $_ =~ s/^ +//g;
+                @partes = split /\(/, $_, 2;
+                $nombre_agente = $partes[0];
+                $nombre_agente =~ s/\s+$//g;
+                $canal  = $partes[1];
+                @partes = split /\)/, $canal;
+                $canal  = $partes[0];
+                $canal =~ s/\) //g;
+
+                if ( $nombre_agente =~ m/^SIP/i || $nombre_agente =~ m/^Local/i || $nombre_agente =~ m/^Agent/i ) {
+                    next;
+                }
+                $agentnamecache{$canal} = $nombre_agente;
+                print " set cache de {$canal}=$nombre_agente \n";
+            }
+        }
+        $pepe->logoff();
+    }
+    else {
+        print "COULD NOT CONNECT TO THE ASTERISK MANAGER INTERFACE\n";
+    }
+}
+
+sub get_agent_name {
+    $agent         = shift;
+    $queue         = shift;
+    $nombre_agente = $agent;
+    if ( !defined($queue) ) { $queue = ''; }
+    if ( $queue eq "NONE" ) { $queue = ''; }
+    print "get agent name $agent en queue $queue\n";
+    my $pepe = astcli->new( 'USER', $config{'amiuser'}, 'PWD', $config{'amipass'}, 'HOST', $config{'amihost'}, 'PORT', $config{'amiport'} );
+    $pepe->connect();
+
+    if ( $pepe->isconnected() ) {
+        my $ret = $pepe->send_command("queue show $queue");
+        my @lines = split /\n/, $ret;
+        foreach (@lines) {
+            if ( $_ =~ /$agent/ ) {
+                print $_. "\n";
+                $_ =~ s/^ +//g;
+                @partes = split /\(/, $_;
+                $nombre_agente = $partes[0];
+                $nombre_agente =~ s/\s+$//g;
+                last;
+            }
+        }
+        $pepe->logoff();
+    }
+    else {
+        print "NO PUDE CONECTAR LA MANAGER	\n";
+        print "NO PUDE CONECTAR LA MANAGER	\n";
+        print "NO PUDE CONECTAR LA MANAGER	\n";
+        print "NO PUDE CONECTAR LA MANAGER	\n";
+        print "NO PUDE CONECTAR LA MANAGER	\n";
+    }
+    print "agente $agent devuelve $nombre_agente\n";
+    return $nombre_agente;
+}
+
+load_config('/etc/tailqueuelog.conf');
+load_config("$ENV{HOME}/.tailqueuelog") if defined $ENV{HOME};
+
+$config{'dbname'}  = $config{'dbname'}  ? $config{'dbname'}  : "qstats";
+$config{'dbhost'}  = $config{'dbhost'}  ? $config{'dbhost'}  : "localhost";
+$config{'dbpass'}  = $config{'dbpass'}  ? $config{'dbpass'}  : "";
+$config{'dbuser'}  = $config{'dbuser'}  ? $config{'dbuser'}  : "root";
+$config{'logfile'} = $config{'logfile'} ? $config{'logfile'} : "/var/log/asterisk/queue_log";
+
+if ( $purge && defined( $config{'dbuser'} ) ) {
+    print "Purge all data from tables.\n";
+    print "Are you sure? (yes|no)\n";
+    $answer = lc(<>);
+    chop($answer);
+    if ( $answer eq "y" || $answer eq "yes" ) {
+        &purgedb();
+    }
+    exit;
+}
+
+if ( !-f $config{'logfile'} ) {
+    print "File " . $config{'logfile'} . " not found\n";
+    exit 1;
+}
+
+if ($write) {
+    if ( -d $ENV{HOME} ) {
+        open DEFAULT, ">$ENV{HOME}/.tailqueuelog";
+        print DEFAULT "dbuser=$config{'dbuser'}\n"   if $config{'dbuser'};
+        print DEFAULT "dbpass=$config{'dbpass'}\n"   if $config{'dbpass'};
+        print DEFAULT "dbhost=$config{'dbhost'}\n"   if $config{'dbhost'};
+        print DEFAULT "logfile=$config{'logfile'}\n" if $config{'logfile'};
+        close DEFAULT;
+    }
+}
+
+if($daemon) {
+    &daemonize();
+}
+
+&reconecta();
+&last_event();
+&get_all_agents();
+&initial_load();
+
+$file = File::Tail->new( $config{'logfile'} );
+while ( defined( $message = $file->read ) ) {
+    next unless defined $message;
+    chomp $message;
+    procesa($message);
+}
+

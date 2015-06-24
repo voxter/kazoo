@@ -1,0 +1,116 @@
+#!/usr/bin/perl
+# Copyright 2008 House Internet S.R.L.
+# This program is not redistributable.
+# http://www.asternic.org
+# Contact Nicolas Gudino for more information <nicolas@house.com.ar>
+use FindBin;
+use lib $FindBin::Bin;
+use POSIX;
+use DBI;
+use Time::Local;
+use Getopt::Long;
+
+my %config;
+my %duplicates;
+my %queuecache;
+my %agentcache;
+my $dbh;
+my $conectado = 0;
+my $last_event_ts = 0;
+
+GetOptions( "u|user=s"     => \$config{'dbuser'}, 
+            "p|password=s" => \$config{'dbpass'}, 
+            "h|host=s"     => \$config{'dbhost'}, 
+            "d|dbname=s"   => \$config{'dbname'}, 
+            "help|?"       => \$help
+            );
+
+
+usage() if $help;
+
+load_config('/etc/tailqueuelog.conf');
+load_config("$ENV{HOME}/.tailqueuelog") if defined $ENV{HOME};
+
+$config{'dbname'}  = $config{'dbname'}?$config{'dbname'}:"qstats";
+$config{'dbhost'}  = $config{'dbhost'}?$config{'dbhost'}:"localhost";
+$config{'dbpass'}  = $config{'dbpass'}?$config{'dbpass'}:"";
+$config{'dbuser'}  = $config{'dbuser'}?$config{'dbuser'}:"root";
+$config{'logfile'} = $config{'logfile'}?$config{'logfile'}:"/var/log/asterisk/queue_log";
+
+sub checkduplicate() {
+    my $contador=0;
+    print "Checking for duplicate events\n";
+    &connect_db();
+    $query = "select count(*) as duplicate,event from qevent group by event having duplicate>1 order by 1;";
+    $sth   = $dbh->prepare($query);
+    $sth->execute;
+    while ( my @row = $sth->fetchrow ) {
+        $contador++;
+        $duplicates{ $row[1] } = $row[0];
+    }
+    if($contador==0) {
+        die("There are no duplicates, you are safe.\n");
+    }
+    while ( my ( $event, $count ) = each( %duplicates) ) {
+       print "evento $event duplicado\n";
+       $query="SELECT * FROM qevent WHERE event='$event' ORDER BY event_id";
+       $sth   = $dbh->prepare($query);
+       $sth->execute;
+       my $contador=0;
+       my $primero="";
+       
+       while ( my @row = $sth->fetchrow ) {
+           if($contador==0) {
+               $primero = $row[0];
+               $contador++;
+           } else {
+               my $actual = $row[0];
+               print "$query\n";
+               $query="UPDATE IGNORE queue_stats SET qevent=$primero WHERE qevent=$actual";
+               $dbh->do($query);
+               $query="DELETE FROM qevent WHERE event_id=$actual";
+               $dbh->do($query);
+               $contador++;
+           }
+       }
+    }
+    
+}
+
+sub load_config() {
+    $file = shift;
+    return unless (-r $file);
+    open (CFG, "<$file") or return;
+    while (<CFG>) {
+        chomp;
+        my ( $var, $val ) = split(/\s*\=\s*/);
+        $val =~ s/'([^']*)';/$1/g;
+		$var = lc($var);
+        $config{$var} = $val;
+    }
+    close(CFG);
+}
+
+sub connect_db() {
+    my $return = 0;
+    my %attr   = (
+        PrintError => 0,
+        RaiseError => 0,
+    );
+    my $dsn = "DBI:mysql:database=$config{'dbname'};host=$config{'dbhost'}";
+    print "Connecting to DB $dsn\n";
+    $dbh->disconnect if $dbh;
+    $dbh = DBI->connect( $dsn, $config{'dbuser'}, $config{'dbpass'}, \%attr ) or $return = 1;
+    return $return;
+}
+
+&checkduplicate();
+
+sub usage {
+    print STDERR "fixduplicates [<options>] \n";
+    print STDERR "       -u <name>     - Connect to mysql as username <name> [root]\n";
+    print STDERR "       -p <pw>       - Connect to mysql with password <pw>\n";
+    print STDERR "       -h <host>     - Connect to mysql host <host> [localhost]\n";
+    print STDERR "       -d <dbname>   - Connect to mysql database <dbname> [qstats]\n\n";
+    exit;
+}

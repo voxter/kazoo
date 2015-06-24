@@ -25,8 +25,8 @@
 
 -define(BINDINGS, [
     {'self', []}
-    ,{acdc_stats, [{restrict_to, [call_stat, status_stat]}]}
-    ,{acdc_agent, [{restrict_to, [status]}]}
+    ,{'acdc_stats', [{'restrict_to', ['call_stat', 'status_stat']}]}
+    ,{'acdc_agent', []}
 ]).
 
 -define(RESPONDERS, [{
@@ -49,30 +49,30 @@ init([]) ->
 
 handle_call(Request, _From, State) ->
     lager:debug("unhandled call: ~p", [Request]),
-    {reply, {error, not_implemented}, State}.
+    {'reply', {'error', 'not_implemented'}, State}.
 
 handle_cast(Msg, State) ->
     lager:debug("unhandled cast: ~p", [Msg]),
-    {noreply, State}.
+    {'noreply', State}.
 
 handle_info(Info, State) ->
     case Info of
-        {'EXIT', Pid, shutdown} ->
+        {'EXIT', Pid, 'shutdown'} ->
             lager:debug("~p shutting down...", [Pid]),
             exit(Pid, "shutting down...");
         _ ->
             lager:debug("unhandled info: ~p", [Info])
     end,
-    {noreply, State}.
+    {'noreply', State}.
 
 handle_event(JObj, State) ->
     % lager:debug("unhandled event: ~p, state: ~p", [JObj, State]),
     quilt_log:handle_event(JObj, State),
-    {noreply, []}.
+    {'noreply', []}.
 
 terminate(Reason, _State) ->
     lager:debug("~p listener on pid ~p terminating: ~p", [?MODULE, self(), Reason]),
-    ok.
+    'ok'.
 
 code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+    {'ok', State}.

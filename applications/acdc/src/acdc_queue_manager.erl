@@ -189,17 +189,9 @@ are_agents_available(Srv, EnterWhenEmpty) ->
 
 start_queue_call(JObj, Props, Call) ->
     _ = whapps_call:put_callid(Call),
-    AccountId = whapps_call:account_id(Call),
     QueueId = wh_json:get_value(<<"Queue-ID">>, JObj),
 
     lager:info("member call for queue ~s recv", [QueueId]),
-
-    acdc_stats:call_waiting(AccountId, QueueId
-                            ,whapps_call:call_id(Call)
-                            ,whapps_call:caller_id_name(Call)
-                            ,whapps_call:caller_id_number(Call)
-                           ),
-
     lager:debug("answering call"),
     whapps_call_command:answer_now(Call),
 
@@ -598,16 +590,12 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
     Position = length(CurrentCalls)+1,
 
     Call = whapps_call:set_custom_channel_var(<<"Queue-Position">>, Position, whapps_call:from_json(wh_json:get_value(<<"Call">>, JObj))),
-    CallId = whapps_call:call_id(Call),
 
-    Prop = [{<<"Account-ID">>, AccountId}
-            ,{<<"Queue-ID">>, QueueId}
-            ,{<<"Call-ID">>, CallId}
-            ,{<<"Entered-Position">>, Position}
-            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-           ],
-
-    wapi_acdc_stats:publish_call_entered_position(Prop),
+    acdc_stats:call_waiting(AccountId, QueueId, Position
+                            ,whapps_call:call_id(Call)
+                            ,whapps_call:caller_id_name(Call)
+                            ,whapps_call:caller_id_number(Call)
+                           ),
     
     UpdatedMemberCalls = [Call | CurrentCalls],
 

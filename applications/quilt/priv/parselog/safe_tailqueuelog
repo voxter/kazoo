@@ -1,0 +1,17 @@
+#!/bin/sh
+
+# This wrapper script will relaunch tailqueuelog if it crasehs for whatever reason
+# you can use this in your /etc/rc.d/rc.local file instead of starting tailqueuelog
+# directly from it or via gnu screen, by adding something like:
+#
+# /usr/local/parselog/safe_tailqueuelog &
+#
+# Remember to set the correct user, password and database name for mysql!
+#
+cd /usr/local/parselog
+while true; do
+./tailqueuelog -u root -p passw0rd -d qstats -l /var/log/asterisk/queue_log > /dev/null 2>&1
+mysql -u root -ppassw0rd -d qstats -e "REPAIR TABLE queue_stats;"
+mysql -u root -ppassw0rd -d qstats -e "REPAIR TABLE recordings;"
+sleep 10
+done

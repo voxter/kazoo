@@ -1,0 +1,198 @@
+#!/usr/bin/perl
+
+use POSIX;
+use DBI;
+use Getopt::Long;
+use IO::File;
+
+my %config;
+my %event_hash;
+my %queuecache;
+my %agentcache;
+my $dbh;
+my $last_event_ts;
+
+GetOptions( "u|user=s"     => \$config{'dbuser'},
+            "p|password=s" => \$config{'dbpass'},
+            "h|host=s"     => \$config{'dbhost'},
+            "d|dbname=s"   => \$config{'dbname'},
+            "l|logfile=s"  => \$config{'logfile'},
+            "help|?"       => \$help);
+
+usage() if $help;
+
+
+sub connect_db() {
+    my $dsn = "DBI:mysql:database=$config{'dbname'};host=$config{'dbhost'}";
+    $dbh->disconnect if $dbh;
+    $dbh = DBI->connect( $dsn, $config{'dbuser'}, $config{'dbpass'} );
+    $dbh->{RaiseError} = 0;
+    $dbh->{PrintError} = 1;
+
+    my $AutoReconnect = 1;
+    $dbh->{mysql_auto_reconnect} = $AutoReconnect ? 1 : 0;
+}
+
+sub check_queue {
+
+    $queue_name = shift;
+
+    if ( !defined($queue_name) ) {
+        return 0;
+    }
+
+    if ( exists( $queuecache{$queue_name} ) ) {
+        return $queuecache{$queue_name};
+    }
+
+    $sth = $dbh->prepare("SELECT queue_id FROM qname WHERE queue=?");
+    $sth->execute($queue_name);
+    my @result  = $sth->fetchrow_array;
+    my $cuantos = @result;
+    $sth->finish;
+
+    if ($cuantos) {
+        $queue_id = $result[0];
+    }
+    else {
+        $sth = $dbh->prepare("INSERT INTO qname (queue) VALUES (?)");
+        $sth->execute($queue_name);
+        $queue_id = $dbh->{q{mysql_insertid}};
+    }
+    $queuecache{$queue_name} = $queue_id;
+    return $queue_id;
+}
+
+sub check_agent {
+
+    $agent_name = shift;
+    if ( !defined($agent_name) ) {
+        return 0;
+    }
+
+	@partes = split(/-/,$agent_name,2);
+
+	$agent_name = $partes[0];
+	if($agent_name =~ /^\d+$/) {
+		$agent_name="Agent/".$agent_name;
+	}
+
+    if ( exists( $agentcache{$agent_name} ) ) {
+        return $agentcache{$agent_name};
+    }
+
+    $sth = $dbh->prepare("SELECT agent_id FROM qagent WHERE agent=?");
+    $sth->execute($agent_name);
+    my @result  = $sth->fetchrow_array;
+    my $cuantos = @result;
+    $sth->finish;
+
+    if ($cuantos) {
+        $agent_id = $result[0];
+    }
+    else {
+        $sth = $dbh->prepare("INSERT INTO qagent (agent) VALUES (?)");
+        $sth->execute($agent_name);
+        $agent_id = $dbh->{q{mysql_insertid}};
+    }
+    $agentcache{$agent_name} = $agent_id;
+    return $agent_id;
+}
+
+sub return_timestamp {
+    my $date_string = shift;
+    my ( $year, $month, $day, $hour, $min, $sec ) = split( /[-: ]/, $date_string, 6 );
+    $year = $year - 1900;
+    $month--;
+    my $u_timestamp = mktime( $sec, $min, $hour, $day, $month, $year );
+    return $u_timestamp;
+}
+
+sub last_event {
+
+    # Select the most recent event saved
+    $query = "SELECT datetime FROM queue_stats ORDER BY datetime DESC LIMIT 1";
+    $sth   = $dbh->prepare($query);
+    $sth->execute;
+    my @result  = $sth->fetchrow_array;
+    my $cuantos = @result;
+    $sth->finish;
+
+    if ( $cuantos > 0 ) {
+        $last_event_ts = return_timestamp( $result[0] );
+        $last_event_ts -= 10;
+    }
+    else {
+        $last_event_ts = 0;
+    }
+}
+
+sub set_events {
+
+    # Populates an array with the EVENTS ids
+    $query = "SELECT * FROM qevent ORDER BY event_id";
+    $sth   = $dbh->prepare($query);
+    $sth->execute;
+    while ( my @row = $sth->fetchrow ) {
+        $event_hash{ $row[1] } = $row[0];
+    }
+}
+
+sub procesa {
+
+    my $linea = shift;
+
+    my ( $date, $uniqueid, $queue_name, $agent, $event, $data1, $data2, $data3 ) = split( /\|/, $linea, 8 );
+
+    if ( $date < $last_event_ts ) {
+#        return;
+    }
+
+    my @timeData = localtime($date);
+    my $sec      = $timeData[0];
+    my $min      = $timeData[1];
+    my $hour     = $timeData[2];
+    my $day      = $timeData[3];
+    my $month    = $timeData[4] + 1;
+    my $year     = $timeData[5] + 1900;
+
+    $date = "$year-$month-$day $hour:$min:$sec";
+
+    $queue_id = check_queue($queue_name);
+    $agent_id = check_agent($agent);
+
+    $event_id = $event_hash{$event};
+
+    if ( $agent_id != -1 ) {
+        $query = "INSERT INTO queue_stats (uniqueid, datetime, qname, qagent, qevent, info1, info2, info3) ";
+        $query .= "VALUES ('$uniqueid','$date','$queue_id','$agent_id','$event_id','$data1','$data2','$data3')";
+        $dbh->do($query) or warn('problem');
+    }
+}
+
+&connect_db();
+&set_events();
+&last_event();
+
+if ( !$dbh ) {
+    print "Could not connect to mysql\n";
+    exit(0);
+}
+
+while (<>) {
+    chomp;
+    procesa($_);
+}
+
+$dbh->disconnect();
+
+sub usage {
+    print STDERR "parselog [<options>] \n";
+    print STDERR "       -u <name>     - Connect to mysql as username <name> [root]\n";
+    print STDERR "       -p <pw>       - Connect to mysql with password <pw>\n";
+    print STDERR "       -h <host>     - Connect to mysql host <host> [localhost]\n";
+    print STDERR "       -d <dbname>   - Connect to mysql database <dbname> [qstats]\n";
+    print STDERR "       -l <queuelog> - Path and name for queue_log [/var/log/asterisk/queue_log]\n\n";
+    exit;
+}
+
