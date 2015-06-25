@@ -45,7 +45,7 @@
          ,code_change/3
         ]).
 
--export([announce_position_loop/6]).
+-export([announce_position_loop/7]).
 
 -include("acdc.hrl").
 
@@ -71,6 +71,11 @@
           ,wait_announce_enabled = 'false' :: boolean()
           ,announcements_timer = 30 :: non_neg_integer()
           ,pos_announce_pids = [] :: announce_pid_list()
+
+          ,position_media = <<"queue-you_are_at_position">> :: binary()
+          ,in_the_queue_media = <<"queue-in_the_queue">> :: binary()
+          ,increase_call_volume_media = <<"queue-increase_in_call_volume">> :: binary()
+          ,estimated_wait_time_media = <<"queue-the_estimated_wait_time_is">> :: binary()
          }).
 -type mgr_state() :: #state{}.
 
@@ -189,7 +194,6 @@ are_agents_available(Srv, EnterWhenEmpty) ->
 
 start_queue_call(JObj, Props, Call) ->
     _ = whapps_call:put_callid(Call),
-    AccountId = whapps_call:account_id(Call),
     QueueId = wh_json:get_value(<<"Queue-ID">>, JObj),
 
     lager:info("member call for queue ~s recv", [QueueId]),
@@ -591,7 +595,6 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
     Position = length(CurrentCalls)+1,
 
     Call = whapps_call:set_custom_channel_var(<<"Queue-Position">>, Position, whapps_call:from_json(wh_json:get_value(<<"Call">>, JObj))),
-    CallId = whapps_call:call_id(Call),
 
     acdc_stats:call_waiting(AccountId, QueueId, Position
                             ,whapps_call:call_id(Call)
@@ -624,6 +627,7 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
                             ,QueueId
                             ,{PosAnnounceEnabled, WaitAnnounceEnabled}
                             ,AnnouncementsTimer
+                            ,queue_media_list(State)
                             ,Pids),
 
     {'noreply', State#state{current_member_calls=UpdatedMemberCalls
@@ -940,17 +944,23 @@ maybe_start_queue_workers(QueueSup, AgentCount) ->
 
 -spec update_properties(wh_json:object(), mgr_state()) -> mgr_state().
 update_properties(QueueJObj, State) ->
+    Default = #state{},
     State#state{
       enter_when_empty=wh_json:is_true(<<"enter_when_empty">>, QueueJObj, 'true')
       ,moh=wh_json:get_ne_value(<<"moh">>, QueueJObj)
       ,pos_announce_enabled=wh_json:is_true(<<"position_announcements_enabled">>, QueueJObj, 'false')
       ,wait_announce_enabled=wh_json:is_true(<<"holdtime_announcements_enabled">>, QueueJObj, 'false')
       ,announcements_timer=wh_json:get_integer_value(<<"announcements_timer">>, QueueJObj, 30)
+
+      ,position_media = wh_json:get_value(<<"position_media">>, QueueJObj, Default#state.position_media)
+      ,in_the_queue_media = wh_json:get_value(<<"in_the_queue_media">>, QueueJObj, Default#state.in_the_queue_media)
+      ,increase_call_volume_media = wh_json:get_value(<<"increase_call_volume_media">>, QueueJObj, Default#state.increase_call_volume_media)
+      ,estimated_wait_time_media = wh_json:get_value(<<"estimated_wait_time_media">>, QueueJObj, Default#state.estimated_wait_time_media)
      }.
 
--spec announce_position(whapps_call:call(), ne_binary(), non_neg_integer(), {boolean(), boolean()}, non_neg_integer() | 'undefined') ->
+-spec announce_position(whapps_call:call(), ne_binary(), non_neg_integer(), {boolean(), boolean()}, proplist(), non_neg_integer() | 'undefined') ->
         non_neg_integer() | 'undefined'.
-announce_position(Call, QueueId, Position, {PosAnnounceEnabled, WaitAnnounceEnabled}, OldAverageWait) ->
+announce_position(Call, QueueId, Position, {PosAnnounceEnabled, WaitAnnounceEnabled}, Media, OldAverageWait) ->
     Req = props:filter_undefined(
             [{<<"Account-ID">>, whapps_call:account_id(Call)}
              ,{<<"Queue-ID">>, QueueId}
@@ -965,30 +975,30 @@ announce_position(Call, QueueId, Position, {PosAnnounceEnabled, WaitAnnounceEnab
             lager:debug("failed to recv resp from AMQP: ~p", [_E]),
             'undefined';
         {'ok', Resp} ->
-            {AverageWait, Prompts} = maybe_average_wait_announcement(Resp, WaitAnnounceEnabled, OldAverageWait),
-            Prompt = maybe_position_announcement(Position, PosAnnounceEnabled) ++
+            {AverageWait, Prompts} = maybe_average_wait_announcement(Resp, WaitAnnounceEnabled, Media, OldAverageWait),
+            Prompt = maybe_position_announcement(Position, PosAnnounceEnabled, Media) ++
                        Prompts,
             whapps_call_command:audio_macro(Prompt, Call),
             AverageWait
     end.
 
--spec maybe_position_announcement(non_neg_integer(), boolean()) -> list().
-maybe_position_announcement(_, 'false') ->
+-spec maybe_position_announcement(non_neg_integer(), boolean(), proplist()) -> list().
+maybe_position_announcement(_, 'false', _) ->
     [];
-maybe_position_announcement(Position, 'true') ->
-    [{'prompt', <<"queue-you_are_at_position">>}
+maybe_position_announcement(Position, 'true', Media) ->
+    [{'prompt', props:get_value(<<"position_media">>, Media), <<"A">>}
      ,{'say', wh_util:to_binary(Position), <<"number">>}
-     ,{'prompt', <<"queue-in_the_queue">>}].
+     ,{'prompt', props:get_value(<<"in_the_queue_media">>, Media), <<"A">>}].
 
--spec maybe_average_wait_announcement(wh_json:object(), boolean(), non_neg_integer() | 'undefined') ->
+-spec maybe_average_wait_announcement(wh_json:object(), boolean(), proplist(), non_neg_integer() | 'undefined') ->
         {non_neg_integer() | 'undefined', list()}.
-maybe_average_wait_announcement(_, 'false', _) ->
+maybe_average_wait_announcement(_, 'false', _, _) ->
     {'undefined', []};
-maybe_average_wait_announcement(JObj, 'true', OldAverageWait) ->
-    average_wait_announcement(JObj, OldAverageWait).
+maybe_average_wait_announcement(JObj, 'true', Media, OldAverageWait) ->
+    average_wait_announcement(JObj, Media, OldAverageWait).
 
--spec average_wait_announcement(wh_json:object(), non_neg_integer() | 'undefined') -> {non_neg_integer() | 'undefined', list()}.
-average_wait_announcement(JObj, OldAverageWait) ->
+-spec average_wait_announcement(wh_json:object(), proplist(), non_neg_integer() | 'undefined') -> {non_neg_integer() | 'undefined', list()}.
+average_wait_announcement(JObj, Media, OldAverageWait) ->
     Abandoned = length(wh_json:get_value(<<"Abandoned">>, JObj, [])),
     Total = length(wh_json:get_value(<<"Abandoned">>, JObj, [])) +
               length(wh_json:get_value(<<"Handled">>, JObj, [])) +
@@ -1003,7 +1013,7 @@ average_wait_announcement(JObj, OldAverageWait) ->
       end
       ,0
       ,[<<"Waiting">>, <<"Handled">>, <<"Processed">>]),
-    time_prompts(format_time(calc_average_wait(Abandoned, Total, TotalWait)), OldAverageWait).
+    time_prompts(format_time(calc_average_wait(Abandoned, Total, TotalWait)), OldAverageWait, Media).
 
 calc_average_wait(Same, Same, TotalWait) ->
     TotalWait;
@@ -1013,56 +1023,68 @@ calc_average_wait(Abandoned, Total, TotalWait) ->
 format_time(Time) ->
     {Time div 3600, Time rem 3600 div 60, Time rem 60}.
 
-time_prompts({0, 0, 0}=AverageWait, _) ->
+time_prompts({0, 0, 0}=AverageWait, _, _) ->
     {AverageWait, []};
-time_prompts({Hour, Min, Sec}=Time, {Hour2, Min2, Sec2}) when (Hour * 3600 + Min * 60 + Sec) > (Hour2 * 3600 + Min2 * 60 + Sec2) ->
-    {Time, [{'prompt', <<"queue-increase_in_call_volume">>}
-            ,{'prompt', <<"queue-the_estimated_wait_time_is">>}
+time_prompts({Hour, Min, Sec}=Time, {Hour2, Min2, Sec2}, Media) when (Hour * 3600 + Min * 60 + Sec) > (Hour2 * 3600 + Min2 * 60 + Sec2) ->
+    {Time, [{'prompt', props:get_value(<<"increase_call_volume_media">>, Media), <<"A">>}
+            ,{'prompt', props:get_value(<<"estimated_wait_time_media">>, Media), <<"A">>}
             | time_prompts2(Time)
            ]};
-time_prompts(Time, _) ->
-    {Time, [{'prompt', <<"queue-the_estimated_wait_time_is">>}
+time_prompts(Time, _, Media) ->
+    {Time, [{'prompt', props:get_value(<<"estimated_wait_time_media">>, Media), <<"A">>}
             | time_prompts2(Time)
            ]}.
     
 time_prompts2({0, 0, _}) ->
-    [{'prompt', <<"queue-less_than_1_minute">>}];
+    [{'prompt', <<"queue-less_than_1_minute">>, <<"A">>}];
 time_prompts2({0, Min, _}) when Min =< 5 ->
-    [{'prompt', <<"queue-about_5_minutes">>}];
+    [{'prompt', <<"queue-about_5_minutes">>, <<"A">>}];
 time_prompts2({0, Min, _}) when Min =< 10 ->
-    [{'prompt', <<"queue-about_10_minutes">>}];
+    [{'prompt', <<"queue-about_10_minutes">>, <<"A">>}];
 time_prompts2({0, Min, _}) when Min =< 15 ->
-    [{'prompt', <<"queue-about_15_minutes">>}];
+    [{'prompt', <<"queue-about_15_minutes">>, <<"A">>}];
 time_prompts2({0, Min, _}) when Min =< 30 ->
-    [{'prompt', <<"queue-about_30_minutes">>}];
+    [{'prompt', <<"queue-about_30_minutes">>, <<"A">>}];
 time_prompts2({0, Min, _}) when Min =< 45 ->
-    [{'prompt', <<"queue-about_45_minutes">>}];
+    [{'prompt', <<"queue-about_45_minutes">>, <<"A">>}];
 time_prompts2({0, _, _}) ->
-    [{'prompt', <<"queue-about_1_hour">>}];
+    [{'prompt', <<"queue-about_1_hour">>, <<"A">>}];
 time_prompts2({_, _, _}) ->
-    [{'prompt', <<"queue-at_least_1_hour">>}].
+    [{'prompt', <<"queue-at_least_1_hour">>, <<"A">>}].
 
-announce_position_loop(Srv, Call, QueueId, AnnouncesEnabled, AnnouncementsTimer, LastAverage) ->
+queue_media_list(#state{position_media=PositionMedia
+                        ,in_the_queue_media=InTheQueueMedia
+                        ,increase_call_volume_media=IncreaseCallVolumeMedia
+                        ,estimated_wait_time_media=EstimatedWaitTimeMedia
+                       }) ->
+    [{<<"position_media">>, PositionMedia}
+     ,{<<"in_the_queue_media">>, InTheQueueMedia}
+     ,{<<"increase_call_volume_media">>, IncreaseCallVolumeMedia}
+     ,{<<"estimated_wait_time_media">>, EstimatedWaitTimeMedia}
+    ].
+
+announce_position_loop(Srv, Call, QueueId, AnnouncesEnabled, AnnouncementsTimer, Media, LastAverage) ->
     Position = gen_listener:call(Srv, {'queue_position', whapps_call:call_id(Call)}),
-    NewAverage = announce_position(Call, QueueId, Position, AnnouncesEnabled, LastAverage),
+    NewAverage = announce_position(Call, QueueId, Position, AnnouncesEnabled, Media, LastAverage),
     timer:sleep(AnnouncementsTimer * 1000),
-    announce_position_loop(Srv, Call, QueueId, AnnouncesEnabled, AnnouncementsTimer, NewAverage).
+    announce_position_loop(Srv, Call, QueueId, AnnouncesEnabled, AnnouncementsTimer, Media, NewAverage).
 
 -spec maybe_schedule_position_announcements(whapps_call:call()
                                             ,ne_binary()
                                             ,{boolean(), boolean()}
+                                            ,proplist()
                                             ,non_neg_integer()
                                             ,announce_pid_list()
                                            ) -> announce_pid_list().
-maybe_schedule_position_announcements(_Call, _, {'false', 'false'}, _, Pids) ->
+maybe_schedule_position_announcements(_Call, _, {'false', 'false'}, _, _, Pids) ->
     Pids;
-maybe_schedule_position_announcements(Call, QueueId, AnnouncesEnabled, AnnouncementsTimer, Pids) when AnnouncementsTimer < 30 ->
-    maybe_schedule_position_announcements(Call, QueueId, AnnouncesEnabled, 30, Pids);
-maybe_schedule_position_announcements(Call, QueueId, AnnouncesEnabled, AnnouncementsTimer, Pids) ->
+maybe_schedule_position_announcements(Call, QueueId, AnnouncesEnabled, AnnouncementsTimer, Media, Pids) when AnnouncementsTimer < 30 ->
+    maybe_schedule_position_announcements(Call, QueueId, AnnouncesEnabled, 30, Media, Pids);
+maybe_schedule_position_announcements(Call, QueueId, AnnouncesEnabled, AnnouncementsTimer, Media, Pids) ->
     [{whapps_call:call_id(Call), spawn(
                                    ?MODULE
                                    ,'announce_position_loop'
-                                   ,[self(), Call, QueueId, AnnouncesEnabled, AnnouncementsTimer, 'undefined']
+                                   ,[self(), Call, QueueId, AnnouncesEnabled, AnnouncementsTimer, Media, 'undefined']
                                    )} | Pids].
 
 -spec maybe_cancel_position_announcements(whapps_call:call(), announce_pid_list()) -> announce_pid_list().
@@ -1087,14 +1109,23 @@ maybe_konami_queue(AccountDb, QueueId, Call) ->
     end.
 
 maybe_queue_has_metaflows(AccountDb, QueueId, Call) ->
-    {ok, Queue} = couch_mgr:open_cache_doc(AccountDb, QueueId),
-    case wh_json:get_value(<<"metaflows">>, Queue) of
-        undefined ->
-            'false';
-        Metaflows ->
+    {'ok', Queue} = couch_mgr:open_cache_doc(AccountDb, QueueId),
+    case wh_json:is_true([<<"breakout">>, <<"enabled">>], Queue, 'false') of
+        'true' ->
+            lager:debug("breakout is enabled for queue ~s", [QueueId]),
             CVs = wh_json:set_value(<<"Queue-ID">>, QueueId, wh_json:new()),
+            Module = wh_json:set_values([{<<"module">>, <<"menu">>}
+                                         ,{<<"data">>, wh_json:get_value(<<"breakout">>, Queue)}
+                                        ], wh_json:new()),
+            Numbers = wh_json:set_value(<<"">>, Module, wh_json:new()),
+            Metaflows = wh_json:set_values([{<<"numbers">>, Numbers}
+                                            ,{<<"binding_key">>, <<"*">>}
+                                            ,{<<"listen_on">>, <<"a">>}
+                                           ], wh_json:new()),
             apply_new_metaflows(whapps_call:call_id(Call), CVs, whapps_call:controller_queue(Call), Metaflows),
-            'true'
+            'true';
+        'false' ->
+            'false'
     end.
 
 -spec maybe_publish_queue_member_remove(ne_binary(), ne_binary(), ne_binary(), binary()) -> 'ok'.
