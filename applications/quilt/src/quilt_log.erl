@@ -40,40 +40,45 @@ handle_event(JObj, _Props) ->
         {<<"acdc_call_stat">>, <<"exited-position">>} ->
             Call = acdc_stats:find_call(CallId),
             lager:debug("acdc call stats: ~p", [Call]),
-            case wh_json:get_value(<<"Status">>, Call) of
-                <<"abandoned">> ->
-                    case wh_json:get_value(<<"Abandoned-Reason">>, Call) of
-                        <<"member_hangup">> -> 
-                            % Check for agent count in queue (could be empty)
-                            case maybe_queue_empty(AccountId, QueueId) of
-                                'true' -> EventName = "EXITEMPTY"; % EXITEMPTY(position|origposition|waittime)
-                                _ -> EventName = "ABANDON" % ABANDON(position|origposition|waittime)
-                            end,
-                            WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, Call)),
-                            OriginalPos = integer_to_list(wh_json:get_value(<<"Entered-Position">>, Call)),
-                            Position = integer_to_list(wh_json:get_value(<<"Exited-Position">>, JObj)),
-                            EventParams = {Position, OriginalPos, WaitTime},
-                            lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
-                            write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
-                        <<"member_timeout">> -> 
-                            EventName = "EXITWITHTIMEOUT", % EXITWITHTIMEOUT(position)
-                            EventParams = {integer_to_list(wh_json:get_value(<<"Exited-Position">>, JObj))},
-                            lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
-                            write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
-                        <<"dtmf_exit">> ->
-                            EventName = "EXITWITHKEY", % EXITWITHKEY(key|position)
-                            EventParams = {<<"#">>, integer_to_list(wh_json:get_value(<<"Exited-Position">>, JObj))},
-                            lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
-                            write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams)
-                        end;
-                <<"handled">> ->
-                    AgentName = lookup_agent_name(AccountId, wh_json:get_value(<<"Agent-ID">>, Call)),
-                    EventName = "CONNECT", % CONNECT(holdtime|bridgedchanneluniqueid)
+            Ev = {wh_json:get_value(<<"Status">>, Call), wh_json:get_value(<<"Abandoned-Reason">>, Call)},
+            case Ev of
+                {<<"abandoned">>, <<"member_hangup">>} -> 
+                    % Check for agent count in queue (could be empty)
+                    case maybe_queue_empty(AccountId, QueueId) of
+                        'true' -> EventName = "EXITEMPTY"; % EXITEMPTY(position|origposition|waittime)
+                        _ -> EventName = "ABANDON" % ABANDON(position|origposition|waittime)
+                    end,
                     WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, Call)),
-                    EventParams = {WaitTime, wh_json:get_value(<<"Agent-ID">>, Call)},
+                    OriginalPos = integer_to_list(wh_json:get_value(<<"Entered-Position">>, Call)),
+                    Position = integer_to_list(wh_json:get_value(<<"Exited-Position">>, JObj)),
+                    EventParams = {Position, OriginalPos, WaitTime},
                     lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
-                    write_log(AccountId, CallId, QueueName, AgentName, EventName, EventParams)
-                end;
+                    write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
+
+                {<<"abandoned">>, <<"member_timeout">>} -> 
+                    EventName = "EXITWITHTIMEOUT", % EXITWITHTIMEOUT(position)
+                    EventParams = {integer_to_list(wh_json:get_value(<<"Exited-Position">>, JObj))},
+                    lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
+                    write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
+
+                {<<"abandoned">>, <<"dtmf_exit">>} ->
+                    EventName = "EXITWITHKEY", % EXITWITHKEY(key|position)
+                    EventParams = {<<"#">>, integer_to_list(wh_json:get_value(<<"Exited-Position">>, JObj))},
+                    lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
+                    write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
+                    
+                {_, _} ->
+                    lager:debug("unhandled exited status/reason: ~p", [Ev])
+            end;
+
+        {<<"acdc_call_stat">>, <<"handled">>} ->
+            EventName = "CONNECT", % CONNECT(holdtime|bridgedchanneluniqueid)
+            Call = acdc_stats:find_call(CallId),
+            AgentName = lookup_agent_name(AccountId, wh_json:get_value(<<"Agent-ID">>, Call)),
+            WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, Call)),
+            EventParams = {WaitTime, wh_json:get_value(<<"Agent-ID">>, Call)},
+            lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
+            write_log(AccountId, CallId, QueueName, AgentName, EventName, EventParams);
 
         {<<"acdc_call_stat">>, <<"missed">>} ->
             EventName = "RINGNOANSWER", % RINGNOANSWER(ringtime)
