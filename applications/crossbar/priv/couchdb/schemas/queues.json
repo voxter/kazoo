@@ -146,6 +146,18 @@
       "description": "Time between position and hold time announcements.",
       "default": 30,
       "minimum": 30
+    },
+    "breakout": {
+      "type": "object",
+      "required": false,
+      "name": "Breakout Menu Config",
+      "properties": {
+        "enabled": {
+            "type": "boolean",
+            "required": false,
+            "name": "Breakout Menu Enabled",
+            "description": "Whether or not to allow user to press * to enter queue waiting breakout menu"
+        }
+      }
     }
-  }
 }
