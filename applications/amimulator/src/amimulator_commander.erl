@@ -89,11 +89,12 @@ handle_event("challenge", Props) ->
 handle_event("ping", Props) ->
    {Megasecs, Secs, Microsecs} = os:timestamp(),
    Timestamp = Megasecs * 1000000 + Secs + Microsecs / 1000000,
-   Payload = [
+   Payload = props:filter_undefined([
        {<<"Response">>, <<"Success">>},
        {<<"Ping">>, <<"Pong">>},
-       {<<"Timestamp">>, Timestamp}
-   ],
+       {<<"Timestamp">>, Timestamp},
+       {<<"ActionID">>, props:get_value(<<"ActionID">>, Props)}
+   ]),
    {ok, {Payload, n}};
 % Handle AMI Status action
 handle_event("status", Props) ->
@@ -124,6 +125,69 @@ handle_event("sippeers", Props) ->
         {<<"ListItems">>, length(SipPeers)}
     ]],
     {ok, {Payload, n}};
+handle_event("sipshowpeer", Props) ->
+    Payload = props:filter_undefined([
+		{<<"Response">>, <<"Success">>},
+		{<<"ActionID">>, props:get_value(<<"ActionID">>, Props)},
+		{<<"Channeltype">>, <<"SIP">>},
+		{<<"ObjectName">>, <<"1011">>},
+		{<<"ChanObjectType">>, <<"peer">>},
+		{<<"SecretExist">>, <<"Y">>},
+		{<<"RemoteSecretExist">>, <<"N">>},
+		{<<"MD5SecretExist">>, <<"N">>},
+		{<<"Context">>, <<"from-internal">>},
+		{<<"Language">>, <<>>},
+		{<<"AMAflags">>, <<"Unknown">>},
+		{<<"CID-CallingPres">>, <<"Presentation Allowed, Not Screened">>},
+		{<<"Callgroup">>, <<>>},
+		{<<"Pickupgroup">>, <<>>},
+		{<<"MOHSuggest">>, <<>>},
+		{<<"VoiceMailbox">>, <<"1011@default">>},
+		{<<"TransferMode">>, <<"open">>},
+		{<<"Maxforwards">>, <<"0">>},
+		{<<"LastMsgsSent">>, <<"-1">>},
+		{<<"Maxforwards">>, <<"0">>},
+		{<<"Call-limit">>, <<"2147483647">>},
+		{<<"Busy-level">>, <<"0">>},
+		{<<"MaxCallBR">>, <<"384 kbps">>},
+		{<<"Dynamic">>, <<"Y">>},
+		{<<"Callerid">>, <<"\"device\" <1011>">>},
+		{<<"RegExpire">>, <<"71 seconds">>},
+		{<<"SIP-AuthInsecure">>, <<"no">>},
+		{<<"SIP-Forcerport">>, <<"Y">>},
+		{<<"ACL">>, <<"Y">>},
+		{<<"SIP-CanReinvite">>, <<"N">>},
+		{<<"SIP-DirectMedia">>, <<"N">>},
+		{<<"SIP-PromiscRedir">>, <<"N">>},
+		{<<"SIP-UserPhone">>, <<"N">>},
+		{<<"SIP-VideoSupport">>, <<"N">>},
+		{<<"SIP-TextSupport">>, <<"N">>},
+		{<<"SIP-T.38Support">>, <<"N">>},
+		{<<"SIP-T.38EC">>, <<"Unknown">>},
+		{<<"SIP-T.38MaxDtgrm">>, <<"-1">>},
+		{<<"SIP-Sess-Timers">>, <<"Accept">>},
+		{<<"SIP-Sess-Refresh">>, <<"uas">>},
+		{<<"SIP-Sess-Expires">>, <<"1800">>},
+		{<<"SIP-Sess-Min">>, <<"90">>},
+		{<<"SIP-RTP-Engine">>, <<"asterisk">>},
+		{<<"SIP-Encryption">>, <<"N">>},
+		{<<"SIP-DTMFmode">>, <<"rfc2833">>},
+		{<<"ToHost">>, <<>>},
+		{<<"Address-IP">>, <<"206.191.105.50">>},
+		{<<"Address-Port">>, <<"52511">>},
+		{<<"Default-addr-IP">>, <<"(null)">>},
+		{<<"Default-addr-port">>, <<"0">>},
+		{<<"Default-Username">>, <<"448">>},
+		{<<"Codecs">>, <<"0x104 (ulaw|g729)">>},
+		{<<"CodecOrder">>, <<"ulaw,g729">>},
+		{<<"Status">>, <<"OK (66 ms)">>},
+		{<<"SIP-Useragent">>, <<"Aastra 57i/3.3.1.4305">>},
+		{<<"Reg-Contact">>, <<"sip:1011@10.2.0.63:5060;transport=udp">>},
+		{<<"QualifyFreq">>, <<"60000 ms">>},
+		{<<"Parkinglot">>, <<>>},
+		{<<"SIP-Use-Reason-Header ">>, <<"N">>}
+    ]),
+    {'ok', {Payload, 'n'}};
 handle_event("mailboxcount", Props) ->
     AccountDb = proplists:get_value(<<"AccountDb">>, Props),
     Mailbox = proplists:get_value(<<"Mailbox">>, Props),

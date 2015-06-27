@@ -409,7 +409,7 @@ dial_event(OtherCallId, Call) ->
     CID = if (DestExten =:= SourceExten) or (DestExten =:= <<"*97">>) ->
         <<"Voicemail">>;
     'true' ->
-        amimulator_call:other_id_name(Call)
+        amimulator_call:id_name(Call)
     end,
 
     % {OtherCID, OtherEndpointName} = case wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], EventJObj) of
@@ -517,6 +517,17 @@ bridge_and_dial(SourceChannel, DestChannel, SourceCallId, DestCallId, SourceCID,
         {<<"Uniqueid1">>, SourceCallId},
         {<<"Uniqueid2">>, DestCallId}
     ], [
+        {<<"Event">>, <<"Bridge">>},
+        {<<"Privilege">>, <<"call,all">>},
+        {<<"Bridgestate">>, <<"Link">>},
+        {<<"Bridgetype">>, <<"core">>},
+        {<<"Channel1">>, SourceChannel},
+        {<<"Channel2">>, DestChannel},
+        {<<"Uniqueid1">>, SourceCallId},
+        {<<"Uniqueid2">>, DestCallId},
+        {<<"CallerID1">>, SourceCID},
+        {<<"CallerID2">>, DestCID}
+    ], [
         {<<"Event">>, <<"Dial">>},
         {<<"Privilege">>, <<"call,all">>},
         {<<"SubEvent">>, <<"Begin">>},
@@ -537,10 +548,10 @@ new_state(<<"inbound">>, Call) ->
     DestExten = amimulator_call:other_id_number(Call),
     EndpointName = amimulator_call:channel(Call),
 
-    OtherCID = if (DestExten =:= SourceExten) or (DestExten =:= <<"*97">>) ->
+    SourceCID = if (DestExten =:= SourceExten) or (DestExten =:= <<"*97">>) ->
         <<"Voicemail">>;
     'true' ->
-        amimulator_call:other_id_name(Call)
+        amimulator_call:id_name(Call)
     end,
 
     % OtherCID = case DestExten of
@@ -557,8 +568,8 @@ new_state(<<"inbound">>, Call) ->
         {<<"Channel">>, EndpointName},
         {<<"ChannelState">>, 4},
         {<<"ChannelStateDesc">>, <<"Ring">>},
-        {<<"CallerIDNum">>, OtherCID},
-        {<<"CallerIDName">>, OtherCID},
+        {<<"CallerIDNum">>, SourceCID},
+        {<<"CallerIDName">>, SourceCID},
         {<<"ConnectedLineNum">>, <<"">>},
         {<<"ConnectedLineName">>, <<"">>},
         {<<"Uniqueid">>, CallId}
@@ -612,7 +623,7 @@ new_state(<<"outbound">>, Call) ->
 
 busy_state(Call, CallId) ->
     EndpointName = amimulator_call:channel(Call),
-    OtherCID = amimulator_call:id_name(Call),
+    SourceCID = amimulator_call:id_name(Call),
 
     % OtherCallId = whapps_call:other_leg_call_id(WhappsCall),
     % OtherCall = ami_sm:call(OtherCallId),
@@ -642,8 +653,8 @@ busy_state(Call, CallId) ->
         {<<"Channel">>, EndpointName},
         {<<"ChannelState">>, ?STATE_UP},
         {<<"ChannelStateDesc">>, <<"Up">>},
-        {<<"CallerIDNum">>, OtherCID},
-        {<<"CallerIDName">>, OtherCID},
+        {<<"CallerIDNum">>, SourceCID},
+        {<<"CallerIDName">>, SourceCID},
         % {<<"ConnectedLineNum">>, OtherCID},
         % {<<"ConnectedLineName">>, OtherCID},
         {<<"Uniqueid">>, CallId}
