@@ -139,19 +139,17 @@ added_participants(_Cached, [], Added) ->
     Added;
 added_participants(Cached, [First|Others], Added) ->
     case find_in_cached(First, Cached) of
-        true ->
-            added_participants(Cached, Others, Added);
-        false ->
-            added_participants(Cached, Others, [wh_json:get_value(<<"Call-ID">>, First) | Added])
+        true -> added_participants(Cached, Others, Added);
+        false -> added_participants(Cached, Others, [wh_json:get_value(<<"Call-ID">>, First) | Added])
     end.
 
 added(CallIds, ConferenceNumber) when is_list(CallIds) ->
     [added(CallId, ConferenceNumber) || CallId <- CallIds];
 
 added(CallId, ConferenceNumber) ->
+    lager:debug("adding call ~s to conference", [CallId]),
     Call = ami_sm:call(CallId),
 
-    _Exten = amimulator_call:id_number(Call),
     EndpointName = amimulator_call:channel(Call),
     CallerId = amimulator_call:id_name(Call),
 

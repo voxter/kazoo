@@ -6,6 +6,14 @@
 
 -define(STATE_UP, 6).
 
+-define(CALLFLOW_CACHE, 'callflow_cache').
+-define(CF_CONFIG_CAT, <<"callflow">>).
+-define(MOD_CONFIG_CAT, <<(?CF_CONFIG_CAT)/binary, ".park">>).
+
+-define(DB_DOC_NAME, whapps_config:get(?MOD_CONFIG_CAT, <<"db_doc_name">>, <<"parked_calls">>)).
+-define(DEFAULT_RINGBACK_TM, whapps_config:get_integer(?MOD_CONFIG_CAT, <<"default_ringback_time">>, 120000)).
+-define(PARKED_CALLS_KEY(Db), {'cf_park', 'parked_calls', Db}).
+
 %%
 %% Public functions
 %%
@@ -47,31 +55,7 @@ handle_specific_event(<<"CHANNEL_ANSWER">>, EventJObj) ->
 handle_specific_event(<<"CHANNEL_BRIDGE">>, EventJObj) ->
     lager:debug("channel bridge for channel with id ~p to ~p", [wh_json:get_value(<<"Call-ID">>, EventJObj)
                                                                 ,wh_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj)]),
-    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
-    OtherCallId = wh_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj),
-
-    amimulator_call_sup:relay_bridge(CallId, OtherCallId);
-
-    % UpdaterParams = [{OtherCallId, OtherCall}, {CallId, Call}],
-    % Updaters = [
-    %     fun(Call2) -> props:set_value(<<"call">>,
-    %         whapps_call:set_other_leg_call_id(OtherCallId, WhappsCall), Call2) end,
-    %     fun(Call2) -> amimulator_util:bleg_ami_channel(Call2, undefined, UpdaterParams) end,
-    %     fun(Call2) -> amimulator_util:bleg_cid(Call2, undefined, UpdaterParams) end,
-    %     fun(Call2) ->
-    %       FlipDirection = wh_util:to_atom(whapps_call:custom_channel_var(<<"Flip-Direction-On-Bridge">>, <<"false">>, WhappsCall)) or
-    %                         (whapps_call:caller_id_name(WhappsCall) =:= <<"Device QuickCall">>),
-
-    %           if FlipDirection ->
-    %               case props:get_value(<<"direction">>, Call2) of
-    %               <<"inbound">> -> props:set_value(<<"direction">>, <<"outbound">>, Call2);
-    %               <<"outbound">> -> props:set_value(<<"direction">>, <<"inbound">>, Call2)
-    %           end;
-    %       true ->
-    %           Call2
-    %       end end
-    % ],
-    % Call2 = lists:foldl(fun(F, Call3) -> F(Call3) end, Call, Updaters),
+    amimulator_call_sup:relay_bridge(EventJObj);
 
 handle_specific_event(<<"CHANNEL_DESTROY">>, EventJObj) ->
     lager:debug("channel destroy for channel with id ~p", [wh_json:get_value(<<"Call-ID">>, EventJObj)]),
@@ -100,9 +84,13 @@ handle_specific_event(<<"DTMF">>, EventJObj) ->
     % TODO: Also need to do this with begin/end reversed
     
     amimulator_event_listener:publish_amqp_event({publish, Payload});
-    
+
 handle_specific_event(EventName, _EventJObj) ->
     lager:debug("unhandled call event ~p", [EventName]).
+
+%%
+%% Private functions
+%%
 
 maybe_create_agent_calls(Call) ->
     maybe_create_agent_calls(amimulator_call:ccv(<<"Member-Call-ID">>, Call), Call).
