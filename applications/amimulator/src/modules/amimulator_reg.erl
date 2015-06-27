@@ -118,6 +118,14 @@ handle_unregister(AccountId, EventJObj) ->
             ami_sm:delete_registration(wh_json:get_value(<<"id">>, Result)),
 
             Exten = amimulator_util:endpoint_exten(EndpointDoc),
+
+            case Exten of
+                'undefined' ->
+                    lager:debug("exten not set, doc: ~p", [EndpointDoc]),
+                    lager:debug("result ~p", [Result]);
+                _ -> 'ok'
+            end,
+
             Peer = <<"SIP/", Exten/binary>>,
             Payload = [[
                 {<<"Event">>, <<"PeerStatus">>},

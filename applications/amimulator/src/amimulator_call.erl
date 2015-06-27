@@ -8,7 +8,7 @@
 -export([update_from_other/2]).
 -export([call_id/1, set_call_id/2]).
 -export([other_leg_call_id/1, set_other_leg_call_id/2]).
--export([channel/1, set_channel/1, set_channel/2]).
+-export([channel/1, short_channel/1, set_channel/1, set_channel/2]).
 -export([other_channel/1, set_other_channel/2]).
 -export([account_id/1, account_db/1]).
 -export([authorizing_id/1, authorizing_type/1]).
@@ -68,7 +68,9 @@ from_json(JObj) ->
                                  case wh_json:get_first_defined([<<"direction">>, <<"Call-Direction">>], JObj) of
                                      <<"inbound">> ->
                                         case wh_json:get_first_defined([<<"Caller-ID-Number">>, <<"caller_id">>], JObj) of
-                                            'undefined' -> <<"@">>;
+                                            'undefined' ->
+                                                lager:debug("JObj ~p", [JObj]),
+                                                <<"@">>;
                                             CallerIdNumber -> <<CallerIdNumber/binary, "@">>
                                         end;
                                      <<"outbound">> -> <<"@">>
@@ -202,6 +204,12 @@ set_other_leg_call_id(CallId, Call) ->
 -spec channel(call()) -> api_binary().
 channel(#call{channel=Channel}) ->
     Channel.
+
+-spec short_channel(call()) -> api_binary().
+short_channel(#call{channel='undefined'}) ->
+    'undefined';
+short_channel(#call{channel=Channel}) ->
+    hd(binary:split(Channel, <<"-">>)).
 
 -spec set_channel(call()) -> call().
 -spec set_channel(api_binary(), call()) -> call().

@@ -8,6 +8,7 @@
 	     ,format_json_events/1
 	     ,index_of/2
          ,create_call/1
+         ,clear_call/1
 
          ,initial_calls/1
          % ,initial_calls2/1
@@ -89,6 +90,29 @@ index_of(Element, [_|T], Index) ->
 create_call(EventJObj) ->
     Call = amimulator_call:from_json(EventJObj),
     amimulator_call:update_from_other(ami_sm:call(amimulator_call:other_leg_call_id(Call)), Call).
+
+-spec clear_call(ne_binary()) -> boolean().
+clear_call(CallId) ->
+    case ami_sm:call(CallId) of
+        'undefined' -> 'not_found';
+        Call ->
+            Payload = [[
+                {<<"Event">>, <<"Hangup">>},
+                {<<"Privilege">>, <<"call,all">>},
+                {<<"Channel">>, amimulator_call:channel(Call)},
+                {<<"Uniqueid">>, CallId},
+                {<<"CallerIDNum">>, <<>>},
+                {<<"CallerIDName">>, <<>>},
+                {<<"ConnectedLineNum">>, <<>>},
+                {<<"ConnectedLineName">>, <<>>},
+                {<<"Cause">>, 16},
+                {<<"Cause-txt">>, <<"Normal Clearing">>}
+            ]],
+
+            amimulator_event_listener:publish_amqp_event({'publish', Payload}, amimulator_call:account_id(Call)),
+
+            ami_sm:delete_call(CallId)
+    end.
 
 %% Fetches all active calls for an account
 -spec initial_calls(ne_binary()) -> [amimulator_call:call(),...] | [].

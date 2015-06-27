@@ -2,7 +2,6 @@
 
 -export([handle/2]).
 -export([handle_event/2]).
--export([queue_stats/2]).
 -export([parse_command/1]).
 
 -include("amimulator.hrl").
@@ -711,13 +710,14 @@ queue_entries(QueueId, Number, WaitingCalls) ->
     end, [], CallIds).
 
 queue_entry(Call, Number, WaitingCallStat) ->
+    %% TODO fixed entered timestamp for other acdc nodes
     [{<<"Event">>, <<"QueueEntry">>}
      ,{<<"Queue">>, Number}
      ,{<<"Position">>, ami_sm:queue_pos(amimulator_call:acdc_queue_id(Call), amimulator_call:call_id(Call))}
      ,{<<"Channel">>, amimulator_call:channel(Call)}
      ,{<<"CallerID">>, amimulator_call:id_number(Call)}
      ,{<<"CallerIDName">>, amimulator_call:id_name(Call)}
-     ,{<<"Wait">>, wh_util:current_tstamp() - wh_json:get_value(<<"entered_timestamp">>, WaitingCallStat)}
+     ,{<<"Wait">>, wh_util:current_tstamp() - wh_json:get_value(<<"entered_timestamp">>, WaitingCallStat, 0)}
     ].
 
 waiting_call_stat(CallId, []) ->
