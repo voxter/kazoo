@@ -17,6 +17,7 @@
          ,channel_string/1
          ,endpoint_exten/1
          ,queue_number/2
+         ,maybe_leave_conference/1
 ,
    
     find_id_number/2, queue_for_number/2]).
@@ -358,6 +359,30 @@ queue_number(AccountDb, QueueId) ->
         {ok, Results} ->
             Value = wh_json:get_value(<<"value">>, hd(Results)),
             hd(Value)
+    end.
+
+maybe_leave_conference(CallId) ->
+    case ami_sm:conf_cache(CallId) of
+        'undefined' ->
+            [];
+        Cache ->
+            CallerId = props:get_value(<<"CallerIDnum">>, Cache),
+            Timestamp = props:get_value(<<"Timestamp">>, Cache),
+            {MegaSecs, Secs, _MicroSecs} = os:timestamp(),
+            Duration = (MegaSecs * 1000000 + Secs) - Timestamp,
+            [[
+                {<<"Event">>, <<"MeetmeLeave">>},
+                {<<"Privilege">>, <<"call,all">>},
+                {<<"Channel">>, props:get_value(<<"Channel">>, Cache)},
+                {<<"Uniqueid">>, props:get_value(<<"Uniqueid">>, Cache)},
+                {<<"Meetme">>, props:get_value(<<"Meetme">>, Cache)},
+                {<<"Usernum">>, props:get_value(<<"Usernum">>, Cache)},
+                {<<"CallerIDNum">>, CallerId},
+                {<<"CallerIDName">>, CallerId},
+                {<<"ConnectedLineNum">>, <<"<unknown>">>},
+                {<<"ConnectedLineName">>, <<"<unknown>">>},
+                {<<"Duration">>, Duration}
+            ]]
     end.
 
 % initial_calls2(AccountId) ->
