@@ -361,7 +361,10 @@ endpoint_exten(Endpoint) ->
     endpoint_exten(wh_json:get_value(<<"owner_id">>, Endpoint), Endpoint).
 
 endpoint_exten('undefined', Endpoint) ->
-    wh_json:get_value(<<"name">>, Endpoint);
+    case wh_json:get_value(<<"name">>, Endpoint) of
+        'undefined' -> wh_json:get_value([<<"servers">>, <<"auth">>, <<"auth_user">>], Endpoint);
+        Name -> Name
+    end;
 endpoint_exten(OwnerId, Endpoint) ->
     case couch_mgr:open_doc(wh_json:get_value(<<"pvt_account_db">>, Endpoint), OwnerId) of
         {'ok', UserDoc} -> <<(wh_json:get_value(<<"username">>, UserDoc))/binary>>;
