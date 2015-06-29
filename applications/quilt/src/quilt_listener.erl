@@ -25,8 +25,13 @@
 
 -define(BINDINGS, [
     {'self', []}
-    ,{'acdc_stats', [{'restrict_to', ['call_stat', 'status_stat']}]}
     ,{'acdc_agent', []}
+    ,{'acdc_stats', [
+        {'restrict_to', ['call_stat', 'status_stat']}
+    ]}
+    ,{'call', [
+        {'restrict_to', [<<"CHANNEL_BRIDGE">>]}
+    ]}
 ]).
 
 -define(RESPONDERS, [{

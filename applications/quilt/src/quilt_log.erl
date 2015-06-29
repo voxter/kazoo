@@ -13,20 +13,20 @@
 -include("quilt.hrl").
 
 handle_event(JObj, _Props) ->
-    file:write_file(<<"/tmp/queue_log_raw">>, io_lib:fwrite("~p\n", [JObj]), [append]),
+    file:write_file(<<"/tmp/queue_log_raw">>, io_lib:fwrite("~p\n", [JObj]), ['append']),
     Event = {wh_json:get_value(<<"Event-Category">>, JObj), wh_json:get_value(<<"Event-Name">>, JObj)},
     AccountId = wh_json:get_value(<<"Account-ID">>, JObj),
     CallId = case wh_json:get_value(<<"Call-ID">>, JObj) of
-        undefined -> wh_json:get_value(<<"Msg-ID">>, JObj);
+        'undefined' -> wh_json:get_value(<<"Msg-ID">>, JObj);
         _ -> wh_json:get_value(<<"Call-ID">>, JObj) end,
     QueueId = case wh_json:get_value(<<"Queue-ID">>, JObj) of
-        undefined -> "NONE";
+        'undefined' -> "NONE";
         _ -> wh_json:get_value(<<"Queue-ID">>, JObj) end,
     QueueName = case QueueId of
         "NONE" -> "NONE";
         _ -> lookup_queue_name(AccountId, QueueId) end,
     BridgedChannel = case wh_json:get_value(<<"Agent-ID">>, JObj) of
-        undefined -> "NONE";
+        'undefined' -> "NONE";
         _ -> lookup_agent_name(AccountId, wh_json:get_value(<<"Agent-ID">>, JObj)) end,
     case Event of
         {<<"acdc_call_stat">>, <<"waiting">>} ->
@@ -162,7 +162,7 @@ handle_event(JObj, _Props) ->
                     _ -> lookup_queue_name(AccountId, Q)
                 end,
                 case quilt_store:get(erlang:iolist_to_binary([AgentId, <<"-">>, QueueName2])) of 
-                    undefined -> % No previous record of logout
+                    'undefined' -> % No previous record of logout
                         quilt_store:put(erlang:iolist_to_binary([AgentId, <<"-">>, QueueName2]), EventName),
                         EventParams = {ChannelName, LoginTime},
                         lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
@@ -170,6 +170,34 @@ handle_event(JObj, _Props) ->
                     _ -> lager:debug("suppressing duplicate agent logoff event", [])
                 end
             end, get_queue_list_by_agent_id(AccountId, AgentId));
+
+        {<<"call_event">>,<<"CHANNEL_BRIDGE">>} ->
+            EventName = "TRANSFER", % TRANSFER(extension|context|holdtime|calltime)
+            lager:debug("detected bridge, checking for transfer for call id ~p", [CallId]),
+            case CallId of
+                'undefined' -> lager:debug("unable to retrieve call id from bridged channel", []);
+                _ ->
+                    Call = acdc_stats:find_call(CallId),
+                    case Call of
+                        'undefined' -> lager:debug("unable to find acdc call stats for call id ~p", [CallId]);
+                        _ ->
+                            DestExt = wh_json:get_value(<<"Callee-ID-Number">>, JObj),
+                            WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, Call)),
+                            TalkTime = integer_to_list(wh_json:get_value(<<"Talk-Time">>, Call)),
+                            AccountId2 = wh_json:get_value(<<"Account-ID">>, Call),
+                            QueueId2 = case wh_json:get_value(<<"Queue-ID">>, Call) of
+                                'undefined' -> "NONE";
+                                _ -> wh_json:get_value(<<"Queue-ID">>, Call) end,
+                            QueueName2 = case QueueId2 of
+                                "NONE" -> "NONE";
+                                _ -> lookup_queue_name(AccountId2, QueueId2) end,
+                            BridgedChannel2 = case wh_json:get_value(<<"Agent-ID">>, Call) of
+                                'undefined' -> "NONE";
+                                _ -> lookup_agent_name(AccountId2, wh_json:get_value(<<"Agent-ID">>, Call)) end,
+                            EventParams = {DestExt, <<"from-queue">>, WaitTime, TalkTime},
+                            write_log(AccountId2, CallId, QueueName2, BridgedChannel2, EventName, EventParams)
+                    end
+            end;
 
         {_, _} ->
             lager:debug("unhandled event: ~p", [Event])
@@ -196,18 +224,18 @@ get_agent_login_timestamp(AccountId, AgentId, Default) ->
          | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
         ]),
     case whapps_util:amqp_pool_request(Request, fun wapi_acdc_stats:publish_status_req/1, fun wapi_acdc_stats:status_resp_v/1) of
-        {ok, Result} ->
+        {'ok', Result} ->
             lager:debug("got agent logged in status response: ~p", [Result]),
             Keys = wh_json:get_keys(wh_json:get_value([<<"Agents">>, AgentId], Result)),
             SortedKeys = lists:sort(fun(A, B) -> list_to_integer(binary_to_list(A)) =< list_to_integer(binary_to_list(B)) end, Keys),
             lists:last(SortedKeys);
-        {error, E} ->
+        {'error', E} ->
             lager:debug("agent login timestamp query failed: ~p", [E]),
             list_to_binary(integer_to_list(Default))
     end.
 
 get_queue_list_by_agent_id(AccountId, AgentId) ->
-    {ok, Result} = couch_mgr:get_results(wh_util:format_account_id(AccountId, encoded), <<"agents/crossbar_listing">>, [{'key', AgentId}]),
+    {'ok', Result} = couch_mgr:get_results(wh_util:format_account_id(AccountId, 'encoded'), <<"agents/crossbar_listing">>, [{'key', AgentId}]),
     wh_json:get_value([<<"value">>, <<"queues">>], hd(Result)).
 
 % lookup_agent_name(AccountId, AgentId) ->
@@ -216,12 +244,12 @@ get_queue_list_by_agent_id(AccountId, AgentId) ->
 %     <<"Local/", (wh_json:get_value(<<"username">>, Result))/binary, "@from-queue/n">>.
 
 lookup_agent_name(AccountId, AgentId) ->
-    AccountDb = wh_util:format_account_id(AccountId, encoded),
-    {ok, Result} = couch_mgr:open_doc(AccountDb, AgentId),
+    AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
+    {'ok', Result} = couch_mgr:open_doc(AccountDb, AgentId),
     <<(wh_json:get_value(<<"first_name">>, Result))/binary, " ", (wh_json:get_value(<<"last_name">>, Result))/binary>>.
 
 lookup_queue_name(AccountId, QueueId) ->
-    case couch_mgr:get_results(wh_util:format_account_id(AccountId, encoded), <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
+    case couch_mgr:get_results(wh_util:format_account_id(AccountId, 'encoded'), <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
         {'error', E} ->
             lager:debug("could not find queue number for queue ~p (~p)", [QueueId, E]),
             "NONE";
@@ -237,22 +265,25 @@ write_log(AccountId, CallId, QueueName, BridgedChannel, Event) ->
     {MegaSec, Sec, _} = os:timestamp(),
     Timestamp = MegaSec * 1000000 + Sec,    
     lager:debug("queue_log event: ~p|~s|~s|~s|~s|", [Timestamp, CallId, QueueName, BridgedChannel, Event]),
-    file:write_file(LogFile, io_lib:fwrite("~p|~s|~s|~s|~s|\n", [Timestamp, CallId, QueueName, BridgedChannel, Event]), [append]).
+    file:write_file(LogFile, io_lib:fwrite("~p|~s|~s|~s|~s|\n", [Timestamp, CallId, QueueName, BridgedChannel, Event]), ['append']).
 
 write_log(AccountId, CallId, QueueName, BridgedChannel, Event, EventParams) ->
     LogFile = "/tmp/queue_log." ++ binary_to_list(AccountId),
     {MegaSec, Sec, _} = os:timestamp(),
     Timestamp = MegaSec * 1000000 + Sec,
     case EventParams of
+        {Param1, Param2, Param3, Param4} -> 
+            lager:debug("fwrite params ~p|~s|~s|~s|~s|~s|~s|~s|~s", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1, Param2, Param3, Param4]),
+            file:write_file(LogFile, io_lib:fwrite("~p|~s|~s|~s|~s|~s|~s|~s|~s\n", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1, Param2, Param3, Param4]), ['append']);
         {Param1, Param2, Param3} -> 
             lager:debug("fwrite params ~p|~s|~s|~s|~s|~s|~s|~s", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1, Param2, Param3]),
-            file:write_file(LogFile, io_lib:fwrite("~p|~s|~s|~s|~s|~s|~s|~s\n", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1, Param2, Param3]), [append]);
+            file:write_file(LogFile, io_lib:fwrite("~p|~s|~s|~s|~s|~s|~s|~s\n", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1, Param2, Param3]), ['append']);
         {Param1, Param2} -> 
             lager:debug("fwrite params ~p|~s|~s|~s|~s|~s|~s", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1, Param2]),
-            file:write_file(LogFile, io_lib:fwrite("~p|~s|~s|~s|~s|~s|~s\n", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1, Param2]), [append]);
+            file:write_file(LogFile, io_lib:fwrite("~p|~s|~s|~s|~s|~s|~s\n", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1, Param2]), ['append']);
         {Param1} -> 
             lager:debug("fwrite params ~p|~s|~s|~s|~s|~s", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1]),
-            file:write_file(LogFile, io_lib:fwrite("~p|~s|~s|~s|~s|~s\n", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1]), [append]);
+            file:write_file(LogFile, io_lib:fwrite("~p|~s|~s|~s|~s|~s\n", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1]), ['append']);
         _ -> 
             lager:debug("unexpected event parameters: ~p", [EventParams])
     end.
