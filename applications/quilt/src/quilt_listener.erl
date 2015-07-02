@@ -40,6 +40,7 @@
         ,{<<"acdc_status_stat">>, <<"*">>}
         ,{<<"agent">>, <<"login_queue">>}
         ,{<<"agent">>, <<"logout_queue">>}
+        ,{<<"call_event">>, <<"CHANNEL_BRIDGE">>}
     ]
 }]).
 
