@@ -108,7 +108,7 @@ handle_specific_event({<<"acdc_call_stat">>, <<"handled">>}, JObj) ->
     lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
     write_log(AccountId, CallId, QueueName, AgentName, EventName, EventParams);
 
-handle_specific_event({<<"call_event">>,<<"CHANNEL_BRIDGE">>}, JObj) ->
+handle_specific_event({<<"call_event">>, <<"CHANNEL_BRIDGE">>}, JObj) ->
     AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
     CallId = wh_json:get_value(<<"Call-ID">>, JObj),
     Call = acdc_stats:find_call(CallId),
@@ -116,7 +116,7 @@ handle_specific_event({<<"call_event">>,<<"CHANNEL_BRIDGE">>}, JObj) ->
         undefined -> wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Owner-ID">>], JObj);
         _ -> wh_json:get_value(<<"Agent-ID">>, Call)
     end,
-    lager:debug("detected bridge, checking for transfer (account: ~p, agent: ~p, call-id: ~p)", [AccountId, AgentId, CallId]),
+    lager:debug("detected channel bridge, checking for transfer (account: ~p, agent: ~p, call-id: ~p)", [AccountId, AgentId, CallId]),
     StoredState = quilt_store:get(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
     case StoredState of
         undefined -> lager:debug("unable to find any existing stored state for this call, ignoring...", []);
@@ -140,6 +140,15 @@ handle_specific_event({<<"call_event">>,<<"CHANNEL_BRIDGE">>}, JObj) ->
                     quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
                     quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]), {"OUTBOUND", StoredCallId})
             end;
+        {"TRANSFER_CANCELLED", StoredCallId} -> % Agent previously cancelled a transfer and is connected to a queue member/caller, set to OUTBOUND state
+            case wh_json:get_value(<<"Other-Leg-Call-ID">>, JObj) of
+                StoredCallId -> % Member to agent bridge
+                    lager:debug("ignoring member to agent bridge: ~p", [StoredState]);
+                _ ->
+                    lager:debug("updating call state to: ~p", [{"OUTBOUND", StoredCallId}]),
+                    quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
+                    quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]), {"OUTBOUND", StoredCallId})
+            end;
         {"OUTBOUND", StoredCallId} ->
             case wh_json:get_value(<<"Other-Leg-Call-ID">>, JObj) of
                 StoredCallId -> % Member to agent bridge
@@ -150,6 +159,27 @@ handle_specific_event({<<"call_event">>,<<"CHANNEL_BRIDGE">>}, JObj) ->
         _ -> % Orphaned state detected
             lager:debug("orphaned state detected, removing: ~p", [StoredState]),
             quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]))
+    end;
+
+handle_specific_event({<<"call_event">>, <<"CHANNEL_DESTROY">>}, JObj) ->
+    AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
+    AgentId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Owner-ID">>], JObj),
+    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    lager:debug("detected channel destroy, checking for cancelled transfer (account: ~p, agent: ~p, call-id: ~p)", [AccountId, AgentId, CallId]),
+    StoredState = quilt_store:get(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
+    case StoredState of
+        {"OUTBOUND", StoredCallId} ->
+            TransferHistory = wh_json:get_value([<<"Transfer-History">>], JObj),
+            lager:debug("retrieving transfer history from call channel variables: ~p", [TransferHistory]),
+            case TransferHistory of
+                undefined ->
+                    NewState = {"TRANSFER_CANCELLED", StoredCallId},
+                    lager:debug("transfer was cancelled: ~p", [NewState]),
+                    quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
+                    quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]), NewState);
+                _ -> lager:debug("unable to find any transfer history for this call, ignoring...", [])
+            end;
+        _ -> lager:debug("unable to find any existing stored state for this call, ignoring...", [])
     end;
 
 handle_specific_event({<<"acdc_status_stat">>, <<"wrapup">>}, JObj) ->

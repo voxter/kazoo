@@ -30,7 +30,7 @@
         {'restrict_to', ['call_stat', 'status_stat']}
     ]}
     ,{'call', [
-        {'restrict_to', [<<"CHANNEL_BRIDGE">>]}
+        {'restrict_to', [<<"CHANNEL_BRIDGE">>, <<"CHANNEL_DESTROY">>]}
     ]}
 ]).
 
@@ -41,6 +41,7 @@
         ,{<<"agent">>, <<"login_queue">>}
         ,{<<"agent">>, <<"logout_queue">>}
         ,{<<"call_event">>, <<"CHANNEL_BRIDGE">>}
+        ,{<<"call_event">>, <<"CHANNEL_DESTROY">>}
     ]
 }]).
 
