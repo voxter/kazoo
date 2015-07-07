@@ -5,15 +5,18 @@
 %%% @end
 %%% @contributors
 %%%   James Aimonetti
+%%%   Daniel Finke
 %%%-------------------------------------------------------------------
 -module(wapi_metaflow).
 
 -export([req/1, req_v/1]).
+-export([update/1, update_v/1]).
 
 -export([bind_q/2, unbind_q/2]).
 -export([declare_exchanges/0]).
 
 -export([publish_req/1, publish_req/2]).
+-export([publish_update/1, publish_update/2]).
 
 -include_lib("whistle/include/wh_api.hrl").
 
@@ -28,6 +31,17 @@
 
 -define(METAFLOW_REQ_ROUTING_KEY(CallId, Action)
         ,<<"metaflow.", (amqp_util:encode(CallId))/binary, ".", (Action)/binary>>
+       ).
+
+-define(METAFLOW_UPDATE_HEADERS, [<<"Call-ID">>, <<"Data">>]).
+-define(OPTIONAL_METAFLOW_UPDATE_HEADERS, []).
+-define(METAFLOW_UPDATE_VALUES, [{<<"Event-Category">>, <<"metaflow">>}
+                                 ,{<<"Event-Name">>, <<"update">>}
+                                ]).
+-define(METAFLOW_UPDATE_TYPES, []).
+
+-define(METAFLOW_UPDATE_ROUTING_KEY(CallId)
+        ,<<"metaflow.", (amqp_util:encode(CallId))/binary, ".update">>
        ).
 
 %%--------------------------------------------------------------------
@@ -50,17 +64,34 @@ req_v(Prop) when is_list(Prop) ->
     wh_api:validate(Prop, ?METAFLOW_REQ_HEADERS, ?METAFLOW_REQ_VALUES, ?METAFLOW_REQ_TYPES);
 req_v(JObj) -> req_v(wh_json:to_proplist(JObj)).
 
+-spec update(wh_json:object() | wh_proplist()) ->
+                 {'ok', iolist()} |
+                 {'error', string()}.
+update(Prop) when is_list(Prop) ->
+    case update_v(Prop) of
+        'true' -> wh_api:build_message(Prop, ?METAFLOW_UPDATE_HEADERS, ?OPTIONAL_METAFLOW_UPDATE_HEADERS);
+        'false' -> {'error', "Proplist failed validation for metaflow_update"}
+    end;
+update(JObj) -> update(wh_json:to_proplist(JObj)).
+
+-spec update_v(wh_json:object() | wh_proplist()) -> boolean().
+update_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?METAFLOW_UPDATE_HEADERS, ?METAFLOW_UPDATE_VALUES, ?METAFLOW_UPDATE_TYPES);
+update_v(JObj) -> update_v(wh_json:to_proplist(JObj)).
+
 -spec bind_q(ne_binary(), wh_proplist()) -> 'ok'.
 bind_q(Queue, Props) ->
     CallId = props:get_value('callid', Props),
     Action = props:get_value('action', Props, <<"*">>),
-    amqp_util:bind_q_to_whapps(Queue, ?METAFLOW_REQ_ROUTING_KEY(CallId, Action)).
+    amqp_util:bind_q_to_whapps(Queue, ?METAFLOW_REQ_ROUTING_KEY(CallId, Action)),
+    amqp_util:bind_q_to_whapps(Queue, ?METAFLOW_UPDATE_ROUTING_KEY(CallId)).
 
 -spec unbind_q(ne_binary(), wh_proplist()) -> 'ok'.
 unbind_q(Queue, Props) ->
     CallId = props:get_value('callid', Props),
     Action = props:get_value('action', Props, <<"*">>),
-    amqp_util:unbind_q_from_whapps(Queue, ?METAFLOW_REQ_ROUTING_KEY(CallId, Action)).
+    amqp_util:unbind_q_from_whapps(Queue, ?METAFLOW_REQ_ROUTING_KEY(CallId, Action)),
+    amqp_util:unbind_q_from_whapps(Queue, ?METAFLOW_UPDATE_ROUTING_KEY(CallId)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -78,6 +109,14 @@ publish_req(JObj) ->
 publish_req(Req, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(Req, ?METAFLOW_REQ_VALUES, fun ?MODULE:req/1),
     amqp_util:whapps_publish(?METAFLOW_REQ_ROUTING_KEY(call_id(Req), action(Req)), Payload, ContentType).
+
+-spec publish_update(api_terms()) -> 'ok'.
+-spec publish_update(api_terms(), ne_binary()) -> 'ok'.
+publish_update(JObj) ->
+    publish_update(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_update(Req, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(Req, ?METAFLOW_UPDATE_VALUES, fun ?MODULE:update/1),
+    amqp_util:whapps_publish(?METAFLOW_UPDATE_ROUTING_KEY(call_id(Req)), Payload, ContentType).
 
 action([_|_]=API) ->
     props:get_value(<<"Action">>, API);
