@@ -14,7 +14,6 @@
 -export([start_fsm/2
          ,event/4
          ,transfer_to/2
-         ,update_numbers/3
         ]).
 
 %% gen_fsm callbacks
@@ -124,12 +123,6 @@ transfer_to(Call, Leg) ->
                                  ,{'transfer_to', Call, Leg}
                                 ).
 
-update_numbers(FSM, CallId, NewNumbers) ->
-    lager:debug("Trying to update FSM ~p numbers to ~p", [FSM, NewNumbers]),
-    gen_fsm:send_all_state_event(FSM
-                                 ,{'update_numbers', CallId, NewNumbers}
-                                ).
-
 %%%===================================================================
 %%% gen_fsm callbacks
 %%%===================================================================
@@ -221,6 +214,14 @@ handle_event(?EVENT(CallId, <<"metaflow_exe">>, Metaflow), StateName, #state{cal
     _Pid = proc_lib:spawn('konami_code_exe', 'handle', [Metaflow, Call]),
     lager:debug("recv metaflow exe request for ~s, processing in ~p", [CallId, _Pid]),
     {'next_state', StateName, State};
+handle_event(?EVENT(CallId, <<"update">>, JObj), StateName, #state{call_id=CallId}=State) ->
+    NewNumbers = wh_json:get_value(<<"Data">>, JObj),
+    lager:debug("trying to update FSM ~p numbers to ~p", [self(), NewNumbers]),
+    {'next_state', StateName, State#state{numbers=NewNumbers
+                                     ,digit_timeout=0
+                                    }};
+handle_event(?EVENT(_CallId, <<"update">>, _JObj), StateName, State) ->
+    {'next_state', StateName, State};
 handle_event(?EVENT(_CallId, <<"CHANNEL_ANSWER">>, Evt)
              ,StateName
              ,State
@@ -258,12 +259,6 @@ handle_event(?EVENT(OtherLeg, <<"CHANNEL_DESTROY">>, _Evt)
              ,#state{other_leg=OtherLeg}=State
             ) ->
     {'next_state', StateName, handle_channel_destroy(State, OtherLeg)};
-handle_event({'update_numbers', CallId, NewNumbers}
-             ,StateName
-             ,#state{call_id=CallId
-                    }=State
-            ) ->
-    {'next_state', StateName, State#state{numbers=NewNumbers,digit_timeout=0}};
 handle_event(?EVENT(_UUID, _EventName, _Evt)
              ,StateName
              ,#state{call_id=_CallId

@@ -16,6 +16,7 @@
          ,handle_call_event/2
          ,handle_originate_event/2
          ,handle_metaflow_req/2
+         ,handle_metaflow_update/2
          ,handle_konami/2
          ,queue_name/0
          ,bindings/0, bindings/1
@@ -59,6 +60,9 @@
                       }
                      ,{{?MODULE, 'handle_metaflow_req'}
                        ,[{<<"metaflow">>, <<"req">>}]
+                      }
+                     ,{{?MODULE, 'handle_metaflow_update'}
+                       ,[{<<"metaflow">>, <<"update">>}]
                       }
                      ,{{?MODULE, 'handle_konami'}
                        ,[{?APP_NAME, <<"*">>}]
@@ -237,6 +241,13 @@ handle_metaflow_req(JObj, _Props) ->
               }
             ]),
     relay_to_fsm(CallId, <<"metaflow_exe">>, Evt).
+
+-spec handle_metaflow_update(wh_json:object(), wh_proplist()) -> any().
+handle_metaflow_update(JObj, _Props) ->
+    'true' = wapi_metaflow:update_v(JObj),
+
+    CallId = kz_call_event:call_id(JObj),
+    relay_to_fsm(CallId, <<"update">>, JObj).
 
 -spec handle_konami(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_konami(JObj, _Props) ->
