@@ -26,6 +26,7 @@
                 ,call_ids = [] :: list()
                 ,answered :: api_binary()
                 ,conference_call_id :: api_binary()
+                ,early_bridge_payload :: wh_json:object() | 'undefined'
                }).
 
 %%
@@ -136,20 +137,29 @@ created({'add_initial', Call}, #state{call_ids=CallIds}=State) ->
         _ -> {'next_state', 'created', State#state{call_ids = add_call_id(CallId, CallIds)}}
     end;
 
-created({'answer', CallId}, State) ->
+created({'answer', CallId}, #state{early_bridge_payload=EventJObj}=State) ->
     Call = ami_sm:call(CallId),
     Call2 = amimulator_call:set_answered('true', Call),
 
     ami_sm:answer(amimulator_call:channel(Call2), CallId),
     ami_sm:update_call(Call2),
     busy_state(Call2, CallId),
+    maybe_dial_event(Call),
 
     lager:debug("moving to answered for call ~p", [CallId]),
+
+    case EventJObj of
+        'undefined' -> 'ok';
+        _ ->
+            lager:debug("using early bridge payload right now"),
+            bridge(self(), EventJObj)
+    end,
+
     {'next_state', 'answered', State#state{answered=CallId}};
 
-created({'bridge', _}, State) ->
-    lager:debug("call using offnet"),
-    {'next_state', 'created', State};
+created({'bridge', EventJObj}, State) ->
+    lager:debug("early bridge; probably offnet call"),
+    {'next_state', 'created', State#state{early_bridge_payload=EventJObj}};
 
 created({'destroy', Reason, CallId}, #state{monitored_channel=Channel
                                             ,call_ids=CallIds
@@ -283,12 +293,24 @@ answered_bridge(Call, OtherCall, State) ->
             lager:debug("bridge, updating answered id to ~p", [CallId]),
             case ami_sm:call(<<CallId/binary, "-queue;2">>) of
                 'undefined' ->
-                    Call2 = amimulator_call:update_from_other(OtherCall, Call),
-                    OtherCall2 = amimulator_call:update_from_other(Call, OtherCall),
+                    FlipDir = amimulator_call:ccv(<<"Flip-Direction-On-Bridge">>, Call) =:= <<"true">> orelse
+                        amimulator_call:ccv(<<"Device-QuickCall">>, Call) =:= <<"true">>,
+                    RevDirCall = case FlipDir of
+                        'true' ->
+                            Direction = case amimulator_call:direction(Call) of
+                                <<"inbound">> -> <<"outbound">>;
+                                <<"outbound">> -> <<"inbound">>
+                            end,
+                            amimulator_call:delete_ccv(<<"Device-QuickCall">>,
+                                amimulator_call:delete_ccv(<<"Flip-Direction-On-Bridge">>, amimulator_call:set_direction(Direction, Call)));
+                        'false' -> Call
+                    end,
+                    Call2 = amimulator_call:update_from_other(OtherCall, RevDirCall),
+                    OtherCall2 = amimulator_call:update_from_other(RevDirCall, OtherCall),
                     ami_sm:update_call(Call2),
                     ami_sm:update_call(OtherCall2),
 
-                    maybe_bridge_and_dial(Call2, OtherCall2),
+                    maybe_bridge(Call2, OtherCall2),
                     {'next_state', 'answered', State#state{answered=CallId}};
                 LocalCall2 ->
                     MemberCall = ami_sm:call(OtherCallId),
@@ -303,7 +325,7 @@ answered_bridge(Call, OtherCall, State) ->
                     ami_sm:update_call(MemberCall3),
                     ami_sm:update_call(Call3),
 
-                    maybe_bridge_and_dial(Call3, LocalCall2),
+                    maybe_bridge(Call3, LocalCall2),
                     {'next_state', 'answered', State#state{answered=CallId}}
             end
     end.
@@ -328,7 +350,7 @@ new_channel_event(<<"inbound">>, Call) ->
     amimulator_event_listener:publish_amqp_event({'publish', Payload}, amimulator_call:account_id(Call));
 new_channel_event(<<"outbound">>, Call) ->
     CallId = amimulator_call:call_id(Call),
-    SourceCID = amimulator_call:other_id_name(Call),
+    SourceCID = amimulator_call:id_name(Call),
     EndpointName = amimulator_call:channel(Call),
 
     % case EndpointName of
@@ -353,6 +375,8 @@ new_channel_payload(Channel, CallerIDNum, CallerIDName, Exten, Uniqueid) ->
         {<<"ChannelStateDesc">>, <<"Down">>},
         {<<"CallerIDNum">>, CallerIDNum},
         {<<"CallerIDName">>, CallerIDName},
+        {<<"ConnectedLineNum">>, <<>>},
+        {<<"ConnectedLineName">>, <<>>},
         {<<"AccountCode">>, <<"">>}, %% Always blank
         {<<"Exten">>, Exten},
         {<<"Context">>, <<"from-internal">>},
@@ -471,7 +495,7 @@ dial_event(OtherCallId, Call) ->
             end
     end.
 
-maybe_bridge_and_dial(Call, OtherCall) ->
+maybe_bridge(Call, OtherCall) ->
     CallId = amimulator_call:call_id(Call),
     OtherCallId = amimulator_call:call_id(OtherCall),
     Channel1 = amimulator_call:channel(Call),
@@ -486,9 +510,9 @@ maybe_bridge_and_dial(Call, OtherCall) ->
 
         Payload = case amimulator_call:direction(Call) of
             <<"inbound">> ->
-                bridge_and_dial(Channel1, Channel2, CallId, OtherCallId, SourceCID, OtherCID);
+                bridge(Channel1, Channel2, CallId, OtherCallId, SourceCID, OtherCID);
             <<"outbound">> ->
-                bridge_and_dial(Channel2, Channel1, OtherCallId, CallId, OtherCID, SourceCID)
+                bridge(Channel2, Channel1, OtherCallId, CallId, OtherCID, SourceCID)
         end,
         amimulator_event_listener:publish_amqp_event({publish, Payload}, amimulator_call:account_id(Call))
     end.
@@ -509,14 +533,8 @@ dial(Channel, Destination, CallerIDNum, CallerIDName, ConnectedLineNum, Connecte
         {<<"Dialstring">>, Dialstring}
     ].
 
-bridge_and_dial(SourceChannel, DestChannel, SourceCallId, DestCallId, SourceCID, DestCID) ->
-    [[
-        {<<"Event">>, <<"Link">>},
-        {<<"Channel1">>, SourceChannel},
-        {<<"Channel2">>, DestChannel},
-        {<<"Uniqueid1">>, SourceCallId},
-        {<<"Uniqueid2">>, DestCallId}
-    ], [
+bridge(SourceChannel, DestChannel, SourceCallId, DestCallId, SourceCID, DestCID) ->
+    [
         {<<"Event">>, <<"Bridge">>},
         {<<"Privilege">>, <<"call,all">>},
         {<<"Bridgestate">>, <<"Link">>},
@@ -527,20 +545,7 @@ bridge_and_dial(SourceChannel, DestChannel, SourceCallId, DestCallId, SourceCID,
         {<<"Uniqueid2">>, DestCallId},
         {<<"CallerID1">>, SourceCID},
         {<<"CallerID2">>, DestCID}
-    ], [
-        {<<"Event">>, <<"Dial">>},
-        {<<"Privilege">>, <<"call,all">>},
-        {<<"SubEvent">>, <<"Begin">>},
-        {<<"Channel">>, SourceChannel},
-        {<<"Destination">>, DestChannel},
-        {<<"CallerIDNum">>, SourceCID},
-        {<<"CallerIDName">>, SourceCID},
-        {<<"ConnectedLineNum">>, DestCID},
-        {<<"ConnectedLineName">>, DestCID},
-        {<<"UniqueID">>, SourceCallId},
-        {<<"DestUniqueid">>, DestCallId},
-        {<<"Dialstring">>, DestCID}
-    ]].
+    ].
 
 new_state(<<"inbound">>, Call) ->
     CallId = amimulator_call:call_id(Call),
@@ -570,13 +575,14 @@ new_state(<<"inbound">>, Call) ->
         {<<"ChannelStateDesc">>, <<"Ring">>},
         {<<"CallerIDNum">>, SourceCID},
         {<<"CallerIDName">>, SourceCID},
-        {<<"ConnectedLineNum">>, <<"">>},
-        {<<"ConnectedLineName">>, <<"">>},
+        {<<"ConnectedLineNum">>, DestExten},
+        {<<"ConnectedLineName">>, DestExten},
         {<<"Uniqueid">>, CallId}
     ],
     amimulator_event_listener:publish_amqp_event({'publish', Payload}, amimulator_call:account_id(Call));
 new_state(<<"outbound">>, Call) ->
     CallId = amimulator_call:call_id(Call),
+    SourceCID = amimulator_call:id_name(Call),
     OtherCID = amimulator_call:other_id_name(Call),
     EndpointName = amimulator_call:channel(Call),
 
@@ -613,8 +619,8 @@ new_state(<<"outbound">>, Call) ->
         {<<"Channel">>, EndpointName},
         {<<"ChannelState">>, 5},
         {<<"ChannelStateDesc">>, <<"Ringing">>},
-        {<<"CallerIDNum">>, OtherCID},
-        {<<"CallerIDName">>, OtherCID},
+        {<<"CallerIDNum">>, SourceCID},
+        {<<"CallerIDName">>, SourceCID},
         {<<"ConnectedLineNum">>, OtherCID},
         {<<"ConnectedLineName">>, OtherCID},
         {<<"Uniqueid">>, CallId}
@@ -624,6 +630,7 @@ new_state(<<"outbound">>, Call) ->
 busy_state(Call, CallId) ->
     EndpointName = amimulator_call:channel(Call),
     SourceCID = amimulator_call:id_name(Call),
+    OtherCID = amimulator_call:other_id_name(Call),
 
     % OtherCallId = whapps_call:other_leg_call_id(WhappsCall),
     % OtherCall = ami_sm:call(OtherCallId),
@@ -655,8 +662,8 @@ busy_state(Call, CallId) ->
         {<<"ChannelStateDesc">>, <<"Up">>},
         {<<"CallerIDNum">>, SourceCID},
         {<<"CallerIDName">>, SourceCID},
-        % {<<"ConnectedLineNum">>, OtherCID},
-        % {<<"ConnectedLineName">>, OtherCID},
+        {<<"ConnectedLineNum">>, OtherCID},
+        {<<"ConnectedLineName">>, OtherCID},
         {<<"Uniqueid">>, CallId}
     ],
     amimulator_event_listener:publish_amqp_event({publish, Payload}, amimulator_call:account_id(Call)).
