@@ -89,7 +89,9 @@ index_of(Element, [_|T], Index) ->
 -spec create_call(wh_json:object()) -> amimulator_call:call().
 create_call(EventJObj) ->
     Call = amimulator_call:from_json(EventJObj),
-    amimulator_call:update_from_other(ami_sm:call(amimulator_call:other_leg_call_id(Call)), Call).
+    UpdatedCall = amimulator_call:update_from_other(ami_sm:call(amimulator_call:other_leg_call_id(Call)), Call),
+    lager:debug("call ~p", [UpdatedCall]),
+    UpdatedCall.
 
 -spec clear_call(ne_binary()) -> boolean().
 clear_call(CallId) ->
@@ -362,7 +364,9 @@ endpoint_exten(Endpoint) ->
 
 endpoint_exten('undefined', Endpoint) ->
     case wh_json:get_value(<<"name">>, Endpoint) of
-        'undefined' -> wh_json:get_value([<<"servers">>, <<"auth">>, <<"auth_user">>], Endpoint);
+        'undefined' ->
+            Server = hd(wh_json:get_value(<<"servers">>, Endpoint)),
+            wh_json:get_value([<<"auth">>, <<"auth_user">>], Server);
         Name -> Name
     end;
 endpoint_exten(OwnerId, Endpoint) ->
