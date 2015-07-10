@@ -78,6 +78,8 @@ dial(Props) ->
                ,{<<"Timeout">>, <<"30">>}
                ,{<<"Ignore-Early-Media">>, <<"true">>}
                ,{<<"Media">>, <<"process">>}
+               ,{<<"Caller-ID-Name">>, <<"Web Dial ", DestExten/binary>>}
+               ,{<<"Caller-ID-Number">>, DestExten}
                ,{<<"Outbound-Caller-ID-Name">>, <<"Web Dial ", DestExten/binary>>}
                ,{<<"Outbound-Caller-ID-Number">>, DestExten}
                ,{<<"Outbound-Callee-ID-Name">>, <<"Outbound Call">>}
