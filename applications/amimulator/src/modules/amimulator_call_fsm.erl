@@ -111,6 +111,7 @@ pre_create({'new_call', Call}, #state{call_ids=CallIds}=State) ->
     CallId = amimulator_call:call_id(Call),
 
     new_channel_event(amimulator_call:direction(Call), Call),
+    maybe_newexten(amimulator_call:direction(Call), Call),
     maybe_dial_event(Call),
     extension_status(Call),
     new_state(amimulator_call:direction(Call), Call),
@@ -259,8 +260,10 @@ maybe_update_other_call_dest(_, 'undefined', _) ->
 maybe_update_other_call_dest(CallId, CallId, _) ->
     'ok';
 maybe_update_other_call_dest(_, OtherCallId, Call) ->
-    OtherCall = ami_sm:call(OtherCallId),
-    ami_sm:update_call(amimulator_call:update_from_other(Call, OtherCall)).
+    case ami_sm:call(OtherCallId) of
+        'undefined' -> 'ok';
+        OtherCall -> ami_sm:update_call(amimulator_call:update_from_other(Call, OtherCall))
+    end.
 
 add_call_id(CallId, CallIds) ->
     NoDupes = delete_call_id(CallId, CallIds),
@@ -346,7 +349,7 @@ new_channel_event(<<"inbound">>, Call) ->
         amimulator_call:id_name(Call)
     end,
 
-    Payload = new_channel_payload(EndpointName, SourceCID, SourceCID, DestExten, CallId),
+    Payload = new_channel_payload(EndpointName, amimulator_call:id_number(Call), SourceCID, DestExten, CallId),
     amimulator_event_listener:publish_amqp_event({'publish', Payload}, amimulator_call:account_id(Call));
 new_channel_event(<<"outbound">>, Call) ->
     CallId = amimulator_call:call_id(Call),
@@ -361,7 +364,7 @@ new_channel_event(<<"outbound">>, Call) ->
     %         ok
     % end,
 
-    Payload = new_channel_payload(EndpointName, SourceCID, SourceCID, CallId),
+    Payload = new_channel_payload(EndpointName, amimulator_call:id_number(Call), SourceCID, CallId),
     amimulator_event_listener:publish_amqp_event({'publish', Payload}, amimulator_call:account_id(Call)).
 
 new_channel_payload(Channel, CallerIDNum, CallerIDName, Uniqueid) ->
@@ -400,6 +403,21 @@ extension_status(Call) ->
     ],
     amimulator_event_listener:publish_amqp_event({'publish', Payload}, amimulator_call:account_id(Call)).
 
+maybe_newexten(<<"inbound">>, Call) ->
+    Payload = [{<<"Event">>, <<"Newexten">>}
+               ,{<<"Privilege">>, <<"dialplan,all">>}
+               ,{<<"Channel">>, amimulator_call:channel(Call)}
+               ,{<<"Context">>, <<"from-internal">>}
+               ,{<<"Extension">>, amimulator_call:other_id_number(Call)}
+               ,{<<"Priority">>, 1}
+               ,{<<"Application">>, <<"Macro">>}
+               ,{<<"AppData">>, <<"user-callerid,LIMIT,">>}
+               ,{<<"Uniqueid">>, amimulator_call:call_id(Call)}
+              ],
+    amimulator_event_listener:publish_amqp_event({'publish', Payload}, amimulator_call:account_id(Call));
+maybe_newexten(_, _) ->
+    'ok'.
+
 maybe_dial_event(Call) ->
     dial_event(amimulator_call:other_leg_call_id(Call), Call).
 
@@ -417,7 +435,7 @@ dial_event('undefined', Call) ->
 
     case amimulator_call:direction(Call) of
         <<"inbound">> ->
-            Payload = dial(EndpointName, 'undefined', SourceCID, SourceCID, DestCID, DestCID, CallId, 'undefined', DestCID),
+            Payload = dial(EndpointName, 'undefined', SourceExten, SourceCID, DestExten, DestCID, CallId, 'undefined', DestCID),
             amimulator_event_listener:publish_amqp_event({'publish', Payload}, amimulator_call:account_id(Call));
         _ -> 'ok'
     end;
@@ -436,62 +454,21 @@ dial_event(OtherCallId, Call) ->
         amimulator_call:id_name(Call)
     end,
 
-    % {OtherCID, OtherEndpointName} = case wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], EventJObj) of
-    %     undefined ->
-    %         % case OtherCallId of
-    %         %     CallId ->
-    %         %         {props:get_value(<<"bleg_cid">>, Call), props:get_value(<<"bleg_ami_channel">>, Call)};
-    %         %     undefined ->
-    %         %         {props:get_value(<<"bleg_cid">>, Call), props:get_value(<<"bleg_ami_channel">>, Call)};
-    %         %     _ ->
-    %         %         {props:get_value(<<"aleg_cid">>, OtherCall), props:get_value(<<"aleg_ami_channel">>, OtherCall)}
-    %         % end;
-    %         {props:get_value(<<"bleg_cid">>, Call), props:get_value(<<"bleg_ami_channel">>, Call)};
-    %     QueueId ->
-    %         case amimulator_util:find_id_number(
-    %             QueueId,
-    %             whapps_call:account_db(WhappsCall)
-    %         ) of
-       %          {error, E} ->
-       %            lager:debug("Could not find queue extension ~p", [E]),
-       %            case OtherCallId of
-          %               CallId ->
-          %                   {props:get_value(<<"bleg_cid">>, Call), props:get_value(<<"bleg_ami_channel">>, Call)};
-          %               undefined ->
-          %                   {props:get_value(<<"bleg_cid">>, Call), props:get_value(<<"bleg_ami_channel">>, Call)};
-          %               _ ->
-          %                   {props:get_value(<<"aleg_cid">>, OtherCall), props:get_value(<<"aleg_ami_channel">>, OtherCall)}
-          %           end;
-       %          {ok, Number} ->
-       %            {<<"Queue ", Number/binary, " Call">>, <<>>}
-    %         end
-    % end,
-
     case OtherCall of
-        'undefined' ->
-            lager:debug("couldn't find other call"),
-            lager:debug("this call: ~p", [Call]);
+        'undefined' -> lager:debug("couldn't find other call, probably hung up quickly");
         _ ->
-            'ok'
-    end,
-
-    %% We need to publish only if the exten matches originally dialed one
-    OtherDialed = amimulator_call:other_id_number(OtherCall),
-    case OtherDialed of
-        'undefined' ->
-            'ok';
-        _ ->
-            case EndpointName of
-                OtherEndpointName ->
-                    'ok';
-                _ ->
-                    Payload = case amimulator_call:direction(Call) of
-                        <<"inbound">> ->
-                            dial(EndpointName, OtherEndpointName, CID, CID, OtherCID, OtherCID, CallId, OtherCallId, OtherCID);
-                        <<"outbound">> ->
-                            dial(OtherEndpointName, EndpointName, OtherCID, OtherCID, CID, CID, OtherCallId, CallId, CID)
-                    end,
-                    amimulator_event_listener:publish_amqp_event({'publish', Payload}, amimulator_call:account_id(Call))
+            case amimulator_call:other_id_number(OtherCall) of
+                'undefined' -> 'ok';
+                _OtherDialed ->
+                    case EndpointName of
+                        OtherEndpointName -> 'ok';
+                        _ ->
+                            Payload = case amimulator_call:direction(Call) of
+                                <<"inbound">> -> dial(EndpointName, OtherEndpointName, SourceExten, CID, DestExten, OtherCID, CallId, OtherCallId, OtherCID);
+                                <<"outbound">> -> dial(OtherEndpointName, EndpointName, DestExten, OtherCID, SourceExten, CID, OtherCallId, CallId, CID)
+                            end,
+                            amimulator_event_listener:publish_amqp_event({'publish', Payload}, amimulator_call:account_id(Call))
+                    end
             end
     end.
 
@@ -505,14 +482,14 @@ maybe_bridge(Call, OtherCall) ->
     if Channel1 =:= Channel2 ->
         'ok';
     'true' ->
-        SourceCID = amimulator_call:id_name(Call),
-        OtherCID = amimulator_call:other_id_name(Call),
+        CIDNum = amimulator_call:id_number(Call),
+        OtherCIDNum = amimulator_call:other_id_number(Call),
 
         Payload = case amimulator_call:direction(Call) of
             <<"inbound">> ->
-                bridge(Channel1, Channel2, CallId, OtherCallId, SourceCID, OtherCID);
+                bridge(Channel1, Channel2, CallId, OtherCallId, CIDNum, OtherCIDNum);
             <<"outbound">> ->
-                bridge(Channel2, Channel1, OtherCallId, CallId, OtherCID, SourceCID)
+                bridge(Channel2, Channel1, OtherCallId, CallId, OtherCIDNum, CIDNum)
         end,
         amimulator_event_listener:publish_amqp_event({publish, Payload}, amimulator_call:account_id(Call))
     end.
@@ -573,16 +550,18 @@ new_state(<<"inbound">>, Call) ->
         {<<"Channel">>, EndpointName},
         {<<"ChannelState">>, 4},
         {<<"ChannelStateDesc">>, <<"Ring">>},
-        {<<"CallerIDNum">>, SourceCID},
+        {<<"CallerIDNum">>, SourceExten},
         {<<"CallerIDName">>, SourceCID},
-        {<<"ConnectedLineNum">>, DestExten},
-        {<<"ConnectedLineName">>, DestExten},
+        {<<"ConnectedLineNum">>, <<>>},
+        {<<"ConnectedLineName">>, <<>>},
         {<<"Uniqueid">>, CallId}
     ],
     amimulator_event_listener:publish_amqp_event({'publish', Payload}, amimulator_call:account_id(Call));
 new_state(<<"outbound">>, Call) ->
     CallId = amimulator_call:call_id(Call),
-    SourceCID = amimulator_call:id_name(Call),
+    CIDNum = amimulator_call:id_number(Call),
+    CID = amimulator_call:id_name(Call),
+    OtherCIDNum = amimulator_call:other_id_number(Call),
     OtherCID = amimulator_call:other_id_name(Call),
     EndpointName = amimulator_call:channel(Call),
 
@@ -619,9 +598,9 @@ new_state(<<"outbound">>, Call) ->
         {<<"Channel">>, EndpointName},
         {<<"ChannelState">>, 5},
         {<<"ChannelStateDesc">>, <<"Ringing">>},
-        {<<"CallerIDNum">>, SourceCID},
-        {<<"CallerIDName">>, SourceCID},
-        {<<"ConnectedLineNum">>, OtherCID},
+        {<<"CallerIDNum">>, CIDNum},
+        {<<"CallerIDName">>, CID},
+        {<<"ConnectedLineNum">>, OtherCIDNum},
         {<<"ConnectedLineName">>, OtherCID},
         {<<"Uniqueid">>, CallId}
     ],
@@ -629,7 +608,9 @@ new_state(<<"outbound">>, Call) ->
 
 busy_state(Call, CallId) ->
     EndpointName = amimulator_call:channel(Call),
-    SourceCID = amimulator_call:id_name(Call),
+    CIDNum = amimulator_call:id_number(Call),
+    CID = amimulator_call:id_name(Call),
+    OtherCIDNum = amimulator_call:other_id_number(Call),
     OtherCID = amimulator_call:other_id_name(Call),
 
     % OtherCallId = whapps_call:other_leg_call_id(WhappsCall),
@@ -660,9 +641,9 @@ busy_state(Call, CallId) ->
         {<<"Channel">>, EndpointName},
         {<<"ChannelState">>, ?STATE_UP},
         {<<"ChannelStateDesc">>, <<"Up">>},
-        {<<"CallerIDNum">>, SourceCID},
-        {<<"CallerIDName">>, SourceCID},
-        {<<"ConnectedLineNum">>, OtherCID},
+        {<<"CallerIDNum">>, CIDNum},
+        {<<"CallerIDName">>, CID},
+        {<<"ConnectedLineNum">>, OtherCIDNum},
         {<<"ConnectedLineName">>, OtherCID},
         {<<"Uniqueid">>, CallId}
     ],
@@ -670,7 +651,9 @@ busy_state(Call, CallId) ->
 
 destroy_channel(Reason, Call) ->
     CallId = amimulator_call:call_id(Call),
-    SourceCID = amimulator_call:id_name(Call),
+    CIDNum = amimulator_call:id_number(Call),
+    CID = amimulator_call:id_name(Call),
+    OtherCIDNum = amimulator_call:other_id_number(Call),
     OtherCID = amimulator_call:other_id_name(Call),
     EndpointName = amimulator_call:channel(Call),
 
@@ -707,9 +690,9 @@ destroy_channel(Reason, Call) ->
         {<<"Privilege">>, <<"call,all">>},
         {<<"Channel">>, EndpointName},
         {<<"Uniqueid">>, CallId},
-        {<<"CallerIDNum">>, SourceCID},
-        {<<"CallerIDName">>, SourceCID},
-        {<<"ConnectedLineNum">>, OtherCID},
+        {<<"CallerIDNum">>, CIDNum},
+        {<<"CallerIDName">>, CID},
+        {<<"ConnectedLineNum">>, OtherCIDNum},
         {<<"ConnectedLineName">>, OtherCID},
         {<<"Cause">>, Cause},
         {<<"Cause-txt">>, CauseText}
