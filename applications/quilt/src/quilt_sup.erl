@@ -16,12 +16,12 @@
 
 %% Helper macro for declaring children of supervisor
 -define(CHILDREN, [
-	?WORKER_TYPE('quilt_listener', temporary)
-	,?WORKER_TYPE('quilt_store', temporary)
+	?WORKER_TYPE('quilt_listener', 'transient')
+	,?WORKER_TYPE('quilt_store', 'transient')
 	]).
 
 start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+    supervisor:start_link({'local', ?MODULE}, ?MODULE, []).
 
 init([]) ->
     RestartStrategy = 'one_for_one',
