@@ -8,30 +8,22 @@
 %%%-------------------------------------------------------------------
 -module(quilt_log).
 
--export([handle_event/2]).
+-export([handle_event/1]).
 
 -include("quilt.hrl").
 
-handle_event(JObj, _Props) ->
+%%
+%% public functions
+%%
+
+handle_event(JObj) ->
     file:write_file(<<"/tmp/queue_log_raw">>, io_lib:fwrite("~p\n", [JObj]), ['append']),
     Event = {wh_json:get_value(<<"Event-Category">>, JObj), wh_json:get_value(<<"Event-Name">>, JObj)},
     handle_specific_event(Event, JObj).
 
-get_common_props(JObj) ->
-    AccountId = wh_json:get_value(<<"Account-ID">>, JObj),
-    CallId = case wh_json:get_value(<<"Call-ID">>, JObj) of
-        'undefined' -> wh_json:get_value(<<"Msg-ID">>, JObj);
-        _ -> wh_json:get_value(<<"Call-ID">>, JObj) end,
-    QueueId = case wh_json:get_value(<<"Queue-ID">>, JObj) of
-        'undefined' -> "NONE";
-        _ -> wh_json:get_value(<<"Queue-ID">>, JObj) end,
-    QueueName = case QueueId of
-        "NONE" -> "NONE";
-        _ -> lookup_queue_name(AccountId, QueueId) end,
-    BridgedChannel = case wh_json:get_value(<<"Agent-ID">>, JObj) of
-        'undefined' -> "NONE";
-        _ -> lookup_agent_name(AccountId, wh_json:get_value(<<"Agent-ID">>, JObj)) end,
-    {AccountId, CallId, QueueId, QueueName, BridgedChannel}.
+%%
+%% event-specific handlers
+%%
 
 handle_specific_event({<<"acdc_call_stat">>, <<"waiting">>}, JObj) ->
     EventName = "ENTERQUEUE", % ENTERQUEUE(url|callerid)
@@ -281,6 +273,26 @@ handle_specific_event({<<"acdc_status_stat">>, <<"logged_out">>}, JObj) ->
     end, get_queue_list_by_agent_id(AccountId, AgentId));
 
 handle_specific_event(Event, _JObj) -> lager:debug("unhandled event: ~p", [Event]).
+
+%%
+%% private functions
+%%
+
+get_common_props(JObj) ->
+    AccountId = wh_json:get_value(<<"Account-ID">>, JObj),
+    CallId = case wh_json:get_value(<<"Call-ID">>, JObj) of
+        'undefined' -> wh_json:get_value(<<"Msg-ID">>, JObj);
+        _ -> wh_json:get_value(<<"Call-ID">>, JObj) end,
+    QueueId = case wh_json:get_value(<<"Queue-ID">>, JObj) of
+        'undefined' -> "NONE";
+        _ -> wh_json:get_value(<<"Queue-ID">>, JObj) end,
+    QueueName = case QueueId of
+        "NONE" -> "NONE";
+        _ -> lookup_queue_name(AccountId, QueueId) end,
+    BridgedChannel = case wh_json:get_value(<<"Agent-ID">>, JObj) of
+        'undefined' -> "NONE";
+        _ -> lookup_agent_name(AccountId, wh_json:get_value(<<"Agent-ID">>, JObj)) end,
+    {AccountId, CallId, QueueId, QueueName, BridgedChannel}.
 
 maybe_queue_empty(AccountId, QueueId) ->
     LoggedIn = lists:filter(fun(Agent) -> 

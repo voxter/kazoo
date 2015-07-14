@@ -72,9 +72,8 @@ handle_info(Info, State) ->
     end,
     {'noreply', State}.
 
-handle_event(JObj, State) ->
-    % lager:debug("unhandled event: ~p, state: ~p", [JObj, State]),
-    quilt_log:handle_event(JObj, State),
+handle_event(JObj, _State) ->
+    handle_specific_event(wh_json:get_value(<<"Event-Name">>, JObj), JObj),
     {'noreply', []}.
 
 terminate(Reason, _State) ->
@@ -83,3 +82,37 @@ terminate(Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
+
+%%
+%% event-specific handlers
+%%
+
+handle_specific_event(<<"waiting">>, JObj) ->
+    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    case quilt_sup:retrieve_fsm(CallId) of
+        {'error', 'not_found'} ->
+            {'ok', FSM} = quilt_sup:start_fsm(CallId),
+            lager:debug("started FSM: ~p for call id: ~p", [FSM, CallId]),
+            gen_fsm:sync_send_all_state_event(FSM, {'enterqueue', JObj});
+        {'ok', FSM} ->
+            lager:debug("FSM ~p already created for this call id: ~p", [FSM, CallId]);
+        Else ->
+            lager:debug("unexpected return value when looking up FSM: ~p", [Else])
+    end;
+    
+handle_specific_event(<<"exited-position">>, JObj) ->
+    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    quilt_sup:stop_fsm(CallId),
+    quilt_log:handle_event(JObj);
+
+handle_specific_event(<<"handled">>, JObj) ->
+    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    case quilt_sup:retrieve_fsm(CallId) of
+        {'ok', FSM} ->
+            gen_fsm:sync_send_all_state_event(FSM, {'connected', JObj});
+        {'error', 'not_found'} ->
+            lager:debug("unable to find a running FSM for call id: ~p", [CallId])
+    end;
+
+handle_specific_event(_, JObj) ->
+    quilt_log:handle_event(JObj).
