@@ -42,7 +42,10 @@ retrieve_fsm(CallId) ->
 	end.
 
 stop_fsm(CallId) ->
-	supervisor:terminate_child(?MODULE, retrieve_fsm(CallId)).
+	case retrieve_fsm(CallId) of
+		{'ok', FSM} -> supervisor:terminate_child(?MODULE, FSM);
+		_ -> lager:debug("could not terminate FSM, not found...", [])
+	end.
 
 get_pid() ->
 	self().

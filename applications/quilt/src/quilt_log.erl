@@ -17,7 +17,6 @@
 %%
 
 handle_event(JObj) ->
-    file:write_file(<<"/tmp/queue_log_raw">>, io_lib:fwrite("~p\n", [JObj]), ['append']),
     Event = {wh_json:get_value(<<"Event-Category">>, JObj), wh_json:get_value(<<"Event-Name">>, JObj)},
     handle_specific_event(Event, JObj).
 
@@ -37,11 +36,10 @@ handle_specific_event({<<"acdc_call_stat">>, <<"waiting">>}, JObj) ->
 handle_specific_event({<<"acdc_call_stat">>, <<"exited-position">>}, JObj) ->
     {AccountId, CallId, QueueId, QueueName, BridgedChannel} = get_common_props(JObj),
     Call = acdc_stats:find_call(CallId),
-    lager:debug("acdc call stats: ~p", [Call]),
     Ev = {wh_json:get_value(<<"Status">>, Call), wh_json:get_value(<<"Abandoned-Reason">>, Call)},
     case Ev of
         {<<"abandoned">>, <<"member_hangup">>} -> 
-            % Check for agent count in queue (could be empty)
+            quilt_sup:stop_fsm(CallId),
             case maybe_queue_empty(AccountId, QueueId) of
                 'true' -> EventName = "EXITEMPTY"; % EXITEMPTY(position|origposition|waittime)
                 _ -> EventName = "ABANDON" % ABANDON(position|origposition|waittime)
@@ -52,20 +50,22 @@ handle_specific_event({<<"acdc_call_stat">>, <<"exited-position">>}, JObj) ->
             EventParams = {Position, OriginalPos, WaitTime},
             lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
             write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
-
         {<<"abandoned">>, <<"member_timeout">>} -> 
+            quilt_sup:stop_fsm(CallId),
             EventName = "EXITWITHTIMEOUT", % EXITWITHTIMEOUT(position)
             EventParams = {integer_to_list(wh_json:get_value(<<"Exited-Position">>, JObj))},
             lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
             write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
-
         {<<"abandoned">>, <<"dtmf_exit">>} ->
+            quilt_sup:stop_fsm(CallId),
             EventName = "EXITWITHKEY", % EXITWITHKEY(key|position)
             EventParams = {<<"#">>, integer_to_list(wh_json:get_value(<<"Exited-Position">>, JObj))},
             lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
             write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
-            
+        {<<"handled">>, _} ->
+            lager:debug("member was connected to an agent", []);
         {_, _} ->
+            quilt_sup:stop_fsm(CallId),
             lager:debug("unhandled exited status/reason: ~p", [Ev])
     end;
 
@@ -101,115 +101,38 @@ handle_specific_event({<<"acdc_call_stat">>, <<"handled">>}, JObj) ->
     write_log(AccountId, CallId, QueueName, AgentName, EventName, EventParams);
 
 handle_specific_event({<<"call_event">>, <<"CHANNEL_BRIDGE">>}, JObj) ->
+    EventName = "TRANSFER", % TRANSFER(extension|context|holdtime|calltime|position)
     AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
     CallId = wh_json:get_value(<<"Call-ID">>, JObj),
     Call = acdc_stats:find_call(CallId),
     AgentId = case Call of
-        undefined -> wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Owner-ID">>], JObj);
+        'undefined' -> wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Owner-ID">>], JObj);
         _ -> wh_json:get_value(<<"Agent-ID">>, Call)
     end,
-    lager:debug("detected channel bridge, checking for transfer (account: ~p, agent: ~p, call-id: ~p)", [AccountId, AgentId, CallId]),
-    StoredState = quilt_store:get(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
-    case StoredState of
-        undefined -> lager:debug("unable to find any existing stored state for this call, ignoring...", []);
-        {"TRANSFERRED", CallId} -> % Call-ID matches a transferred call, log TRANSFER event
-            EventName = "TRANSFER", % TRANSFER(extension|context|holdtime|calltime|position)
-            {_, _, _, QueueName, BridgedChannel} = get_common_props(Call),
-            quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
-            Extension = wh_json:get_value(<<"Callee-ID-Number">>, JObj),
-            WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, Call)),
-            TalkTime = integer_to_list(wh_json:get_value(<<"Talk-Time">>, Call)),
-            Position = integer_to_list(wh_json:get_value(<<"Exited-Position">>, Call)),
-            EventParams = {Extension, <<"from-queue">>, WaitTime, TalkTime, Position},
-            lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
-            write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
-        {"CONNECT", StoredCallId} -> % Agent is connected to a queue member/caller, transition to OUTBOUND state
-            case wh_json:get_value(<<"Other-Leg-Call-ID">>, JObj) of
-                StoredCallId -> % Member to agent bridge
-                    lager:debug("ignoring member to agent bridge: ~p", [StoredState]);
-                _ ->
-                    lager:debug("updating call state to: ~p", [{"OUTBOUND", StoredCallId}]),
-                    quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
-                    quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]), {"OUTBOUND", StoredCallId})
-            end;
-        {"TRANSFER_CANCELLED", StoredCallId} -> % Agent previously cancelled a transfer and is connected to a queue member/caller, set to OUTBOUND state
-            case wh_json:get_value(<<"Other-Leg-Call-ID">>, JObj) of
-                StoredCallId -> % Member to agent bridge
-                    lager:debug("ignoring member to agent bridge: ~p", [StoredState]);
-                _ ->
-                    lager:debug("updating call state to: ~p", [{"OUTBOUND", StoredCallId}]),
-                    quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
-                    quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]), {"OUTBOUND", StoredCallId})
-            end;
-        {"OUTBOUND", StoredCallId} ->
-            case wh_json:get_value(<<"Other-Leg-Call-ID">>, JObj) of
-                StoredCallId -> % Member to agent bridge
-                    lager:debug("ignoring member to agent bridge: ~p", [StoredState]);
-                _ -> % Unexpected state detected
-                    lager:debug("unexpected state detected: ~p", [StoredState])
-            end;
-        _ -> % Orphaned state detected
-            lager:debug("orphaned state detected, removing: ~p", [StoredState]),
-            quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]))
-    end;
-
-handle_specific_event({<<"call_event">>, <<"CHANNEL_DESTROY">>}, JObj) ->
-    AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
-    AgentId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Owner-ID">>], JObj),
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
-    lager:debug("detected channel destroy, checking for cancelled transfer (account: ~p, agent: ~p, call-id: ~p)", [AccountId, AgentId, CallId]),
-    StoredState = quilt_store:get(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
-    case StoredState of
-        {"OUTBOUND", StoredCallId} ->
-            TransferHistory = wh_json:get_value([<<"Transfer-History">>], JObj),
-            lager:debug("retrieving transfer history from call channel variables: ~p", [TransferHistory]),
-            case TransferHistory of
-                undefined ->
-                    NewState = {"TRANSFER_CANCELLED", StoredCallId},
-                    lager:debug("transfer was cancelled: ~p", [NewState]),
-                    quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
-                    quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]), NewState);
-                _ -> lager:debug("unable to find any transfer history for this call, ignoring...", [])
-            end;
-        _ -> lager:debug("unable to find any existing stored state for this call, ignoring...", [])
-    end;
-
-handle_specific_event({<<"acdc_status_stat">>, <<"wrapup">>}, JObj) ->
-    AccountId = wh_json:get_value(<<"Account-ID">>, JObj),
-    AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
-    StoredState = quilt_store:get(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
-    lager:debug("agent wrapup, checking state for call transfer: ~p", [StoredState]),
-    case StoredState of
-        {"OUTBOUND", StoredCallId} ->
-            lager:debug("acdc call stats: ~p", [acdc_stats:find_call(StoredCallId)]),
-            lager:debug("updating state to: ~p", [{"TRANSFERRED", StoredCallId}]),
-            quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
-            quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]), {"TRANSFERRED", StoredCallId});
-        _ -> 
-            lager:debug("unhandled wrapup state: ~p", [StoredState])
-    end;
+    {_, _, _, QueueName, BridgedChannel} = get_common_props(Call),
+    quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
+    Extension = wh_json:get_value(<<"Callee-ID-Number">>, JObj),
+    WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, Call)),
+    TalkTime = integer_to_list(wh_json:get_value(<<"Talk-Time">>, Call)),
+    Position = integer_to_list(wh_json:get_value(<<"Exited-Position">>, Call)),
+    EventParams = {Extension, <<"from-queue">>, WaitTime, TalkTime, Position},
+    lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
+    write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
 
 handle_specific_event({<<"acdc_call_stat">>, <<"processed">>}, JObj) ->
     {AccountId, CallId, _, QueueName, BridgedChannel} = get_common_props(JObj),
     Call = acdc_stats:find_call(CallId),
-    AgentId = wh_json:get_value(<<"Agent-ID">>, Call),
-    StoredState = quilt_store:get(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
-    case StoredState of
-        {"OUTBOUND", CallId} -> lager:debug("ignoring COMPLETE event when agent was in OUTBOUND state...", []);
-        {"TRANSFERRED", CallId} -> lager:debug("ignoring COMPLETE event when agent was in TRANSFERRED state...", []);
-        _ ->
-            HungUpBy = wh_json:get_value(<<"Hung-Up-By">>, Call),
-            EventName = case HungUpBy of
-                <<"member">> -> "COMPLETECALLER"; % COMPLETECALLER(holdtime|calltime|origposition)
-                _ -> "COMPLETEAGENT" % COMPLETECALLER(holdtime|calltime|origposition)
-            end,
-            WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, Call)),
-            TalkTime = integer_to_list(wh_json:get_value(<<"Talk-Time">>, Call)),
-            OriginalPos = integer_to_list(wh_json:get_value(<<"Entered-Position">>, Call)),
-            EventParams = {WaitTime, TalkTime, OriginalPos},
-            lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
-            write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams)
-    end;
+    HungUpBy = wh_json:get_value(<<"Hung-Up-By">>, Call),
+    EventName = case HungUpBy of
+        <<"member">> -> "COMPLETECALLER"; % COMPLETECALLER(holdtime|calltime|origposition)
+        _ -> "COMPLETEAGENT" % COMPLETECALLER(holdtime|calltime|origposition)
+    end,
+    WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, Call)),
+    TalkTime = integer_to_list(wh_json:get_value(<<"Talk-Time">>, Call)),
+    OriginalPos = integer_to_list(wh_json:get_value(<<"Entered-Position">>, Call)),
+    EventParams = {WaitTime, TalkTime, OriginalPos},
+    lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
+    write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
 
 handle_specific_event({<<"agent">>, <<"login_queue">>}, JObj) ->
     EventName = "ADDMEMBER", % ADDMEMBER
