@@ -39,7 +39,7 @@ handle_specific_event({<<"acdc_call_stat">>, <<"exited-position">>}, JObj) ->
     Ev = {wh_json:get_value(<<"Status">>, Call), wh_json:get_value(<<"Abandoned-Reason">>, Call)},
     case Ev of
         {<<"abandoned">>, <<"member_hangup">>} -> 
-            quilt_sup:stop_fsm(CallId),
+            quilt_sup:stop_member_fsm(CallId),
             case maybe_queue_empty(AccountId, QueueId) of
                 'true' -> EventName = "EXITEMPTY"; % EXITEMPTY(position|origposition|waittime)
                 _ -> EventName = "ABANDON" % ABANDON(position|origposition|waittime)
@@ -51,13 +51,13 @@ handle_specific_event({<<"acdc_call_stat">>, <<"exited-position">>}, JObj) ->
             lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
             write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
         {<<"abandoned">>, <<"member_timeout">>} -> 
-            quilt_sup:stop_fsm(CallId),
+            quilt_sup:stop_member_fsm(CallId),
             EventName = "EXITWITHTIMEOUT", % EXITWITHTIMEOUT(position)
             EventParams = {integer_to_list(wh_json:get_value(<<"Exited-Position">>, JObj))},
             lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
             write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
         {<<"abandoned">>, <<"dtmf_exit">>} ->
-            quilt_sup:stop_fsm(CallId),
+            quilt_sup:stop_member_fsm(CallId),
             EventName = "EXITWITHKEY", % EXITWITHKEY(key|position)
             EventParams = {<<"#">>, integer_to_list(wh_json:get_value(<<"Exited-Position">>, JObj))},
             lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
@@ -65,7 +65,7 @@ handle_specific_event({<<"acdc_call_stat">>, <<"exited-position">>}, JObj) ->
         {<<"handled">>, _} ->
             lager:debug("member was connected to an agent", []);
         {_, _} ->
-            quilt_sup:stop_fsm(CallId),
+            quilt_sup:stop_member_fsm(CallId),
             lager:debug("unhandled exited status/reason: ~p", [Ev])
     end;
 
@@ -151,16 +151,30 @@ handle_specific_event({<<"agent">>, <<"logout_queue">>}, JObj) ->
 handle_specific_event({<<"acdc_status_stat">>, <<"paused">>}, JObj) ->
     EventName = "PAUSEALL", 
     {AccountId, CallId, _, QueueName, BridgedChannel} = get_common_props(JObj),
-    % There is no pause for a single queue, pause all by default
-    lager:debug("writing event to queue_log: ~s", [EventName]),
-    write_log(AccountId, CallId, QueueName, BridgedChannel, EventName);
+    AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
+    case quilt_store:get(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId, <<"-">>, EventName])) of 
+        EventName -> lager:debug("suppressing duplicate agent pause event ~p", [EventName]);
+        _ ->  % 'undefined' or "UNPAUSEALL"
+            % There is no pause for a single queue, pause all by default
+            quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId, <<"-UNPAUSEALL">>])),
+            quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId, <<"-">>, EventName]), EventName),
+            lager:debug("writing event to queue_log: ~s", [EventName]),
+            write_log(AccountId, CallId, QueueName, BridgedChannel, EventName)
+    end;
 
 handle_specific_event({<<"acdc_status_stat">>, <<"resume">>}, JObj) ->
     EventName = "UNPAUSEALL", 
     {AccountId, CallId, _, QueueName, BridgedChannel} = get_common_props(JObj),
-    % There is no resume for a single queue, unpause all by default
-    lager:debug("writing event to queue_log: ~s", [EventName]),
-    write_log(AccountId, CallId, QueueName, BridgedChannel, EventName);
+    AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
+    case quilt_store:get(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId, <<"-">>, EventName])) of 
+        EventName -> lager:debug("suppressing duplicate agent unpause event ~p", [EventName]);
+        _ ->  % 'undefined' or "PAUSEALL"
+            % There is no resume for a single queue, unpause all by default
+            quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId, <<"-PAUSEALL">>])),
+            quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId, <<"-">>, EventName]), EventName),
+            lager:debug("writing event to queue_log: ~s", [EventName]),
+            write_log(AccountId, CallId, QueueName, BridgedChannel, EventName)
+    end;        
 
 handle_specific_event({<<"acdc_status_stat">>, <<"logged_in">>}, JObj) ->
     EventName = "AGENTLOGIN", % AGENTLOGIN(channel)
@@ -168,11 +182,15 @@ handle_specific_event({<<"acdc_status_stat">>, <<"logged_in">>}, JObj) ->
     AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
     ChannelName = lookup_agent_name(AccountId, AgentId),
     lists:foreach(fun(Q) -> % Agent will log in to all queues that they are a member of
-        quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId, <<"-">>, Q])),
-        QueueName = lookup_queue_name(AccountId, Q),
-        EventParams = {ChannelName}, 
-        lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
-        write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams)
+        case quilt_store:get(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId, <<"-">>, Q])) of 
+            EventName -> lager:debug("suppressing duplicate agent login event ~p", [EventName]);
+            _ ->  % 'undefined' or "AGENTLOGOFF"
+                quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId, <<"-">>, Q]), EventName),
+                QueueName = lookup_queue_name(AccountId, Q),
+                EventParams = {ChannelName}, 
+                lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
+                write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams)
+        end
     end, get_queue_list_by_agent_id(AccountId, AgentId));
 
 handle_specific_event({<<"acdc_status_stat">>, <<"logged_out">>}, JObj) ->
@@ -185,13 +203,13 @@ handle_specific_event({<<"acdc_status_stat">>, <<"logged_out">>}, JObj) ->
     LoginTime = list_to_binary(integer_to_list(LogoutTimestamp - LoginTimestamp)),
     lists:foreach(fun(Q) -> % Agent will log out of all queues that they are a member of
         case quilt_store:get(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId, <<"-">>, Q])) of 
-            'undefined' -> % No previous record of logout
+            EventName -> lager:debug("suppressing duplicate agent logoff event ~p", [EventName]);
+            _ -> % 'undefined' or "AGENTLOGIN"
                 quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId, <<"-">>, Q]), EventName),
                 QueueName = lookup_queue_name(AccountId, Q),
                 EventParams = {ChannelName, LoginTime},
                 lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
-                write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
-            _ -> lager:debug("suppressing duplicate agent logoff event", [])
+                write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams)
         end
     end, get_queue_list_by_agent_id(AccountId, AgentId));
 

@@ -6,7 +6,7 @@
 %%% @contributors
 %%%   Lucas Bussey
 %%%-------------------------------------------------------------------
--module(quilt_fsm).
+-module(quilt_agent_fsm).
 
 -behaviour(gen_fsm).
 
@@ -36,21 +36,27 @@ handle_event(Event, StateName, State) ->
     lager:debug("unhandled event in state ~s: ~p", [StateName, Event]),
     {'next_state', StateName, State}.
 
-handle_sync_event({'enterqueue', JObj}, _From, 'started', State) ->
+handle_sync_event({'agentlogin', JObj}, _From, 'started', State) ->
     quilt_log:handle_event(JObj),
-    {'reply', 'ok', 'waiting', State};
-handle_sync_event({'connected', JObj}, _From, 'waiting', State) ->
+    {'reply', 'ok', 'ready', State};
+handle_sync_event({'agentlogoff', JObj}, _From, 'paused', State) ->
     quilt_log:handle_event(JObj),
-    {'reply', 'ok', 'incall', State};
-handle_sync_event({'abandon', JObj}, _From, 'waiting', State) ->
+    {'reply', 'ok', 'loggedout', State};
+handle_sync_event({'agentlogoff', JObj}, _From, 'ready', State) ->
     quilt_log:handle_event(JObj),
-    {'reply', 'ok', 'abandoned', State};
-handle_sync_event({'exitqueue', JObj}, _From, 'connected', State) ->
+    {'reply', 'ok', 'loggedout', State};
+handle_sync_event({'unpauseall', JObj}, _From, 'started', State) ->
     quilt_log:handle_event(JObj),
-    {'reply', 'ok', 'incall', State};
-handle_sync_event({'exitqueue', JObj}, _From, 'abandoned', State) ->
+    {'reply', 'ok', 'ready', State};
+handle_sync_event({'unpauseall', JObj}, _From, 'paused', State) ->
     quilt_log:handle_event(JObj),
-    {'reply', 'ok', 'hangup', State};
+    {'reply', 'ok', 'ready', State};
+handle_sync_event({'pauseall', JObj}, _From, 'started', State) ->
+    quilt_log:handle_event(JObj),
+    {'reply', 'ok', 'paused', State};
+handle_sync_event({'pauseall', JObj}, _From, 'ready', State) ->
+    quilt_log:handle_event(JObj),
+    {'reply', 'ok', 'paused', State};
 handle_sync_event(Event, _From, StateName, State) ->
     lager:debug("unhandled sync event in state ~s: ~p", [StateName, Event]),
     {'reply', 'ok', StateName, State}.

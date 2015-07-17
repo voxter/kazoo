@@ -73,7 +73,7 @@ handle_info(Info, State) ->
     {'noreply', State}.
 
 handle_event(JObj, _State) ->
-    %% file:write_file(<<"/tmp/queue_log_raw">>, io_lib:fwrite("~p\n", [JObj]), ['append']), %% REMOVE/COMMENT OUT THIS LINE FOR PRODUCTION
+    file:write_file(<<"/tmp/queue_log_raw">>, io_lib:fwrite("~p\n", [JObj]), ['append']), %% REMOVE/COMMENT OUT THIS LINE FOR PRODUCTION
     handle_specific_event(wh_json:get_value(<<"Event-Name">>, JObj), JObj),
     {'noreply', []}.
 
@@ -90,9 +90,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 handle_specific_event(<<"waiting">>, JObj) ->
     CallId = wh_json:get_value(<<"Call-ID">>, JObj),
-    case quilt_sup:retrieve_fsm(CallId) of
+    case quilt_sup:retrieve_member_fsm(CallId) of
         {'error', 'not_found'} ->
-            {'ok', FSM} = quilt_sup:start_fsm(CallId),
+            {'ok', FSM} = quilt_sup:start_member_fsm(CallId),
             lager:debug("started FSM: ~p for call id: ~p", [FSM, CallId]),
             gen_fsm:sync_send_all_state_event(FSM, {'enterqueue', JObj});
         {'ok', FSM} ->
@@ -103,7 +103,7 @@ handle_specific_event(<<"waiting">>, JObj) ->
 
 handle_specific_event(<<"abandoned">>, JObj) ->
     CallId = wh_json:get_value(<<"Call-ID">>, JObj),
-    case quilt_sup:retrieve_fsm(CallId) of
+    case quilt_sup:retrieve_member_fsm(CallId) of
         {'ok', FSM} ->
             gen_fsm:sync_send_all_state_event(FSM, {'abandon', JObj});
         {'error', 'not_found'} ->
@@ -112,7 +112,7 @@ handle_specific_event(<<"abandoned">>, JObj) ->
 
 handle_specific_event(<<"handled">>, JObj) ->
     CallId = wh_json:get_value(<<"Call-ID">>, JObj),
-    case quilt_sup:retrieve_fsm(CallId) of
+    case quilt_sup:retrieve_member_fsm(CallId) of
         {'ok', FSM} ->
             gen_fsm:sync_send_all_state_event(FSM, {'connected', JObj});
         {'error', 'not_found'} ->
@@ -121,7 +121,7 @@ handle_specific_event(<<"handled">>, JObj) ->
 
 handle_specific_event(<<"exited-position">>, JObj) ->
     CallId = wh_json:get_value(<<"Call-ID">>, JObj),
-    case quilt_sup:retrieve_fsm(CallId) of
+    case quilt_sup:retrieve_member_fsm(CallId) of
         {'ok', FSM} ->
             gen_fsm:sync_send_all_state_event(FSM, {'exitqueue', JObj});
         {'error', 'not_found'} ->
@@ -143,7 +143,7 @@ handle_specific_event(<<"CHANNEL_BRIDGE">>, JObj) ->
             case StoredState of
                 'undefined' -> lager:debug("unable to find any existing stored state for this call, ignoring...", []);
                 {"TRANSFERRED", CallId} -> % Call-ID matches a transferred call, log TRANSFER event
-                    quilt_sup:stop_fsm(CallId),
+                    quilt_sup:stop_member_fsm(CallId),
                     quilt_log:handle_event(JObj);
                 {"CONNECT", StoredCallId} -> % Agent is connected to a queue member/caller, transition to OUTBOUND state
                     case wh_json:get_value(<<"Other-Leg-Call-ID">>, JObj) of
@@ -226,9 +226,66 @@ handle_specific_event(<<"processed">>, JObj) ->
         {"TRANSFERRED", CallId} -> lager:debug("ignoring COMPLETE event when agent was in TRANSFERRED state...", []);
         _ ->
             quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
-            quilt_sup:stop_fsm(CallId),
+            quilt_sup:stop_member_fsm(CallId),
             quilt_log:handle_event(JObj)
     end;
+
+handle_specific_event(<<"logged_in">>, JObj) ->
+    AccountId = wh_json:get_value(<<"Account-ID">>, JObj),
+    AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
+    case quilt_sup:retrieve_agent_fsm(AccountId, AgentId) of
+        {'error', 'not_found'} ->
+            {'ok', FSM} = quilt_sup:start_agent_fsm(AccountId, AgentId),
+            lager:debug("started FSM: ~p for account/agent: ~p, ~p", [FSM, AccountId, AgentId]),
+            gen_fsm:sync_send_all_state_event(FSM, {'agentlogin', JObj});
+        {'ok', FSM} ->
+            lager:debug("found FSM: ~p this account/agent: ~p, ~p", [FSM, AccountId, AgentId]),
+            gen_fsm:sync_send_all_state_event(FSM, {'agentlogin', JObj});
+        Else ->
+            lager:debug("unexpected return value when looking up FSM: ~p", [Else])
+    end;
+
+handle_specific_event(<<"logged_out">>, JObj) ->
+    AccountId = wh_json:get_value(<<"Account-ID">>, JObj),
+    AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
+    case quilt_sup:retrieve_agent_fsm(AccountId, AgentId) of
+        {'ok', FSM} ->
+            lager:debug("found FSM: ~p this account/agent: ~p, ~p", [FSM, AccountId, AgentId]),
+            gen_fsm:sync_send_all_state_event(FSM, {'agentlogoff', JObj});
+        Else ->
+            lager:debug("unable to find FSM to record agent logoff: ~p", [Else])
+    end;
+
+handle_specific_event(<<"paused">>, JObj) ->
+    AccountId = wh_json:get_value(<<"Account-ID">>, JObj),
+    AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
+    case quilt_sup:retrieve_agent_fsm(AccountId, AgentId) of
+        {'error', 'not_found'} ->
+            {'ok', FSM} = quilt_sup:start_agent_fsm(AccountId, AgentId),
+            lager:debug("started FSM: ~p for account/agent: ~p, ~p", [FSM, AccountId, AgentId]),
+            gen_fsm:sync_send_all_state_event(FSM, {'pauseall', JObj});
+        {'ok', FSM} ->
+            lager:debug("found FSM: ~p this account/agent: ~p, ~p", [FSM, AccountId, AgentId]),
+            gen_fsm:sync_send_all_state_event(FSM, {'pauseall', JObj});
+        Else ->
+            lager:debug("unexpected return value when looking up FSM: ~p", [Else])
+    end;
+
+handle_specific_event(<<"resume">>, JObj) ->
+    AccountId = wh_json:get_value(<<"Account-ID">>, JObj),
+    AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
+    case quilt_sup:retrieve_agent_fsm(AccountId, AgentId) of
+        {'error', 'not_found'} ->
+            {'ok', FSM} = quilt_sup:start_agent_fsm(AccountId, AgentId),
+            lager:debug("started FSM: ~p for account/agent: ~p, ~p", [FSM, AccountId, AgentId]),
+            gen_fsm:sync_send_all_state_event(FSM, {'unpauseall', JObj});
+        {'ok', FSM} ->
+            lager:debug("found FSM: ~p this account/agent: ~p, ~p", [FSM, AccountId, AgentId]),
+            gen_fsm:sync_send_all_state_event(FSM, {'unpauseall', JObj});
+        Else ->
+            lager:debug("unexpected return value when looking up FSM: ~p", [Else])
+    end;
+
 
 handle_specific_event(_, JObj) ->
     quilt_log:handle_event(JObj).
