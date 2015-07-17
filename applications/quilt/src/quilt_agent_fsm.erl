@@ -22,21 +22,24 @@
 %% Public functions
 %%
 
-start_link(Call) ->
-    gen_fsm:start_link(?MODULE, Call, []).
+start_link(Agent) ->
+    gen_fsm:start_link(?MODULE, Agent, []).
 
 %%
 %% gen_fsm callbacks
 %%
 
-init(CallId) ->
-    {'ok', 'started', CallId}.
+init(Agent) ->
+    {'ok', 'started', Agent}.
 
 handle_event(Event, StateName, State) ->
     lager:debug("unhandled event in state ~s: ~p", [StateName, Event]),
     {'next_state', StateName, State}.
 
 handle_sync_event({'agentlogin', JObj}, _From, 'started', State) ->
+    quilt_log:handle_event(JObj),
+    {'reply', 'ok', 'ready', State};
+handle_sync_event({'agentlogin', JObj}, _From, 'loggedout', State) ->
     quilt_log:handle_event(JObj),
     {'reply', 'ok', 'ready', State};
 handle_sync_event({'agentlogoff', JObj}, _From, 'paused', State) ->
