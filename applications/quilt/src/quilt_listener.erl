@@ -73,7 +73,7 @@ handle_info(Info, State) ->
     {'noreply', State}.
 
 handle_event(JObj, _State) ->
-    file:write_file(<<"/tmp/queue_log_raw">>, io_lib:fwrite("~p\n", [JObj]), ['append']), %% REMOVE/COMMENT OUT THIS LINE FOR PRODUCTION
+    %% file:write_file(<<"/tmp/queue_log_raw">>, io_lib:fwrite("~p\n", [JObj]), ['append']), %% REMOVE/COMMENT OUT THIS LINE FOR PRODUCTION
     handle_specific_event(wh_json:get_value(<<"Event-Name">>, JObj), JObj),
     {'noreply', []}.
 
@@ -135,63 +135,70 @@ handle_specific_event(<<"CHANNEL_BRIDGE">>, JObj) ->
         'undefined' -> wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Owner-ID">>], JObj);
         Call -> wh_json:get_value(<<"Agent-ID">>, Call)
     end,
-    lager:debug("detected channel bridge, checking for transfer (account: ~p, agent: ~p, call-id: ~p)", [AccountId, AgentId, CallId]),
-    
-    StoredState = quilt_store:get(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
-    case StoredState of
-        'undefined' -> lager:debug("unable to find any existing stored state for this call, ignoring...", []);
-        {"TRANSFERRED", CallId} -> % Call-ID matches a transferred call, log TRANSFER event
-            quilt_sup:stop_fsm(CallId),
-            quilt_log:handle_event(JObj);
-        {"CONNECT", StoredCallId} -> % Agent is connected to a queue member/caller, transition to OUTBOUND state
-            case wh_json:get_value(<<"Other-Leg-Call-ID">>, JObj) of
-                StoredCallId -> % Member to agent bridge
-                    lager:debug("ignoring member to agent bridge: ~p", [StoredState]);
-                _ ->
-                    lager:debug("updating call state to: ~p", [{"OUTBOUND", StoredCallId}]),
-                    quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
-                    quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]), {"OUTBOUND", StoredCallId})
-            end;
-        {"TRANSFER_CANCELLED", StoredCallId} -> % Agent previously cancelled a transfer and is connected to a queue member/caller, set to OUTBOUND state
-            case wh_json:get_value(<<"Other-Leg-Call-ID">>, JObj) of
-                StoredCallId -> % Member to agent bridge
-                    lager:debug("ignoring member to agent bridge: ~p", [StoredState]);
-                _ ->
-                    lager:debug("updating call state to: ~p", [{"OUTBOUND", StoredCallId}]),
-                    quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
-                    quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]), {"OUTBOUND", StoredCallId})
-            end;
-        {"OUTBOUND", StoredCallId} ->
-            case wh_json:get_value(<<"Other-Leg-Call-ID">>, JObj) of
-                StoredCallId -> % Member to agent bridge
-                    lager:debug("ignoring member to agent bridge: ~p", [StoredState]);
-                _ -> % Unexpected state detected
-                    lager:debug("unexpected state detected: ~p", [StoredState])
-            end;
-        _ -> % Orphaned state detected
-            lager:debug("orphaned state detected, removing: ~p", [StoredState]),
-            quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]))
+    case AgentId of
+        'undefined' -> lager:debug("missing agent id");
+        _ ->
+            lager:debug("detected channel bridge, checking for transfer (account: ~p, agent: ~p, call-id: ~p)", [AccountId, AgentId, CallId]),
+            StoredState = quilt_store:get(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
+            case StoredState of
+                'undefined' -> lager:debug("unable to find any existing stored state for this call, ignoring...", []);
+                {"TRANSFERRED", CallId} -> % Call-ID matches a transferred call, log TRANSFER event
+                    quilt_sup:stop_fsm(CallId),
+                    quilt_log:handle_event(JObj);
+                {"CONNECT", StoredCallId} -> % Agent is connected to a queue member/caller, transition to OUTBOUND state
+                    case wh_json:get_value(<<"Other-Leg-Call-ID">>, JObj) of
+                        StoredCallId -> % Member to agent bridge
+                            lager:debug("ignoring member to agent bridge: ~p", [StoredState]);
+                        _ ->
+                            lager:debug("updating call state to: ~p", [{"OUTBOUND", StoredCallId}]),
+                            quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
+                            quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]), {"OUTBOUND", StoredCallId})
+                    end;
+                {"TRANSFER_CANCELLED", StoredCallId} -> % Agent previously cancelled a transfer and is connected to a queue member/caller, set to OUTBOUND state
+                    case wh_json:get_value(<<"Other-Leg-Call-ID">>, JObj) of
+                        StoredCallId -> % Member to agent bridge
+                            lager:debug("ignoring member to agent bridge: ~p", [StoredState]);
+                        _ ->
+                            lager:debug("updating call state to: ~p", [{"OUTBOUND", StoredCallId}]),
+                            quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
+                            quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]), {"OUTBOUND", StoredCallId})
+                    end;
+                {"OUTBOUND", StoredCallId} ->
+                    case wh_json:get_value(<<"Other-Leg-Call-ID">>, JObj) of
+                        StoredCallId -> % Member to agent bridge
+                            lager:debug("ignoring member to agent bridge: ~p", [StoredState]);
+                        _ -> % Unexpected state detected
+                            lager:debug("unexpected state detected: ~p", [StoredState])
+                    end;
+                _ -> % Orphaned state detected
+                    lager:debug("orphaned state detected, removing: ~p", [StoredState]),
+                    quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]))
+            end
     end;
 
 handle_specific_event(<<"CHANNEL_DESTROY">>, JObj) ->
     AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
     AgentId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Owner-ID">>], JObj),
     CallId = wh_json:get_value(<<"Call-ID">>, JObj),
-    lager:debug("detected channel destroy, checking for cancelled transfer (account: ~p, agent: ~p, call-id: ~p)", [AccountId, AgentId, CallId]),
-    StoredState = quilt_store:get(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
-    case StoredState of
-        {"OUTBOUND", StoredCallId} ->
-            TransferHistory = wh_json:get_value([<<"Transfer-History">>], JObj),
-            lager:debug("retrieving transfer history from call channel variables: ~p", [TransferHistory]),
-            case TransferHistory of
-                'undefined' ->
-                    NewState = {"TRANSFER_CANCELLED", StoredCallId},
-                    lager:debug("transfer was cancelled: ~p", [NewState]),
-                    quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
-                    quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]), NewState);
-                _ -> lager:debug("unable to find any transfer history for this call, ignoring...", [])
-            end;
-        _ -> lager:debug("unable to find any existing stored state for this call, ignoring...", [])
+    case AgentId of
+        'undefined' -> lager:debug("missing agent id");
+        _ ->
+            lager:debug("detected channel destroy, checking for cancelled transfer (account: ~p, agent: ~p, call-id: ~p)", [AccountId, AgentId, CallId]),
+            StoredState = quilt_store:get(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
+            case StoredState of
+                {"OUTBOUND", StoredCallId} ->
+                    TransferHistory = wh_json:get_value([<<"Transfer-History">>], JObj),
+                    lager:debug("retrieving transfer history from call channel variables: ~p", [TransferHistory]),
+                    case TransferHistory of
+                        'undefined' ->
+                            NewState = {"TRANSFER_CANCELLED", StoredCallId},
+                            lager:debug("transfer was cancelled: ~p", [NewState]),
+                            quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
+                            quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]), NewState);
+                        _ -> lager:debug("unable to find any transfer history for this call, ignoring...", [])
+                    end;
+                _ -> lager:debug("unable to find any existing stored state for this call, ignoring...", [])
+        end
     end;
 
 handle_specific_event(<<"wrapup">>, JObj) ->
