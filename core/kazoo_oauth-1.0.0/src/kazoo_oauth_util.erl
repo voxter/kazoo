@@ -248,7 +248,7 @@ refresh_token(#oauth_app{name=ClientId
 
 oauth_header(URL, CustomParams, ConsumerKey, ConsumerSecret, AccessToken, AccessSecret) ->
     OAuthParams = oauth_params(ConsumerKey, ConsumerSecret, AccessToken, AccessSecret),
-    BaseParams = lists:keysort(1, OAuthParams ++ include_other_params(CustomParams)),
+    BaseParams = lists:ukeysort(1, OAuthParams ++ include_other_params(CustomParams)),
 
     NormalizedParams = lists:foldl(fun({K,V}, Acc) ->
         [{wh_util:uri_encode(K), wh_util:uri_encode(V)}] ++ Acc end,
