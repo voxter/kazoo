@@ -66,5 +66,5 @@ maybe_use_variable(Data, Call) ->
         'undefined' ->
             wh_json:get_value(<<"id">>, Data);
         Variable ->
-            whapps_call:custom_channel_var(Variable, Call)
+            wh_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call))
     end.
