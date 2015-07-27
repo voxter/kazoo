@@ -1,6 +1,6 @@
 -module(amimulator_commander).
 
--export([handle/2]).
+-export([handle/3]).
 -export([handle_event/2]).
 -export([parse_command/1]).
 
@@ -9,9 +9,13 @@
 -define(AMI_DB, <<"ami">>).
     
 %% Handle a payload sent as an AMI command
-handle(Payload, AccountId) ->
+handle(Payload, AccountId, 'undefined') ->
     Props = amimulator_util:parse_payload(Payload),
-    handle_event(update_props(Props, AccountId)).
+    handle_event(update_props(Props, AccountId));
+%% When authenticating via md5 challenge, pass the challenge along
+handle(Payload, AccountId, Challenge) ->
+    Props = amimulator_util:parse_payload(Payload),
+    handle_event("login", props:set_value(<<"Challenge">>, Challenge, update_props(Props, AccountId))).
 
 update_props(Props, AccountId) ->
     Routines = [
@@ -35,42 +39,13 @@ handle_event(Props) ->
 % TODO: validate secret mode login (secret in TCP payload)
 handle_event("login", Props) ->
     Username = proplists:get_value(<<"Username">>, Props),
-    %Secret = proplists:get_value(<<"Secret">>, Props),
-    Secret = undefined,
+    Secret = proplists:get_value(<<"Secret">>, Props),
+    Key = proplists:get_value(<<"Key">>, Props),
+    ActionId = proplists:get_value(<<"ActionID">>, Props),
 
-    %% Maybe the action id was not supplied (queue stats)
-    ActionIDStr = case proplists:get_value(<<"ActionID">>, Props) of
-        undefined ->
-            [];
-        ActionID ->
-            [{<<"ActionID">>, ActionID}]
-    end,
-
-    {ok, AMIDoc} = couch_mgr:open_doc(?AMI_DB, Username),
-    %case wh_json:get_value(<<"Secret">>, AMIDoc) of
-    case Secret of
-        undefined ->
-            %% Successful login
-            lager:debug("successful login, starting event listener"),
-            
-            %% Record account id that is being used for logged in account
-            AccountId = wh_json:get_value(<<"account_id">>, AMIDoc),
-            amimulator_socket_listener:login(AccountId),
-            
-            Payload = [[
-                {<<"Response">>, <<"Success">>}
-            ] ++ ActionIDStr ++ [
-                {<<"Message">>, <<"Authentication accepted">>}
-            ]],
-            {ok, {Payload, broken}};
-        _ ->
-            %% Failed login
-            Payload = [
-                {<<"Response">>, <<"Error">>}
-            ] ++ ActionIDStr ++ [
-                {<<"Message">>, <<"Authentication failed">>}
-            ],
-            {ok, {Payload, n}}
+    case Key of
+        'undefined' -> login_secret(Username, Secret, ActionId);
+        _ -> login_md5(Username, Key, proplists:get_value(<<"Challenge">>, Props), ActionId)
     end;
 handle_event("logoff", _Props) ->
     gen_server:cast(self(), {logout}),
@@ -84,7 +59,7 @@ handle_event("challenge", Props) ->
         {<<"Challenge">>, Challenge},
         {<<"ActionID">>, ActionID}
     ],
-    {ok, {Payload, n}};
+    [{<<"Ret">>, {'ok', {Payload, 'n'}}}, {<<"Challenge">>, Challenge}];
 handle_event("ping", Props) ->
    {Megasecs, Secs, Microsecs} = os:timestamp(),
    Timestamp = Megasecs * 1000000 + Secs + Microsecs / 1000000,
@@ -312,6 +287,40 @@ handle_event("listcommands", Props) ->
 handle_event(Event, Props) ->
     lager:debug("no handler defined for event ~p, props ~p", [Event, Props]),
     {error, no_action}.
+
+login_secret(Username, Secret, ActionId) ->
+    {'ok', AMIDoc} = couch_mgr:open_doc(?AMI_DB, Username),
+    case wh_json:get_value(<<"secret">>, AMIDoc) of
+        Secret -> login_success(wh_json:get_value(<<"account_id">>, AMIDoc), ActionId);
+        _ -> login_fail(ActionId)
+    end.
+
+login_md5(Username, Md5, Challenge, ActionId) ->
+    {'ok', AMIDoc} = couch_mgr:open_doc(?AMI_DB, Username),
+    Digest = crypto:hash('md5', <<(wh_util:to_binary(Challenge))/binary, (wh_json:get_value(<<"secret">>, AMIDoc))/binary>>),
+    case wh_util:to_binary(lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest])) of
+        Md5 -> login_success(wh_json:get_value(<<"account_id">>, AMIDoc), ActionId);
+        _ -> login_fail(ActionId)
+    end.
+
+login_success(AccountId, ActionId) ->
+    lager:debug("successful login, starting event listener"),
+    
+    %% Record account id that is being used for logged in account
+    amimulator_socket_listener:login(AccountId),
+    
+    Payload = props:filter_undefined([{<<"Response">>, <<"Success">>}
+                                      ,{<<"ActionID">>, ActionId}
+                                      ,{<<"Message">>, <<"Authentication accepted">>}
+                                     ]),
+    {'ok', {Payload, 'broken'}}.
+
+login_fail(ActionId) ->
+    Payload = props:filter_undefined([{<<"Response">>, <<"Error">>}
+                                      ,{<<"ActionID">>, ActionId}
+                                      ,{<<"Message">>, <<"Authentication failed">>}
+                                     ]),
+    {'ok', {Payload, 'n'}}.
 
 initial_channel_status(Calls, _Props, Format) ->
     FormattedCalls = lists:foldl(fun(Call, List) ->
