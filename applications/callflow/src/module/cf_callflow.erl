@@ -45,7 +45,11 @@ maybe_use_variable(Data, Call) ->
         'undefined' ->
             wh_json:get_value(<<"id">>, Data);
         Variable ->
-            wh_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call))
+            Value = wh_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
+            case couch_mgr:open_cache_doc(whapps_call:account_db(Call), Value) of
+                {'ok', _} -> Value;
+                _ -> wh_json:get_value(<<"id">>, Data)
+            end
     end.
 
 -spec continue_if_still_active(whapps_call:call(), wh_json:object()) -> 'ok'.
