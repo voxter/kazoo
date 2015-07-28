@@ -274,7 +274,6 @@ find_account_by_realm(Realm) ->
 %%--------------------------------------------------------------------
 -spec find_account_by_id(input_term()) ->
                                    {'ok', ne_binary()} |
-                                   {'multiples', [ne_binary(),...]} |
                                    {'error', term()}.
 find_account_by_id(Id) when not is_binary(Id) ->
     find_account_by_id(wh_util:to_binary(Id));
@@ -282,13 +281,6 @@ find_account_by_id(Id) ->
     case whapps_util:get_account_by_id(Id) of
         {'ok', AccountDb} ->
             print_account_info(AccountDb);
-        {'multiples', AccountDbs} ->
-            AccountIds = [begin
-                              {'ok', AccountId} = print_account_info(AccountDb),
-                              AccountId
-                          end || AccountDb <- AccountDbs
-                         ],
-            {'multiples', AccountIds};
         {'error', Reason}=E ->
             io:format("failed to find account: ~p~n", [Reason]),
             E
