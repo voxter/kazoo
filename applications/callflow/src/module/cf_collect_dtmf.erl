@@ -32,12 +32,10 @@ handle(Data, Call) ->
     AlreadyCollected =
         case whapps_call:get_dtmf_collection(Call) of
             'undefined' -> <<>>;
-            <<_/binary>> = D ->
-                _ = cf_exe:set_call(whapps_call:set_dtmf_collection('undefined', Call)),
-                D
+            <<_/binary>> = D -> D
         end,
 
-    maybe_collect_more_digits(Data, Call, AlreadyCollected).
+    maybe_collect_more_digits(Data, whapps_call:set_dtmf_collection('undefined', Call), AlreadyCollected).
 
 -spec maybe_collect_more_digits(wh_json:object(), whapps_call:call(), binary()) -> 'ok'.
 maybe_collect_more_digits(Data, Call, AlreadyCollected) ->
