@@ -66,6 +66,7 @@ req_params(Call) ->
        ,{<<"Transcription-Status">>, kzt_util:get_transcription_status(Call)}
        ,{<<"Transcription-Url">>, kzt_util:get_transcription_url(Call)}
        ,{<<"Language">>, whapps_call:language(Call)}
+       ,{<<"Callflow-ID">>, whapps_call:kvs_fetch('cf_flow_id', Call)}
       ],
              
     props:filter_undefined(cf_kvs_set:add_kvs_to_props(Props, Call)).

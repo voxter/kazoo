@@ -7,7 +7,7 @@
 -export([start_link/0]).
 -export([relay_new_call/1
          ,relay_answer/1
-         ,relay_bridge/2
+         ,relay_bridge/1
          ,relay_destroy/2
          ,initial_call/1
         ]).
@@ -30,9 +30,10 @@ relay_answer(CallId) ->
         amimulator_call_fsm:answer(Pid, CallId)
     end, find_call_handlers(CallId)).
 
-relay_bridge(CallId, OtherCallId) ->
+relay_bridge(EventJObj) ->
+    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
     lists:foreach(fun(Pid) ->
-        amimulator_call_fsm:bridge(Pid, CallId, OtherCallId)
+        amimulator_call_fsm:bridge(Pid, EventJObj)
     end, find_call_handlers(CallId)).
 
 % -spec relay_destroy(api_binary(), amimulator_call:call()) -> 'ok'.

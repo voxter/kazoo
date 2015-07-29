@@ -1144,9 +1144,11 @@ maybe_publish_queue_member_remove(AccountId, QueueId, CallId, _) ->
 
 apply_new_metaflows(CallId, CVs, ControllerQueue, Metaflows) ->
     Numbers = update_with_cq(update_with_cvs(wh_json:get_value(<<"numbers">>, Metaflows), CVs), ControllerQueue),
-    lists:foreach(fun(FSM) ->
-        konami_code_fsm:update_numbers(FSM, CallId, Numbers)
-    end, konami_event_listener:fsms_for_callid(CallId)).
+    Prop = [{<<"Call-ID">>, CallId}
+            ,{<<"Data">>, Numbers}
+            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+    timer:apply_after(500, 'wapi_metaflow', 'publish_update', [Prop]).
 
 update_with_cvs(NumbersJObj, CVs) ->
     Numbers = wh_json:get_keys(NumbersJObj),

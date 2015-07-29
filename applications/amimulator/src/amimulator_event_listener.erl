@@ -29,6 +29,7 @@
 -record(state, {account_id :: ne_binary()
                 ,pids = [] :: pids()
                 ,prune_timer_pid :: api_pid()
+                ,extra_props = [] :: proplist()
                }).
 
 %%
@@ -117,6 +118,7 @@ init([AccountId]) ->
     ],
     publish_amqp_event({'publish', Payload}, AccountId),
 
+    gen_listener:cast(self(), {'get_module_extra_props', AccountId}),
     gen_listener:cast(self(), {'init_modules', AccountId}),
     {'ok', #state{account_id=AccountId}}.
 
@@ -126,6 +128,14 @@ handle_call(_Request, _From, State) ->
     lager:debug("unhandled call"),
     {'reply', {'error', 'not_implemented'}, State}.
 
+handle_cast({'get_module_extra_props', AccountId}, State) ->
+    Props = lists:foldl(fun(Module, Acc) ->
+        case erlang:function_exported(Module, 'get_extra_props', 1) of
+            'true' -> Module:get_extra_props(AccountId) ++ Acc;
+            'false' -> Acc
+        end
+    end, [], ?MODULES),
+    {'noreply', State#state{extra_props=Props}};
 %% Register bindings of handler modules for varying event types
 handle_cast({'init_modules', AccountId}, State) ->
     lists:foreach(fun(Module) ->
@@ -162,9 +172,11 @@ handle_info(_Info, State) ->
     
 handle_event(_JObj, #state{account_id=AccountId
                            ,pids=Pids
+                           ,extra_props=ExtraProps
                           }) ->
     {'reply', [{<<"AccountId">>, AccountId}
                ,{<<"Pids">>, Pids}
+               | ExtraProps
               ]}.
 
 terminate('normal', #state{prune_timer_pid=PrunePid}) ->

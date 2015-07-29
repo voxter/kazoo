@@ -1,10 +1,18 @@
 -module(amimulator_call_hook).
 
--export([init/1, bindings/1, responders/1, handle_event/1, handle_event/2]).
+-export([init/1, bindings/1, responders/1, get_extra_props/1, handle_event/1, handle_event/2]).
 
 -include("../amimulator.hrl").
 
 -define(STATE_UP, 6).
+
+-define(CALLFLOW_CACHE, 'callflow_cache').
+-define(CF_CONFIG_CAT, <<"callflow">>).
+-define(MOD_CONFIG_CAT, <<(?CF_CONFIG_CAT)/binary, ".park">>).
+
+-define(DB_DOC_NAME, whapps_config:get(?MOD_CONFIG_CAT, <<"db_doc_name">>, <<"parked_calls">>)).
+-define(DEFAULT_RINGBACK_TM, whapps_config:get_integer(?MOD_CONFIG_CAT, <<"default_ringback_time">>, 120000)).
+-define(PARKED_CALLS_KEY(Db), {'cf_park', 'parked_calls', Db}).
 
 %%
 %% Public functions
@@ -13,20 +21,27 @@
 init(AccountId) ->
     wh_hooks:register(AccountId).
 
-bindings(_Props) ->
-    [].
+bindings(Props) ->
+    AccountId = props:get_value("AccountId", Props),
+    [{'route', [{'realm', get_realm(AccountId)}]}].
 
 responders(_Props) ->
-    [].
+    [{<<"dialplan">>, <<"route_req">>}].
+
+get_extra_props(AccountId) ->
+    case couch_mgr:get_results(wh_util:format_account_id(AccountId, 'encoded'), <<"callflows/crossbar_listing">>) of
+        {'ok', JObjs} -> extract_featurecodes(JObjs);
+        {'error', E} -> lager:debug("could not open callflows/crossbar_listing to get featurecodes (~p)", [E])
+    end.
 
 handle_event(EventJObj) ->
     handle_event(EventJObj, []).
     
-handle_event(EventJObj, _Props) ->
+handle_event(EventJObj, Props) ->
     {_EventType, EventName} = wh_util:get_event_type(EventJObj),
-    handle_specific_event(EventName, EventJObj).
+    handle_specific_event(EventName, EventJObj, Props).
     
-handle_specific_event(<<"CHANNEL_CREATE">>, EventJObj) ->
+handle_specific_event(<<"CHANNEL_CREATE">>, EventJObj, _) ->
 	lager:debug("new channel with id ~p", [wh_json:get_value(<<"Call-ID">>, EventJObj)]),
 
     %% First add the sip version of the call
@@ -36,7 +51,7 @@ handle_specific_event(<<"CHANNEL_CREATE">>, EventJObj) ->
     %% Publish the new one plus any Local/ calls that are required for queue calls
     relay_new_calls(maybe_create_agent_calls(Call));
 
-handle_specific_event(<<"CHANNEL_ANSWER">>, EventJObj) ->
+handle_specific_event(<<"CHANNEL_ANSWER">>, EventJObj, _) ->
     lager:debug("channel answer for channel with id ~p", [wh_json:get_value(<<"Call-ID">>, EventJObj)]),
     CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
 
@@ -44,36 +59,12 @@ handle_specific_event(<<"CHANNEL_ANSWER">>, EventJObj) ->
     amimulator_call_sup:relay_answer(<<CallId/binary, "-queue;1">>),
     amimulator_call_sup:relay_answer(<<CallId/binary, "-queue;2">>);
 
-handle_specific_event(<<"CHANNEL_BRIDGE">>, EventJObj) ->
+handle_specific_event(<<"CHANNEL_BRIDGE">>, EventJObj, _) ->
     lager:debug("channel bridge for channel with id ~p to ~p", [wh_json:get_value(<<"Call-ID">>, EventJObj)
                                                                 ,wh_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj)]),
-    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
-    OtherCallId = wh_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj),
+    amimulator_call_sup:relay_bridge(EventJObj);
 
-    amimulator_call_sup:relay_bridge(CallId, OtherCallId);
-
-    % UpdaterParams = [{OtherCallId, OtherCall}, {CallId, Call}],
-    % Updaters = [
-    %     fun(Call2) -> props:set_value(<<"call">>,
-    %         whapps_call:set_other_leg_call_id(OtherCallId, WhappsCall), Call2) end,
-    %     fun(Call2) -> amimulator_util:bleg_ami_channel(Call2, undefined, UpdaterParams) end,
-    %     fun(Call2) -> amimulator_util:bleg_cid(Call2, undefined, UpdaterParams) end,
-    %     fun(Call2) ->
-    %       FlipDirection = wh_util:to_atom(whapps_call:custom_channel_var(<<"Flip-Direction-On-Bridge">>, <<"false">>, WhappsCall)) or
-    %                         (whapps_call:caller_id_name(WhappsCall) =:= <<"Device QuickCall">>),
-
-    %           if FlipDirection ->
-    %               case props:get_value(<<"direction">>, Call2) of
-    %               <<"inbound">> -> props:set_value(<<"direction">>, <<"outbound">>, Call2);
-    %               <<"outbound">> -> props:set_value(<<"direction">>, <<"inbound">>, Call2)
-    %           end;
-    %       true ->
-    %           Call2
-    %       end end
-    % ],
-    % Call2 = lists:foldl(fun(F, Call3) -> F(Call3) end, Call, Updaters),
-
-handle_specific_event(<<"CHANNEL_DESTROY">>, EventJObj) ->
+handle_specific_event(<<"CHANNEL_DESTROY">>, EventJObj, _) ->
     lager:debug("channel destroy for channel with id ~p", [wh_json:get_value(<<"Call-ID">>, EventJObj)]),
     % lager:debug("channel destroy ~p", [EventJObj]),
     CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
@@ -83,7 +74,7 @@ handle_specific_event(<<"CHANNEL_DESTROY">>, EventJObj) ->
     amimulator_call_sup:relay_destroy(HangupCause, <<CallId/binary, "-queue;1">>),
     amimulator_call_sup:relay_destroy(HangupCause, <<CallId/binary, "-queue;2">>);
     
-handle_specific_event(<<"DTMF">>, EventJObj) ->
+handle_specific_event(<<"DTMF">>, EventJObj, _) ->
     CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
     Digit = wh_json:get_value(<<"DTMF-Digit">>, EventJObj),
 
@@ -100,9 +91,37 @@ handle_specific_event(<<"DTMF">>, EventJObj) ->
     % TODO: Also need to do this with begin/end reversed
     
     amimulator_event_listener:publish_amqp_event({publish, Payload});
-    
-handle_specific_event(EventName, _EventJObj) ->
+
+handle_specific_event(<<"route_req">>, EventJObj, Props) ->
+    % lager:debug("route_req ~p", [EventJObj]),
+    % lager:debug("props ~p", [Props]),
+    maybe_handle_feature_code(wh_json:get_value(<<"Request">>, EventJObj), EventJObj, Props);
+
+handle_specific_event(EventName, _EventJObj, _) ->
     lager:debug("unhandled call event ~p", [EventName]).
+
+%%
+%% Private functions
+%%
+
+get_realm(AccountId) ->
+    {ok, AccountDoc} = couch_mgr:open_doc(<<"accounts">>, AccountId),
+    wh_json:get_value(<<"realm">>, AccountDoc).
+
+-spec extract_featurecodes(wh_json:objects()) -> proplist().
+extract_featurecodes(JObjs) ->
+    lists:foldl(fun(JObj, Acc) ->
+        case wh_json:get_value(<<"featurecode">>, wh_json:get_value(<<"value">>, JObj)) of
+            'undefined' -> Acc;
+            FeatureCode -> maybe_add_featurecode(wh_json:get_value(<<"name">>, FeatureCode), wh_json:get_value(<<"number">>, FeatureCode), Acc)
+        end
+    end, [], JObjs).
+
+-spec maybe_add_featurecode(api_binary(), api_binary(), proplist()) -> proplist().
+maybe_add_featurecode(<<"park_and_retrieve">>, Number, FeatureCodes) ->
+    [{Number, <<"park_and_retrieve">>} | FeatureCodes];
+maybe_add_featurecode(_, _, FeatureCodes) ->
+    FeatureCodes.
 
 maybe_create_agent_calls(Call) ->
     maybe_create_agent_calls(amimulator_call:ccv(<<"Member-Call-ID">>, Call), Call).
@@ -136,3 +155,96 @@ relay_new_calls(Calls) ->
     lists:foreach(fun(Call) ->
         amimulator_call_sup:relay_new_call(Call)
     end, Calls).
+
+maybe_handle_feature_code(<<"*2*", Digit:1/binary, Slot:1/binary, _/binary>>, EventJObj, Props) ->
+    case props:get_value(Digit, Props) of
+        'undefined' -> 'ok';
+        <<"park_and_retrieve">> -> handle_retrieve(Digit, Slot, EventJObj);
+        _ -> 'ok'
+    end;
+maybe_handle_feature_code(<<"*", Digit:1/binary, Slot:1/binary, _/binary>>, EventJObj, Props) ->
+    case props:get_value(Digit, Props) of
+        'undefined' -> 'ok';
+        <<"park_and_retrieve">> -> handle_retrieve(Digit, Slot, EventJObj);
+        _ -> 'ok'
+    end;
+maybe_handle_feature_code(_, _, _) ->
+    'ok'.
+
+handle_retrieve(Digit, Slot, EventJObj) ->
+    ParkedCalls = get_parked_calls(wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], EventJObj)),
+    case retrieve(Slot, ParkedCalls) of
+        {'error', 'slot_empty'} -> handle_park(Digit, Slot, EventJObj);
+        CallId ->
+            Call = ami_sm:call(CallId),
+            Payload = [{<<"Event">>, <<"UnParkedCall">>}
+                       ,{<<"Privilege">>, <<"call,all">>}
+                       ,{<<"Exten">>, <<"*", Digit/binary, Slot/binary>>}
+                       ,{<<"Channel">>, amimulator_call:channel(Call)}
+                       ,{<<"Parkinglot">>, <<"parkedcalls", Slot/binary>>}
+                       ,{<<"From">>, amimulator_call:channel(Call)}
+                       ,{<<"CallerIDNum">>, amimulator_call:id_number(Call)}
+                       ,{<<"CallerIDName">>, amimulator_call:id_name(Call)}
+                       ,{<<"ConnectedLineNum">>, <<"<unknown>">>}
+                       ,{<<"ConnectedLineName">>, <<"<unknown>">>}
+                       ,{<<"Uniqueid">>, CallId}
+                      ],
+            amimulator_event_listener:publish_amqp_event({'publish', Payload}, amimulator_call:account_id(Call))
+    end.
+
+handle_park(Digit, Slot, EventJObj) ->
+    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
+    Call = ami_sm:call(CallId),
+    Payload = [{<<"Event">>, <<"ParkedCall">>}
+               ,{<<"Privilege">>, <<"call,all">>}
+               ,{<<"Exten">>, <<"*", Digit/binary, Slot/binary>>}
+               ,{<<"Channel">>, amimulator_call:channel(Call)}
+               ,{<<"Parkinglot">>, <<"parkedcalls", Slot/binary>>}
+               ,{<<"From">>, amimulator_call:channel(Call)}
+               ,{<<"Timeout">>, ?DEFAULT_RINGBACK_TM div 1000}
+               ,{<<"CallerIDNum">>, amimulator_call:id_number(Call)}
+               ,{<<"CallerIDName">>, amimulator_call:id_name(Call)}
+               ,{<<"ConnectedLineNum">>, <<"<unknown>">>}
+               ,{<<"ConnectedLineName">>, <<"<unknown>">>}
+               ,{<<"Uniqueid">>, CallId}
+              ],
+    amimulator_event_listener:publish_amqp_event({'publish', Payload}, amimulator_call:account_id(Call)).
+
+get_parked_calls(AccountId) ->
+    get_parked_calls(wh_util:format_account_id(AccountId, 'encoded'), AccountId).
+
+get_parked_calls(AccountDb, AccountId) ->
+    case wh_cache:peek_local(?CALLFLOW_CACHE, ?PARKED_CALLS_KEY(AccountDb)) of
+        {'ok', JObj} -> JObj;
+        {'error', 'not_found'} ->
+            fetch_parked_calls(AccountDb, AccountId)
+    end.
+
+fetch_parked_calls(AccountDb, AccountId) ->
+    case couch_mgr:open_doc(AccountDb, ?DB_DOC_NAME) of
+        {'error', 'not_found'} ->
+            Timestamp = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
+            Generators = [fun(J) -> wh_json:set_value(<<"_id">>, <<"parked_calls">>, J) end
+                          ,fun(J) -> wh_json:set_value(<<"pvt_type">>, <<"parked_calls">>, J) end
+                          ,fun(J) -> wh_json:set_value(<<"pvt_account_db">>, AccountDb, J) end
+                          ,fun(J) -> wh_json:set_value(<<"pvt_account_id">>, AccountId, J) end
+                          ,fun(J) -> wh_json:set_value(<<"pvt_created">>, Timestamp, J) end
+                          ,fun(J) -> wh_json:set_value(<<"pvt_modified">>, Timestamp, J) end
+                          ,fun(J) -> wh_json:set_value(<<"pvt_vsn">>, <<"1">>, J) end
+                          ,fun(J) -> wh_json:set_value(<<"slots">>, wh_json:new(), J) end],
+            lists:foldr(fun(F, J) -> F(J) end, wh_json:new(), Generators);
+        {'ok', JObj} ->
+            JObj;
+        {'error', _R}=E ->
+            lager:info("unable to get parked calls: ~p", [_R]),
+            E
+    end.
+
+-spec retrieve(ne_binary(), wh_json:object()) ->
+                      ne_binary() |
+                      {'error', 'slot_empty'}.
+retrieve(SlotNumber, ParkedCalls) ->
+    case wh_json:get_value([<<"slots">>, SlotNumber], ParkedCalls) of
+        'undefined' -> {'error', 'slot_empty'};
+        Slot -> wh_json:get_ne_value(<<"Call-ID">>, Slot)
+    end.

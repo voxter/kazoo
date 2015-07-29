@@ -8,11 +8,11 @@
 -export([update_from_other/2]).
 -export([call_id/1, set_call_id/2]).
 -export([other_leg_call_id/1, set_other_leg_call_id/2]).
--export([channel/1, set_channel/1, set_channel/2]).
+-export([channel/1, short_channel/1, set_channel/1, set_channel/2]).
 -export([other_channel/1, set_other_channel/2]).
 -export([account_id/1, account_db/1]).
 -export([authorizing_id/1, authorizing_type/1]).
--export([ccv/2]).
+-export([ccv/2, delete_ccv/2]).
 -export([control_queue/1, set_control_queue/2]).
 -export([acdc_queue_id/1, set_acdc_queue_id/2]).
 -export([agent_id/1, set_agent_id/2]).
@@ -68,7 +68,9 @@ from_json(JObj) ->
                                  case wh_json:get_first_defined([<<"direction">>, <<"Call-Direction">>], JObj) of
                                      <<"inbound">> ->
                                         case wh_json:get_first_defined([<<"Caller-ID-Number">>, <<"caller_id">>], JObj) of
-                                            'undefined' -> <<"@">>;
+                                            'undefined' ->
+                                                lager:debug("JObj ~p", [JObj]),
+                                                <<"@">>;
                                             CallerIdNumber -> <<CallerIdNumber/binary, "@">>
                                         end;
                                      <<"outbound">> -> <<"@">>
@@ -179,9 +181,20 @@ update_from_other(OtherCall, #call{direction=Direction}=Call) ->
     Updaters = [fun(Call2) -> set_other_leg_call_id(call_id(OtherCall), Call2) end
                 ,fun(Call2) -> set_other_channel(channel(OtherCall), Call2) end
                ],
-    directional_update_from_other(Direction
-                                  ,OtherCall
-                                  ,lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters)).
+    case {ccv(<<"Flip-Direction-On-Bridge">>, OtherCall), ccv(<<"Device-QuickCall">>, OtherCall)} of
+        {<<"true">>, _} ->
+            set_other_channel(channel(OtherCall), Call);
+        {_, <<"true">>} ->
+            Updaters2 = [fun(Call2) -> set_caller_id_name(callee_id_name(OtherCall), Call2) end
+                         ,fun(Call2) -> set_caller_id_number(callee_id_number(OtherCall), Call2) end
+                         ,fun(Call2) -> set_other_channel(channel(OtherCall), Call2) end
+                        ],
+            lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters2);
+        _ ->
+            directional_update_from_other(Direction
+                                          ,OtherCall
+                                          ,lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters))
+    end.
 
 -spec call_id(call()) -> api_binary().
 call_id(#call{call_id=CallId}) ->
@@ -203,10 +216,15 @@ set_other_leg_call_id(CallId, Call) ->
 channel(#call{channel=Channel}) ->
     Channel.
 
+-spec short_channel(call()) -> api_binary().
+short_channel(#call{channel='undefined'}) ->
+    'undefined';
+short_channel(#call{channel=Channel}) ->
+    hd(binary:split(Channel, <<"-">>)).
+
 -spec set_channel(call()) -> call().
 -spec set_channel(api_binary(), call()) -> call().
 set_channel(Call) ->
-    lager:debug("call ~p", [Call]),
     set_channel(amimulator_util:channel_string(Call), Call).
 
 set_channel(Channel, Call) ->
@@ -236,9 +254,17 @@ authorizing_id(#call{authorizing_id=AuthorizingId}) ->
 authorizing_type(#call{authorizing_type=AuthorizingType}) ->
     AuthorizingType.
 
--spec ccv(binary(), call()) -> wh_json:json_term() | 'undefined'.
+-spec ccv(wh_json:key(), call()) -> wh_json:json_term() | 'undefined'.
 ccv(Key, #call{custom_channel_vars=CCVs}) ->
     wh_json:get_value(Key, CCVs).
+
+-spec set_ccv(wh_json:key(), wh_json:json_term(), call()) -> call().
+set_ccv(Key, Value, #call{custom_channel_vars=CCVs}=Call) ->
+    Call#call{custom_channel_vars=wh_json:set_value(Key, Value, CCVs)}.
+
+-spec delete_ccv(wh_json:key(), call()) -> call().
+delete_ccv(Key, #call{custom_channel_vars=CCVs}=Call) ->
+    Call#call{custom_channel_vars=wh_json:delete_key(Key, CCVs)}.
 
 -spec control_queue(call()) -> api_binary().
 control_queue(#call{call_id=CallId
@@ -421,6 +447,7 @@ user(Call) ->
 -spec update_post_create(call()) -> call().
 update_post_create(Call) ->
     Updaters = [fun unset_other_leg_self/1
+                ,fun set_quickcall_ccv/1
                 ,fun set_id/1
                 ,fun set_other_id/1
                 ,fun set_channel/1
@@ -448,6 +475,13 @@ unset_other_leg_self(#call{call_id=CallId
     Call#call{other_leg_call_id='undefined'};
 unset_other_leg_self(Call) ->
     Call.
+
+-spec set_quickcall_ccv(call()) -> call().
+set_quickcall_ccv(Call) ->
+    case caller_id_name(Call) of
+        <<"Device QuickCall">> -> set_ccv(<<"Device-QuickCall">>, <<"true">>, Call);
+        _ -> Call
+    end.
 
 -spec set_id(call()) -> call().
 -spec set_id(api_binary(), {api_binary(), api_binary()} | 'undefined', call()) -> call().

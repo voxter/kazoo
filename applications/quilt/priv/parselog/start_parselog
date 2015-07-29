@@ -1,0 +1,7 @@
+#!/bin/bash
+
+PARSELOG_BIN=/usr/local/parselog/tailqueuelog
+DB=$2
+QUEUEID=$1
+
+$PARSELOG_BIN -h res02.van1.voxter.net -u qstatsUser -p qstatsPassw0rd -d $DB -l /tmp/queue_log.$QUEUEID

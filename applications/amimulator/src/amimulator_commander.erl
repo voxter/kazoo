@@ -1,8 +1,7 @@
 -module(amimulator_commander).
 
--export([handle/2]).
+-export([handle/3]).
 -export([handle_event/2]).
--export([queue_stats/2]).
 -export([parse_command/1]).
 
 -include("amimulator.hrl").
@@ -10,9 +9,13 @@
 -define(AMI_DB, <<"ami">>).
     
 %% Handle a payload sent as an AMI command
-handle(Payload, AccountId) ->
+handle(Payload, AccountId, 'undefined') ->
     Props = amimulator_util:parse_payload(Payload),
-    handle_event(update_props(Props, AccountId)).
+    handle_event(update_props(Props, AccountId));
+%% When authenticating via md5 challenge, pass the challenge along
+handle(Payload, AccountId, Challenge) ->
+    Props = amimulator_util:parse_payload(Payload),
+    handle_event("login", props:set_value(<<"Challenge">>, Challenge, update_props(Props, AccountId))).
 
 update_props(Props, AccountId) ->
     Routines = [
@@ -36,42 +39,13 @@ handle_event(Props) ->
 % TODO: validate secret mode login (secret in TCP payload)
 handle_event("login", Props) ->
     Username = proplists:get_value(<<"Username">>, Props),
-    %Secret = proplists:get_value(<<"Secret">>, Props),
-    Secret = undefined,
+    Secret = proplists:get_value(<<"Secret">>, Props),
+    Key = proplists:get_value(<<"Key">>, Props),
+    ActionId = proplists:get_value(<<"ActionID">>, Props),
 
-    %% Maybe the action id was not supplied (queue stats)
-    ActionIDStr = case proplists:get_value(<<"ActionID">>, Props) of
-        undefined ->
-            [];
-        ActionID ->
-            [{<<"ActionID">>, ActionID}]
-    end,
-
-    {ok, AMIDoc} = couch_mgr:open_doc(?AMI_DB, Username),
-    %case wh_json:get_value(<<"Secret">>, AMIDoc) of
-    case Secret of
-        undefined ->
-            %% Successful login
-            lager:debug("successful login, starting event listener"),
-            
-            %% Record account id that is being used for logged in account
-            AccountId = wh_json:get_value(<<"account_id">>, AMIDoc),
-            amimulator_socket_listener:login(AccountId),
-            
-            Payload = [[
-                {<<"Response">>, <<"Success">>}
-            ] ++ ActionIDStr ++ [
-                {<<"Message">>, <<"Authentication accepted">>}
-            ]],
-            {ok, {Payload, broken}};
-        _ ->
-            %% Failed login
-            Payload = [
-                {<<"Response">>, <<"Error">>}
-            ] ++ ActionIDStr ++ [
-                {<<"Message">>, <<"Authentication failed">>}
-            ],
-            {ok, {Payload, n}}
+    case Key of
+        'undefined' -> login_secret(Username, Secret, ActionId);
+        _ -> login_md5(Username, Key, proplists:get_value(<<"Challenge">>, Props), ActionId)
     end;
 handle_event("logoff", _Props) ->
     gen_server:cast(self(), {logout}),
@@ -85,15 +59,16 @@ handle_event("challenge", Props) ->
         {<<"Challenge">>, Challenge},
         {<<"ActionID">>, ActionID}
     ],
-    {ok, {Payload, n}};
-handle_event("ping", _Props) ->
+    [{<<"Ret">>, {'ok', {Payload, 'n'}}}, {<<"Challenge">>, Challenge}];
+handle_event("ping", Props) ->
    {Megasecs, Secs, Microsecs} = os:timestamp(),
    Timestamp = Megasecs * 1000000 + Secs + Microsecs / 1000000,
-   Payload = [
+   Payload = props:filter_undefined([
        {<<"Response">>, <<"Success">>},
        {<<"Ping">>, <<"Pong">>},
-       {<<"Timestamp">>, Timestamp}
-   ],
+       {<<"Timestamp">>, Timestamp},
+       {<<"ActionID">>, props:get_value(<<"ActionID">>, Props)}
+   ]),
    {ok, {Payload, n}};
 % Handle AMI Status action
 handle_event("status", Props) ->
@@ -124,6 +99,69 @@ handle_event("sippeers", Props) ->
         {<<"ListItems">>, length(SipPeers)}
     ]],
     {ok, {Payload, n}};
+handle_event("sipshowpeer", Props) ->
+    Payload = props:filter_undefined([
+		{<<"Response">>, <<"Success">>},
+		{<<"ActionID">>, props:get_value(<<"ActionID">>, Props)},
+		{<<"Channeltype">>, <<"SIP">>},
+		{<<"ObjectName">>, <<"1011">>},
+		{<<"ChanObjectType">>, <<"peer">>},
+		{<<"SecretExist">>, <<"Y">>},
+		{<<"RemoteSecretExist">>, <<"N">>},
+		{<<"MD5SecretExist">>, <<"N">>},
+		{<<"Context">>, <<"from-internal">>},
+		{<<"Language">>, <<>>},
+		{<<"AMAflags">>, <<"Unknown">>},
+		{<<"CID-CallingPres">>, <<"Presentation Allowed, Not Screened">>},
+		{<<"Callgroup">>, <<>>},
+		{<<"Pickupgroup">>, <<>>},
+		{<<"MOHSuggest">>, <<>>},
+		{<<"VoiceMailbox">>, <<"1011@default">>},
+		{<<"TransferMode">>, <<"open">>},
+		{<<"Maxforwards">>, <<"0">>},
+		{<<"LastMsgsSent">>, <<"-1">>},
+		{<<"Maxforwards">>, <<"0">>},
+		{<<"Call-limit">>, <<"2147483647">>},
+		{<<"Busy-level">>, <<"0">>},
+		{<<"MaxCallBR">>, <<"384 kbps">>},
+		{<<"Dynamic">>, <<"Y">>},
+		{<<"Callerid">>, <<"\"device\" <1011>">>},
+		{<<"RegExpire">>, <<"71 seconds">>},
+		{<<"SIP-AuthInsecure">>, <<"no">>},
+		{<<"SIP-Forcerport">>, <<"Y">>},
+		{<<"ACL">>, <<"Y">>},
+		{<<"SIP-CanReinvite">>, <<"N">>},
+		{<<"SIP-DirectMedia">>, <<"N">>},
+		{<<"SIP-PromiscRedir">>, <<"N">>},
+		{<<"SIP-UserPhone">>, <<"N">>},
+		{<<"SIP-VideoSupport">>, <<"N">>},
+		{<<"SIP-TextSupport">>, <<"N">>},
+		{<<"SIP-T.38Support">>, <<"N">>},
+		{<<"SIP-T.38EC">>, <<"Unknown">>},
+		{<<"SIP-T.38MaxDtgrm">>, <<"-1">>},
+		{<<"SIP-Sess-Timers">>, <<"Accept">>},
+		{<<"SIP-Sess-Refresh">>, <<"uas">>},
+		{<<"SIP-Sess-Expires">>, <<"1800">>},
+		{<<"SIP-Sess-Min">>, <<"90">>},
+		{<<"SIP-RTP-Engine">>, <<"asterisk">>},
+		{<<"SIP-Encryption">>, <<"N">>},
+		{<<"SIP-DTMFmode">>, <<"rfc2833">>},
+		{<<"ToHost">>, <<>>},
+		{<<"Address-IP">>, <<"206.191.105.50">>},
+		{<<"Address-Port">>, <<"52511">>},
+		{<<"Default-addr-IP">>, <<"(null)">>},
+		{<<"Default-addr-port">>, <<"0">>},
+		{<<"Default-Username">>, <<"448">>},
+		{<<"Codecs">>, <<"0x104 (ulaw|g729)">>},
+		{<<"CodecOrder">>, <<"ulaw,g729">>},
+		{<<"Status">>, <<"OK (66 ms)">>},
+		{<<"SIP-Useragent">>, <<"Aastra 57i/3.3.1.4305">>},
+		{<<"Reg-Contact">>, <<"sip:1011@10.2.0.63:5060;transport=udp">>},
+		{<<"QualifyFreq">>, <<"60000 ms">>},
+		{<<"Parkinglot">>, <<>>},
+		{<<"SIP-Use-Reason-Header ">>, <<"N">>}
+    ]),
+    {'ok', {Payload, 'n'}};
 handle_event("mailboxcount", Props) ->
     AccountDb = proplists:get_value(<<"AccountDb">>, Props),
     Mailbox = proplists:get_value(<<"Mailbox">>, Props),
@@ -249,6 +287,40 @@ handle_event("listcommands", Props) ->
 handle_event(Event, Props) ->
     lager:debug("no handler defined for event ~p, props ~p", [Event, Props]),
     {error, no_action}.
+
+login_secret(Username, Secret, ActionId) ->
+    {'ok', AMIDoc} = couch_mgr:open_doc(?AMI_DB, Username),
+    case wh_json:get_value(<<"secret">>, AMIDoc) of
+        Secret -> login_success(wh_json:get_value(<<"account_id">>, AMIDoc), ActionId);
+        _ -> login_fail(ActionId)
+    end.
+
+login_md5(Username, Md5, Challenge, ActionId) ->
+    {'ok', AMIDoc} = couch_mgr:open_doc(?AMI_DB, Username),
+    Digest = crypto:hash('md5', <<(wh_util:to_binary(Challenge))/binary, (wh_json:get_value(<<"secret">>, AMIDoc))/binary>>),
+    case wh_util:to_binary(lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest])) of
+        Md5 -> login_success(wh_json:get_value(<<"account_id">>, AMIDoc), ActionId);
+        _ -> login_fail(ActionId)
+    end.
+
+login_success(AccountId, ActionId) ->
+    lager:debug("successful login, starting event listener"),
+    
+    %% Record account id that is being used for logged in account
+    amimulator_socket_listener:login(AccountId),
+    
+    Payload = props:filter_undefined([{<<"Response">>, <<"Success">>}
+                                      ,{<<"ActionID">>, ActionId}
+                                      ,{<<"Message">>, <<"Authentication accepted">>}
+                                     ]),
+    {'ok', {Payload, 'broken'}}.
+
+login_fail(ActionId) ->
+    Payload = props:filter_undefined([{<<"Response">>, <<"Error">>}
+                                      ,{<<"ActionID">>, ActionId}
+                                      ,{<<"Message">>, <<"Authentication failed">>}
+                                     ]),
+    {'ok', {Payload, 'n'}}.
 
 initial_channel_status(Calls, _Props, Format) ->
     FormattedCalls = lists:foldl(fun(Call, List) ->
@@ -647,13 +719,14 @@ queue_entries(QueueId, Number, WaitingCalls) ->
     end, [], CallIds).
 
 queue_entry(Call, Number, WaitingCallStat) ->
+    %% TODO fixed entered timestamp for other acdc nodes
     [{<<"Event">>, <<"QueueEntry">>}
      ,{<<"Queue">>, Number}
      ,{<<"Position">>, ami_sm:queue_pos(amimulator_call:acdc_queue_id(Call), amimulator_call:call_id(Call))}
      ,{<<"Channel">>, amimulator_call:channel(Call)}
      ,{<<"CallerID">>, amimulator_call:id_number(Call)}
      ,{<<"CallerIDName">>, amimulator_call:id_name(Call)}
-     ,{<<"Wait">>, wh_util:current_tstamp() - wh_json:get_value(<<"entered_timestamp">>, WaitingCallStat)}
+     ,{<<"Wait">>, wh_util:current_tstamp() - wh_json:get_value(<<"entered_timestamp">>, WaitingCallStat, 0)}
     ].
 
 waiting_call_stat(CallId, []) ->
@@ -966,6 +1039,15 @@ getvar(Variable, Props) ->
 command(<<"meetme list ", MeetMeSpec/binary>>, Props) ->
     [Number, _Mode] = binary:split(MeetMeSpec, <<" ">>),
     maybe_list_conf(Number, Props);
+command(<<"meetme mute ", MeetMeSpec/binary>>, Props) ->
+    [Number, ParticipantId] = binary:split(MeetMeSpec, <<" ">>),
+    mute_conf(Number, ParticipantId, Props);
+command(<<"meetme unmute ", MeetMeSpec/binary>>, Props) ->
+    [Number, ParticipantId] = binary:split(MeetMeSpec, <<" ">>),
+    unmute_conf(Number, ParticipantId, Props);
+command(<<"meetme kick ", MeetMeSpec/binary>>, Props) ->
+    [Number, ParticipantId] = binary:split(MeetMeSpec, <<" ">>),
+    kick_conf(Number, ParticipantId, Props);
 command(<<"core show channels ", Verbosity/binary>>, Props) ->
     initial_channel_status(ami_sm:calls(proplists:get_value(<<"AccountId">>, Props)), Props, Verbosity);
 command(<<"database put ", Variable/binary>>, Props) ->
@@ -1074,32 +1156,94 @@ user_event(EventName, Props) ->
 	undefined.
 
 maybe_list_conf(Number, Props) ->
-    AccountDb = props:get_value(<<"AccountDb">>, Props),
-    {ok, Results} = couch_mgr:get_results(AccountDb, <<"conferences/conference_map">>),
-    maybe_conf_has_number(Number, props:get_value(<<"ActionID">>, Props), Results).
-
-maybe_conf_has_number(_Number, _ActionId, []) ->
-    undefined;
-maybe_conf_has_number(Number, ActionId, [Result|Results]) ->
-    case wh_json:get_value([<<"value">>, <<"numbers">>], Result) of
-        [_|_]=Numbers ->
-            Found = lists:any(fun(Number2) ->
-                if Number2 =:= Number ->
-                        true;
-                true ->
-                        false
-                end
-            end, Numbers),
-            if Found ->
-                conf_details(ActionId, wh_json:get_value(<<"key">>, Result));
-            true ->
-                maybe_conf_has_number(Number, ActionId, Results)
-            end;
-        _ ->
-            maybe_conf_has_number(Number, ActionId, Results)
+    case conf_id_for_number(Number, props:get_value(<<"AccountId">>, Props)) of
+        'undefined' -> 'undefined';
+        ConfId ->
+            case conf_details(ConfId) of
+                {[]} -> 'undefined';
+                ConfDetails ->
+                    participant_payloads(wh_json:get_value(<<"Participants">>, ConfDetails)
+                                         ,wh_json:get_value(<<"Run-Time">>, ConfDetails)
+                                         ,props:get_value(<<"ActionID">>, Props)
+                                        )
+            end
     end.
 
-conf_details(ActionId, ConfId) ->
+mute_conf(Number, ParticipantId, Props) when is_binary(ParticipantId) ->
+    mute_conf(Number, list_to_integer(binary_to_list(ParticipantId)), Props);
+mute_conf(Number, ParticipantId, Props) ->
+    case conf_id_for_number(Number, props:get_value(<<"AccountId">>, Props)) of
+        'undefined' -> 'ok';
+        ConfId ->
+            Conference = whapps_conference:set_id(ConfId, whapps_conference:new()),
+            whapps_conference_command:mute_participant(ParticipantId, Conference),
+            ConfDetails = conf_details(ConfId),
+            CallId = participant_call_id(ParticipantId, wh_json:get_value(<<"Participants">>, ConfDetails)),
+            Call = ami_sm:call(CallId),
+            [{<<"Event">>, <<"MeetmeMute">>}
+             ,{<<"Privilege">>, <<"call,all">>}
+             ,{<<"Channel">>, amimulator_call:channel(Call)}
+             ,{<<"Uniqueid">>, CallId}
+             ,{<<"Meetme">>, Number}
+             ,{<<"Usernum">>, ParticipantId}
+             ,{<<"Status">>, <<"on">>}]
+    end.
+
+unmute_conf(Number, ParticipantId, Props) when is_binary(ParticipantId) ->
+    unmute_conf(Number, list_to_integer(binary_to_list(ParticipantId)), Props);
+unmute_conf(Number, ParticipantId, Props) ->
+    case conf_id_for_number(Number, props:get_value(<<"AccountId">>, Props)) of
+        'undefined' -> 'ok';
+        ConfId ->
+            Conference = whapps_conference:set_id(ConfId, whapps_conference:new()),
+            whapps_conference_command:unmute_participant(ParticipantId, Conference),
+            ConfDetails = conf_details(ConfId),
+            CallId = participant_call_id(ParticipantId, wh_json:get_value(<<"Participants">>, ConfDetails)),
+            Call = ami_sm:call(CallId),
+            [{<<"Event">>, <<"MeetmeMute">>}
+             ,{<<"Privilege">>, <<"call,all">>}
+             ,{<<"Channel">>, amimulator_call:channel(Call)}
+             ,{<<"Uniqueid">>, CallId}
+             ,{<<"Meetme">>, Number}
+             ,{<<"Usernum">>, ParticipantId}
+             ,{<<"Status">>, <<"off">>}]
+    end.
+
+kick_conf(Number, ParticipantId, Props) when is_binary(ParticipantId) ->
+    kick_conf(Number, list_to_integer(binary_to_list(ParticipantId)), Props);
+kick_conf(Number, ParticipantId, Props) ->
+    case conf_id_for_number(Number, props:get_value(<<"AccountId">>, Props)) of
+        'undefined' -> 'ok';
+        ConfId ->
+            ConfDetails = conf_details(ConfId),
+            CallId = participant_call_id(ParticipantId, wh_json:get_value(<<"Participants">>, ConfDetails)),
+            Payload = amimulator_util:maybe_leave_conference(CallId),
+            Conference = whapps_conference:set_id(ConfId, whapps_conference:new()),
+            whapps_conference_command:kick(ParticipantId, Conference),
+            Payload
+    end.
+
+conf_id_for_number(Number, AccountId) ->
+    case couch_mgr:get_results(wh_util:format_account_id(AccountId, 'encoded'), <<"conferences/conference_map">>) of
+        {'ok', Results} -> conf_id_for_number(Number, AccountId, Results);
+        {'error', E} ->
+            lager:debug("couldn't read couch view 'conferences/conference_map' (~p)", [E]),
+            'undefined'
+    end.
+
+conf_id_for_number(_, _, []) ->
+    'undefined';
+conf_id_for_number(Number, AccountId, [Result|Results]) ->
+    case wh_json:get_value([<<"value">>, <<"numbers">>], Result) of
+        [_|_]=Numbers ->
+            case lists:member(Number, Numbers) of
+                'true' -> wh_json:get_value(<<"key">>, Result);
+                'false' -> conf_id_for_number(Number, AccountId, Results)
+            end;
+        _ -> conf_id_for_number(Number, AccountId, Results)
+    end.
+
+conf_details(ConfId) ->
     Req = props:filter_undefined([
         {<<"Conference-ID">>, ConfId}
         | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
@@ -1107,23 +1251,48 @@ conf_details(ActionId, ConfId) ->
     case whapps_util:amqp_pool_collect(
         Req,
         fun wapi_conference:publish_search_req/1,
-        {ecallmgr, true}
+        {'ecallmgr', 'true'}
     ) of
         {'error', E} ->
             lager:debug("conf_details error ~p", [E]),
-            undefined;
-        {'ok', Resp} ->
-            maybe_conf_down(ActionId, Resp)
+            'undefined';
+        {'ok', JObjs} -> merge_conference_resps(JObjs)
     end.
 
-maybe_conf_down(_ActionId, []) ->
-    undefined;
-maybe_conf_down(ActionId, [JObj|JObjs]) ->
+merge_conference_resps(JObjs) ->
+    merge_conference_resps(JObjs, wh_json:new()).
+
+merge_conference_resps([], Acc) ->
+    Acc;
+merge_conference_resps([JObj|JObjs], Acc) ->
     case wh_json:get_value(<<"Participants">>, JObj) of
-        undefined ->
-            maybe_conf_down(ActionId, JObjs);
+        'undefined' -> merge_conference_resps(JObjs, Acc);
         Participants ->
-            participant_payloads(Participants, wh_json:get_integer_value(<<"Run-Time">>, JObj), ActionId)
+            Participants2 = lists:foldl(fun(Participant, Acc2) ->
+                [Participant | delete_participant(wh_json:get_value(<<"Call-ID">>, Participant), Acc2)]
+            end, wh_json:get_value(<<"Participants">>, Acc, []), Participants),
+            wh_json:set_values([{<<"Participants">>, Participants2}
+                                ,{<<"Run-Time">>, wh_json:get_value(<<"Run-Time">>, JObj, wh_json:get_value(<<"Run-Time">>, Acc))}
+                               ], Acc)
+    end.
+
+delete_participant(CallId, Participants) ->
+    delete_participant(CallId, Participants, []).
+
+delete_participant(_, [], Acc) ->
+    Acc;
+delete_participant(CallId, [Participant|Participants], Acc) ->
+    case wh_json:get_value(<<"Call-ID">>, Participant) of
+        CallId -> delete_participant(CallId, Participants, Acc);
+        _ -> delete_participant(CallId, Participants, [Participant | Acc])
+    end.
+
+participant_call_id(_, []) ->
+    'undefined';
+participant_call_id(ParticipantId, [Participant|Participants]) ->
+    case wh_json:get_value(<<"Participant-ID">>, Participant) of
+        ParticipantId -> wh_json:get_value(<<"Call-ID">>, Participant);
+        _ -> participant_call_id(ParticipantId, Participants)
     end.
 
 participant_payloads(Participants, RunTime, ActionId) ->
@@ -1241,15 +1410,3 @@ list_commands(Props) ->
                ,{<<"DataGet">>, <<"Retrieve the data api tree.  (Priv: <none>)">>}
               ],
     {'ok', {props:filter_undefined(Payload), 'n'}}.
-
-
-
-
-
-
-
-
-
-
-
-

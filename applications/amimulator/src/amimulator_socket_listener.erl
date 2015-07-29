@@ -13,6 +13,7 @@
                 ,bundle = <<>>
                 ,account_id
                 ,event_mask = 'on' :: list() | 'on' | 'off'
+                ,challenge
                }).
 
 %%
@@ -83,7 +84,7 @@ handle_cast({'logout'}, #state{accept_socket=AcceptSocket
 
     amimulator_sup:unregister_event_listener(AccountId, self()),
     gen_server:cast(self(), 'accept'),
-    {'noreply', State#state{accept_socket='undefined', bundle = <<>>, account_id='undefined', event_mask='on'}};
+    {'noreply', State#state{accept_socket='undefined', bundle = <<>>, account_id='undefined', event_mask='on', challenge='undefined'}};
 %% Synchronously publish AMI events to socket
 handle_cast({'publish', Events}, #state{accept_socket=AcceptSocket}=State) ->
     publish_events(Events, AcceptSocket),
@@ -96,12 +97,25 @@ handle_cast(Event, State) ->
 handle_info({'tcp', _Socket, Data}, #state{bundle=Bundle
                                            ,account_id=AccountId
                                            ,event_mask=EventMask
+                                           ,challenge=Challenge
                                           }=State) ->
     %% Received commands are buffered until a flush (data containing only \r\n)
     case list_to_binary(Data) of
         <<"\r\n">> ->
-            maybe_send_response(EventMask, amimulator_commander:handle(Bundle, AccountId)),
-            {'noreply', State#state{bundle = <<>>}};
+            case amimulator_commander:handle(Bundle, AccountId, Challenge) of
+                [_|_]=Props ->
+                    Result = props:get_value(<<"Ret">>, Props),
+                    Challenge2 = props:get_value(<<"Challenge">>, Props),
+                    maybe_send_response(EventMask, Result),
+                    {'noreply', State#state{bundle = <<>>
+                                            ,challenge=Challenge2
+                                           }};
+                Result ->
+                    maybe_send_response(EventMask, Result),
+                    {'noreply', State#state{bundle = <<>>
+                                            ,challenge='undefined'
+                                           }}
+            end;
         NewData ->
             {'noreply', State#state{bundle = <<Bundle/binary, NewData/binary>>}}
     end;
@@ -127,8 +141,9 @@ terminate('shutdown', #state{accept_socket=AcceptSocket
             gen_tcp:close(AcceptSocket),
             'ok'
     end;
-terminate(Reason, State) ->
+terminate(Reason, #state{account_id=AccountId}=State) ->
     lager:debug("Unexpected terminate (~p)", [Reason]),
+    amimulator_sup:unregister_event_listener(AccountId, self()),
     terminate('shutdown', State).
 
 code_change(_OldVsn, State, _Extra) ->
