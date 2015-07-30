@@ -4,6 +4,7 @@
 -module(cf_kvs_set).
 
 -export([handle/2]).
+-export([get_kv/2, get_kv/3]).
 -export([add_kvs_to_props/2]).
 -export([format_json/1]).
 
@@ -23,6 +24,12 @@ handle(Data, Call) ->
     Call2 = set_kvs(Data, Call),
     cf_exe:set_call(Call2),
     cf_exe:continue(Call2).
+
+get_kv(Key, Call) ->
+    get_kv(?COLLECTION_KVS, Key, Call).
+
+get_kv(Collection, Key, Call) ->
+    wh_json:get_value(Key, get_collection(Collection, Call)).
     
 set_kvs(Data, Call) ->
     Call2 = set_kvs_mode(wh_json:get_value(<<"kvs_mode">>, Data, undefined), Call),
@@ -34,7 +41,7 @@ set_kvs(Data, Call) ->
         Keys
     ).
     
-set_kvs_mode(undefined, Call) -> Call;
+set_kvs_mode('undefined', Call) -> set_collection(?COLLECTION_MODE, <<"kvs_mode">>, 'undefined', Call);
 set_kvs_mode(Mode, Call) -> set_collection(?COLLECTION_MODE, <<"kvs_mode">>, Mode, Call).
 
 -spec get_kvs_collection(whapps_call:call()) -> api_binary().

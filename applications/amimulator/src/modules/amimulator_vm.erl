@@ -21,7 +21,7 @@ bindings(Props) ->
 
 responders(_Props) ->
     [
-        {<<"notification">>, <<"voicemail_new">>}
+        {<<"notification">>, <<"voicemail_saved">>}
     ].
 
 handle_event(EventJObj, Props) ->
@@ -43,7 +43,7 @@ handle_event(EventJObj, Props) ->
 % 127.0.0.1            <- AppData: 100@default,u
 % 127.0.0.1            <- Uniqueid: 1433191552.4
 
-handle_specific_event(<<"voicemail_new">>, EventJObj) ->
+handle_specific_event(<<"voicemail_saved">>, EventJObj) ->
     new_voicemail(EventJObj);
 handle_specific_event(_, _EventJObj) ->
     lager:debug("unhandled event").

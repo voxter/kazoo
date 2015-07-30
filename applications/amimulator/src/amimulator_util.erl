@@ -8,6 +8,7 @@
 	     ,format_json_events/1
 	     ,index_of/2
          ,create_call/1
+         ,clear_call/1
 
          ,initial_calls/1
          % ,initial_calls2/1
@@ -17,6 +18,7 @@
          ,channel_string/1
          ,endpoint_exten/1
          ,queue_number/2
+         ,maybe_leave_conference/1
 ,
    
     find_id_number/2, queue_for_number/2]).
@@ -87,7 +89,32 @@ index_of(Element, [_|T], Index) ->
 -spec create_call(wh_json:object()) -> amimulator_call:call().
 create_call(EventJObj) ->
     Call = amimulator_call:from_json(EventJObj),
-    amimulator_call:update_from_other(ami_sm:call(amimulator_call:other_leg_call_id(Call)), Call).
+    UpdatedCall = amimulator_call:update_from_other(ami_sm:call(amimulator_call:other_leg_call_id(Call)), Call),
+    lager:debug("call ~p", [UpdatedCall]),
+    UpdatedCall.
+
+-spec clear_call(ne_binary()) -> boolean().
+clear_call(CallId) ->
+    case ami_sm:call(CallId) of
+        'undefined' -> 'not_found';
+        Call ->
+            Payload = [[
+                {<<"Event">>, <<"Hangup">>},
+                {<<"Privilege">>, <<"call,all">>},
+                {<<"Channel">>, amimulator_call:channel(Call)},
+                {<<"Uniqueid">>, CallId},
+                {<<"CallerIDNum">>, <<>>},
+                {<<"CallerIDName">>, <<>>},
+                {<<"ConnectedLineNum">>, <<>>},
+                {<<"ConnectedLineName">>, <<>>},
+                {<<"Cause">>, 16},
+                {<<"Cause-txt">>, <<"Normal Clearing">>}
+            ]],
+
+            amimulator_event_listener:publish_amqp_event({'publish', Payload}, amimulator_call:account_id(Call)),
+
+            ami_sm:delete_call(CallId)
+    end.
 
 %% Fetches all active calls for an account
 -spec initial_calls(ne_binary()) -> [amimulator_call:call(),...] | [].
@@ -336,7 +363,12 @@ endpoint_exten(Endpoint) ->
     endpoint_exten(wh_json:get_value(<<"owner_id">>, Endpoint), Endpoint).
 
 endpoint_exten('undefined', Endpoint) ->
-    wh_json:get_value(<<"name">>, Endpoint);
+    case wh_json:get_value(<<"name">>, Endpoint) of
+        'undefined' ->
+            Server = hd(wh_json:get_value(<<"servers">>, Endpoint)),
+            wh_json:get_value([<<"auth">>, <<"auth_user">>], Server);
+        Name -> Name
+    end;
 endpoint_exten(OwnerId, Endpoint) ->
     case couch_mgr:open_doc(wh_json:get_value(<<"pvt_account_db">>, Endpoint), OwnerId) of
         {'ok', UserDoc} -> <<(wh_json:get_value(<<"username">>, UserDoc))/binary>>;
@@ -358,6 +390,30 @@ queue_number(AccountDb, QueueId) ->
         {ok, Results} ->
             Value = wh_json:get_value(<<"value">>, hd(Results)),
             hd(Value)
+    end.
+
+maybe_leave_conference(CallId) ->
+    case ami_sm:conf_cache(CallId) of
+        'undefined' ->
+            [];
+        Cache ->
+            CallerId = props:get_value(<<"CallerIDnum">>, Cache),
+            Timestamp = props:get_value(<<"Timestamp">>, Cache),
+            {MegaSecs, Secs, _MicroSecs} = os:timestamp(),
+            Duration = (MegaSecs * 1000000 + Secs) - Timestamp,
+            [[
+                {<<"Event">>, <<"MeetmeLeave">>},
+                {<<"Privilege">>, <<"call,all">>},
+                {<<"Channel">>, props:get_value(<<"Channel">>, Cache)},
+                {<<"Uniqueid">>, props:get_value(<<"Uniqueid">>, Cache)},
+                {<<"Meetme">>, props:get_value(<<"Meetme">>, Cache)},
+                {<<"Usernum">>, props:get_value(<<"Usernum">>, Cache)},
+                {<<"CallerIDNum">>, CallerId},
+                {<<"CallerIDName">>, CallerId},
+                {<<"ConnectedLineNum">>, <<"<unknown>">>},
+                {<<"ConnectedLineName">>, <<"<unknown>">>},
+                {<<"Duration">>, Duration}
+            ]]
     end.
 
 % initial_calls2(AccountId) ->

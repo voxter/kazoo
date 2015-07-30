@@ -195,8 +195,9 @@ call_event(FSM, <<"call_event">>, <<"CHANNEL_TRANSFEREE">>, JObj) ->
     gen_fsm:send_event(FSM, {'channel_unbridged', call_id(JObj)});
 call_event(FSM, <<"call_event">>, <<"PLAYBACK_STOP">>, JObj) ->
     gen_fsm:send_event(FSM, {'playback_stop', JObj});
-call_event(_FSM, <<"call_event">>, <<"CALL_UPDATE">>, JObj) ->
-    lager:debug("Unhandled CALL_UPDATE: ~p", [JObj]);
+call_event(_FSM, <<"call_event">>, <<"CALL_UPDATE">>, _JObj) ->
+    % lager:debug("Unhandled CALL_UPDATE: ~p", [JObj]);
+    'ok';
 call_event(_, _C, _E, _) ->
     lager:info("Unhandled combo: ~s/~s", [_C, _E]).
 
@@ -750,6 +751,8 @@ ringing({'agent_timeout', _JObj}, #state{agent_listener=AgentListener
      ,return_to_state(Fails+1, MaxFails, AccountId, AgentId)
      ,clear_call(State, 'failed')
     };
+ringing({'playback_stop', _JObj}, State) ->
+    {'next_state', 'ringing', State};
 ringing({'channel_bridged', MemberCallId}, #state{member_call_id=MemberCallId
                                              ,member_call=MemberCall
                                              ,agent_listener=AgentListener
@@ -942,6 +945,28 @@ awaiting_callback({'originate_resp', ACallId}, #state{agent_listener=AgentListen
                                                     ,originate_call_ids=[]
                                                     ,control_q_map=[]
                                                    }};
+awaiting_callback({'originate_failed', E}, #state{agent_listener=AgentListener
+                                                  ,account_id=AccountId
+                                                  ,agent_id=AgentId
+                                                  ,member_call_queue_id=QueueId
+                                                  ,member_call_id=CallId
+                                                  ,connect_failures=Fails
+                                                  ,max_connect_failures=MaxFails
+                                                 }=State) ->
+    acdc_agent_listener:member_connect_retry(AgentListener, CallId),
+
+    ErrReason = missed_reason(wh_json:get_value(<<"Error-Message">>, E)),
+
+    lager:debug("ringing agent failed: ~s", [ErrReason]),
+
+    acdc_stats:call_missed(AccountId, QueueId, AgentId, CallId, ErrReason),
+
+    acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
+
+    {'next_state'
+     ,return_to_state(Fails+1, MaxFails, AccountId, AgentId)
+     ,clear_call(State, 'failed')
+    };
 awaiting_callback({'call_from', MemberCallId}, #state{account_id=AccountId
 													  ,agent_listener=AgentListener
 													  ,member_call=Call
@@ -1114,6 +1139,8 @@ answered({'dialplan_error', _App}, #state{agent_listener=AgentListener
 
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
     {'next_state', 'ready', clear_call(State, 'ready')};
+answered({'playback_stop', _JObj}, State) ->
+    {'next_state', 'answered', State};
 answered({'channel_bridged', CallId}, #state{member_call_id=CallId
                                              ,agent_listener=AgentListener
                                              ,queue_notifications=Ns
@@ -1331,6 +1358,8 @@ paused('status', _, #state{pause_ref=Ref}=State) ->
 paused('current_call', _, State) ->
     {'reply', 'undefined', 'paused', State}.
 
+outbound({'playback_stop', _JObj}, State) ->
+    {'next_state', 'outbound', State};
 outbound({'channel_hungup', CallId, _Cause}, #state{agent_listener=AgentListener
                                                     ,outbound_call_id=CallId
                                                    }=State) ->

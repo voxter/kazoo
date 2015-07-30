@@ -66,5 +66,9 @@ maybe_use_variable(Data, Call) ->
         'undefined' ->
             wh_json:get_value(<<"id">>, Data);
         Variable ->
-            whapps_call:custom_channel_var(Variable, Call)
+            Value = wh_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
+            case couch_mgr:open_cache_doc(whapps_call:account_db(Call), Value) of
+                {'ok', _} -> Value;
+                _ -> wh_json:get_value(<<"id">>, Data)
+            end
     end.
