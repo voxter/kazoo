@@ -457,9 +457,9 @@ send_req(Call, Uri, 'post', Headers, BaseParams, Debug) ->
     UpdatedCall = whapps_call:kvs_erase(<<"digits_collected">>, Call),
     case Headers of
         [] ->
-            send(UpdatedCall, Uri, 'post', [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}], wh_json:to_querystring(Params), Debug);
+            send(UpdatedCall, Uri, 'post', [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}, {"Accept-Language", binary_to_list(whapps_call:language(Call))}], wh_json:to_querystring(Params), Debug);
         _ ->
-            send(UpdatedCall, Uri, 'post', Headers, wh_json:to_querystring(Params), Debug)
+            send(UpdatedCall, Uri, 'post', [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "application/json"}, {"Accept-Language", binary_to_list(whapps_call:language(Call))} | Headers], wh_json:to_querystring(Params), Debug)
     end.
 
 -spec send(whapps_call:call(), iolist(), atom(), wh_proplist(), iolist(), boolean()) ->
@@ -502,12 +502,7 @@ maybe_oauth_headers(AccountId, URL, Params) ->
         {_, undefined} ->
             [];
         {_, _} ->
-            [
-                {"Content-Type", "application/x-www-form-urlencoded"},
-                {"Accept", "application/json"},
-                {"Accept-Language", "en-us"},
-                kazoo_oauth_util:oauth_header(URL, Params, ConsumerKey, ConsumerSecret, AccessToken, AccessSecret)
-            ]
+            [kazoo_oauth_util:oauth_header(URL, Params, ConsumerKey, ConsumerSecret, AccessToken, AccessSecret)]
     end.
 
 -spec normalize_resp_headers(wh_proplist()) -> wh_proplist().
