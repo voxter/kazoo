@@ -210,18 +210,19 @@ store_owner_id(Call) ->
 %%-----------------------------------------------------------------------------
 -spec set_language(whapps_call:call()) -> whapps_call:call().
 set_language(Call) ->
-    Default = case whapps_call:language(Call) of
-        'undefined' -> wh_media_util:prompt_language(whapps_call:account_id(Call));
-        Language1 -> Language1
-    end,
-    case cf_endpoint:get(Call) of
-        {'ok', Endpoint} ->
-            Language = wh_json:get_value(<<"language">>, Endpoint, Default),
-            lager:debug("setting language '~s' for this call", [Language]),
-            whapps_call:set_language(wh_util:to_lower_binary(Language), Call);
-        {'error', _E} ->
-            lager:debug("no source endpoint for this call, setting language to default ~s", [Default]),
-            whapps_call:set_language(Default, Call)
+    Default = wh_media_util:prompt_language(whapps_call:account_id(Call)),
+    case whapps_call:language(Call) of
+        Default ->
+            case cf_endpoint:get(Call) of
+                {'ok', Endpoint} ->
+                    Language = wh_json:get_value(<<"language">>, Endpoint, Default),
+                    lager:debug("setting language '~s' for this call", [Language]),
+                    whapps_call:set_language(wh_util:to_lower_binary(Language), Call);
+                {'error', _E} ->
+                    lager:debug("no source endpoint for this call, setting language to default ~s", [Default]),
+                    whapps_call:set_language(Default, Call)
+            end;
+        _ -> Call
     end.
 
 %%-----------------------------------------------------------------------------
