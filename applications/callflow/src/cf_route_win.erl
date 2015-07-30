@@ -210,7 +210,10 @@ store_owner_id(Call) ->
 %%-----------------------------------------------------------------------------
 -spec set_language(whapps_call:call()) -> whapps_call:call().
 set_language(Call) ->
-    Default = wh_media_util:prompt_language(whapps_call:account_id(Call)),
+    Default = case whapps_call:language(Call) of
+        'undefined' -> wh_media_util:prompt_language(whapps_call:account_id(Call));
+        Language1 -> Language1
+    end,
     case cf_endpoint:get(Call) of
         {'ok', Endpoint} ->
             Language = wh_json:get_value(<<"language">>, Endpoint, Default),
