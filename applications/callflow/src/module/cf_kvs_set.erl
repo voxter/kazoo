@@ -101,7 +101,7 @@ format_json_rec([{K,V}=KV|Others], []) ->
     "{" ++ format_json_rec({K, V}) ++ "," ++ format_json_rec(Others, [KV]);
     
 format_json_rec([{K,V}=KV|Others], Done) ->
-    format_json_rec({K, V}) ++ "," ++ format_json_rec(Others, Done ++ KV);
+    format_json_rec({K, V}) ++ "," ++ format_json_rec(Others, [KV] ++ Done);
     
 format_json_rec({K, V}, _) ->
     "\"" ++ binary_to_list(K) ++ "\":" ++ format_json_rec(V, []);
