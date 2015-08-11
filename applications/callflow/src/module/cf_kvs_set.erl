@@ -36,13 +36,27 @@ set_kvs(Data, Call) ->
     Data2 = wh_json:delete_key(<<"kvs_mode">>, Data),
     Keys = wh_json:get_keys(Data2),
     lists:foldl(fun(Key, Call3) ->
-        set_kvs_collection(Key, wh_json:get_value(Key, Data2), Call3) end,
+        set_kvs_collection(Key, evaluate(wh_json:get_value(Key, Data2), Call3), Call3) end,
         Call2,
         Keys
     ).
     
 set_kvs_mode('undefined', Call) -> set_collection(?COLLECTION_MODE, <<"kvs_mode">>, 'undefined', Call);
 set_kvs_mode(Mode, Call) -> set_collection(?COLLECTION_MODE, <<"kvs_mode">>, Mode, Call).
+
+evaluate(<<"$", Key/binary>>, Call) ->
+    get_kv(Key, Call);
+evaluate(Value, Call) ->
+    case wh_json:is_json_object(Value) of
+        'true' -> evaluate_ui(wh_json:get_keys(Value), Value, Call);
+        'false' -> Value
+    end.
+
+evaluate_ui([<<"type">>, <<"value">>], Value, _Call) ->
+    %evaluate(wh_json:get_value(<<"value">>, Value), Call);
+    Value;
+evaluate_ui(_, Value, _) ->
+    Value.
 
 -spec get_kvs_collection(whapps_call:call()) -> api_binary().
 get_kvs_collection(Call) ->
@@ -126,4 +140,4 @@ format_type(Data) when not is_binary(Data) ->
     
 format_type(<<Data/binary>>) ->
     "\"" ++ binary_to_list(Data) ++ "\"".
-    
+ 
