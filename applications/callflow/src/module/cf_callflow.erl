@@ -61,5 +61,6 @@ continue_if_still_active(Call, JObj) ->
         {'ok', _} ->
             lager:info("branching to new callflow ~s", [wh_doc:id(JObj)]),
             Flow = wh_json:get_value(<<"flow">>, JObj, wh_json:new()),
+            cf_exe:set_call(whapps_call:kvs_store('cf_flow_id', wh_doc:id(JObj), Call)),
             cf_exe:branch(Flow, Call)
     end.
