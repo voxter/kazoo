@@ -45,7 +45,7 @@ delete_registration(EndpointId) ->
     gen_server:cast(?MODULE, {'delete_registration', EndpointId}).
 
 call(CallId) ->
-    gen_server:call(?MODULE, {'get_call', CallId}).
+    gen_server:call(?MODULE, {'get_call', CallId}, 'infinity').
 
 call_by_channel(Channel) ->
     gen_server:call(?MODULE, {'get_call_by_channel', Channel}).
@@ -87,7 +87,7 @@ cache_conf_part(CallId, Data) ->
     gen_server:cast(?MODULE, {'cache_conf_part', CallId, Data}).
 
 calls(AccountId) ->
-    gen_server:call(?MODULE, {'get_calls', AccountId}).
+    gen_server:call(?MODULE, {'get_calls', AccountId}, 'infinity').
 
 channel_call_ids(Channel) ->
     gen_server:call(?MODULE, {'get_call_ids_by_channel', Channel}).
