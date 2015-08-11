@@ -448,12 +448,13 @@ maybe_handle_aleg_code(#state{numbers=Ns
                               ,a_collected_dtmf = Collected
                               ,call=Call
                               ,call_id=CallId
+                              ,other_leg=OtherLeg
                              }) ->
     lager:debug("a DTMF timeout, let's check '~s'", [Collected]),
     case has_metaflow(Collected, Ns, Ps) of
         'false' -> lager:debug("no handler for '~s', unarming", [Collected]);
-        {'number', N} -> handle_number_metaflow(Call, N, CallId);
-        {'pattern', P} -> handle_pattern_metaflow(Call, P, CallId)
+        {'number', N} -> handle_number_metaflow(whapps_call:set_other_leg_call_id(OtherLeg, Call), N, CallId);
+        {'pattern', P} -> handle_pattern_metaflow(whapps_call:set_other_leg_call_id(OtherLeg, Call), P, CallId)
     end.
 
 -spec maybe_handle_bleg_code(state()) -> 'ok'.
