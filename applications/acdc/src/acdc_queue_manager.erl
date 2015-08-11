@@ -975,30 +975,31 @@ announce_position(Call, QueueId, Position, {PosAnnounceEnabled, WaitAnnounceEnab
             lager:debug("failed to recv resp from AMQP: ~p", [_E]),
             'undefined';
         {'ok', Resp} ->
-            {AverageWait, Prompts} = maybe_average_wait_announcement(Resp, WaitAnnounceEnabled, Media, OldAverageWait),
-            Prompt = maybe_position_announcement(Position, PosAnnounceEnabled, Media) ++
+            {AverageWait, Prompts} = maybe_average_wait_announcement(Resp, WaitAnnounceEnabled, Media, whapps_call:language(Call), OldAverageWait),
+            Prompt = maybe_position_announcement(Position, PosAnnounceEnabled, Media, whapps_call:language(Call)) ++
                        Prompts,
             whapps_call_command:audio_macro(Prompt, Call),
             AverageWait
     end.
 
--spec maybe_position_announcement(non_neg_integer(), boolean(), proplist()) -> list().
-maybe_position_announcement(_, 'false', _) ->
+-spec maybe_position_announcement(non_neg_integer(), boolean(), proplist(), binary()) -> list().
+maybe_position_announcement(_, 'false', _, _) ->
     [];
-maybe_position_announcement(Position, 'true', Media) ->
-    [{'prompt', props:get_value(<<"position_media">>, Media), <<"A">>}
+maybe_position_announcement(Position, 'true', Media, Language) ->
+    lager:debug("position ~p", [Position]),
+    [{'prompt', props:get_value(<<"position_media">>, Media), Language, <<"A">>}
      ,{'say', wh_util:to_binary(Position), <<"number">>}
-     ,{'prompt', props:get_value(<<"in_the_queue_media">>, Media), <<"A">>}].
+     ,{'prompt', props:get_value(<<"in_the_queue_media">>, Media), Language, <<"A">>}].
 
--spec maybe_average_wait_announcement(wh_json:object(), boolean(), proplist(), non_neg_integer() | 'undefined') ->
+-spec maybe_average_wait_announcement(wh_json:object(), boolean(), proplist(), binary(), non_neg_integer() | 'undefined') ->
         {non_neg_integer() | 'undefined', list()}.
-maybe_average_wait_announcement(_, 'false', _, _) ->
+maybe_average_wait_announcement(_, 'false', _, _, _) ->
     {'undefined', []};
-maybe_average_wait_announcement(JObj, 'true', Media, OldAverageWait) ->
-    average_wait_announcement(JObj, Media, OldAverageWait).
+maybe_average_wait_announcement(JObj, 'true', Media, Language, OldAverageWait) ->
+    average_wait_announcement(JObj, Media, Language, OldAverageWait).
 
--spec average_wait_announcement(wh_json:object(), proplist(), non_neg_integer() | 'undefined') -> {non_neg_integer() | 'undefined', list()}.
-average_wait_announcement(JObj, Media, OldAverageWait) ->
+-spec average_wait_announcement(wh_json:object(), proplist(), binary(), non_neg_integer() | 'undefined') -> {non_neg_integer() | 'undefined', list()}.
+average_wait_announcement(JObj, Media, Language, OldAverageWait) ->
     Abandoned = length(wh_json:get_value(<<"Abandoned">>, JObj, [])),
     Total = length(wh_json:get_value(<<"Abandoned">>, JObj, [])) +
               length(wh_json:get_value(<<"Handled">>, JObj, [])) +
@@ -1013,7 +1014,7 @@ average_wait_announcement(JObj, Media, OldAverageWait) ->
       end
       ,0
       ,[<<"Waiting">>, <<"Handled">>, <<"Processed">>]),
-    time_prompts(format_time(calc_average_wait(Abandoned, Total, TotalWait)), OldAverageWait, Media).
+    time_prompts(format_time(calc_average_wait(Abandoned, Total, TotalWait)), OldAverageWait, Media, Language).
 
 calc_average_wait(Same, Same, TotalWait) ->
     TotalWait;
@@ -1023,34 +1024,34 @@ calc_average_wait(Abandoned, Total, TotalWait) ->
 format_time(Time) ->
     {Time div 3600, Time rem 3600 div 60, Time rem 60}.
 
-time_prompts({0, 0, 0}=AverageWait, _, _) ->
+time_prompts({0, 0, 0}=AverageWait, _, _, _) ->
     {AverageWait, []};
-time_prompts({Hour, Min, Sec}=Time, {Hour2, Min2, Sec2}, Media) when (Hour * 3600 + Min * 60 + Sec) > (Hour2 * 3600 + Min2 * 60 + Sec2) ->
-    {Time, [{'prompt', props:get_value(<<"increase_call_volume_media">>, Media), <<"A">>}
-            ,{'prompt', props:get_value(<<"estimated_wait_time_media">>, Media), <<"A">>}
-            | time_prompts2(Time)
+time_prompts({Hour, Min, Sec}=Time, {Hour2, Min2, Sec2}, Media, Language) when (Hour * 3600 + Min * 60 + Sec) > (Hour2 * 3600 + Min2 * 60 + Sec2) ->
+    {Time, [{'prompt', props:get_value(<<"increase_call_volume_media">>, Media), Language, <<"A">>}
+            ,{'prompt', props:get_value(<<"estimated_wait_time_media">>, Media), Language, <<"A">>}
+            | time_prompts2(Time, Language)
            ]};
-time_prompts(Time, _, Media) ->
-    {Time, [{'prompt', props:get_value(<<"estimated_wait_time_media">>, Media), <<"A">>}
-            | time_prompts2(Time)
+time_prompts(Time, _, Media, Language) ->
+    {Time, [{'prompt', props:get_value(<<"estimated_wait_time_media">>, Media, Language), <<"A">>}
+            | time_prompts2(Time, Language)
            ]}.
     
-time_prompts2({0, 0, _}) ->
-    [{'prompt', <<"queue-less_than_1_minute">>, <<"A">>}];
-time_prompts2({0, Min, _}) when Min =< 5 ->
-    [{'prompt', <<"queue-about_5_minutes">>, <<"A">>}];
-time_prompts2({0, Min, _}) when Min =< 10 ->
-    [{'prompt', <<"queue-about_10_minutes">>, <<"A">>}];
-time_prompts2({0, Min, _}) when Min =< 15 ->
-    [{'prompt', <<"queue-about_15_minutes">>, <<"A">>}];
-time_prompts2({0, Min, _}) when Min =< 30 ->
-    [{'prompt', <<"queue-about_30_minutes">>, <<"A">>}];
-time_prompts2({0, Min, _}) when Min =< 45 ->
-    [{'prompt', <<"queue-about_45_minutes">>, <<"A">>}];
-time_prompts2({0, _, _}) ->
-    [{'prompt', <<"queue-about_1_hour">>, <<"A">>}];
-time_prompts2({_, _, _}) ->
-    [{'prompt', <<"queue-at_least_1_hour">>, <<"A">>}].
+time_prompts2({0, 0, _}, Language) ->
+    [{'prompt', <<"queue-less_than_1_minute">>, Language, <<"A">>}];
+time_prompts2({0, Min, _}, Language) when Min =< 5 ->
+    [{'prompt', <<"queue-about_5_minutes">>, Language, <<"A">>}];
+time_prompts2({0, Min, _}, Language) when Min =< 10 ->
+    [{'prompt', <<"queue-about_10_minutes">>, Language, <<"A">>}];
+time_prompts2({0, Min, _}, Language) when Min =< 15 ->
+    [{'prompt', <<"queue-about_15_minutes">>, Language, <<"A">>}];
+time_prompts2({0, Min, _}, Language) when Min =< 30 ->
+    [{'prompt', <<"queue-about_30_minutes">>, Language, <<"A">>}];
+time_prompts2({0, Min, _}, Language) when Min =< 45 ->
+    [{'prompt', <<"queue-about_45_minutes">>, Language, <<"A">>}];
+time_prompts2({0, _, _}, Language) ->
+    [{'prompt', <<"queue-about_1_hour">>, Language, <<"A">>}];
+time_prompts2({_, _, _}, Language) ->
+    [{'prompt', <<"queue-at_least_1_hour">>, Language, <<"A">>}].
 
 queue_media_list(#state{position_media=PositionMedia
                         ,in_the_queue_media=InTheQueueMedia
