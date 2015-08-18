@@ -149,12 +149,20 @@ get_to_did(Data, Call) ->
 get_request_did(Data, Call) ->
     case wh_json:is_true(<<"do_not_normalize">>, Data) of
         'true' -> get_original_request_user(Call);
-        'false' ->
+        'false' -> maybe_use_capture_group(Data, Call)
+    end.
+
+-spec maybe_use_capture_group(wh_json:object(), whapps_call:call()) -> ne_binary().
+maybe_use_capture_group(Data, Call) ->
+    case whapps_call:kvs_fetch('cf_capture_group', Call) of
+        'undefined' ->
             case cf_endpoint:get(Call) of
                 {'error', _ } -> maybe_bypass_e164(Data, Call);
-                {'ok', Endpoint} ->
-                    maybe_apply_dialplan(Endpoint, Data, Call)
-            end
+                {'ok', Endpoint} -> maybe_apply_dialplan(Endpoint, Data, Call)
+            end;
+        CaptureGroup ->
+            lager:debug("using capture group ~s", [CaptureGroup]),
+            CaptureGroup
     end.
 
 -spec maybe_apply_dialplan(wh_json:object(), wh_json:object(), whapps_call:call()) -> ne_binary().
