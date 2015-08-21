@@ -65,6 +65,7 @@
                 ,ringback :: api_binary()
                 ,moh :: api_binary()
                 ,extension :: api_binary()
+                ,transfer_announce = 'false' :: boolean()
                 ,purgatory_ref :: api_reference()
                 ,event_node :: ne_binary()
                }).
@@ -127,6 +128,7 @@ handle(Data, Call) ->
                                    ,ringback=to_tonestream(wh_json:get_value(<<"ringback">>, Data, ?DEFAULT_RINGBACK))
                                    ,moh=find_moh(Data, Call)
                                    ,extension=get_extension(wh_json:get_first_defined([<<"captures">>, <<"target">>], Data))
+                                   ,transfer_announce=wh_json:is_true(<<"transfer_announce">>, Data, 'false')
                                   }
                           )
     of
@@ -306,12 +308,13 @@ attended_wait(?EVENT(TargetA, <<"CHANNEL_CREATE">>, _Evt)
               ,#state{target_a_leg=TargetA
                       ,transferor=Transferor
                       ,ringback=Ringback
+                      ,transfer_announce=TransferAnnounce
                       ,call=Call
                      }=State
              ) ->
     lager:info("transfer target 'a' ~s channel created", [TargetA]),
     ?WSD_NOTE(TargetA, 'right', <<"created">>),
-    maybe_start_transferor_ringback(Call, Transferor, Ringback),
+    maybe_start_transferor_ringback(Call, Transferor, Ringback, TransferAnnounce),
     {'next_state', 'attended_wait', State};
 attended_wait(?EVENT(TargetA, <<"LEG_CREATED">>, Evt)
               ,#state{target_a_leg=TargetA
@@ -1374,12 +1377,19 @@ to_tonestream('undefined') -> 'undefined';
 to_tonestream(<<"tone_stream://", _/binary>> = TS) -> <<TS/binary, ";loops=-1">>;
 to_tonestream(Ringback) -> <<"tone_stream://", Ringback/binary, ";loops=-1">>.
 
--spec maybe_start_transferor_ringback(whapps_call:call(), ne_binary(), api_binary()) -> 'ok'.
-maybe_start_transferor_ringback(_Call, _Transferor, 'undefined') -> 'ok';
-maybe_start_transferor_ringback(Call, Transferor, Ringback) ->
+-spec maybe_start_transferor_ringback(whapps_call:call(), ne_binary(), api_binary(), boolean()) -> 'ok'.
+maybe_start_transferor_ringback(_Call, _Transferor, 'undefined', _) -> 'ok';
+maybe_start_transferor_ringback(Call, Transferor, Ringback, TransferAnnounce) ->
+    case TransferAnnounce of
+        'true' ->
+            lager:debug("telling transferor that transfer has begun"),
+            whapps_call_command:prompt(<<"menu-transferring_call">>, Call);
+        'false' -> 'ok'
+    end,
+
     Command = whapps_call_command:play_command(Ringback, Transferor),
     lager:debug("playing ringback on ~s to ~s", [Transferor, Ringback]),
-    whapps_call_command:send_command(wh_json:set_values([{<<"Insert-At">>, <<"now">>}], Command), Call).
+    whapps_call_command:send_command(Command, Call).
 
 -spec maybe_cancel_timer(api_reference()) -> 'ok'.
 maybe_cancel_timer('undefined') -> 'ok';

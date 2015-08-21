@@ -1,25 +1,21 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2014, 2600Hz
+%%% @copyright (C) 2015, Voxter Communications
 %%% @doc
 %%%
 %%% @end
 %%% @contributors
+%%%   Daniel Finke
 %%%-------------------------------------------------------------------
--module(konami_sup).
+-module(konami_call_sup).
 
 -behaviour(supervisor).
 
 -export([start_link/0]).
 -export([init/1]).
 
--include("konami.hrl").
+-export([handle_metaflow/2]).
 
-%% Helper macro for declaring children of supervisor
--define(CHILDREN, [?WORKER('konami_listener')
-                   ,?WORKER('konami_event_listener')
-                   ,?WORKER('konami_init')
-                   ,?SUPER('konami_call_sup')
-                  ]).
+-include("konami.hrl").
 
 %% ===================================================================
 %% API functions
@@ -34,6 +30,10 @@
 -spec start_link() -> startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?MODULE}, ?MODULE, []).
+
+handle_metaflow(JObj, Props) ->
+    CallId = wh_json:get_value([<<"Call">>, <<"Call-ID">>], JObj),
+    create_or_update_call(pid_for_callid(CallId), JObj, Props).
 
 %% ===================================================================
 %% Supervisor callbacks
@@ -50,11 +50,26 @@ start_link() ->
 %%--------------------------------------------------------------------
 -spec init([]) -> sup_init_ret().
 init([]) ->
-    wh_util:set_startup(),
-    RestartStrategy = 'one_for_one',
+    RestartStrategy = 'simple_one_for_one',
     MaxRestarts = 5,
     MaxSecondsBetweenRestarts = 10,
 
     SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
 
-    {'ok', {SupFlags, ?CHILDREN}}.
+    {'ok', {SupFlags, [?WORKER_TYPE('konami_call', 'transient')]}}.
+
+pid_for_callid(CallId) ->
+    pid_for_callid(CallId, [Pid || {_, Pid, 'worker', ['konami_call']} <- supervisor:which_children(?MODULE)]).
+
+pid_for_callid(_, []) ->
+    'undefined';
+pid_for_callid(CallId, [Pid|Pids]) ->
+    case konami_call:call_id(Pid) of
+        CallId -> Pid;
+        _ -> pid_for_callid(CallId, Pids)
+    end.
+
+create_or_update_call('undefined', JObj, Props) ->
+    supervisor:start_child(?MODULE, [JObj, Props]);
+create_or_update_call(Pid, JObj, Props) ->
+    konami_call:update(Pid, JObj, Props).

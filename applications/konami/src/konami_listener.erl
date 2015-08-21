@@ -72,19 +72,7 @@ handle_metaflow(JObj, Props) ->
     Call = whapps_call:from_json(wh_json:get_value(<<"Call">>, JObj)),
     whapps_call:put_callid(Call),
 
-    try konami_code_fsm:start_fsm(
-          whapps_call:kvs_store('consumer_pid', props:get_value('server', Props), Call)
-          ,JObj
-         )
-    of
-        _ -> 'ok'
-    catch
-        'exit':'normal' -> 'ok';
-        _E:_R ->
-            ST = erlang:get_stacktrace(),
-            lager:debug("failed to run FSM: ~s: ~p", [_E, _R]),
-            wh_util:log_stacktrace(ST)
-    end.
+    konami_call_sup:handle_metaflow(JObj, Props).
 
 handle_route_req(JObj, _Props) ->
     'true' = wapi_route:req_v(JObj),

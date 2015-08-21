@@ -11,7 +11,7 @@
 -behaviour(gen_fsm).
 
 %% API
--export([start_fsm/2
+-export([start_fsm/3
          ,event/4
          ,transfer_to/2
         ]).
@@ -34,7 +34,8 @@
 
 -type listen_on() :: 'a' | 'b' | 'ab'.
 
--record(state, {numbers :: api_object()
+-record(state, {konami_call_pid :: api_pid()
+                ,numbers :: api_object()
                 ,patterns :: api_object()
                 ,binding_digit = konami_config:binding_digit() :: ne_binary()
                 ,digit_timeout = konami_config:timeout() :: pos_integer()
@@ -74,8 +75,8 @@
 %%% API
 %%%===================================================================
 
--spec start_fsm(whapps_call:call(), wh_json:object()) -> any().
-start_fsm(Call, JObj) ->
+-spec start_fsm(whapps_call:call(), wh_json:object(), pid()) -> any().
+start_fsm(Call, JObj, KonamiCallPid) ->
     ListenOn = listen_on(Call, JObj),
 
     whapps_call:put_callid(Call),
@@ -92,8 +93,7 @@ start_fsm(Call, JObj) ->
     ?WSD_TITLE(["FSM: ", whapps_call:call_id(Call), " listen on: ", wh_util:to_list(ListenOn)]),
 
     gen_fsm:enter_loop(?MODULE, [], 'unarmed'
-                       ,#state{numbers=numbers(Call, JObj)
-                               ,patterns=patterns(Call, JObj)
+                       ,#state{konami_call_pid=KonamiCallPid
                                ,binding_digit=binding_digit(Call, JObj)
                                ,digit_timeout=digit_timeout(Call, JObj)
 
@@ -321,25 +321,30 @@ binding_digit(Call, JObj) ->
             BindingDigit
     end.
 
--spec numbers(whapps_call:call(), wh_json:object()) -> wh_json:object().
-numbers(Call, JObj) ->
-    case wh_json:get_value(<<"Numbers">>, JObj) of
-        'undefined' ->
-            lager:debug("loading default account metaflow numbers"),
-            konami_config:numbers(whapps_call:account_id(Call));
-        Numbers ->
-            lager:debug("loading numbers from api: ~p", [Numbers]),
-            Numbers
-    end.
+% -spec numbers(whapps_call:call(), wh_json:object()) -> wh_json:object().
+% numbers(Call, JObj) ->
+%     case wh_json:get_value(<<"Numbers">>, JObj) of
+%         'undefined' ->
+%             lager:debug("loading default account metaflow numbers"),
+%             konami_config:numbers(whapps_call:account_id(Call));
+%         Numbers ->
+%             lager:debug("loading numbers from api: ~p", [Numbers]),
+%             Numbers
+%     end.
 
--spec patterns(whapps_call:call(), wh_json:object()) -> wh_json:object().
-patterns(Call, JObj) ->
-    case wh_json:get_value(<<"Patterns">>, JObj) of
-        'undefined' -> konami_config:patterns(whapps_call:account_id(Call));
-        Patterns ->
-            lager:debug("loading patterns from api: ~p", [Patterns]),
-            Patterns
-    end.
+% -spec patterns(whapps_call:call(), wh_json:object()) -> wh_json:object().
+% patterns(Call, JObj) ->
+%     case wh_json:get_value(<<"Patterns">>, JObj) of
+%         'undefined' -> konami_config:patterns(whapps_call:account_id(Call));
+%         Patterns ->
+%             lager:debug("loading patterns from api: ~p", [Patterns]),
+%             Patterns
+%     end.
+numbers(Pid, EndpointId) ->
+    konami_call:numbers(Pid, EndpointId).
+
+patterns(Pid, EndpointId) ->
+    konami_call:patterns(Pid, EndpointId).
 
 -spec digit_timeout(whapps_call:call(), wh_json:object()) -> pos_integer().
 digit_timeout(Call, JObj) ->
@@ -443,13 +448,14 @@ maybe_cancel_timer(Ref) when is_reference(Ref) ->
 maybe_cancel_timer(_) -> 'ok'.
 
 -spec maybe_handle_aleg_code(state()) -> 'ok'.
-maybe_handle_aleg_code(#state{numbers=Ns
-                              ,patterns=Ps
+maybe_handle_aleg_code(#state{konami_call_pid=Pid
                               ,a_collected_dtmf = Collected
                               ,call=Call
                               ,call_id=CallId
                               ,other_leg=OtherLeg
                              }) ->
+    Ns = numbers(Pid, whapps_call:authorizing_id(Call)),
+    Ps = patterns(Pid, whapps_call:authorizing_id(Call)),
     lager:debug("a DTMF timeout, let's check '~s'", [Collected]),
     case has_metaflow(Collected, Ns, Ps) of
         'false' -> lager:debug("no handler for '~s', unarming", [Collected]);
@@ -458,12 +464,14 @@ maybe_handle_aleg_code(#state{numbers=Ns
     end.
 
 -spec maybe_handle_bleg_code(state()) -> 'ok'.
-maybe_handle_bleg_code(#state{numbers=Ns
-                              ,patterns=Ps
+maybe_handle_bleg_code(#state{konami_call_pid=Pid
                               ,b_collected_dtmf = Collected
                               ,call=Call
                               ,other_leg=OtherLeg
+                              ,b_endpoint_id=BEndpointId
                              }) ->
+    Ns = numbers(Pid, BEndpointId),
+    Ps = patterns(Pid, BEndpointId),
     lager:debug("b DTMF timeout, let's check '~s'", [Collected]),
     case has_metaflow(Collected, Ns, Ps) of
         'false' -> lager:debug("no handler for '~s', unarming", [Collected]);
