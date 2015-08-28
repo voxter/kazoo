@@ -56,12 +56,14 @@ handle_call({'get_patterns', EndpointId}, _, #state{endpoint_patterns=Ps}=State)
 handle_call(_Request, _From, State) ->
     {'noreply', State}.
     
-handle_cast({'update', JObj, _Props}, #state{endpoint_numbers=Ns
-                                            ,endpoint_patterns=Ps
-                                           }=State) ->
+handle_cast({'update', JObj, _Props}, #state{code_fsm_pid=FSM
+                                             ,endpoint_numbers=Ns
+                                             ,endpoint_patterns=Ps
+                                            }=State) ->
     EndpointId = wh_json:get_value(<<"Endpoint-ID">>, JObj),
     CallId = wh_json:get_value([<<"Call">>, <<"Call-ID">>], JObj),
     lager:debug("adding endpoint ~s to konami call ~s", [EndpointId, CallId]),
+    konami_code_fsm:add_endpoint(FSM, EndpointId),
     {'noreply', State#state{endpoint_numbers = [{EndpointId, wh_json:get_value(<<"Numbers">>, JObj)} | Ns]
                             ,endpoint_patterns = [{EndpointId, wh_json:get_value(<<"Patterns">>, JObj)} | Ps]
                            }};
@@ -84,11 +86,16 @@ code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
 init_state(JObj, Props) ->
+    AuthorizingId = wh_json:get_value([<<"Call">>, <<"Custom-Channel-Vars">>, <<"Authorizing-ID">>], JObj),
     EndpointId = wh_json:get_value(<<"Endpoint-ID">>, JObj),
     {'ok', #state{call_id = wh_json:get_value([<<"Call">>, <<"Call-ID">>], JObj)
                   ,code_fsm_pid = start_fsm(JObj, Props)
-                  ,endpoint_numbers = [{EndpointId, wh_json:get_value(<<"Numbers">>, JObj)}]
-                  ,endpoint_patterns = [{EndpointId, wh_json:get_value(<<"Patterns">>, JObj)}]
+                  ,endpoint_numbers = [{AuthorizingId, wh_json:get_value(<<"Numbers">>, JObj)}
+                                       ,{EndpointId, wh_json:get_value(<<"Numbers">>, JObj)}
+                                      ]
+                  ,endpoint_patterns = [{AuthorizingId, wh_json:get_value(<<"Patterns">>, JObj)}
+                                        ,{EndpointId, wh_json:get_value(<<"Patterns">>, JObj)}
+                                       ]
                  }}.
 
 start_fsm(JObj, Props) ->

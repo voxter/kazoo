@@ -12,6 +12,7 @@
 
 %% API
 -export([start_fsm/3
+         ,add_endpoint/2
          ,event/4
          ,transfer_to/2
         ]).
@@ -49,12 +50,12 @@
 
                 ,b_digit_timeout_ref :: api_reference()
                 ,b_collected_dtmf = <<>> :: binary()
-                ,b_endpoint_id :: api_binary()
+                ,b_endpoint_ids = [] :: api_binaries()
                 ,b_leg_armed = 'false' :: boolean()
 
                 ,call_id :: ne_binary()
                 ,other_leg :: api_binary()
-                ,other_leg_e164_destination :: api_binary()
+                ,other_leg_candidates = [] :: api_binaries()
                }).
 -type state() :: #state{}.
 
@@ -103,10 +104,12 @@ start_fsm(Call, JObj, KonamiCallPid) ->
                                        whapps_call:kvs_store(?MODULE, self(), Call)
                                       )
                                ,call_id=whapps_call:call_id_direct(Call)
-                               ,other_leg_e164_destination=wnm_util:to_e164(whapps_call:to_user(Call))
 
-                               ,b_endpoint_id=BEndpointId
+                               ,b_endpoint_ids=[BEndpointId]
                               }).
+
+add_endpoint(FSM, EndpointId) ->
+    gen_fsm:send_all_state_event(FSM, {'add_endpoint', EndpointId}).
 
 -spec event(pid(), ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
 event(FSM, CallId, <<"DTMF">>, JObj) ->
@@ -214,14 +217,16 @@ handle_event(?EVENT(CallId, <<"metaflow_exe">>, Metaflow), StateName, #state{cal
     _Pid = proc_lib:spawn('konami_code_exe', 'handle', [Metaflow, Call]),
     lager:debug("recv metaflow exe request for ~s, processing in ~p", [CallId, _Pid]),
     {'next_state', StateName, State};
-handle_event(?EVENT(CallId, <<"update">>, JObj), StateName, #state{call_id=CallId}=State) ->
-    NewNumbers = wh_json:get_value(<<"Data">>, JObj),
-    lager:debug("trying to update FSM ~p numbers to ~p", [self(), NewNumbers]),
-    {'next_state', StateName, State#state{numbers=NewNumbers
-                                     ,digit_timeout=0
-                                    }};
-handle_event(?EVENT(_CallId, <<"update">>, _JObj), StateName, State) ->
-    {'next_state', StateName, State};
+handle_event({'add_endpoint', EndpointId}, StateName, #state{b_endpoint_ids=BEndpointIds}=State) ->
+    {'next_state', StateName, State#state{b_endpoint_ids = [EndpointId | BEndpointIds]}};
+% handle_event(?EVENT(CallId, <<"update">>, JObj), StateName, #state{call_id=CallId}=State) ->
+%     NewNumbers = wh_json:get_value(<<"Data">>, JObj),
+%     lager:debug("trying to update FSM ~p numbers to ~p", [self(), NewNumbers]),
+%     {'next_state', StateName, State#state{numbers=NewNumbers
+%                                      ,digit_timeout=0
+%                                     }};
+% handle_event(?EVENT(_CallId, <<"update">>, _JObj), StateName, State) ->
+%     {'next_state', StateName, State};
 handle_event(?EVENT(_CallId, <<"CHANNEL_ANSWER">>, Evt)
              ,StateName
              ,State
@@ -231,24 +236,12 @@ handle_event(?EVENT(CallId, <<"CHANNEL_BRIDGE">>, Evt)
              ,StateName
              ,#state{call_id=CallId}=State
             ) ->
-    case wh_json:get_value(<<"Endpoint-Disposition">>, Evt) of
-        <<"EARLY MEDIA">> ->
-            lager:debug("we'll let that one slide... (early media should be treated like an answer)"),
-            OtherLegCallId = kz_call_event:other_leg_call_id(Evt),
-            maybe_add_call_event_bindings(OtherLegCallId),
-            {'next_state'
-             ,StateName
-             ,handle_channel_bridge(State#state{other_leg=OtherLegCallId}, CallId, OtherLegCallId, 'undefined')
-            };
-        _ ->
-            {'next_state', StateName, handle_channel_bridge(State, CallId, kz_call_event:other_leg_call_id(Evt)
-                                                            ,wnm_util:to_e164(wh_json:get_value(<<"Other-Leg-Destination-Number">>, Evt, <<>>)))}
-    end;
+    {'next_state', StateName, handle_channel_bridge(State, CallId, kz_call_event:other_leg_call_id(Evt))};
 handle_event(?EVENT(OtherLeg, <<"CHANNEL_BRIDGE">>, Evt)
              ,StateName
              ,#state{other_leg=OtherLeg}=State
             ) ->
-    {'next_state', StateName, handle_channel_bridge(State, kz_call_event:other_leg_call_id(Evt), OtherLeg, 'undefined')};
+    {'next_state', StateName, handle_channel_bridge(State, kz_call_event:other_leg_call_id(Evt), OtherLeg)};
 handle_event(?EVENT(CallId, <<"CHANNEL_DESTROY">>, _Evt)
              ,StateName
              ,#state{call_id=CallId}=State
@@ -468,7 +461,7 @@ maybe_handle_bleg_code(#state{konami_call_pid=Pid
                               ,b_collected_dtmf = Collected
                               ,call=Call
                               ,other_leg=OtherLeg
-                              ,b_endpoint_id=BEndpointId
+                              ,b_endpoint_ids=[BEndpointId]
                              }) ->
     Ns = numbers(Pid, BEndpointId),
     Ps = patterns(Pid, BEndpointId),
@@ -557,18 +550,14 @@ handle_channel_answer(#state{call_id=CallId}=State, CallId, _Evt) ->
 handle_channel_answer(#state{other_leg=OtherLeg}=State, OtherLeg, _Evt) ->
     lager:debug("'b' leg ~s answered", [OtherLeg]),
     State;
-handle_channel_answer(#state{other_leg=_OtherLeg}=State
+handle_channel_answer(State
                       ,CallId
                       ,Evt
                      ) ->
-    Destination = case binary:split(wh_json:get_value(<<"To">>, Evt, <<"@">>), <<"@">>) of
-        [H,_T] -> H;
-        [H] -> H
-    end,
     maybe_other_leg_answered(State
                              ,CallId
                              ,kz_call_event:authorizing_id(Evt)
-                             ,wnm_util:to_e164(Destination)
+                             ,kz_call_event:other_leg_call_id(Evt)
                             ).
 % handle_channel_answer(#state{call_id=_CallId
 %                              ,other_leg=_OtherLeg
@@ -579,47 +568,61 @@ handle_channel_answer(#state{other_leg=_OtherLeg}=State
 %     lager:debug("channel ~s answered while on ~s and ~s", [_AnsweredId, _CallId, _OtherLeg]),
 %     State.
 
--spec maybe_other_leg_answered(state(), ne_binary(), ne_binary(), binary()) -> state().
-maybe_other_leg_answered(#state{b_endpoint_id=EndpointId
-                                ,call=Call
+-spec maybe_other_leg_answered(state(), ne_binary(), ne_binary(), ne_binary()) -> state().
+maybe_other_leg_answered(#state{b_endpoint_ids=EndpointIds
+                                ,other_leg_candidates=OtherLegCandidates
                                }=State
-                         ,OtherLeg
+                         ,CallId
                          ,EndpointId
-                         ,Destination
+                         ,OtherLegCallId
                         ) ->
-    lager:debug("yay, our endpoint ~s answered on ~s", [EndpointId, OtherLeg]),
-    maybe_add_call_event_bindings(OtherLeg),
-    State#state{other_leg=OtherLeg
-                ,call=whapps_call:set_other_leg_call_id(OtherLeg, Call)
-                ,other_leg_e164_destination=Destination
-               };
-maybe_other_leg_answered(State, _CallId, _EndpointId, _) ->
-    % lager:debug("ignoring channel ~s answering for endpoint ~s", [_CallId, _EndpointId]),
+    case lists:member(OtherLegCallId, OtherLegCandidates) andalso lists:member(EndpointId, EndpointIds) of
+        'true' ->
+            lager:debug("used candidate other leg ~s because of endpoint id (~s) matchup", [OtherLegCallId, EndpointId]),
+            endpoint_answered(State, OtherLegCallId, EndpointId);
+        'false' ->
+            State1 = maybe_add_candidate(State, CallId, EndpointId),
+            case lists:member(EndpointId, EndpointIds) of
+                'true' -> endpoint_answered(State1, CallId, EndpointId);
+                'false' ->
+                    lager:debug("ignoring channel ~s answering for endpoint ~s", [CallId, EndpointId]),
+                    State1
+            end
+    end.
+
+maybe_add_candidate(#state{other_leg_candidates=OtherLegCandidates}=State
+                    ,CallId
+                    ,'undefined'
+                   ) ->
+    lager:debug("added potential candidate call ~s for call forward", [CallId]),
+    State#state{other_leg_candidates=[CallId | OtherLegCandidates]};
+maybe_add_candidate(State, _, _) ->
     State.
 
--spec handle_channel_bridge(state(), ne_binary(), ne_binary(), api_binary()) -> state().
+endpoint_answered(#state{call=Call}=State
+                  ,CallId
+                  ,EndpointId) ->
+    lager:debug("yay, our endpoint ~s answered on ~s", [EndpointId, CallId]),
+    maybe_add_call_event_bindings(CallId),
+    State#state{other_leg=CallId
+                ,call=whapps_call:set_other_leg_call_id(CallId, Call)
+                ,b_endpoint_ids=[EndpointId]
+               }.
+
+-spec handle_channel_bridge(state(), ne_binary(), ne_binary()) -> state().
 handle_channel_bridge(#state{call_id=CallId
-                            }=State, CallId, CallId, _) ->
+                            }=State, CallId, CallId) ->
     lager:debug("bridging to self - ignoring"),
     State;
 handle_channel_bridge(#state{call_id=CallId
-                             ,call=Call
-                             ,other_leg_e164_destination=Destination
-                            }=State, CallId, OtherLeg, Destination) ->
-    lager:debug("probably found the next leg (~s) of an offnet call", [OtherLeg]),
-    maybe_add_call_event_bindings(OtherLeg),
-    State#state{call=whapps_call:set_other_leg_call_id(OtherLeg, Call)
-                ,other_leg=OtherLeg
-               };
-handle_channel_bridge(#state{call_id=CallId
                              ,other_leg=OtherLeg
-                            }=State, CallId, OtherLeg, _) ->
+                            }=State, CallId, OtherLeg) ->
     lager:debug("joy, 'a' and 'b' legs bridged"),
     State;
 handle_channel_bridge(#state{call_id=CallId
                              ,listen_on='a'
                              ,call=Call
-                            }=State, CallId, OtherLeg, _) ->
+                            }=State, CallId, OtherLeg) ->
     lager:debug("joy, 'a' is bridged to ~s", [OtherLeg]),
     maybe_add_call_event_bindings(OtherLeg),
     State#state{call=whapps_call:set_other_leg_call_id(OtherLeg, Call)
@@ -628,7 +631,6 @@ handle_channel_bridge(#state{call_id=CallId
 handle_channel_bridge(#state{other_leg='undefined'}
                       ,_CallId
                       ,_OtherLeg
-                      ,_
                      ) ->
     lager:debug("'a' leg has bridged to other leg ~s...done here", [_OtherLeg]),
     exit('normal');
@@ -638,7 +640,6 @@ handle_channel_bridge(#state{call_id=_CallId
                             }
                       ,UUID
                       ,OtherLeg
-                      ,_
                      ) ->
     lager:debug("our 'b' leg ~s bridged to ~s instead of ~s", [OtherLeg, UUID, _CallId]),
     exit('normal');
@@ -648,7 +649,6 @@ handle_channel_bridge(#state{call_id=_CallId
                             }=State
                       ,UUID
                       ,OtherLeg
-                      ,_
                      ) ->
     lager:debug("our 'b' leg ~s bridged to ~s instead of ~s", [OtherLeg, UUID, _CallId]),
     State#state{call_id=UUID

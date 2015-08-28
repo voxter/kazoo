@@ -1380,15 +1380,16 @@ to_tonestream(Ringback) -> <<"tone_stream://", Ringback/binary, ";loops=-1">>.
 -spec maybe_start_transferor_ringback(whapps_call:call(), ne_binary(), api_binary(), boolean()) -> 'ok'.
 maybe_start_transferor_ringback(_Call, _Transferor, 'undefined', _) -> 'ok';
 maybe_start_transferor_ringback(Call, Transferor, Ringback, TransferAnnounce) ->
-    case TransferAnnounce of
-        'true' ->
-            lager:debug("telling transferor that transfer has begun"),
-            whapps_call_command:prompt(<<"menu-transferring_call">>, Call);
-        'false' -> 'ok'
-    end,
-
+    maybe_announce_transfer(Call, Transferor, TransferAnnounce),
     Command = whapps_call_command:play_command(Ringback, Transferor),
     lager:debug("playing ringback on ~s to ~s", [Transferor, Ringback]),
+    whapps_call_command:send_command(Command, Call).
+
+maybe_announce_transfer(_, _, 'false') ->
+    'ok';
+maybe_announce_transfer(Call, Transferor, 'true') ->
+    Command = whapps_call_command:play_command(wh_media_util:get_prompt(<<"menu-transferring_call">>, Call), Transferor),
+    lager:debug("telling transferor that transfer has begun"),
     whapps_call_command:send_command(Command, Call).
 
 -spec maybe_cancel_timer(api_reference()) -> 'ok'.
