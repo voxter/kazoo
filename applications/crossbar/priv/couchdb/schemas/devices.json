@@ -505,6 +505,13 @@
             "description": "The device metaflow parameters",
             "$ref": "metaflows"
         },
+        "exclude_from_queues": {
+            "default": false,
+            "description": "Do not ring this device when calling user/agent in queue",
+            "name": "Exclude from Queues",
+            "required": false,
+            "type": "boolean"
+        },
         "language": {
             "type": "string",
             "required": false,
