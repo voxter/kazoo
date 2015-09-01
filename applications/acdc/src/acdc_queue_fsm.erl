@@ -414,7 +414,7 @@ connect_req({'dtmf_pressed', DTMF}, #state{caller_exit_key=DTMF
     %% Do not exit if exit is suppressed
     case wh_json:get_value(<<"No-Queue-Exit">>, whapps_call:ccvs(Call)) of
         'undefined' ->
-            webseq:evt(self(), whapps_call:call_id(Call), <<"member call finish - DTMF">>),
+            webseq:evt(?WSD_ID, self(), whapps_call:call_id(Call), <<"member call finish - DTMF">>),
 
             acdc_queue_listener:exit_member_call(Srv),
             acdc_stats:call_abandoned(AccountId, QueueId, whapps_call:call_id(Call), ?ABANDON_EXIT),
@@ -488,7 +488,7 @@ connecting({'accepted', AcceptJObj}, #state{queue_proc=Srv
         'true' ->
             lager:debug("recv acceptance from agent"),
 
-            webseq:evt(self(), whapps_call:call_id(Call), <<"member call - agent acceptance">>),
+            webseq:evt(?WSD_ID, self(), whapps_call:call_id(Call), <<"member call - agent acceptance">>),
 
             HandledCallId = case wh_json:get_value(<<"Old-Call-ID">>, AcceptJObj) of
                 undefined ->
@@ -562,7 +562,7 @@ connecting({'member_hungup', CallEvt}, #state{queue_proc=Srv
     lager:debug("caller did not answer a callback"),
     acdc_queue_listener:finish_member_call(Srv),
 
-    webseq:evt(self(), wh_json:get_value(<<"Call-ID">>, CallEvt), <<"member call - hungup">>),
+    webseq:evt(?WSD_ID, self(), wh_json:get_value(<<"Call-ID">>, CallEvt), <<"member call - hungup">>),
 
     {'next_state', 'ready', clear_member_call(State), 'hibernate'};
 
@@ -600,7 +600,7 @@ connecting({'dtmf_pressed', DTMF}, #state{caller_exit_key=DTMF
     %% Do not exit if exit is suppressed
     case wh_json:get_value(<<"No-Queue-Exit">>, whapps_call:ccvs(Call)) of
         'undefined' ->
-            webseq:evt(self(), whapps_call:call_id(Call), <<"member call finish - DTMF">>),
+            webseq:evt(?WSD_ID, self(), whapps_call:call_id(Call), <<"member call finish - DTMF">>),
 
             acdc_queue_listener:exit_member_call(Srv),
             acdc_stats:call_abandoned(AccountId, QueueId, whapps_call:call_id(Call), ?ABANDON_EXIT),
