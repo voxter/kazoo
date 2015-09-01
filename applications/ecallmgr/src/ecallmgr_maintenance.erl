@@ -483,7 +483,7 @@ registrar_details(Realm) ->
 registrar_details(Username, Realm) ->
     ecallmgr_registrar:details(Username, Realm),
     'no_return'.
-    
+
 -spec flush_authn() -> 'ok'.
 flush_authn() ->
     wh_cache:flush_local(?ECALLMGR_AUTH_CACHE).
@@ -505,8 +505,8 @@ show_calls() ->
 -spec check_sync(text(), text()) -> 'ok'.
 check_sync(Username, Realm) ->
     ecallmgr_fs_notify:check_sync(wh_util:to_binary(Username)
-				  ,wh_util:to_binary(Realm)
-				 ).
+                                  ,wh_util:to_binary(Realm)
+                                 ).
 
 -spec add_fs_node(text(), ne_binaries(), function()) -> 'ok' | {'error', _}.
 add_fs_node(FSNode, FSNodes, ConfigFun) when not is_binary(FSNode) ->

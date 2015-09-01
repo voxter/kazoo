@@ -265,7 +265,7 @@ find_account_by_realm(Realm) ->
             io:format("failed to find account: ~p~n", [Reason]),
             E
     end.
-    
+
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
