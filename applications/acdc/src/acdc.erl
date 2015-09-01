@@ -62,7 +62,6 @@ start_deps() ->
                                                 ,'lager'
                                                 ,'whistle_amqp'
                                                 ,'whistle_couch'
-                                                ,'webseq'
                                                ]],
     'ok'.
 
