@@ -131,6 +131,9 @@
           ,interdigit_timeout = whapps_call_command:default_interdigit_timeout() :: pos_integer()
           ,play_greeting_intro = 'false' :: boolean()
           ,use_person_not_available = 'false' :: boolean()
+          ,hunt = 'false' :: boolean()
+          ,hunt_deny = <<>> :: binary()
+          ,hunt_allow = <<>> :: binary()
           ,not_configurable = 'false' :: boolean()
          }).
 -type mailbox() :: #mailbox{}.
@@ -347,39 +350,11 @@ compose_voicemail(#mailbox{max_message_count=MaxCount
         _Else ->
             lager:debug("finished with call")
     end;
-compose_voicemail(#mailbox{keys=#keys{login=Login
-                                      ,operator=Operator
-                                     }
-                          }=Box, _, Call) ->
+compose_voicemail(Box, _, Call) ->
     lager:debug("playing mailbox greeting to caller"),
     _ = play_greeting_intro(Box, Call),
     _ = play_greeting(Box, Call),
-    _ = play_instructions(Box, Call),
-    _NoopId = whapps_call_command:noop(Call),
-    %% timeout after 5 min for saftey, so this process cant hang around forever
-    case whapps_call_command:wait_for_application_or_dtmf(<<"noop">>, 300000) of
-        {'ok', _} ->
-            lager:info("played greeting and instructions to caller, recording new message"),
-            record_voicemail(tmp_file(), Box, Call);
-        {'dtmf', Digit} ->
-            _ = whapps_call_command:b_flush(Call),
-            case Digit of
-                Login ->
-                    lager:info("caller pressed '~s', redirecting to check voicemail", [Login]),
-                    check_mailbox(Box, Call);
-                Operator ->
-                    lager:info("caller choose to ring the operator"),
-                    case cf_util:get_operator_callflow(whapps_call:account_id(Call)) of
-                        {'ok', Flow} -> {'branch', Flow};
-                        {'error', _R} -> record_voicemail(tmp_file(), Box, Call)
-                    end;
-                _Else ->
-                    lager:info("caller pressed unbound '~s', skip to recording new message", [_Else]),
-                    record_voicemail(tmp_file(), Box, Call)
-            end;
-        {'error', R} ->
-            lager:info("error while playing voicemail greeting: ~p", [R])
-    end.
+    maybe_hunt(Box, Call).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -428,6 +403,195 @@ play_greeting(#mailbox{unavailable_media_id=MediaId}, Call) ->
 play_instructions(#mailbox{skip_instructions='true'}, _) -> 'ok';
 play_instructions(#mailbox{skip_instructions='false'}, Call) ->
     whapps_call_command:prompt(<<"vm-record_message">>, Call).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%--------------------------------------------------------------------  
+-spec maybe_hunt(mailbox(), whapps_call:call()) ->
+                               'ok' | {'branch', _} |
+                               {'error', 'channel_hungup'}.
+maybe_hunt(#mailbox{hunt='false'}=Mailbox, Call) ->
+    do_compose_voicemail(Mailbox, Call);
+maybe_hunt(Mailbox, Call) ->
+    lager:debug("offering opportunity to dial another extension before recording"),
+    NoopId = whapps_call_command:prompt(<<"vm-hunt">>, Call),
+    case whapps_call_command:wait_for_playback_timeout_or_dtmf(NoopId, 5000) of
+        {'ok', <<>>} -> do_compose_voicemail(Mailbox, Call);
+        {'ok', Digits} -> do_hunt(Mailbox, Call, Digits);
+        {'error', 'channel_hungup'}=E -> E
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec do_compose_voicemail(mailbox(), whapps_call:call()) ->
+                               'ok' | {'branch', _} |
+                               {'error', 'channel_hungup'}.
+do_compose_voicemail(#mailbox{keys=#keys{login=Login
+                                         ,operator=Operator
+                                        }
+                             }=Box, Call) ->
+    _ = play_instructions(Box, Call),
+    _NoopId = whapps_call_command:noop(Call),
+    %% timeout after 5 min for saftey, so this process cant hang around forever
+    case whapps_call_command:wait_for_application_or_dtmf(<<"noop">>, 300000) of
+        {'ok', _} ->
+            lager:info("played greeting and instructions to caller, recording new message"),
+            record_voicemail(tmp_file(), Box, Call);
+        {'dtmf', Digit} ->
+            _ = whapps_call_command:b_flush(Call),
+            case Digit of
+                Login ->
+                    lager:info("caller pressed '~s', redirecting to check voicemail", [Login]),
+                    check_mailbox(Box, Call);
+                Operator ->
+                    lager:info("caller choose to ring the operator"),
+                    case cf_util:get_operator_callflow(whapps_call:account_id(Call)) of
+                        {'ok', Flow} -> {'branch', Flow};
+                        {'error', _R} -> record_voicemail(tmp_file(), Box, Call)
+                    end;
+                _Else ->
+                    lager:info("caller pressed unbound '~s', skip to recording new message", [_Else]),
+                    record_voicemail(tmp_file(), Box, Call)
+            end;
+        {'error', R} ->
+            lager:info("error while playing voicemail greeting: ~p", [R])
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec do_hunt(mailbox(), whapps_call:call(), ne_binary()) ->
+                               'ok' | {'branch', _} |
+                               {'error', 'channel_hungup'}.
+do_hunt(Mailbox, Call, Digits) ->
+    case try_match_digits(Digits, Mailbox, Call) of
+        'true' ->
+            lager:debug("performing transfer from voicemail menu"),
+            'ok';
+        'false' ->
+            whapps_call_command:prompt(<<"vm-invalid_hunt">>, Call),
+            compose_voicemail(Mailbox, 'false', Call)
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% The primary sequence logic to route the collected digits
+%% @end
+%%--------------------------------------------------------------------
+-spec try_match_digits(ne_binary(), mailbox(), whapps_call:call()) -> boolean().
+try_match_digits(Digits, Mailbox, Call) ->
+    lager:info("trying to match digits ~s", [Digits]),
+    is_callflow_child(Digits, Mailbox, Call)
+        orelse (is_hunt_enabled(Digits, Mailbox, Call)
+                andalso is_hunt_allowed(Digits, Mailbox, Call)
+                andalso not is_hunt_denied(Digits, Mailbox, Call)
+                andalso hunt_for_callflow(Digits, Mailbox, Call)).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Check if the digits are a exact match for the auto-attendant children
+%% @end
+%%--------------------------------------------------------------------
+-spec is_callflow_child(ne_binary(), mailbox(), whapps_call:call()) -> boolean().
+is_callflow_child(Digits, _, Call) ->
+    case cf_exe:attempt(Digits, Call) of
+        {'attempt_resp', 'ok'} ->
+            lager:info("selection is a callflow child"),
+            'true';
+        {'attempt_resp', {'error', _}} -> 'false'
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Check if hunting is enabled
+%% @end
+%%--------------------------------------------------------------------
+-spec is_hunt_enabled(ne_binary(), mailbox(), whapps_call:call()) -> boolean().
+is_hunt_enabled(_, #mailbox{hunt=Hunt}, _) ->
+    Hunt.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Check whitelist hunt digit patterns
+%% @end
+%%--------------------------------------------------------------------
+-spec is_hunt_allowed(ne_binary(), mailbox(), whapps_call:call()) -> boolean().
+is_hunt_allowed(_, #mailbox{hunt_allow = <<>>}, _) ->
+    lager:info("hunt_allow implicitly accepted digits"),
+    'true';
+is_hunt_allowed(Digits, #mailbox{hunt_allow=RegEx}, _) ->
+    try re:run(Digits, RegEx) of
+        {'match', _} ->
+            lager:info("hunt_allow accepted digits"),
+            'true';
+        'nomatch' ->
+            lager:info("hunt_allow denied digits"),
+            'false'
+    catch
+        _E:_R ->
+            lager:info("failed to run regex ~s: ~s: ~p", [RegEx, _E, _R]),
+            'false'
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Check blacklisted hunt digit patterns
+%% @end
+%%--------------------------------------------------------------------
+-spec is_hunt_denied(ne_binary(), mailbox(), whapps_call:call()) -> boolean().
+is_hunt_denied(_, #mailbox{hunt_deny = <<>>}, _) ->
+    lager:info("hunt_deny implicitly accepted digits"),
+    'false';
+is_hunt_denied(Digits, #mailbox{hunt_deny=RegEx}, _) ->
+    try re:run(Digits, RegEx) of
+        {'match', _} ->
+            lager:info("hunt_deny denied digits"),
+            'true';
+        'nomatch' ->
+            lager:info("hunt_deny accepted digits"),
+            'false'
+    catch
+        _E:_R ->
+            lager:info("failed to run regex ~s: ~s: ~p", [RegEx, _E, _R]),
+            'false'
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Hunt for a callflow with these numbers
+%% @end
+%%--------------------------------------------------------------------
+-spec hunt_for_callflow(ne_binary(), mailbox(), whapps_call:call()) -> boolean().
+hunt_for_callflow(Digits, _, Call) ->
+    AccountId = whapps_call:account_id(Call),
+    lager:info("hunting for ~s in account ~s", [Digits, AccountId]),
+    case cf_util:lookup_callflow(Digits, AccountId) of
+        {'ok', Flow, 'false'} ->
+            lager:info("callflow hunt succeeded, branching"),
+            _ = whapps_call_command:flush_dtmf(Call),
+            _ = whapps_call_command:b_prompt(<<"menu-transferring_call">>, Call),
+            cf_exe:branch(wh_json:get_value(<<"flow">>, Flow, wh_json:new()), Call),
+            'true';
+        _ ->
+            lager:info("callflow hunt failed"),
+            'false'
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1473,6 +1637,12 @@ get_mailbox_profile(Data, Call) ->
                          wh_json:is_true(<<"play_greeting_intro">>, JObj, Default#mailbox.play_greeting_intro)
                      ,use_person_not_available =
                          wh_json:is_true(<<"use_person_not_available">>, JObj, Default#mailbox.use_person_not_available)
+                     ,hunt =
+                         wh_json:is_true(<<"hunt">>, JObj, Default#mailbox.hunt)
+                     ,hunt_deny =
+                         wh_json:get_value(<<"hunt_deny">>, JObj, Default#mailbox.hunt_deny)
+                     ,hunt_allow =
+                         wh_json:get_value(<<"hunt_allow">>, JObj, Default#mailbox.hunt_allow)
                      ,not_configurable=
                          wh_json:is_true(<<"not_configurable">>, JObj, 'false')
                     };
