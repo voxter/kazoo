@@ -18,7 +18,6 @@
         ]).
 -export([details/0
          ,details/1
-         ,get_channels/1
         ]).
 -export([show_all/0]).
 -export([flush_node/1]).
@@ -134,16 +133,11 @@ details() ->
 details(UUID) when not is_binary(UUID) ->
     details(wh_util:to_binary(UUID));
 details(UUID) ->
-	print_details(get_channels(UUID)).
-
-get_channels(UUID) ->
     MatchSpec = [{#channel{uuid='$1', _ = '_'}
                   ,[{'=:=', '$1', {'const', UUID}}]
                   ,['$_']
                  }],
-    lager:debug("ETS info:"),
-    lists:foreach(fun(H) -> lager:debug("~p: ~p", [element(1, H), element(2, H)]) end, ets:info(?CHANNELS_TBL)),
-    ets:select(?CHANNELS_TBL, MatchSpec, 1).
+    print_details(ets:select(?CHANNELS_TBL, MatchSpec, 1)).
 
 -spec show_all() -> wh_json:objects().
 show_all() ->
@@ -157,7 +151,6 @@ flush_node(Node) ->
 
 -spec new(channel()) -> 'ok'.
 new(#channel{}=Channel) ->
-	lager:debug("Attempting to create new channel"),
     gen_server:call(?MODULE, {'new_channel', Channel}).
 
 -spec destroy(ne_binary(), atom()) -> 'ok'.
