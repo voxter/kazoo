@@ -28,7 +28,7 @@ handle_req(JObj, Props) ->
 maybe_send_route_response(JObj, Q, Call) ->
     case find_conference(Call) of
         {'ok', Conference} ->
-            send_route_response(JObj, Q, Call, Conference);
+            send_route_response(JObj, Q, Call, bridged_conference(Conference));
         {'error', _} -> 'ok'
     end.
 
@@ -77,3 +77,7 @@ find_account_db(Call) ->
                        ),
             'undefined'
     end.
+
+-spec bridged_conference(whapps_conference:conference()) -> whapps_conference:conference().
+bridged_conference(Conference) ->
+    whapps_conference:set_play_entry_tone('false', Conference).

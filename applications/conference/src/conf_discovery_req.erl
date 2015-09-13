@@ -171,13 +171,13 @@ handle_search_error(Conference, Call, Srv) ->
     end.
 
 -spec play_participants_count(whapps_call:call(), non_neg_integer() | wh_json:object()) -> 'ok'.
-play_participants_count(Call, 1) ->
-    whapps_call_command:audio_macro([{'prompt', <<"conf-there_is">>}
-                                     ,{'say', <<"1">>, <<"number">>}
-                                     ,{'prompt', <<"conf-other_participant">>}
-                                    ], Call),
+play_participants_count(Call, 0) ->
+    whapps_call_command:prompt(<<"conf-alone">>, Call),
     'ok';
-play_participants_count(Call, Count) when is_integer(Count) andalso Count >= 0 ->
+play_participants_count(Call, 1) ->
+    whapps_call_command:prompt(<<"conf-single">>, Call),
+    'ok';
+play_participants_count(Call, Count) when is_integer(Count) andalso Count > 0 ->
     whapps_call_command:audio_macro([{'prompt', <<"conf-there_are">>}
                                      ,{'say', wh_util:to_binary(Count), <<"number">>}
                                      ,{'prompt', <<"conf-other_participants">>}
