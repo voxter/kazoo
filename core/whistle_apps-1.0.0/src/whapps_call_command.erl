@@ -162,6 +162,7 @@
          ,wait_for_unbridge/0, wait_for_unbridge/1
        ]).
 -export([wait_for_application_or_dtmf/2]).
+-export([wait_for_playback_timeout_or_dtmf/2]).
 -export([collect_digits/2, collect_digits/3
          ,collect_digits/4, collect_digits/5
          ,collect_digits/6
@@ -2521,6 +2522,44 @@ wait_for_application_or_dtmf(Application, Timeout) ->
                 _ ->
                     wait_for_application_or_dtmf(Application, wh_util:decr_timeout(Timeout, Start))
             end
+    end.
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Waits for the length of a media file + timeout seconds, or dtmf
+%% @end
+%%--------------------------------------------------------------------
+-spec wait_for_playback_timeout_or_dtmf(api_binary(), wh_timeout()) ->
+                                            {'error', 'channel_hungup'} | {'ok', binary()}.
+-spec wait_for_playback_timeout_or_dtmf(api_binary(), wh_timeout(), wh_timeout(), binary()) ->
+                                            {'error', 'channel_hungup'} | {'ok', binary()}.
+wait_for_playback_timeout_or_dtmf(NoopId, Timeout) ->
+    wait_for_playback_timeout_or_dtmf(NoopId, 300000, Timeout, <<>>).
+
+wait_for_playback_timeout_or_dtmf(NoopId, RecvTimeout, Timeout, Digits) ->
+    Start = os:timestamp(),
+    case receive_event(RecvTimeout) of
+        {'ok', JObj} ->
+            case get_event_type(JObj) of
+                {<<"call_event">>, <<"CHANNEL_EXECUTE_COMPLETE">>, <<"noop">>} ->
+                    case wh_json:get_value(<<"Application-Response">>, JObj) of
+                        NoopId when is_binary(NoopId), NoopId =/= <<>> ->
+                            lager:debug("noop received, starting timeout"),
+                            wait_for_playback_timeout_or_dtmf('undefined', Timeout, 1500, Digits);
+                        _ -> wait_for_playback_timeout_or_dtmf(NoopId, RecvTimeout, Timeout, Digits)
+                    end;
+                {<<"call_event">>, <<"CHANNEL_DESTROY">>, _} ->
+                    lager:debug("channel was destroyed while waiting for playback timeout or DTMF"),
+                    {'error', 'channel_hungup'};
+                {<<"call_event">>, <<"DTMF">>, _} ->
+                    Digit = wh_json:get_value(<<"DTMF-Digit">>, JObj),
+                    wait_for_playback_timeout_or_dtmf(NoopId, 1500, 1500, <<Digits/binary, Digit/binary>>);
+                _ -> wait_for_playback_timeout_or_dtmf(NoopId, wh_util:decr_timeout(RecvTimeout, Start), Timeout, Digits)
+            end;
+        {'error', 'timeout'} ->
+            lager:debug("timeout, got digits ~s", [Digits]),
+            {'ok', Digits}
     end.
 
 -type wait_for_fax_ret() :: {'ok', wh_json:object()} |
