@@ -1333,6 +1333,7 @@ generate_ccvs(Endpoint, Call, CallFwd) ->
                ,fun maybe_set_encryption_flags/1
                ,fun set_sip_invite_domain/1
                ,fun maybe_set_call_waiting/1
+               ,fun maybe_preserve_rewrite_cid/1
               ],
     Acc0 = {Endpoint, Call, CallFwd, wh_json:new()},
     {_Endpoint, _Call, _CallFwd, JObj} = lists:foldr(fun(F, Acc) -> F(Acc) end, Acc0, CCVFuns),
@@ -1442,6 +1443,17 @@ maybe_set_call_waiting({Endpoint, Call, CallFwd, JObj}) ->
                   'false' -> wh_json:set_value(<<"Call-Waiting-Disabled">>, 'true', JObj)
               end,
     {Endpoint, Call, CallFwd, NewJobj}.
+
+-spec maybe_preserve_rewrite_cid(ccv_acc()) -> ccv_acc().
+maybe_preserve_rewrite_cid({_, _, 'undefined', _}=Acc) ->
+    Acc;
+maybe_preserve_rewrite_cid({Endpoint, Call, CallFwd, JObj}) ->
+    RewriteCIDName = whapps_call:kvs_fetch('rewrite_cid_name', Call),
+    RewriteCIDNumber = whapps_call:kvs_fetch('rewrite_cid_number', Call),
+    NewJObj = wh_json:set_values(props:filter_undefined([{<<"Rewrite-CID-Name">>, RewriteCIDName}
+                                                         ,{<<"Rewrite-CID-Number">>, RewriteCIDNumber}
+                                                        ]), JObj),
+    {Endpoint, Call, CallFwd, NewJObj}.
 
 -spec get_invite_format(wh_json:object()) -> ne_binary().
 get_invite_format(SIPJObj) ->
