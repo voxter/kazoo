@@ -405,14 +405,7 @@ handle_event(JObj, #participant{call_event_consumers=Consumers
             lager:debug("received channel hangup event, terminate"),
             gen_listener:cast(Srv, 'hungup');
         {{<<"call_event">>, <<"CHANNEL_BRIDGE">>}, CallId} ->
-            % 'ok';
             gen_listener:cast(Srv, 'play_announce');
-        {{<<"call_event">>,<<"CHANNEL_EXECUTE">>}, CallId} ->
-            case wh_json:get_value(<<"Application-Name">>, JObj) of
-                % <<"conference">> -> 'ok';%gen_listener:cast(Srv, 'play_announce');
-                <<"conference">> -> gen_listener:cast(Srv, 'play_announce');
-                _ -> 'ok'
-            end;
         {_Else, CallId} ->
             lager:debug("unhandled event: ~p", [_Else]);
         {_Else, _OtherLeg} ->
@@ -485,7 +478,9 @@ sync_participant(JObj, Call, #participant{in_conference='false'
             sync_member(Member, Call, Participant#participant{conference=C});
         {'error', 'not_found'} ->
             lager:debug("caller not found in the list of conference participants"),
-            Participant
+            Focus = wh_json:get_value(<<"Focus">>, JObj),
+            C = whapps_conference:set_focus(Focus, Conference),
+            Participant#participant{conference=C}
     end;
 sync_participant(JObj, Call, #participant{in_conference='true'}=Participant) ->
     Participants = wh_json:get_value(<<"Participants">>, JObj, []),
@@ -509,6 +504,7 @@ sync_moderator(JObj, Call, #participant{conference=Conference
     lager:debug("caller has joined the local conference as moderator ~p", [ParticipantId]),
     Deaf = not wh_json:is_true(<<"Hear">>, JObj),
     Muted = not wh_json:is_true(<<"Speak">>, JObj),
+    gen_listener:cast(self(), 'play_announce'),
     whapps_conference:moderator_join_muted(Conference)
         andalso gen_listener:cast(self(), 'mute'),
     whapps_conference:moderator_join_deaf(Conference)
@@ -533,6 +529,7 @@ sync_member(JObj, Call, #participant{conference=Conference
     lager:debug("caller has joined the local conference as member ~p", [ParticipantId]),
     Deaf = not wh_json:is_true(<<"Hear">>, JObj),
     Muted = not wh_json:is_true(<<"Speak">>, JObj),
+    gen_listener:cast(self(), 'play_announce'),
     whapps_conference:member_join_muted(Conference)
         andalso gen_listener:cast(self(), 'mute'),
     whapps_conference:member_join_deaf(Conference)
@@ -573,7 +570,7 @@ play_announce(#participant{name_pronounced='undefined'
 play_announce(#participant{conference=Conference
                            ,name_pronounced={_, AccountId, MediaId}
                           }) ->
-    lager:debug("playing announcement ~s to conference ~p", [MediaId, Conference]),
+    lager:debug("playing announcement ~s to conference ~s", [MediaId, whapps_conference:id(Conference)]),
     Recording = wh_media_util:media_path(MediaId, AccountId),
     RecordingCommand = [{<<"Application-Name">>, <<"play">>}
                         ,{<<"Media-Name">>, Recording}
@@ -606,7 +603,7 @@ play_hangup_announce(#participant{conference=Conference
 play_hangup_announce(#participant{conference=Conference
                                   ,name_pronounced={_, AccountId, MediaId}
                                  }) ->
-    lager:debug("playing announcement ~s to conference ~p", [MediaId, Conference]),
+    lager:debug("playing announcement ~s to conference ~s", [MediaId, whapps_conference:id(Conference)]),
     Recording = wh_media_util:media_path(MediaId, AccountId),
     RecordingCommand = [{<<"Application-Name">>, <<"play">>}
                         ,{<<"Media-Name">>, Recording}
