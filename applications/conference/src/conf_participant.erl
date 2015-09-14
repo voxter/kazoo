@@ -242,15 +242,15 @@ handle_call(_Request, _, P) ->
 %%--------------------------------------------------------------------
 handle_cast('hungup', #participant{in_conference='true'
                                    ,call=Call
-                                   ,conference=Conference
                                   }=Participant
            ) ->
-    whapps_conference_command:play(?EXIT_TONE, Conference),
+    play_hangup_announce(Participant),
     _ = whapps_call_command:hangup(Call),
     {'stop', {'shutdown', 'hungup'}, Participant};
 handle_cast('hungup', #participant{in_conference='false'
                                    ,call=Call
                                   }=Participant) ->
+    play_hangup_announce(Participant),
     _ = whapps_call_command:hangup(Call),
     {'stop', {'shutdown', 'hungup'}, Participant};
 handle_cast({'gen_listener', {'created_queue', Q}}, #participant{conference='undefined'
@@ -292,15 +292,8 @@ handle_cast(_Message, #participant{conference='undefined'}=Participant) ->
                 ,[_Message]
                ),
     {'noreply', Participant};
-handle_cast('play_announce', #participant{name_pronounced='undefined'} = Participant) ->
-    lager:debug("skipping announce"),
-    {'noreply', Participant};
-handle_cast('play_announce', #participant{conference=Conference
-                                          ,name_pronounced={_, AccountId, MediaId}
-                                         }=Participant) ->
-    lager:debug("playing announcement ~s to conference", [MediaId]),
-    Recording = wh_media_util:media_path(MediaId, AccountId),
-    whapps_conference_command:play(Recording, Conference),
+handle_cast('play_announce', Participant) ->
+    play_announce(Participant),
     {'noreply', Participant};
 handle_cast('join_local', #participant{call=Call
                                        ,conference=Conference
@@ -318,14 +311,6 @@ handle_cast({'join_remote', JObj}, #participant{call=Call
     {'noreply', Participant};
 handle_cast({'sync_participant', JObj}, #participant{call=Call}=Participant) ->
     {'noreply', sync_participant(JObj, Call, Participant)};
-handle_cast('play_member_entry', #participant{conference=Conference}=Participant) ->
-    _ = whapps_conference:play_entry_tone(Conference)
-        andalso whapps_conference_command:play(?ENTRY_TONE, Conference),
-    {'noreply', Participant};
-handle_cast('play_moderator_entry', #participant{conference=Conference}=Participant) ->
-    _ = whapps_conference:play_entry_tone(Conference)
-        andalso whapps_conference_command:play(?MOD_ENTRY_TONE, Conference),
-    {'noreply', Participant};
 handle_cast({'dtmf', Digit}, #participant{last_dtmf = <<"*">>}=Participant) ->
     case Digit of
         <<"1">> -> toggle_mute(self());
@@ -420,9 +405,11 @@ handle_event(JObj, #participant{call_event_consumers=Consumers
             lager:debug("received channel hangup event, terminate"),
             gen_listener:cast(Srv, 'hungup');
         {{<<"call_event">>, <<"CHANNEL_BRIDGE">>}, CallId} ->
+            % 'ok';
             gen_listener:cast(Srv, 'play_announce');
         {{<<"call_event">>,<<"CHANNEL_EXECUTE">>}, CallId} ->
             case wh_json:get_value(<<"Application-Name">>, JObj) of
+                % <<"conference">> -> 'ok';%gen_listener:cast(Srv, 'play_announce');
                 <<"conference">> -> gen_listener:cast(Srv, 'play_announce');
                 _ -> 'ok'
             end;
@@ -522,7 +509,6 @@ sync_moderator(JObj, Call, #participant{conference=Conference
     lager:debug("caller has joined the local conference as moderator ~p", [ParticipantId]),
     Deaf = not wh_json:is_true(<<"Hear">>, JObj),
     Muted = not wh_json:is_true(<<"Speak">>, JObj),
-    gen_listener:cast(self(), 'play_moderator_entry'),
     whapps_conference:moderator_join_muted(Conference)
         andalso gen_listener:cast(self(), 'mute'),
     whapps_conference:moderator_join_deaf(Conference)
@@ -547,7 +533,6 @@ sync_member(JObj, Call, #participant{conference=Conference
     lager:debug("caller has joined the local conference as member ~p", [ParticipantId]),
     Deaf = not wh_json:is_true(<<"Hear">>, JObj),
     Muted = not wh_json:is_true(<<"Speak">>, JObj),
-    gen_listener:cast(self(), 'play_member_entry'),
     whapps_conference:member_join_muted(Conference)
         andalso gen_listener:cast(self(), 'mute'),
     whapps_conference:member_join_deaf(Conference)
@@ -575,6 +560,71 @@ notify_requestor(MyQ, MyId, DiscoveryEvent, ConferenceId) ->
                     | wh_api:default_headers(MyQ, ?APP_NAME, ?APP_VERSION)
                    ],
             wapi_conference:publish_discovery_resp(RequestorQ, Resp)
+    end.
+
+-spec play_announce(participant()) -> 'ok'.
+play_announce(#participant{name_pronounced='undefined'
+                           ,conference=Conference
+                          }) ->
+    lager:debug("skipping announce"),
+    _ = whapps_conference:play_entry_tone(Conference)
+            andalso whapps_conference_command:play(?ENTRY_TONE, Conference),
+    'ok';
+play_announce(#participant{conference=Conference
+                           ,name_pronounced={_, AccountId, MediaId}
+                          }) ->
+    lager:debug("playing announcement ~s to conference ~p", [MediaId, Conference]),
+    Recording = wh_media_util:media_path(MediaId, AccountId),
+    RecordingCommand = [{<<"Application-Name">>, <<"play">>}
+                        ,{<<"Media-Name">>, Recording}
+                        ,{<<"Participant">>, 'undefined'}
+                       ],
+    PromptCommand = [{<<"Application-Name">>, <<"play">>}
+                     ,{<<"Media-Name">>, wh_media_util:get_prompt(<<"conf-has_joined">>, whapps_conference:call(Conference))}
+                     ,{<<"Participant">>, 'undefined'}
+                    ],
+
+    case whapps_conference:play_entry_tone(Conference) of
+        'true' ->
+            ToneCommand = [{<<"Application-Name">>, <<"play">>}
+                           ,{<<"Media-Name">>, ?ENTRY_TONE}
+                           ,{<<"Participant">>, 'undefined'}
+                          ],
+            whapps_conference_command:macro([ToneCommand, RecordingCommand, PromptCommand], Conference);
+        'false' -> whapps_conference_command:macro([RecordingCommand, PromptCommand], Conference)
+    end.
+
+-spec play_hangup_announce(participant()) -> 'ok'.
+play_hangup_announce(#participant{conference='undefined'}) ->
+    'ok';
+play_hangup_announce(#participant{conference=Conference
+                                  ,name_pronounced='undefined'
+                                 }) ->
+    _ = whapps_conference:play_entry_tone(Conference)
+            andalso whapps_conference_command:play(?EXIT_TONE, Conference),
+    'ok';
+play_hangup_announce(#participant{conference=Conference
+                                  ,name_pronounced={_, AccountId, MediaId}
+                                 }) ->
+    lager:debug("playing announcement ~s to conference ~p", [MediaId, Conference]),
+    Recording = wh_media_util:media_path(MediaId, AccountId),
+    RecordingCommand = [{<<"Application-Name">>, <<"play">>}
+                        ,{<<"Media-Name">>, Recording}
+                        ,{<<"Participant">>, 'undefined'}
+                       ],
+    PromptCommand = [{<<"Application-Name">>, <<"play">>}
+                     ,{<<"Media-Name">>, wh_media_util:get_prompt(<<"conf-has_left">>, whapps_conference:call(Conference))}
+                     ,{<<"Participant">>, 'undefined'}
+                    ],
+
+    case whapps_conference:play_entry_tone(Conference) of
+        'true' ->
+            ToneCommand = [{<<"Application-Name">>, <<"play">>}
+                           ,{<<"Media-Name">>, ?EXIT_TONE}
+                           ,{<<"Participant">>, 'undefined'}
+                          ],
+            whapps_conference_command:macro([ToneCommand, RecordingCommand, PromptCommand], Conference);
+        'false' -> whapps_conference_command:macro([RecordingCommand, PromptCommand], Conference)
     end.
 
 -spec bridge_to_conference(ne_binary(), whapps_conference:conference(), whapps_call:call()) -> 'ok'.

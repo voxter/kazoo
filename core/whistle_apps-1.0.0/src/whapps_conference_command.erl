@@ -29,6 +29,7 @@
 -export([participant_volume_out/3]).
 
 -export([send_command/2]).
+-export([macro/2]).
 
 -spec search(whapps_conference:conference() | api_binary() | string()) ->
                     {'ok', wh_json:object()} |
@@ -219,8 +220,25 @@ send_command([_|_]=Command, Conference) ->
     Prop = Command ++ [{<<"Conference-ID">>, ConferenceId}
                        | wh_api:default_headers(Q, <<"conference">>, <<"command">>, AppName, AppVersion)
                       ],
+    lager:debug("prop ~p", [Prop]),
     case wh_util:is_empty(Focus) of
         'true' -> wapi_conference:publish_command(ConferenceId, Prop);
         'false' -> wapi_conference:publish_targeted_command(Focus, Prop)
     end;
 send_command(JObj, Conference) -> send_command(wh_json:to_proplist(JObj), Conference).
+
+macro(Commands, Conference) ->
+    Values = [{<<"Event-Category">>, <<"conference">>}
+              ,{<<"Event-Name">>, <<"command">>}
+              ,{<<"Conference-ID">>, whapps_conference:id(Conference)}
+              ,{<<"Msg-ID">>, wh_util:rand_hex_binary(16)}
+              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+             ],
+    JsonCommands = lists:reverse(lists:foldl(fun(Command, Acc) ->
+        [wh_json:from_list(props:filter_undefined(Command ++ Values)) | Acc]
+    end, [], Commands)),
+    Prop = [{<<"Application-Name">>, <<"play_macro">>}
+            ,{<<"Commands">>, JsonCommands}
+            | Values
+           ],
+    send_command(Prop, Conference).
