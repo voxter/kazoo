@@ -13,9 +13,9 @@
 -module(cb_conferences).
 
 -export([init/0
-         ,allowed_methods/0, allowed_methods/1, allowed_methods/2, allowed_methods/3
-         ,resource_exists/0, resource_exists/1, resource_exists/2, resource_exists/3
-         ,validate/1, validate/2, validate/3, validate/4
+         ,allowed_methods/0, allowed_methods/1, allowed_methods/2
+         ,resource_exists/0, resource_exists/1, resource_exists/2
+         ,validate/1, validate/2, validate/3
          ,put/1
          ,post/2
          ,patch/2
@@ -50,13 +50,12 @@ init() ->
 %%--------------------------------------------------------------------
 -spec allowed_methods() -> http_methods().
 -spec allowed_methods(path_token()) -> http_methods().
+-spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
 allowed_methods(_) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_PATCH, ?HTTP_DELETE].
 allowed_methods(_, <<"details">>) ->
-	[?HTTP_GET].
-allowed_methods(_, _, _) ->
 	[?HTTP_GET].
 
 %%--------------------------------------------------------------------
@@ -69,10 +68,10 @@ allowed_methods(_, _, _) ->
 %%--------------------------------------------------------------------
 -spec resource_exists() -> 'true'.
 -spec resource_exists(path_token()) -> 'true'.
+-spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists() -> 'true'.
 resource_exists(_) -> 'true'.
 resource_exists(_, <<"details">>) -> 'true'.
-resource_exists(_, _, _) -> 'true'.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -85,6 +84,7 @@ resource_exists(_, _, _) -> 'true'.
 %%--------------------------------------------------------------------
 -spec validate(cb_context:context()) -> cb_context:context().
 -spec validate(cb_context:context(), path_token()) -> cb_context:context().
+-spec validate(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 validate(Context) ->
     validate_conferences(Context, cb_context:req_verb(Context)).
 
@@ -99,98 +99,17 @@ validate(Context, Id) ->
 validate_conference(Context, Id, ?HTTP_GET) ->
     load_conference(Id, Context);
 validate_conference(Context, Id, ?HTTP_POST) ->
-    update_conference(Id, Context);
+    case cb_context:req_value(Context, <<"action">>) of
+        'undefined' -> update_conference(Id, Context);
+        Action -> do_conference_action(Context, Id, Action, cb_context:req_value(Context, <<"participant">>))
+    end;
 validate_conference(Context, Id, ?HTTP_PATCH) ->
     patch_conference(Id, Context);
 validate_conference(Context, Id, ?HTTP_DELETE) ->
     load_conference(Id, Context).
-    
-validate(Context, ConfId, <<"details">>) ->
-    crossbar_doc:handle_json_success(lookup_participants(conference_details(Context, ConfId)), Context).
-validate(Context, ConfId, Action, ParticipantId) ->
-	AuthDoc = cb_context:auth_doc(Context),
-	ConfDoc = cb_context:doc(load_conference(ConfId, Context)),
-	ConfOwnerId = wh_json:get_value(<<"owner_id">>, ConfDoc),
-	AuthOwnerId = wh_json:get_value(<<"owner_id">>, AuthDoc),
-	% Abort if the user is not room owner
-	if ConfOwnerId =/= AuthOwnerId ->
-		crossbar_doc:handle_json_success(wh_json:set_value(<<"resp">>, <<"user_not_owner">>, wh_json:new()), Context);
-	true ->
-		Conference = whapps_conference:set_id(ConfId, whapps_conference:new()),
-		crossbar_doc:handle_json_success(wh_json:set_value(<<"resp">>, perform_conference_action(Conference, Action, ParticipantId), wh_json:new()), Context)
-	end.
-	
-%%
-%% Perform conference kick/mute/unmute via API
-%%
-perform_conference_action(Conference, <<"mute">>, ParticipantId) ->
-	whapps_conference_command:mute_participant(ParticipantId, Conference);
-perform_conference_action(Conference, <<"unmute">>, ParticipantId) ->
-	whapps_conference_command:unmute_participant(ParticipantId, Conference);
-perform_conference_action(Conference, <<"kick">>, ParticipantId) ->
-	whapps_conference_command:kick(ParticipantId, Conference).
-    
-%%
-%% Returns some details about the users connected to a conference
-%%
-conference_details(Context, ConfId) ->
-	lager:info("lookup_confs"),
-	AccountId = cb_context:account_id(Context),
-    AccountDb = cb_context:account_db(Context),
-    AccountRealm = wh_util:get_account_realm(AccountDb, AccountId),
-    Req = [{<<"Realm">>, AccountRealm}
-           ,{<<"Fields">>, []}
-           ,{<<"Conference-ID">>, ConfId}
-           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-          ],
-	lager:info("before pool collect"),
-    ReqResp = whapps_util:amqp_pool_collect(Req
-                                            ,fun wapi_conference:publish_search_req/1
-                                            ,{'ecallmgr', 'true'}
-                                           ),
-    case ReqResp of
-        {'error', _} -> [];
-        {_, JObjs} -> JObjs
-    end.
-    
-successful_participant_resp([H|T]=ReqResp) when is_list(ReqResp) ->
-	CheckedResp = successful_participant_resp(H),
-	if CheckedResp == undefined ->
-		successful_participant_resp(T);
-	true ->
-		CheckedResp
-	end;
-successful_participant_resp(ReqResp) ->
-	wh_json:get_value(<<"Participants">>, ReqResp).
-    
-lookup_participants(JObjs) ->
-	lager:debug("Looking up participants of conference"),
-	lager:info("ConferenceObject: ~p", [JObjs]),
-	Data = successful_participant_resp(JObjs),
-	lager:info("SuccessfulResp: ~p", [Data]),
-	Details = participant_details(Data),
-	channel_details(Details).
-	
-participant_details(undefined) -> [];
-participant_details(Participants) ->
-	lists:foldl(fun(Participant, Acc) ->
-		CallId = wh_json:get_value(<<"Call-ID">>, Participant),
-		ParticipantId = wh_json:get_value(<<"Participant-ID">>, Participant),
-		Mute = not wh_json:get_value(<<"Speak">>, Participant),
-		lager:debug("Call-ID found: ~p", [CallId]),
-		lager:debug("Participant-ID found: ~p", [Participant]),
-		Acc ++ [{CallId, ParticipantId, Mute}] end,
-		[], Participants).
-		
-channel_details(Details) ->
-	lists:foldl(fun({UUID, ParticipantId, Mute}, Acc) ->
-		Channel = hd(element(1, rpc:call('ecallmgr@awe01.van1.voxter.net', ecallmgr_fs_channels, get_channels, [UUID]))),
-		ChannelJSON = wh_json:set_values(
-			[{<<"participant_id">>, ParticipantId}, {<<"mute">>, Mute}],
-			ecallmgr_fs_channel:to_json(Channel)),
-		lager:debug("Got channel JSON: ~p", [ChannelJSON]),
-		Acc ++ [ChannelJSON] end,
-		[], Details).
+
+validate(Context, Id, <<"details">>) ->
+    load_conference_details(Context, Id).
 
 -spec post(cb_context:context(), path_token()) -> cb_context:context().
 post(Context, _) ->
@@ -221,7 +140,6 @@ delete(Context, _) ->
 %%--------------------------------------------------------------------
 -spec load_conference_summary(cb_context:context()) -> cb_context:context().
 load_conference_summary(Context) ->
-	log_nouns(cb_context:req_nouns(Context)),
     case lists:nth(2, cb_context:req_nouns(Context)) of
         {<<"users">>, [UserId]} ->
             Filter = fun(J, A) ->
@@ -231,11 +149,8 @@ load_conference_summary(Context) ->
         {?WH_ACCOUNTS_DB, _} ->
             crossbar_doc:load_view(?CB_LIST, [], Context, fun normalize_view_results/2);
         _ ->
-            cb_context:add_system_error(faulty_request, Context)
+            cb_context:add_system_error('faulty_request', Context)
     end.
-    
-log_nouns(Nouns) ->
-	lager:info("Nouns log: " ++ Nouns).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -309,6 +224,98 @@ create_conference(Context) ->
 -spec load_conference(ne_binary(), cb_context:context()) -> cb_context:context().
 load_conference(DocId, Context) ->
     crossbar_doc:load(DocId, Context).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Load details of the participants of a conference
+%% @end
+%%--------------------------------------------------------------------
+-spec load_conference_details(cb_context:context(), path_token()) -> cb_context:context().
+load_conference_details(Context, ConfId) ->
+    AccountRealm = wh_util:get_account_realm(cb_context:account_id(Context)),
+    Req = [{<<"Realm">>, AccountRealm}
+           ,{<<"Fields">>, []}
+           ,{<<"Conference-ID">>, ConfId}
+           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+          ],
+    ReqResp = whapps_util:amqp_pool_collect(Req
+                                            ,fun wapi_conference:publish_search_req/1
+                                            ,{'ecallmgr', 'true'}
+                                           ),
+    case ReqResp of
+        {'error', _} -> cb_context:add_system_error('not_found', Context);
+        {_, JObjs} -> participant_details(conference_participants(JObjs), Context)
+    end.
+
+-spec conference_participants(wh_json:objects()) -> wh_json:objects().
+conference_participants(JObjs) ->
+    [Participant || JObj <- JObjs
+                    ,Participant <- wh_json:get_value(<<"Participants">>, JObj, [])
+    ].
+
+-spec participant_details(wh_json:objects(), cb_context:context()) -> cb_context:context().
+-spec participant_details(wh_json:objects(), cb_context:context(), wh_json:objects()) -> cb_context:context().
+participant_details([], Context) ->
+    cb_context:add_system_error('conference_not_active', Context);
+participant_details(Participants, Context) ->
+    participant_details(Participants, Context, []).
+
+participant_details([], Context, Acc) ->
+    crossbar_doc:handle_json_success(Acc, Context);
+participant_details([H|T], Context, Acc) ->
+    CallId = wh_json:get_value(<<"Call-ID">>, H),
+    Req = [{<<"Call-ID">>, CallId}
+           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+          ],
+    case whapps_util:amqp_pool_request(Req
+                                       ,fun wapi_call:publish_channel_status_req/1
+                                       ,fun wapi_call:channel_status_resp_v/1
+                                      ) of
+        {'error', E} ->
+            lager:debug("error fetching channel status for ~s (~p)", [CallId, E]),
+            participant_details(T, Context, Acc);
+        {'ok', Resp} ->
+            Participant = wh_json:set_values([{<<"Participant-ID">>, wh_json:get_ne_binary_value(<<"Participant-ID">>, H)}
+                                              ,{<<"Mute">>, not wh_json:is_true(<<"Speak">>, H)}
+                                             ], Resp),
+            participant_details(T, Context, [Participant | Acc])
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Perform conference kick/mute/unmute via API
+%% @end
+%%--------------------------------------------------------------------
+-spec do_conference_action(cb_context:context(), path_token(), wh_json:json_term(), wh_json:json_term()) ->
+                             cb_context:context().
+do_conference_action(Context, _, _, 'undefined') ->
+    cb_context:add_system_error('participant_missing', Context);
+do_conference_action(Context, Id, Action, ParticipantId) ->
+    AuthDoc = cb_context:auth_doc(Context),
+    ConfDoc = cb_context:doc(load_conference(Id, Context)),
+    ConfOwnerId = wh_json:get_value(<<"owner_id">>, ConfDoc),
+    AuthOwnerId = wh_json:get_value(<<"owner_id">>, AuthDoc),
+    % Abort if the user is not room owner
+    case ConfOwnerId of
+        AuthOwnerId ->
+            Conference = whapps_conference:set_id(Id, whapps_conference:new()),
+            Resp = wh_json:set_value(<<"resp">>
+                                     ,perform_conference_action(Conference, Action, ParticipantId)
+                                     ,wh_json:new()
+                                    ),
+            crossbar_doc:handle_json_success(Resp, Context);
+        _ -> cb_context:add_system_error('forbidden', Context)
+    end.
+
+-spec perform_conference_action(whapps_conference:conference(), binary(), ne_binary()) -> 'ok'.
+perform_conference_action(Conference, <<"mute">>, ParticipantId) ->
+    whapps_conference_command:mute_participant(ParticipantId, Conference);
+perform_conference_action(Conference, <<"unmute">>, ParticipantId) ->
+    whapps_conference_command:unmute_participant(ParticipantId, Conference);
+perform_conference_action(Conference, <<"kick">>, ParticipantId) ->
+    whapps_conference_command:kick(ParticipantId, Conference).
 
 %%--------------------------------------------------------------------
 %% @private
