@@ -247,7 +247,11 @@ update_ccvs(Call) ->
                ,{<<"Caller-ID-Number">>, CIDNumber}
                | get_incoming_security(Call)
               ]),
-    whapps_call:set_custom_channel_vars(Props, Call).
+    Unsetters = [fun(Call2) -> whapps_call:kvs_erase('prepend_cid_name', Call2) end
+                 ,fun(Call2) -> whapps_call:kvs_erase('prepend_cid_number', Call2) end
+                ],
+    Call2 = lists:foldl(fun(Unsetter, Call2) -> Unsetter(Call2) end, Call, Unsetters),
+    whapps_call:set_custom_channel_vars(Props, Call2).
 
 -spec maybe_start_metaflow(whapps_call:call()) -> whapps_call:call().
 maybe_start_metaflow(Call) ->
