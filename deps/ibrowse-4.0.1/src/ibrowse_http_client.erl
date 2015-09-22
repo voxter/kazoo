@@ -231,7 +231,7 @@ handle_info({req_timedout, From}, State) ->
             {noreply, State};
         true ->
             shutting_down(State),
-%%            do_error_reply(State, req_timedout),
+            do_error_reply(State, req_timedout),
             {stop, normal, State}
     end;
 
