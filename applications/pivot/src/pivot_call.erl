@@ -350,6 +350,17 @@ handle_info({'ibrowse_async_response', ReqId, {'error', 'connection_closed'}}
                    }=State) ->
     lager:info("connection closed unexpectedly: collected: ~s", [_RespBody]),
     {'noreply', State};
+handle_info({'ibrowse_async_response', ReqId, {'error', 'req_timedout'}}
+            ,#state{request_id=ReqId
+                    ,call=_Call
+                    ,requester_queue=_RequesterQ
+                   }=State) ->
+    lager:debug("request ~p timed out", [ReqId]),
+    % wapi_pivot:publish_failed(RequesterQ, [{<<"Call-ID">>, whapps_call:call_id(Call)}
+    %                                        | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+    %                                       ]),
+    % {'stop', 'timeout', State};
+    {'noreply', State};
 handle_info({'ibrowse_async_response', ReqId, Chunk}
             ,#state{request_id=ReqId
                     ,response_body=RespBody
