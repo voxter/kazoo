@@ -22,6 +22,7 @@
          ,handle_queue_member_remove/2
          ,handle_queue_member_position/2
          ,handle_manager_success_notify/2
+         ,are_agents_available/1
          ,handle_config_change/2
          ,should_ignore_member_call/3, should_ignore_member_call/4
          ,config/1
@@ -188,6 +189,10 @@ handle_member_call(JObj, Props) ->
         'true' ->
             start_queue_call(JObj, Props, Call)
     end.
+
+-spec are_agents_available(server_ref()) -> boolean().
+are_agents_available(Srv) ->
+    are_agents_available(Srv, gen_listener:call(Srv, 'enter_when_empty')).
 
 are_agents_available(Srv, EnterWhenEmpty) ->
     agents_available(Srv) > 0 orelse EnterWhenEmpty.
@@ -400,6 +405,9 @@ handle_call('agents_available', _, #state{strategy_state=[_|_]}=State) ->
     {'reply', 1, State};
 handle_call('agents_available', _, #state{strategy_state=SS}=State) ->
     {'reply', queue:len(SS), State};
+
+handle_call('enter_when_empty', _, #state{enter_when_empty=EnterWhenEmpty}=State) ->
+    {'reply', EnterWhenEmpty, State};
 
 handle_call('next_winner', _, #state{strategy='mi'}=State) ->
     {'reply', 'undefined', State};
@@ -1094,7 +1102,14 @@ maybe_cancel_position_announcements(Call, Pids) ->
     case lists:keyfind(CallId, 1, Pids) of
         {_, Pid} ->
             erlang:exit(Pid, 'call_done'),
-            whapps_call_command:flush(Call);
+            %% Attempt to skip remaining announcement media, but don't flush hangups
+            NoopId = couch_mgr:get_uuid(),
+            Command = [{<<"Application-Name">>, <<"noop">>}
+                       ,{<<"Msg-ID">>, NoopId}
+                       ,{<<"Insert-At">>, <<"now">>}
+                       ,{<<"Filter-Applications">>, [<<"play">>, <<"say">>, <<"play">>]}
+                      ],
+            whapps_call_command:send_command(Command, Call);
         _ ->
             lager:debug("she caught me without the pid... it wasn't me"),
             'ok'
