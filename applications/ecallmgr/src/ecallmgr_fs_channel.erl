@@ -210,6 +210,7 @@ to_props(Channel) ->
        ,{<<"to_tag">>, Channel#channel.to_tag}
        ,{<<"from_tag">>, Channel#channel.from_tag}
        ,{<<"elapsed_s">>, wh_util:elapsed_s(Channel#channel.timestamp)}
+       ,{<<"control_q">>, Channel#channel.control_q}
        ,{<<"caller_id">>, Channel#channel.caller_id}
       ]).
 
@@ -248,6 +249,7 @@ to_api_props(Channel) ->
        ,{<<"From-Tag">>, Channel#channel.from_tag}
        ,{<<"Switch-URL">>, ecallmgr_fs_nodes:sip_url(Channel#channel.node)}
        ,{<<"Elapsed-Seconds">>, wh_util:elapsed_s(Channel#channel.timestamp)}
+       ,{<<"Control-Queue">>, Channel#channel.control_q}
       ]).
 
 %%%===================================================================
@@ -527,7 +529,7 @@ props_to_record(Props, Node) ->
              ,handling_locally=handling_locally(Props)
              ,to_tag=props:get_value(<<"variable_sip_to_tag">>, Props)
              ,from_tag=props:get_value(<<"variable_sip_from_tag">>, Props)
-             %,caller_id=pr
+             ,control_q=props:get_value(<<"control_q">>, Props)
             }.
 
 -spec handling_locally(wh_proplist()) -> boolean().
@@ -574,6 +576,7 @@ props_to_update(Props) ->
                             ,{#channel.dialplan, props:get_value(<<"Caller-Dialplan">>, Props)}
                             ,{#channel.to_tag, props:get_value(<<"variable_sip_to_tag">>, Props)}
                             ,{#channel.from_tag, props:get_value(<<"variable_sip_from_tag">>, Props)}
+                            ,{#channel.control_q, props:get_value(<<"variable_control_q">>, Props)}
                             ,{#channel.caller_id, props:get_value(<<"Caller-Caller-ID-Name">>, Props)}
                            ]).
 
