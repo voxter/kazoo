@@ -33,7 +33,6 @@
 -define(CB_LIST, <<"users/crossbar_listing">>).
 -define(LIST_BY_USERNAME, <<"users/list_by_username">>).
 -define(CHANNELS, <<"channels">>).
--define(QUICKCALL, <<"quickcall">>).
 
 %%%===================================================================
 %%% API
@@ -84,7 +83,7 @@ allowed_methods(_) ->
 allowed_methods(_, ?CHANNELS) ->
     [?HTTP_GET].
 
-allowed_methods(_, ?QUICKCALL, _) ->
+allowed_methods(_, ?QUICKCALL_PATH_TOKEN, _) ->
     [?HTTP_GET].
 
 %%--------------------------------------------------------------------
@@ -101,9 +100,10 @@ allowed_methods(_, ?QUICKCALL, _) ->
 
 resource_exists() -> 'true'.
 resource_exists(_) -> 'true'.
-resource_exists(_, ?CHANNELS) -> 'true'.
-resource_exists(_, ?QUICKCALL, _) -> 'true'.
 
+resource_exists(_, ?CHANNELS) -> 'true'.
+
+resource_exists(_, ?QUICKCALL_PATH_TOKEN, _) -> 'true'.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -239,8 +239,8 @@ validate(Context, UserId, ?CHANNELS) ->
         'false' -> get_channels(Context1)
     end.
 
-validate(Context, UserId, ?QUICKCALL, _) ->
-    Context1 = maybe_validate_quickcall(load_user(UserId, Context)),
+validate(Context, UserId, ?QUICKCALL_PATH_TOKEN, _) ->
+    Context1 = crossbar_util:maybe_validate_quickcall(load_user(UserId, Context)),
     case cb_context:has_errors(Context1) of
         'true' -> Context1;
         'false' ->
@@ -585,27 +585,6 @@ should_update_voicemail_creds(Username, VMJObj, UserFullDoc) ->
 		lager:info("Did not save user pass as PIN because they do not have an extension username"),
 		false
 	end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec maybe_validate_quickcall(cb_context:context()) -> cb_context:context().
--spec maybe_validate_quickcall(cb_context:context(), crossbar_status()) -> cb_context:context().
-maybe_validate_quickcall(Context) ->
-    maybe_validate_quickcall(Context, cb_context:resp_status(Context)).
-
-maybe_validate_quickcall(Context, 'success') ->
-    case cb_context:is_authenticated(Context)
-        orelse wh_json:is_true(<<"allow_anoymous_quickcalls">>, cb_context:doc(Context))
-    of
-        'false' -> cb_context:add_system_error('invalid_credentials', Context);
-        'true' -> Context
-    end;
-maybe_validate_quickcall(Context, _) ->
-    cb_context:add_system_error('invalid_credentials', Context).
 
 %%--------------------------------------------------------------------
 %% @private

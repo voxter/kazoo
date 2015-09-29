@@ -3,14 +3,6 @@
 %%% @doc
 %%% Handles starting/stopping a call recording
 %%%
-%%% "data":{
-%%%   "action":["start","stop"] // one of these
-%%%   ,"time_limit":600 // in seconds, how long to record the call
-%%%   ,"format":["mp3","wav"] // what format to store the recording in
-%%%   ,"url":"http://server.com/path/to/dump/file" // what URL to PUT the file to
-%%%   ,"record_on_answer": boolean() // whether to delay the start of the recording
-%%%   ,"record_sample_rate": integer() // sample rate to record at, in Hz
-%%% }
 %%% @end
 %%% @contributors
 %%%   James Aimonetti
@@ -57,7 +49,7 @@ handle(Data, Call, <<"stop">> = Action) ->
 handle_immediate_start(Data, Call) ->
     Url = wh_json:get_value(<<"url">>, Data),
     case wh_media_recording:should_store_recording(Url) of
-        {'true', 'other', 'third_party'} ->
+        {'true', 'third_party'} ->
             lager:debug("call will be stored to 3rd party CouchDB", []),
             start_wh_media_recording(Data, Call);
         {'true', 'other', Url} ->
@@ -86,7 +78,9 @@ record_call(Data, Call) ->
              ,{<<"Additional-Headers">>, wh_json:get_value(<<"additional_headers">>, Data)}
              ,{<<"Time-Limit">>, wh_json:get_value(<<"time_limit">>, Data)}
              ,{<<"Record-Sample-Rate">>, wh_json:get_integer_value(<<"record_sample_rate">>, Data)}
+             ,{<<"Record-Min-Sec">>, wh_json:get_integer_value(<<"record_min_sec">>, Data)}
             ],
+
     _ = whapps_call_command:record_call(props:filter_undefined(Props), <<"start">>, Call),
     lager:debug("auto handling call recording").
 

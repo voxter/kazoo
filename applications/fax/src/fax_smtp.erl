@@ -75,22 +75,13 @@ init(Hostname, SessionCount, Address, Options) ->
                          {'ok', pos_integer(), state()} |
                          {'ok', state()} |
                          error_message().
-handle_HELO(<<"invalid">>, State) ->
-    %% contrived example
-    {'error', "554 invalid hostname", State};
-handle_HELO(<<"trusted_host">>, State) ->
-    {'ok', State}; %% no size limit because we trust them.
 handle_HELO(Hostname, State) ->
     lager:debug("HELO from ~s", [Hostname]),
-    {'ok', 655360, State}. % 640kb of HELO should be enough for anyone.
-%% If {ok, State} was returned here, we'd use the default 10mb limit
+    {'ok', State}.
 
 -spec handle_EHLO(binary(), list(), state()) ->
                          {'ok', list(), state()} |
                          error_message().
-handle_EHLO(<<"invalid">>, _Extensions, State) ->
-    %% contrived example
-    {'error', "554 invalid hostname", State};
 handle_EHLO(Hostname, Extensions, #state{options=Options}=State) ->
     lager:debug("EHLO from ~s", [Hostname]),
     %% You can advertise additional extensions, or remove some defaults
@@ -331,7 +322,7 @@ to_proplist(#state{}=State) ->
        ,{<<"FaxBox-Owner-Email">>, State#state.owner_email}
        ,{<<"Content-Type">>, State#state.content_type}
        ,{<<"Filename">>, State#state.filename}
-       ,{<<"Errors">>, State#state.errors}
+       ,{<<"Errors">>, lists:reverse(State#state.errors)}
        ,{<<"Account-ID">>, State#state.account_id}
        | to_proplist(State#state.faxbox)
       ]);
@@ -457,7 +448,7 @@ maybe_faxbox(#state{faxbox_email=Domain}=State) ->
     case couch_mgr:get_results(?WH_FAXES_DB, <<"faxbox/email_address">>, ViewOptions) of
         {'ok', [JObj]} ->
             FaxBoxDoc= wh_json:get_value(<<"doc">>,JObj),
-            AccountId = wh_json:get_value(<<"pvt_account_id">>,JObj),
+            AccountId = wh_json:get_value(<<"pvt_account_id">>,FaxBoxDoc),
             maybe_faxbox_owner(State#state{faxbox=FaxBoxDoc, account_id=AccountId});
         _ -> maybe_faxbox_domain(State)
     end.
@@ -499,26 +490,31 @@ maybe_faxbox_domain(#state{faxbox_email=Domain}=State) ->
     end.
 
 -spec maybe_faxbox_by_owner_email(ne_binary(), state()) -> state().
-maybe_faxbox_by_owner_email(AccountId, #state{from=From}=State) ->
+maybe_faxbox_by_owner_email(AccountId, #state{errors=Errors
+                                              ,from=From
+                                             }=State) ->
     ViewOptions = [{'key', From}],
     AccountDb = wh_util:format_account_db(AccountId),
     case couch_mgr:get_results(AccountDb, <<"users/list_by_email">>, ViewOptions) of
         {'ok', []} ->
-            lager:debug("user ~s does not exist in account ~s, trying by rules",[From, AccountId]),
-            maybe_faxbox_by_rules(AccountId, State);
+            Error = wh_util:to_binary(io_lib:format("user ~s does not exist in account ~s, trying by rules",[From, AccountId])),
+            lager:debug(Error),
+            maybe_faxbox_by_rules(AccountId, State#state{errors=[Error | Errors]});
         {'ok', [JObj]} ->
             OwnerId = wh_json:get_value(<<"id">>, JObj),
             maybe_faxbox_by_owner_id(AccountId, OwnerId, State);
         {'ok', [_JObj | _JObjs]} ->
-            lager:debug("more then one user with email ~s in account ~s, trying by rules", [From, AccountId]),
-            maybe_faxbox_by_rules(AccountId, State);
+            Error = wh_util:to_binary(io_lib:format("more then one user with email ~s in account ~s, trying by rules", [From, AccountId])), 
+            lager:debug(Error),
+            maybe_faxbox_by_rules(AccountId, State#state{errors=[Error | Errors]});
         {'error', _E} ->
-            lager:debug("error ~p getting user by email ~s  in account ~s, trying by rules",[_E, From, AccountId]),
-            maybe_faxbox_by_rules(AccountId, State)
+            Error = wh_util:to_binary(io_lib:format("error ~p getting user by email ~s  in account ~s, trying by rules",[_E, From, AccountId])),
+            lager:debug(Error),
+            maybe_faxbox_by_rules(AccountId, State#state{errors=[Error | Errors]})
     end.
 
 -spec maybe_faxbox_by_owner_id(ne_binary(), ne_binary(),state()) -> state().
-maybe_faxbox_by_owner_id(AccountId, OwnerId, #state{from=From}=State) ->
+maybe_faxbox_by_owner_id(AccountId, OwnerId, #state{errors=Errors, from=From}=State) ->
     ViewOptions = [{'key', OwnerId}, 'include_docs'],
     AccountDb = wh_util:format_account_db(AccountId),
     case couch_mgr:get_results(AccountDb, <<"faxbox/list_by_ownerid">>, ViewOptions) of
@@ -526,20 +522,31 @@ maybe_faxbox_by_owner_id(AccountId, OwnerId, #state{from=From}=State) ->
             State#state{faxbox=wh_json:get_value(<<"doc">>,JObj)
                         ,owner_id=OwnerId
                         ,owner_email=From
+                        ,errors=[]
                        };
+        {'ok', [_JObj | _JObjs]} ->
+            Error = io_lib:format("user ~s : ~s has multiples faxboxes", [OwnerId, From]),
+            maybe_faxbox_by_rules(AccountId
+                                  ,State#state{owner_id=OwnerId
+                                               ,owner_email=From
+                                               ,errors=[Error | Errors]
+                                              }
+                                 );
         _ ->
+            Error = io_lib:format("user ~s : ~s does not have a faxbox", [OwnerId, From]),
             lager:debug("user ~s : ~s from account ~s does not have a faxbox, trying by rules"
                         ,[OwnerId, From, AccountId]
                        ),
             maybe_faxbox_by_rules(AccountId
                                   ,State#state{owner_id=OwnerId
                                                ,owner_email=From
+                                               ,errors=[Error | Errors]
                                               }
                                  )
     end.
 
 -spec maybe_faxbox_by_rules(ne_binary() | wh_json:objects(), state()) -> state().
-maybe_faxbox_by_rules(AccountId, State)
+maybe_faxbox_by_rules(AccountId, #state{errors=Errors}=State)
   when is_binary(AccountId) ->
     ViewOptions = ['include_docs'],
     AccountDb = wh_util:format_account_db(AccountId),
@@ -547,24 +554,24 @@ maybe_faxbox_by_rules(AccountId, State)
         {'ok', []} ->
             Error = <<"no faxboxes for account ", AccountId/binary>>,
             lager:debug(Error),
-            State#state{errors=[Error]};
+            State#state{errors=[Error | Errors]};
         {'ok', JObjs} -> maybe_faxbox_by_rules(JObjs, State#state{account_id=AccountId});
         {'error', _E} ->
             Error = <<"error getting faxbox email permissions for account ", AccountId/binary>>,
-            lager:debug(Error),
-            lager:debug("error ~p", [_E]),
-            State#state{errors=[Error]}
+            lager:debug("error getting faxbox email permissions for account ~s : ~p", [AccountId, _E]),
+            State#state{errors=[Error | Errors]}
     end;
 maybe_faxbox_by_rules([], #state{account_id=AccountId
                                  ,from=From
+                                 ,errors=Errors
                                 }=State) ->
     Error = <<"no mathing rules in account ", AccountId/binary, " for ", From/binary >>,
     lager:debug(Error),
-    State#state{errors=[Error]};
+    State#state{errors=[Error | Errors]};
 maybe_faxbox_by_rules([JObj | JObjs], #state{from=From}=State) ->
     Key = wh_json:get_value(<<"key">>, JObj),
     case match(From, Key) of
-        'true' -> State#state{faxbox=wh_json:get_value(<<"doc">>, JObj)};
+        'true' -> State#state{errors=[], faxbox=wh_json:get_value(<<"doc">>, JObj)};
         'false' -> maybe_faxbox_by_rules(JObjs, State)
     end.
 
