@@ -113,7 +113,7 @@ process_rules(#temporal{local_sec=LSec
             process_rules(T, Rules, Call, ApplicableRules);
         {_, End} ->
             lager:info("within active time window until ~w", [calendar:gregorian_seconds_to_datetime(End)]),
-            process_rules(T, Rs, Call, [R | ApplicableRules])
+            process_rules(T, Rules, Call, [Rule | ApplicableRules])
     end;
 process_rules(_, [], _, []) ->
     lager:info("continuing with default callflow"),
