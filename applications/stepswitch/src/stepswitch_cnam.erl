@@ -69,12 +69,14 @@ start_link(_) ->
 -spec lookup(wh_json:object() | ne_binary()) -> wh_json:object().
 lookup(<<_/binary>> = Number) ->
     Num = wnm_util:normalize_number(Number),
-    lookup(wh_json:set_values([{<<"phone_number">>, wh_util:uri_encode(Num)}
-                               ,{<<"Caller-ID-Number">>, Num}
-                              ]
-                              ,wh_json:new()
-                             )
-          );
+    lookup(
+      wh_json:set_values(
+        [{<<"phone_number">>, wh_util:uri_encode(Num)}
+         ,{<<"Caller-ID-Number">>, Num}
+        ]
+        ,wh_json:new()
+       )
+     );
 lookup(JObj) ->
     Number = wh_json:get_value(<<"Caller-ID-Number">>, JObj, <<"0000000000">>),
     Num = wnm_util:normalize_number(Number),
@@ -82,18 +84,16 @@ lookup(JObj) ->
         {'ok', CNAM} ->
             update_request(JObj, CNAM, 'true');
         {'error', 'not_found'} ->
-            update_request(JObj
-                           ,fetch_cnam(Num, wh_json:set_value(<<"phone_number">>, wh_util:uri_encode(Num), JObj))
-                           ,'false'
-                          )
+            CNAM = fetch_cnam(Num, set_phone_number(Num, JObj)),
+            update_request(JObj, CNAM, 'false')
     end.
 
+-spec set_phone_number(ne_binary(), wh_json:object()) -> wh_json:object().
+set_phone_number(Num, JObj) ->
+    wh_json:set_value(<<"phone_number">>, wh_util:uri_encode(Num), JObj).
+
 -spec update_request(wh_json:object(), api_binary(), boolean()) -> wh_json:object().
-update_request(JObj, 'undefined', FromCache) ->
-    update_request(JObj
-                   ,wh_json:get_value(<<"Caller-ID-Name">>, JObj, <<"UNKNOWN">>)
-                   ,FromCache
-                  );
+update_request(JObj, 'undefined', _) -> JObj;
 update_request(JObj, CNAM, FromCache) ->
     Props = [{<<"Caller-ID-Name">>, CNAM}
              ,{[<<"Custom-Channel-Vars">>, <<"Caller-ID-Name">>], CNAM}
@@ -101,9 +101,11 @@ update_request(JObj, CNAM, FromCache) ->
             ],
     wh_json:set_values(Props, JObj).
 
+-spec flush() -> 'ok'.
 flush() ->
     wh_cache:filter_erase_local(?STEPSWITCH_CACHE, fun flush_entries/2).
 
+-spec flush_entries(any(), any()) -> boolean().
 flush_entries(?CACHE_KEY(_), _) -> 'true';
 flush_entries(_, _) -> 'false'.
 
@@ -253,12 +255,13 @@ cache_key(Number) -> ?CACHE_KEY(Number).
 
 -spec fetch_cnam(ne_binary(), wh_json:object()) -> api_binary().
 fetch_cnam(Number, JObj) ->
-    CNAM = make_request(Number, JObj),
-    CacheProps = [{'expires', whapps_config:get_integer(?CONFIG_CAT, <<"cnam_expires">>, ?DEFAULT_EXPIRES)}
-                  ,{'origin', [{'db', wnm_util:number_to_db_name(Number), Number}, {'type', <<"number">>}]}
-                 ],
-    wh_cache:store_local(?STEPSWITCH_CACHE, cache_key(Number), CNAM, CacheProps),
-    CNAM.
+    case make_request(Number, JObj) of
+        'undefined' -> 'undefined';
+        CNAM ->
+            CacheProps = [{'expires', whapps_config:get_integer(?CONFIG_CAT, <<"cnam_expires">>, ?DEFAULT_EXPIRES)}],
+            wh_cache:store_local(?STEPSWITCH_CACHE, cache_key(Number), CNAM, CacheProps),
+            CNAM
+    end.
 
 -spec make_request(ne_binary(), wh_json:object()) -> api_binary().
 make_request(Number, JObj) ->

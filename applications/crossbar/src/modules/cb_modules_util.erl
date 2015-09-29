@@ -351,7 +351,7 @@ get_timeout(Context) ->
 
 -spec get_ignore_early_media(cb_context:context()) -> boolean().
 get_ignore_early_media(Context) ->
-    wh_util:is_true(cb_context:req_value(Context, <<"ignore-early-media">>)).
+    wh_util:is_true(cb_context:req_value(Context, <<"ignore-early-media">>, 'true')).
 
 -spec get_media(cb_context:context()) -> ne_binary().
 get_media(Context) ->
@@ -454,7 +454,9 @@ content_type_to_extension(<<"image/jpeg">>) -> <<"jpg">>;
 content_type_to_extension(<<"image/png">>) -> <<"png">>;
 content_type_to_extension(<<"image/gif">>) -> <<"gif">>;
 content_type_to_extension(<<"text/html">>) -> <<"html">>;
-content_type_to_extension(<<"text/plain">>) -> <<"txt">>.
+content_type_to_extension(<<"text/plain">>) -> <<"txt">>;
+content_type_to_extension(<<"image/icon">>) -> <<"ico">>;
+content_type_to_extension(<<"image/x-icon">>) -> <<"ico">>.
 
 -spec parse_media_type(ne_binary()) ->
                               {'error', 'badarg'} |

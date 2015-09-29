@@ -84,6 +84,7 @@ relay_amqp(JObj, Props) ->
 %%--------------------------------------------------------------------
 -spec init([fun()]) -> {'ok', state()}.
 init([Call, Callback, Args]) ->
+    _ = whapps_call:put_callid(Call),
     lager:debug("started event listener for cf_task"),
     {'ok', #state{call=Call
                   ,callback=Callback
@@ -133,7 +134,7 @@ handle_info({'DOWN', Ref, 'process', Pid, Reason}
                     ,pid=Pid
                    }=State
            ) ->
-    lager:debug("task exit reason: ~p", [Reason]),
+    lager:debug("task in ~p (~p) exited with reason: ~p", [Pid, Ref, Reason]),
     {'stop', 'normal', State};
 handle_info(Info, State) ->
     lager:debug("unhandled message: ~p", [Info]),
@@ -180,10 +181,13 @@ launch_task(#state{queue=Q
                   }=State) ->
     Self = self(),
     {Pid, Ref} = spawn_monitor(
-                   fun() -> wh_amqp_channel:consumer_pid(Self),
-                            Funs = [{fun whapps_call:kvs_store/3, 'consumer_pid', Self}
-                                    ,{fun whapps_call:set_controller_queue/2, Q}
-                                   ],
-                            apply(Callback, Args ++ [whapps_call:exec(Funs, Call)])
+                   fun() ->
+                           whapps_call:put_callid(Call),
+                           wh_amqp_channel:consumer_pid(Self),
+                           Funs = [{fun whapps_call:kvs_store/3, 'consumer_pid', Self}
+                                   ,{fun whapps_call:set_controller_queue/2, Q}
+                                  ],
+                           apply(Callback, Args ++ [whapps_call:exec(Funs, Call)])
                    end),
+    lager:debug("watching task execute in ~p (~p)", [Pid, Ref]),
     State#state{pid=Pid, ref=Ref}.

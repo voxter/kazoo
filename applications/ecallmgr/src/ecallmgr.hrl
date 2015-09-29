@@ -17,7 +17,7 @@
 
 -define(DEFAULT_FREESWITCH_CONTEXT, ecallmgr_config:get(<<"freeswitch_context">>, <<"context_2">>)).
 
--define(SIP_INTERFACE, "sofia/sipinterface_1/").
+-define(SIP_INTERFACE, "sipinterface_1").
 -define(DEFAULT_FS_PROFILE, "sipinterface_1").
 -define(DEFAULT_FS_TECHNOLOGY, "sofia").
 -define(DEFAULT_FS_DIALPLAN, "XML").
@@ -227,6 +227,7 @@
                                ,{<<"Record-Sample-Rate">>, <<"record_sample_rate">>}
                                ,{<<"recording_follow_transfer">>, <<"recording_follow_transfer">>}
                                ,{<<"recording_follow_attxfer">>, <<"recording_follow_attxfer">>}
+                               ,{<<"Record-Min-Sec">>, <<"record_min_sec">>}
                                ,{<<"enable_file_write_buffering">>, <<"enable_file_write_buffering">>}
                                ,{<<"RECORD_APPEND">>, <<"RECORD_APPEND">>}
                                ,{<<"fax_enable_t38_request">>, <<"fax_enable_t38_request">>}

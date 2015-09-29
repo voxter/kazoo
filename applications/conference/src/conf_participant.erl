@@ -564,8 +564,7 @@ play_announce(#participant{name_pronounced='undefined'
                            ,conference=Conference
                           }) ->
     lager:debug("skipping announce"),
-    _ = whapps_conference:play_entry_tone(Conference)
-            andalso whapps_conference_command:play(?ENTRY_TONE, Conference),
+    maybe_play_entry_tone('member', Conference),
     'ok';
 play_announce(#participant{conference=Conference
                            ,name_pronounced={_, AccountId, MediaId}
@@ -597,8 +596,7 @@ play_hangup_announce(#participant{conference='undefined'}) ->
 play_hangup_announce(#participant{conference=Conference
                                   ,name_pronounced='undefined'
                                  }) ->
-    _ = whapps_conference:play_entry_tone(Conference)
-            andalso whapps_conference_command:play(?EXIT_TONE, Conference),
+    maybe_play_exit_tone(Conference),
     'ok';
 play_hangup_announce(#participant{conference=Conference
                                   ,name_pronounced={_, AccountId, MediaId}
@@ -641,9 +639,9 @@ bridge_to_conference(Route, Conference, Call) ->
                                  ]),
     Command = [{<<"Application-Name">>, <<"bridge">>}
                ,{<<"Endpoints">>, [Endpoint]}
-               ,{<<"Timeout">>, <<"20">>}
-               ,{<<"Ignore-Early-Media">>, <<"false">>}
+               ,{<<"Timeout">>, 20}
                ,{<<"Dial-Endpoint-Method">>, <<"single">>}
+               ,{<<"Ignore-Early-Media">>, <<"false">>}
                ,{<<"Hold-Media">>, <<"silence">>}
               ],
     whapps_call_command:send_command(Command, Call).
@@ -677,11 +675,34 @@ send_conference_command(Conference, Call) ->
                  ,whapps_conference:member_join_deaf(Conference)
                 }
         end,
-    Command = [{<<"Application-Name">>, <<"conference">>}
-               ,{<<"Conference-ID">>, whapps_conference:id(Conference)}
-               ,{<<"Mute">>, Mute}
-               ,{<<"Deaf">>, Deaf}
-               ,{<<"Moderator">>, whapps_conference:moderator(Conference)}
-               ,{<<"Profile">>, whapps_conference:profile(Conference)}
-              ],
-    whapps_call_command:send_command(Command, Call).
+    whapps_call_command:conference(whapps_conference:id(Conference)
+                                   ,Mute
+                                   ,Deaf
+                                   ,whapps_conference:moderator(Conference)
+                                   ,whapps_conference:profile(Conference)
+                                   ,Call
+                                  ).
+
+%% @private
+-spec maybe_play_exit_tone(whapps_conference:conference()) -> 'ok'.
+maybe_play_exit_tone(Conference) ->
+    case whapps_conference:play_exit_tone(Conference) of
+        'false' -> 'ok';
+        Media = ?NE_BINARY -> whapps_conference_command:play(Media, Conference);
+        _Else -> whapps_conference_command:play(?EXIT_TONE, Conference)
+    end.
+
+%% @private
+-spec maybe_play_entry_tone('member' | 'moderator', whapps_conference:conference()) -> 'ok'.
+maybe_play_entry_tone('member', Conference) ->
+    case whapps_conference:play_entry_tone(Conference) of
+        'false' -> 'ok';
+        Media = ?NE_BINARY -> whapps_conference_command:play(Media, Conference);
+        _Else -> whapps_conference_command:play(?ENTRY_TONE, Conference)
+    end;
+maybe_play_entry_tone('moderator', Conference) ->
+    case whapps_conference:play_entry_tone(Conference) of
+        'false' -> 'ok';
+        Media = ?NE_BINARY -> whapps_conference_command:play(Media, Conference);
+        _Else -> whapps_conference_command:play(?MOD_ENTRY_TONE, Conference)
+    end.
