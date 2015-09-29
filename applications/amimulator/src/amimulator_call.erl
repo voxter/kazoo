@@ -271,11 +271,12 @@ control_queue(#call{call_id=CallId
                     ,control_q='undefined'
                    }) ->
     Req = props:filter_undefined([{<<"Call-ID">>, CallId}
+                                  ,{<<"Fields">>, [<<"Control-Queue">>]}
                                   | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
                                  ]),
     ReqResp = whapps_util:amqp_pool_request(Req
-                                            ,fun wapi_amimulator:publish_control_queue_req/1
-                                            ,fun wapi_amimulator:control_queue_resp_v/1
+                                            ,fun wapi_call:publish_query_channels_req/1
+                                            ,fun wapi_call:query_channels_resp_v/1
                                            ),
     case ReqResp of
         {'error', 'timeout'} ->
@@ -298,7 +299,7 @@ control_queue(#call{call_id=CallId
             lager:debug("could not fetch control queue for ~p (~p)", [CallId, E]),
             'undefined';
         {'ok', Resp} ->
-            wh_json:get_value(<<"Control-Queue">>, Resp)
+            wh_json:get_value([<<"Channels">>, CallId, <<"Control-Queue">>], Resp)
     end;
 control_queue(#call{control_q=ControlQueue}) ->
     ControlQueue.
