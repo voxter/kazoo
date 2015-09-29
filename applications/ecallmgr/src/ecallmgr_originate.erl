@@ -562,9 +562,12 @@ originate_execute(Node, Dialstrings, Timeout) ->
         {'ok', Other} ->
             lager:debug("recv other 'ok': ~s", [Other]),
             {'error', wh_util:strip_binary(binary:replace(Other, <<"\n">>, <<>>))};
-        {'error', Error} ->
+        {'error', Error} when is_binary(Error) ->
             lager:debug("error originating: ~s", [Error]),
-            {'error', wh_util:strip_binary(binary:replace(Error, <<"\n">>, <<>>))}
+            {'error', wh_util:strip_binary(binary:replace(Error, <<"\n">>, <<>>))};
+        {'error', _Reason} ->
+            lager:debug("error originating: ~p", [_Reason]),
+            {'error', <<"unspecified">>}
     end.
 
 -spec set_music_on_hold(atom(), ne_binary(), api_binary()) -> 'ok'.
