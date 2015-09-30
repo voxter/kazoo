@@ -18,6 +18,7 @@
 -export([lock/1]).
 -export([mute_participant/2]).
 -export([prompt/2, prompt/3]).
+-export([play_command/1, play_command/2]).
 -export([play/2, play/3]).
 -export([record/1, recordstop/1]).
 -export([relate_participants/3, relate_participants/4]).
@@ -122,16 +123,24 @@ prompt(Media, Conference) ->
 prompt(Media, ParticipantId, Conference) ->
     play(wh_media_util:get_prompt(Media, whapps_conference:call(Conference)), ParticipantId, Conference).
 
+-spec play_command(ne_binary()) -> wh_proplist().
+-spec play_command(ne_binary(), non_neg_integer() | 'undefined') -> wh_proplist().
+
+play_command(Media) ->
+    play_command(Media, 'undefined').
+play_command(Media, ParticipantId) ->
+    [{<<"Application-Name">>, <<"play">>}
+     ,{<<"Media-Name">>, Media}
+     ,{<<"Participant">>, ParticipantId}
+    ].
+
 -spec play(ne_binary(), whapps_conference:conference()) -> 'ok'.
 -spec play(ne_binary(), non_neg_integer() | 'undefined', whapps_conference:conference()) -> 'ok'.
 
 play(Media, Conference) ->
     play(Media, 'undefined', Conference).
 play(Media, ParticipantId, Conference) ->
-    Command = [{<<"Application-Name">>, <<"play">>}
-               ,{<<"Media-Name">>, Media}
-               ,{<<"Participant">>, ParticipantId}
-              ],
+    Command = play_command(Media, ParticipantId),
     send_command(Command, Conference).
 
 -spec record(whapps_conference:conference()) -> 'ok'.

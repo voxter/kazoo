@@ -564,30 +564,29 @@ play_announce(#participant{name_pronounced='undefined'
                            ,conference=Conference
                           }) ->
     lager:debug("skipping announce"),
-    maybe_play_entry_tone('member', Conference),
-    'ok';
+    Moderator = case whapps_conference:moderator(Conference) of
+        'true' -> 'moderator';
+        'false' -> 'member'
+    end,
+    case play_entry_tone(Moderator, Conference) of
+        'false' -> 'ok';
+        Command -> whapps_conference_command:send_command(Command, Conference)
+    end;
 play_announce(#participant{conference=Conference
                            ,name_pronounced={_, AccountId, MediaId}
                           }) ->
     lager:debug("playing announcement ~s to conference ~s", [MediaId, whapps_conference:id(Conference)]),
     Recording = wh_media_util:media_path(MediaId, AccountId),
-    RecordingCommand = [{<<"Application-Name">>, <<"play">>}
-                        ,{<<"Media-Name">>, Recording}
-                        ,{<<"Participant">>, 'undefined'}
-                       ],
-    PromptCommand = [{<<"Application-Name">>, <<"play">>}
-                     ,{<<"Media-Name">>, wh_media_util:get_prompt(<<"conf-has_joined">>, whapps_conference:call(Conference))}
-                     ,{<<"Participant">>, 'undefined'}
-                    ],
+    RecordingCommand = whapps_conference_command:play_command(Recording),
+    PromptCommand = whapps_conference_command:play_command(wh_media_util:get_prompt(<<"conf-has_joined">>, whapps_conference:call(Conference))),
 
-    case whapps_conference:play_entry_tone(Conference) of
-        'true' ->
-            ToneCommand = [{<<"Application-Name">>, <<"play">>}
-                           ,{<<"Media-Name">>, ?ENTRY_TONE}
-                           ,{<<"Participant">>, 'undefined'}
-                          ],
-            whapps_conference_command:macro([ToneCommand, RecordingCommand, PromptCommand], Conference);
-        'false' -> whapps_conference_command:macro([RecordingCommand, PromptCommand], Conference)
+    Moderator = case whapps_conference:moderator(Conference) of
+        'true' -> 'moderator';
+        'false' -> 'member'
+    end,
+    case play_entry_tone(Moderator, Conference) of
+        'false' -> whapps_conference_command:macro([RecordingCommand, PromptCommand], Conference);
+        Command -> whapps_conference_command:macro([Command, RecordingCommand, PromptCommand], Conference)
     end.
 
 -spec play_hangup_announce(participant()) -> 'ok'.
@@ -596,30 +595,21 @@ play_hangup_announce(#participant{conference='undefined'}) ->
 play_hangup_announce(#participant{conference=Conference
                                   ,name_pronounced='undefined'
                                  }) ->
-    maybe_play_exit_tone(Conference),
-    'ok';
+    case play_exit_tone(Conference) of
+        'false' -> 'ok';
+        Command -> whapps_conference_command:send_command(Command, Conference)
+    end;
 play_hangup_announce(#participant{conference=Conference
                                   ,name_pronounced={_, AccountId, MediaId}
                                  }) ->
     lager:debug("playing announcement ~s to conference ~s", [MediaId, whapps_conference:id(Conference)]),
     Recording = wh_media_util:media_path(MediaId, AccountId),
-    RecordingCommand = [{<<"Application-Name">>, <<"play">>}
-                        ,{<<"Media-Name">>, Recording}
-                        ,{<<"Participant">>, 'undefined'}
-                       ],
-    PromptCommand = [{<<"Application-Name">>, <<"play">>}
-                     ,{<<"Media-Name">>, wh_media_util:get_prompt(<<"conf-has_left">>, whapps_conference:call(Conference))}
-                     ,{<<"Participant">>, 'undefined'}
-                    ],
+    RecordingCommand = whapps_conference_command:play_command(Recording),
+    PromptCommand = whapps_conference_command:play_command(wh_media_util:get_prompt(<<"conf-has_left">>, whapps_conference:call(Conference))),
 
-    case whapps_conference:play_entry_tone(Conference) of
-        'true' ->
-            ToneCommand = [{<<"Application-Name">>, <<"play">>}
-                           ,{<<"Media-Name">>, ?EXIT_TONE}
-                           ,{<<"Participant">>, 'undefined'}
-                          ],
-            whapps_conference_command:macro([ToneCommand, RecordingCommand, PromptCommand], Conference);
-        'false' -> whapps_conference_command:macro([RecordingCommand, PromptCommand], Conference)
+    case play_exit_tone(Conference) of
+        'false' -> whapps_conference_command:macro([RecordingCommand, PromptCommand], Conference);
+        Command -> whapps_conference_command:macro([Command, RecordingCommand, PromptCommand], Conference)
     end.
 
 -spec bridge_to_conference(ne_binary(), whapps_conference:conference(), whapps_call:call()) -> 'ok'.
@@ -684,25 +674,25 @@ send_conference_command(Conference, Call) ->
                                   ).
 
 %% @private
--spec maybe_play_exit_tone(whapps_conference:conference()) -> 'ok'.
-maybe_play_exit_tone(Conference) ->
+-spec play_exit_tone(whapps_conference:conference()) -> wh_proplist() | 'false'.
+play_exit_tone(Conference) ->
     case whapps_conference:play_exit_tone(Conference) of
-        'false' -> 'ok';
-        Media = ?NE_BINARY -> whapps_conference_command:play(Media, Conference);
-        _Else -> whapps_conference_command:play(?EXIT_TONE, Conference)
+        'false' -> 'false';
+        Media = ?NE_BINARY -> whapps_conference_command:play_command(Media);
+        _Else -> whapps_conference_command:play_command(?EXIT_TONE)
     end.
 
 %% @private
--spec maybe_play_entry_tone('member' | 'moderator', whapps_conference:conference()) -> 'ok'.
-maybe_play_entry_tone('member', Conference) ->
+-spec play_entry_tone('member' | 'moderator', whapps_conference:conference()) -> wh_proplist() | 'false'.
+play_entry_tone('member', Conference) ->
+    play_entry_tone_media(?ENTRY_TONE, Conference);
+play_entry_tone('moderator', Conference) ->
+    play_entry_tone_media(?MOD_ENTRY_TONE, Conference).
+
+-spec play_entry_tone_media(ne_binary(), whapps_conference:conference()) -> wh_proplist() | 'false'.
+play_entry_tone_media(Tone, Conference) ->
     case whapps_conference:play_entry_tone(Conference) of
-        'false' -> 'ok';
-        Media = ?NE_BINARY -> whapps_conference_command:play(Media, Conference);
-        _Else -> whapps_conference_command:play(?ENTRY_TONE, Conference)
-    end;
-maybe_play_entry_tone('moderator', Conference) ->
-    case whapps_conference:play_entry_tone(Conference) of
-        'false' -> 'ok';
-        Media = ?NE_BINARY -> whapps_conference_command:play(Media, Conference);
-        _Else -> whapps_conference_command:play(?MOD_ENTRY_TONE, Conference)
+        'false' -> 'false';
+        Media = ?NE_BINARY -> whapps_conference_command:play_command(Media);
+        _Else -> whapps_conference_command:play_command(Tone)
     end.
