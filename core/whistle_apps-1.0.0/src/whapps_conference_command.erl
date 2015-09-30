@@ -140,7 +140,7 @@ play_command(Media, ParticipantId) ->
 play(Media, Conference) ->
     play(Media, 'undefined', Conference).
 play(Media, ParticipantId, Conference) ->
-    Command = play_command(Media, ParticipantId);
+    Command = play_command(Media, ParticipantId),
     send_command(Command, Conference).
 
 -spec record(whapps_conference:conference()) -> 'ok'.
