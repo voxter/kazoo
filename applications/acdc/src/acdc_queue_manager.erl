@@ -496,6 +496,9 @@ handle_cast({'start_workers'}, #state{account_id=AccountId
                                  ,'include_docs'
                                 ])
     of
+        {'ok', []} ->
+            lager:debug("no agents yet, but create a worker anyway"),
+            acdc_queue_workers_sup:new_worker(WorkersSup, AccountId, QueueId);
         {'ok', Agents} ->
             _ = [start_agent_and_worker(WorkersSup, AccountId, QueueId
                                         ,wh_json:get_value(<<"doc">>, A)
@@ -523,9 +526,11 @@ handle_cast({'start_worker', N}, #state{account_id=AccountId
 handle_cast({'agent_available', AgentId}, #state{strategy=Strategy
                                                  ,strategy_state=StrategyState
                                                  ,known_agents=As
+                                                 ,supervisor=QueueSup
                                                 }=State) when is_binary(AgentId) ->
     lager:info("adding agent ~s to strategy ~s", [AgentId, Strategy]),
     {StrategyState1, As1} = update_strategy_with_agent(Strategy, StrategyState, As, AgentId, 'add'),
+    maybe_start_queue_workers(QueueSup, dict:size(As1)),
     {'noreply', State#state{strategy_state=StrategyState1
                             ,known_agents=As1
                            }
@@ -546,14 +551,10 @@ handle_cast({'agent_ringing', JObj}, State) ->
 handle_cast({'agent_unavailable', AgentId}, #state{strategy=Strategy
                                                    ,strategy_state=StrategyState
                                                    ,known_agents=As
-                                                   ,supervisor=QueueSup
                                                   }=State) when is_binary(AgentId) ->
     lager:info("agent ~s unavailable, maybe updating strategy ~s", [AgentId, Strategy]),
 
     {StrategyState1, As1} = update_strategy_with_agent(Strategy, StrategyState, As, AgentId, 'remove'),
-
-    maybe_start_queue_workers(QueueSup, dict:size(As1)),
-
     {'noreply', State#state{strategy_state=StrategyState1
                             ,known_agents=As1
                            }

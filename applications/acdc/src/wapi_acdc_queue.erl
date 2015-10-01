@@ -720,7 +720,11 @@ shared_queue_name(AcctId, QueueId) ->
 queue_size(AcctId, QueueId) ->
     Q = shared_queue_name(AcctId, QueueId),
     try amqp_util:new_queue(Q, [{'return_field', 'all'}
-                                ,{'passive', 'true'}
+                                ,{'exclusive', 'false'}
+                                ,{'arguments', [{<<"x-message-ttl">>, ?MILLISECONDS_IN_DAY}
+                                                ,{<<"x-max-length">>, 1000}
+                                               ]
+                                 }
                                ])
     of
         {'error', {'server_initiated_close', 404, _Msg}} ->
