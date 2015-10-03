@@ -19,7 +19,6 @@
          ,handle_member_call_cancel/2
          ,handle_agent_change/2
          ,handle_queue_member_add/2
-         ,handle_queue_member_remove/2
          ,handle_queue_member_position/2
          ,handle_manager_success_notify/2
          ,are_agents_available/1
@@ -85,7 +84,7 @@
                                    ,{'id', Q}
                                    ,'federate'
                                   ]}
-                         ,{'acdc_queue', [{'restrict_to', ['stats_req', 'agent_change', 'member_addremove', 'member_position']}
+                         ,{'acdc_queue', [{'restrict_to', ['member_call_result', 'stats_req', 'agent_change', 'member_addremove', 'member_position']}
                                           ,{'account_id', A}
                                           ,{'queue_id', Q}
                                          ]}
@@ -244,7 +243,7 @@ handle_member_call_cancel(JObj, Props) ->
                        ),
 
     gen_listener:cast(props:get_value('server', Props), {'member_call_cancel', K, JObj}),
-    gen_listener:cast(props:get_value('server', Props), {'remove_queue_member', JObj}).
+    gen_listener:cast(props:get_value('server', Props), {'handle_queue_member_remove', JObj}).
 
 handle_agent_change(JObj, Prop) ->
     'true' = wapi_acdc_queue:agent_change_v(JObj),
@@ -261,17 +260,13 @@ handle_agent_change(JObj, Prop) ->
 handle_queue_member_add(JObj, Prop) ->
     gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_add', JObj, props:get_value('queue', Prop)}).
 
--spec handle_queue_member_remove(wh_json:object(), wh_proplist()) -> 'ok'.
-handle_queue_member_remove(JObj, Prop) ->
-    gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_remove', JObj}).
-
 -spec handle_queue_member_position(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_queue_member_position(JObj, Prop) ->
 	gen_listener:cast(props:get_value('server', Prop), {'queue_member_position', JObj}).
 
 -spec handle_manager_success_notify(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_manager_success_notify(JObj, Prop) ->
-    gen_listener:cast(props:get_value('server', Prop), {'remove_queue_member', JObj}).
+    gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_remove', JObj}).
 
 -spec handle_config_change(server_ref(), wh_json:object()) -> 'ok'.
 handle_config_change(Srv, JObj) ->
@@ -476,9 +471,14 @@ handle_cast({'member_call_cancel', K, JObj}, #state{ignored_member_calls=Dict}=S
     Reason = wh_json:get_value(<<"Reason">>, JObj),
 
     acdc_stats:call_abandoned(AccountId, QueueId, CallId, Reason),
-    {'noreply', State#state{
-                  ignored_member_calls=dict:store(K, 'true', Dict)
-                 }};
+    case Reason of
+        %% Don't add to ignored_member_calls because an FSM has already dealt with this call
+        <<"No agents left in queue">> ->
+            {'noreply', State};
+        _ ->
+            {'noreply', State#state{ignored_member_calls=dict:store(K, 'true', Dict)}}
+    end;
+    
 handle_cast({'monitor_call', Call}, State) ->
     gen_listener:add_binding(self(), 'call', [{'callid', whapps_call:call_id(Call)}
                                               ,{'restrict_to', [<<"CHANNEL_DESTROY">>]}
@@ -643,12 +643,6 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
                             ,pos_announce_pids=UpdatedAnnouncePids
                            }};
 
-handle_cast({'remove_queue_member', JObj}, #state{account_id=AccountId
-                                                  ,queue_id=QueueId
-                                                 }=State) ->
-    maybe_publish_queue_member_remove(AccountId, QueueId, wh_json:get_value(<<"Call-ID">>, JObj), wh_json:get_value(<<"Reason">>, JObj)),
-    {'noreply', State};
-
 handle_cast({'handle_queue_member_add', JObj, _Queue}, #state{current_member_calls=CurrentCalls}=State) ->
     lager:debug("Received notification of new queue member"),
 
@@ -658,46 +652,9 @@ handle_cast({'handle_queue_member_add', JObj, _Queue}, #state{current_member_cal
 
     {'noreply', State#state{current_member_calls = [Call | lists:keydelete(CallId, 2, CurrentCalls)]}};
 
-handle_cast({'handle_queue_member_remove', JObj}, #state{account_id=AccountId
-                                                         ,queue_id=QueueId
-                                                         ,current_member_calls=CurrentCalls
-                                                         ,pos_announce_pids=Pids
-                                                        }=State) ->
-    lager:debug("Received notification of queue member being removed"),
-
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
-    Call = lists:keyfind(CallId, 2, CurrentCalls),
-
-    {Map, _} = lists:mapfoldr(fun(X, I) -> {{X, I}, I + 1} end, 1, CurrentCalls),
-    Index = case lists:keyfind(Call, 1, Map) of
-        {_, Index2} ->
-            Index2;
-        _Result ->
-            lager:debug("call id ~p", [CallId]),
-            lists:foreach(fun(Call2) ->
-                lager:debug("current call id ~p", [whapps_call:call_id(Call2)])
-            end, CurrentCalls),
-            'true' = wh_json:get_value(<<"Stop">>, JObj)
-    end,
-
-    Prop = [{<<"Account-ID">>, AccountId}
-            ,{<<"Queue-ID">>, QueueId}
-            ,{<<"Call-ID">>, CallId}
-            ,{<<"Exited-Position">>, Index}
-            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-           ],
-
-    wapi_acdc_stats:publish_call_exited_position(Prop),
-
-    UpdatedMemberCalls = lists:delete(Call, CurrentCalls),
-
-    %% Cancel position announcements
-    Call = lists:keyfind(CallId, 2, CurrentCalls),
-    UpdatedAnnouncePids = maybe_cancel_position_announcements(Call, Pids),
-
-    {'noreply', State#state{current_member_calls=UpdatedMemberCalls
-                            ,pos_announce_pids=UpdatedAnnouncePids
-                           }};
+handle_cast({'handle_queue_member_remove', JObj}, State) ->
+    State1 = maybe_remove_queue_member(wh_json:get_value(<<"Call-ID">>, JObj), wh_json:get_value(<<"Reason">>, JObj), State),
+    {'noreply', State1};
 
 handle_cast({'replace_call', OldCall, NewCall}, #state{current_member_calls=CurrentCalls
                                                        ,pos_announce_pids=Pids
@@ -1145,19 +1102,54 @@ maybe_queue_has_metaflows(AccountDb, QueueId, Call) ->
             'false'
     end.
 
--spec maybe_publish_queue_member_remove(ne_binary(), ne_binary(), ne_binary(), binary()) -> 'ok'.
-maybe_publish_queue_member_remove(_, _, _, <<"no agents">>) ->
-    'ok';
-maybe_publish_queue_member_remove(AccountId, QueueId, CallId, _) ->
-    lager:debug("Publishing remove of queue member"),
+-spec maybe_remove_queue_member(api_binary(), api_binary(), mgr_state()) -> mgr_state().
+maybe_remove_queue_member(_, <<"no agents">>, State) ->
+    State;
+maybe_remove_queue_member(CallId, _Reason, #state{account_id=AccountId
+                                                 ,queue_id=QueueId
+                                                 ,current_member_calls=CurrentCalls
+                                                 ,pos_announce_pids=Pids
+                                                }=State) ->
+    
+
+    Call = lists:keyfind(CallId, 2, CurrentCalls),
+
+    {Map, _} = lists:mapfoldr(fun(X, I) -> {{X, I}, I + 1} end, 1, CurrentCalls),
+    Index = case lists:keyfind(Call, 1, Map) of
+        {_, Index2} ->
+            lager:debug("removing call id ~s", [CallId]),
+            Index2;
+        _Result ->
+            lager:debug("call id ~p", [CallId]),
+            lists:foreach(fun(Call2) ->
+                lager:debug("current call id ~p", [whapps_call:call_id(Call2)])
+            end, CurrentCalls),
+            'undefined'
+    end,
 
     Prop = [{<<"Account-ID">>, AccountId}
             ,{<<"Queue-ID">>, QueueId}
             ,{<<"Call-ID">>, CallId}
+            ,{<<"Exited-Position">>, Index}
             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
 
-    wapi_acdc_queue:publish_queue_member_remove(Prop).
+    case Index of
+        'undefined' -> 'ok';
+        _Other -> wapi_acdc_stats:publish_call_exited_position(Prop)
+    end,
+
+    UpdatedMemberCalls = lists:delete(Call, CurrentCalls),
+
+    %% Cancel position announcements
+    UpdatedAnnouncePids = case lists:keyfind(CallId, 2, CurrentCalls) of
+        'false' -> Pids;
+        Call -> maybe_cancel_position_announcements(Call, Pids)
+    end,
+
+    State#state{current_member_calls=UpdatedMemberCalls
+                ,pos_announce_pids=UpdatedAnnouncePids
+               }.
 
 apply_new_metaflows(CallId, CVs, ControllerQueue, Metaflows) ->
     Numbers = update_with_cq(update_with_cvs(wh_json:get_value(<<"numbers">>, Metaflows), CVs), ControllerQueue),
