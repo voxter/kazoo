@@ -717,7 +717,10 @@ clear_call_state(#state{call=Call
                         ,queue_id=QueueId
                         ,awaiting_callback=AC
                        }=State) ->
-    CallId = whapps_call:call_id(Call),
+    CallId = case Call of
+        'undefined' -> 'undefined';
+        _ -> whapps_call:call_id(Call)
+    end,
     _ = acdc_util:queue_presence_update(AcctId, QueueId),
 
     put('callid', QueueId),
