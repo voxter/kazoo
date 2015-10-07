@@ -212,9 +212,8 @@ get_common_props(JObj) ->
 maybe_queue_empty(AccountId, QueueId) ->
     LoggedIn = lists:filter(fun(Agent) -> 
         case acdc_agent_util:most_recent_status(AccountId, Agent) of
-            {'ok', <<"ready">>} -> 'true';
-            {'ok', <<"logged_in">>} -> 'true';
-            _ -> 'false'
+            {'ok', <<"logged_out">>} -> 'false';
+            _ -> 'true'
         end
     end, acdc_util:agents_in_queue(wh_util:format_account_id(AccountId, 'encoded'), QueueId)),
     case length(LoggedIn) of
