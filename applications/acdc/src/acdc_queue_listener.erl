@@ -580,27 +580,27 @@ send_member_connect_req(CallId, AcctId, QueueId, MyQ, MyId) ->
                               ,boolean() | {api_binary(), binary()}) -> 'ok'.
 send_member_connect_win(RespJObj, Call, QueueId, MyQ, MyId, QueueOpts, 'false') ->
     CallJSON = whapps_call:to_json(Call),
-    Q = wh_json:get_value(<<"Server-ID">>, RespJObj),
     Win = props:filter_undefined(
             [{<<"Call">>, CallJSON}
              ,{<<"Process-ID">>, MyId}
              ,{<<"Agent-Process-ID">>, wh_json:get_value(<<"Agent-Process-ID">>, RespJObj)}
              ,{<<"Queue-ID">>, QueueId}
+             ,{<<"Agent-ID">>, wh_json:get_value(<<"Agent-ID">>, RespJObj)}
              | QueueOpts ++ wh_api:default_headers(MyQ, ?APP_NAME, ?APP_VERSION)
             ]),
-    publish(Q, Win, fun wapi_acdc_queue:publish_member_connect_win/2);
+    publish(Win, fun wapi_acdc_queue:publish_member_connect_win/1);
 send_member_connect_win(RespJObj, Call, QueueId, MyQ, MyId, QueueOpts, {_, CallbackNumber}) ->
     CallJSON = whapps_call:to_json(Call),
-    Q = wh_json:get_value(<<"Server-ID">>, RespJObj),
     Win = props:filter_undefined(
             [{<<"Call">>, CallJSON}
              ,{<<"Process-ID">>, MyId}
              ,{<<"Agent-Process-ID">>, wh_json:get_value(<<"Agent-Process-ID">>, RespJObj)}
              ,{<<"Queue-ID">>, QueueId}
+             ,{<<"Agent-ID">>, wh_json:get_value(<<"Agent-ID">>, RespJObj)}
              ,{<<"Callback-Number">>, CallbackNumber}
              | QueueOpts ++ wh_api:default_headers(MyQ, ?APP_NAME, ?APP_VERSION)
             ]),
-    publish(Q, Win, fun wapi_acdc_queue:publish_member_connect_win/2).
+    publish(Win, fun wapi_acdc_queue:publish_member_connect_win/1).
 
 -spec send_agent_timeout(wh_json:object(), whapps_call:call(), ne_binary()) -> 'ok'.
 send_agent_timeout(RespJObj, Call, QueueId) ->

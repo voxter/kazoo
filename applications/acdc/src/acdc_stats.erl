@@ -523,10 +523,10 @@ call_match_builder_fold(<<"End-Range">>, End, {CallStat, Contstraints}) ->
                                          ,{<<"Window-Size">>, ?CLEANUP_WINDOW + 1}
                                          ,{<<"Current-Timestamp">>, Now}
                                         ])};
-        N when N > Now ->
-            {'error', wh_json:from_list([{<<"End-Range">>, <<"supplied value is in the future">>}
-                                         ,{<<"Current-Timestamp">>, Now}
-                                        ])};
+        % N when N > Now ->
+        %     {'error', wh_json:from_list([{<<"End-Range">>, <<"supplied value is in the future">>}
+        %                                  ,{<<"Current-Timestamp">>, Now}
+        %                                 ])};
         N ->
             {CallStat#call_stat{entered_timestamp='$5'}
              ,[{'=<', '$5', N} | Contstraints]

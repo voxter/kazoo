@@ -15,7 +15,7 @@
 -export([start_link/2, start_link/3, start_link/4, start_link/5
          ,call_event/4
          ,member_connect_req/2
-         ,member_connect_win/2
+         ,member_connect_win/3
          ,agent_timeout/2
          ,originate_ready/2
          ,originate_resp/2, originate_started/2, originate_uuid/2
@@ -148,9 +148,9 @@ member_connect_req(FSM, JObj) ->
 %%   member_connect_resp payload or ignore the request
 %% @end
 %%--------------------------------------------------------------------
--spec member_connect_win(pid(), wh_json:object()) -> 'ok'.
-member_connect_win(FSM, JObj) ->
-    gen_fsm:send_event(FSM, {'member_connect_win', JObj}).
+-spec member_connect_win(pid(), wh_json:object(), 'same_node' | 'different_node') -> 'ok'.
+member_connect_win(FSM, JObj, Node) ->
+    gen_fsm:send_event(FSM, {'member_connect_win', JObj, Node}).
 
 -spec agent_timeout(pid(), wh_json:object()) -> 'ok'.
 agent_timeout(FSM, JObj) ->
@@ -551,13 +551,12 @@ ready({'sync_req', JObj}, #state{agent_listener=AgentListener}=State) ->
     lager:debug("recv sync_req from ~s", [wh_json:get_value(<<"Server-ID">>, JObj)]),
     acdc_agent_listener:send_sync_resp(AgentListener, 'ready', JObj),
     {'next_state', 'ready', State};
-ready({'member_connect_win', JObj}, #state{agent_listener=AgentListener
-                                           ,endpoints=OrigEPs
-                                           ,agent_listener_id=MyId
-                                           ,account_id=AccountId
-                                           ,agent_id=AgentId
-                                           ,connect_failures=CF
-                                          }=State) ->
+ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentListener
+                                                        ,endpoints=OrigEPs
+                                                        ,account_id=AccountId
+                                                        ,agent_id=AgentId
+                                                        ,connect_failures=CF
+                                                       }=State) ->
     Call = whapps_call:from_json(wh_json:get_value(<<"Call">>, JObj)),
     CallId = whapps_call:call_id(Call),
 
@@ -570,60 +569,76 @@ ready({'member_connect_win', JObj}, #state{agent_listener=AgentListener
     CDRUrl = cdr_url(JObj),
     RecordingUrl = recording_url(JObj),
 
-    case wh_json:get_value(<<"Agent-Process-ID">>, JObj) of
-        MyId ->
-            lager:debug("trying to ring agent ~s to connect to caller in queue ~s", [AgentId, QueueId]),
+    % case wh_json:get_value(<<"Agent-Process-ID">>, JObj) of
+    %     MyId ->
+    lager:debug("trying to ring agent ~s to connect to caller in queue ~s", [AgentId, QueueId]),
 
-            case get_endpoints(OrigEPs, AgentListener, Call, AgentId, QueueId) of
-                {'error', 'no_endpoints'} ->
-                    lager:info("agent ~s has no endpoints assigned; logging agent out", [AgentId]),
-                    acdc_agent_listener:logout_agent(AgentListener),
-                    acdc_agent_stats:agent_logged_out(AccountId, AgentId),
-                    acdc_agent_listener:member_connect_retry(AgentListener, JObj),
-                    {'next_state', 'paused', State};
-                {'error', _E} ->
-                    lager:debug("can't take the call, skip me: ~p", [_E]),
-                    acdc_agent_listener:member_connect_retry(AgentListener, JObj),
-                    {'next_state', 'ready', State#state{connect_failures=CF+1}};
-                {'ok', UpdatedEPs} ->
-                    %% Need to check if a callback is required to the caller
-                    case wh_json:get_value(<<"Callback-Number">>, JObj) of
-                        'undefined' ->
-                            acdc_agent_listener:bridge_to_member(AgentListener, Call, JObj, UpdatedEPs, CDRUrl, RecordingUrl);
-                        Number ->
-                            acdc_agent_listener:redial_member(AgentListener, Call, JObj, UpdatedEPs, CDRUrl, RecordingUrl, Number)
-                    end,
+    case get_endpoints(OrigEPs, AgentListener, Call, AgentId, QueueId) of
+        {'error', 'no_endpoints'} ->
+            lager:info("agent ~s has no endpoints assigned; logging agent out", [AgentId]),
+            acdc_agent_listener:logout_agent(AgentListener),
+            acdc_agent_stats:agent_logged_out(AccountId, AgentId),
+            acdc_agent_listener:member_connect_retry(AgentListener, JObj),
+            {'next_state', 'paused', State};
+        {'error', _E} ->
+            lager:debug("can't take the call, skip me: ~p", [_E]),
+            acdc_agent_listener:member_connect_retry(AgentListener, JObj),
+            {'next_state', 'ready', State#state{connect_failures=CF+1}};
+        {'ok', UpdatedEPs} ->
+            %% Need to check if a callback is required to the caller
+            case wh_json:get_value(<<"Callback-Number">>, JObj) of
+                'undefined' ->
+                    acdc_agent_listener:bridge_to_member(AgentListener, Call, JObj, UpdatedEPs, CDRUrl, RecordingUrl);
+                Number ->
+                    acdc_agent_listener:redial_member(AgentListener, Call, JObj, UpdatedEPs, CDRUrl, RecordingUrl, Number)
+            end,
 
-                    CIDName = whapps_call:caller_id_name(Call),
-                    CIDNum = whapps_call:caller_id_number(Call),
+            CIDName = whapps_call:caller_id_name(Call),
+            CIDNum = whapps_call:caller_id_number(Call),
 
-                    acdc_agent_stats:agent_connecting(AccountId, AgentId, CallId, CIDName, CIDNum),
-                    lager:info("trying to ring agent endpoints(~p)", [length(UpdatedEPs)]),
-                    lager:debug("notifications for the queue: ~p", [wh_json:get_value(<<"Notifications">>, JObj)]),
-                    {'next_state', 'ringing', State#state{wrapup_timeout=WrapupTimer
-                                                          ,member_call=Call
-                                                          ,member_call_id=CallId
-                                                          ,member_call_start=erlang:now()
-                                                          ,member_call_queue_id=QueueId
-                                                          ,caller_exit_key=CallerExitKey
-                                                          ,endpoints=UpdatedEPs
-                                                          ,queue_notifications=wh_json:get_value(<<"Notifications">>, JObj)
-                                                         }}
-            end;
-        _OtherId ->
-            lager:debug("monitoring agent ~s to connect to caller in queue ~s", [AgentId, QueueId]),
-
-            acdc_agent_listener:monitor_call(AgentListener, Call, CDRUrl, RecordingUrl),
-
-            {'next_state', 'ringing', State#state{
-                                        wrapup_timeout=WrapupTimer
-                                        ,member_call_id=CallId
-                                        ,member_call_start=erlang:now()
-                                        ,member_call_queue_id=QueueId
-                                        ,caller_exit_key=CallerExitKey
-                                        ,agent_call_id='undefined'
-                                       }}
+            acdc_agent_stats:agent_connecting(AccountId, AgentId, CallId, CIDName, CIDNum),
+            lager:info("trying to ring agent endpoints(~p)", [length(UpdatedEPs)]),
+            lager:debug("notifications for the queue: ~p", [wh_json:get_value(<<"Notifications">>, JObj)]),
+            {'next_state', 'ringing', State#state{wrapup_timeout=WrapupTimer
+                                                  ,member_call=Call
+                                                  ,member_call_id=CallId
+                                                  ,member_call_start=erlang:now()
+                                                  ,member_call_queue_id=QueueId
+                                                  ,caller_exit_key=CallerExitKey
+                                                  ,endpoints=UpdatedEPs
+                                                  ,queue_notifications=wh_json:get_value(<<"Notifications">>, JObj)
+                                                 }}
     end;
+    %     _OtherId ->
+    %         lager:debug("monitoring agent ~s to connect to caller in queue ~s", [AgentId, QueueId]),
+
+    %         acdc_agent_listener:monitor_call(AgentListener, Call, CDRUrl, RecordingUrl),
+
+    %         {'next_state', 'ringing', State#state{
+    %                                     wrapup_timeout=WrapupTimer
+    %                                     ,member_call_id=CallId
+    %                                     ,member_call_start=erlang:now()
+    %                                     ,member_call_queue_id=QueueId
+    %                                     ,caller_exit_key=CallerExitKey
+    %                                     ,agent_call_id='undefined'
+    %                                    }}
+    % end;
+ready({'member_connect_win', JObj, 'different_node'}, #state{agent_listener=AgentListener
+                                                             ,agent_id=AgentId
+                                                            }=State) ->
+    Call = whapps_call:from_json(wh_json:get_value(<<"Call">>, JObj)),
+    CallId = whapps_call:call_id(Call),
+
+    put('callid', CallId),
+
+    QueueId = wh_json:get_value(<<"Queue-ID">>, JObj),
+    CDRUrl = cdr_url(JObj),
+    RecordingUrl = recording_url(JObj),
+    lager:debug("monitoring agent ~s to connect to caller in queue ~s", [AgentId, QueueId]),
+    acdc_agent_listener:monitor_call(AgentListener, Call, CDRUrl, RecordingUrl),
+    {'next_state', 'ringing', State#state{member_call=Call
+                                          ,member_call_id=CallId
+                                         }};
 ready({'member_connect_req', _}, #state{max_connect_failures=Max
                                         ,connect_failures=Fails
                                         ,account_id=AccountId
@@ -675,10 +690,13 @@ ready('current_call', _, State) ->
 %%--------------------------------------------------------------------
 ringing({'member_connect_req', _}, State) ->
     {'next_state', 'ringing', State};
-ringing({'member_connect_win', JObj}, #state{agent_listener=AgentListener}=State) ->
+ringing({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentListener}=State) ->
     lager:debug("agent won, but can't process this right now (already ringing)"),
     acdc_agent_listener:member_connect_retry(AgentListener, JObj),
 
+    {'next_state', 'ringing', State};
+ringing({'member_connect_win', _, 'different_node'}, State) ->
+    lager:debug("received member_connect_win for different node (ringing)"),
     {'next_state', 'ringing', State};
 ringing({'originate_ready', JObj}, #state{agent_listener=AgentListener}=State) ->
     CallId = wh_json:get_value(<<"Call-ID">>, JObj),
@@ -1118,10 +1136,13 @@ awaiting_callback('current_call', _, #state{member_call=Call
 %%--------------------------------------------------------------------
 answered({'member_connect_req', _}, State) ->
     {'next_state', 'answered', State};
-answered({'member_connect_win', JObj}, #state{agent_listener=AgentListener}=State) ->
+answered({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentListener}=State) ->
     lager:debug("agent won, but can't process this right now (on the phone with someone)"),
     acdc_agent_listener:member_connect_retry(AgentListener, JObj),
 
+    {'next_state', 'answered', State};
+answered({'member_connect_win', _, 'different_node'}, State) ->
+    lager:debug("received member_connect_win for different node (answered)"),
     {'next_state', 'answered', State};
 answered({'dialplan_error', _App}, #state{agent_listener=AgentListener
                                           ,account_id=AccountId
@@ -1240,10 +1261,13 @@ wrapup({'pause', Timeout}, #state{account_id=AccountId
     {'next_state', 'paused', State#state{pause_ref=Ref}};
 wrapup({'member_connect_req', _}, State) ->
     {'next_state', 'wrapup', State#state{wrapup_timeout=0}};
-wrapup({'member_connect_win', JObj}, #state{agent_listener=AgentListener}=State) ->
+wrapup({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentListener}=State) ->
     lager:debug("agent won, but can't process this right now (in wrapup)"),
     acdc_agent_listener:member_connect_retry(AgentListener, JObj),
 
+    {'next_state', 'wrapup', State#state{wrapup_timeout=0}};
+wrapup({'member_connect_win', _, 'different_node'}, State) ->
+    lager:debug("received member_connect_win for different node (wrapup)"),
     {'next_state', 'wrapup', State#state{wrapup_timeout=0}};
 wrapup({'timeout', Ref, ?WRAPUP_FINISHED}, #state{wrapup_ref=Ref
                                                   ,account_id=AccountId
@@ -1335,10 +1359,13 @@ paused({'sync_req', JObj}, #state{agent_listener=AgentListener
     {'next_state', 'paused', State};
 paused({'member_connect_req', _}, State) ->
     {'next_state', 'paused', State};
-paused({'member_connect_win', JObj}, #state{agent_listener=AgentListener}=State) ->
+paused({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentListener}=State) ->
     lager:debug("agent won, but can't process this right now"),
     acdc_agent_listener:member_connect_retry(AgentListener, JObj),
 
+    {'next_state', 'paused', State};
+paused({'member_connect_win', _, 'different_node'}, State) ->
+    lager:debug("received member_connect_win for different node (paused)"),
     {'next_state', 'paused', State};
 paused(?NEW_CHANNEL_FROM(CallId), State) ->
     lager:debug("paused call_from outbound: ~s", [CallId]),
@@ -1383,9 +1410,12 @@ outbound({'leg_destroyed', CallId}, #state{agent_listener=AgentListener
     acdc_agent_listener:channel_hungup(AgentListener, CallId),
 
     outbound_hungup(State);
-outbound({'member_connect_win', JObj}, #state{agent_listener=AgentListener}=State) ->
+outbound({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentListener}=State) ->
     lager:debug("agent won, but can't process this right now (on outbound call)"),
     acdc_agent_listener:member_connect_retry(AgentListener, JObj),
+    {'next_state', 'outbound', State};
+outbound({'member_connect_win', _, 'different_node'}, State) ->
+    lager:debug("received member_connect_win for different node (outbound)"),
     {'next_state', 'outbound', State};
 outbound({'pause', Timeout}, #state{account_id=AccountId
                                     ,agent_id=AgentId

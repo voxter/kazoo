@@ -379,6 +379,19 @@ login_resp_v(JObj) ->
     login_resp_v(wh_json:to_proplist(JObj)).
 
 %%------------------------------------------------------------------------------
+%% Shared routing key for member_connect_win
+%%------------------------------------------------------------------------------
+-spec member_connect_win_routing_key(api_terms() | ne_binary()) -> ne_binary().
+member_connect_win_routing_key(Props) when is_list(Props) ->
+    AgentId = props:get_value(<<"Agent-ID">>, Props),
+    member_connect_win_routing_key(AgentId);
+member_connect_win_routing_key(AgentId) when is_binary(AgentId) ->
+    <<"acdc.member.connect_win.", AgentId/binary>>;
+member_connect_win_routing_key(JObj) ->
+    AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
+    member_connect_win_routing_key(AgentId).
+
+%%------------------------------------------------------------------------------
 %% Bind/Unbind the queue as appropriate
 %%------------------------------------------------------------------------------
 
@@ -396,6 +409,9 @@ bind_q(Q, {AcctId, AgentId, _, Status}, 'undefined') ->
     amqp_util:bind_q_to_whapps(Q, sync_req_routing_key(AcctId, AgentId)),
     amqp_util:bind_q_to_whapps(Q, stats_req_routing_key(AcctId)),
     amqp_util:bind_q_to_whapps(Q, stats_req_routing_key(AcctId, AgentId));
+bind_q(Q, {_, AgentId, _, _}=Ids, ['member_connect_win'|T]) ->
+    amqp_util:bind_q_to_callmgr(Q, member_connect_win_routing_key(AgentId)),
+    bind_q(Q, Ids, T);
 bind_q(Q, {AcctId, AgentId, _, Status}=Ids, ['status'|T]) ->
     amqp_util:bind_q_to_whapps(Q, agent_status_routing_key(AcctId, AgentId, Status)),
     bind_q(Q, Ids, T);
@@ -428,6 +444,9 @@ unbind_q(Q, {AcctId, AgentId, _, Status}, 'undefined') ->
     _ = amqp_util:unbind_q_from_whapps(Q, agent_status_routing_key(AcctId, AgentId, Status)),
     _ = amqp_util:unbind_q_from_whapps(Q, sync_req_routing_key(AcctId, AgentId)),
     amqp_util:unbind_q_from_whapps(Q, stats_req_routing_key(AcctId));
+unbind_q(Q, {_, AgentId, _, _}=Ids, ['member_connect_win'|T]) ->
+    amqp_util:unbind_q_from_callmgr(Q, member_connect_win_routing_key(AgentId)),
+    unbind_q(Q, Ids, T);
 unbind_q(Q, {AcctId, AgentId, _, Status}=Ids, ['status'|T]) ->
     _ = amqp_util:unbind_q_from_whapps(Q, agent_status_routing_key(AcctId, AgentId, Status)),
     unbind_q(Q, Ids, T);
