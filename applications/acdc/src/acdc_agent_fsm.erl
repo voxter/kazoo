@@ -571,8 +571,6 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
     CDRUrl = cdr_url(JObj),
     RecordingUrl = recording_url(JObj),
 
-    % case wh_json:get_value(<<"Agent-Process-ID">>, JObj) of
-    %     MyId ->
     lager:debug("trying to ring agent ~s to connect to caller in queue ~s", [AgentId, QueueId]),
 
     case get_endpoints(OrigEPs, AgentListener, Call, AgentId, QueueId) of
@@ -611,20 +609,6 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
                                                   ,queue_notifications=wh_json:get_value(<<"Notifications">>, JObj)
                                                  }}
     end;
-    %     _OtherId ->
-    %         lager:debug("monitoring agent ~s to connect to caller in queue ~s", [AgentId, QueueId]),
-
-    %         acdc_agent_listener:monitor_call(AgentListener, Call, CDRUrl, RecordingUrl),
-
-    %         {'next_state', 'ringing', State#state{
-    %                                     wrapup_timeout=WrapupTimer
-    %                                     ,member_call_id=CallId
-    %                                     ,member_call_start=erlang:now()
-    %                                     ,member_call_queue_id=QueueId
-    %                                     ,caller_exit_key=CallerExitKey
-    %                                     ,agent_call_id='undefined'
-    %                                    }}
-    % end;
 ready({'member_connect_win', JObj, 'different_node'}, #state{agent_listener=AgentListener
                                                              ,agent_id=AgentId
                                                             }=State) ->

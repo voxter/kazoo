@@ -253,10 +253,10 @@ status_match_builder_fold(<<"End-Range">>, End, {StatusStat, Contstraints}) ->
                                          ,{<<"Window-Size">>, ?CLEANUP_WINDOW + 1}
                                          ,{<<"Current-Timestamp">>, Now}
                                         ])};
-        % N when N > Now ->
-        %     {'error', wh_json:from_list([{<<"End-Range">>, <<"supplied value is in the future">>}
-        %                                  ,{<<"Current-Timestamp">>, Now}
-        %                                 ])};
+        N when N > Now ->
+            {'error', wh_json:from_list([{<<"End-Range">>, <<"supplied value is in the future">>}
+                                         ,{<<"Current-Timestamp">>, Now}
+                                        ])};
         N ->
             {StatusStat#status_stat{timestamp='$3'}
              ,[{'=<', '$3', N} | Contstraints]
