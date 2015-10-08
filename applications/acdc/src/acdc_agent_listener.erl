@@ -120,7 +120,7 @@
 -define(BINDINGS(AcctId, AgentId), [{'self', []}
                                     ,{'acdc_agent', [{'account_id', AcctId}
                                                      ,{'agent_id', AgentId}
-                                                     ,{'restrict_to', ['sync']}
+                                                     ,{'restrict_to', ['member_connect_win', 'sync']}
                                                     ]}
                                     ,{'conf', [{'action', <<"*">>}
                                                ,{'db', wh_util:format_account_id(AcctId, 'encoded')}
@@ -146,6 +146,9 @@
                       }
                      ,{{'acdc_agent_handler', 'handle_call_event'}
                        ,[{<<"error">>, <<"*">>}]
+                      }
+                     ,{{'acdc_agent_handler', 'handle_member_connect_win'}
+                       ,[{<<"member">>, <<"connect_win">>}]
                       }
                      ,{{'acdc_agent_handler', 'handle_member_message'}
                        ,[{<<"member">>, <<"*">>}]

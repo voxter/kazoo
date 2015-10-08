@@ -16,6 +16,7 @@
          ,handle_call_event/2
          ,handle_new_channel/2
          ,handle_originate_resp/2
+         ,handle_member_connect_win/2
          ,handle_member_message/2
          ,handle_agent_message/2
          ,handle_config_change/2
@@ -294,6 +295,17 @@ handle_originate_resp(JObj, Props) ->
             acdc_agent_fsm:originate_uuid(props:get_value('fsm_pid', Props), JObj)
     end.
 
+-spec handle_member_connect_win(wh_json:object(), wh_proplist()) -> 'ok'.
+handle_member_connect_win(JObj, Props) ->
+    'true' = wapi_acdc_queue:member_connect_win_v(JObj),
+    MyId = acdc_util:proc_id(props:get_value('fsm_pid', Props)),
+    lager:debug("myid ~p", [MyId]),
+    lager:debug("procid ~p", [wh_json:get_value(<<"Agent-Process-ID">>, JObj)]),
+    case wh_json:get_value(<<"Agent-Process-ID">>, JObj) of
+        MyId -> acdc_agent_fsm:member_connect_win(props:get_value('fsm_pid', Props), JObj, 'same_node');
+        _ -> acdc_agent_fsm:member_connect_win(props:get_value('fsm_pid', Props), JObj, 'different_node')
+    end.
+
 -spec handle_member_message(wh_json:object(), wh_proplist()) -> 'ok'.
 -spec handle_member_message(wh_json:object(), wh_proplist(), ne_binary()) -> 'ok'.
 handle_member_message(JObj, Props) ->
@@ -302,9 +314,6 @@ handle_member_message(JObj, Props) ->
 handle_member_message(JObj, Props, <<"connect_req">>) ->
     'true' = wapi_acdc_queue:member_connect_req_v(JObj),
     acdc_agent_fsm:member_connect_req(props:get_value('fsm_pid', Props), JObj);
-handle_member_message(JObj, Props, <<"connect_win">>) ->
-    'true' = wapi_acdc_queue:member_connect_win_v(JObj),
-    acdc_agent_fsm:member_connect_win(props:get_value('fsm_pid', Props), JObj);
 handle_member_message(_, _, EvtName) ->
     lager:debug("not handling member event ~s", [EvtName]).
 
