@@ -54,6 +54,7 @@
          ,wrapup/2
          ,paused/2
          ,outbound/2
+         ,monitoring/2
 
          ,wait/3
          ,sync/3
@@ -64,6 +65,7 @@
          ,wrapup/3
          ,paused/3
          ,outbound/3
+         ,monitoring/3
         ]).
 
 -ifdef(TEST).
@@ -636,9 +638,11 @@ ready({'member_connect_win', JObj, 'different_node'}, #state{agent_listener=Agen
     RecordingUrl = recording_url(JObj),
     lager:debug("monitoring agent ~s to connect to caller in queue ~s", [AgentId, QueueId]),
     acdc_agent_listener:monitor_call(AgentListener, Call, CDRUrl, RecordingUrl),
-    {'next_state', 'ringing', State#state{member_call=Call
-                                          ,member_call_id=CallId
-                                         }};
+
+    %% Start a sync waiting for the next ready state
+    monitoring('send_sync_event', State#state{member_call=Call
+                                              ,member_call_id=CallId
+                                             });
 ready({'member_connect_req', _}, #state{max_connect_failures=Max
                                         ,connect_failures=Fails
                                         ,account_id=AccountId
@@ -1478,6 +1482,65 @@ outbound('status', _, #state{wrapup_ref=Ref
      ,'outbound', State};
 outbound('current_call', _, State) ->
     {'reply', 'undefined', 'outbound', State}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Become aware of activity on other node for the agent, preventing them from being
+%% in an inconsistent state on each node
+%%
+%% @end
+%%--------------------------------------------------------------------
+monitoring({'timeout', Ref, ?SYNC_RESPONSE_MESSAGE}, #state{sync_ref=Ref}=State) when is_reference(Ref) ->
+    lager:debug("monitoring - sync timed out"),
+    monitoring('send_sync_event', State);
+monitoring({'timeout', Ref, ?RESYNC_RESPONSE_MESSAGE}, #state{sync_ref=Ref}=State) when is_reference(Ref) ->
+    lager:debug("monitoring - resync timer expired, lets check with the others again"),
+    monitoring('send_sync_event', State#state{sync_ref=start_sync_timer()});
+monitoring('send_sync_event', #state{agent_listener=AgentListener
+                                     ,agent_listener_id=_AProcId
+                                    }=State) ->
+    lager:debug("monitoring - sending sync_req event to other agent processes: ~s", [_AProcId]),
+    acdc_agent_listener:send_sync_req(AgentListener),
+    {'next_state', 'monitoring', State};
+monitoring({'sync_req', JObj}, #state{agent_listener=AgentListener
+                                      ,agent_listener_id=AProcId
+                                     }=State) ->
+    case wh_json:get_value(<<"Process-ID">>, JObj) of
+        AProcId ->
+            lager:debug("monitoring - recv sync req from ourself"),
+            {'next_state', 'monitoring', State};
+        _OtherProcId ->
+            lager:debug("monitoring - recv sync_req from ~s (we are ~s)", [_OtherProcId, AProcId]),
+            acdc_agent_listener:send_sync_resp(AgentListener, 'monitoring', JObj),
+            {'next_state', 'monitoring', State}
+    end;
+monitoring({'sync_resp', JObj}, #state{sync_ref=Ref}=State) ->
+    case catch wh_util:to_atom(wh_json:get_value(<<"Status">>, JObj)) of
+        'ready' ->
+            lager:debug("monitoring - other agent fsm is in ready state, joining back in"),
+            _ = erlang:cancel_timer(Ref),
+            {'next_state', 'ready', clear_call(State, 'ready'), 'hibernate'};
+        {'EXIT', _} ->
+            lager:debug("monitoring - other agent fsm sent unusable state, ignoring"),
+            {'next_state', 'monitoring', State};
+        Status ->
+            lager:debug("monitoring - other agent fsm is in ~s, delaying", [Status]),
+            _ = erlang:cancel_timer(Ref),
+            {'next_state', 'monitoring', State#state{sync_ref=start_resync_timer()}}
+    end;
+monitoring({_Evt, _}, State) ->
+    lager:debug("monitoring - unhandled event: ~p", [_Evt]),
+    {'next_state', 'monitoring', State};
+monitoring(_Evt, State) ->
+    lager:debug("monitoring - unhandled event: ~p", [_Evt]),
+    {'next_state', 'monitoring', State}.
+
+monitoring('status', _, State) ->
+    {'reply', [{'state', <<"monitoring">>}], 'monitoring', State};
+monitoring('current_call', _, State) ->
+    {'reply', 'undefined', 'monitoring', State}.
+
 
 %%--------------------------------------------------------------------
 %% @private
