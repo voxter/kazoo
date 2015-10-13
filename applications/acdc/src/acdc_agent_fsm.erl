@@ -107,7 +107,7 @@
                 ,wrapup_ref :: reference()
 
                 ,sync_ref :: reference()
-                ,pause_ref :: reference()
+                ,pause_ref :: reference() | 'infinity'
 
                 ,member_call :: whapps_call:call()
                 ,member_call_id :: api_binary()
@@ -510,6 +510,14 @@ sync({'sync_resp', JObj}, #state{sync_ref=Ref
 sync({'member_connect_req', _}, State) ->
     lager:debug("member_connect_req recv, not ready"),
     {'next_state', 'sync', State};
+sync({'pause', <<"infinity">>}, #state{account_id=AccountId
+                                       ,agent_id=AgentId
+                                       ,agent_listener=AgentListener
+                                      }=State) ->
+    lager:debug("recv status update:, pausing for up to infinity s"),
+    acdc_agent_stats:agent_paused(AccountId, AgentId, <<"infinity">>),
+    acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_RED_FLASH),
+    {'next_state', 'paused', State#state{pause_ref='infinity'}};
 sync({'pause', Timeout}, #state{account_id=AccountId
                                 ,agent_id=AgentId
                                 ,agent_listener=AgentListener
@@ -539,6 +547,14 @@ sync('current_call', _, State) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
+ready({'pause', <<"infinity">>}, #state{account_id=AccountId
+                                        ,agent_id=AgentId
+                                        ,agent_listener=AgentListener
+                                       }=State) ->
+    lager:debug("recv status update:, pausing for up to infinity s"),
+    acdc_agent_stats:agent_paused(AccountId, AgentId, <<"infinity">>),
+    acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_RED_FLASH),
+    {'next_state', 'paused', State#state{pause_ref='infinity'}};
 ready({'pause', Timeout}, #state{account_id=AccountId
                                  ,agent_id=AgentId
                                  ,agent_listener=AgentListener
@@ -1237,6 +1253,14 @@ answered('current_call', _, #state{member_call=Call
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
+wrapup({'pause', <<"infinity">>}, #state{account_id=AccountId
+                                         ,agent_id=AgentId
+                                         ,agent_listener=AgentListener
+                                        }=State) ->
+    lager:debug("recv status update:, pausing for up to infinity s"),
+    acdc_agent_stats:agent_paused(AccountId, AgentId, <<"infinity">>),
+    acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_RED_FLASH),
+    {'next_state', 'paused', State#state{pause_ref='infinity'}};
 wrapup({'pause', Timeout}, #state{account_id=AccountId
                                   ,agent_id=AgentId
                                   ,agent_listener=AgentListener
@@ -1405,6 +1429,14 @@ outbound({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentL
 outbound({'member_connect_win', _, 'different_node'}, State) ->
     lager:debug("received member_connect_win for different node (outbound)"),
     {'next_state', 'outbound', State};
+outbound({'pause', <<"infinity">>}, #state{account_id=AccountId
+                                           ,agent_id=AgentId
+                                           ,agent_listener=AgentListener
+                                          }=State) ->
+    lager:debug("recv status update:, pausing for up to infinity s"),
+    acdc_agent_stats:agent_paused(AccountId, AgentId, <<"infinity">>),
+    acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_RED_FLASH),
+    {'next_state', 'paused', clear_call(State#state{pause_ref='infinity'}, 'paused')};
 outbound({'pause', Timeout}, #state{account_id=AccountId
                                     ,agent_id=AgentId
                                     ,agent_listener=AgentListener
@@ -1727,11 +1759,12 @@ hangup_cause(JObj) ->
     end.
 
 %% returns time left in seconds
--spec time_left(reference() | 'false' | api_integer()) -> api_integer().
+-spec time_left(reference() | 'false' | api_integer() | 'infinity') -> api_integer() | ne_binary().
 time_left(Ref) when is_reference(Ref) ->
     time_left(erlang:read_timer(Ref));
 time_left('false') -> 'undefined';
 time_left('undefined') -> 'undefined';
+time_left('infinity') -> <<"infinity">>;
 time_left(Ms) when is_integer(Ms) -> Ms div 1000.
 
 -spec clear_call(fsm_state(), atom()) -> fsm_state().
@@ -1823,9 +1856,10 @@ hangup_call(#state{agent_listener=AgentListener
     maybe_notify(Ns, ?NOTIFY_HANGUP, State),
     wrapup_timer(State).
 
--spec maybe_stop_timer(reference() | 'undefined') -> 'ok'.
--spec maybe_stop_timer(reference() | 'undefined', boolean()) -> 'ok'.
+-spec maybe_stop_timer(reference() | 'undefined' | 'infinity') -> 'ok'.
+-spec maybe_stop_timer(reference() | 'undefined' | 'infinity', boolean()) -> 'ok'.
 maybe_stop_timer('undefined') -> 'ok';
+maybe_stop_timer('infinity') -> 'ok';
 maybe_stop_timer(ConnRef) when is_reference(ConnRef) ->
     _ = gen_fsm:cancel_timer(ConnRef),
     'ok'.
@@ -1862,6 +1896,9 @@ outbound_hungup(#state{agent_listener=AgentListener
             case time_left(PRef) of
                 N when is_integer(N), N > 0 ->
                     acdc_agent_stats:agent_paused(AccountId, AgentId, N),
+                    {'next_state', 'paused', clear_call(State, 'paused'), 'hibernate'};
+                <<"infinity">> ->
+                    acdc_agent_stats:agent_paused(AccountId, AgentId, <<"infinity">>),
                     {'next_state', 'paused', clear_call(State, 'paused'), 'hibernate'};
                 _P ->
                     lager:debug("wrapup left: ~p pause left: ~p", [_W, _P]),
