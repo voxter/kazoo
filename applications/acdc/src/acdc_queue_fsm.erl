@@ -918,7 +918,7 @@ maybe_pick_winner(#state{connect_resps=CRs
                          ,notifications=Notifications
                         }=State) ->
     case acdc_queue_manager:pick_winner(Mgr, CRs) of
-        {[Winner|_]=Agents, Rest} ->
+        {[Winner|_], Rest} ->
             QueueOpts = [{<<"Ring-Timeout">>, RingTimeout}
                          ,{<<"Wrapup-Timeout">>, AgentWrapup}
                          ,{<<"Caller-Exit-Key">>, CallerExitKey}
@@ -928,9 +928,7 @@ maybe_pick_winner(#state{connect_resps=CRs
                          ,{<<"Notifications">>, Notifications}
                         ],
 
-            _ = [acdc_queue_listener:member_connect_win(Srv, update_agent(Agent, Winner), QueueOpts)
-                 || Agent <- Agents
-                ],
+            acdc_queue_listener:member_connect_win(Srv, update_agent(Winner, Winner), QueueOpts),
 
             lager:debug("sending win to ~s(~s)", [wh_json:get_value(<<"Agent-ID">>, Winner)
                                                   ,wh_json:get_value(<<"Process-ID">>, Winner)
