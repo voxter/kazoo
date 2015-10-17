@@ -15,14 +15,18 @@
 
 -include("../kzt.hrl").
 
--spec exec(whapps_call:call(), wh_json:object()) -> usurp_return().
+-spec exec(whapps_call:call(), wh_json:object()) -> usurp_return() | channel_down_return().
 exec(Call, FlowJObj) ->
-    Prop = [{<<"Call">>, whapps_call:to_json(Call)}
-            ,{<<"Flow">>, FlowJObj}
-            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-           ],
-    wapi_callflow:publish_resume(Prop),
-    {'usurp', Call}.
+    case whapps_call_command:b_channel_status(Call) of
+        {'error', _E} -> {'channel_down', Call};
+        _ ->
+            Prop = [{<<"Call">>, whapps_call:to_json(Call)}
+                    ,{<<"Flow">>, FlowJObj}
+                    | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                   ],
+            wapi_callflow:publish_resume(Prop),
+            {'usurp', Call}
+    end.
 
 -spec parse_cmds(ne_binary()) ->
                         {'ok', wh_json:object()} |
