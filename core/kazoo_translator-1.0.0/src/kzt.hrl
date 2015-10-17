@@ -5,12 +5,14 @@
 
 -type ok_return() :: {'ok', whapps_call:call()}.
 -type stop_return() :: {'stop', whapps_call:call()}.
+-type channel_down_return() :: {'channel_down', whapps_call:call()}.
 -type usurp_return() :: {'usurp', whapps_call:call()}.
 -type request_return() :: {'request', whapps_call:call()}.
 
 -type exec_element_return() ::
         ok_return() |
         stop_return() |
+        channel_down_return() |
         usurp_return() |
         request_return().
 
