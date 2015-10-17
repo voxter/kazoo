@@ -219,6 +219,29 @@ get_orig_port(Prop) ->
         Port -> Port
     end.
 
+-spec get_sip_interface_from_db(ne_binary()) -> ne_binary().
+get_sip_interface_from_db([FsPath]) ->
+    NetworkMap = ecallmgr_config:get(<<"network_map">>, wh_json:new()),
+    case map_fs_path_to_sip_profile(FsPath, NetworkMap) of
+        'undefined' ->
+            lager:debug("unable to find network map for ~s, using default interface '~s'", [FsPath, ?SIP_INTERFACE]),
+            ?SIP_INTERFACE;
+        Else ->
+            lager:debug("found custom interface '~s' in network map for ~s", [Else, FsPath]),
+            Else
+    end.
+
+-spec map_fs_path_to_sip_profile(ne_binary(), wh_json:object()) -> ne_binary().
+map_fs_path_to_sip_profile(FsPath, NetworkMap) ->
+    SIPInterfaceObj = wh_json:filter(fun({K, _}) ->
+                               wh_network_utils:verify_cidr(FsPath, K)
+                       end, NetworkMap),
+    case wh_json:get_values(SIPInterfaceObj) of
+        {[],[]} -> 'undefined';
+        {[V|_], _} ->
+            wh_json:get_ne_value(<<"custom_sip_interface">>, V)
+    end.
+
 %% Extract custom channel variables to include in the event
 -spec custom_channel_vars(wh_proplist()) -> wh_proplist().
 -spec custom_channel_vars(wh_proplist(), wh_proplist()) -> wh_proplist().
@@ -836,10 +859,20 @@ maybe_format_user(Contact, _) -> Contact.
 -spec maybe_set_interface(ne_binary(), bridge_endpoint()) -> ne_binary().
 maybe_set_interface(<<"sofia/", _/binary>>=Contact, _) -> Contact;
 maybe_set_interface(<<"loopback/", _/binary>>=Contact, _) -> Contact;
-maybe_set_interface(Contact, #bridge_endpoint{sip_interface='undefined'}) ->
-    <<?SIP_INTERFACE, Contact/binary>>;
+maybe_set_interface(Contact, #bridge_endpoint{sip_interface='undefined'}=Endpoint) ->
+    Options = ['ungreedy', {'capture', 'all_but_first', 'binary'}],
+    case re:run(Contact, <<";fs_path=sip:(.*):\\d*;">>, Options) of
+        {'match', FsPath} ->
+            SIPInterface = wh_util:to_binary(get_sip_interface_from_db(FsPath)),
+            maybe_set_interface(Contact, Endpoint#bridge_endpoint{sip_interface=SIPInterface});
+        'nomatch' ->
+            <<"sofia/", ?SIP_INTERFACE, "/", Contact/binary>>
+    end;
+maybe_set_interface(Contact, #bridge_endpoint{sip_interface= <<"sofia/", _/binary>>=SIPInterface}) ->
+    <<(wh_util:strip_right_binary(SIPInterface, <<"/">>))/binary, "/", Contact/binary>>;
 maybe_set_interface(Contact, #bridge_endpoint{sip_interface=SIPInterface}) ->
-    <<SIPInterface/binary, Contact/binary>>.
+    <<"sofia/", SIPInterface/binary, "/", Contact/binary>>.
+
 
 -spec append_channel_vars(ne_binary(), bridge_endpoint()) -> ne_binary().
 append_channel_vars(Contact, #bridge_endpoint{include_channel_vars='false'}) ->
@@ -879,7 +912,7 @@ create_masquerade_event(Application, EventName, Boolean) ->
 -spec media_path(ne_binary(), ne_binary(), wh_json:object()) -> ne_binary().
 media_path(MediaName, UUID, JObj) -> media_path(MediaName, 'new', UUID, JObj).
 
--spec media_path(ne_binary(), media_types(), ne_binary(), wh_json:object()) -> ne_binary().
+-spec media_path(api_binary(), media_types(), ne_binary(), wh_json:object()) -> ne_binary().
 media_path('undefined', _Type, _UUID, _) -> <<"silence_stream://5">>;
 media_path(MediaName, Type, UUID, JObj) when not is_binary(MediaName) ->
     media_path(wh_util:to_binary(MediaName), Type, UUID, JObj);
@@ -1021,16 +1054,13 @@ request_media_url(MediaName, CallId, JObj, Type) ->
                    | wh_api:default_headers(<<"media">>, <<"media_req">>, ?APP_NAME, ?APP_VERSION)
                   ])
                 ,JObj),
-    ReqResp = wh_amqp_worker:call(Request
-                                  ,fun wapi_media:publish_req/1
-                                  ,fun wapi_media:resp_v/1
-                                 ),
-    case ReqResp of
-        {'error', _E}=E ->
-            lager:debug("error get media url from amqp ~p", [E]),
-            E;
+    case wh_amqp_worker:call_collect(Request
+                                     ,fun wapi_media:publish_req/1
+                                     ,{'media_mgr', fun wapi_media:resp_v/1}
+                                    )
+    of
         {'ok', MediaResp} ->
-            MediaUrl = wh_json:get_value(<<"Stream-URL">>, MediaResp, <<>>),
+            MediaUrl = wh_json:find(<<"Stream-URL">>, MediaResp, <<>>),
             CacheProps = media_url_cache_props(MediaName),
             _ = wh_cache:store_local(?ECALLMGR_UTIL_CACHE
                                      ,?ECALLMGR_PLAYBACK_MEDIA_KEY(MediaName)
@@ -1038,7 +1068,16 @@ request_media_url(MediaName, CallId, JObj, Type) ->
                                      ,CacheProps
                                     ),
             lager:debug("media ~s stored to playback cache : ~s", [MediaName, MediaUrl]),
-            {'ok', MediaUrl}
+            {'ok', MediaUrl};
+        {'returned', _JObj, _BR} ->
+            lager:debug("no media manager available", []),
+            {'error', 'timeout'};
+        {'timeout', _Resp} ->
+            lager:debug("timeout when getting media url from amqp", []),
+            {'error', 'timeout'};
+        {'error', _R}=E ->
+            lager:debug("error when getting media url from amqp ~p", [_R]),
+            E
     end.
 
 -define(DEFAULT_MEDIA_CACHE_PROPS
@@ -1053,9 +1092,16 @@ media_url_cache_props(<<"/", _/binary>> = MediaName) ->
             [{'origin', {'db', AccountDb, MediaId}}
              | ?DEFAULT_MEDIA_CACHE_PROPS
             ];
-        _ -> ?DEFAULT_MEDIA_CACHE_PROPS
+        _Parts ->
+            ?DEFAULT_MEDIA_CACHE_PROPS
     end;
-media_url_cache_props(_MediaName) -> ?DEFAULT_MEDIA_CACHE_PROPS.
+media_url_cache_props(<<"tts://", Text/binary>>) ->
+    Id = wh_util:binary_md5(Text),
+    [{'origin', {'db', <<"tts">>, Id}}
+     | ?DEFAULT_MEDIA_CACHE_PROPS
+    ];
+media_url_cache_props(_MediaName) ->
+    ?DEFAULT_MEDIA_CACHE_PROPS.
 
 -spec cached_media_expelled(?ECALLMGR_PLAYBACK_MEDIA_KEY(ne_binary()), ne_binary(), atom()) -> 'ok'.
 cached_media_expelled(?ECALLMGR_PLAYBACK_MEDIA_KEY(MediaName), MediaUrl, _Reason) ->

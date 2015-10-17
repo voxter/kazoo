@@ -676,10 +676,11 @@ maybe_do_not_disturb(Endpoint, _, _) ->
                                         'ok' |
                                         {'error', 'exclude_from_queues'}.
 maybe_exclude_from_queues(Endpoint, _, Call) ->
-    case {whapps_call:custom_channel_var(<<"Queue-ID">>, Call), wh_json:is_true(<<"exclude_from_queues">>, Endpoint, 'false')} of
-        {'undefined', _} -> 'ok';
-        {_, 'true'} -> {'error', 'exclude_from_queues'};
-        _ -> 'ok'
+    case is_binary(whapps_call:custom_channel_var(<<"Queue-ID">>, Call))
+        andalso wh_json:is_true(<<"exclude_from_queues">>, Endpoint)
+    of
+        'false' -> 'ok';
+        'true' -> {'error', 'exclude_from_queues'}
     end.
 
 %%--------------------------------------------------------------------
@@ -943,6 +944,7 @@ create_sip_endpoint(Endpoint, Properties, #clid{}=Clid, Call) ->
          ,{<<"To-DID">>, get_to_did(Endpoint, Call)}
          ,{<<"To-IP">>, wh_json:get_value(<<"ip">>, SIPJObj)}
          ,{<<"SIP-Transport">>, get_sip_transport(SIPJObj)}
+         ,{<<"SIP-Interface">>, get_custom_sip_interface(SIPJObj)}
          ,{<<"Route">>, wh_json:get_value(<<"route">>, SIPJObj)}
          ,{<<"Proxy-IP">>, wh_json:get_value(<<"proxy">>, SIPJObj)}
          ,{<<"Forward-IP">>, wh_json:get_value(<<"forward">>, SIPJObj)}
@@ -1068,6 +1070,19 @@ validate_sip_transport(_) -> 'undefined'.
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec get_custom_sip_interface(wh_json:object()) -> api_binary().
+get_custom_sip_interface(JObj) ->
+    case wh_json:get_value(<<"custom_sip_interface">>, JObj) of
+        'undefined' ->
+            whapps_config:get(?CF_CONFIG_CAT, <<"custom_sip_interface">>);
+        Else -> Else
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Creates the whistle API endpoint for a bridge call command. This
 %% endpoint is comprised of the endpoint definition (commonally a
 %% device) and the properties of this endpoint in the callflow.
@@ -1158,6 +1173,7 @@ create_mobile_audio_endpoint(Endpoint, Properties, Call) ->
             Error;
         Route ->
             Codecs = whapps_config:get(?CF_MOBILE_CONFIG_CAT, <<"codecs">>, ?DEFAULT_MOBILE_CODECS),
+            SIPInterface = whapps_config:get_binary(?CF_MOBILE_CONFIG_CAT, <<"custom_sip_interface">>),
             Prop = [{<<"Invite-Format">>, <<"route">>}
                     ,{<<"Ignore-Early-Media">>, <<"true">>}
                     ,{<<"Route">>, Route}
@@ -1168,6 +1184,8 @@ create_mobile_audio_endpoint(Endpoint, Properties, Call) ->
                     ,{<<"Custom-SIP-Headers">>, generate_sip_headers(Endpoint, Call)}
                     ,{<<"Codecs">>, Codecs}
                     ,{<<"Custom-Channel-Vars">>, generate_ccvs(Endpoint, Call, wh_json:new())}
+                    ,{<<"SIP-Interface">>, SIPInterface}
+                    ,{<<"Bypass-Media">>, get_bypass_media(Endpoint)}
                    ],
             wh_json:from_list(props:filter_undefined(Prop))
     end.
@@ -1228,34 +1246,42 @@ generate_sip_headers(Endpoint, Call) ->
                                   wh_json:object().
 generate_sip_headers(Endpoint, Acc, Call) ->
     Inception = whapps_call:inception(Call),
-    SIP = wh_json:get_value(<<"sip">>, Endpoint),
 
-    Realm = wh_json:get_value(<<"realm">>, SIP, whapps_call:account_realm(Call)),
-    Username = wh_json:get_value(<<"username">>, SIP),
-
-    HeaderFuns = [fun(J) ->
-                          case wh_json:get_value(<<"custom_sip_headers">>, SIP) of
-                              'undefined' -> J;
-                              CustomHeaders ->
-                                  wh_json:merge_jobjs(CustomHeaders, J)
-                          end
-                  end
-                  ,fun (J) when Inception =:= 'undefined' ->
-                           case wh_json:get_value([<<"ringtones">>, <<"internal">>], Endpoint) of
-                               'undefined' -> J;
-                               Ringtone -> wh_json:set_value(<<"Alert-Info">>, Ringtone, J)
-                           end;
-                       (J) ->
-                           case wh_json:get_value([<<"ringtones">>, <<"external">>], Endpoint) of
-                               'undefined' -> J;
-                               Ringtone -> wh_json:set_value(<<"Alert-Info">>, Ringtone, J)
-                           end
-                   end
-                  ,fun(J) ->
-                          wh_json:set_value(<<"X-KAZOO-AOR">>, <<"sip:", Username/binary, "@", Realm/binary>> , J)
-                   end
+    HeaderFuns = [fun maybe_add_sip_headers/1
+                  ,fun(J) -> maybe_add_alert_info(J, Endpoint, Inception) end
+                  ,fun(J) -> maybe_add_aor(J, Call) end
                  ],
     lists:foldr(fun(F, JObj) -> F(JObj) end, Acc, HeaderFuns).
+
+-spec maybe_add_sip_headers(wh_json:object()) -> wh_json:object().
+maybe_add_sip_headers(JObj) ->
+    case kz_device:custom_sip_headers(JObj) of
+        'undefined' -> JObj;
+        CustomHeaders -> wh_json:merge_jobjs(CustomHeaders, JObj)
+    end.
+
+-spec maybe_add_alert_info(wh_json:object(), wh_json:object(), api_binary()) -> wh_json:object().
+maybe_add_alert_info(JObj, Endpoint, 'undefined') ->
+    case wh_json:get_value([<<"ringtones">>, <<"internal">>], Endpoint) of
+        'undefined' -> JObj;
+        Ringtone -> wh_json:set_value(<<"Alert-Info">>, Ringtone, JObj)
+    end;
+maybe_add_alert_info(JObj, Endpoint, _Inception) ->
+    case wh_json:get_value([<<"ringtones">>, <<"external">>], Endpoint) of
+        'undefined' -> JObj;
+        Ringtone -> wh_json:set_value(<<"Alert-Info">>, Ringtone, JObj)
+    end.
+
+-spec maybe_add_aor(wh_json:object(), whapps_call:call()) -> wh_json:object().
+-spec maybe_add_aor(wh_json:object(), api_binary(), ne_binary()) -> wh_json:object().
+maybe_add_aor(JObj, Call) ->
+    Realm = kz_device:sip_realm(JObj, whapps_call:account_realm(Call)),
+    Username = kz_device:sip_username(JObj),
+    maybe_add_aor(JObj, Username, Realm).
+
+maybe_add_aor(JObj, 'undefined', _Realm) -> JObj;
+maybe_add_aor(JObj, Username, Realm) ->
+    wh_json:set_value(<<"X-KAZOO-AOR">>, <<"sip:", Username/binary, "@", Realm/binary>> , JObj).
 
 %%--------------------------------------------------------------------
 %% @private

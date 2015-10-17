@@ -80,4 +80,9 @@ find_account_db(Call) ->
 
 -spec bridged_conference(whapps_conference:conference()) -> whapps_conference:conference().
 bridged_conference(Conference) ->
-    whapps_conference:set_play_entry_tone('false', Conference).
+    %% We are relying on the original channel to play media
+    %% so that name announcements always work
+    Updaters = [fun(Conf) -> whapps_conference:set_play_entry_tone('false', Conf) end
+                ,fun(Conf) -> whapps_conference:set_play_exit_tone('false', Conf) end
+               ],
+    whapps_conference:update(Updaters, Conference).

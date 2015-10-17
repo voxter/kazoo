@@ -147,7 +147,7 @@ logout_agent(Call, AgentId) ->
 logout_agent(Call, AgentId, Data) ->
     update_agent_status(Call, AgentId, Data, fun wapi_acdc_agent:publish_logout/1).
 
-pause_agent(Call, AgentId, Data, Timeout) when is_integer(Timeout) ->
+pause_agent(Call, AgentId, Data, Timeout) ->
     _ = play_agent_pause(Call),
     update_agent_status(Call, AgentId, Data, fun wapi_acdc_agent:publish_pause/1, Timeout).
 pause_agent(Call, AgentId, Data) ->
@@ -155,7 +155,7 @@ pause_agent(Call, AgentId, Data) ->
                                         ,Data
                                         ,whapps_config:get(<<"acdc">>, <<"default_agent_pause_timeout">>, 600)
                                        ),
-    lager:info("agent ~s is pausing work for ~b s", [AgentId, Timeout]),
+    lager:info("agent ~s is pausing work for ~s s", [AgentId, Timeout]),
     pause_agent(Call, AgentId, Data, Timeout).
 
 resume_agent(Call, AgentId, Data) ->

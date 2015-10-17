@@ -35,7 +35,7 @@
 
 %% Doc related
 -export([open_cache_doc/4
-         ,cache_db_doc/3
+         ,add_to_doc_cache/3
          ,flush_cache_doc/2
          ,flush_cache_doc/3
          ,flush_cache_docs/0
@@ -80,6 +80,12 @@
 %% Throttle how many docs we bulk insert to BigCouch
 -define(MAX_BULK_INSERT, 2000).
 -define(RETRY_504(F), retry504s(fun() -> F end)).
+
+-define(PUBLISH_FIELDS, [<<"pvt_type">>
+                         ,<<"pvt_account_id">>
+                         ,<<"pvt_created">>
+                         ,<<"pvt_modified">>
+                        ]).
 
 -type db_create_options() :: [{'q',integer()} | {'n',integer()},...] | [].
 
@@ -435,6 +441,9 @@ format_error({'conn_failed', {'error', 'enetunreach'}}) -> 'network_unreachable'
 format_error({'conn_failed', {'error', 'system_limit'}}) ->
     lager:critical("system limit reached for database operations!!"),
     'system_limit';
+format_error({'conn_failed',{'error','econnrefused'}}) ->
+    lager:warning("connection is being refused"),
+    'econnrefused';
 format_error({'ok', "500", _Headers, Body}) ->
     JObj = wh_json:decode(Body),
     case wh_json:get_value(<<"error">>, JObj) of
@@ -481,7 +490,7 @@ open_cache_doc(#server{}=Conn, DbName, DocId, Options) ->
                     maybe_cache_failure(DbName, DocId, Options, E),
                     E;
                 {'ok', JObj}=Ok ->
-                    cache_db_doc(DbName, DocId, JObj),
+                    add_to_doc_cache(DbName, DocId, JObj),
                     Ok
             end
     end.
@@ -496,20 +505,42 @@ maybe_cache_failure(DbName, DocId, Options, Error) ->
     case props:get_value('cache_failures', Options) of
         ErrorCodes when is_list(ErrorCodes) ->
             maybe_cache_failure(DbName, DocId, Options, Error, ErrorCodes);
-        'true' -> cache_db_doc(DbName, DocId, Error);
+        'true' -> add_to_doc_cache(DbName, DocId, Error);
         _ -> 'ok'
     end.
 
 maybe_cache_failure(DbName, DocId, _Options, {'error', ErrorCode}=Error, ErrorCodes) ->
     case lists:member(ErrorCode, ErrorCodes) of
-        'true' -> cache_db_doc(DbName, DocId, Error);
+        'true' -> add_to_doc_cache(DbName, DocId, Error);
         'false' -> 'ok'
     end.
 
--spec cache_db_doc(ne_binary(), ne_binary(), wh_json:object() | couchbeam_error()) -> 'ok'.
-cache_db_doc(DbName, DocId, CacheValue) ->
+-spec add_to_doc_cache(ne_binary(), ne_binary(), wh_json:object() | couchbeam_error()) -> 'ok'.
+add_to_doc_cache(DbName, DocId, CacheValue) ->
     CacheProps = [{'origin', {'db', DbName, DocId}}],
-    wh_cache:store_local(?WH_COUCH_CACHE, {?MODULE, DbName, DocId}, CacheValue, CacheProps).
+    case wh_json:is_json_object(CacheValue) of
+        'true' ->
+           cache_if_not_media(CacheProps, DbName, DocId, CacheValue);
+        'false' ->
+            wh_cache:store_local(?WH_COUCH_CACHE, {?MODULE, DbName, DocId}, CacheValue, CacheProps)
+    end.
+
+-spec cache_if_not_media(wh_proplist(), ne_binary(), ne_binary(), wh_json:object() | couchbeam_error()) -> 'ok'.
+cache_if_not_media(CacheProps, DbName, DocId, CacheValue) ->
+    %% NOTE: this is currently necessary because when a http_put is issued to
+    %%   freeswitch and the media is uploaded it goes directly to bigcouch
+    %%   and therefore no doc change notice is pushed.  This results in the
+    %%   doc cache containing a document tha thas no attachements (or the wrong
+    %%   attachments).  What needs to happen is a change notice get sent on the
+    %%   message bus anytime a http_put is issued (or maybe if the store
+    %%   url is built in media IF everything uses that helper function,
+    %    which is not currently the case...)
+    case wh_json:get_value(<<"pvt_type">>, CacheValue) of
+        <<"media">> -> 'ok';
+        <<"private_media">> -> 'ok';
+        _Else ->
+            wh_cache:store_local(?WH_COUCH_CACHE, {?MODULE, DbName, DocId}, CacheValue, CacheProps)
+    end.
 
 -spec flush_cache_doc(ne_binary() | db(), ne_binary() | wh_json:object()) -> 'ok'.
 flush_cache_doc(#db{name=Name}, Doc) ->
@@ -628,16 +659,8 @@ do_delete_docs(Conn, #db{}=Db, Docs) ->
 
 -spec prepare_doc_for_del(server(), couchbeam_db(), wh_json:object() | ne_binary()) ->
                                  wh_json:object().
-prepare_doc_for_del(Conn, #db{name=DbName}=Db, <<_/binary>> = DocId) ->
-    case lookup_doc_rev(Conn, wh_util:to_binary(DbName), DocId) of
-        {'error', _E} ->
-            lager:error("doc ~p : ~p", [DocId, _E]),
-            prepare_doc_for_del(Conn, Db, wh_json:new());
-        {'ok', Rev} ->
-            prepare_doc_for_del(Conn, Db, wh_json:from_list([{<<"_id">>, DocId}
-                                                             ,{<<"_rev">>, Rev}
-                                                            ]))
-    end;
+prepare_doc_for_del(Conn, Db, <<_/binary>> = DocId) ->
+    prepare_doc_for_del(Conn, Db, wh_json:from_list([{<<"_id">>, DocId}]));
 prepare_doc_for_del(Conn, #db{name=DbName}, Doc) ->
     Id = doc_id(Doc),
     DocRev = case doc_rev(Doc) of
@@ -646,10 +669,13 @@ prepare_doc_for_del(Conn, #db{name=DbName}, Doc) ->
                      Rev;
                  Rev -> Rev
              end,
-    wh_json:from_list([{<<"_id">>, Id}
-                       ,{<<"_rev">>, DocRev}
-                       ,{<<"_deleted">>, 'true'}
-                      ]).
+    wh_json:from_list(
+      props:filter_undefined(
+        [{<<"_id">>, Id}
+         ,{<<"_rev">>, DocRev}
+         ,{<<"_deleted">>, 'true'}
+         | publish_fields(Doc)
+        ])).
 
 -spec do_ensure_saved(couchbeam_db(), wh_json:object(), wh_proplist()) ->
                              {'ok', wh_json:object()} |
@@ -693,11 +719,10 @@ do_fetch_doc(#db{}=Db, DocId, Options) ->
 do_save_doc(#db{}=Db, Docs, Options) when is_list(Docs) ->
     do_save_docs(Db, Docs, Options);
 do_save_doc(#db{}=Db, Doc, Options) ->
-    PreparedDoc = maybe_set_docid(Doc),
-    _ = flush_cache_doc(Db, PreparedDoc),
+    {PreparedDoc, PublishDoc} = prepare_doc_for_save(Db, Doc),
     case ?RETRY_504(couchbeam:save_doc(Db, PreparedDoc, Options)) of
         {'ok', JObj}=Ok ->
-            _ = maybe_publish_doc(Db, PreparedDoc, JObj),
+            _ = maybe_publish_doc(Db, PublishDoc, JObj),
             Ok;
         Else -> Else
     end.
@@ -708,36 +733,68 @@ do_save_doc(#db{}=Db, Doc, Options) ->
 do_save_docs(#db{}=Db, Docs, Options) ->
     do_save_docs(Db, Docs, Options, []).
 
+-spec do_save_docs(couchbeam_db(), wh_json:objects(), wh_proplist(), wh_json:objects()) ->
+                          {'ok', wh_json:objects()} |
+                          couchbeam_error().
+do_save_docs(#db{}=Db, Docs, Options, Acc) ->
+    try lists:split(?MAX_BULK_INSERT, Docs) of
+        {Save, Cont} ->
+            case perform_save_docs(Db, Save, Options) of
+                {'error', _}=E -> E;
+                {'ok', JObjs} ->
+                    do_save_docs(Db, Cont, Options, JObjs ++ Acc)
+            end
+    catch
+        'error':'badarg' ->
+            case perform_save_docs(Db, Docs, Options) of
+                {'ok', JObjs} -> {'ok', JObjs ++ Acc};
+                {'error', _}=E -> E
+            end
+    end.
+
+-spec perform_save_docs(couchbeam_db(), wh_json:objects(), wh_proplist()) ->
+                               {'ok', wh_json:objects()} |
+                               couchbeam_error().
+perform_save_docs(Db, Docs, Options) ->
+    {PreparedDocs, Publish} = lists:unzip([prepare_doc_for_save(Db, D) || D <- Docs]),
+    case ?RETRY_504(couchbeam:save_docs(Db, PreparedDocs, Options)) of
+        {'ok', JObjs} ->
+            _ = maybe_publish_docs(Db, Publish, JObjs),
+            {'ok', JObjs};
+        {'error', _}=E -> E
+    end.
+
+-spec prepare_doc_for_save(couchbeam_db(), wh_json:object()) ->
+                                  {wh_json:object(), wh_json:object()}.
+-spec prepare_doc_for_save(couchbeam_db(), wh_json:object(), boolean()) ->
+                                  {wh_json:object(), wh_json:object()}.
+prepare_doc_for_save(Db, JObj) ->
+    prepare_doc_for_save(Db, JObj, wh_util:is_empty(doc_id(JObj))).
+prepare_doc_for_save(_Db, JObj, 'true') ->
+    prepare_publish(maybe_set_docid(JObj));
+prepare_doc_for_save(Db, JObj, 'false') ->
+    flush_cache_doc(Db, JObj),
+    prepare_publish(JObj).
+
+-spec prepare_publish(wh_json:object()) ->
+                             {wh_json:object(), wh_json:object()}.
+prepare_publish(JObj) ->
+    {maybe_tombstone(JObj), wh_json:from_list(publish_fields(JObj))}.
+
+-spec maybe_tombstone(wh_json:object()) -> wh_json:object().
+-spec maybe_tombstone(wh_json:object(), boolean()) -> wh_json:object().
+maybe_tombstone(JObj) ->
+    maybe_tombstone(JObj, wh_json:is_true(<<"_deleted">>, JObj, 'false')).
+
+maybe_tombstone(JObj, 'true') ->
+    wh_json:delete_keys(?PUBLISH_FIELDS, JObj);
+maybe_tombstone(JObj, 'false') -> JObj.
+
 -spec maybe_set_docid(wh_json:object()) -> wh_json:object().
 maybe_set_docid(Doc) ->
     case doc_id(Doc) of
         'undefined' -> wh_json:set_value(<<"_id">>, couch_mgr:get_uuid(), Doc);
         _ -> Doc
-    end.
-
--spec do_save_docs(couchbeam_db(), wh_json:objects(), wh_proplist(), wh_json:objects()) ->
-                          {'ok', wh_json:objects()} |
-                          couchbeam_error().
-do_save_docs(#db{}=Db, Docs, Options, Acc) ->
-    case catch(lists:split(?MAX_BULK_INSERT, Docs)) of
-        {'EXIT', _} ->
-            PreparedDocs = [maybe_set_docid(D) || D <- Docs],
-            _ = flush_cache_docs(Db, PreparedDocs),
-            case ?RETRY_504(couchbeam:save_docs(Db, PreparedDocs, Options)) of
-                {'ok', JObjs} ->
-                    _ = maybe_publish_docs(Db, PreparedDocs, JObjs),
-                    {'ok', JObjs ++ Acc};
-                {'error', _}=E -> E
-            end;
-        {Save, Cont} ->
-            PreparedDocs = [maybe_set_docid(D) || D <- Save],
-            _ = flush_cache_docs(Db, PreparedDocs),
-            case ?RETRY_504(couchbeam:save_docs(Db, PreparedDocs, Options)) of
-                {'ok', JObjs} ->
-                    _ = maybe_publish_docs(Db, PreparedDocs, JObjs),
-                    do_save_docs(Db, Cont, Options, JObjs ++ Acc);
-                {'error', _}=E -> E
-            end
     end.
 
 %% Attachment-related functions ------------------------------------------------
@@ -874,8 +931,7 @@ maybe_add_pvt_type(Db, DocId, JObj) ->
             lager:error("failed to open doc ~p in ~p : ~p", [DocId, Db, R]),
             JObj;
         {'ok', Doc} ->
-            PvtType = wh_json:get_value(<<"pvt_type">>, Doc),
-            wh_json:set_value(<<"pvt_type">>, PvtType, JObj);
+            wh_json:set_values(publish_fields(Doc), JObj);
         _Else ->
             JObj
     end.
@@ -961,15 +1017,27 @@ publish_doc(#db{name=DbName}, Doc, JObj) ->
     case wh_doc:is_soft_deleted(Doc)
         orelse wh_json:is_true(<<"_deleted">>, Doc)
     of
-        'true' -> publish('deleted', wh_util:to_binary(DbName), Doc);
+        'true' ->
+            publish('deleted', wh_util:to_binary(DbName), publish_fields(Doc, JObj));
         'false' ->
-            case wh_json:get_value(<<"_rev">>, JObj) of
+            case doc_rev(JObj) of
                 <<"1-", _/binary>> ->
-                    publish('created', wh_util:to_binary(DbName), JObj);
+                    publish('created', wh_util:to_binary(DbName), publish_fields(Doc, JObj));
                 _Else ->
-                    publish('edited', wh_util:to_binary(DbName), JObj)
+                    publish('edited', wh_util:to_binary(DbName), publish_fields(Doc, JObj))
             end
     end.
+
+-spec publish_fields(wh_json:object()) -> wh_proplist().
+-spec publish_fields(wh_json:object(), wh_json:object()) -> wh_json:object().
+publish_fields(Doc) ->
+    [{Key, V} ||
+        Key <- ?PUBLISH_FIELDS,
+        wh_util:is_not_empty(V = wh_json:get_value(Key, Doc))
+    ].
+
+publish_fields(Doc, JObj) ->
+    wh_json:set_values(publish_fields(Doc), JObj).
 
 -spec publish(wapi_conf:action(), ne_binary(), wh_json:object()) -> 'ok'.
 publish(Action, Db, Doc) ->

@@ -342,7 +342,7 @@ init(Super, AccountId, QueueId, QueueJObj) ->
     process_flag('trap_exit', 'false'),
 
     AcctDb = wh_util:format_account_id(AccountId, 'encoded'),
-    couch_mgr:cache_db_doc(AcctDb, QueueId, QueueJObj),
+    couch_mgr:add_to_doc_cache(AcctDb, QueueId, QueueJObj),
 
     _ = start_secondary_queue(AccountId, QueueId),
 
@@ -622,7 +622,7 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
     acdc_util:presence_update(AccountId, QueueId, ?PRESENCE_RED_FLASH),
 
     %% Notify other queue manager of added call
-    lager:debug("Publishing add of new queue member"),
+    lager:debug("publishing add of new queue member ~s", [whapps_call:call_id(Call)]),
     Prop2 = [{<<"Account-ID">>, AccountId}
             ,{<<"Queue-ID">>, QueueId}
             ,{<<"JObj">>, JObj}
@@ -644,11 +644,10 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
                            }};
 
 handle_cast({'handle_queue_member_add', JObj, _Queue}, #state{current_member_calls=CurrentCalls}=State) ->
-    lager:debug("Received notification of new queue member"),
-
     JObj2 = wh_json:get_value(<<"JObj">>, JObj),
     Call = whapps_call:from_json(wh_json:get_value(<<"Call">>, JObj2)),
     CallId = whapps_call:call_id(Call),
+    lager:debug("received notification of new queue member ~s", [CallId]),
 
     {'noreply', State#state{current_member_calls = [Call | lists:keydelete(CallId, 2, CurrentCalls)]}};
 
@@ -1110,8 +1109,6 @@ maybe_remove_queue_member(CallId, _Reason, #state{account_id=AccountId
                                                  ,current_member_calls=CurrentCalls
                                                  ,pos_announce_pids=Pids
                                                 }=State) ->
-    
-
     Call = lists:keyfind(CallId, 2, CurrentCalls),
 
     {Map, _} = lists:mapfoldr(fun(X, I) -> {{X, I}, I + 1} end, 1, CurrentCalls),

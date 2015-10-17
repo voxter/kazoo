@@ -187,6 +187,7 @@ do_render_template('undefined', DefaultTemplate, Props) ->
     DefaultTemplate:render(Props);
 do_render_template(Template, DefaultTemplate, Props) ->
     try
+        'false' = wh_util:is_empty(Template),
         CustomTemplate = wh_util:to_atom(list_to_binary([couch_mgr:get_uuid(), "_"
                                                         ,wh_util:to_binary(DefaultTemplate)
                                                         ])
@@ -289,6 +290,13 @@ maybe_find_deprecated_settings(_, _) -> wh_json:new().
 %%--------------------------------------------------------------------
 -spec get_rep_email(wh_json:object()) -> api_binary().
 get_rep_email(JObj) ->
+    case whapps_config:get_is_true(?NOTIFY_CONFIG_CAT, <<"search_rep_email">>, 'true') of
+        'true' -> find_rep_email(JObj);
+        'false' -> 'undefined'
+    end.
+
+-spec find_rep_email(wh_json:object()) -> api_binary().
+find_rep_email(JObj) ->
     AccountId = wh_json:get_value(<<"pvt_account_id">>, JObj),
 
     Admin =

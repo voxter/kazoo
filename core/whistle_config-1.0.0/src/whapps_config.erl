@@ -311,7 +311,8 @@ set_node(Category, Key, Value, Node) ->
     update_category(Category, Key, Value, Node, [{'node_specific', 'true'}]).
 
 -spec update_category(config_category(), config_key(), term(), ne_binary() | atom(), wh_proplist()) ->
-                             {'ok', wh_json:object()}.
+                             {'ok', wh_json:object()} |
+                             {'error', _}.
 update_category('undefined', _, _, _, _) -> 'ok';
 update_category(_, 'undefined', _, _, _) -> 'ok';
 update_category(_, _, 'undefined', _, _) -> 'ok';
@@ -326,10 +327,19 @@ update_category(Category, Key, Value, Node, Opts) when not is_binary(Node) ->
 update_category(Category, Keys, Value, Node, Opts) ->
     lager:debug("setting ~s(~p): ~p", [Category, Keys, Value]),
     case couch_mgr:open_cache_doc(?WH_CONFIG_DB, Category) of
-        {'ok', JObj} -> update_category(Category, Keys, Value, Node, Opts, JObj);
+        {'ok', JObj} ->
+            lager:debug("updating category ~s(~s).~s to ~p", [Category
+                                                              ,Node
+                                                              ,wh_util:join_binary(Keys)
+                                                              ,Value
+                                                             ]),
+            update_category(Category, Keys, Value, Node, Opts, JObj);
         {'error', 'not_found'} ->
+            lager:debug("config ~s not found, using empty for now", [Category]),
             update_category(Category, Keys, Value, Node, Opts, wh_json:new());
-        {'error', _Reason}=E -> E
+        {'error', _Reason}=E ->
+            lager:debug("failed to update category ~s: ~p", [Category, couch_util:format_error(_Reason)]),
+            E
     end.
 
 -spec update_category(config_category(), config_key(), term(), ne_binary(), wh_proplist(), wh_json:object()) ->
@@ -348,13 +358,13 @@ update_category(Category, Keys, Value, Node, Opts, JObj) ->
                              {'ok', wh_json:object()}.
 update_category(Category, JObj) ->
     case maybe_save_category(Category, JObj) of
+        {'ok', _}=OK -> OK;
         {'error', 'conflict'} ->
             lager:debug("conflict saving ~s, merging and saving", [Category]),
             {'ok', Updated} = couch_mgr:open_doc(?WH_CONFIG_DB, Category),
             Merged = wh_json:merge_jobjs(Updated, wh_json:public_fields(JObj)),
             lager:debug("updating from ~s to ~s", [wh_doc:revision(JObj), wh_doc:revision(Merged)]),
-            update_category(Category, Merged);
-        Else -> Else
+            update_category(Category, Merged)
     end.
 
 %%-----------------------------------------------------------------------------
@@ -383,7 +393,7 @@ maybe_save_category(Category, JObj, Looped) ->
     case couch_mgr:save_doc(?WH_CONFIG_DB, JObj1) of
         {'ok', SavedJObj} ->
             lager:debug("saved cat ~s to db ~s (~s)", [Category, ?WH_CONFIG_DB, wh_doc:revision(SavedJObj)]),
-            couch_mgr:cache_db_doc(?WH_CONFIG_DB, Category, SavedJObj),
+            couch_mgr:add_to_doc_cache(?WH_CONFIG_DB, Category, SavedJObj),
             {'ok', SavedJObj};
         {'error', 'not_found'} when not Looped ->
             lager:debug("attempting to create ~s DB", [?WH_CONFIG_DB]),
@@ -392,7 +402,7 @@ maybe_save_category(Category, JObj, Looped) ->
         {'error', 'conflict'}=E -> E;
         {'error', _R} ->
             lager:warning("unable to update ~s system config doc: ~p", [Category, _R]),
-            couch_mgr:cache_db_doc(?WH_CONFIG_DB, Category, JObj1),
+            couch_mgr:add_to_doc_cache(?WH_CONFIG_DB, Category, JObj1),
             {'ok', JObj1}
     end.
 
@@ -428,7 +438,7 @@ flush(Category, Keys, Node) ->
         {'error', _} -> 'ok';
         {'ok', JObj} ->
             J = wh_json:delete_key([Node | Keys], JObj),
-            _ = couch_mgr:cache_db_doc(?WH_CONFIG_DB, Category, J),
+            _ = couch_mgr:add_to_doc_cache(?WH_CONFIG_DB, Category, J),
             'ok'
     end.
 

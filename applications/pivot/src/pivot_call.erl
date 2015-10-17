@@ -555,6 +555,9 @@ process_resp(RequesterQ, Call, CT, RespBody) ->
         {'stop', _Call1}=Stop ->
             lager:debug("translator says stop"),
             Stop;
+        {'channel_down', Call1} ->
+            lager:debug("translator says channel is down, stop"),
+            {'stop', Call1};
         {'ok', _Call1}=OK ->
             lager:debug("translator says ok, continuing"),
             OK;
