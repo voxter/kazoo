@@ -1113,9 +1113,7 @@ execute_control_request(Cmd, #state{node=Node
             Srv ! {'force_queue_advance', CallId},
             'ok';
         'error':{'badmatch', {'error', ErrMsg}} ->
-            ST = erlang:get_stacktrace(),
             lager:debug("invalid command ~s: ~p", [wh_json:get_value(<<"Application-Name">>, Cmd), ErrMsg]),
-            wh_util:log_stacktrace(ST),
             send_error_resp(CallId, Cmd),
             Srv ! {'force_queue_advance', CallId},
             'ok';
