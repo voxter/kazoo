@@ -1512,13 +1512,13 @@ monitoring({'timeout', Ref, ?SYNC_RESPONSE_MESSAGE}, #state{sync_ref=Ref}=State)
     monitoring('send_sync_event', State);
 monitoring({'timeout', Ref, ?RESYNC_RESPONSE_MESSAGE}, #state{sync_ref=Ref}=State) when is_reference(Ref) ->
     lager:debug("monitoring - resync timer expired, lets check with the others again"),
-    monitoring('send_sync_event', State#state{sync_ref=start_sync_timer()});
+    monitoring('send_sync_event', State);
 monitoring('send_sync_event', #state{agent_listener=AgentListener
                                      ,agent_listener_id=_AProcId
                                     }=State) ->
     lager:debug("monitoring - sending sync_req event to other agent processes: ~s", [_AProcId]),
     acdc_agent_listener:send_sync_req(AgentListener),
-    {'next_state', 'monitoring', State};
+    {'next_state', 'monitoring', State#state{sync_ref=start_sync_timer()}};
 monitoring({'sync_req', JObj}, #state{agent_listener=AgentListener
                                       ,agent_listener_id=AProcId
                                      }=State) ->
