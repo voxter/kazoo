@@ -126,6 +126,8 @@
                 ,outbound_call_id :: api_binary()
                 ,max_connect_failures :: wh_timeout()
                 ,connect_failures = 0 :: non_neg_integer()
+
+                ,ignored_agent_calls = [] :: api_binaries()
                }).
 -type fsm_state() :: #state{}.
 
@@ -623,6 +625,7 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
                                                   ,caller_exit_key=CallerExitKey
                                                   ,endpoints=UpdatedEPs
                                                   ,queue_notifications=wh_json:get_value(<<"Notifications">>, JObj)
+                                                  ,ignored_agent_calls=[]
                                                  }}
     end;
 ready({'member_connect_win', JObj, 'different_node'}, #state{agent_listener=AgentListener
@@ -675,9 +678,15 @@ ready({'originate_failed', _E}, State) ->
 ready(?NEW_CHANNEL_FROM(CallId), State) ->
     lager:debug("ready call_from outbound: ~s", [CallId]),
     {'next_state', 'outbound', start_outbound_call_handling(CallId, State), 'hibernate'};
-ready(?NEW_CHANNEL_TO(CallId), State) ->
-    lager:debug("ready call_to outbound: ~s", [CallId]),
-    {'next_state', 'outbound', start_outbound_call_handling(CallId, State), 'hibernate'};
+ready(?NEW_CHANNEL_TO(CallId), #state{ignored_agent_calls=IgnoredAgentCalls}=State) ->
+    case lists:member(CallId, IgnoredAgentCalls) of
+        'true' ->
+            lager:debug("ignoring an outbound call that is the result of a failed originate"),
+            {'next_state', 'ready', State};
+        'false' ->
+            lager:debug("ready call_to outbound: ~s", [CallId]),
+            {'next_state', 'outbound', start_outbound_call_handling(CallId, State), 'hibernate'}
+    end;
 ready(_Evt, State) ->
     lager:debug("unhandled event while ready: ~p", [_Evt]),
     {'next_state', 'ready', State}.
@@ -708,10 +717,16 @@ ringing({'originate_ready', JObj}, #state{agent_listener=AgentListener}=State) -
     lager:debug("ringing agent's phone with call-id ~s", [CallId]),
     acdc_agent_listener:originate_execute(AgentListener, JObj),
     {'next_state', 'ringing', State};
-ringing({'originate_uuid', ACallId, ACtrlQ}, #state{agent_listener=AgentListener}=State) ->
+ringing({'originate_uuid', ACallId, ACtrlQ}, #state{agent_listener=AgentListener
+                                                    ,ignored_agent_calls=IgnoredAgentCalls
+                                                   }=State) ->
     lager:debug("recv originate_uuid for agent call ~s(~s)", [ACallId, ACtrlQ]),
     acdc_agent_listener:originate_uuid(AgentListener, ACallId, ACtrlQ),
-    {'next_state', 'ringing', State};
+
+    %% List of call ids to ignore CHANNEL_CREATE in case we fail back to ready quickly
+    IgnoredAgentCalls1 = [ACallId | IgnoredAgentCalls],
+
+    {'next_state', 'ringing', State#state{ignored_agent_calls=IgnoredAgentCalls1}};
 ringing({'originate_started', ACallId}, #state{agent_listener=AgentListener
                                                ,member_call_id=MemberCallId
                                                ,member_call=MemberCall
