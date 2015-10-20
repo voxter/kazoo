@@ -18,6 +18,7 @@
          ,agent_timeout/1
          ,redial_member/7
          ,bridge_to_member/6
+         ,hangup_call/1
          ,replace_call/2
          ,monitor_call/4
          ,channel_hungup/2
@@ -120,7 +121,7 @@
 -define(BINDINGS(AcctId, AgentId), [{'self', []}
                                     ,{'acdc_agent', [{'account_id', AcctId}
                                                      ,{'agent_id', AgentId}
-                                                     ,{'restrict_to', ['member_connect_win', 'sync']}
+                                                     ,{'restrict_to', ['member_connect_win', 'member_connect_reset', 'sync']}
                                                     ]}
                                     ,{'conf', [{'action', <<"*">>}
                                                ,{'db', wh_util:format_account_id(AcctId, 'encoded')}
@@ -149,6 +150,9 @@
                       }
                      ,{{'acdc_agent_handler', 'handle_member_connect_win'}
                        ,[{<<"member">>, <<"connect_win">>}]
+                      }
+                     ,{{'acdc_agent_handler', 'handle_member_connect_reset'}
+                       ,[{<<"member">>, <<"connect_reset">>}]
                       }
                      ,{{'acdc_agent_handler', 'handle_member_message'}
                        ,[{<<"member">>, <<"*">>}]
@@ -240,6 +244,10 @@ member_connect_accepted(Srv, ACallId, MemberCall) ->
                       ) -> 'ok'.
 redial_member(Srv, Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number) ->
     gen_listener:cast(Srv, {'redial_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number}).
+
+-spec hangup_call(pid()) -> 'ok'.
+hangup_call(Srv) ->
+    gen_listener:cast(Srv, {'hangup_call'}).
 
 -spec bridge_to_member(pid(), whapps_call:call(), wh_json:object()
                        ,wh_json:objects(), api_binary(), api_binary()
@@ -772,6 +780,31 @@ handle_cast({'member_connect_resp', ReqJObj}, #state{agent_id=AgentId
                                    }
              ,'hibernate'}
     end;
+
+handle_cast({'hangup_call'}, #state{my_id=MyId
+                                    ,msg_queue_id=Server
+                                    ,agent_call_ids=ACallIds
+                                    ,call=Call
+                                    ,agent_id=AgentId
+                                   }=State) ->
+    %% Hangup this agent's calls
+    lager:debug("agent FSM requested a hangup of the agent call, sending retry"),
+    _ = filter_agent_calls(ACallIds, AgentId),
+
+    %% Pass the call on to another agent
+    CallId = whapps_call:call_id(Call),
+    send_member_connect_retry(Server, CallId, MyId, AgentId),
+    acdc_util:unbind_from_call_events(CallId),
+
+    put('callid', AgentId),
+    {'noreply', State#state{call='undefined'
+                            ,old_call='undefined'
+                            ,msg_queue_id='undefined'
+                            ,acdc_queue_id='undefined'
+                            ,agent_call_ids=[]
+                            ,recording_url='undefined'
+                           }
+     ,'hibernate'};
 
 handle_cast({'replace_call', NewCall}, #state{call=OldCall
                                               ,acct_id=AccountId
