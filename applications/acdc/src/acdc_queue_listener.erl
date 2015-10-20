@@ -580,8 +580,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
--spec maybe_timeout_agent(api_object(), ne_binary(), whapps_call:call(), wh_json:object()) -> 'ok'.
+-spec maybe_timeout_agent(api_object(), ne_binary(), whapps_call:call(), api_object()) -> 'ok'.
 maybe_timeout_agent('undefined', _QueueId, _Call, _JObj) -> 'ok';
+maybe_timeout_agent(_AgentId, _QueueId, _Call, 'undefined') -> 'ok';
 maybe_timeout_agent(_AgentId, QueueId, Call, JObj) ->
     lager:debug("timing out winning agent because they should not be able to pick up after the queue timeout"),
     send_agent_timeout(JObj, Call, QueueId).
