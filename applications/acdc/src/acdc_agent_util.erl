@@ -137,18 +137,18 @@ most_recent_statuses(AccountId, AgentId, Options) ->
 
     ETS = spawn_monitor(?MODULE, 'async_most_recent_ets_statuses', [AccountId, AgentId, Options, Self]),
 
-    DB = maybe_start_db_lookup('async_most_recent_db_statuses', AccountId, AgentId, Options, Self),
+    % DB = maybe_start_db_lookup('async_most_recent_db_statuses', AccountId, AgentId, Options, Self),
 
-    maybe_reduce_statuses(AgentId, receive_statuses([ETS, DB])).
+    maybe_reduce_statuses(AgentId, receive_statuses([ETS])).
 
--spec maybe_start_db_lookup(atom(), ne_binary(), api_binary(), list(), pid()) ->
-                                   pid_ref() | 'undefined'.
-maybe_start_db_lookup(F, AccountId, AgentId, Options, Self) ->
-    case wh_cache:fetch_local(?ACDC_CACHE, db_fetch_key(F, AccountId, AgentId)) of
-        {'ok', _} -> 'undefined';
-        {'error', 'not_found'} ->
-            spawn_monitor(?MODULE, F, [AccountId, AgentId, Options, Self])
-    end.
+% -spec maybe_start_db_lookup(atom(), ne_binary(), api_binary(), list(), pid()) ->
+%                                    pid_ref() | 'undefined'.
+% maybe_start_db_lookup(F, AccountId, AgentId, Options, Self) ->
+%     case wh_cache:fetch_local(?ACDC_CACHE, db_fetch_key(F, AccountId, AgentId)) of
+%         {'ok', _} -> 'undefined';
+%         {'error', 'not_found'} ->
+%             spawn_monitor(?MODULE, F, [AccountId, AgentId, Options, Self])
+%     end.
 db_fetch_key(F, AccountId, AgentId) -> {F, AccountId, AgentId}.
 
 -spec maybe_reduce_statuses(api_binary(), wh_json:object()) ->
