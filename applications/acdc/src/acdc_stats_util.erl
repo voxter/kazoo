@@ -66,5 +66,8 @@ prev_modb(Account, Year, Month) ->
 	wh_util:format_account_id(Account, Year, Month).
 
 -spec cleanup_old_stats() -> 'ok'.
+-spec cleanup_old_stats(pos_integer()) -> 'ok'.
 cleanup_old_stats() ->
-    acdc_stats:manual_cleanup(3600).
+    cleanup_old_stats(1200).
+cleanup_old_stats(Window) ->
+    acdc_stats:manual_cleanup(Window).

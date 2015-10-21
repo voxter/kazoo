@@ -246,7 +246,7 @@ agent_statuses() ->
 
 -spec manual_cleanup(pos_integer()) -> 'ok'.
 manual_cleanup(Window) ->
-    Srv = call_table_id(),
+    {'ok', Srv} = acdc_stats_sup:stats_srv(),
     
     Past = wh_util:current_tstamp() - Window,
     PastConstraint = {'=<', '$1', Past},
