@@ -17,7 +17,7 @@
          ,db_name/1
          ,prev_modb/1
 
-         ,cleanup_old_stats/0
+         ,cleanup_old_stats/0, cleanup_old_stats/1
         ]).
 
 -include("acdc.hrl").
