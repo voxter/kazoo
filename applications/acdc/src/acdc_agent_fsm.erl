@@ -1525,7 +1525,7 @@ handle_event({'resume'}, 'ready', State) ->
     {'next_state', 'ready', State};
 handle_event({'resume'}, 'paused', State) ->
     ReadyState = handle_resume(State),
-    {'next_state', 'ready', apply_state_updates(ReadyState)};
+    apply_state_updates(ReadyState);
 handle_event({'resume'}, StateName, #state{agent_state_updates = Queue} = State) ->
     NewQueue = [{'resume'} | Queue],
     {'next_state', StateName, State#state{agent_state_updates = NewQueue}};
@@ -1882,10 +1882,12 @@ outbound_hungup(#state{agent_listener=AgentListener
             case time_left(PRef) of
                 N when is_integer(N), N > 0 ->
                     acdc_agent_stats:agent_paused(AccountId, AgentId, N),
-                    {'next_state', 'paused', clear_call(State, 'paused'), 'hibernate'};
+                    {Next, SwitchTo, State1} = apply_state_updates(clear_call(State, 'paused')),
+                    {Next, SwitchTo, State1, 'hibernate'};
                 <<"infinity">> ->
                     acdc_agent_stats:agent_paused(AccountId, AgentId, <<"infinity">>),
-                    {'next_state', 'paused', clear_call(State, 'paused'), 'hibernate'};
+                    {Next, SwitchTo, State1} = apply_state_updates(clear_call(State, 'paused')),
+                    {Next, SwitchTo, State1, 'hibernate'};
                 _P ->
                     lager:debug("wrapup left: ~p pause left: ~p", [_W, _P]),
                     acdc_agent_stats:agent_ready(AccountId, AgentId),
