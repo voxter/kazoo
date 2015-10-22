@@ -643,9 +643,7 @@ ready({'member_connect_req', _}, #state{max_connect_failures=Max
 ready({'member_connect_req', JObj}, #state{agent_listener=AgentListener}=State) ->
     acdc_agent_listener:member_connect_resp(AgentListener, JObj),
     {'next_state', 'ready', State};
-ready({'originate_uuid', ACallId, ACtrlQ}, #state{agent_listener=AgentListener
-                                                  ,ignored_agent_calls=IgnoredAgentCalls
-                                                 }=State) ->
+ready({'originate_uuid', ACallId, ACtrlQ}, #state{ignored_agent_calls=IgnoredAgentCalls}=State) ->
     lager:debug("ready recv originate_uuid for agent call ~s(~s)", [ACallId, ACtrlQ]),
     IgnoredAgentCalls1 = [ACallId | IgnoredAgentCalls],
     {'next_state', 'ready', State#state{ignored_agent_calls=IgnoredAgentCalls1}};
