@@ -592,7 +592,6 @@ connecting({'dtmf_pressed', DTMF}, #state{caller_exit_key=DTMF
                                           ,member_call=Call
                                          }=State) when is_binary(DTMF) ->
     lager:debug("member pressed the exit key (~s)", [DTMF]),
-    acdc_queue_listener:exit_member_call(Srv),
 
     %% Do not exit if exit is suppressed
     case wh_json:get_value(<<"No-Queue-Exit">>, whapps_call:ccvs(Call)) of
