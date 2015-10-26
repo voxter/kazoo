@@ -1447,6 +1447,13 @@ outbound({'channel_bridged', _}, State) ->
     {'next_state', 'outbound', State};
 outbound({'channel_unbridged', _}, State) ->
     {'next_state', 'outbound', State};
+outbound({'channel_replaced', JObj}, #state{agent_listener=AgentListener}=State) ->
+    CallId = kz_call_event:call_id(JObj),
+    ReplacedBy = kz_call_event:replaced_by(JObj),
+    acdc_agent_listener:rebind_events(AgentListener, CallId, ReplacedBy),
+    wh_util:put_callid(ReplacedBy),
+    lager:info("channel ~s replaced by ~s", [CallId, ReplacedBy]),
+    {'next_state', 'outbound', State#state{outbound_call_id=ReplacedBy}};
 outbound(?NEW_CHANNEL_TO(CallId), #state{outbound_call_id=CallId}=State) ->
     {'next_state', 'outbound', State};
 outbound(_Msg, State) ->
