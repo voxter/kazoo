@@ -1404,6 +1404,18 @@ outbound({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentL
 outbound({'member_connect_win', _, 'different_node'}, State) ->
     lager:debug("received member_connect_win for different node (outbound)"),
     {'next_state', 'outbound', State};
+outbound({'originate_uuid', CallId, ACtrlQ}, #state{agent_listener=AgentListener
+                                                    ,outbound_call_id=CallId
+                                                    ,ignored_agent_calls=IgnoredAgentCalls
+                                                   }=State) ->
+    lager:debug("recv originate_uuid for agent call ~s(~s), cancel outbound", [CallId, ACtrlQ]),
+    acdc_agent_listener:outbound_invalid(AgentListener, CallId),
+    IgnoredAgentCalls1 = [CallId | IgnoredAgentCalls],
+    outbound_hungup(State#state{ignored_agent_calls=IgnoredAgentCalls1});
+outbound({'originate_uuid', ACallId, ACtrlQ}, #state{ignored_agent_calls=IgnoredAgentCalls}=State) ->
+    lager:debug("recv originate_uuid for agent call ~s(~s)", [ACallId, ACtrlQ]),
+    IgnoredAgentCalls1 = [ACallId | IgnoredAgentCalls],
+    {'next_state', 'outbound', State#state{ignored_agent_calls=IgnoredAgentCalls1}};
 outbound({'timeout', Ref, ?PAUSE_MESSAGE}, #state{pause_ref=Ref}=State) ->
     lager:debug("pause timer expired while outbound"),
     {'next_state', 'outbound', State#state{pause_ref='undefined'}};
