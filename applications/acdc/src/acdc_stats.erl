@@ -32,7 +32,8 @@
          ,agent_outbound/3
 
          ,agent_statuses/0
-         ,manual_cleanup/1
+         ,manual_cleanup_calls/1
+         ,manual_cleanup_statuses/1
         ]).
 
 %% ETS config
@@ -244,8 +245,8 @@ agent_outbound(AcctId, AgentId, CallId) ->
 agent_statuses() ->
     ?STATUS_STATUSES.
 
--spec manual_cleanup(pos_integer()) -> 'ok'.
-manual_cleanup(Window) ->
+-spec manual_cleanup_calls(pos_integer()) -> 'ok'.
+manual_cleanup_calls(Window) ->
     {'ok', Srv} = acdc_stats_sup:stats_srv(),
     
     Past = wh_util:current_tstamp() - Window,
@@ -261,12 +262,6 @@ manual_cleanup(Window) ->
                  }],
     gen_listener:cast(Srv, {'remove_call', CallMatch}),
 
-    StatusMatch = [{#status_stat{timestamp='$1', _='_'}
-                    ,[{'=<', '$1', Past}]
-                    ,['$_']
-                   }],
-    gen_listener:cast(Srv, {'remove_status', StatusMatch}),
-
     case ets:select(?MODULE:call_table_id()
                     ,[{#call_stat{entered_timestamp='$1', status= <<"waiting">>, _='_'}
                        ,[PastConstraint]
@@ -281,6 +276,18 @@ manual_cleanup(Window) ->
         [] -> 'ok';
         Unfinished -> cleanup_unfinished(Unfinished)
     end.
+
+-spec manual_cleanup_statuses(pos_integer()) -> 'ok'.
+manual_cleanup_statuses(Window) ->
+    {'ok', Srv} = acdc_stats_sup:stats_srv(),
+    
+    Past = wh_util:current_tstamp() - Window,
+
+    StatusMatch = [{#status_stat{timestamp='$1', _='_'}
+                    ,[{'=<', '$1', Past}]
+                    ,['$_']
+                   }],
+    gen_listener:cast(Srv, {'remove_status', StatusMatch}).
 
 %% ETS config
 call_table_id() -> 'acdc_stats_call'.
