@@ -1513,12 +1513,15 @@ monitoring('current_call', _, State) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-handle_event({'agent_logout'}, 'ready', State) ->
-    handle_agent_logout(State),
-    {'next_state', 'ready', State};
-handle_event({'agent_logout'} = Event, StateName, #state{agent_state_updates = Queue} = State) ->
-    NewQueue = [Event | Queue],
-    {'next_state', StateName, State#state{agent_state_updates = NewQueue}};
+handle_event({'agent_logout'}=Event, StateName, #state{agent_state_updates=Queue}=State) ->
+    case valid_state_for_logout(StateName) of
+        'true' ->
+            handle_agent_logout(State),
+            {'next_state', 'ready', State};
+        'false' ->
+            NewQueue = [Event | Queue],
+            {'next_state', StateName, State#state{agent_state_updates = NewQueue}}
+    end;
 handle_event({'resume'}, 'ready', State) ->
     {'next_state', 'ready', State};
 handle_event({'resume'}, 'paused', State) ->
@@ -2137,6 +2140,12 @@ state_step({'agent_logout'}, {NextState, State}) ->
 state_step({'update_presence', PresenceId, PresenceState}, {NextState, State}) ->
     handle_presence_update(PresenceId, PresenceState, State),
     {NextState, State}.
+
+-spec valid_state_for_logout(atom()) -> boolean().
+valid_state_for_logout('ready') -> 'true';
+valid_state_for_logout('wrapup') -> 'true';
+valid_state_for_logout('paused') -> 'true';
+valid_state_for_logout(_) -> 'false'.
 
 -spec handle_agent_logout(fsm_state()) -> 'ok'.
 handle_agent_logout(#state{account_id = AccountId
