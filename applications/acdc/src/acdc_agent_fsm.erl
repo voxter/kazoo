@@ -1550,6 +1550,7 @@ handle_event({'resume'}, 'paused', State) ->
     ReadyState = handle_resume(State),
     apply_state_updates(ReadyState);
 handle_event({'resume'}, StateName, #state{agent_state_updates = Queue} = State) ->
+    lager:debug("recv resume during ~p, delaying", [StateName]),
     NewQueue = [{'resume'} | Queue],
     {'next_state', StateName, State#state{agent_state_updates = NewQueue}};
 handle_event({'pause', Timeout}, 'ringing', #state{agent_listener=AgentListener
@@ -1572,6 +1573,7 @@ handle_event({'pause', Timeout}, 'ready', State) ->
     lager:debug("recv status update: pausing for up to ~b s", [Timeout]),
     {'next_state', 'paused', handle_pause(Timeout, State)};
 handle_event({'pause', _} = Event, StateName, #state{agent_state_updates = Queue} = State) ->
+    lager:debug("recv pause during ~p, delaying", [StateName]),
     NewQueue = [Event | Queue],
     {'next_state', StateName, State#state{agent_state_updates = NewQueue}};
 handle_event({'update_presence', PresenceID, PresenceState}, 'ready', State) ->
@@ -1900,7 +1902,8 @@ outbound_hungup(#state{agent_listener=AgentListener
     case time_left(WRef) of
         N when is_integer(N), N > 0 ->
             acdc_agent_stats:agent_wrapup(AccountId, AgentId, N),
-            {'next_state', 'wrapup', clear_call(State, 'wrapup'), 'hibernate'};
+            {Next, SwitchTo, State1} = apply_state_updates(clear_call(State, 'wrapup')),
+            {Next, SwitchTo, State1, 'hibernate'};
         _W ->
             case time_left(PRef) of
                 N when is_integer(N), N > 0 ->
@@ -1915,8 +1918,8 @@ outbound_hungup(#state{agent_listener=AgentListener
                     lager:debug("wrapup left: ~p pause left: ~p", [_W, _P]),
                     acdc_agent_stats:agent_ready(AccountId, AgentId),
                     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
-                    {Next, SwitchTo, State} = apply_state_updates(clear_call(State, 'ready')),
-                    {Next, SwitchTo, State, 'hibernate'}
+                    {Next, SwitchTo, State1} = apply_state_updates(clear_call(State, 'ready')),
+                    {Next, SwitchTo, State1, 'hibernate'}
             end
     end.
 
@@ -2144,8 +2147,21 @@ uri(URI, QueryString) ->
     end.
 
 -spec apply_state_updates(fsm_state()) -> {'next_state', atom(), fsm_state()}.
-apply_state_updates(#state{agent_state_updates=Q}=State) ->
-    {Atom, ModState} = lists:foldl(fun state_step/2, {'ready', State}, lists:reverse(Q)),
+apply_state_updates(#state{agent_state_updates=Q
+                           ,wrapup_ref=WRef
+                           ,pause_ref=PRef
+                          }=State) ->
+    FoldDefaultState = case time_left(WRef) of
+        N when is_integer(N), N > 0 -> 'wrapup';
+        _W ->
+            case time_left(PRef) of
+                N when is_integer(N), N > 0 -> 'paused';
+                <<"infinity">> -> 'paused';
+                _P -> 'ready'
+            end
+    end,
+    lager:debug("default state for applying state updates ~s", [FoldDefaultState]),
+    {Atom, ModState} = lists:foldl(fun state_step/2, {FoldDefaultState, State}, lists:reverse(Q)),
     {'next_state', Atom, ModState#state{agent_state_updates = []}}.
 
 -type state_acc() :: {atom(), fsm_state()}.
