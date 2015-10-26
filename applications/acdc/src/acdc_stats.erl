@@ -863,6 +863,7 @@ handle_waiting_stat(JObj, Props) ->
             Updates = props:filter_undefined(
                         [{#call_stat.caller_id_name, wh_json:get_value(<<"Caller-ID-Name">>, JObj)}
                          ,{#call_stat.caller_id_number, wh_json:get_value(<<"Caller-ID-Number">>, JObj)}
+                         ,{#call_stat.entered_timestamp, wh_json:get_value(<<"Entered-Timestamp">>, JObj)}
                          ,{#call_stat.entered_position, wh_json:get_value(<<"Entered-Position">>, JObj)}
                         ]),
             update_call_stat(Id, Updates, Props)
@@ -893,12 +894,17 @@ handle_abandoned_stat(JObj, Props) ->
     'true' = wapi_acdc_stats:call_abandoned_v(JObj),
 
     Id = call_stat_id(JObj),
-    Updates = props:filter_undefined(
-                [{#call_stat.abandoned_reason, wh_json:get_value(<<"Abandon-Reason">>, JObj)}
-                 ,{#call_stat.abandoned_timestamp, wh_json:get_value(<<"Abandon-Timestamp">>, JObj)}
-                 ,{#call_stat.status, <<"abandoned">>}
-                ]),
-    update_call_stat(Id, Updates, Props).
+    %% If caller leaves quickly, the waiting entry might not have arrived yet
+    case find_call_stat(Id) of
+        'undefined' -> create_call_stat(Id, JObj, Props);
+        _Stat ->
+            Updates = props:filter_undefined(
+                        [{#call_stat.abandoned_reason, wh_json:get_value(<<"Abandon-Reason">>, JObj)}
+                         ,{#call_stat.abandoned_timestamp, wh_json:get_value(<<"Abandon-Timestamp">>, JObj)}
+                         ,{#call_stat.status, <<"abandoned">>}
+                        ]),
+            update_call_stat(Id, Updates, Props)
+    end.
 
 -spec handle_handled_stat(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_handled_stat(JObj, Props) ->
@@ -974,10 +980,12 @@ create_call_stat(Id, JObj, Props) ->
                                           ,call_id = wh_json:get_value(<<"Call-ID">>, JObj)
                                           ,acct_id = wh_json:get_value(<<"Account-ID">>, JObj)
                                           ,queue_id = wh_json:get_value(<<"Queue-ID">>, JObj)
-                                          ,entered_timestamp = wh_json:get_value(<<"Entered-Timestamp">>, JObj)
+                                          ,entered_timestamp = wh_json:get_value(<<"Entered-Timestamp">>, JObj, wh_util:current_tstamp())
+                                          ,abandoned_timestamp = wh_json:get_value(<<"Abandon-Timestamp">>, JObj)
                                           ,entered_position = wh_json:get_value(<<"Entered-Position">>, JObj)
+                                          ,abandoned_reason = wh_json:get_value(<<"Abandon-Reason">>, JObj)
                                           ,misses = []
-                                          ,status = <<"waiting">>
+                                          ,status = wh_json:get_value(<<"Event-Name">>, JObj)
                                           ,caller_id_name = wh_json:get_value(<<"Caller-ID-Name">>, JObj)
                                           ,caller_id_number = wh_json:get_value(<<"Caller-ID-Number">>, JObj)
                                          }

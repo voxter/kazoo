@@ -30,8 +30,8 @@
 
        	  ,hung_up_by :: api_binary() | '_'
 
-          ,entered_position :: pos_integer()
-          ,exited_position :: pos_integer()
+          ,entered_position :: api_integer()
+          ,exited_position :: api_integer()
 
           ,abandoned_reason :: api_binary() | '_'
 
