@@ -1354,12 +1354,22 @@ paused({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentLis
 paused({'member_connect_win', _, 'different_node'}, State) ->
     lager:debug("received member_connect_win for different node (paused)"),
     {'next_state', 'paused', State};
+paused({'originate_uuid', ACallId, ACtrlQ}, #state{ignored_agent_calls=IgnoredAgentCalls}=State) ->
+    lager:debug("recv originate_uuid for agent call ~s(~s)", [ACallId, ACtrlQ]),
+    IgnoredAgentCalls1 = [ACallId | IgnoredAgentCalls],
+    {'next_state', 'paused', State#state{ignored_agent_calls=IgnoredAgentCalls1}};
 paused(?NEW_CHANNEL_FROM(CallId), State) ->
     lager:debug("paused call_from outbound: ~s", [CallId]),
     {'next_state', 'outbound', start_outbound_call_handling(CallId, State), 'hibernate'};
-paused(?NEW_CHANNEL_TO(CallId), State) ->
-    lager:debug("paused call_to outbound: ~s", [CallId]),
-    {'next_state', 'outbound', start_outbound_call_handling(CallId, State), 'hibernate'};
+paused(?NEW_CHANNEL_TO(CallId), #state{ignored_agent_calls=IgnoredAgentCalls}=State) ->
+    case lists:member(CallId, IgnoredAgentCalls) of
+        'true' ->
+            lager:debug("ignoring an outbound call that is the result of a failed originate"),
+            {'next_state', 'ready', State};
+        'false' ->
+            lager:debug("paused call_to outbound: ~s", [CallId]),
+            {'next_state', 'outbound', start_outbound_call_handling(CallId, State), 'hibernate'}
+    end;
 paused({'channel_hungup', CallId, _Reason}, #state{agent_listener=AgentListener
                                                    ,pause_ref=Ref
                                                    ,account_id=AccountId
