@@ -32,6 +32,7 @@
          ,agent_outbound/3
 
          ,agent_statuses/0
+         ,manual_cleanup/1
         ]).
 
 %% ETS config
@@ -243,6 +244,44 @@ agent_outbound(AcctId, AgentId, CallId) ->
 agent_statuses() ->
     ?STATUS_STATUSES.
 
+-spec manual_cleanup(pos_integer()) -> 'ok'.
+manual_cleanup(Window) ->
+    {'ok', Srv} = acdc_stats_sup:stats_srv(),
+    
+    Past = wh_util:current_tstamp() - Window,
+    PastConstraint = {'=<', '$1', Past},
+
+    TypeConstraints = [{'=/=', '$2', {'const', <<"waiting">>}}
+                       ,{'=/=', '$2', {'const', <<"handled">>}}
+                      ],
+
+    CallMatch = [{#call_stat{entered_timestamp='$1', status='$2', _='_'}
+                  ,[PastConstraint | TypeConstraints]
+                  ,['$_']
+                 }],
+    gen_listener:cast(Srv, {'remove_call', CallMatch}),
+
+    StatusMatch = [{#status_stat{timestamp='$1', _='_'}
+                    ,[{'=<', '$1', Past}]
+                    ,['$_']
+                   }],
+    gen_listener:cast(Srv, {'remove_status', StatusMatch}),
+
+    case ets:select(?MODULE:call_table_id()
+                    ,[{#call_stat{entered_timestamp='$1', status= <<"waiting">>, _='_'}
+                       ,[PastConstraint]
+                       ,['$_']
+                      }
+                      ,{#call_stat{entered_timestamp='$1', status= <<"handled">>, _='_'}
+                        ,[PastConstraint]
+                        ,['$_']
+                       }
+                     ])
+    of
+        [] -> 'ok';
+        Unfinished -> cleanup_unfinished(Unfinished)
+    end.
+
 %% ETS config
 call_table_id() -> 'acdc_stats_call'.
 call_key_pos() -> #call_stat.id.
@@ -269,6 +308,7 @@ call_table_opts() ->
                        ,[{<<"acdc_status_stat">>, <<"ready">>}
                          ,{<<"acdc_status_stat">>, <<"logged_in">>}
                          ,{<<"acdc_status_stat">>, <<"logged_out">>}
+                         ,{<<"acdc_status_stat">>, <<"pending_logged_out">>}
                          ,{<<"acdc_status_stat">>, <<"connecting">>}
                          ,{<<"acdc_status_stat">>, <<"connected">>}
                          ,{<<"acdc_status_stat">>, <<"wrapup">>}

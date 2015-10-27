@@ -62,7 +62,5 @@ start_deps() ->
                                                ,'whistle_amqp'
                                                ,'whistle_couch'
                                                ,'kazoo_bindings'
-                                               ,'acdc'
-                                               ,'amimulator'
                                                ]],
     'ok'.

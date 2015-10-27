@@ -88,7 +88,9 @@ restart_acct(AcctId) -> [acdc_agent_sup:restart(S) || S <- workers(), is_agent_i
 restart_agent(AcctId, AgentId) ->
     case find_agent_supervisor(AcctId, AgentId) of
         'undefined' -> lager:info("no supervisor for agent ~s(~s) to restart", [AgentId, AcctId]);
-        S -> acdc_agent_sup:restart(S)
+        S ->
+            acdc_agent_sup:stop(S),
+            new(AcctId, AgentId)
     end.
 
 -spec find_acct_supervisors(ne_binary()) -> pids().

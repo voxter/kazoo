@@ -16,6 +16,8 @@
          ,get_query_limit/1
          ,db_name/1
          ,prev_modb/1
+
+         ,cleanup_old_stats/0, cleanup_old_stats/1
         ]).
 
 -include("acdc.hrl").
@@ -62,3 +64,10 @@ prev_modb(Account, Year, 0) ->
 	prev_modb(Account, Year-1, 12);
 prev_modb(Account, Year, Month) ->
 	wh_util:format_account_id(Account, Year, Month).
+
+-spec cleanup_old_stats() -> 'ok'.
+-spec cleanup_old_stats(pos_integer()) -> 'ok'.
+cleanup_old_stats() ->
+    cleanup_old_stats(1200).
+cleanup_old_stats(Window) ->
+    acdc_stats:manual_cleanup(Window).
