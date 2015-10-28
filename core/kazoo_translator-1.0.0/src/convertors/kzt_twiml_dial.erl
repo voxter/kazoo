@@ -91,7 +91,7 @@ exec(Call, [#xmlElement{name='Conference'
 
     lager:debug("waited for offnet, maybe ending dial"),
 
-    maybe_end_dial(Call1, DialProps),
+    _ = maybe_end_dial(Call1, DialProps),
     {'stop', Call1};
 
 exec(Call, [#xmlElement{name='Queue'
@@ -183,7 +183,7 @@ setup_call_for_dial(Call, Props) ->
     whapps_call:exec(Setters, Call).
 
 -spec maybe_end_dial(whapps_call:call(), wh_proplist()) ->
-                            {'ok' | 'stop', whapps_call:call()}.
+                            {'ok' | 'stop' | 'request', whapps_call:call()}.
 maybe_end_dial(Call, Props) ->
     maybe_end_dial(Call, Props, kzt_twiml_util:action_url(Props)).
 
@@ -416,8 +416,8 @@ add_conference_profile(Call, ConfProps) ->
                    ,{<<"annouce-count">>, props:get_integer_value('announceCount', ConfProps)}
                    ,{<<"caller-controls">>, props:get_value('callerControls', ConfProps, <<"default">>)}
                    ,{<<"moderator-controls">>, props:get_value('callerControls', ConfProps, <<"default">>)}
-                   ,{<<"caller-id-name">>, props:get_value('callerIdName', ConfProps, <<"Kazoo">>)}
-                   ,{<<"caller-id-number">>, props:get_value('callerIdNumber', ConfProps, <<"0000000000">>)}
+                   ,{<<"caller-id-name">>, props:get_value('callerIdName', ConfProps, wh_util:anonymous_caller_id_name())}
+                   ,{<<"caller-id-number">>, props:get_value('callerIdNumber', ConfProps, wh_util:anonymous_caller_id_number())}
                    %,{<<"suppress-events">>, <<>>} %% add events to make FS less chatty
                    ,{<<"moh-sound">>, props:get_value('waitUrl', ConfProps, <<"http://com.twilio.music.classical.s3.amazonaws.com/Mellotroniac_-_Flight_Of_Young_Hearts_Flute.mp3">>)}
                   ])),

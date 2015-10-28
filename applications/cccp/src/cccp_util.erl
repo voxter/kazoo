@@ -71,7 +71,7 @@ handle_disconnect_cause(JObj) ->
                        'error'.
 authorize(Value, View) ->
     ViewOptions = [{'key', Value}],
-    case couch_mgr:get_results(?CCCPS_DB, View, ViewOptions) of
+    case couch_mgr:get_results(?KZ_CCCPS_DB, View, ViewOptions) of
         {'ok',[]} ->
             lager:info("Auth by ~p failed for: ~p. No such value in Db.", [Value, View]),
             'empty';   %%% don't change. used in cb_cccps.erl
@@ -107,7 +107,12 @@ ensure_valid_caller_id(OutboundCID, AccountId) ->
         'true' ->
             OutboundCID;
         'false' ->
-            DefaultCID = whapps_config:get(?CCCP_CONFIG_CAT, <<"default_caller_id_number">>, <<"00000000000">>),
+            DefaultCID =
+                whapps_config:get(
+                  ?CCCP_CONFIG_CAT
+                  ,<<"default_caller_id_number">>
+                  ,wh_util:anonymous_caller_id_number()
+                 ),
             lager:debug("OutboundCID ~p is out of account's list; changing to application's default: ~p", [OutboundCID, DefaultCID]),
             DefaultCID
     end.
@@ -159,7 +164,7 @@ get_last_dialed_number(Call) ->
 -spec store_last_dialed(ne_binary(), ne_binary()) -> 'ok'.
 store_last_dialed(Number, DocId) ->
     {'ok', Doc} = couch_mgr:update_doc(<<"cccps">>, DocId, [{<<"pvt_last_dialed">>, Number}]),
-    _ = couch_mgr:update_doc(wh_json:get_value(<<"pvt_account_db">>, Doc), DocId, [{<<"pvt_last_dialed">>, Number}]),
+    _ = couch_mgr:update_doc(wh_doc:account_db(Doc), DocId, [{<<"pvt_last_dialed">>, Number}]),
     'ok'.
 
 -spec check_restrictions(ne_binary(), whapps_call:call()) ->
@@ -169,8 +174,8 @@ check_restrictions(Number, Call) ->
     {'ok', CachedCall} = whapps_call:retrieve(whapps_call:call_id(Call), ?APP_NAME),
     DocId = whapps_call:kvs_fetch('auth_doc_id', CachedCall),
     {'ok', Doc} = couch_mgr:open_doc(<<"cccps">>, DocId),
-    AccountId = wh_json:get_value(<<"pvt_account_id">>, Doc),
-    AccountDb = wh_json:get_value(<<"pvt_account_db">>, Doc),
+    AccountId = wh_doc:account_id(Doc),
+    AccountDb = wh_doc:account_db(Doc),
     case is_number_restricted(Number, AccountId, AccountDb) of
        'true' ->
             lager:debug("Number ~p is restricted", [Number]),

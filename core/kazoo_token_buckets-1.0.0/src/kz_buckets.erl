@@ -216,10 +216,10 @@ tokens() ->
               ,[<<"Application">>, <<"Key">>, <<"Pid">>, <<"Tokens">>, <<"Last Accessed">>]
              ),
 
-    lists:foldl(fun print_bucket_info/2
-                ,'undefined'
-                ,lists:keysort(#bucket.key, ets:tab2list(table_id()))
-               ),
+    _ = lists:foldl(fun print_bucket_info/2
+                    ,'undefined'
+                    ,lists:keysort(#bucket.key, ets:tab2list(table_id()))
+                   ),
     'ok'.
 
 print_bucket_info(#bucket{key={CurrentApp, Name}
@@ -361,7 +361,7 @@ handle_info({'DOWN', Ref, 'process', Pid, _Reason}, #state{table_id=Tbl}=State) 
     end,
     {'noreply', State};
 handle_info(?INACTIVITY_MSG, #state{inactivity_timer_ref=_OldRef}=State) ->
-    _Pid = spawn(fun check_for_inactive_buckets/0),
+    _Pid = wh_util:spawn(fun check_for_inactive_buckets/0),
     {'noreply', State#state{inactivity_timer_ref=start_inactivity_timer()}};
 handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),

@@ -274,8 +274,8 @@ handle_new_channel(JObj, AccountId) ->
 -spec handle_new_channel_acct(wh_json:object(), api_binary()) -> 'ok'.
 handle_new_channel_acct(_, 'undefined') -> 'ok';
 handle_new_channel_acct(JObj, AccountId) ->
-	FromUser = hd(binary:split(wh_json:get_value(<<"From">>, JObj), <<"@">>)),
-	ToUser = hd(binary:split(wh_json:get_value(<<"To">>, JObj), <<"@">>)),
+    FromUser = hd(binary:split(wh_json:get_value(<<"From">>, JObj), <<"@">>)),
+    ToUser = hd(binary:split(wh_json:get_value(<<"To">>, JObj), <<"@">>)),
     ReqUser = hd(binary:split(wh_json:get_value(<<"Request">>, JObj), <<"@">>)),
 
     CallId = wh_json:get_value(<<"Call-ID">>, JObj),

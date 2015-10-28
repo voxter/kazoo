@@ -77,7 +77,7 @@
 -include("ecallmgr.hrl").
 
 -define(SERVER, ?MODULE).
--define(KEEP_ALIVE, 120000). %% after hangup, keep alive for 2 minutes
+-define(KEEP_ALIVE, 2 * ?MILLISECONDS_IN_MINUTE). %% after hangup, keep alive for 2 minutes
 
 -type insert_at_options() :: 'now' | 'head' | 'tail' | 'flush'.
 
@@ -156,11 +156,11 @@ stop(Srv) ->
 
 -spec callid(pid()) -> ne_binary().
 callid(Srv) ->
-    gen_listener:call(Srv, 'callid', 1000).
+    gen_listener:call(Srv, 'callid', ?MILLISECONDS_IN_SECOND).
 
 -spec node(pid()) -> ne_binary().
 node(Srv) ->
-    gen_listener:call(Srv, 'node', 1000).
+    gen_listener:call(Srv, 'node', ?MILLISECONDS_IN_SECOND).
 
 -spec hostname(pid()) -> binary().
 hostname(Srv) ->
@@ -174,7 +174,7 @@ queue_name(_) -> 'undefined'.
 
 -spec other_legs(pid()) -> ne_binaries().
 other_legs(Srv) ->
-    gen_listener:call(Srv, 'other_legs', 1000).
+    gen_listener:call(Srv, 'other_legs', ?MILLISECONDS_IN_SECOND).
 
 -spec event_execute_complete(api_pid(), ne_binary(), ne_binary()) -> 'ok'.
 event_execute_complete('undefined', _CallId, _App) -> 'ok';
@@ -755,11 +755,12 @@ add_leg(Props, LegId, #state{other_legs=Legs
         'false' ->
             lager:debug("added leg ~s to call", [LegId]),
             ConsumerPid = wh_amqp_channel:consumer_pid(),
-            _ = spawn(fun() ->
-                              _ = put('callid', CallId),
-                              wh_amqp_channel:consumer_pid(ConsumerPid),
-                              publish_leg_addition(props:set_value(<<"Other-Leg-Unique-ID">>, CallId, Props))
-                      end),
+            _ = wh_util:spawn(
+                  fun() ->
+                          wh_util:put_callid(CallId),
+                          wh_amqp_channel:consumer_pid(ConsumerPid),
+                          publish_leg_addition(props:set_value(<<"Other-Leg-Unique-ID">>, CallId, Props))
+                  end),
             State#state{other_legs=[LegId|Legs]}
     end.
 
@@ -788,11 +789,12 @@ add_cleg(Props, OtherLeg, LegId, #state{other_legs=Legs
         'false' ->
             lager:debug("added cleg ~s to call", [LegId]),
             ConsumerPid = wh_amqp_channel:consumer_pid(),
-            _ = spawn(fun() ->
-                              _ = put('callid', CallId),
-                              wh_amqp_channel:consumer_pid(ConsumerPid),
-                              publish_cleg_addition(Props, OtherLeg, CallId)
-                      end),
+            _ = wh_util:spawn(
+                  fun() ->
+                          wh_util:put_callid(CallId),
+                          wh_amqp_channel:consumer_pid(ConsumerPid),
+                          publish_cleg_addition(Props, OtherLeg, CallId)
+                  end),
             State#state{other_legs=[LegId|Legs]}
     end.
 
@@ -836,11 +838,12 @@ remove_leg(Props, #state{other_legs=Legs
         'true' ->
             lager:debug("removed leg ~s from call", [LegId]),
             ConsumerPid = wh_amqp_channel:consumer_pid(),
-            _ = spawn(fun() ->
-                              put('callid', CallId),
-                              wh_amqp_channel:consumer_pid(ConsumerPid),
-                              publish_leg_removal(Props)
-                      end),
+            _ = wh_util:spawn(
+                  fun() ->
+                          wh_util:put_callid(CallId),
+                          wh_amqp_channel:consumer_pid(ConsumerPid),
+                          publish_leg_removal(Props)
+                  end),
             State#state{other_legs=lists:delete(LegId, Legs)
                         ,last_removed_leg=LegId
                        }
@@ -956,7 +959,7 @@ execute_queue_commands([Command|Commands], DefJObj, State) ->
         'false' ->
             JObj = wh_json:merge_jobjs(Command, DefJObj),
             'true' = wapi_dialplan:v(JObj),
-            insert_command(State, 'now', JObj),
+            _Ugly = insert_command(State, 'now', JObj),
             execute_queue_commands(Commands, DefJObj, State)
     end.
 

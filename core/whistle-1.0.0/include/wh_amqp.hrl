@@ -35,7 +35,7 @@
 %% For all call cdrs, bind to <<"call.cdr.*">>
 
 -define(AMQP_RECONNECT_INIT_TIMEOUT, 500).
--define(AMQP_RECONNECT_MAX_TIMEOUT, 5000).
+-define(AMQP_RECONNECT_MAX_TIMEOUT, 5 * ?MILLISECONDS_IN_SECOND).
 
 -define(AMQP_DEBUG, 'false').
 
@@ -128,6 +128,11 @@
 -define(EXCHANGE_NODES, <<"nodes">>).
 -define(TYPE_NODES, <<"fanout">>).
 
+%% Registrar Exchange
+%% - For registrar related communication
+-define(EXCHANGE_REGISTRAR, <<"registrar">>).
+-define(TYPE_REGISTRAR, <<"topic">>).
+
 -type wh_amqp_command() :: #'queue.declare'{} | #'queue.delete'{} |
                            #'queue.bind'{} | #'queue.unbind'{} |
                            #'basic.consume'{} | #'basic.cancel'{} |
@@ -135,6 +140,7 @@
                            #'basic.qos'{} |
                            #'exchange.declare'{} |
                            #'confirm.select'{} |
+                           #'channel.flow'{} | #'channel.flow_ok'{} |
                            '_' | 'undefined'.
 -type wh_amqp_commands() :: [wh_amqp_command(),...] | [].
 
@@ -201,7 +207,7 @@
                               ,zone='local' :: atom() | '$1' | '_'
                               ,manager=self() :: pid() | '_'
                               ,tags = [] :: list() | '_'
-                              ,hidden = 'false' :: boolean() | '_'
+                              ,hidden = 'false' :: boolean() | '$3' | '_'
                              }).
 -type wh_amqp_connections() :: #wh_amqp_connections{}.
 -type wh_amqp_connections_list() :: [wh_amqp_connections(), ...] | [].

@@ -63,7 +63,7 @@
 -define(CONSUME_OPTIONS, [{'exclusive', 'false'}]).
 
 -define(SERVER, ?MODULE).
--define(EXPIRE_CHECK, 60000).
+-define(EXPIRE_CHECK, 60 * ?MILLISECONDS_IN_SECOND).
 
 -record(node, {node :: atom()
                ,cookie :: atom()
@@ -115,9 +115,16 @@ add(Node, Opts) when is_list(Opts) -> add(Node, erlang:get_cookie(), Opts);
 add(Node, Cookie) when is_atom(Cookie) -> add(Node, Cookie, [{'cookie', Cookie}]).
 
 add(Node, Cookie, Opts) ->
-    gen_server:call(?MODULE, {'add_fs_node', Node, Cookie, [{'cookie', Cookie}
-                                                            | props:delete('cookie', Opts)
-                                                           ]}, 60000).
+    gen_server:call(?MODULE
+                    ,{'add_fs_node'
+                      ,Node
+                      ,Cookie
+                      ,[{'cookie', Cookie}
+                        | props:delete('cookie', Opts)
+                       ]
+                     }
+                    ,60 * ?MILLISECONDS_IN_SECOND
+                   ).
 
 -spec nodeup(atom()) -> 'ok'.
 nodeup(Node) -> gen_server:cast(?MODULE, {'fs_nodeup', Node}).
@@ -129,6 +136,9 @@ remove(Node) -> gen_server:cast(?MODULE, {'rm_fs_node', Node}).
 -spec connected() -> atoms() | wh_proplist_kv(atom(), gregorian_seconds()).
 connected() ->
     connected('false').
+
+-spec connected('false') -> [atom()];
+               ('true') -> [{atom(), gregorian_seconds()}].
 connected(Verbose) ->
     gen_server:call(?MODULE, {'connected_nodes', Verbose}).
 
@@ -146,9 +156,9 @@ flush(User, Realm) ->
 -spec do_flush(binary()) -> 'ok'.
 do_flush(Args) ->
     lager:debug("flushing xml cache ~s from all FreeSWITCH servers", [Args]),
-    [freeswitch:api(Node, 'xml_flush_cache', Args)
-     || Node <- connected()
-    ],
+    _ = [freeswitch:api(Node, 'xml_flush_cache', Args)
+         || Node <- connected()
+        ],
     'ok'.
 
 -spec is_node_up(atom()) -> boolean().
@@ -386,7 +396,8 @@ handle_call({'connected_nodes', 'true'}, _From, #state{nodes=Nodes}=State) ->
            ],
     {'reply', Resp, State};
 handle_call({'add_fs_node', NodeName, Cookie, Options}, From, State) ->
-    spawn(fun() ->
+    _ = wh_util:spawn(
+          fun() ->
                   try maybe_add_node(NodeName, Cookie, Options, State) of
                       Reply ->
                           gen_server:reply(From, Reply)
@@ -434,7 +445,7 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({'fs_nodeup', NodeName}, State) ->
-    spawn(fun() -> maybe_handle_nodeup(NodeName, State) end),
+    _ = wh_util:spawn(fun() -> maybe_handle_nodeup(NodeName, State) end),
     {'noreply', State};
 handle_cast({'update_node', #node{node=NodeName, connected=Connected}=Node}
             ,#state{nodes=Nodes}=State) ->
@@ -449,11 +460,9 @@ handle_cast({'remove_capabilities', NodeName}, State) ->
     lager:debug("removed ~p capabilities from ~s", [_Rm, NodeName]),
     {'noreply', State};
 handle_cast({'rm_fs_node', NodeName}, State) ->
-    LogId = get('callid'),
-    spawn(fun() ->
-                  put('callid', LogId),
-                  maybe_rm_fs_node(NodeName, State)
-          end),
+    _ = wh_util:spawn(fun() ->
+                              maybe_rm_fs_node(NodeName, State)
+                      end),
     {'noreply', State};
 handle_cast(_Cast, State) ->
     lager:debug("unhandled cast: ~p", [_Cast]),
@@ -479,7 +488,7 @@ handle_info('expire_sip_subscriptions', Cache) ->
     _ = erlang:send_after(?EXPIRE_CHECK, self(), 'expire_sip_subscriptions'),
     {'noreply', Cache};
 handle_info({'nodedown', NodeName}, State) ->
-    spawn(fun() -> maybe_handle_nodedown(NodeName, State) end),
+    _ = wh_util:spawn(fun() -> maybe_handle_nodedown(NodeName, State) end),
     call_control_fs_nodedown(NodeName),
     {'noreply', State};
 handle_info({'DOWN', Ref, 'process', Pid, _Reason}, #state{init_pidref={Pid, Ref}}=State) ->
@@ -754,21 +763,21 @@ start_preconfigured_servers() ->
     case ecallmgr_config:get(<<"fs_nodes">>) of
         [] ->
             lager:info("no preconfigured servers available. Is the sysconf whapp running?"),
-            timer:sleep(5000),
+            timer:sleep(5 * ?MILLISECONDS_IN_SECOND),
             _ = ecallmgr_config:flush(<<"fs_nodes">>),
             start_preconfigured_servers();
         Nodes when is_list(Nodes) ->
             lager:info("successfully retrieved FreeSWITCH nodes to connect with, doing so..."),
-            _ = [spawn(fun() -> start_node_from_config(N) end) || N <- Nodes],
+            _ = [wh_util:spawn(fun() -> start_node_from_config(N) end) || N <- Nodes],
             'ok';
         'undefined' ->
             lager:debug("failed to receive a response for node configs"),
-            timer:sleep(5000),
+            timer:sleep(5 * ?MILLISECONDS_IN_SECOND),
             _ = ecallmgr_config:flush(<<"fs_nodes">>),
             start_preconfigured_servers();
         _E ->
             lager:debug("recieved a non-list for fs_nodes: ~p", [_E]),
-            timer:sleep(5000),
+            timer:sleep(5 * ?MILLISECONDS_IN_SECOND),
             _ = ecallmgr_config:flush(<<"fs_nodes">>),
             start_preconfigured_servers()
     end.
@@ -812,11 +821,9 @@ print_details([{NodeName, Node}|Nodes],Count) ->
             NodeSupPid ->
                 io:format("~-12s: ~p~n", [<<"Supervisor">>, NodeSupPid]),
                 io:format("Workers~n"),
-                [begin
-                     io:format("    ~-15w ~s~n", [Pid, Name])
-                 end
-                 || {Name, Pid, _, _} <- supervisor:which_children(NodeSupPid)
-                ],
+                _ = [io:format("    ~-15w ~s~n", [Pid, Name])
+                     || {Name, Pid, _, _} <- supervisor:which_children(NodeSupPid)
+                    ],
                 print_node_details(NodeName)
         end,
     print_details(Nodes, Count + 1).

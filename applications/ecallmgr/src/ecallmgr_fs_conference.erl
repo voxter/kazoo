@@ -130,19 +130,20 @@ handle_cast('bind_to_events', #state{node=Node}=State) ->
 handle_cast({'gen_listener', {'created_queue', <<"ecallmgr_fs_conference">>}}, #state{node=Node}=State) ->
     Self = self(),
     ConsumerPid = wh_amqp_channel:consumer_pid(),
-    spawn(fun() ->
-                  %% This queue is used to round-robin conference commands
-                  %% between listeners that have established connections
-                  %% to the conference focus when the upstream whapp
-                  %% knows the conference focus...
-                  wh_amqp_channel:consumer_pid(ConsumerPid),
-                  QueueName = wapi_conference:focus_queue_name(Node),
-                  Options = [{'queue_options', [{'exclusive', 'false'}]}
-                             ,{'consume_options', [{'exclusive', 'false'}]}
-                            ],
-                  Bindings= [{'self', []}],
-                  gen_listener:add_queue(Self, QueueName, Options, Bindings)
-          end),
+    wh_util:spawn(
+      fun() ->
+              %% This queue is used to round-robin conference commands
+              %% between listeners that have established connections
+              %% to the conference focus when the upstream whapp
+              %% knows the conference focus...
+              wh_amqp_channel:consumer_pid(ConsumerPid),
+              QueueName = wapi_conference:focus_queue_name(Node),
+              Options = [{'queue_options', [{'exclusive', 'false'}]}
+                         ,{'consume_options', [{'exclusive', 'false'}]}
+                        ],
+              Bindings= [{'self', []}],
+              gen_listener:add_queue(Self, QueueName, Options, Bindings)
+      end),
     {'noreply', State};
 handle_cast({'gen_listener',{'created_queue',_QueueName}}, State) ->
     {'noreply', State};
@@ -169,7 +170,6 @@ handle_info({'event', ['undefined' | Props]}, #state{node=Node}=State) ->
             {'continue', CustomProps} ->
                 send_conference_event(Action, Props, CustomProps)
         end,
-    process_conference_event(Action, Props, Node),
     {'noreply', State};
 handle_info({'event', [CallId | Props]}, #state{node=Node}=State) ->
     Action = props:get_value(<<"Action">>, Props),
@@ -755,9 +755,9 @@ safe_integer_get(Key, Props, Default) ->
 -spec relay_event(wh_proplist()) -> 'ok'.
 relay_event(Props) ->
     ConferenceName = props:get_value(<<"Conference-Name">>, Props),
-    [relay_event(UUID, Node, Props)
-     || #participant{uuid=UUID, node=Node} <- ecallmgr_fs_conferences:participants(ConferenceName)
-    ],
+    _ = [relay_event(UUID, Node, Props)
+         || #participant{uuid=UUID, node=Node} <- ecallmgr_fs_conferences:participants(ConferenceName)
+        ],
     'ok'.
 
 -spec relay_event(ne_binary(), atom(), wh_proplist()) -> 'ok'.

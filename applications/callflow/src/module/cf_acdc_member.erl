@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz
+%%% @copyright (C) 2012-2015, 2600Hz
 %%% @doc
 %%%
 %%% Data: {
@@ -9,6 +9,7 @@
 %%% @end
 %%% @contributors
 %%%   James Aimonetti
+%%%   KAZOO-3596: Sponsored by GTNetwork LLC, implemented by SIPLABS LLC
 %%%-------------------------------------------------------------------
 -module(cf_acdc_member).
 
@@ -24,7 +25,7 @@
 -record(member_call, {call              :: whapps_call:call()
                       ,queue_id         :: api_binary()
                       ,config_data = [] :: wh_proplist()
-                      ,max_wait = 60000 :: max_wait()
+                      ,max_wait = 60 * ?MILLISECONDS_IN_SECOND :: max_wait()
                      }).
 -type member_call() :: #member_call{}.
 
@@ -38,10 +39,13 @@ handle(Data, Call) ->
     QueueId = maybe_use_variable(Data, Call),
     lager:info("sending call to queue ~s", [QueueId]),
 
+    Priority = lookup_priority(Data, Call),
+
     MemberCall = props:filter_undefined(
                    [{<<"Account-ID">>, whapps_call:account_id(Call)}
                     ,{<<"Queue-ID">>, QueueId}
                     ,{<<"Call">>, whapps_call:to_json(update_caller_id(Call))}
+                    ,{<<"Member-Priority">>, Priority}
                     | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
                    ]),
 
@@ -81,6 +85,16 @@ maybe_use_variable(Data, Call) ->
                 {'ok', _} -> Value;
                 _ -> wh_json:get_value(<<"id">>, Data)
             end
+    end.
+
+-spec lookup_priority(wh_json:object(), whapps_call:call()) -> api_binary().
+lookup_priority(Data, Call) ->
+    FromData = wh_json:get_integer_value(<<"priority">>, Data),
+    FromCall = whapps_call:custom_channel_var(<<"Call-Priority">>, Call),
+    case {FromData, FromCall} of
+        {FromData, _} when is_integer(FromData) -> FromData;
+        {_, FromCall} when is_binary(FromCall) -> wh_util:to_integer(FromCall);
+        _ -> 'undefined'
     end.
 
 -spec update_caller_id(whapps_call:call()) -> whapps_call:call().
@@ -180,7 +194,7 @@ process_message(#member_call{call=Call}=MC, Timeout, Start, Wait, JObj, {<<"call
             lager:info("caller pressed the exit key(~s), moving to next callflow action", [DigitPressed]),
             cancel_member_call(Call, <<"dtmf_exit">>),
             _ = whapps_call_command:flush_dtmf(Call),
-            timer:sleep(1000),
+            timer:sleep(?MILLISECONDS_IN_SECOND),
             cf_exe:continue(Call);
         'false' ->
             lager:info("caller pressed ~s, ignoring", [DigitPressed]),
@@ -195,7 +209,7 @@ process_message(MC, Timeout, Start, Wait, _JObj, _Type) ->
 %% convert from seconds to milliseconds, or infinity
 -spec max_wait(integer()) -> max_wait().
 max_wait(N) when N < 1 -> 'infinity';
-max_wait(N) -> N * 1000.
+max_wait(N) -> N * ?MILLISECONDS_IN_SECOND.
 
 max_queue_size(N) when is_integer(N), N > 0 -> N;
 max_queue_size(_) -> 0.

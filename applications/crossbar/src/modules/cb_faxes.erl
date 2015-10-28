@@ -121,12 +121,15 @@ allowed_methods(?INCOMING, _Id, ?ATTACHMENT) ->
 -spec resource_exists(path_token(), path_token(), path_token()) -> 'true'.
 
 resource_exists() -> 'true'.
+
 resource_exists(?SMTP_LOG) -> 'true';
 resource_exists(?INCOMING) -> 'true';
 resource_exists(?OUTGOING) -> 'true'.
+
 resource_exists(?SMTP_LOG, _Id) -> 'true';
 resource_exists(?INCOMING, _Id) -> 'true';
 resource_exists(?OUTGOING, _Id) -> 'true'.
+
 resource_exists(?INCOMING, _Id, ?ATTACHMENT) -> 'true'.
 
 -spec content_types_accepted(cb_context:context()) -> cb_context:context().
@@ -235,7 +238,7 @@ validate_incoming_fax_attachment(Context, Id, ?HTTP_GET) ->
     load_fax_binary(Id, Context);
 validate_incoming_fax_attachment(Context, Id, ?HTTP_DELETE) ->
     load_incoming_fax_doc(Id, Context).
-    
+
 
 %%--------------------------------------------------------------------
 %% @public
@@ -281,7 +284,7 @@ patch(Context, ?OUTGOING, _) ->
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
-%% If the HTTP verib is DELETE, execute the actual action, usually a db delete
+%% If the HTTP verb is DELETE, execute the actual action, usually a db delete
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(cb_context:context(), path_token(), path_token()) -> cb_context:context().
@@ -297,7 +300,7 @@ delete(Context, ?INCOMING, Id, ?ATTACHMENT) ->
                         crossbar_doc:delete_attachment(Id, AName, Ctx)
                 end
                , Context, ANames).
-    
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -339,7 +342,7 @@ get_delivered_date(JObj) ->
     case wh_json:get_value(<<"pvt_delivered_date">>, JObj) of
         'undefined' ->
             case wh_json:get_value(<<"pvt_job_status">>, JObj) of
-                <<"completed">> -> wh_json:get_value(<<"pvt_modified">>, JObj);
+                <<"completed">> -> wh_doc:modified(JObj);
                 _ -> 'undefined'
             end;
         Date -> Date
@@ -475,8 +478,8 @@ incoming_summary(Context) ->
 -spec get_incoming_view_and_filter(wh_json:object()) ->
           {ne_binary(), api_binaries(), api_binaries()}.
 get_incoming_view_and_filter(JObj) ->
-    Id = wh_json:get_value(<<"_id">>, JObj),
-    case wh_json:get_value(<<"pvt_type">>, JObj) of
+    Id = wh_doc:id(JObj),
+    case wh_doc:type(JObj) of
         <<"faxbox">> -> {?CB_LIST_BY_FAXBOX, [Id], 'undefined'};
         <<"user">> -> {?CB_LIST_BY_OWNERID, [Id], 'undefined'};
         _Else -> {?CB_LIST_ALL, 'undefined', [wh_json:new()]}
@@ -543,10 +546,10 @@ set_fax_binary(Context, AttachmentId) ->
 outgoing_summary(Context) ->
     JObj = cb_context:doc(Context),
     {View, ViewOptions} =
-        case wh_json:get_value(<<"pvt_type">>, JObj) of
+        case wh_doc:type(JObj) of
             <<"faxbox">> ->
                 {?CB_LIST_BY_FAXBOX
-                 ,[{'key', wh_json:get_value(<<"_id">>, JObj)}
+                 ,[{'key', wh_doc:id(JObj)}
                    ,'include_docs'
                   ]};
             _Else ->
@@ -563,7 +566,8 @@ outgoing_summary(Context) ->
                            ,fun normalize_view_results/2
                           ).
 
--spec normalize_view_results(wh_json:object(), wh_json:objects()) -> wh_json:objects().
+-spec normalize_view_results(wh_json:object(), wh_json:objects()) ->
+                                    wh_json:objects().
 normalize_view_results(JObj, Acc) ->
     [wh_json:get_value(<<"value">>, JObj)|Acc].
 
@@ -573,7 +577,8 @@ normalize_view_results(JObj, Acc) ->
 %% Normalizes the resuts of a view
 %% @end
 %%--------------------------------------------------------------------
--spec normalize_incoming_view_results(wh_json:object(), wh_json:objects()) -> wh_json:objects().
+-spec normalize_incoming_view_results(wh_json:object(), wh_json:objects()) ->
+                                             wh_json:objects().
 normalize_incoming_view_results(JObj, Acc) ->
     [wh_json:public_fields(wh_json:get_value(<<"doc">>, JObj))|Acc].
 

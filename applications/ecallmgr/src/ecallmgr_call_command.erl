@@ -507,9 +507,9 @@ get_fs_app(Node, UUID, JObj, <<"redirect">>) ->
 
 %% TODO: can we depreciate this command? It was prior to ecallmgr_fs_query....dont think anything is using it.
 get_fs_app(Node, UUID, JObj, <<"fetch">>) ->
-    spawn(fun() ->
-                  send_fetch_call_event(Node, UUID, JObj)
-          end),
+    _ = wh_util:spawn(fun() ->
+                              send_fetch_call_event(Node, UUID, JObj)
+                      end),
     {<<"fetch">>, 'noop'};
 
 get_fs_app(Node, UUID, JObj, <<"conference">>) ->
@@ -1023,9 +1023,9 @@ send_detailed_alert(Node, UUID, File, Type, Reason) ->
 
 -spec send_fs_store(atom(), ne_binary(), 'put' | 'post') -> fs_api_ret().
 send_fs_store(Node, Args, 'put') ->
-    freeswitch:api(Node, 'http_put', wh_util:to_list(Args), 120000);
+    freeswitch:api(Node, 'http_put', wh_util:to_list(Args), 120 * ?MILLISECONDS_IN_SECOND);
 send_fs_store(Node, Args, 'post') ->
-    freeswitch:api(Node, 'http_post', wh_util:to_list(Args), 120000).
+    freeswitch:api(Node, 'http_post', wh_util:to_list(Args), 120 * ?MILLISECONDS_IN_SECOND).
 
 -spec send_fs_bg_store(atom(), ne_binary(), ne_binary(), ne_binary(), 'put' | 'post', 'store' | 'store_vm' | 'fax') -> fs_api_ret().
 send_fs_bg_store(Node, UUID, File, Args, 'put', 'store') ->

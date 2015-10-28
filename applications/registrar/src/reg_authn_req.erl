@@ -29,27 +29,24 @@ init() -> 'ok'.
 handle_req(JObj, _Props) ->
     'true' = wapi_authn:req_v(JObj),
     _ = wh_util:put_callid(JObj),
-    Username = get_auth_user(JObj),
-    Realm = wapi_authn:get_auth_realm(JObj),
-    lager:debug("trying to authenticate ~s@~s", [Username, Realm]),
-    case lookup_auth_user(Username, Realm, JObj) of
-        {'ok', #auth_user{}=AuthUser} ->
-            send_auth_resp(AuthUser, JObj);
-        {'error', _R} ->
-            lager:notice("auth failure for ~s@~s: ~p"
-                         ,[Username, Realm, _R]
-                        ),
-            send_auth_error(JObj)
-    end.
-
--spec get_auth_user(wh_json:object()) -> ne_binary().
-get_auth_user(JObj) ->
-    case wapi_authn:get_auth_user(JObj) of
-        <<"unknown">> ->
-            To = wh_json:get_value(<<"To">>, JObj,<<"nouser@nodomain">>),
-            [ToUser, _ToDomain] = binary:split(To, <<"@">>),
-            wh_util:to_lower_binary(ToUser);
-        Username -> Username
+    Realm = wh_json:get_value(<<"Auth-Realm">>, JObj, <<"missing.realm">>),
+    case wh_network_utils:is_ipv4(Realm)
+        orelse wh_network_utils:is_ipv6(Realm)
+    of
+        'true' ->
+            lager:debug("realm is an IP address (~s) : skipping", [Realm]);
+        'false' ->
+            Username = wapi_authn:get_auth_user(JObj),
+            lager:debug("trying to authenticate ~s@~s", [Username, Realm]),
+            case lookup_auth_user(Username, Realm, JObj) of
+                {'ok', #auth_user{}=AuthUser} ->
+                    send_auth_resp(AuthUser, JObj);
+                {'error', _R} ->
+                    lager:notice("auth failure for ~s@~s: ~p"
+                                ,[Username, Realm, _R]
+                                ),
+                    send_auth_error(JObj)
+            end
     end.
 
 -spec send_auth_resp(auth_user(), wh_json:object()) -> 'ok'.
@@ -94,7 +91,7 @@ send_auth_error(JObj) ->
     wapi_authn:publish_error(wh_json:get_value(<<"Server-ID">>, JObj), Resp).
 
 -spec create_ccvs(auth_user()) -> wh_json:object().
-create_ccvs(#auth_user{}=AuthUser) ->
+create_ccvs(#auth_user{doc=JObj}=AuthUser) ->
     Props = [{<<"Username">>, AuthUser#auth_user.username}
              ,{<<"Realm">>, AuthUser#auth_user.realm}
              ,{<<"Account-ID">>, AuthUser#auth_user.account_id}
@@ -106,6 +103,7 @@ create_ccvs(#auth_user{}=AuthUser) ->
              ,{<<"Presence-ID">>, maybe_get_presence_id(AuthUser)}
              ,{<<"Suppress-Unregister-Notifications">>, AuthUser#auth_user.suppress_unregister_notifications}
              ,{<<"Register-Overwrite-Notify">>, AuthUser#auth_user.register_overwrite_notify}
+             ,{<<"Pusher-Application">>, wh_json:get_value([<<"push">>, <<"Token-App">>], JObj)}
              | (create_specific_ccvs(AuthUser, AuthUser#auth_user.method)
                  ++ generate_security_ccvs(AuthUser))
             ],
@@ -139,10 +137,10 @@ get_presence_id(AccountDb, DeviceId, OwnerId) ->
 maybe_get_owner_presence_id(AccountDb, DeviceId, OwnerId) ->
     case couch_mgr:open_cache_doc(AccountDb, OwnerId) of
         {'error', _} -> 'undefined';
-        {'ok', JObj} ->
-            case wh_json:get_ne_value(<<"presence_id">>, JObj) of
+        {'ok', UserJObj} ->
+            case kzd_user:presence_id(UserJObj) of
                 'undefined' -> get_device_presence_id(AccountDb, DeviceId);
-                PresenceId -> wh_util:to_binary(PresenceId)
+                PresenceId -> PresenceId
             end
     end.
 
@@ -151,40 +149,43 @@ get_device_presence_id(AccountDb, DeviceId) ->
     case couch_mgr:open_cache_doc(AccountDb, DeviceId) of
         {'error', _} -> 'undefined';
         {'ok', JObj} ->
-            case wh_json:get_ne_value(<<"presence_id">>, JObj) of
+            case kz_device:presence_id(JObj) of
                 'undefined' -> 'undefined';
-                PresenceId -> wh_util:to_binary(PresenceId)
+                PresenceId -> PresenceId
             end
     end.
 
 -spec create_specific_ccvs(auth_user(), ne_binary()) -> wh_proplist().
-create_specific_ccvs(#auth_user{}=AuthUser, ?GSM_ANY_METHOD) ->
-    [{<<"Caller-ID">>, AuthUser#auth_user.msisdn}
-     ,{<<"Caller-ID-Number">>, AuthUser#auth_user.msisdn}
+create_specific_ccvs(#auth_user{msisdn=MSISDN}, ?GSM_ANY_METHOD) ->
+    [{<<"Caller-ID">>, MSISDN}
+     ,{<<"Caller-ID-Number">>, MSISDN}
     ];
 create_specific_ccvs(_, _) -> [].
 
 -spec create_custom_sip_headers(api_binary(), auth_user()) -> api_object().
-create_custom_sip_headers(?GSM_ANY_METHOD, #auth_user{a3a8_kc=KC
-                                                      ,a3a8_sres=SRES
-                                                      ,msisdn=Number
-                                                      ,account_realm=AccountRealm
-                                                      ,realm=Realm
-                                                      ,username=Username
-                                                     }) ->
-    Props = props:filter_undefined(
-              [{<<"P-GSM-Kc">>, KC}
-               ,{<<"P-GSM-SRes">>, SRES}
-               ,{<<"P-Asserted-Identity">>, <<"<sip:", Username/binary, "@", Realm/binary, ">">>}
-               ,{<<"P-Associated-URI">>, get_tel_uri(Number)}
-               ,{<<"P-Associated-URI">>, <<"<sip:", Username/binary, "@", AccountRealm/binary, ">">>}
-               ,{<<"P-Kazoo-Primary-Number">>, Number}
-              ]),
-    case Props of
-        [] -> 'undefined';
-        _ -> wh_json:from_list(Props)
-    end;
+create_custom_sip_headers(?GSM_ANY_METHOD
+                          ,#auth_user{a3a8_kc=KC
+                                      ,a3a8_sres=SRES
+                                      ,msisdn=Number
+                                      ,account_realm=AccountRealm
+                                      ,realm=Realm
+                                      ,username=Username
+                                     }) ->
+    create_custom_sip_headers(
+      props:filter_undefined(
+        [{<<"P-GSM-Kc">>, KC}
+         ,{<<"P-GSM-SRes">>, SRES}
+         ,{<<"P-Asserted-Identity">>, <<"<sip:", Username/binary, "@", Realm/binary, ">">>}
+         ,{<<"P-Associated-URI">>, get_tel_uri(Number)}
+         ,{<<"P-Associated-URI">>, <<"<sip:", Username/binary, "@", AccountRealm/binary, ">">>}
+         ,{<<"P-Kazoo-Primary-Number">>, Number}
+        ])
+     );
 create_custom_sip_headers(?ANY_AUTH_METHOD, _) -> 'undefined'.
+
+-spec create_custom_sip_headers(wh_proplist()) -> api_object().
+create_custom_sip_headers([]) -> 'undefined';
+create_custom_sip_headers(Props) -> wh_json:from_list(Props).
 
 -spec get_tel_uri(api_binary()) -> api_binary().
 get_tel_uri('undefined') -> 'undefined';
@@ -376,8 +377,8 @@ maybe_owner_enabled(JObj) ->
 is_owner_enabled(AccountDb, OwnerId) ->
     Default = whapps_config:get_is_true(?CONFIG_CAT, <<"owner_enabled_default">>, 'true'),
     case couch_mgr:open_cache_doc(AccountDb, OwnerId) of
-        {'ok', JObj} ->
-            case wh_json:is_true(<<"enabled">>, JObj, Default) of
+        {'ok', UserJObj} ->
+            case kzd_user:is_enabled(UserJObj, Default) of
                 'true' -> 'true';
                 'false' ->
                     lager:notice("rejecting authn for disabled owner ~s"
@@ -403,7 +404,7 @@ jobj_to_auth_user(JObj, Username, Realm, Req) ->
                           ,account_db = get_account_db(AuthDoc)
                           ,password = wh_json:get_value(<<"password">>, AuthValue, wh_util:rand_hex_binary(6))
                           ,authorizing_type = wh_json:get_value(<<"pvt_type">>, AuthDoc, <<"anonymous">>)
-                          ,authorizing_id = wh_json:get_value(<<"id">>, JObj)
+                          ,authorizing_id = wh_doc:id(JObj)
                           ,method = wh_util:to_lower_binary(Method)
                           ,owner_id = wh_json:get_value(<<"owner_id">>, AuthDoc)
                           ,suppress_unregister_notifications = wh_json:is_true(<<"suppress_unregister_notifications">>, AuthDoc)
@@ -417,25 +418,19 @@ jobj_to_auth_user(JObj, Username, Realm, Req) ->
 get_auth_value(JObj) ->
     wh_json:get_first_defined([[<<"doc">>,<<"sip">>]
                                ,<<"value">>
-                              ], JObj).
+                              ]
+                              ,JObj
+                             ).
 
 -spec add_account_name(auth_user()) -> auth_user().
-add_account_name(#auth_user{account_id=AccountId
-                            ,account_db='undefined'
-                           }=AuthUser
-                ) ->
-    add_account_name(AuthUser, wh_util:format_account_id(AccountId, 'encoded'));
-add_account_name(#auth_user{account_db=AccountDb}=AuthUser) ->
-    add_account_name(AuthUser, AccountDb).
-
--spec add_account_name(auth_user(), ne_binary()) -> auth_user().
-add_account_name(#auth_user{account_id=AccountId}=AuthUser, AccountDb) ->
-    case couch_mgr:open_cache_doc(AccountDb, AccountId) of
+add_account_name(#auth_user{account_id=AccountId}=AuthUser) ->
+    case kz_account:fetch(AccountId) of
         {'error', _} -> AuthUser;
         {'ok', Account} ->
-            AuthUser#auth_user{account_name=wh_json:get_value(<<"name">>, Account)
-                               ,account_realm=wh_json:get_value(<<"realm">>, Account)
-                               ,account_normalized_realm=wh_json:get_lower_binary(<<"realm">>, Account)
+            Realm = kz_account:realm(Account),
+            AuthUser#auth_user{account_name=kz_account:name(Account)
+                               ,account_realm=Realm
+                               ,account_normalized_realm=wh_util:to_lower_binary(Realm)
                               }
     end.
 

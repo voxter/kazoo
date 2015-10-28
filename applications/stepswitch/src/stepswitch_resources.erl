@@ -21,7 +21,7 @@
 
 -record(gateway, {
            server :: api_binary()
-           ,port :: api_binary()
+           ,port :: api_integer()
            ,realm :: api_binary()
            ,username :: api_binary()
            ,password :: api_binary()
@@ -207,9 +207,13 @@ reverse_lookup(JObj) ->
 
 -spec find_port(wh_json:object()) -> api_integer().
 find_port(JObj) ->
-    wh_json:get_first_defined([<<"From-Network-Port">>
+    case wh_json:get_first_defined([<<"From-Network-Port">>
                                     ,<<"Orig-Port">>
-                                   ], JObj).
+                                   ], JObj)
+    of
+        'undefined' -> 'undefined';
+        Port -> wh_util:to_integer(Port)
+    end.
 
 -spec find_account_id(api_binary(), wh_json:object()) -> api_binary().
 find_account_id(Realm, JObj) ->
@@ -229,33 +233,34 @@ find_account_id(Realm) ->
         {'ok', AccountId} -> AccountId
     end.
 
--spec maybe_find_global(api_binary(), api_binary(), api_binary()) ->
+-spec maybe_find_global(api_binary(), api_integer(), api_binary()) ->
                                {'ok', wh_proplist()} |
                                {'error', 'not_found'}.
 maybe_find_global(IP, Port, Realm) ->
     search_resources(IP, Port, Realm, get()).
 
--spec maybe_find_local(api_binary(), api_binary(), api_binary(), api_binary()) ->
+-spec maybe_find_local(api_binary(), api_integer(), api_binary(), api_binary()) ->
                               {'ok', wh_proplist()} |
                               {'error', 'not_found'}.
 maybe_find_local(_, _, _, 'undefined') -> {'error', 'not_found'};
 maybe_find_local(IP, Port, Realm, AccountId) ->
     search_resources(IP, Port, Realm, get(AccountId)).
 
--spec search_resources(api_binary(), api_binary(), api_binary(), resources()) ->
+-spec search_resources(api_binary(), api_integer(), api_binary(), resources()) ->
                               {'ok', wh_proplist()} |
                               {'error', 'not_found'}.
 search_resources(_IP, _Port, _Realm, []) ->
-    lager:debug("failed to find matching resource for ~s:~s(~s)", [_IP, _Port, _Realm]),
+    lager:debug("failed to find matching resource for ~s:~p(~s)", [_IP, _Port, _Realm]),
     {'error', 'not_found'};
 search_resources(IP, Port, Realm, [#resrc{id=Id
-                                    ,gateways=Gateways
-                                    ,global=Global
-                                   }
-                             | Resources
-                            ]) ->
+                                          ,gateways=Gateways
+                                          ,global=Global
+                                         }
+                                   | Resources
+                                  ]) ->
     case search_gateways(IP, Port, Realm, Gateways) of
-        {'error', 'not_found'} -> search_resources(IP, Port, Realm, Resources);
+        {'error', 'not_found'} ->
+            search_resources(IP, Port, Realm, Resources);
         #gateway{realm=GatewayRealm
                  ,username=Username
                  ,password=Password
@@ -272,7 +277,7 @@ search_resources(IP, Port, Realm, [#resrc{id=Id
             {'ok', Props}
     end.
 
--spec search_gateways(api_binary(), api_binary(), api_binary(), gateways()) ->
+-spec search_gateways(api_binary(), api_integer(), api_binary(), gateways()) ->
                              gateway() |
                              {'error', 'not_found'}.
 search_gateways(_, _, _, []) -> {'error', 'not_found'};
@@ -282,15 +287,37 @@ search_gateways(IP, Port, Realm, [Gateway | Gateways]) ->
         #gateway{}=Gateway -> Gateway
     end.
 
--spec search_gateway(api_binary(), api_binary(), api_binary(), gateway()) ->
+-spec search_gateway(api_binary(), api_integer(), api_binary(), gateway()) ->
                             gateway() |
                             {'error', 'not_found'}.
-search_gateway(IP, Port, _, #gateway{server=IP, port=Port, force_port='true'}=Gateway) when IP =/= 'undefined' andalso Port =/= 'undefined' -> Gateway;
-search_gateway(IP, _, _, #gateway{server=IP, force_port='false'}=Gateway) when IP =/= 'undefined' -> Gateway;
-search_gateway(IP, _, _, #gateway{realm=IP, force_port='false'}=Gateway) when IP =/= 'undefined' -> Gateway;
-search_gateway(_, _, Realm, #gateway{realm=Realm, force_port='false'}=Gateway) when Realm =/= 'undefined' -> Gateway;
-search_gateway(_, _, Realm, #gateway{server=Realm, force_port='false'}=Gateway) when Realm =/= 'undefined' -> Gateway;
-search_gateway(_, _, _, _) -> {'error', 'not_found'}.
+search_gateway(IP, Port, _, #gateway{server=IP
+                                     ,port=Port
+                                     ,force_port='true'
+                                    }=Gateway
+              ) when IP =/= 'undefined' andalso Port =/= 'undefined' ->
+    Gateway;
+search_gateway(IP, _, _, #gateway{server=IP
+                                  ,force_port='false'
+                                 }=Gateway
+              ) when IP =/= 'undefined' ->
+    Gateway;
+search_gateway(IP, _, _, #gateway{realm=IP
+                                  ,force_port='false'
+                                 }=Gateway
+              ) when IP =/= 'undefined' ->
+    Gateway;
+search_gateway(_, _, Realm, #gateway{realm=Realm
+                                     ,force_port='false'
+                                    }=Gateway
+              ) when Realm =/= 'undefined' ->
+    Gateway;
+search_gateway(_, _, Realm, #gateway{server=Realm
+                                     ,force_port='false'
+                                    }=Gateway
+              ) when Realm =/= 'undefined' ->
+    Gateway;
+search_gateway(_, _, _, _) ->
+    {'error', 'not_found'}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -803,22 +830,22 @@ resource_from_jobj(JObj) ->
 
 -spec resource_bypass_media(wh_json:object()) -> boolean().
 resource_bypass_media(JObj) ->
-    Default = whapps_config:get_is_true(<<"stepswitch">>, <<"default_bypass_media">>, 'false'),
+    Default = whapps_config:get_is_true(?SS_CONFIG_CAT, <<"default_bypass_media">>, 'false'),
     wh_json:is_true([<<"media">>, <<"bypass_media">>], JObj, Default).
 
 -spec resource_formatters(wh_json:object()) -> api_objects().
 resource_formatters(JObj) ->
-    Default = whapps_config:get(<<"stepswitch">>, <<"default_formatters">>),
+    Default = whapps_config:get(?SS_CONFIG_CAT, <<"default_formatters">>),
     wh_json:get_value(<<"formatters">>, JObj, Default).
 
 -spec resource_codecs(wh_json:object()) -> ne_binaries().
 resource_codecs(JObj) ->
-    DefaultAudio = whapps_config:get(<<"stepswitch">>, <<"default_audio_codecs">>, []),
-    DefaultVideo = whapps_config:get(<<"stepswitch">>, <<"default_video_codecs">>, []),
+    DefaultAudio = whapps_config:get(?SS_CONFIG_CAT, <<"default_audio_codecs">>, []),
+    DefaultVideo = whapps_config:get(?SS_CONFIG_CAT, <<"default_video_codecs">>, []),
     case wh_json:get_value([<<"media">>, <<"audio">>, <<"codecs">>], JObj, DefaultAudio)
         ++ wh_json:get_value([<<"media">>, <<"video">>, <<"codecs">>], JObj, DefaultVideo)
     of
-        [] -> whapps_config:get(<<"stepswitch">>, <<"default_codecs">>, []);
+        [] -> whapps_config:get(?SS_CONFIG_CAT, <<"default_codecs">>, []);
         Codecs -> Codecs
     end.
 
@@ -853,7 +880,7 @@ resource_cid_rules(JObj) ->
 
 -spec resource_grace_period(wh_json:object() | integer()) -> 0..100.
 resource_grace_period(JObj) when not is_integer(JObj) ->
-    Default = whapps_config:get_integer(<<"stepswitch">>, <<"default_weight">>, 3),
+    Default = whapps_config:get_integer(?SS_CONFIG_CAT, <<"default_weight">>, 3),
     resource_grace_period(wh_json:get_integer_value(<<"grace_period">>, JObj, Default));
 resource_grace_period(GracePeriod) when is_integer(GracePeriod), GracePeriod > 100 -> 100;
 resource_grace_period(GracePeriod) when is_integer(GracePeriod), GracePeriod < 0 -> 0;
@@ -861,7 +888,7 @@ resource_grace_period(GracePeriod) when is_integer(GracePeriod) -> GracePeriod.
 
 -spec resource_weight(wh_json:object() | integer()) -> integer().
 resource_weight(JObj) when not is_integer(JObj) ->
-    Default = whapps_config:get_integer(<<"stepswitch">>, <<"default_weight">>, 1),
+    Default = whapps_config:get_integer(?SS_CONFIG_CAT, <<"default_weight">>, 1),
     resource_weight(wh_json:get_integer_value(<<"weight_cost">>, JObj, Default));
 resource_weight(W) when W > 100 -> 100;
 resource_weight(W) when W < 1 -> 1;
@@ -909,7 +936,7 @@ gateway_from_jobj(JObj, #resrc{is_emergency=IsEmergency
     EndpointType = wh_json:get_ne_value(<<"endpoint_type">>, JObj, <<"sip">>),
     #gateway{endpoint_type=EndpointType
              ,server=wh_json:get_value(<<"server">>, JObj)
-             ,port=wh_json:get_binary_value(<<"port">>, JObj)
+             ,port=wh_json:get_integer_value(<<"port">>, JObj)
              ,realm=wh_json:get_value(<<"realm">>, JObj)
              ,username=wh_json:get_value(<<"username">>, JObj)
              ,password=wh_json:get_value(<<"password">>, JObj)
@@ -933,27 +960,27 @@ gateway_from_jobj(JObj, #resrc{is_emergency=IsEmergency
 
 -spec gateway_route(wh_json:object()) -> api_binary().
 gateway_route(JObj) ->
-    Default = whapps_config:get_binary(<<"stepswitch">>, <<"default_route">>),
+    Default = whapps_config:get_binary(?SS_CONFIG_CAT, <<"default_route">>),
     wh_json:get_ne_value(<<"route">>, JObj, Default).
 
 -spec gateway_prefix(wh_json:object()) -> binary().
 gateway_prefix(JObj) ->
-    Default = whapps_config:get_binary(<<"stepswitch">>, <<"default_prefix">>, <<>>),
+    Default = whapps_config:get_binary(?SS_CONFIG_CAT, <<"default_prefix">>, <<>>),
     wh_json:get_binary_value(<<"prefix">>, JObj, Default).
 
 -spec gateway_suffix(wh_json:object()) -> binary().
 gateway_suffix(JObj) ->
-    Default = whapps_config:get_binary(<<"stepswitch">>, <<"default_suffix">>, <<>>),
+    Default = whapps_config:get_binary(?SS_CONFIG_CAT, <<"default_suffix">>, <<>>),
     wh_json:get_binary_value(<<"suffix">>, JObj, Default).
 
 -spec gateway_caller_id_type(wh_json:object()) -> ne_binary().
 gateway_caller_id_type(JObj) ->
-    Default = whapps_config:get_binary(<<"stepswitch">>, <<"default_caller_id_type">>, <<"external">>),
+    Default = whapps_config:get_binary(?SS_CONFIG_CAT, <<"default_caller_id_type">>, <<"external">>),
     wh_json:get_ne_value(<<"caller_id_type">>, JObj, Default).
 
 -spec gateway_progress_timeout(wh_json:object()) -> integer().
 gateway_progress_timeout(JObj) ->
-    Default = whapps_config:get_integer(<<"stepswitch">>, <<"default_progress_timeout">>, 8),
+    Default = whapps_config:get_integer(?SS_CONFIG_CAT, <<"default_progress_timeout">>, 8),
     wh_json:get_integer_value(<<"progress_timeout">>, JObj, Default).
 
 -spec endpoint_options(wh_json:object(), api_binary()) -> wh_json:object().
@@ -1005,20 +1032,23 @@ endpoint_options(_, _) -> wh_json:new().
 gateway_dialstring(#gateway{route='undefined'
                             ,prefix=Prefix
                             ,suffix=Suffix
-                            ,server=Server
+                           ,server=Server
                             ,port=Port
                            }, Number) ->
-    DialStringPort = case wh_util:is_not_empty(Port) andalso Port =/= <<"5060">> of
-        'true' -> <<":", Port/binary>>;
-        'false' -> <<>>
-    end,
+    DialStringPort =
+        case wh_util:is_not_empty(Port)
+            andalso Port =/= 5060
+        of
+            'true' -> <<":", (wh_util:to_binary(Port))/binary>>;
+            'false' -> <<>>
+        end,
     Route = list_to_binary(["sip:"
                             ,wh_util:to_binary(Prefix)
                             ,Number
                             ,wh_util:to_binary(Suffix)
                             ,"@"
                             ,wh_util:to_binary(Server)
-                            ,DialStringPort
+                            ,wh_util:to_binary(DialStringPort)
                            ]),
     lager:debug("created gateway route ~s", [Route]),
     Route;

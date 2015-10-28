@@ -10,7 +10,6 @@
 -module(cb_notifications).
 
 -export([init/0
-         ,authorize/1
          ,allowed_methods/0, allowed_methods/1, allowed_methods/2
          ,resource_exists/0, resource_exists/1, resource_exists/2
          ,content_types_provided/2
@@ -19,6 +18,8 @@
          ,put/1
          ,post/2, post/3
          ,delete/2
+
+         ,flush/0
         ]).
 
 -ifdef(TEST).
@@ -32,7 +33,9 @@
                                  ]).
 -define(CB_LIST, <<"notifications/crossbar_listing">>).
 -define(PREVIEW, <<"preview">>).
-
+-define(SMTP_LOG, <<"logs">>).
+-define(CB_LIST_SMTP_LOG, <<"notifications/smtp_log">>).
+       
 -define(MACROS, <<"macros">>).
 
 -define(MOD_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".notifications">>).
@@ -52,7 +55,6 @@
 %%--------------------------------------------------------------------
 -spec init() -> 'ok'.
 init() ->
-    _ = crossbar_bindings:bind(<<"*.authorize">>, ?MODULE, 'authorize'),
     _ = crossbar_bindings:bind(<<"*.allowed_methods.notifications">>, ?MODULE, 'allowed_methods'),
     _ = crossbar_bindings:bind(<<"*.resource_exists.notifications">>, ?MODULE, 'resource_exists'),
     _ = crossbar_bindings:bind(<<"*.content_types_provided.notifications">>, ?MODULE, 'content_types_provided'),
@@ -61,37 +63,6 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.execute.put.notifications">>, ?MODULE, 'put'),
     _ = crossbar_bindings:bind(<<"*.execute.post.notifications">>, ?MODULE, 'post'),
     _ = crossbar_bindings:bind(<<"*.execute.delete.notifications">>, ?MODULE, 'delete').
-
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Authorizes the incoming request, returning true if the requestor is
-%% allowed to access the resource, or false if not.
-%% @end
-%%--------------------------------------------------------------------
--spec authorize(cb_context:context()) -> boolean().
--spec authorize(cb_context:context(), ne_binary(), req_nouns()) -> boolean().
-authorize(Context) ->
-    authorize(Context, cb_context:auth_account_id(Context), cb_context:req_nouns(Context)).
-
-authorize(_Context, AuthAccountId, [{<<"notifications">>, _Id}
-                                    ,{<<"accounts">>, [AccountId]}
-                                   ]) ->
-    lager:debug("maybe authz for ~s to modify ~s in ~s", [AuthAccountId, _Id, AccountId]),
-    wh_services:is_reseller(AuthAccountId)
-        andalso wh_util:is_in_account_hierarchy(AuthAccountId, AccountId, 'true');
-authorize(Context, AuthAccountId, [{<<"notifications">>, []}]) ->
-    lager:debug("checking authz on system request to /"),
-    {'ok', MasterAccountId} = whapps_util:get_master_account_id(),
-    cb_context:req_verb(Context) =:= ?HTTP_GET
-        orelse AuthAccountId =:= MasterAccountId;
-authorize(Context, AuthAccountId, [{<<"notifications">>, _Id}]) ->
-    lager:debug("maybe authz for system notification ~s", [_Id]),
-    {'ok', MasterAccountId} = whapps_util:get_master_account_id(),
-    cb_context:req_verb(Context) =:= ?HTTP_GET
-        orelse AuthAccountId =:= MasterAccountId;
-authorize(_Context, _AuthAccountId, _Nouns) ->
-    'false'.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -105,6 +76,8 @@ authorize(_Context, _AuthAccountId, _Nouns) ->
 -spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
+allowed_methods(?SMTP_LOG) ->
+    [?HTTP_GET];
 allowed_methods(_) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE].
 allowed_methods(_, ?PREVIEW) ->
@@ -137,8 +110,23 @@ resource_exists(_Id, ?PREVIEW) -> 'true'.
                                     cb_context:context().
 -spec content_types_provided(cb_context:context(), path_token(), http_method()) ->
                                     cb_context:context().
+content_types_provided(Context, ?SMTP_LOG) ->
+    Context;
 content_types_provided(Context, Id) ->
-    content_types_provided(Context, kz_notification:db_id(Id), cb_context:req_verb(Context)).
+    case cb_context:account_id(Context) of
+        'undefined' ->
+            content_types_provided(
+              cb_context:set_account_db(Context, ?WH_CONFIG_DB)
+              ,kz_notification:db_id(Id)
+              ,cb_context:req_verb(Context)
+             );
+        _Else ->
+            content_types_provided(
+              Context
+              ,kz_notification:db_id(Id)
+              ,cb_context:req_verb(Context)
+             )
+    end.
 
 content_types_provided(Context, Id, ?HTTP_GET) ->
     Context1 = read(Context, Id),
@@ -188,6 +176,8 @@ content_type_from_attachment(_Name, Attachment, Acc) ->
     end.
 
 -spec content_types_accepted(cb_context:context(), path_token()) -> cb_context:context().
+content_types_accepted(Context, ?SMTP_LOG) ->
+    Context;
 content_types_accepted(Context, _Id) ->
     content_types_accepted_for_upload(Context, cb_context:req_verb(Context)).
 
@@ -215,13 +205,50 @@ content_types_accepted_for_upload(Context, _Verb) ->
 -spec validate(cb_context:context(), path_token()) -> cb_context:context().
 -spec validate(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 validate(Context) ->
-    validate_notifications(Context, cb_context:req_verb(Context)).
+    case cb_context:account_id(Context) of
+        'undefined' ->
+            validate_notifications(
+              cb_context:set_account_db(Context, ?WH_CONFIG_DB)
+              ,cb_context:req_verb(Context)
+             );
+        _Else ->
+            validate_notifications(
+              Context
+              ,cb_context:req_verb(Context)
+             )
+    end.
 
+validate(Context, ?SMTP_LOG) ->
+    load_smtp_log(Context);
 validate(Context, Id) ->
-    validate_notification(Context, kz_notification:db_id(Id), cb_context:req_verb(Context)).
+    case cb_context:account_id(Context) of
+        'undefined' ->
+            validate_notification(
+              cb_context:set_account_db(Context, ?WH_CONFIG_DB)
+              ,kz_notification:db_id(Id)
+              ,cb_context:req_verb(Context)
+             );
+        _Else ->
+            validate_notification(
+              Context
+              ,kz_notification:db_id(Id)
+              ,cb_context:req_verb(Context)
+             )
+    end.
 
 validate(Context, Id, ?PREVIEW) ->
-    update_notification(Context, kz_notification:db_id(Id)).
+    case cb_context:account_id(Context) of
+        'undefined' ->
+            update_notification(
+              cb_context:set_account_db(Context, ?WH_CONFIG_DB)
+              ,kz_notification:db_id(Id)
+             );
+        _Else ->
+            update_notification(
+              Context
+              ,kz_notification:db_id(Id)
+             )
+    end.
 
 -spec validate_notifications(cb_context:context(), http_method()) ->
                                     cb_context:context().
@@ -241,23 +268,20 @@ validate_notification(Context, Id, ?HTTP_DELETE) ->
 
 -spec validate_delete_notification(cb_context:context(), path_token()) ->
                                           cb_context:context().
--spec validate_delete_notification(cb_context:context(), path_token(), ne_binary(), ne_binary()) ->
+-spec validate_delete_notification(cb_context:context(), path_token(), ne_binary()) ->
                                           cb_context:context().
 validate_delete_notification(Context, Id) ->
-    {'ok', MasterAccountId} = whapps_util:get_master_account_id(),
-    validate_delete_notification(Context, Id, MasterAccountId, cb_context:account_id(Context)).
+    validate_delete_notification(Context, Id, cb_context:account_id(Context)).
 
-validate_delete_notification(Context, Id, MasterAccountId, MasterAccountId) ->
+validate_delete_notification(Context, Id, 'undefined') ->
     disallow_delete(Context, kz_notification:resp_id(Id));
-validate_delete_notification(Context, Id, _MasterAccountId, 'undefined') ->
-    disallow_delete(Context, kz_notification:resp_id(Id));
-validate_delete_notification(Context, Id, _MasterAccuontId, _AccountId) ->
+validate_delete_notification(Context, Id, _AccountId) ->
     lager:debug("trying to remove notification from account ~s", [_AccountId]),
     read(Context, Id, 'account').
 
 -spec disallow_delete(cb_context:context(), path_token()) -> cb_context:context().
 disallow_delete(Context, Id) ->
-    lager:debug("deleting the master template is disallowed"),
+    lager:debug("deleting the system config template is disallowed"),
     cb_context:add_validation_error(Id
                                     ,<<"disallow">>
                                     ,wh_json:from_list(
@@ -406,10 +430,16 @@ publish_fun(<<"port_request">>) ->
     fun wapi_notifications:publish_port_request/1;
 publish_fun(<<"port_scheduled">>) ->
     fun wapi_notifications:publish_port_scheduled/1;
+publish_fun(<<"port_rejected">>) ->
+    fun wapi_notifications:publish_port_rejected/1;
 publish_fun(<<"port_cancel">>) ->
     fun wapi_notifications:publish_port_cancel/1;
 publish_fun(<<"ported">>) ->
     fun wapi_notifications:publish_ported/1;
+publish_fun(<<"webhook_disabled">>) ->
+    fun wapi_notifications:publish_webhook_disabled/1;
+publish_fun(<<"denied_emergency_bridge">>) ->
+    fun wapi_notifications:publish_denied_emergency_bridge/1;
 publish_fun(_Id) ->
     lager:debug("no wapi_notification:publish_~s/1 defined", [_Id]),
     fun(_Any) -> 'ok' end.
@@ -567,11 +597,11 @@ read(Context, Id) ->
 read(Context, Id, LoadFrom) ->
     Context1 =
         case cb_context:account_db(Context) of
-            'undefined' when LoadFrom =:= 'system'; LoadFrom =:= 'system_migrate' ->
-                lager:debug("no account id, loading ~s from system", [Id]),
+            ?WH_CONFIG_DB when LoadFrom =:= 'system'; LoadFrom =:= 'system_migrate' ->
+                lager:debug("loading ~s from system config", [Id]),
                 read_system(Context, Id);
             _AccountDb ->
-                lager:debug("reading ~s from account first", [Id]),
+                lager:debug("reading ~s from account ~s first", [Id, _AccountDb]),
                 read_account(Context, Id, LoadFrom)
         end,
     case cb_context:resp_status(Context1) of
@@ -583,8 +613,7 @@ read(Context, Id, LoadFrom) ->
 
 -spec read_system(cb_context:context(), ne_binary()) -> cb_context:context().
 read_system(Context, Id) ->
-    {'ok', MasterAccountDb} = whapps_util:get_master_account_db(),
-    crossbar_doc:load(Id, cb_context:set_account_db(Context, MasterAccountDb)).
+    crossbar_doc:load(Id, cb_context:set_account_db(Context, ?WH_CONFIG_DB)).
 
 -spec read_account(cb_context:context(), ne_binary(), load_from()) -> cb_context:context().
 read_account(Context, Id, LoadFrom) ->
@@ -631,7 +660,7 @@ revert_context_to_account(AccountContext, SystemContext) ->
 
 -spec migrate_template_to_account(cb_context:context(), path_token()) -> cb_context:context().
 migrate_template_to_account(Context, Id) ->
-    lager:debug("saving template ~s from master to account ~s", [Id, cb_context:account_id(Context)]),
+    lager:debug("saving template ~s from system config to account ~s", [Id, cb_context:account_id(Context)]),
 
     Template = cb_context:fetch(Context, 'db_doc'),
 
@@ -779,8 +808,7 @@ attachment_filename(Id, Accept) ->
 
 -spec read_system_attachment(cb_context:context(), ne_binary(), ne_binary()) -> cb_context:context().
 read_system_attachment(Context, DocId, Name) ->
-    {'ok', MasterAccountDb} = whapps_util:get_master_account_db(),
-    crossbar_doc:load_attachment(DocId, Name, cb_context:set_account_db(Context, MasterAccountDb)).
+    crossbar_doc:load_attachment(DocId, Name, cb_context:set_account_db(Context, ?WH_CONFIG_DB)).
 
 -spec read_account_attachment(cb_context:context(), ne_binary(), ne_binary()) -> cb_context:context().
 read_account_attachment(Context, DocId, Name) ->
@@ -874,11 +902,10 @@ summary_available(Context) ->
 
 -spec fetch_summary_available(cb_context:context()) -> cb_context:context().
 fetch_summary_available(Context) ->
-    {'ok', MasterAccountDb} = whapps_util:get_master_account_db(),
     Context1 =
         crossbar_doc:load_view(?CB_LIST
                                ,[]
-                               ,cb_context:set_account_db(Context, MasterAccountDb)
+                               ,cb_context:set_account_db(Context, ?WH_CONFIG_DB)
                                ,select_normalize_fun(Context)
                               ),
     cache_available(Context1),
@@ -891,6 +918,16 @@ cache_available(Context) ->
                          ,cb_context:doc(Context)
                          ,[{'origin', [{'db', cb_context:account_db(Context), kz_notification:pvt_type()}]}]
                         ).
+
+-spec flush() -> non_neg_integer().
+flush() ->
+    wh_cache:filter_erase_local(?CROSSBAR_CACHE
+                                ,fun is_cache_key/2
+                               ).
+
+-spec is_cache_key(_, _) -> boolean().
+is_cache_key({?MODULE, 'available'}, _) -> 'true';
+is_cache_key(_K, _V) -> 'false'.
 
 -spec fetch_available() -> {'ok', wh_json:objects()} |
                            {'error', 'not_found'}.
@@ -953,20 +990,47 @@ select_normalize_fun(Context) ->
     Account = cb_context:auth_account_id(Context),
     case wh_util:is_system_admin(Account) of
         'true' -> fun normalize_available_admin/2;
-        'false' -> fun normalize_available_non_admin/2
+        'false' -> fun(JObj, Acc) -> normalize_available_non_admin(JObj, Acc, Context) end
     end.
 
 -spec normalize_available_admin(wh_json:object(), wh_json:objects()) -> wh_json:objects().
--spec normalize_available_non_admin(wh_json:object(), wh_json:objects()) -> wh_json:objects().
 normalize_available_admin(JObj, Acc) ->
-    [wh_json:get_value(<<"value">>, JObj) | Acc].
+    Value = wh_json:get_value(<<"value">>, JObj),
+    case kz_notification:category(Value) of
+        <<"skel">> -> Acc;
+        _Category -> [Value | Acc]
+    end.
 
-normalize_available_non_admin(JObj, Acc) ->
+-spec normalize_available_non_admin(wh_json:object(), wh_json:objects(), cb_context:context()) ->
+                                           wh_json:objects().
+normalize_available_non_admin(JObj, Acc, Context) ->
     Value = wh_json:get_value(<<"value">>, JObj),
     case kz_notification:category(Value) of
         <<"system">> -> Acc;
         <<"skel">> -> Acc;
+        <<"port">> -> normalize_available_port(Value, Acc, Context);
         _Category -> [Value | Acc]
+    end.
+
+-spec normalize_available_port(wh_json:object(), wh_json:objects(), cb_context:context()) ->
+                                      wh_json:objects().
+normalize_available_port(Value, Acc, Context) ->
+    AccountId = cb_context:account_id(Context),
+    AuthAccountId = cb_context:auth_account_id(Context),
+
+    case wh_services:is_reseller(AuthAccountId)
+        andalso cb_port_requests:authority(AccountId)
+    of
+        'false' -> Acc;
+
+        'undefined' -> [Value | Acc];
+        AuthAccountId -> [Value | Acc];
+
+        _OtherAccountId ->
+            lager:debug("another account ~s manages port requests for ~s, not ~s"
+                        ,[_OtherAccountId, AccountId, AuthAccountId]
+                       ),
+            Acc
     end.
 
 %%--------------------------------------------------------------------
@@ -976,11 +1040,10 @@ normalize_available_non_admin(JObj, Acc) ->
 %% @end
 %%--------------------------------------------------------------------
 
--spec master_notification_doc(ne_binary()) -> {'ok', wh_json:object()} |
+-spec system_config_notification_doc(ne_binary()) -> {'ok', wh_json:object()} |
                                               {'error', _}.
-master_notification_doc(DocId) ->
-    {'ok', MasterAccountDb} = whapps_util:get_master_account_db(),
-    couch_mgr:open_cache_doc(MasterAccountDb, DocId).
+system_config_notification_doc(DocId) ->
+    couch_mgr:open_cache_doc(?WH_CONFIG_DB, DocId).
 
 -spec on_successful_validation(api_binary(), cb_context:context()) -> cb_context:context().
 on_successful_validation('undefined', Context) ->
@@ -988,14 +1051,14 @@ on_successful_validation('undefined', Context) ->
 
     DocId = kz_notification:db_id(ReqTemplate),
 
-    case master_notification_doc(DocId) of
+    case system_config_notification_doc(DocId) of
         {'ok', _JObj} ->
             Doc = kz_notification:set_base_properties(ReqTemplate, DocId),
             cb_context:set_doc(Context, Doc);
         {'error', 'not_found'} ->
-            handle_missing_master_notification(Context, DocId, ReqTemplate);
+            handle_missing_system_config_notification(Context, DocId, ReqTemplate);
         {'error', _E} ->
-            lager:debug("error fetching ~s from master account: ~p", [DocId, _E]),
+            lager:debug("error fetching ~s from system config: ~p", [DocId, _E]),
             crossbar_util:response_db_fatal(Context)
     end;
 on_successful_validation(Id, Context) ->
@@ -1014,7 +1077,7 @@ on_successful_validation(Id, Context) ->
             handle_missing_account_notification(CleanedContext, Id, cb_context:req_nouns(CleanedContext));
         {'success', _} -> Context1;
         {_Status, _Code} ->
-            lager:debug("load/merge of ~s failed with ~p / ~p", [_Status, _Code]),
+            lager:debug("load/merge of ~s failed with ~p / ~p", [Id, _Status, _Code]),
             Context1
     end.
 
@@ -1027,33 +1090,29 @@ handle_missing_account_notification(Context, Id, _ReqNouns) ->
     _Context = read_system_for_account(Context, Id, 'system_migrate'),
     on_successful_validation(Id, Context).
 
--spec handle_missing_master_notification(cb_context:context(), ne_binary(), wh_json:object()) ->
+-spec handle_missing_system_config_notification(cb_context:context(), ne_binary(), wh_json:object()) ->
                                                 cb_context:context().
-handle_missing_master_notification(Context, DocId, ReqTemplate) ->
-    {'ok', MasterAccountId} = whapps_util:get_master_account_id(),
+handle_missing_system_config_notification(Context, DocId, ReqTemplate) ->
     case cb_context:account_id(Context) of
         'undefined' ->
-            lager:debug("creating master notification for ~s", [DocId]),
-            create_new_notification(Context, DocId, ReqTemplate, MasterAccountId);
-        MasterAccountId ->
-            lager:debug("creating master notification for ~s", [DocId]),
-            create_new_notification(Context, DocId, ReqTemplate, MasterAccountId);
+            lager:debug("creating system config notification for ~s", [DocId]),
+            create_new_notification(Context, DocId, ReqTemplate);
         _AccountId ->
-            lager:debug("doc ~s does not exist in the master account, not letting ~s create it"
+            lager:debug("doc ~s does not exist in the system config, not letting ~s create it"
                         ,[DocId, _AccountId]
                        ),
             crossbar_util:response_bad_identifier(kz_notification:resp_id(DocId), Context)
     end.
 
--spec create_new_notification(cb_context:context(), ne_binary(), wh_json:object(), ne_binary()) ->
+-spec create_new_notification(cb_context:context(), ne_binary(), wh_json:object()) ->
                                      cb_context:context().
-create_new_notification(Context, DocId, ReqTemplate, AccountId) ->
-    lager:debug("this will create a new template in the master account"),
+create_new_notification(Context, DocId, ReqTemplate) ->
+    lager:debug("this will create a new template in the system config"),
     Doc = kz_notification:set_base_properties(ReqTemplate, DocId),
     cb_context:setters(Context
                        ,[{fun cb_context:set_doc/2, Doc}
-                         ,{fun cb_context:set_account_db/2, wh_util:format_account_id(AccountId, 'encoded')}
-                         ,{fun cb_context:set_account_id/2, AccountId}
+                         ,{fun cb_context:set_account_db/2, ?WH_CONFIG_DB}
+                         ,{fun cb_context:set_account_id/2, ?WH_CONFIG_DB}
                         ]).
 
 -spec clean_req_doc(wh_json:object()) -> wh_json:object().
@@ -1091,3 +1150,19 @@ leak_attachments_fold(_Attachment, Props, Acc) ->
                       ,wh_json:from_list([{<<"length">>, wh_json:get_integer_value(<<"length">>, Props)}])
                       ,Acc
                      ).
+
+-spec load_smtp_log(cb_context:context()) -> cb_context:context().
+load_smtp_log(Context) ->
+    case cb_modules_util:range_modb_view_options(Context) of
+        {'ok', ViewOptions} ->
+            crossbar_doc:load_view(?CB_LIST_SMTP_LOG
+                                   ,['include_docs' | ViewOptions]
+                                   ,Context
+                                   ,fun normalize_view_results/2
+                                  );
+        Ctx -> Ctx
+    end.
+
+-spec normalize_view_results(wh_json:object(), wh_json:objects()) -> wh_json:objects().
+normalize_view_results(JObj, Acc) ->
+    [wh_json:get_value(<<"doc">>, JObj)|Acc].

@@ -37,28 +37,31 @@
 -define(TEMPLATE_HTML_ERROR, ?TEMPLATE_HTML_GROUP("Error Details", "error_details")).
 -define(TEMPLATE_HTML_FLOW, ?TEMPLATE_HTML_GROUP("Callflow", "callflow")).
 
-
 -define(TEMPLATE_HTML_ACCOUNT, "{% if account %}<h2>Account</h2><table cellpadding=\"4\" cellspacing=\"0\" border=\"0\"><tr><td>Account ID: </td><td>{{account.id}}</td></tr><tr><td>Account Name: </td><td>{{account.name}}</td></tr><tr><td>Account Realm: </td><td>{{account.realm}}</td></tr></table>{% endif %}").
 -define(TEMPLATE_HTML_USER, "{% if user %}<h2>Admin</h2><table cellpadding=\"4\" cellspacing=\"0\" border=\"0\"><tr><td>Name: </td><td>{{user.first_name}} {{user.last_name}}</td></tr><tr><td>Email: </td><td>{{user.email}}</td></tr><tr><td>Timezone: </td><td>{{user.timezone}}</td></tr></table>{% endif %}").
 -define(TEMPLATE_HTML_NUMBERS, "{% if account.pvt_wnm_numbers %}<h2>Phone Numbers</h2><ul>{% for number in account.pvt_wnm_numbers %}<li>{{number}}</li>{% endfor %}</ul>{% endif %}").
 -define(TEMPLATE_HTML_SERVICE, "<h2>Service</h2><table cellpadding=\"4\" cellspacing=\"0\" border=\"0\"><tr><td>URL: </td><td>https://apps.2600hz.com/</td></tr><tr><td>Name: </td><td>VoIP Services</td></tr><tr><td>Service Provider: </td><td>2600hz</td></tr></table><p style=\"font-size:9pt;color:#CCCCCC\">Sent from {{system.hostname}}</p>").
 
--define(TEMPLATE_HTML, wh_util:to_binary(lists:flatten(
-          [?TEMPLATE_HTML_HEAD
-           ,?TEMPLATE_HTML_ALERT
-           ,?TEMPLATE_HTML_PRODUCER
-           ,?TEMPLATE_HTML_DETAILS
-           ,?TEMPLATE_HTML_FLOW
-           ,?TEMPLATE_HTML_ERROR
-           ,?TEMPLATE_HTML_KVS
-           ,?TEMPLATE_HTML_CCVS
-           ,?TEMPLATE_HTML_SIPHDR
-           ,?TEMPLATE_HTML_ACCOUNT
-           ,?TEMPLATE_HTML_USER
-           ,?TEMPLATE_HTML_NUMBERS
-           ,?TEMPLATE_HTML_SERVICE
-           ,?TEMPLATE_HTML_TAIL
-           ]))).
+-define(TEMPLATE_HTML, wh_util:to_binary(
+                         lists:flatten(
+                           [?TEMPLATE_HTML_HEAD
+                            ,?TEMPLATE_HTML_ALERT
+                            ,?TEMPLATE_HTML_PRODUCER
+                            ,?TEMPLATE_HTML_DETAILS
+                            ,?TEMPLATE_HTML_FLOW
+                            ,?TEMPLATE_HTML_ERROR
+                            ,?TEMPLATE_HTML_KVS
+                            ,?TEMPLATE_HTML_CCVS
+                            ,?TEMPLATE_HTML_SIPHDR
+                            ,?TEMPLATE_HTML_ACCOUNT
+                            ,?TEMPLATE_HTML_USER
+                            ,?TEMPLATE_HTML_NUMBERS
+                            ,?TEMPLATE_HTML_SERVICE
+                            ,?TEMPLATE_HTML_TAIL
+                           ]
+                          )
+                        )
+       ).
 
 
 -define(TEMPLATE_TEXT_ALERT, "Alert\n{{message}}\n").
@@ -77,21 +80,24 @@
 -define(TEMPLATE_TEXT_NUMBERS, "{% if account.pvt_wnm_numbers %}Phone Numbers\n{% for number in account.pvt_wnm_numbers %}{{number}}\n{% endfor %}\n{% endif %}").
 -define(TEMPLATE_TEXT_SERVICE, "Service\nURL: https://apps.2600hz.com/\nName: VoIP Services\nService Provider: 2600hz\n\nSent from {{system.hostname}}").
 
--define(TEMPLATE_TEXT, wh_util:to_binary(lists:flatten(
-          [?TEMPLATE_TEXT_ALERT
-           ,?TEMPLATE_TEXT_PRODUCER
-           ,?TEMPLATE_TEXT_DETAILS
-           ,?TEMPLATE_TEXT_FLOW
-           ,?TEMPLATE_TEXT_ERROR
-           ,?TEMPLATE_TEXT_KVS
-           ,?TEMPLATE_TEXT_CCVS
-           ,?TEMPLATE_TEXT_SIPHDR
-           ,?TEMPLATE_TEXT_ACCOUNT
-           ,?TEMPLATE_TEXT_USER
-           ,?TEMPLATE_TEXT_NUMBERS
-           ,?TEMPLATE_TEXT_SERVICE
-           ]))).
-
+-define(TEMPLATE_TEXT, wh_util:to_binary(
+                         lists:flatten(
+                           [?TEMPLATE_TEXT_ALERT
+                            ,?TEMPLATE_TEXT_PRODUCER
+                            ,?TEMPLATE_TEXT_DETAILS
+                            ,?TEMPLATE_TEXT_FLOW
+                            ,?TEMPLATE_TEXT_ERROR
+                            ,?TEMPLATE_TEXT_KVS
+                            ,?TEMPLATE_TEXT_CCVS
+                            ,?TEMPLATE_TEXT_SIPHDR
+                            ,?TEMPLATE_TEXT_ACCOUNT
+                            ,?TEMPLATE_TEXT_USER
+                            ,?TEMPLATE_TEXT_NUMBERS
+                            ,?TEMPLATE_TEXT_SERVICE
+                           ]
+                          )
+                        )
+       ).
 
 -define(TEMPLATE_SUBJECT, <<"VoIP Services: {{request.level}} from {{request.node}}">>).
 -define(TEMPLATE_CATEGORY, <<"system">>).
@@ -106,18 +112,18 @@
 -spec init() -> 'ok'.
 init() ->
     wh_util:put_callid(?MODULE),
-    teletype_util:init_template(?TEMPLATE_ID, [{'macros', ?TEMPLATE_MACROS}
-                                               ,{'text', ?TEMPLATE_TEXT}
-                                               ,{'html', ?TEMPLATE_HTML}
-                                               ,{'subject', ?TEMPLATE_SUBJECT}
-                                               ,{'category', ?TEMPLATE_CATEGORY}
-                                               ,{'friendly_name', ?TEMPLATE_NAME}
-                                               ,{'to', ?TEMPLATE_TO}
-                                               ,{'from', ?TEMPLATE_FROM}
-                                               ,{'cc', ?TEMPLATE_CC}
-                                               ,{'bcc', ?TEMPLATE_BCC}
-                                               ,{'reply_to', ?TEMPLATE_REPLY_TO}
-                                              ]).
+    teletype_templates:init(?TEMPLATE_ID, [{'macros', ?TEMPLATE_MACROS}
+                                           ,{'text', ?TEMPLATE_TEXT}
+                                           ,{'html', ?TEMPLATE_HTML}
+                                           ,{'subject', ?TEMPLATE_SUBJECT}
+                                           ,{'category', ?TEMPLATE_CATEGORY}
+                                           ,{'friendly_name', ?TEMPLATE_NAME}
+                                           ,{'to', ?TEMPLATE_TO}
+                                           ,{'from', ?TEMPLATE_FROM}
+                                           ,{'cc', ?TEMPLATE_CC}
+                                           ,{'bcc', ?TEMPLATE_BCC}
+                                           ,{'reply_to', ?TEMPLATE_REPLY_TO}
+                                          ]).
 
 -spec handle_system_alert(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_system_alert(JObj, _Props) ->
@@ -166,7 +172,7 @@ handle_req_as_email(JObj, 'true') ->
 process_req(DataJObj) ->
     lager:debug("template is enabled for account, fetching templates for rendering"),
     %% Load templates
-    process_req(DataJObj, teletype_util:fetch_templates(?TEMPLATE_ID)).
+    process_req(DataJObj, teletype_templates:fetch(?TEMPLATE_ID)).
 
 process_req(DataJObj, Templates) ->
     Macros = [{<<"system">>, teletype_util:system_params()}
@@ -183,9 +189,9 @@ process_req(DataJObj, Templates) ->
                         ],
 
     {'ok', TemplateMetaJObj} =
-        teletype_util:fetch_template_meta(?TEMPLATE_ID
-                                          ,teletype_util:find_account_id(DataJObj)
-                                         ),
+        teletype_templates:fetch_meta(?TEMPLATE_ID
+                                      ,teletype_util:find_account_id(DataJObj)
+                                     ),
 
     Subject =
         teletype_util:render_subject(
@@ -200,6 +206,7 @@ process_req(DataJObj, Templates) ->
                ,?MOD_CONFIG_CAT
               ),
 
+    put('skip_smtp_log', 'true'),
     case teletype_util:send_email(Emails, Subject, RenderedTemplates) of
         'ok' -> teletype_util:send_update(DataJObj, <<"completed">>);
         {'error', Reason} -> teletype_util:send_update(DataJObj, <<"failed">>, Reason)
@@ -214,11 +221,14 @@ details_macros(DataJObj) ->
         Details -> details_groups(wh_json:recursive_to_proplist(Details))
     end.
 
--spec details_groups(list()) -> list().
+-spec details_groups(wh_proplist()) -> wh_proplist().
 details_groups(Details) ->
     details_groups(Details, {<<"details">>, []}).
 
+-spec details_groups(wh_proplist(), {ne_binary(), wh_proplist()}) ->
+                            wh_proplist().
 details_groups([], {_, Acc}) -> Acc;
+
 details_groups([{<<"key_value_store">>, V} | KS], {Group, Acc}) ->
     details_groups(KS, {Group, details_groups(V, {<<"key_store">>, Acc})});
 details_groups([{<<"custom_channel_vars">>, V} | KS], {Group, Acc}) ->
@@ -234,10 +244,12 @@ details_groups([{<<"cf_", _/binary>>,_}=KV | KS], {Group, Acc}) ->
 details_groups([KV | KS], {Group, Acc}) ->
     details_groups(KS, {Group, add_to_group(Group, KV, Acc)}).
 
-add_to_group(K, KV, Acc) ->
-    case props:get_value(K, Acc) of
-        'undefined' -> props:set_value(K, [KV], Acc);
-        Props -> props:set_value(K, props:insert_value(KV, Props), Acc)
+-spec add_to_group(ne_binary(), {wh_json:key(), wh_json:json_term()}, wh_proplist()) ->
+                          wh_proplist().
+add_to_group(Group, KV, Acc) ->
+    case props:get_value(Group, Acc) of
+        'undefined' -> props:set_value(Group,[KV], Acc);
+        Props -> props:set_value(Group, props:insert_value(KV, Props), Acc)
     end.
 
 -spec request_macros(wh_json:object()) -> wh_proplist().

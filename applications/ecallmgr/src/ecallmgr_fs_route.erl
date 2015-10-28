@@ -140,22 +140,22 @@ handle_info({'fetch', Section, _Tag, _Key, _Value, FSId, [CallId | FSData]}, #st
         {'dialplan', <<"REQUEST_PARAMS">>, _SubClass, _Context} ->
             %% TODO: move this to a supervisor somewhere
             lager:info("processing dialplan fetch request ~s (call ~s) from ~s", [FSId, CallId, Node]),
-            spawn(?MODULE, 'process_route_req', [Section, Node, FSId, CallId, FSData]),
+            _ = wh_util:spawn(?MODULE, 'process_route_req', [Section, Node, FSId, CallId, FSData]),
             {'noreply', State, 'hibernate'};
         {'chatplan', <<"CUSTOM">>, <<"KZ::", _/binary>>, _Context} ->
             %% TODO: move this to a supervisor somewhere
             lager:info("processing chatplan fetch request ~s (call ~s) from ~s", [FSId, CallId, Node]),
-            spawn(?MODULE, 'process_route_req', [Section, Node, FSId, CallId, init_message_props(FSData)]),
+            _ = wh_util:spawn(?MODULE, 'process_route_req', [Section, Node, FSId, CallId, init_message_props(FSData)]),
             {'noreply', State, 'hibernate'};
         {'chatplan', <<"REQUEST_PARAMS">>, _SubClass, _Context} ->
             %% TODO: move this to a supervisor somewhere
             lager:info("processing chatplan fetch request ~s (call ~s) from ~s", [FSId, CallId, Node]),
-            spawn(?MODULE, 'process_route_req', [Section, Node, FSId, CallId, init_message_props(FSData)]),
+            _ = wh_util:spawn(?MODULE, 'process_route_req', [Section, Node, FSId, CallId, init_message_props(FSData)]),
             {'noreply', State, 'hibernate'};
         {'chatplan', <<"MESSAGE">>, _SubClass, _Context} ->
             %% TODO: move this to a supervisor somewhere
             lager:info("processing chatplan fetch request ~s (call ~s) from ~s", [FSId, CallId, Node]),
-            spawn(?MODULE, 'process_route_req', [Section, Node, FSId, CallId, init_message_props(FSData)]),
+            _ = wh_util:spawn(?MODULE, 'process_route_req', [Section, Node, FSId, CallId, init_message_props(FSData)]),
             {'noreply', State, 'hibernate'};
         {_, _Other, _, _Context} ->
             lager:debug("ignoring ~s event ~s in context ~s from ~s", [Section, _Other, _Context, Node]),
@@ -243,10 +243,10 @@ process_route_req(Section, Node, FetchId, CallId, Props) ->
 
 -spec search_for_route(atom(), atom(), ne_binary(), ne_binary(), wh_proplist()) -> 'ok'.
 search_for_route(Section, Node, FetchId, CallId, Props) ->
-    _ = spawn('ecallmgr_fs_authz', 'authorize', [props:set_value(<<"Call-Setup">>, <<"true">>, Props)
-                                                 ,CallId
-                                                 ,Node
-                                                ]),
+    _ = wh_util:spawn('ecallmgr_fs_authz', 'authorize', [props:set_value(<<"Call-Setup">>, <<"true">>, Props)
+                                                         ,CallId
+                                                         ,Node
+                                                        ]),
     ReqResp = wh_amqp_worker:call(route_req(CallId, FetchId, Props, Node)
                                   ,fun wapi_route:publish_req/1
                                   ,fun wapi_route:is_actionable_resp/1
@@ -298,7 +298,7 @@ reply_forbidden(Section, Node, FetchId) ->
                                                   ,{<<"Fetch-Section">>, wh_util:to_binary(Section)}
                                                  ]),
     lager:debug("sending XML to ~s: ~s", [Node, XML]),
-    case freeswitch:fetch_reply(Node, FetchId, Section, iolist_to_binary(XML), 3000) of
+    case freeswitch:fetch_reply(Node, FetchId, Section, iolist_to_binary(XML), 3 * ?MILLISECONDS_IN_SECOND) of
         'ok' -> lager:info("node ~s accepted ~s route response for request ~s", [Node, Section, FetchId]);
         {'error', Reason} -> lager:debug("node ~s rejected our ~s route unauthz: ~p", [Node, Section, Reason])
     end.
@@ -308,7 +308,7 @@ reply_affirmative(Section, Node, FetchId, CallId, JObj) ->
     lager:info("received affirmative route response for request ~s", [FetchId]),
     {'ok', XML} = ecallmgr_fs_xml:route_resp_xml(JObj),
     lager:debug("sending XML to ~s: ~s", [Node, XML]),
-    case freeswitch:fetch_reply(Node, FetchId, Section, iolist_to_binary(XML), 3000) of
+    case freeswitch:fetch_reply(Node, FetchId, Section, iolist_to_binary(XML), 3 * ?MILLISECONDS_IN_SECOND) of
         {'error', _Reason} -> lager:debug("node ~s rejected our ~s route response: ~p", [Node, Section, _Reason]);
         'ok' ->
             lager:info("node ~s accepted ~s route response for request ~s", [Node, Section, FetchId]),
@@ -327,7 +327,13 @@ maybe_start_call_handling(Node, FetchId, CallId, JObj) ->
 -spec start_call_handling(atom(), ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
 start_call_handling(Node, FetchId, CallId, JObj) ->
     ServerQ = wh_json:get_value(<<"Server-ID">>, JObj),
-    CCVs = wh_json:get_value(<<"Custom-Channel-Vars">>, JObj, wh_json:new()),
+    CCVs =
+        wh_json:set_values(
+            [{<<"Application-Name">>, wh_json:get_value(<<"App-Name">>, JObj)}
+             ,{<<"Application-Node">>, wh_json:get_value(<<"Node">>, JObj)}
+            ]
+            ,wh_json:get_value(<<"Custom-Channel-Vars">>, JObj, wh_json:new())
+        ),
     _ = ecallmgr_call_sup:start_event_process(Node, CallId),
     _ = ecallmgr_call_sup:start_control_process(Node, CallId, FetchId, ServerQ, CCVs),
     ecallmgr_util:set(Node, CallId, wh_json:to_proplist(CCVs)).

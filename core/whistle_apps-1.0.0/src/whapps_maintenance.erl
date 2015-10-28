@@ -64,7 +64,7 @@
 %%--------------------------------------------------------------------
 -spec rebuild_token_auth() -> 'ok'.
 rebuild_token_auth() ->
-    rebuild_token_auth(5000).
+    rebuild_token_auth(5 * ?MILLISECONDS_IN_SECOND).
 
 -spec rebuild_token_auth(text() | integer()) -> 'ok'.
 rebuild_token_auth(Pause) ->
@@ -81,10 +81,25 @@ rebuild_token_auth(Pause) ->
 %%--------------------------------------------------------------------
 -spec migrate() -> 'no_return'.
 migrate() ->
-    migrate(2000).
+    migrate(2 * ?MILLISECONDS_IN_SECOND).
 
 -spec migrate(text() | integer()) -> 'no_return'.
 migrate(Pause) ->
+    _ = migrate_config_setting(
+          {<<"callflow">>, <<"default_emergency_cid_number">>}
+          ,{<<"stepswitch">>, <<"default_emergency_cid_number">>}
+         ),
+
+    _ = migrate_config_setting(
+          {<<"callflow">>, <<"ensure_valid_emergency_number">>}
+          ,{<<"stepswitch">>, <<"ensure_valid_emergency_cid">>}
+         ),
+
+    _ = migrate_config_setting(
+          {<<"trunkstore">>, <<"ensure_valid_emergency_number">>}
+          ,{<<"stepswitch">>, <<"ensure_valid_emergency_cid">>}
+         ),
+
     Databases = get_databases(),
     Accounts = [wh_util:format_account_id(Db, 'encoded')
                 || Db <- Databases,
@@ -137,7 +152,7 @@ blocking_refresh(Pause) ->
 -spec refresh(ne_binaries(), non_neg_integer(), non_neg_integer()) -> 'no_return'.
 refresh() ->
     Databases = get_databases(),
-    refresh(Databases, 2000).
+    refresh(Databases, 2 * ?MILLISECONDS_IN_SECOND).
 
 refresh(Databases, Pause) ->
     Total = length(Databases),
@@ -161,6 +176,8 @@ get_databases() ->
 
 refresh(?WH_CONFIG_DB) ->
     couch_mgr:db_create(?WH_CONFIG_DB),
+    couch_mgr:revise_doc_from_file(?WH_CONFIG_DB, 'teletype', <<"views/notifications.json">>),
+    cleanup_invalid_notify_docs(),
     delete_system_media_references();
 refresh(?KZ_OAUTH_DB) ->
     couch_mgr:db_create(?KZ_OAUTH_DB),
@@ -224,6 +241,10 @@ refresh(?KZ_ACDC_DB) ->
     couch_mgr:db_create(?KZ_ACDC_DB),
     _ = couch_mgr:revise_doc_from_file(?KZ_ACDC_DB, 'crossbar', <<"views/acdc.json">>),
     'ok';
+refresh(?KZ_CCCPS_DB) ->
+    couch_mgr:db_create(?KZ_CCCPS_DB),
+    _ = couch_mgr:revise_doc_from_file(?KZ_CCCPS_DB, 'crossbar', <<"views/cccps.json">>),
+    'ok';
 refresh(?KZ_TOKEN_DB) ->
     _ = couch_mgr:db_create(?KZ_TOKEN_DB),
     couch_mgr:revise_doc_from_file(?KZ_TOKEN_DB, 'crossbar', "views/token_auth.json"),
@@ -237,6 +258,174 @@ refresh(Database) when is_binary(Database) ->
             'ok';
         _Else -> 'ok'
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec cleanup_invalid_notify_docs() -> 'ok'.
+cleanup_invalid_notify_docs() ->
+    _ = couch_mgr:db_archive(<<"system_config">>),
+    case couch_mgr:all_docs(?WH_CONFIG_DB, ['include_docs']) of
+        {'ok', JObjs} -> cleanup_invalid_notify_docs(JObjs);
+        {'error', _R} ->
+            lager:warning("unable to fetch all system config docs: ~p", [_R])
+    end.
+
+-spec cleanup_invalid_notify_docs(wh_json:objects()) -> 'ok'.
+cleanup_invalid_notify_docs([]) -> 'ok';
+cleanup_invalid_notify_docs([JObj|JObjs]) ->
+    Id = wh_json:get_value(<<"id">>, JObj),
+    Doc = wh_json:get_value(<<"doc">>, JObj),
+    Type = wh_json:get_value(<<"pvt_type">>, Doc),
+    _ = maybe_remove_invalid_notify_doc(Type, Id, Doc),
+    cleanup_invalid_notify_docs(JObjs).
+
+-spec maybe_remove_invalid_notify_doc(ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
+maybe_remove_invalid_notify_doc(<<"notification">>, <<"notification", _/binary>>, _) -> 'ok';
+maybe_remove_invalid_notify_doc(<<"notification">>, _, JObj) ->
+    _ = couch_mgr:del_doc(?WH_CONFIG_DB, JObj),
+    'ok';
+maybe_remove_invalid_notify_doc(_, _, _) -> 'ok'.
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% This function will move a system config setting from one location
+%%  to another.  It will create the document if it does not already
+%%  exist and will move per-node settings if they exist.
+%%  In the event that both the source and destination exist but
+%%  have different values it will not make any change.  The parameter
+%%  is only removed from the source after a successsful save of the
+%%  the destiation.
+%% @end
+%%--------------------------------------------------------------------
+-type config_key() :: ne_binary().
+-type migrate_setting() :: {ne_binary(), config_key()}.
+-type migrate_value() :: {ne_binary(), ne_binary(), config_key(), _}.
+-type migrate_values() :: [migrate_value()].
+-spec migrate_config_setting(migrate_setting(), migrate_setting()) ->
+                                    'ok' |
+                                    {'error', _}.
+migrate_config_setting(From, To) ->
+    case remove_config_setting(From) of
+        {'ok', _, []} -> 'ok';
+        {'ok', JObj, Removed} ->
+            migrate_config_setting(JObj, Removed, To);
+        {'error', 'not_found'} -> 'ok';
+        {'error', Reason} -> {'error', {'remove', Reason}}
+    end.
+
+-spec migrate_config_setting(wh_json:object(), migrate_values(), migrate_setting()) ->
+                                    'ok' |
+                                    {'error', _}.
+migrate_config_setting(UpdatedFrom, Removed, To) ->
+    case add_config_setting(To, Removed) of
+        {'ok', UpdatedTo} ->
+            {'ok', _} = couch_mgr:save_doc(?WH_CONFIG_DB, UpdatedTo),
+            {'ok', _} = couch_mgr:save_doc(?WH_CONFIG_DB, UpdatedFrom),
+            'ok';
+        {'error', Reason} -> {'error', {'add', Reason}}
+    end.
+
+-spec add_config_setting(migrate_setting(), migrate_values()) ->
+                                'ok' |
+                                {'error', _}.
+add_config_setting({Id, Setting}, Values) ->
+    add_config_setting(Id, Setting, Values).
+
+-spec add_config_setting(ne_binary(), config_key(), migrate_values()) ->
+                                'ok' |
+                                {'error', _}.
+add_config_setting(Id, Setting, Values) when is_binary(Id) ->
+    case couch_mgr:open_doc(?WH_CONFIG_DB, Id) of
+        {'ok', JObj} -> add_config_setting(JObj, Setting, Values);
+        {'error', 'not_found'} ->
+            add_config_setting(
+              wh_doc:update_pvt_parameters(
+                wh_doc:set_id(wh_json:new(), Id)
+                ,?WH_CONFIG_DB
+                ,[{'type', <<"config">>}]
+               )
+              ,Setting
+              ,Values
+             );
+        {'error', _}=Error -> Error
+    end;
+add_config_setting(JObj, _, []) -> {'ok', JObj};
+add_config_setting(JObj, ToSetting, [{FromId, Node, FromSetting, Value} | Values]) ->
+    ToId  = wh_json:get_value(<<"_id">>, JObj),
+    Key = config_setting_key(Node, ToSetting),
+    case wh_json:get_value(Key, JObj) of
+        'undefined' ->
+            io:format(
+              "migrating setting from ~s ~s.~s to ~s ~s.~s value ~p~n"
+              ,[FromId, Node, FromSetting
+                ,ToId, Node, ToSetting
+                ,Value
+               ]
+             ),
+            add_config_setting(
+              wh_json:set_value(Key, Value, JObj)
+              ,ToSetting
+              ,Values
+             );
+        Value -> add_config_setting(JObj, ToSetting, Values);
+        _Else ->
+            io:format("the system tried to move the parameter listed below but found a different setting already there, you need to correct this disparity manually!~n", []),
+            io:format("  Source~n    db: ~s~n    id: ~s~n    key: ~s ~s~n    value: ~p~n"
+                      ,[?WH_CONFIG_DB, FromId, Node, FromSetting, Value]
+                     ),
+            io:format("  Destination~n    db: ~s~n    id: ~s~n    key: ~s ~s~n    value: ~p~n"
+                      ,[?WH_CONFIG_DB, ToId, Node, ToSetting, _Else]
+                     ),
+            {'error', 'disparity'}
+    end.
+
+-spec remove_config_setting(migrate_setting()) ->
+                                   {'ok', wh_json:object(), migrate_values()} |
+                                   {'error', _}.
+remove_config_setting({Id, Setting}) ->
+    remove_config_setting(Id, Setting).
+
+-spec remove_config_setting(ne_binary() | wh_json:object(), config_key()) ->
+                                   {'ok', wh_json:object(), migrate_values()} |
+                                   {'error', _}.
+remove_config_setting(Id, Setting) when is_binary(Id) ->
+    case couch_mgr:open_doc(?WH_CONFIG_DB, Id) of
+        {'ok', JObj} -> remove_config_setting(JObj, Setting);
+        {'error', _}=Error -> Error
+    end;
+remove_config_setting(JObj, Setting) ->
+    Id = wh_json:get_value(<<"_id">>, JObj),
+    Keys =
+        [{Id, Node, Setting}
+         || Node <- wh_json:get_public_keys(JObj)
+        ],
+    remove_config_setting(Keys, JObj, []).
+
+-spec remove_config_setting([{ne_binary(), ne_binary(), config_key()}], wh_json:object(), migrate_values()) ->
+                                   {'ok', wh_json:object(), migrate_values()}.
+remove_config_setting([], JObj, Removed) ->
+    {'ok', JObj, Removed};
+remove_config_setting([{Id, Node, Setting} | Keys], JObj, Removed) ->
+    Key = config_setting_key(Node, Setting),
+    case wh_json:get_value(Key, JObj) of
+        'undefined' -> remove_config_setting(Keys, JObj, Removed);
+        Value ->
+            remove_config_setting(
+              Keys
+              ,wh_json:delete_key(Key, JObj)
+              ,[{Id, Node, Setting, Value} | Removed]
+             )
+    end.
+
+-spec config_setting_key(ne_binary(), config_key()) -> ne_binaries().
+%% NOTE: to support nested keys, update this merge function
+config_setting_key(Node, Setting) ->
+    [Node, Setting].
 
 %%--------------------------------------------------------------------
 %% @public
@@ -615,9 +804,6 @@ migrate_media(Account) ->
             io:format("unable to fetch private media files in db ~s: ~p~n", [AccountDb, E2])
     end.
 
-
-
-
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
@@ -637,8 +823,7 @@ ensure_aggregate_devices(Accounts).
 -spec ensure_aggregate_device(ne_binary()) -> 'ok'.
 ensure_aggregate_device(Account) ->
     AccountDb = wh_util:format_account_id(Account, 'encoded'),
-    AccountId = wh_util:format_account_id(Account, 'raw'),
-    AccountRealm = crossbar_util:get_account_realm(AccountDb, AccountId),
+    AccountRealm = wh_util:get_account_realm(AccountDb),
     case couch_mgr:get_results(AccountDb, ?DEVICES_CB_LIST, ['include_docs']) of
         {'ok', Devices} ->
             _ = remove_aggregate_devices(AccountDb, AccountRealm, Devices),
@@ -648,10 +833,10 @@ ensure_aggregate_device(Account) ->
 
 -spec refresh_account_devices(ne_binary(), ne_binary(), wh_json:objects()) -> 'ok'.
 refresh_account_devices(AccountDb, AccountRealm, Devices) ->
-    [whapps_util:add_aggregate_device(AccountDb, wh_json:get_value(<<"doc">>, Device))
-     || Device <- Devices,
-        should_aggregate_device(AccountRealm, wh_json:get_value(<<"doc">>, Device))
-    ],
+    _ = [whapps_util:add_aggregate_device(AccountDb, wh_json:get_value(<<"doc">>, Device))
+         || Device <- Devices,
+            should_aggregate_device(AccountRealm, wh_json:get_value(<<"doc">>, Device))
+        ],
     'ok'.
 
 -spec should_aggregate_device(ne_binary(), wh_json:object()) -> boolean().
@@ -661,10 +846,10 @@ should_aggregate_device(AccountRealm, Device) ->
 
 -spec remove_aggregate_devices(ne_binary(), ne_binary(), wh_json:objects()) -> 'ok'.
 remove_aggregate_devices(AccountDb, AccountRealm, Devices) ->
-    [whapps_util:rm_aggregate_device(AccountDb, wh_json:get_value(<<"doc">>, Device))
-     || Device <- Devices,
-        should_remove_aggregate(AccountRealm, wh_json:get_value(<<"doc">>, Device))
-    ],
+    _ = [whapps_util:rm_aggregate_device(AccountDb, wh_json:get_value(<<"doc">>, Device))
+         || Device <- Devices,
+            should_remove_aggregate(AccountRealm, wh_json:get_value(<<"doc">>, Device))
+        ],
     'ok'.
 
 -spec should_remove_aggregate(ne_binary(), wh_json:object()) -> boolean().
@@ -934,17 +1119,17 @@ purge_doc_type([Type|Types], Account) ->
     _ = purge_doc_type(Type, Account),
     purge_doc_type(Types
                    ,Account
-                   ,whapps_config:get_integer(?SYSCONFIG_COUCH, <<"default_chunk_size">>, 1000)
+                   ,whapps_config:get_integer(?SYSCONFIG_COUCH, <<"default_chunk_size">>, ?MILLISECONDS_IN_SECOND)
                   );
 purge_doc_type(Type, Account) when not is_binary(Type) ->
     purge_doc_type(wh_util:to_binary(Type)
                    ,Account
-                   ,whapps_config:get_integer(?SYSCONFIG_COUCH, <<"default_chunk_size">>, 1000)
+                   ,whapps_config:get_integer(?SYSCONFIG_COUCH, <<"default_chunk_size">>, ?MILLISECONDS_IN_SECOND)
                   );
 purge_doc_type(Type, Account) when not is_binary(Account) ->
     purge_doc_type(Type
                    ,wh_util:to_binary(Account)
-                   ,whapps_config:get_integer(?SYSCONFIG_COUCH, <<"default_chunk_size">>, 1000)
+                   ,whapps_config:get_integer(?SYSCONFIG_COUCH, <<"default_chunk_size">>, ?MILLISECONDS_IN_SECOND)
                   ).
 
 purge_doc_type(Type, Account, ChunkSize) ->
@@ -1008,18 +1193,22 @@ delete_system_media_references(DocId, CallResponsesDoc) ->
     case wh_json:map(fun remove_system_media_refs/2, Default) of
         Default -> 'ok';
         NewDefault ->
-           io:format("updating ~s with stripped system_media references~n", [DocId]),
+            io:format("updating ~s with stripped system_media references~n", [DocId]),
             NewCallResponsesDoc = wh_json:set_value(TheKey, NewDefault, CallResponsesDoc),
             _Resp = couch_mgr:save_doc(?WH_CONFIG_DB, NewCallResponsesDoc),
             'ok'
     end.
 
--spec remove_system_media_refs(wh_json:key(), wh_json:json_term()) ->
+-spec remove_system_media_refs(wh_json:key(), wh_json:objects()) ->
                                       {wh_json:key(), wh_json:json_term()}.
 remove_system_media_refs(HangupCause, Config) ->
-    {HangupCause
-     ,wh_json:foldl(fun remove_system_media_ref/3, wh_json:new(), Config)
-    }.
+    case wh_json:is_json_object(Config) of
+        'false' -> {HangupCause, Config};
+        'true' ->
+            {HangupCause
+            ,wh_json:foldl(fun remove_system_media_ref/3, wh_json:new(), Config)
+            }
+    end.
 
 -spec remove_system_media_ref(wh_json:key(), wh_json:json_term(), wh_json:object()) ->
                                      wh_json:object().

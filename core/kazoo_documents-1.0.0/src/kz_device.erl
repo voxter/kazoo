@@ -23,6 +23,9 @@
          ,name/1, name/2, set_name/2
          ,mac_address/1, mac_address/2, set_mac_address/2
          ,language/1, language/2, set_language/2
+         ,device_type/1, device_type/2, set_device_type/2
+         ,owner_id/1, owner_id/2, set_owner_id/2
+         ,timezone/1, timezone/2
 
          ,new/0
         ]).
@@ -30,7 +33,10 @@
 -include("kz_documents.hrl").
 
 -type doc() :: wh_json:object().
--export_type([doc/0]).
+-type docs() :: [doc()].
+-export_type([doc/0
+              ,docs/0
+             ]).
 
 -define(SIP, <<"sip">>).
 -define(USERNAME, [?SIP, <<"username">>]).
@@ -45,6 +51,9 @@
 -define(NAME, <<"name">>).
 -define(MAC_ADDRESS, <<"mac_address">>).
 -define(LANGUAGE, <<"language">>).
+-define(DEVICE_TYPE, <<"device_type">>).
+-define(KEY_OWNER_ID, <<"owner_id">>).
+-define(KEY_TIMEZONE, <<"timezone">>).
 
 -spec new() -> doc().
 new() ->
@@ -163,11 +172,15 @@ set_sip_settings(DeviceJObj, SipJObj) ->
 presence_id(DeviceJObj) ->
     presence_id(DeviceJObj, 'undefined').
 presence_id(DeviceJObj, Default) ->
-    wh_json:get_value(?PRESENCE_ID, DeviceJObj, Default).
+    wh_json:get_binary_value(?PRESENCE_ID, DeviceJObj, Default).
 
 -spec set_presence_id(doc(), ne_binary()) -> doc().
 set_presence_id(DeviceJObj, Id) ->
-    wh_json:set_value(?PRESENCE_ID, Id, DeviceJObj).
+    wh_json:set_value(
+      ?PRESENCE_ID
+      ,wh_util:to_binary(Id)
+      ,DeviceJObj
+     ).
 
 -spec name(doc()) -> api_binary().
 -spec name(doc(), Default) -> ne_binary() | Default.
@@ -201,3 +214,74 @@ language(DeviceJObj, Default) ->
 -spec set_language(doc(), ne_binary()) -> doc().
 set_language(DeviceJObj, Language) ->
     wh_json:set_value(?LANGUAGE, Language, DeviceJObj).
+-spec device_type(doc()) -> api_binary().
+-spec device_type(doc(), Default) -> ne_binary() | Default.
+device_type(DeviceJObj) ->
+    device_type(DeviceJObj, 'undefined').
+device_type(DeviceJObj, Default) ->
+    wh_json:get_value(?DEVICE_TYPE, DeviceJObj, Default).
+
+-spec set_device_type(doc(), ne_binary()) -> doc().
+set_device_type(DeviceJObj, MacAddress) ->
+    wh_json:set_value(?DEVICE_TYPE, MacAddress, DeviceJObj).
+
+-spec owner_id(doc()) -> api_binary().
+-spec owner_id(doc(), Default) -> ne_binary() | Default.
+owner_id(DeviceJObj) ->
+    owner_id(DeviceJObj, 'undefined').
+owner_id(DeviceJObj, Default) ->
+    wh_json:get_value(?KEY_OWNER_ID, DeviceJObj, Default).
+
+-spec set_owner_id(doc(), ne_binary()) -> doc().
+set_owner_id(DeviceJObj, OwnerId) ->
+    wh_json:set_value(?KEY_OWNER_ID, OwnerId, DeviceJObj).
+
+
+-spec timezone(doc()) -> api_binary().
+-spec timezone(doc(), Default) -> ne_binary() | Default.
+timezone(Box) ->
+    timezone(Box, 'undefined').
+timezone(Box, Default) ->
+    case wh_json:get_value(?KEY_TIMEZONE, Box) of
+        'undefined'   -> owner_timezone(Box, Default);
+        <<"inherit">> -> owner_timezone(Box, Default);  %% UI-1808
+        TZ -> TZ
+    end.
+
+-spec owner_timezone(doc(), Default) -> ne_binary() | Default.
+-spec owner_timezone(doc(), Default, kzd_user:doc()) -> ne_binary() | Default.
+owner_timezone(Box, Default) ->
+    case owner(Box) of
+        'undefined'   -> account_timezone(Box, Default);
+        <<"inherit">> -> account_timezone(Box, Default);  %% UI-1808
+        OwnerJObj -> owner_timezone(Box, Default, OwnerJObj)
+    end.
+
+-spec owner(doc()) -> kzd_user:doc() | 'undefined'.
+-spec owner(doc(), ne_binary()) -> kzd_user:doc() | 'undefined'.
+owner(Box) ->
+    case owner_id(Box) of
+        'undefined' -> 'undefined';
+        OwnerId -> owner(Box, OwnerId)
+    end.
+
+owner(Box, OwnerId) ->
+    case couch_mgr:open_cache_doc(wh_doc:account_db(Box)
+                                  ,OwnerId
+                                 )
+    of
+        {'ok', OwnerJObj} -> OwnerJObj;
+        {'error', 'not_found'} -> 'undefined'
+    end.
+
+owner_timezone(Box, Default, OwnerJObj) ->
+    case kzd_user:timezone(OwnerJObj, 'undefined') of
+        'undefined'   -> account_timezone(Box, Default);
+        <<"inherit">> -> account_timezone(Box, Default);  %% UI-1808
+        TZ -> TZ
+    end.
+
+-spec account_timezone(doc(), Default) -> ne_binary() | Default.
+account_timezone(Box, Default) ->
+    {'ok', AccountJObj} = kz_account:fetch(wh_doc:account_id(Box)),
+    kz_account:timezone(AccountJObj, Default).

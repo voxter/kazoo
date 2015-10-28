@@ -52,6 +52,7 @@
                    ,fun add_pvt_created/2
                    ,fun add_pvt_modified/2
                    ,fun add_pvt_request_id/2
+                   ,fun add_pvt_auth/2
                   ]).
 
 -define(PAGINATION_PAGE_SIZE
@@ -138,7 +139,7 @@ load(DocId, Context, Options) ->
 load(_DocId, Context, _Options, 'error') -> Context;
 load(DocId, Context, Opts, _RespStatus) when is_binary(DocId) ->
     OpenFun = case props:get_is_true('use_cache', Opts, 'true') of
-                  'true' -> fun couch_mgr:open_cache_doc/3;
+                  'true' ->  fun couch_mgr:open_cache_doc/3;
                   'false' -> fun couch_mgr:open_doc/3
               end,
     case OpenFun(cb_context:account_db(Context), DocId, Opts) of
@@ -153,7 +154,12 @@ load([_|_]=IDs, Context, Opts, _RespStatus) ->
     Opts1 = [{'keys', IDs}, 'include_docs' | Opts],
     case couch_mgr:all_docs(cb_context:account_db(Context), Opts1) of
         {'error', Error} -> handle_couch_mgr_errors(Error, IDs, Context);
-        {'ok', JObjs} -> handle_couch_mgr_success(extract_included_docs(JObjs), Context)
+        {'ok', JObjs} ->
+            Docs = extract_included_docs(JObjs),
+            cb_context:store(handle_couch_mgr_success(Docs, Context)
+                             ,'db_doc'
+                             ,Docs
+                            )
     end.
 
 -spec handle_successful_load(cb_context:context(), wh_json:object()) -> cb_context:context().
@@ -218,9 +224,7 @@ load_merge(DocId, DataJObj, Context, 'undefined') ->
     Context1 = load(DocId, Context),
     case cb_context:resp_status(Context1) of
         'success' ->
-            lager:debug("loaded doc ~s(~s), merging"
-                        ,[DocId, wh_json:get_value(<<"_rev">>, cb_context:doc(Context1))]
-                       ),
+            lager:debug("loaded doc ~s(~s), merging", [DocId, wh_doc:revision(cb_context:doc(Context1))]),
             merge(DataJObj, cb_context:doc(Context1), Context1);
         _Status -> Context1
     end;
@@ -311,7 +315,9 @@ load_view(#load_view_params{dbs=[]
                             ,context=Context
                            }) ->
     case cb_context:resp_status(Context) of
-        'success' -> handle_couch_mgr_success(cb_context:doc(Context), Context);
+        'success' ->
+            lager:debug("databases exhausted"),
+            handle_couch_mgr_success(cb_context:doc(Context), Context);
         _Status -> Context
     end;
 load_view(#load_view_params{page_size=PageSize
@@ -338,7 +344,7 @@ load_view(#load_view_params{view=View
         props:filter_undefined(
           [{'startkey', StartKey}
            ,{'limit', Limit}
-           | props:delete_keys(['startkey', 'limit'], Options)
+           | props:delete_keys(['startkey', 'limit', 'databases'], Options)
           ]),
 
     IncludeOptions =
@@ -353,6 +359,9 @@ load_view(#load_view_params{view=View
             'false' -> IncludeOptions;
             _V -> props:delete('include_docs', IncludeOptions)
         end,
+
+    lager:debug("couch_mgr:get_results(~p, ~p, ~p)", [Db, View, ViewOptions]),
+
     case couch_mgr:get_results(Db, View, ViewOptions) of
         % There were more dbs, so move to the next one
         {'error', 'not_found'} ->
@@ -380,36 +389,11 @@ limit_by_page_size(N) when is_integer(N) -> N+1;
 limit_by_page_size(<<_/binary>> = B) -> limit_by_page_size(wh_util:to_integer(B)).
 
 limit_by_page_size(Context, PageSize) ->
-    case cb_context:api_version(Context) =/= ?VERSION_1
-        andalso cb_context:req_value(Context, <<"paginate">>)
-    of
-        'undefined' ->
-            lager:debug("pagination enabled by default, checking filters"),
-            maybe_disable_page_size(Context, PageSize);
+    case cb_context:should_paginate(Context) of
+        'true' -> limit_by_page_size(PageSize);
         'false' ->
-            lager:debug("not enabling pagination"),
-            'undefined';
-        ShouldEnable ->
-            case wh_util:is_true(ShouldEnable) of
-                'true' ->
-                    lager:debug("pagination explicitly enabled, getting page size from ~p", [PageSize]),
-                    limit_by_page_size(PageSize);
-                'false' ->
-                    lager:debug("pagination disabled by request or version"),
-                    'undefined'
-            end
-    end.
-
--spec maybe_disable_page_size(cb_context:context(), pos_integer() | api_binary()) ->
-                                     'undefined' | pos_integer().
-maybe_disable_page_size(Context, PageSize) ->
-    case has_qs_filter(Context) of
-        'true' ->
-            lager:debug("request has a query string filter, disabling pagination"),
-            'undefined';
-        'false' ->
-            lager:debug("no query string filter, getting page size from ~p", [PageSize]),
-            limit_by_page_size(PageSize)
+            lager:debug("pagination disabled in context"),
+            'undefined'
     end.
 
 -spec start_key(cb_context:context()) -> wh_json:json_term() | 'undefined'.
@@ -483,14 +467,7 @@ load_attachment(DocId, AName, Context) when is_binary(DocId) ->
                                 ])
     end;
 load_attachment(Doc, AName, Context) ->
-    load_attachment(find_doc_id(Doc), AName, Context).
-
--spec find_doc_id(wh_json:object()) -> api_binary().
-find_doc_id(JObj) ->
-    case wh_json:get_ne_value(<<"_id">>, JObj) of
-        'undefined' -> wh_json:get_ne_value(<<"id">>, JObj);
-        DocId -> DocId
-    end.
+    load_attachment(wh_doc:id(Doc), AName, Context).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -520,21 +497,23 @@ save(Context, [_|_]=JObjs, Options) ->
     JObjs0 = update_pvt_parameters(JObjs, Context),
     case couch_mgr:save_docs(cb_context:account_db(Context), JObjs0, Options) of
         {'error', Error} ->
-            IDs = [wh_json:get_value(<<"_id">>, J) || J <- JObjs],
+            IDs = [wh_doc:id(JObj) || JObj <- JObjs],
             handle_couch_mgr_errors(Error, IDs, Context);
         {'ok', JObj1} ->
             Context1 = handle_couch_mgr_success(JObj1, Context),
-            provisioner_util:maybe_send_contact_list(Context1)
+            _ = wh_util:spawn('provisioner_util', 'maybe_send_contact_list', [Context1]),
+            Context1
     end;
 save(Context, JObj, Options) ->
     JObj0 = update_pvt_parameters(JObj, Context),
     case couch_mgr:save_doc(cb_context:account_db(Context), JObj0, Options) of
         {'error', Error} ->
-            DocId = wh_json:get_value(<<"_id">>, JObj0),
+            DocId = wh_doc:id(JObj0),
             handle_couch_mgr_errors(Error, DocId, Context);
         {'ok', JObj1} ->
             Context1 = handle_couch_mgr_success(JObj1, Context),
-            provisioner_util:maybe_send_contact_list(Context1)
+            _ = wh_util:spawn('provisioner_util', 'maybe_send_contact_list', [Context1]),
+            Context1
     end.
 
 %%--------------------------------------------------------------------
@@ -563,11 +542,12 @@ ensure_saved(Context, JObj, Options) ->
     JObj0 = update_pvt_parameters(JObj, Context),
     case couch_mgr:ensure_saved(cb_context:account_db(Context), JObj0, Options) of
         {'error', Error} ->
-            DocId = wh_json:get_value(<<"_id">>, JObj0),
+            DocId = wh_doc:id(JObj0),
             handle_couch_mgr_errors(Error, DocId, Context);
         {'ok', JObj1} ->
             Context1 = handle_couch_mgr_success(JObj1, Context),
-            provisioner_util:maybe_send_contact_list(Context1)
+            _ = wh_util:spawn('provisioner_util', 'maybe_send_contact_list', [Context1]),
+            Context1
     end.
 
 %%--------------------------------------------------------------------
@@ -673,14 +653,10 @@ delete(Context) ->
     delete(Context, 'soft').
 
 delete(Context, 'soft') ->
-    case couch_mgr:lookup_doc_rev(cb_context:account_db(Context)
-                                  ,wh_doc:id(cb_context:doc(Context))
-                                 )
-    of
-        {'ok', Rev} ->
-            soft_delete(Context, Rev);
-        {'error', _E} ->
-            soft_delete(Context, wh_doc:revision(cb_context:doc(Context)))
+    Doc = cb_context:doc(Context),
+    case couch_mgr:lookup_doc_rev(cb_context:account_db(Context), wh_doc:id(Doc)) of
+        {'ok', Rev}   -> soft_delete(Context, Rev);
+        {'error', _E} -> soft_delete(Context, wh_doc:revision(Doc))
     end;
 delete(Context, 'permanent') ->
     JObj = cb_context:doc(Context),
@@ -720,7 +696,8 @@ do_delete(Context, JObj, CouchFun) ->
                         ,[wh_doc:id(JObj), cb_context:account_db(Context)]
                        ),
             Context1 = handle_couch_mgr_success(JObj, Context),
-            provisioner_util:maybe_send_contact_list(Context1)
+            _ = wh_util:spawn('provisioner_util', 'maybe_send_contact_list', [Context1]),
+            Context1
     end.
 
 %%--------------------------------------------------------------------
@@ -760,7 +737,7 @@ rev_to_etag([_|_])-> 'automatic';
 rev_to_etag([]) -> 'undefined';
 rev_to_etag(Rev) when is_binary(Rev) -> wh_util:to_list(Rev);
 rev_to_etag(JObj) ->
-    case wh_json:get_value(<<"_rev">>, JObj) of
+    case wh_doc:revision(JObj) of
         'undefined' -> 'undefined';
         Rev -> wh_util:to_list(Rev)
     end.
@@ -774,12 +751,39 @@ rev_to_etag(JObj) ->
 -spec update_pagination_envelope_params(cb_context:context(), term(), non_neg_integer() | 'undefined') ->
                                                cb_context:context().
 update_pagination_envelope_params(Context, StartKey, PageSize) ->
-    update_pagination_envelope_params(Context, StartKey, PageSize, 'undefined').
+    update_pagination_envelope_params(Context
+                                      ,StartKey
+                                      ,PageSize
+                                      ,'undefined'
+                                      ,cb_context:should_paginate(Context)
+                                     ).
 
 -spec update_pagination_envelope_params(cb_context:context(), term(), non_neg_integer() | 'undefined', api_binary()) ->
                                                cb_context:context().
 update_pagination_envelope_params(Context, StartKey, PageSize, NextStartKey) ->
-    CurrentPageSize = wh_json:get_value(<<"page_size">>, cb_context:resp_envelope(Context), 0),
+    update_pagination_envelope_params(Context
+                                      ,StartKey
+                                      ,PageSize
+                                      ,NextStartKey
+                                      ,cb_context:should_paginate(Context)
+                                     ).
+
+-spec update_pagination_envelope_params(cb_context:context(), term(), non_neg_integer() | 'undefined', api_binary(), boolean()) ->
+                                               cb_context:context().
+update_pagination_envelope_params(Context, _StartKey, _PageSize, _NextStartKey, 'false') ->
+    lager:debug("pagination disabled, removing resp envelope keys"),
+    cb_context:set_resp_envelope(Context
+                                 ,wh_json:delete_keys(
+                                    [<<"start_key">>
+                                     ,<<"page_size">>
+                                     ,<<"next_start_key">>
+                                    ]
+                                    ,cb_context:resp_envelope(Context)
+                                   )
+                                );
+update_pagination_envelope_params(Context, StartKey, PageSize, NextStartKey, 'true') ->
+    RespEnvelope = cb_context:resp_envelope(Context),
+    CurrentPageSize = wh_json:get_integer_value(<<"page_size">>, RespEnvelope, 0),
     cb_context:set_resp_envelope(Context
                                  ,wh_json:set_values(
                                     props:filter_undefined(
@@ -787,8 +791,9 @@ update_pagination_envelope_params(Context, StartKey, PageSize, NextStartKey) ->
                                        ,{<<"page_size">>, PageSize + CurrentPageSize}
                                        ,{<<"next_start_key">>, NextStartKey}
                                       ])
-                                    ,cb_context:resp_envelope(Context)
-                                   )).
+                                    ,RespEnvelope
+                                   )
+                                ).
 
 -spec handle_couch_mgr_pagination_success(wh_json:objects(), pos_integer() | 'undefined', ne_binary(), load_view_params()) ->
                                                  cb_context:context().
@@ -972,7 +977,7 @@ handle_json_success([_|_]=JObjs, Context, ?HTTP_PUT) ->
                 || JObj <- JObjs,
                    not wh_doc:is_soft_deleted(JObj)
                ],
-    RespHeaders = [{<<"Location">>, wh_json:get_value(<<"_id">>, JObj)}
+    RespHeaders = [{<<"Location">>, wh_doc:id(JObj)}
                    || JObj <- JObjs
                   ] ++ cb_context:resp_headers(Context),
     cb_context:setters(Context
@@ -995,7 +1000,7 @@ handle_json_success([_|_]=JObjs, Context, _Verb) ->
                          | version_specific_success(JObjs, Context)
                         ]);
 handle_json_success(JObj, Context, ?HTTP_PUT) ->
-    RespHeaders = [{<<"Location">>, wh_json:get_value(<<"_id">>, JObj)}
+    RespHeaders = [{<<"Location">>, wh_doc:id(JObj)}
                    | cb_context:resp_headers(Context)
                   ],
     cb_context:setters(Context
@@ -1067,56 +1072,83 @@ handle_couch_mgr_errors(Else, _View, Context) ->
 update_pvt_parameters(JObjs, Context) when is_list(JObjs) ->
     [update_pvt_parameters(JObj, Context) || JObj <- JObjs];
 update_pvt_parameters(JObj0, Context) ->
-    lists:foldl(fun(Fun, JObj) -> Fun(JObj, Context) end, JObj0, ?PVT_FUNS).
+    lists:foldl(fun(Fun, JObj) ->
+                        apply_pvt_fun(Fun, JObj, Context)
+                end
+                ,JObj0
+                ,?PVT_FUNS
+               ).
+
+-type pvt_fun() :: fun((wh_json:object(), cb_context:context()) -> wh_json:object()).
+-spec apply_pvt_fun(pvt_fun(), wh_json:object(), cb_context:context()) ->
+                           wh_json:object().
+apply_pvt_fun(Fun, JObj, Context) ->
+    Fun(JObj, Context).
 
 -spec add_pvt_vsn(wh_json:object(), cb_context:context()) -> wh_json:object().
 add_pvt_vsn(JObj, _) ->
-    case wh_json:get_value(<<"pvt_vsn">>, JObj) of
-        'undefined' -> wh_json:set_value(<<"pvt_vsn">>, ?CROSSBAR_DOC_VSN, JObj);
+    case wh_doc:vsn(JObj) of
+        'undefined' -> wh_doc:set_vsn(JObj, ?CROSSBAR_DOC_VSN);
         _ -> JObj
     end.
 
 -spec add_pvt_account_db(wh_json:object(), cb_context:context()) -> wh_json:object().
 add_pvt_account_db(JObj, Context) ->
-    case wh_json:get_value(<<"pvt_account_db">>, JObj) of
+    case wh_doc:account_db(JObj) of
         'undefined' ->
             case cb_context:account_db(Context) of
                 'undefined' -> JObj;
-                AccountDb -> wh_json:set_value(<<"pvt_account_db">>, AccountDb, JObj)
+                AccountDb -> wh_doc:set_account_db(JObj, AccountDb)
             end;
         _Else -> JObj
     end.
 
 -spec add_pvt_account_id(wh_json:object(), cb_context:context()) -> wh_json:object().
 add_pvt_account_id(JObj, Context) ->
-    case wh_json:get_value(<<"pvt_account_id">>, JObj) of
+    case wh_doc:account_id(JObj) of
         'undefined' ->
             case cb_context:account_id(Context) of
                 'undefined' -> JObj;
-                AccountId -> wh_json:set_value(<<"pvt_account_id">>, AccountId, JObj)
+                AccountId -> wh_doc:set_account_id(JObj, AccountId)
             end;
         _Else -> JObj
     end.
 
 -spec add_pvt_created(wh_json:object(), cb_context:context()) -> wh_json:object().
 add_pvt_created(JObj, _) ->
-    case wh_json:get_value(<<"_rev">>, JObj) of
+    case wh_doc:revision(JObj) of
         'undefined' ->
             Timestamp = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
-            wh_json:set_value(<<"pvt_created">>, Timestamp, JObj);
+            wh_doc:set_created(JObj, Timestamp);
         _ ->
             JObj
     end.
 
--spec add_pvt_modified(wh_json:object(), cb_context:context()) -> wh_json:object().
+-spec add_pvt_modified(wh_json:object(), cb_context:context()) ->
+                              wh_json:object().
 add_pvt_modified(JObj, _) ->
     Timestamp = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
-    wh_json:set_value(<<"pvt_modified">>, Timestamp, JObj).
+    wh_doc:set_modified(JObj, Timestamp).
 
--spec add_pvt_request_id(wh_json:object(), cb_context:context()) -> wh_json:object().
+-spec add_pvt_request_id(wh_json:object(), cb_context:context()) ->
+                                wh_json:object().
 add_pvt_request_id(JObj, Context) ->
     RequestId = cb_context:req_id(Context),
     wh_json:set_value(<<"pvt_request_id">>, RequestId, JObj).
+
+-spec add_pvt_auth(wh_json:object(), cb_context:context()) ->
+                          wh_json:object().
+add_pvt_auth(JObj, Context) ->
+    case cb_context:is_authenticated(Context) of
+        'false' -> wh_json:set_value(<<"pvt_is_authenticated">>, 'false', JObj);
+        'true' ->
+            Values = props:filter_undefined(
+                       [{<<"pvt_is_authenticated">>, 'true'}
+                        ,{<<"pvt_auth_account_id">>, cb_context:auth_account_id(Context)}
+                        ,{<<"pvt_auth_user_id">>, cb_context:auth_user_id(Context)}
+                       ]),
+            wh_json:set_values(Values, JObj)
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1137,7 +1169,9 @@ extract_included_docs(JObjs) ->
 %%--------------------------------------------------------------------
 -spec has_qs_filter(cb_context:context()) -> boolean().
 has_qs_filter(Context) ->
-    lists:any(fun is_filter_key/1, wh_json:to_proplist(cb_context:query_string(Context))).
+    wh_json:any(fun is_filter_key/1
+                ,cb_context:query_string(Context)
+               ).
 
 %%--------------------------------------------------------------------
 %% @private

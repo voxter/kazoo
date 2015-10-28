@@ -44,20 +44,16 @@ start_link() -> supervisor:start_link({'local', ?MODULE}, ?MODULE, []).
 
 -spec status() -> 'ok'.
 status() ->
-    LogId = get('callid'),
     lager:info("ACDc Agents Status"),
     Ws = workers(),
-    _ = spawn(fun() ->
-                      put('callid', LogId),
-                      [acdc_agent_sup:status(Sup) || Sup <- Ws]
-              end),
+    _ = wh_util:spawn(fun() -> [acdc_agent_sup:status(Sup) || Sup <- Ws] end),
     'ok'.
 
 -spec new(wh_json:object()) -> sup_startchild_ret().
 -spec new(ne_binary(), ne_binary()) -> sup_startchild_ret().
 new(JObj) ->
-    case find_agent_supervisor(wh_json:get_value(<<"pvt_account_id">>, JObj)
-                               ,wh_json:get_value(<<"_id">>, JObj)
+    case find_agent_supervisor(wh_doc:account_id(JObj)
+                               ,wh_doc:id(JObj)
                               )
     of
         'undefined' -> supervisor:start_child(?MODULE, [JObj]);

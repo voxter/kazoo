@@ -61,8 +61,8 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    put('callid', ?MODULE),
-    ensure_template(),
+    wh_util:put_callid(?MODULE),
+    _ = ensure_template(),
     lager:debug("omnipresence event presence package started"),
     {'ok', #state{}}.
 
@@ -107,21 +107,15 @@ handle_cast({'omnipresence',{'subscribe_notify', <<"presence">>, User, #omnip_su
             ],
     wh_amqp_worker:cast(Props, fun wapi_presence:publish_probe/1),
     {'noreply', State};
-handle_cast({'omnipresence',{'x_resubscribe_notify', <<"presence">>, User, #omnip_subscription{}=_Subscription}}, State) ->
-    [Username, Realm] = binary:split(User, <<"@">>),
-    Props = [{<<"Username">>, Username}
-             ,{<<"Realm">>, Realm}
-             ,{<<"Event-Package">>, <<"presence">>}
-             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-            ],
-    wh_amqp_worker:cast(Props, fun wapi_presence:publish_probe/1),
-    {'noreply', State};
 handle_cast({'omnipresence',{'presence_update', JObj}}, State) ->
-    _ = spawn(fun() -> presence_event(JObj) end),
+    _ = wh_util:spawn(fun() -> presence_event(JObj) end),
+    {'noreply', State};
+handle_cast({'omnipresence',{'presence_reset', JObj}}, State) ->
+    _ = wh_util:spawn(fun() -> presence_reset(JObj) end),
     {'noreply', State};
 handle_cast({'omnipresence',{'channel_event', JObj}}, State) ->
     EventType = wh_json:get_value(<<"Event-Name">>, JObj),
-    _ = spawn(fun() -> channel_event(EventType, JObj) end),
+    _ = wh_util:spawn(fun() -> channel_event(EventType, JObj) end),
     {'noreply', State};
 handle_cast({'omnipresence', _}, State) ->
     {'noreply', State};
@@ -196,7 +190,7 @@ channel_event(_, _JObj) -> 'ok'.
 handle_new_channel(JObj) ->
     'true' = wapi_call:event_v(JObj),
     wh_util:put_callid(JObj),
-    lager:debug("received channel create, checking for subscribers"),
+    lager:debug("received channel create, checking for presence subscribers"),
     handle_update(JObj, ?PRESENCE_RINGING).
 
 -spec handle_answered_channel(wh_json:object()) -> 'ok'.
@@ -210,7 +204,7 @@ handle_answered_channel(JObj) ->
 handle_destroyed_channel(JObj) ->
     'true' = wapi_call:event_v(JObj),
     wh_util:put_callid(JObj),
-    lager:debug("received channel destroy, checking for subscribers"),
+    lager:debug("received channel destroy, checking for presence subscribers"),
     handle_update(JObj, ?PRESENCE_HANGUP).
 
 -spec handle_disconnected_channel(wh_json:object()) -> 'ok'.
@@ -332,12 +326,12 @@ send_update(<<"amqp">>, _User, Props, Subscriptions) ->
     lager:debug("building SIP presence update: ~p", [Props]),
     Stalkers = lists:usort([St || #omnip_subscription{stalker=St} <- Subscriptions]),
     {'ok', Worker} = wh_amqp_worker:checkout_worker(),
-    [wh_amqp_worker:cast(Props
-                         ,fun(P) -> wapi_omnipresence:publish_update(S, P) end
-                         ,Worker
-                        )
-     || S <- Stalkers
-    ],
+    _ = [wh_amqp_worker:cast(Props
+                             ,fun(P) -> wapi_omnipresence:publish_update(S, P) end
+                             ,Worker
+                            )
+         || S <- Stalkers
+        ],
     wh_amqp_worker:checkin_worker(Worker);
 send_update(<<"sip">>, User, Props, Subscriptions) ->
     lager:debug("building SIP presence update: ~p", [Props]),
@@ -345,18 +339,18 @@ send_update(<<"sip">>, User, Props, Subscriptions) ->
                ,{'content_type', <<"application/pidf+xml">>}
                ,{'subscription_state', 'active'}
               ],
-    [nksip_uac:notify(SubscriptionId
-                      ,[{'contact', Contact}
-                        ,{'route', [Proxy]}
-                        | Options
-                       ]
-                     )
-     || #omnip_subscription{subscription_id=SubscriptionId
-                            ,contact=Contact
-                            ,proxy_route=Proxy
-                           } <- Subscriptions,
-        SubscriptionId =/= 'undefined'
-    ],
+    _ = [nksip_uac:notify(SubscriptionId
+                          ,[{'contact', Contact}
+                            ,{'route', [Proxy]}
+                            | Options
+                           ]
+                         )
+         || #omnip_subscription{subscription_id=SubscriptionId
+                                ,contact=Contact
+                                ,proxy_route=Proxy
+                               } <- Subscriptions,
+            SubscriptionId =/= 'undefined'
+        ],
     lager:debug("sent SIP presence updates").
 
 -spec get_user_channels(ne_binary()) -> list().
@@ -428,7 +422,8 @@ build_variables(User, Props) ->
 -spec build_body(ne_binary(), wh_proplist()) -> ne_binary().
 build_body(User, Props) ->
     Variables = build_variables(User, Props),
-    {'ok', Text} = sub_package_presence:render(Variables),
+    Mod = wh_util:to_atom(<<"sub_package_presence">>, 'true'),
+    {'ok', Text} = Mod:render(Variables),
     Body = wh_util:to_binary(Text),
     binary:replace(Body, <<"\n\n">>, <<"\n">>, ['global']).
 
@@ -438,6 +433,11 @@ ensure_template() ->
     File = lists:concat([BasePath, "/packages/presence.xml"]),
     Mod = wh_util:to_atom(<<"sub_package_presence">>, 'true'),
     {'ok', _CompileResult} = erlydtl:compile(File, Mod, [{'record_info', [{'call', record_info('fields', 'call')}]}]).
+
+-spec presence_reset(wh_json:object()) -> any().
+presence_reset(JObj) ->
+    User = <<(wh_json:get_value(<<"Username">>, JObj))/binary, "@", (wh_json:get_value(<<"Realm">>, JObj))/binary>>,
+    set_presence_state(User, ?PRESENCE_HANGUP).
 
 -spec set_presence_state(ne_binary(), ne_binary()) -> 'ok'.
 set_presence_state(PresenceId, State) ->

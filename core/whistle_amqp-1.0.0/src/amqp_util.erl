@@ -7,6 +7,7 @@
 %%%   James Aimonetti
 %%%   Karl Anderson
 %%%   Edouard Swiac
+%%%   KAZOO-3596: Sponsored by GTNetwork LLC, implemented by SIPLABS LLC
 %%%-------------------------------------------------------------------
 -module(amqp_util).
 
@@ -88,17 +89,32 @@
 -export([unbind_q_from_presence/2]).
 -export([presence_publish/2, presence_publish/3, presence_publish/4]).
 
+-export([registrar_exchange/0]).
+-export([new_registrar_queue/0, new_registrar_queue/1]).
+-export([delete_registrar_queue/1]).
+-export([bind_q_to_registrar/2, bind_q_to_registrar/3]).
+-export([unbind_q_from_registrar/2]).
+-export([registrar_publish/2, registrar_publish/3, registrar_publish/4]).
+
 -export([originate_resource_publish/1, originate_resource_publish/2]).
 
 -export([offnet_resource_publish/1, offnet_resource_publish/2]).
 
--export([configuration_exchange/0, configuration_publish/2, configuration_publish/3, document_change_publish/5, document_change_publish/6]).
--export([document_routing_key/0, document_routing_key/1, document_routing_key/2, document_routing_key/3, document_routing_key/4]).
+-export([configuration_exchange/0
+         ,configuration_publish/2, configuration_publish/3, configuration_publish/4
+         ,document_change_publish/5, document_change_publish/6
+        ]).
+-export([document_routing_key/0, document_routing_key/1
+         ,document_routing_key/2, document_routing_key/3
+         ,document_routing_key/4
+        ]).
 -export([bind_q_to_configuration/2, unbind_q_from_configuration/2]).
 -export([new_configuration_queue/1, new_configuration_queue/2, delete_configuration_queue/1]).
 
 -export([monitor_exchange/0, monitor_publish/3]).
--export([bind_q_to_monitor/2]).
+-export([bind_q_to_monitor/2
+         ,unbind_q_from_monitor/2
+        ]).
 -export([new_monitor_queue/0, new_monitor_queue/1, delete_monitor_queue/1]).
 
 -export([bind_q_to_exchange/3, bind_q_to_exchange/4]).
@@ -117,6 +133,10 @@
 
 -export([is_json/1, is_host_available/0]).
 -export([encode/1]).
+
+-ifdef(TEST).
+-export([trim/3]).
+-endif.
 
 -define(KEY_SAFE(C), ((C >= $a andalso C =< $z) orelse
                      (C >= $A andalso C =< $Z) orelse
@@ -204,10 +224,13 @@ callmgr_publish(Payload, ContentType, RoutingKey, Opts) ->
 
 -spec configuration_publish(ne_binary(), amqp_payload()) -> 'ok'.
 -spec configuration_publish(ne_binary(), amqp_payload(), ne_binary()) -> 'ok'.
+-spec configuration_publish(ne_binary(), amqp_payload(), ne_binary(), wh_proplist()) -> 'ok'.
 configuration_publish(RoutingKey, Payload) ->
     configuration_publish(RoutingKey, Payload, ?DEFAULT_CONTENT_TYPE).
 configuration_publish(RoutingKey, Payload, ContentType) ->
-    basic_publish(?EXCHANGE_CONFIGURATION, RoutingKey, Payload, ContentType).
+    configuration_publish(RoutingKey, Payload, ContentType, []).
+configuration_publish(RoutingKey, Payload, ContentType, Props) ->
+    basic_publish(?EXCHANGE_CONFIGURATION, RoutingKey, Payload, ContentType, Props).
 
 -spec document_change_publish(Action, Db, Type, Id, Payload) -> 'ok' when
       Action :: atom(), %% edited | created | deleted
@@ -334,6 +357,16 @@ conference_publish(Payload, 'event', ConfId, Options, ContentType) ->
 conference_publish(Payload, 'command', ConfId, Options, ContentType) ->
     basic_publish(?EXCHANGE_CONFERENCE, <<?KEY_CONFERENCE_COMMAND/binary, ConfId/binary>>, Payload, ContentType, Options).
 
+-spec registrar_publish(ne_binary(), amqp_payload()) -> 'ok'.
+-spec registrar_publish(ne_binary(), amqp_payload(), ne_binary()) -> 'ok'.
+-spec registrar_publish(ne_binary(), amqp_payload(), ne_binary(), wh_proplist()) -> 'ok'.
+registrar_publish(Routing, Payload) ->
+    registrar_publish(Routing, Payload, ?DEFAULT_CONTENT_TYPE).
+registrar_publish(Routing, Payload, ContentType) ->
+    registrar_publish(Routing, Payload, ContentType, []).
+registrar_publish(Routing, Payload, ContentType, Opts) ->
+    basic_publish(?EXCHANGE_REGISTRAR, Routing, Payload, ContentType, Opts).
+
 %% generic publisher for an Exchange.Queue
 %% Use <<"#">> for a default Queue
 -spec basic_publish(ne_binary(), binary(), amqp_payload()) -> 'ok'.
@@ -451,6 +484,10 @@ monitor_exchange() ->
 conference_exchange() ->
     new_exchange(?EXCHANGE_CONFERENCE, ?TYPE_CONFERENCE).
 
+-spec registrar_exchange() -> 'ok'.
+registrar_exchange() ->
+    new_exchange(?EXCHANGE_REGISTRAR, ?TYPE_REGISTRAR).
+
 %% A generic Exchange maker
 -spec new_exchange(ne_binary(), ne_binary()) -> 'ok'.
 -spec new_exchange(ne_binary(), ne_binary(), wh_proplist()) -> 'ok'.
@@ -510,6 +547,11 @@ new_whapps_queue(Queue) -> new_queue(Queue, [{'nowait', 'false'}]).
 -spec new_presence_queue(binary()) -> ne_binary() | {'error', _}.
 new_presence_queue() -> new_presence_queue(<<>>).
 new_presence_queue(Queue) -> new_queue(Queue, [{'nowait', 'false'}]).
+
+-spec new_registrar_queue() -> ne_binary() | {'error', _}.
+-spec new_registrar_queue(binary()) -> ne_binary() | {'error', _}.
+new_registrar_queue() -> new_registrar_queue(<<>>).
+new_registrar_queue(Queue) -> new_queue(Queue, [{'nowait', 'false'}]).
 
 -spec new_notifications_queue() -> ne_binary() | {'error', _}.
 -spec new_notifications_queue(binary()) -> ne_binary() | {'error', _}.
@@ -633,8 +675,25 @@ new_queue_name() ->
 queue_arguments(Arguments) ->
     Routines = [fun max_length/2
                 ,fun message_ttl/2
+                ,fun max_priority/2
                ],
     lists:foldl(fun(F, Acc) -> F(Arguments, Acc) end, Arguments, Routines).
+
+-spec max_priority(wh_proplist(), amqp_properties()) -> amqp_properties().
+max_priority(Args, Acc) ->
+    Property = props:get_value(<<"x-max-priority">>, Args),
+    Acc1 = props:delete(<<"x-max-priority">>, Acc),
+    case Property of
+        Val when is_integer(Val) ->
+            AMQPValue = trim(0, 255, Val),
+            [{<<"x-max-priority">>, 'byte', AMQPValue}|Acc1];
+        _Else -> Acc1
+    end.
+
+-spec trim(integer(), integer(), integer()) -> integer().
+trim(Min, _  , Val) when Val < Min -> Min;
+trim(_  , Max, Val) when Val > Max -> Max;
+trim(_  , _  , Val)                -> Val.
 
 -spec max_length(wh_proplist(), amqp_properties()) -> amqp_properties().
 max_length(Args, Acc) ->
@@ -649,7 +708,7 @@ max_length(Args, Acc) ->
 -spec message_ttl(wh_proplist(), amqp_properties()) -> amqp_properties().
 message_ttl(Args, Acc) ->
     case props:get_value(<<"x-message-ttl">>, Args) of
-        'undefined' -> [{<<"x-message-ttl">>, 'signedint', 60000}|Acc];
+        'undefined' -> [{<<"x-message-ttl">>, 'signedint', 60 * ?MILLISECONDS_IN_SECOND}|Acc];
         'infinity' -> props:delete(<<"x-message-ttl">>, Acc);
         Value ->
             Acc1 = props:delete(<<"x-message-ttl">>, Acc),
@@ -673,6 +732,7 @@ delete_resource_queue(Queue) -> queue_delete(Queue, []).
 delete_configuration_queue(Queue) -> queue_delete(Queue, []).
 delete_conference_queue(Queue) -> queue_delete(Queue, []).
 delete_monitor_queue(Queue) -> queue_delete(Queue, []).
+delete_registrar_queue(Queue) -> queue_delete(Queue, []).
 
 delete_callevt_queue(CallID) -> delete_callevt_queue(CallID, []).
 delete_callevt_queue(CallID, Prop) ->
@@ -726,6 +786,13 @@ bind_q_to_presence(Queue, Routing) ->
 bind_q_to_presence(Queue, Routing, Options) ->
     bind_q_to_exchange(Queue, Routing, ?EXCHANGE_PRESENCE, Options).
 
+-spec bind_q_to_registrar(ne_binary(), ne_binary()) -> 'ok'.
+-spec bind_q_to_registrar(ne_binary(), ne_binary(), wh_proplist()) -> 'ok'.
+bind_q_to_registrar(Queue, Routing) ->
+    bind_q_to_registrar(Queue, Routing, []).
+bind_q_to_registrar(Queue, Routing, Options) ->
+    bind_q_to_exchange(Queue, Routing, ?EXCHANGE_REGISTRAR, Options).
+
 -spec bind_q_to_notifications(ne_binary(), ne_binary()) -> 'ok'.
 -spec bind_q_to_notifications(ne_binary(), ne_binary(), wh_proplist()) -> 'ok'.
 bind_q_to_notifications(Queue, Routing) ->
@@ -770,6 +837,10 @@ bind_q_to_configuration(Queue, Routing) ->
 -spec bind_q_to_monitor(ne_binary(), ne_binary()) -> 'ok'.
 bind_q_to_monitor(Queue, Routing) ->
     bind_q_to_exchange(Queue, Routing, ?EXCHANGE_MONITOR).
+
+-spec unbind_q_from_monitor(ne_binary(), ne_binary()) -> 'ok'.
+unbind_q_from_monitor(Queue, Routing) ->
+    unbind_q_from_exchange(Queue, Routing, ?EXCHANGE_MONITOR).
 
 -spec bind_q_to_conference(ne_binary(), conf_routing_type()) -> 'ok'.
 -spec bind_q_to_conference(ne_binary(), conf_routing_type(), api_binary()) -> 'ok'.
@@ -869,6 +940,9 @@ unbind_q_from_whapps(Queue, Routing) ->
 unbind_q_from_presence(Queue, Routing) ->
     unbind_q_from_exchange(Queue, Routing, ?EXCHANGE_PRESENCE).
 
+unbind_q_from_registrar(Queue, Routing) ->
+    unbind_q_from_exchange(Queue, Routing, ?EXCHANGE_REGISTRAR).
+
 -spec unbind_q_from_exchange(ne_binary(), ne_binary(), ne_binary()) ->
                                     'ok' | {'error', _}.
 unbind_q_from_exchange(Queue, Routing, Exchange) ->
@@ -931,10 +1005,12 @@ confirm_select() -> wh_amqp_channel:command(#'confirm.select'{}).
 -spec flow_control() -> 'ok'.
 -spec flow_control(boolean()) -> 'ok'.
 flow_control() -> flow_control('true').
-flow_control(Active) -> wh_amqp_channel:command(#'channel.flow'{active=Active}).
+flow_control(Active) ->
+    wh_amqp_channel:command(#'channel.flow'{active=Active}).
 
 -spec flow_control_reply(boolean()) -> 'ok'.
-flow_control_reply(Active) -> wh_amqp_channel:command(#'channel.flow_ok'{active=Active}).
+flow_control_reply(Active) ->
+    wh_amqp_channel:command(#'channel.flow_ok'{active=Active}).
 
 %%------------------------------------------------------------------------------
 %% @public

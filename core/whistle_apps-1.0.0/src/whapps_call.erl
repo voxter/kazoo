@@ -6,6 +6,7 @@
 %%% @contributors
 %%%   Karl Anderson
 %%%   James Aimonetti
+%%%   KAZOO-3596: Sponsored by GTNetwork LLC, implemented by SIPLABS LLC
 %%%============================================================================
 -module(whapps_call).
 
@@ -21,6 +22,7 @@
 -export([is_call/1]).
 
 -export([exec/2]).
+-export_type([exec_funs/0]).
 
 -export([set_application_name/2, application_name/1]).
 -export([set_application_version/2, application_version/1]).
@@ -70,6 +72,7 @@
         ]).
 
 -export([set_custom_channel_var/3
+         ,insert_custom_channel_var/3
          ,set_custom_channel_vars/2
          ,update_custom_channel_vars/2
          ,custom_channel_var/3
@@ -114,16 +117,13 @@
 
 -export([default_helper_function/2]).
 
--define(DEFAULT_CALLER_ID_NAME, <<"Unknown">>).
--define(DEFAULT_CALLER_ID_NUMBER, <<"0000000000">>).
-
 -record(whapps_call, {call_id :: api_binary()                       %% The UUID of the call
                       ,call_id_helper = fun ?MODULE:default_helper_function/2 :: whapps_helper_function()         %% A function used when requesting the call id, to ensure it is up-to-date
                       ,control_q :: api_binary()                   %% The control queue provided on route win
                       ,control_q_helper = fun ?MODULE:default_helper_function/2 :: whapps_helper_function()       %% A function used when requesting the call id, to ensure it is up-to-date
                       ,controller_q :: api_binary()                %%
-                      ,caller_id_name = ?DEFAULT_CALLER_ID_NAME :: ne_binary()      %% The caller name
-                      ,caller_id_number = ?DEFAULT_CALLER_ID_NUMBER :: ne_binary() %% The caller number
+                      ,caller_id_name = wh_util:anonymous_caller_id_name() :: ne_binary()      %% The caller name
+                      ,caller_id_number = wh_util:anonymous_caller_id_number() :: ne_binary() %% The caller number
                       ,callee_id_name :: api_binary()                     %% The callee name
                       ,callee_id_number :: api_binary()                   %% The callee number
                       ,switch_nodename = <<>> :: binary()                 %% The switch node name (as known in ecallmgr)
@@ -464,13 +464,13 @@ to_proplist(#whapps_call{}=Call) ->
      ,{<<"From-Tag">>, from_tag(Call)}
     ].
 
--spec is_call(term()) -> boolean().
+-spec is_call(_) -> boolean().
 is_call(#whapps_call{}) -> 'true';
 is_call(_) -> 'false'.
 
 -type exec_fun_1() :: fun((call()) -> call()).
--type exec_fun_2() :: {fun((term(), call()) -> call()), term()}.
--type exec_fun_3() :: {fun((term(), term(), call()) -> call()), term(), term()}.
+-type exec_fun_2() :: {fun((_, call()) -> call()), _}.
+-type exec_fun_3() :: {fun((_, _, call()) -> call()), _, _}.
 -type exec_fun() :: exec_fun_1() | exec_fun_2() | exec_fun_3().
 -type exec_funs() :: [exec_fun(),...].
 
@@ -567,7 +567,7 @@ set_caller_id_name(CIDName, #whapps_call{}=Call) when is_binary(CIDName) ->
 -spec caller_id_name(call()) -> ne_binary().
 caller_id_name(#whapps_call{caller_id_name=CIDName}) ->
     case wh_util:is_empty(CIDName) of
-        'true' -> ?DEFAULT_CALLER_ID_NAME;
+        'true' -> wh_util:anonymous_caller_id_name();
         'false' -> CIDName
     end.
 
@@ -579,7 +579,7 @@ set_caller_id_number(CIDNumber, #whapps_call{}=Call) ->
 -spec caller_id_number(call()) -> ne_binary().
 caller_id_number(#whapps_call{caller_id_number=CIDNumber}) ->
     case  wh_util:is_empty(CIDNumber) of
-        'true' -> ?DEFAULT_CALLER_ID_NUMBER;
+        'true' -> wh_util:anonymous_caller_id_number();
         'false' -> CIDNumber
     end.
 
@@ -824,8 +824,12 @@ from_tag(#whapps_call{from_tag=FromTag}) ->
     FromTag.
 
 -spec set_custom_channel_var(term(), term(), call()) -> call().
-set_custom_channel_var(Key, Value, #whapps_call{ccvs=CCVs}=Call) ->
+set_custom_channel_var(Key, Value, Call) ->
     whapps_call_command:set(wh_json:set_value(Key, Value, wh_json:new()), 'undefined', Call),
+    insert_custom_channel_var(Key, Value, Call).
+
+-spec insert_custom_channel_var(term(), term(), call()) -> call().
+insert_custom_channel_var(Key, Value, #whapps_call{ccvs=CCVs}=Call) ->
     handle_ccvs_update(wh_json:set_value(Key, Value, CCVs), Call).
 
 -spec set_custom_channel_vars(wh_proplist(), call()) -> call().

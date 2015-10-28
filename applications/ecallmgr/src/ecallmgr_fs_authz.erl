@@ -159,6 +159,7 @@ request_channel_authorization(Props, CallId, Node) ->
 
 -spec authz_response(wh_json:object(), wh_proplist(), ne_binary(), atom()) -> boolean().
 authz_response(JObj, Props, CallId, Node) ->
+    'ok' = set_ccv_trunk_usage(JObj, CallId, Node),
     case wh_json:is_true(<<"Is-Authorized">>, JObj)
         orelse wh_json:is_true(<<"Soft-Limit">>, JObj)
     of
@@ -174,7 +175,21 @@ authz_response(JObj, Props, CallId, Node) ->
             end
     end.
 
--spec authorize_account(wh_json:object(), wh_proplist(), ne_binary(), atom()) -> boolean().
+-spec set_ccv_trunk_usage(wh_json:object(), ne_binary(), atom()) -> 'ok'.
+set_ccv_trunk_usage(JObj, CallId, Node) ->
+    ecallmgr_util:set(Node
+                      ,CallId
+                      ,[{Key, TrunkUsage}
+                        || Key <- [<<"Account-Trunk-Usage">>
+                                   ,<<"Reseller-Trunk-Usage">>
+                                  ],
+                           (TrunkUsage = kz_call_event:custom_channel_var(JObj, Key)) =/= 'undefined'
+                       ]
+                     ),
+    'ok'.
+
+-spec authorize_account(wh_json:object(), wh_proplist(), ne_binary(), atom()) ->
+                               boolean().
 authorize_account(JObj, Props, CallId, Node) ->
     AccountId = wh_json:get_value(<<"Account-ID">>, JObj),
     Type = wh_json:get_value(<<"Account-Billing">>, JObj),
@@ -184,7 +199,8 @@ authorize_account(JObj, Props, CallId, Node) ->
                          ], Props),
     authorize_reseller(JObj, P, CallId, Node).
 
--spec authorize_reseller(wh_json:object(), wh_proplist(), ne_binary(), atom()) -> boolean().
+-spec authorize_reseller(wh_json:object(), wh_proplist(), ne_binary(), atom()) ->
+                                boolean().
 authorize_reseller(JObj, Props, CallId, Node) ->
     AccountId = props:get_value(?GET_CCV(<<"Account-ID">>), Props),
     case wh_json:get_value(<<"Reseller-ID">>, JObj, AccountId) of
@@ -200,7 +216,7 @@ authorize_reseller(JObj, Props, CallId, Node) ->
 
 -spec rate_call(wh_proplist(), ne_binary(), atom()) -> 'true'.
 rate_call(Props, CallId, Node) ->
-    _P = spawn(?MODULE, 'rate_channel', [Props, Node]),
+    _P = wh_util:spawn(?MODULE, 'rate_channel', [Props, Node]),
     lager:debug("rating call in ~p", [_P]),
     allow_call(Props, CallId, Node).
 
@@ -231,7 +247,7 @@ maybe_deny_call(Props, CallId, Node) ->
         'true' -> rate_call(Props, CallId, Node);
         'false' ->
             wh_cache:store_local(?ECALLMGR_UTIL_CACHE, ?AUTHZ_RESPONSE_KEY(CallId), 'false'),
-            spawn(?MODULE, 'kill_channel', [Props, Node]),
+            wh_util:spawn(?MODULE, 'kill_channel', [Props, Node]),
             'false'
     end.
 
@@ -244,7 +260,7 @@ rate_channel(Props, Node) ->
                                   ,fun wapi_rate:publish_req/1
                                   ,fun wapi_rate:resp_v/1
                                   %% get inbound_rate_resp_timeout or outbound_rate_resp_timeout
-                                  ,ecallmgr_config:get_integer(<<Direction/binary, "_rate_resp_timeout">>, 10000)
+                                  ,ecallmgr_config:get_integer(<<Direction/binary, "_rate_resp_timeout">>, 10 * ?MILLISECONDS_IN_SECOND)
                                  ),
     rate_channel_resp(Props, Node, ReqResp).
 
@@ -342,8 +358,8 @@ authz_req(Props) ->
        ,{<<"Call-ID">>, kzd_freeswitch:call_id(Props)}
        ,{<<"Call-Direction">>, kzd_freeswitch:call_direction(Props)}
        ,{<<"Other-Leg-Call-ID">>, kzd_freeswitch:other_leg_call_id(Props)}
-       ,{<<"Caller-ID-Name">>, kzd_freeswitch:caller_id_name(Props, <<"Unknown">>)}
-       ,{<<"Caller-ID-Number">>, kzd_freeswitch:caller_id_number(Props, <<"Unknown">>)}
+       ,{<<"Caller-ID-Name">>, kzd_freeswitch:caller_id_name(Props, wh_util:anonymous_caller_id_name())}
+       ,{<<"Caller-ID-Number">>, kzd_freeswitch:caller_id_number(Props, wh_util:anonymous_caller_id_number())}
        ,{<<"Custom-Channel-Vars">>, wh_json:from_list(ecallmgr_util:custom_channel_vars(Props))}
        | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
       ]).

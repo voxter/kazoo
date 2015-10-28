@@ -12,6 +12,8 @@
          ,set_failure_expiry/1, set_failure_expiry/2
          ,set_disable_threshold/1, set_disable_threshold/2
          ,failure_status/0, failure_status/1
+         ,enable_account_hooks/1
+         ,enable_descendant_hooks/1
         ]).
 
 -include("webhooks.hrl").
@@ -77,18 +79,16 @@ set_disable_threshold(Account, Count) ->
 failure_status() ->
     Failed = webhooks_listener:find_failures(),
     Sorted = lists:keysort(1, Failed),
-
     print_failure_header(),
-    [print_failure_count(AccountId, HookId, Count) || {{AccountId, HookId}, Count} <- Sorted],
+    _ = [print_failure_count(AccountId, HookId, Count) || {{AccountId, HookId}, Count} <- Sorted],
     print_failure_footer().
 
 failure_status(Account) ->
     AccountId = wh_util:format_account_id(Account),
     Failed = webhooks_listener:find_failures(),
     Sorted = lists:keysort(1, Failed),
-
     print_failure_header(),
-    [print_failure_count(AID, HookId, Count) || {{AID, HookId}, Count} <- Sorted, AccountId =:= AID],
+    _ = [print_failure_count(AID, HookId, Count) || {{AID, HookId}, Count} <- Sorted, AccountId =:= AID],
     print_failure_footer().
 
 -define(FORMAT_FAILURE_STRING, "| ~-32s | ~-32s | ~5s |~n").
@@ -103,3 +103,9 @@ print_failure_footer() ->
 
 print_failure_count(AccountId, HookId, Count) ->
     io:format(?FORMAT_FAILURE_STRING, [AccountId, HookId, wh_util:to_binary(Count)]).
+
+enable_account_hooks(AccountId) ->
+    webhooks_util:reenable(AccountId, <<"account">>).
+
+enable_descendant_hooks(AccountId) ->
+    webhooks_util:reenable(AccountId, <<"descendants">>).

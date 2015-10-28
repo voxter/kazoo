@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2015, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -32,7 +32,7 @@
 -include("amqp_util.hrl").
 
 -define(TAB, ?MODULE).
--define(SERVER_RETRY_PERIOD, 30000).
+-define(SERVER_RETRY_PERIOD, 30 * ?MILLISECONDS_IN_SECOND).
 -record(state, {brokers = ordsets:new()}).
 
 %%%===================================================================
@@ -104,7 +104,7 @@ add_channel(Broker, Connection, Channel) when is_pid(Channel), is_binary(Broker)
 
 -spec release(pid()) -> 'ok'.
 release(Consumer) ->
-    gen_server:cast(?MODULE, {'release_assignments', Consumer}).
+    gen_server:call(?MODULE, {'release_handlers', Consumer}, 'infinity').
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -122,7 +122,7 @@ release(Consumer) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    put(callid, ?LOG_SYSTEM_ID),
+    wh_util:put_callid(?MODULE),
     _ = ets:new(?TAB, ['named_table'
                        ,{'keypos', #wh_amqp_assignment.timestamp}
                        ,'protected'
@@ -149,6 +149,9 @@ handle_call({'request_float', Consumer, Broker}, _, State) ->
     {'reply', assign_or_reserve(Consumer, Broker, 'float'), State};
 handle_call({'request_sticky', Consumer, Broker}, _, State) ->
     {'reply', assign_or_reserve(Consumer, Broker, 'sticky'), State};
+handle_call({'release_handlers', Consumer}, _, State) ->
+    gen_server:cast(self(), {'release_assignments', Consumer}),
+   {'reply', release_handlers(Consumer), State};
 handle_call(_Msg, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
@@ -176,7 +179,7 @@ handle_cast({'add_watcher', Consumer, Watcher}, State) ->
     _ = add_watcher(Consumer, Watcher),
     {'noreply', State};
 handle_cast({'maybe_reassign', Consumer}, State) ->
-    maybe_reassign(Consumer),
+    _ = maybe_reassign(Consumer),
     {'noreply', State};
 handle_cast({'maybe_defer_reassign', #wh_amqp_assignment{timestamp=Timestamp
                                                          ,consumer=Consumer
@@ -184,7 +187,7 @@ handle_cast({'maybe_defer_reassign', #wh_amqp_assignment{timestamp=Timestamp
                                                         }}, State) ->
     Props = reassign_props(Type),
     ets:update_element(?TAB, Timestamp, Props),
-    maybe_reassign(Consumer),
+    _ = maybe_reassign(Consumer),
     {'noreply', State};
 handle_cast(_Msg, State) ->
     {'noreply', State}.
@@ -600,11 +603,12 @@ maybe_reconnect(#wh_amqp_assignment{reconnect='false'}) -> 'ok';
 maybe_reconnect(#wh_amqp_assignment{consumer=Consumer
                                     ,channel=Channel
                                    }=Assignment) ->
-    _ = spawn(fun() ->
-                      lager:debug("replaying previous AMQP commands from consumer ~p on channel ~p"
-                                  ,[Consumer, Channel]),
-                      reconnect(Assignment, wh_amqp_history:get(Consumer))
-              end),
+    _ = wh_util:spawn(
+          fun() ->
+                  lager:debug("replaying previous AMQP commands from consumer ~p on channel ~p"
+                              ,[Consumer, Channel]),
+                  reconnect(Assignment, wh_amqp_history:get(Consumer))
+          end),
     'ok'.
 
 -spec reconnect(wh_amqp_assignment(), wh_amqp_commands()) -> 'ok'.
@@ -659,7 +663,7 @@ notify_watchers(#wh_amqp_assignment{}=Assignment, [Watcher|Watchers]) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_reserve(api_binary(), api_pid(), wh_amqp_type()) -> wh_amqp_assignment().
+-spec maybe_reserve(api_pid(), api_binary(), wh_amqp_type()) -> wh_amqp_assignment().
 maybe_reserve(Consumer, Broker, Type) ->
     Pattern = #wh_amqp_assignment{consumer=Consumer, _='_'},
     case ets:match_object(?TAB, Pattern, 1) of
@@ -677,7 +681,7 @@ maybe_reserve(Consumer, Broker, Type) ->
             ExistingAssignment
     end.
 
--spec reserve(api_binary(), api_pid(), wh_amqp_type()) -> wh_amqp_assignment().
+-spec reserve(api_pid(), api_binary(), wh_amqp_type()) -> wh_amqp_assignment().
 reserve(Consumer, Broker, 'sticky') when Broker =/= 'undefined' ->
     Ref = erlang:monitor('process', Consumer),
     Assignment = #wh_amqp_assignment{consumer=Consumer
@@ -753,11 +757,12 @@ handle_down_match({'channel', #wh_amqp_assignment{channel=Channel
 -spec maybe_defer_reassign(#wh_amqp_assignment{}, term()) -> 'ok'.
 maybe_defer_reassign(#wh_amqp_assignment{}=Assignment
                     ,{'shutdown',{'server_initiated_close', 404, _Msg}}) ->
-     lager:debug("defer channel reassign for ~p ms", [?SERVER_RETRY_PERIOD]),
-     spawn(fun() ->
-                   timer:sleep(?SERVER_RETRY_PERIOD),                   
-                   gen_server:cast(?MODULE, {'maybe_defer_reassign', Assignment})
-           end);
+    lager:debug("defer channel reassign for ~p ms", [?SERVER_RETRY_PERIOD]),
+    wh_util:spawn(
+      fun() ->
+              timer:sleep(?SERVER_RETRY_PERIOD),
+              gen_server:cast(?MODULE, {'maybe_defer_reassign', Assignment})
+      end);
 maybe_defer_reassign(#wh_amqp_assignment{timestamp=Timestamp
                                          ,consumer=Consumer
                                          ,type=Type
@@ -866,3 +871,23 @@ register_channel_handlers(Channel, Consumer) ->
     amqp_channel:register_flow_handler(Channel, Consumer),
     lager:debug("registered handlers for channel ~p to ~p", [Channel, Consumer]).
 
+-spec unregister_channel_handlers(pid()) -> 'ok'.
+unregister_channel_handlers(Channel) ->
+    _ = (catch amqp_channel:unregister_return_handler(Channel)),
+    _ = (catch amqp_channel:unregister_confirm_handler(Channel)),
+    _ = (catch amqp_channel:unregister_flow_handler(Channel)),
+    lager:debug("unregistered handlers for channel ~p", [Channel]).
+
+
+-spec release_handlers({wh_amqp_assignments(), ets:continuation()} | '$end_of_table' | pid()) -> 'ok'.
+release_handlers(Consumer)
+  when is_pid(Consumer) ->
+    Pattern = #wh_amqp_assignment{consumer=Consumer, _='_'},
+    release_handlers(ets:match_object(?TAB, Pattern, 1));
+release_handlers('$end_of_table') -> 'ok';
+release_handlers({[#wh_amqp_assignment{channel=Channel}], Continuation})
+  when is_pid(Channel) ->
+    _ = unregister_channel_handlers(Channel),
+    release_handlers(ets:match(Continuation));
+release_handlers({[#wh_amqp_assignment{}], Continuation}) ->
+    release_handlers(ets:match(Continuation)).

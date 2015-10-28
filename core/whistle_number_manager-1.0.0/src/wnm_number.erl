@@ -196,7 +196,7 @@ maybe_correct_used_by(#number{assigned_to=Account}=N) ->
         {'ok', JObj} ->
             maybe_correct_used_by(N, JObj);
         {'error', _R} ->
-            lager:warning("failed to get phone number doc for correction: ~p", [_R]),
+            lager:warning("failed to get phone number doc for used_by correction: ~p", [_R]),
             N
     end.
 
@@ -279,26 +279,17 @@ simple_save(#number{}=Number) ->
                ],
     lists:foldl(fun(F, J) -> F(J) end, Number, Routines).
 
--spec maybe_update_service_plans(wnm_number() | {_, wnm_number()}) ->
-                                        wnm_number() |
-                                        {_, wnm_number()}.
+-spec maybe_update_service_plans(wnm_number()) -> wnm_number().
 maybe_update_service_plans(#number{state = ?NUMBER_STATE_DISCOVERY}=N) -> N;
-maybe_update_service_plans(#number{}=N) -> update_service_plans(N);
-maybe_update_service_plans(E) -> E.
+maybe_update_service_plans(#number{}=N) -> update_service_plans(N).
 
--spec maybe_save_phone_number_docs(wnm_number() | {_, wnm_number()}) ->
-                                          wnm_number() |
-                                          {_, wnm_number()}.
+-spec maybe_save_phone_number_docs(wnm_number()) -> wnm_number().
 maybe_save_phone_number_docs(#number{state = ?NUMBER_STATE_DISCOVERY}=N) -> N;
-maybe_save_phone_number_docs(#number{}=N) -> save_phone_number_docs(N);
-maybe_save_phone_number_docs(E) -> E.
+maybe_save_phone_number_docs(#number{}=N) -> save_phone_number_docs(N).
 
--spec maybe_save_number_doc(wnm_number() | {_, wnm_number()}) ->
-                                   wnm_number() |
-                                   {_, wnm_number()}.
+-spec maybe_save_number_doc(wnm_number()) -> wnm_number().
 maybe_save_number_doc(#number{dry_run='true'}=N) -> N;
-maybe_save_number_doc(#number{}=N) -> save_number_doc(N);
-maybe_save_number_doc(E) -> E.
+maybe_save_number_doc(#number{}=N) -> save_number_doc(N).
 
 -spec maybe_get_updated_phone_number_docs(wnm_number()) -> wnm_number().
 maybe_get_updated_phone_number_docs(#number{state = ?NUMBER_STATE_DISCOVERY}=N) -> N;
@@ -609,15 +600,23 @@ in_service(Number) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec released_authorize_change(wnm_number()) -> wnm_number().
+released_authorize_change(#number{auth_by='system'
+                                  ,number_doc=JObj
+                                 }=N) ->
+    N#number{
+      features=sets:new()
+      ,number_doc=wh_json:private_fields(JObj)
+     };
 released_authorize_change(#number{assigned_to=AssignedTo
                                   ,auth_by=AuthBy
                                   ,number_doc=JObj
                                  }=N) ->
     case wh_util:is_in_account_hierarchy(AuthBy, AssignedTo, 'true') of
         'false' -> error_unauthorized(N);
-        'true' -> N#number{features=sets:new()
-                           ,number_doc=wh_json:private_fields(JObj)
-                          }
+        'true' ->
+            N#number{features=sets:new()
+                     ,number_doc=wh_json:private_fields(JObj)
+                    }
     end.
 
 -spec released_move_states(wnm_number(), ne_binary()) -> wnm_number().
@@ -680,6 +679,13 @@ released(#number{state = ?NUMBER_STATE_RESERVED}=Number) ->
                ],
     lists:foldl(fun(F, J) -> F(J) end, Number, Routines);
 released(#number{state = ?NUMBER_STATE_IN_SERVICE}=Number) ->
+    NewState = whapps_config:get_binary(?WNM_CONFIG_CAT, <<"released_state">>, ?NUMBER_STATE_AVAILABLE),
+    Routines = [fun released_authorize_change/1
+                ,fun(N) -> released_move_states(N, NewState) end
+                ,fun released_maybe_disconnect/1
+               ],
+    lists:foldl(fun(F, J) -> F(J) end, Number, Routines);
+released(#number{state = ?NUMBER_STATE_PORT_IN}=Number) ->
     NewState = whapps_config:get_binary(?WNM_CONFIG_CAT, <<"released_state">>, ?NUMBER_STATE_AVAILABLE),
     Routines = [fun released_authorize_change/1
                 ,fun(N) -> released_move_states(N, NewState) end
@@ -783,14 +789,26 @@ json_to_record(JObj, IsNew, #number{number=Num
      }.
 
 -spec number_from_port_doc(wnm_number(), wh_json:object()) -> wnm_number().
-number_from_port_doc(#number{number=N}=Number, JObj) ->
-    Number#number{
-      number_db=wnm_util:number_to_db_name(N)
-      ,state = ?NUMBER_STATE_PORT_IN
-      ,current_state = ?NUMBER_STATE_PORT_IN
-      ,assigned_to=wh_json:get_ne_value(<<"pvt_account_id">>, JObj)
-      ,auth_by=wh_json:get_ne_value(<<"pvt_account_id">>, JObj)
-     }.
+number_from_port_doc(#number{number=Number}=N, JObj) ->
+    AccountId = wh_doc:account_id(JObj),
+    Num = wnm_util:normalize_number(Number),
+    ModuleName = whapps_config:get_binary(?WNM_CONFIG_CAT, <<"porting_module_name">>, <<"wnm_local">>),
+    Props = [{<<"_id">>, Num}
+            ,{<<"pvt_module_name">>, ModuleName}
+            ,{<<"pvt_module_data">>, wh_json:new()}
+            ,{?PVT_NUMBER_STATE, ?NUMBER_STATE_PORT_IN}
+            ,{<<"pvt_ported_in">>, 'true'}
+            ,{<<"pvt_db_name">>, wnm_util:number_to_db_name(Num)}
+            ,{<<"pvt_created">>, wh_util:current_tstamp()}
+            ,{<<"pvt_authorizing_account">>, AccountId}
+            ,{<<"pvt_assigned_to">>, AccountId}
+            ],
+    json_to_record(
+      wh_json:from_list(Props)
+      ,'true'
+      ,N#number{auth_by = 'system'
+               ,assign_to = AccountId}
+     ).
 
 %%--------------------------------------------------------------------
 %% @private

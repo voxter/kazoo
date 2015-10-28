@@ -66,7 +66,7 @@ delete_modb(<<_:42/binary, "-", _:4/binary, _:2/binary>> = AccountModb) ->
     'ok' = couch_util:archive(AccountModb),
     _Deleted = couch_mgr:db_delete(AccountModb),
     io:format("    deleted: ~p~n", [_Deleted]),
-    timer:sleep(5000).
+    timer:sleep(5 * ?MILLISECONDS_IN_SECOND).
 
 -spec archive_modbs() -> 'no_return'.
 -spec archive_modbs(text()) -> 'no_return'.
@@ -91,7 +91,7 @@ do_archive_modbs(MODbs, AccountId) ->
 verify_rollups() ->
     Accounts = whapps_util:get_all_accounts(),
     Total = erlang:length(Accounts),
-    lists:foldr(fun verify_db_rollup/2, {1, Total}, Accounts),
+    _ = lists:foldr(fun verify_db_rollup/2, {1, Total}, Accounts),
     'ok'.
 
 -spec verify_db_rollup(ne_binary(), {pos_integer(), pos_integer()}) ->
@@ -151,7 +151,7 @@ fix_rollup(Account) ->
 rollup_accounts() ->
     Accounts = whapps_util:get_all_accounts(),
     Total = length(Accounts),
-    lists:foldr(fun rollup_account_fold/2, {1, Total}, Accounts),
+    _ = lists:foldr(fun rollup_account_fold/2, {1, Total}, Accounts),
     'ok'.
 
 -spec rollup_account_fold(ne_binary(), {pos_integer(), pos_integer()}) ->

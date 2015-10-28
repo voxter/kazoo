@@ -55,13 +55,13 @@
 -include("wh_couch.hrl").
 
 -define(SLEEP_BETWEEN_COMPACTION
-        ,whapps_config:get_integer(?CONFIG_CAT, <<"sleep_between_compaction">>, 60000)
+        ,whapps_config:get_integer(?CONFIG_CAT, <<"sleep_between_compaction">>, 60 * ?MILLISECONDS_IN_SECOND)
        ).
 -define(SLEEP_BETWEEN_POLL
-        ,whapps_config:get_integer(?CONFIG_CAT, <<"sleep_between_poll">>, 3000)
+        ,whapps_config:get_integer(?CONFIG_CAT, <<"sleep_between_poll">>, 3 * ?MILLISECONDS_IN_SECOND)
        ).
 -define(SLEEP_BETWEEN_VIEWS
-        ,whapps_config:get_integer(?CONFIG_CAT, <<"sleep_between_views">>, 2000)
+        ,whapps_config:get_integer(?CONFIG_CAT, <<"sleep_between_views">>, 2 * ?MILLISECONDS_IN_SECOND)
        ).
 -define(MAX_COMPACTING_SHARDS
         ,whapps_config:get_integer(?CONFIG_CAT, <<"max_compacting_shards">>, 2)
@@ -70,13 +70,13 @@
         ,whapps_config:get_integer(?CONFIG_CAT, <<"max_compacting_views">>, 2)
        ).
 -define(MAX_WAIT_FOR_COMPACTION_PIDS
-        ,case whapps_config:get(?CONFIG_CAT, <<"max_wait_for_compaction_pids">>, 360000) of
+        ,case whapps_config:get(?CONFIG_CAT, <<"max_wait_for_compaction_pids">>, 360 * ?MILLISECONDS_IN_SECOND) of
              <<"infinity">> -> 'infinity';
              N -> wh_util:to_integer(N)
          end
        ).
 
--define(AUTOCOMPACTION_CHECK_TIMEOUT, whapps_config:get_integer(?CONFIG_CAT, <<"autocompaction_check">>, 60000)).
+-define(AUTOCOMPACTION_CHECK_TIMEOUT, whapps_config:get_integer(?CONFIG_CAT, <<"autocompaction_check">>, 60 * ?MILLISECONDS_IN_SECOND)).
 
 -define(MIN_RATIO, whapps_config:get_float(?CONFIG_CAT, <<"min_ratio">>, 1.2)).
 -define(MIN_DATA, whapps_config:get_integer(?CONFIG_CAT, <<"min_data_size">>, 131072)). % 128Kb
@@ -858,10 +858,11 @@ compact({'compact_db', N, D, [], _}, #state{nodes=[]
     };
 
 compact({'rebuild_views', N, D, DDs}, #state{conn=Conn}=State) ->
-    _P = spawn(fun() ->
-                       put('callid', N),
-                       ?MODULE:rebuild_design_docs(Conn, encode_db(D), DDs)
-               end),
+    _P = wh_util:spawn(
+           fun() ->
+                   wh_util:put_callid(N),
+                   ?MODULE:rebuild_design_docs(Conn, encode_db(D), DDs)
+           end),
     lager:debug("rebuilding views in ~p", [_P]),
     gen_fsm:send_event(self(), {'compact_db', N, D, [], DDs}),
     {'next_state', 'compact', State};
@@ -1287,7 +1288,7 @@ rebuild_design_doc(Conn, D, DD, DesignDoc) ->
 -spec rebuild_views(server(), ne_binary(), ne_binary(), ne_binaries()) -> 'ok'.
 -spec rebuild_view(server(), ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
 rebuild_views(Conn, D, DD, Views) ->
-    [rebuild_view(Conn, D, DD, V) || V <- Views],
+    _ = [rebuild_view(Conn, D, DD, V) || V <- Views],
     'ok'.
 
 rebuild_view(Conn, D, DD, View) ->
@@ -1306,7 +1307,7 @@ rebuild_view(Conn, D, DD, View) ->
 -spec compact_shards(server(), server(), list(), list(), list()) -> pid_ref().
 compact_shards(Conn, AdminConn, Node, Ss, DDs) ->
     PR = spawn_monitor(fun() ->
-                               put('callid', Node),
+                               wh_util:put_callid(Node),
                                Ps = [spawn_monitor(?MODULE, 'compact_shard', [Conn, AdminConn, Shard, DDs])
                                      || Shard <- Ss
                                     ],
@@ -1651,7 +1652,7 @@ get_db_disk_and_data(Conn, Encoded, N) ->
             };
         {'error', {'conn_failed',{'error','timeout'}}} ->
             lager:debug("timed out asking for info, waiting and trying again"),
-            'ok' = timer:sleep(1000),
+            'ok' = timer:sleep(?MILLISECONDS_IN_SECOND),
             get_db_disk_and_data(Conn, Encoded, N+1);
         {'error', 'not_found'} ->
             lager:debug("db '~s' not found, skipping", [Encoded]),

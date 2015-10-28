@@ -27,6 +27,7 @@
          ,port_request/1, port_request_v/1
          ,port_pending/1, port_pending_v/1
          ,port_scheduled/1, port_scheduled_v/1
+         ,port_rejected/1, port_rejected_v/1
          ,port_cancel/1, port_cancel_v/1
          ,ported/1, ported_v/1
          ,port_comment/1, port_comment_v/1
@@ -36,10 +37,11 @@
          ,transaction/1, transaction_v/1
          ,system_alert/1, system_alert_v/1
          ,webhook/1, webhook_v/1
+         ,webhook_disabled/1, webhook_disabled_v/1
          %% published on completion of notification
          ,notify_update/1, notify_update_v/1
+         ,denied_emergency_bridge/1, denied_emergency_bridge_v/1
          ,skel/1, skel_v/1
-
          ,headers/1
         ]).
 
@@ -58,6 +60,7 @@
          ,publish_port_request/1, publish_port_request/2
          ,publish_port_pending/1, publish_port_pending/2
          ,publish_port_scheduled/1, publish_port_scheduled/2
+         ,publish_port_rejected/1, publish_port_rejected/2
          ,publish_port_cancel/1, publish_port_cancel/2
          ,publish_ported/1, publish_ported/2
          ,publish_port_comment/1, publish_port_comment/2
@@ -67,7 +70,9 @@
          ,publish_transaction/1, publish_transaction/2
          ,publish_system_alert/1, publish_system_alert/2
          ,publish_webhook/1, publish_webhook/2
+         ,publish_webhook_disabled/1, publish_webhook_disabled/2
          ,publish_notify_update/2, publish_notify_update/3
+         ,publish_denied_emergency_bridge/1, publish_denied_emergency_bridge/2
          ,publish_skel/1, publish_skel/2
         ]).
 
@@ -98,6 +103,7 @@
 -define(NOTIFY_PORT_REQUEST, <<"notifications.number.port">>).
 -define(NOTIFY_PORT_PENDING, <<"notifications.number.port_pending">>).
 -define(NOTIFY_PORT_SCHEDULED, <<"notifications.number.port_scheduled">>).
+-define(NOTIFY_PORT_REJECTED, <<"notifications.number.port_rejected">>).
 -define(NOTIFY_PORT_CANCEL, <<"notifications.number.port_cancel">>).
 -define(NOTIFY_PORTED, <<"notifications.number.ported">>).
 -define(NOTIFY_PORT_COMMENT, <<"notifications.number.port_comment">>).
@@ -107,6 +113,8 @@
 -define(NOTIFY_TRANSACTION, <<"notifications.account.transaction">>).
 -define(NOTIFY_SYSTEM_ALERT, <<"notifications.system.alert">>).
 -define(NOTIFY_WEBHOOK_CALLFLOW, <<"notifications.webhook.callflow">>).
+-define(NOTIFY_WEBHOOK_DISABLED, <<"notifications.webhook.disabled">>).
+-define(NOTIFY_DENIED_EMERGENCY_BRIDGE, <<"notifications.denied_emergency_bridge">>).
 -define(NOTIFY_SKEL, <<"notifications.skel">>).
 
 %% Notify New Voicemail or Voicemail Saved
@@ -300,6 +308,18 @@
                                ]).
 -define(PORT_SCHEDULED_TYPES, []).
 
+% Notify Port Rejected
+-define(PORT_REJECTED_HEADERS, [<<"Account-ID">>]).
+-define(OPTIONAL_PORT_REJECTED_HEADERS, [<<"Authorized-By">>, <<"Port-Request-ID">>
+                                       ,<<"Number-State">>, <<"Local-Number">>
+                                       ,<<"Number">>, <<"Port">>
+                                       | ?DEFAULT_OPTIONAL_HEADERS
+                                      ]).
+-define(PORT_REJECTED_VALUES, [{<<"Event-Category">>, <<"notification">>}
+                             ,{<<"Event-Name">>, <<"port_rejected">>}
+                            ]).
+-define(PORT_REJECTED_TYPES, []).
+
 % Notify Port Cancel
 -define(PORT_CANCEL_HEADERS, [<<"Account-ID">>]).
 -define(OPTIONAL_PORT_CANCEL_HEADERS, [<<"Authorized-By">>, <<"Port-Request-ID">>
@@ -393,6 +413,14 @@
                         ]).
 -define(WEBHOOK_TYPES, []).
 
+%% Notify webhook
+-define(WEBHOOK_DISABLED_HEADERS, [<<"Hook-ID">>, <<"Account-ID">>]).
+-define(OPTIONAL_WEBHOOK_DISABLED_HEADERS, ?DEFAULT_OPTIONAL_HEADERS).
+-define(WEBHOOK_DISABLED_VALUES, [{<<"Event-Category">>, <<"notification">>}
+                         ,{<<"Event-Name">>, <<"webhook_disabled">>}
+                        ]).
+-define(WEBHOOK_DISABLED_TYPES, []).
+
 -define(NOTIFY_UPDATE_HEADERS, [<<"Status">>]).
 -define(OPTIONAL_NOTIFY_UPDATE_HEADERS, [<<"Failure-Message">>
                                          | ?DEFAULT_OPTIONAL_HEADERS
@@ -402,6 +430,19 @@
                                ,{<<"Status">>, [<<"completed">>, <<"failed">>, <<"pending">>]}
                               ]).
 -define(NOTIFY_UPDATE_TYPES, []).
+
+%% Denied Emergency Bridge
+-define(DENIED_EMERGENCY_BRIDGE_HEADERS, [<<"Account-ID">>, <<"Call-ID">>]).
+-define(OPTIONAL_DENIED_EMERGENCY_BRIDGE_HEADERS, [<<"Emergency-Caller-ID-Number">>
+                                                   ,<<"Emergency-Caller-ID-Name">>
+                                                   ,<<"Outbound-Caller-ID-Number">>
+                                                   ,<<"Outbound-Caller-ID-Name">>
+                                                   | ?DEFAULT_OPTIONAL_HEADERS
+                                                  ]).
+-define(DENIED_EMERGENCY_BRIDGE_VALUES, [{<<"Event-Category">>, <<"notification">>}
+                                         ,{<<"Event-Name">>, <<"denied_emergency_bridge">>}
+                                        ]).
+-define(DENIED_EMERGENCY_BRIDGE_TYPES, []).
 
 %% Skeleton
 -define(SKEL_HEADERS, [<<"Account-ID">>, <<"User-ID">>]).
@@ -440,8 +481,6 @@ headers(<<"system_alert">>) ->
     ?SYSTEM_ALERT_HEADERS ++ ?OPTIONAL_SYSTEM_ALERT_HEADERS;
 headers(<<"cnam_request">>) ->
     ?CNAM_REQUEST_HEADERS ++ ?OPTIONAL_CNAM_REQUEST_HEADERS;
-headers(<<"skel">>) ->
-    ?SKEL_HEADERS ++ ?OPTIONAL_SKEL_HEADERS;
 headers(<<"topup">>) ->
     ?TOPUP_HEADERS ++ ?OPTIONAL_TOPUP_HEADERS;
 headers(<<"port_request">>) ->
@@ -452,10 +491,18 @@ headers(<<"port_scheduled">>) ->
     ?PORT_SCHEDULED_HEADERS ++ ?OPTIONAL_PORT_SCHEDULED_HEADERS;
 headers(<<"port_cancel">>) ->
     ?PORT_CANCEL_HEADERS ++ ?OPTIONAL_PORT_CANCEL_HEADERS;
+headers(<<"port_rejected">>) ->
+    ?PORT_REJECTED_HEADERS ++ ?OPTIONAL_PORT_REJECTED_HEADERS;
 headers(<<"ported">>) ->
     ?PORTED_HEADERS ++ ?OPTIONAL_PORTED_HEADERS;
 headers(<<"port_comment">>) ->
     ?PORT_COMMENT_HEADERS ++ ?OPTIONAL_PORT_COMMENT_HEADERS;
+headers(<<"webhook_disabled">>) ->
+    ?WEBHOOK_DISABLED_HEADERS ++ ?OPTIONAL_WEBHOOK_DISABLED_HEADERS;
+headers(<<"denied_emergency_bridge">>) ->
+    ?DENIED_EMERGENCY_BRIDGE_HEADERS ++ ?OPTIONAL_DENIED_EMERGENCY_BRIDGE_HEADERS;
+headers(<<"skel">>) ->
+    ?SKEL_HEADERS ++ ?OPTIONAL_SKEL_HEADERS;
 headers(_Notification) ->
     lager:warning("no notification headers for ~s", [_Notification]),
     [].
@@ -724,6 +771,23 @@ port_scheduled_v(Prop) when is_list(Prop) ->
 port_scheduled_v(JObj) -> port_scheduled_v(wh_json:to_proplist(JObj)).
 
 %%--------------------------------------------------------------------
+%% @doc Port rejected notification - see wiki
+%% Takes proplist, creates JSON string or error
+%% @end
+%%--------------------------------------------------------------------
+port_rejected(Prop) when is_list(Prop) ->
+    case port_rejected_v(Prop) of
+        'true' -> wh_api:build_message(Prop, ?PORT_REJECTED_HEADERS, ?OPTIONAL_PORT_REJECTED_HEADERS);
+        'false' -> {'error', "Proplist failed validation for port_rejected"}
+    end;
+port_rejected(JObj) -> port_rejected(wh_json:to_proplist(JObj)).
+
+-spec port_rejected_v(api_terms()) -> boolean().
+port_rejected_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?PORT_REJECTED_HEADERS, ?PORT_REJECTED_VALUES, ?PORT_REJECTED_TYPES);
+port_rejected_v(JObj) -> port_rejected_v(wh_json:to_proplist(JObj)).
+
+%%--------------------------------------------------------------------
 %% @doc Port cancel notification - see wiki
 %% Takes proplist, creates JSON string or error
 %% @end
@@ -878,6 +942,23 @@ webhook_v(Prop) when is_list(Prop) ->
 webhook_v(JObj) -> webhook_v(wh_json:to_proplist(JObj)).
 
 %%--------------------------------------------------------------------
+%% @doc webhook notification - see wiki
+%% Takes proplist, creates JSON string or error
+%% @end
+%%--------------------------------------------------------------------
+webhook_disabled(Prop) when is_list(Prop) ->
+    case webhook_disabled_v(Prop) of
+        'true' -> wh_api:build_message(Prop, ?WEBHOOK_DISABLED_HEADERS, ?OPTIONAL_WEBHOOK_DISABLED_HEADERS);
+        'false' -> {'error', "Proplist failed validation for webhook_disabled"}
+    end;
+webhook_disabled(JObj) -> webhook_disabled(wh_json:to_proplist(JObj)).
+
+-spec webhook_disabled_v(api_terms()) -> boolean().
+webhook_disabled_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?WEBHOOK_DISABLED_HEADERS, ?WEBHOOK_DISABLED_VALUES, ?WEBHOOK_DISABLED_TYPES);
+webhook_disabled_v(JObj) -> webhook_disabled_v(wh_json:to_proplist(JObj)).
+
+%%--------------------------------------------------------------------
 %% @doc System alert notification - see wiki
 %% Takes proplist, creates JSON string or error
 %% @end
@@ -895,7 +976,24 @@ notify_update_v(Prop) when is_list(Prop) ->
 notify_update_v(JObj) -> notify_update_v(wh_json:to_proplist(JObj)).
 
 %%--------------------------------------------------------------------
-%% @doc webhook notification - see wiki
+%% @doc denied_emergency_bridge notification - see wiki
+%% Takes proplist, creates JSON string or error
+%% @end
+%%--------------------------------------------------------------------
+denied_emergency_bridge(Prop) when is_list(Prop) ->
+    case denied_emergency_bridge_v(Prop) of
+        'true' -> wh_api:build_message(Prop, ?DENIED_EMERGENCY_BRIDGE_HEADERS, ?OPTIONAL_DENIED_EMERGENCY_BRIDGE_HEADERS);
+        'false' -> {'error', "Proplist failed validation for denied_emergency_bridge"}
+    end;
+denied_emergency_bridge(JObj) -> denied_emergency_bridge(wh_json:to_proplist(JObj)).
+
+-spec denied_emergency_bridge_v(api_terms()) -> boolean().
+denied_emergency_bridge_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?DENIED_EMERGENCY_BRIDGE_HEADERS, ?DENIED_EMERGENCY_BRIDGE_VALUES, ?DENIED_EMERGENCY_BRIDGE_TYPES);
+denied_emergency_bridge_v(JObj) -> denied_emergency_bridge_v(wh_json:to_proplist(JObj)).
+
+%%--------------------------------------------------------------------
+%% @doc skel notification - see wiki
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
@@ -911,11 +1009,45 @@ skel_v(Prop) when is_list(Prop) ->
     wh_api:validate(Prop, ?SKEL_HEADERS, ?SKEL_VALUES, ?SKEL_TYPES);
 skel_v(JObj) -> skel_v(wh_json:to_proplist(JObj)).
 
+-type restriction() :: 'new_voicemail' |
+                       'voicemail_saved' |
+                       'voicemail_full' |
+                       'inbound_fax' |
+                       'outbound_fax' |
+                       'new_fax' |
+                       'inbound_fax_error' |
+                       'outbound_fax_error' |
+                       'fax_error' |
+                       'register' |
+                       'deregister' |
+                       'pwd_recovery' |
+                       'new_account' |
+                       'new_user' |
+                       'port_request' |
+                       'port_pending' |
+                       'port_scheduled' |
+                       'port_cancel' |
+                       'port_rejected' |
+                       'ported' |
+                       'port_comment' |
+                       'cnam_requests' |
+                       'low_balance' |
+                       'topup' |
+                       'transaction' |
+                       'system_alerts' |
+                       'webhook' |
+                       'webhook_disabled' |
+                       'denied_emergency_bridge' |
+                       'skel'.
+-type restrictions() :: [restriction(),...] | [].
+-type option() :: {'restrict_to', restrictions()}.
+-type options() :: [option(),...] | [].
 
--spec bind_q(ne_binary(), wh_proplist()) -> 'ok'.
+-spec bind_q(ne_binary(), options()) -> 'ok'.
 bind_q(Queue, Props) ->
     bind_to_q(Queue, props:get_value('restrict_to', Props), Props).
 
+-spec bind_to_q(ne_binary(), restrictions() | 'undefined', wh_proplist()) -> 'ok'.
 bind_to_q(Q, 'undefined', _) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, <<"notifications.*.*">>);
 bind_to_q(Q, ['new_voicemail'|T], Props) ->
@@ -971,6 +1103,9 @@ bind_to_q(Q, ['port_pending'|T], Props) ->
 bind_to_q(Q, ['port_scheduled'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_PORT_SCHEDULED),
     bind_to_q(Q, T, Props);
+bind_to_q(Q, ['port_rejected'|T], Props) ->
+    'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_PORT_REJECTED),
+    bind_to_q(Q, T, Props);
 bind_to_q(Q, ['port_cancel'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_PORT_CANCEL),
     bind_to_q(Q, T, Props);
@@ -998,17 +1133,23 @@ bind_to_q(Q, ['system_alerts'|T], Props) ->
 bind_to_q(Q, ['webhook'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_WEBHOOK_CALLFLOW),
     bind_to_q(Q, T, Props);
+bind_to_q(Q, ['webhook_disabled'|T], Props) ->
+    'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_WEBHOOK_DISABLED),
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['denied_emergency_bridge'|T, Props]) ->
+    'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_DENIED_EMERGENCY_BRIDGE),
+    bind_to_q(Q, T, Props);
 bind_to_q(Q, ['skel'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_SKEL),
     bind_to_q(Q, T, Props);
 bind_to_q(_Q, [], _) ->
     'ok'.
 
--spec unbind_q(ne_binary(), wh_proplist()) -> 'ok'.
-
+-spec unbind_q(ne_binary(), options()) -> 'ok'.
 unbind_q(Queue, Props) ->
     unbind_q_from(Queue, props:get_value('restrict_to', Props), Props).
 
+-spec unbind_q_from(ne_binary(), restrictions() | 'undefined', wh_proplist()) -> 'ok'.
 unbind_q_from(Q, 'undefined', _) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, <<"notifications.*.*">>);
 unbind_q_from(Q, ['new_voicemail'|T], Props) ->
@@ -1061,6 +1202,9 @@ unbind_q_from(Q, ['port_pending'|T], Props) ->
 unbind_q_from(Q, ['port_scheduled'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_PORT_SCHEDULED),
     unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['port_rejected'|T], Props) ->
+    'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_PORT_REJECTED),
+    unbind_q_from(Q, T, Props);
 unbind_q_from(Q, ['port_cancel'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_PORT_CANCEL),
     unbind_q_from(Q, T, Props);
@@ -1087,6 +1231,12 @@ unbind_q_from(Q, ['system_alert'|T], Props) ->
     unbind_q_from(Q, T, Props);
 unbind_q_from(Q, ['webhook'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_WEBHOOK_CALLFLOW),
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['webhook_disabled'|T], Props) ->
+    'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_WEBHOOK_DISABLED),
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['denied_emergency_bridge'|T], Props) ->
+    'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_DENIED_EMERGENCY_BRIDGE),
     unbind_q_from(Q, T, Props);
 unbind_q_from(Q, ['skel'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_SKEL),
@@ -1211,6 +1361,13 @@ publish_port_scheduled(API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?PORT_SCHEDULED_VALUES, fun ?MODULE:port_scheduled/1),
     amqp_util:notifications_publish(?NOTIFY_PORT_SCHEDULED, Payload, ContentType).
 
+-spec publish_port_rejected(api_terms()) -> 'ok'.
+-spec publish_port_rejected(api_terms(), ne_binary()) -> 'ok'.
+publish_port_rejected(JObj) -> publish_port_rejected(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_port_rejected(API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?PORT_REJECTED_VALUES, fun ?MODULE:port_rejected/1),
+    amqp_util:notifications_publish(?NOTIFY_PORT_REJECTED, Payload, ContentType).
+
 -spec publish_port_cancel(api_terms()) -> 'ok'.
 -spec publish_port_cancel(api_terms(), ne_binary()) -> 'ok'.
 publish_port_cancel(JObj) -> publish_port_cancel(JObj, ?DEFAULT_CONTENT_TYPE).
@@ -1274,12 +1431,27 @@ publish_webhook(API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?WEBHOOK_VALUES, fun ?MODULE:webhook/1),
     amqp_util:notifications_publish(?NOTIFY_WEBHOOK_CALLFLOW, Payload, ContentType).
 
+-spec publish_webhook_disabled(api_terms()) -> 'ok'.
+-spec publish_webhook_disabled(api_terms(), ne_binary()) -> 'ok'.
+publish_webhook_disabled(JObj) -> publish_webhook_disabled(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_webhook_disabled(API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?WEBHOOK_DISABLED_VALUES, fun ?MODULE:webhook_disabled/1),
+    amqp_util:notifications_publish(?NOTIFY_WEBHOOK_DISABLED, Payload, ContentType).
+
+
 -spec publish_notify_update(ne_binary(), api_terms()) -> 'ok'.
 -spec publish_notify_update(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
 publish_notify_update(RespQ, JObj) -> publish_notify_update(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_notify_update(RespQ, API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?NOTIFY_UPDATE_VALUES, fun ?MODULE:notify_update/1),
     amqp_util:targeted_publish(RespQ, Payload, ContentType).
+
+-spec publish_denied_emergency_bridge(api_terms()) -> 'ok'.
+-spec publish_denied_emergency_bridge(api_terms(), ne_binary()) -> 'ok'.
+publish_denied_emergency_bridge(JObj) -> publish_denied_emergency_bridge(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_denied_emergency_bridge(API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?DENIED_EMERGENCY_BRIDGE_VALUES, fun ?MODULE:denied_emergency_bridge/1),
+    amqp_util:notifications_publish(?NOTIFY_DENIED_EMERGENCY_BRIDGE, Payload, ContentType).
 
 -spec publish_skel(api_terms()) -> 'ok'.
 -spec publish_skel(api_terms(), ne_binary()) -> 'ok'.

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2014, 2600Hz
+%%% @copyright (C) 2013-2015, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -24,6 +24,8 @@
 
          ,account_expires_time/1
          ,system_expires_time/0
+
+         ,reenable/2
         ]).
 
 %% ETS Management
@@ -188,9 +190,16 @@ retry_hook(JObj, Hook, URI, Method, Retries) ->
     fire_hook(JObj, Hook, URI, Method, Retries-1).
 
 -spec successful_hook(webhook()) -> 'ok'.
+-spec successful_hook(webhook(), boolean()) -> 'ok'.
+successful_hook(Hook) ->
+    successful_hook(Hook, whapps_config:get_is_true(?APP_NAME, <<"log_successful_attempts">>, 'false')).
+
+successful_hook(_Hook, 'false') -> 'ok';
 successful_hook(#webhook{hook_id=HookId
                          ,account_id=AccountId
-                        }) ->
+                        }
+               ,'true'
+               ) ->
     Attempt = wh_json:from_list([{<<"hook_id">>, HookId}
                                  ,{<<"result">>, <<"success">>}
                                 ]),
@@ -219,7 +228,7 @@ failed_hook(#webhook{hook_id=HookId
                                  ,{<<"reason">>, <<"bad response code">>}
                                  ,{<<"response_code">>, wh_util:to_binary(RespCode)}
                                  ,{<<"response_body">>, wh_util:to_binary(RespBody)}
-                                 ,{<<"retries left">>, Retries-1}
+                                 ,{<<"retries_left">>, Retries-1}
                                 ]),
     save_attempt(Attempt, AccountId).
 
@@ -238,7 +247,7 @@ failed_hook(#webhook{hook_id=HookId
     Attempt = wh_json:from_list([{<<"hook_id">>, HookId}
                                  ,{<<"result">>, <<"failure">>}
                                  ,{<<"reason">>, <<"kazoo http client error">>}
-                                 ,{<<"retries left">>, Retries-1}
+                                 ,{<<"retries_left">>, Retries-1}
                                  ,{<<"client_error">>, Error}
                                 ]),
     save_attempt(Attempt, AccountId).
@@ -330,7 +339,7 @@ init_webhooks() ->
 
 -spec load_hooks(pid(), wh_json:objects()) -> 'ok'.
 load_hooks(Srv, WebHooks) ->
-    [load_hook(Srv, wh_json:get_value(<<"doc">>, Hook)) || Hook <- WebHooks],
+    _ = [load_hook(Srv, wh_json:get_value(<<"doc">>, Hook)) || Hook <- WebHooks],
     lager:debug("sent hooks into server ~p", [Srv]).
 
 -spec load_hook(pid(), wh_json:object()) -> 'ok'.
@@ -360,6 +369,7 @@ jobj_to_rec(Hook) ->
 
 -spec init_mods() -> 'ok'.
 -spec init_mods(wh_json:objects()) -> 'ok'.
+-spec init_mods(wh_json:objects(), wh_year(), wh_month()) -> 'ok'.
 init_mods() ->
     case couch_mgr:get_results(?KZ_WEBHOOKS_DB
                                ,<<"webhooks/accounts_listing">>
@@ -378,9 +388,9 @@ init_mods(Accts) ->
     {{Year, Month, _}, _} = calendar:gregorian_seconds_to_datetime(wh_util:current_tstamp()),
     init_mods(Accts, Year, Month).
 init_mods([], _, _) -> 'ok';
-init_mods([Acct|Accts], Year, Month) ->
-    init_mod(Acct, Year, Month),
-    init_mods(Accts, Year, Month).
+init_mods(Accts, Year, Month) ->
+    _ = [init_mod(Acct, Year, Month) || Acct <- Accts],
+    'ok'.
 
 -spec init_mod(wh_json:object(), wh_year(), wh_month()) -> 'ok'.
 init_mod(Acct, Year, Month) ->
@@ -412,3 +422,76 @@ account_expires_time(AccountId) ->
 -spec system_expires_time() -> pos_integer().
 system_expires_time() ->
     whapps_config:get_integer(?APP_NAME, ?ATTEMPT_EXPIRY_KEY, ?MILLISECONDS_IN_MINUTE).
+
+-spec reenable(ne_binary(), ne_binary()) -> 'ok'.
+reenable(AccountId, <<"account">>) ->
+    enable_account_hooks(AccountId);
+reenable(AccountId, <<"descendants">>) ->
+    enable_descendant_hooks(AccountId).
+
+-spec enable_account_hooks(ne_binary()) -> 'ok'.
+enable_account_hooks(Account) ->
+    AccountId = wh_util:format_account_id(Account, 'raw'),
+
+    case couch_mgr:get_results(?KZ_WEBHOOKS_DB
+                               ,<<"webhooks/accounts_listing">>
+                               ,[{'key', AccountId}
+                                 ,{'reduce', 'false'}
+                                 ,'include_docs'
+                                ]
+                              )
+    of
+        {'ok', []} -> io:format("account ~s has no webhooks configured~n", [AccountId]);
+        {'ok', Hooks} -> enable_hooks(Hooks);
+        {'error', _E} -> io:format("failed to load hooks for account ~s: ~p~n", [AccountId, _E])
+    end.
+
+-spec enable_hooks(wh_json:objects()) -> 'ok'.
+enable_hooks(Hooks) ->
+    case hooks_to_reenable(Hooks) of
+        [] -> io:format("no hooks to re-enable~n", []);
+        Reenable ->
+            {'ok', Saved} = couch_mgr:save_docs(?KZ_WEBHOOKS_DB, Reenable),
+            _ = webhooks_listener:flush_hooks(Reenable),
+            io:format("re-enabled ~p hooks~nIDs: ", [length(Saved)]),
+            Ids = wh_util:join_binary([wh_doc:id(D) || D <- Saved], <<", ">>),
+            io:format("~s~n", [Ids])
+    end.
+
+-spec hooks_to_reenable(wh_json:objects()) -> wh_json:objects().
+hooks_to_reenable(Hooks) ->
+    [kzd_webhook:enable(Hook)
+     || View <- Hooks,
+        kzd_webhook:is_auto_disabled(Hook = wh_json:get_value(<<"doc">>, View))
+    ].
+
+-spec enable_descendant_hooks(ne_binary()) -> 'ok'.
+enable_descendant_hooks(Account) ->
+    AccountId = wh_util:format_account_id(Account, 'raw'),
+    case couch_mgr:get_results(?WH_ACCOUNTS_DB
+                               ,<<"accounts/listing_by_descendants">>
+                               ,[{'startkey', [AccountId]}
+                                 ,{'endkey', [AccountId, wh_json:new()]}
+                                ]
+                              )
+    of
+        {'ok', []} ->
+            maybe_enable_descendants_hooks([AccountId]);
+        {'ok', Descendants} ->
+            maybe_enable_descendants_hooks([AccountId
+                                            | [wh_json:get_value([<<"value">>, <<"id">>], D) || D <- Descendants]
+                                           ]
+                                          );
+        {'error', _E} ->
+            io:format("failed to find descendants for account ~s: ~p~n", [AccountId, _E])
+    end.
+
+-spec maybe_enable_descendants_hooks(ne_binaries()) -> 'ok'.
+maybe_enable_descendants_hooks(Accounts) ->
+    _ = [maybe_enable_descendant_hooks(Account) || Account <- Accounts],
+    'ok'.
+
+-spec maybe_enable_descendant_hooks(ne_binary()) -> 'ok'.
+maybe_enable_descendant_hooks(Account) ->
+    io:format("## checking account ~s for hooks to enable ##~n", [Account]),
+    enable_account_hooks(Account).

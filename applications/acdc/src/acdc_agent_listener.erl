@@ -191,13 +191,13 @@ start_link(Supervisor, AgentJObj) ->
     start_link(Supervisor, AgentJObj, AcctId, AgentId, Queues).
 start_link(Supervisor, _, _AcctId, _AgentId, []) ->
     lager:debug("agent ~s has no queues, not starting", [_AgentId]),
-    spawn('acdc_agent_sup', 'stop', [Supervisor]),
+    _ = wh_util:spawn('acdc_agent_sup', 'stop', [Supervisor]),
     'ignore';
 start_link(Supervisor, AgentJObj, AcctId, AgentId, Queues) ->
     case acdc_agent_util:most_recent_status(AcctId, AgentId) of
         {'ok', <<"logged_out">>} ->
             lager:debug("agent ~s in ~s is logged out, not starting", [AgentId, AcctId]),
-            spawn('acdc_agent_sup', 'stop', [Supervisor]),
+            _ = wh_util:spawn('acdc_agent_sup', 'stop', [Supervisor]),
             'ignore';
         {'ok', _S} ->
             lager:debug("start bindings for ~s(~s) in ~s", [AcctId, AgentId, _S]),
@@ -381,7 +381,7 @@ id(Srv) ->
 %%--------------------------------------------------------------------
 init([Supervisor, Agent, Queues]) ->
     AgentId = agent_id(Agent),
-    put('callid', AgentId),
+    wh_util:put_callid(AgentId),
     lager:debug("starting acdc agent listener"),
 
     {'ok', #state{agent_id=AgentId
@@ -443,13 +443,12 @@ handle_cast({'refresh_config', Qs}, #state{agent_queues=Queues}=State) ->
     {Add, Rm} = acdc_agent_util:changed(Queues, Qs),
 
     Self = self(),
-    [gen_listener:cast(Self, {'queue_login', A}) || A <- Add],
-    [gen_listener:cast(Self, {'queue_logout', R}) || R <- Rm],
-
+    _ = [gen_listener:cast(Self, {'queue_login', A}) || A <- Add],
+    _ = [gen_listener:cast(Self, {'queue_logout', R}) || R <- Rm],
     {'noreply', State};
 handle_cast({'stop_agent', Req}, #state{supervisor=Supervisor}=State) ->
     lager:debug("stop agent requested by ~p", [Req]),
-    _ = spawn('acdc_agent_sup', 'stop', [Supervisor]),
+    _ = wh_util:spawn('acdc_agent_sup', 'stop', [Supervisor]),
     {'noreply', State};
 
 handle_cast({'fsm_started', FSMPid}, State) ->
@@ -477,7 +476,7 @@ handle_cast({'queue_login', Q}, #state{agent_queues=Qs
     end;
 handle_cast({'queue_login', QJObj}, State) ->
     lager:debug("queue jobj: ~p", [QJObj]),
-    handle_cast({'queue_login', wh_json:get_value(<<"_id">>, QJObj)}, State);
+    handle_cast({'queue_login', wh_doc:id(QJObj)}, State);
 
 handle_cast({'queue_logout', Q}, #state{agent_queues=[Q]
                                         ,acct_id=AcctId
@@ -531,7 +530,7 @@ handle_cast({'channel_hungup', CallId}, #state{call=Call
 
             _ = filter_agent_calls(ACallIds, CallId),
 
-            put('callid', AgentId),
+            wh_util:put_callid(AgentId),
             case IsThief of
                 'false' ->
                     {'noreply', State#state{call='undefined'
@@ -591,10 +590,10 @@ handle_cast({'member_connect_retry', CallId}, #state{my_id=MyId
             lager:debug("need to retry member connect, agent isn't able to take it"),
             send_member_connect_retry(Server, CallId, MyId, AgentId),
 
-            [acdc_util:unbind_from_call_events(ACallId) || ACallId <- ACallIds],
+            _ = [acdc_util:unbind_from_call_events(ACallId) || ACallId <- ACallIds],
             acdc_util:unbind_from_call_events(CallId),
 
-            put('callid', AgentId),
+            wh_util:put_callid(AgentId),
 
             {'noreply', State#state{msg_queue_id='undefined'
                                     ,acdc_queue_id='undefined'
@@ -1346,7 +1345,7 @@ recording_format() ->
 -spec agent_id(agent()) -> api_binary().
 agent_id(Agent) ->
     case wh_json:is_json_object(Agent) of
-        'true' -> wh_json:get_value(<<"_id">>, Agent);
+        'true' -> wh_doc:id(Agent);
         'false' -> whapps_call:owner_id(Agent)
     end.
 
@@ -1360,7 +1359,7 @@ account_id(Agent) ->
 -spec account_db(agent()) -> api_binary().
 account_db(Agent) ->
     case wh_json:is_json_object(Agent) of
-        'true' -> wh_json:get_value(<<"pvt_account_db">>, Agent);
+        'true' -> wh_doc:account_db(Agent);
         'false' -> whapps_call:account_db(Agent)
     end.
 
@@ -1388,8 +1387,8 @@ stop_agent_leg(ACallId, ACtrlQ) ->
     wapi_dialplan:publish_command(ACtrlQ, Command).
 
 find_account_id(JObj) ->
-    case wh_json:get_value(<<"pvt_account_id">>, JObj) of
-        'undefined' -> wh_util:format_account_id(wh_json:get_value(<<"pvt_account_db">>, JObj), 'raw');
+    case wh_doc:account_id(JObj) of
+        'undefined' -> wh_util:format_account_id(wh_doc:account_db(JObj), 'raw');
         AcctId -> AcctId
     end.
 

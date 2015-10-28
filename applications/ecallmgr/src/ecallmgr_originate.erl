@@ -54,7 +54,7 @@
 
 -define(ORIGINATE_PARK, <<"&park()">>).
 -define(ORIGINATE_EAVESDROP, <<"eavesdrop">>).
--define(REPLY_TIMEOUT, 5000).
+-define(REPLY_TIMEOUT, 5 * ?MILLISECONDS_IN_SECOND).
 
 %%%===================================================================
 %%% API
@@ -553,11 +553,16 @@ maybe_add_loopback(JObj, Props) ->
                                {'error', ne_binary() | 'timeout' | 'crash'}.
 originate_execute(Node, Dialstrings, Timeout) ->
     lager:debug("executing on ~s: ~s", [Node, Dialstrings]),
-    case freeswitch:api(Node, 'originate', wh_util:to_list(Dialstrings), Timeout*1000) of
+    case freeswitch:api(Node
+                        ,'originate'
+                        ,wh_util:to_list(Dialstrings)
+                        ,Timeout*?MILLISECONDS_IN_SECOND
+                       )
+    of
         {'ok', <<"+OK ", ID/binary>>} ->
             UUID = wh_util:strip_binary(binary:replace(ID, <<"\n">>, <<>>)),
             Media = get('hold_media'),
-            _Pid = spawn(fun() -> set_music_on_hold(Node, UUID, Media) end),
+            _Pid = wh_util:spawn(fun() -> set_music_on_hold(Node, UUID, Media) end),
             {'ok', UUID};
         {'ok', Other} ->
             lager:debug("recv other 'ok': ~s", [Other]),
@@ -624,7 +629,7 @@ create_uuid(Endpoint, JObj, Node) ->
         CallId -> {'api', CallId}
     end.
 
--spec get_unset_vars(wh_json:object()) -> string().
+-spec get_unset_vars(wh_json:object()) -> iolist().
 get_unset_vars(JObj) ->
     %% Refactor (Karl wishes he had unit tests here for you to use)
     ExportProps = [{K, <<>>} || K <- wh_json:get_value(<<"Export-Custom-Channel-Vars">>, JObj, [])],

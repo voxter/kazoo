@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2014, 2600Hz INC
+%%% @copyright (C) 2010-2015, 2600Hz INC
 %%% @doc
 %%% Manage CouchDB connections
 %%% @end
@@ -33,6 +33,7 @@
 -export([save_doc/2, save_doc/3
          ,save_docs/2, save_docs/3
          ,open_cache_doc/2, open_cache_doc/3
+         ,update_cache_doc/3
          ,flush_cache_doc/2, flush_cache_doc/3
          ,flush_cache_docs/0, flush_cache_docs/1
          ,add_to_doc_cache/3
@@ -528,6 +529,27 @@ add_to_doc_cache(DbName, DocId, Doc) ->
         {'error', _}=E -> E
     end.
 
+-spec update_cache_doc(text(), ne_binary(), fun((wh_json:object()) -> wh_json:object() | 'skip')) ->
+                      {'ok', wh_json:object()}
+                      | couchbeam_error().
+update_cache_doc(DbName, DocId, Fun) when is_function(Fun, 1) ->
+    case open_cache_doc(DbName, DocId) of
+        {'ok', JObj} ->
+            NewJObj = Fun(JObj),
+            maybe_save_doc(DbName, NewJObj, JObj);
+        {'error', _Reason} = Else ->
+            lager:error("Can't open doc ~s/~s coz ~p", [DbName, DocId, _Reason]),
+            Else
+    end.
+
+-spec maybe_save_doc(text(), wh_json:object() | 'skip', wh_json:object()) ->
+                      {'ok', wh_json:object() | wh_json:objects()} |
+                      couchbeam_error().
+maybe_save_doc(_DbName, 'skip', Jobj) ->
+    {'ok', Jobj};
+maybe_save_doc(DbName, JObj, _OldJobj) ->
+    save_doc(DbName, JObj).
+
 -spec flush_cache_doc(ne_binary(), ne_binary() | wh_json:object()) ->
                              'ok' |
                              {'error', 'invalid_db_name'}.
@@ -932,7 +954,8 @@ db_archive(Db) ->
     {'ok', DbInfo} = couch_mgr:db_info(Db),
 
     MaxDocs = whapps_config:get_integer(?CONFIG_CAT, <<"max_concurrent_docs_to_archive">>, 500),
-    Filename = filename:join(["/tmp", <<Db/binary, ".archive.json">>]),
+    Timestamp = wh_util:to_binary(wh_util:current_tstamp()),
+    Filename = filename:join(["/tmp", <<Db/binary, ".", Timestamp/binary, ".archive.json">>]),
     {'ok', File} = file:open(Filename, ['write']),
 
     lager:debug("archiving to ~s", [Filename]),
@@ -981,7 +1004,7 @@ archive(Db, File, MaxDocs, N, Pos) ->
 
 -spec archive_docs(file:io_device(), wh_json:objects()) -> 'ok'.
 archive_docs(File, Docs) ->
-    [archive_doc(File, wh_json:get_value(<<"doc">>, D)) || D <- Docs],
+    _ = [archive_doc(File, wh_json:get_value(<<"doc">>, D)) || D <- Docs],
     'ok'.
 
 -spec archive_doc(file:io_device(), wh_json:object()) -> 'ok'.

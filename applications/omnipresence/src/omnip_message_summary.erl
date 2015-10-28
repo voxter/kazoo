@@ -53,8 +53,8 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    put('callid', ?MODULE),
-    ensure_template(),
+    wh_util:put_callid(?MODULE),
+    _ = ensure_template(),
     lager:debug("omnipresence event message-summary package started"),
     {'ok', #state{}}.
 
@@ -98,16 +98,11 @@ handle_cast({'omnipresence',{'subscribe_notify', <<"message-summary">>, User, _S
             ],
     wh_amqp_worker:cast(Query, fun wapi_presence:publish_mwi_query/1),
     {'noreply', State};
-handle_cast({'omnipresence',{'x_resubscribe_notify', <<"message-summary">>, User, _Subscription}}, State) ->
-    [Username, Realm] = binary:split(User, <<"@">>),
-    Query = [{<<"Username">>, Username}
-             ,{<<"Realm">>, Realm}
-             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-            ],
-    wh_amqp_worker:cast(Query, fun wapi_presence:publish_mwi_query/1),
-    {'noreply', State};
 handle_cast({'omnipresence',{'mwi_update', JObj}}, State) ->
-    _ = spawn(fun() -> mwi_event(JObj) end),
+    _ = wh_util:spawn(fun() -> mwi_event(JObj) end),
+    {'noreply', State};
+handle_cast({'omnipresence',{'presence_reset', JObj}}, State) ->
+    _ = wh_util:spawn(fun() -> presence_reset(JObj) end),
     {'noreply', State};
 handle_cast({'omnipresence', _}, State) ->
     {'noreply', State};
@@ -228,12 +223,12 @@ send_update(_, _User, _Props, []) -> 'ok';
 send_update(<<"amqp">>, _User, Props, Subscriptions) ->
     Stalkers = lists:usort([St || #omnip_subscription{stalker=St} <- Subscriptions]),
     {'ok', Worker} = wh_amqp_worker:checkout_worker(),
-    [wh_amqp_worker:cast(Props
-                         ,fun(P) -> wapi_omnipresence:publish_update(S, P) end
-                         ,Worker
-                        )
-     || S <- Stalkers
-    ],
+    _ = [wh_amqp_worker:cast(Props
+                             ,fun(P) -> wapi_omnipresence:publish_update(S, P) end
+                             ,Worker
+                            )
+         || S <- Stalkers
+        ],
     wh_amqp_worker:checkin_worker(Worker);
 send_update(<<"sip">>, User, Props, Subscriptions) ->
     Body = build_body(User, Props),
@@ -260,7 +255,8 @@ build_variables(_User, Props) ->
 -spec build_body(ne_binary(), wh_proplist()) -> ne_binary().
 build_body(User, Props) ->
     Variables = build_variables(User, Props),
-    {'ok', Text} = sub_package_message_summary:render(Variables),
+    Mod = wh_util:to_atom(<<"sub_package_message_summary">>, 'true'),
+    {'ok', Text} = Mod:render(Variables),
     Body = wh_util:to_binary(Text),
     binary:replace(Body, <<"\n">>, <<"\r\n">>, ['global']).
 
@@ -270,3 +266,8 @@ ensure_template() ->
     File = lists:concat([BasePath, "/packages/message-summary.xml"]),
     Mod = wh_util:to_atom(<<"sub_package_message_summary">>, 'true'),
     {'ok', _CompileResult} = erlydtl:compile(File, Mod, []).
+
+-spec presence_reset(wh_json:object()) -> any().
+presence_reset(JObj) ->
+    User = <<(wh_json:get_value(<<"Username">>, JObj))/binary, "@", (wh_json:get_value(<<"Realm">>, JObj))/binary>>,
+    handle_update(wh_json:new(), User).

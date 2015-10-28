@@ -287,8 +287,8 @@ resume(FSM) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update_presence(server_ref(), ne_binary(), ne_binary()) -> 'ok'.
-update_presence(FSM, PresenceID, PresenceState) ->
-    gen_fsm:send_all_state_event(FSM, {'update_presence', PresenceID, PresenceState}).
+update_presence(FSM, PresenceId, PresenceState) ->
+    gen_fsm:send_all_state_event(FSM, {'update_presence', PresenceId, PresenceState}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -332,8 +332,8 @@ awaiting_callback(FSM) -> gen_fsm:send_event(FSM, 'wait_for_callback').
 -spec start_link(ne_binary(), ne_binary(), pid(), wh_proplist()) -> startlink_ret().
 
 start_link(Supervisor, AgentJObj) when is_pid(Supervisor) ->
-    pvt_start_link(wh_json:get_value(<<"pvt_account_id">>, AgentJObj)
-                   ,wh_json:get_value(<<"_id">>, AgentJObj)
+    pvt_start_link(wh_doc:account_id(AgentJObj)
+                   ,wh_doc:id(AgentJObj)
                    ,Supervisor
                    ,[]
                    ,'false'
@@ -353,11 +353,11 @@ start_link(Supervisor, _AgentJObj, AccountId, AgentId, _Queues) ->
 
 pvt_start_link('undefined', _AgentId, Supervisor, _, _) ->
     lager:debug("agent ~s trying to start with no account id", [_AgentId]),
-    spawn('acdc_agent_sup', 'stop', [Supervisor]),
+    _ = wh_util:spawn('acdc_agent_sup', 'stop', [Supervisor]),
     'ignore';
 pvt_start_link(_AccountId, 'undefined', Supervisor, _, _) ->
     lager:debug("undefined agent id trying to start in account ~s", [_AccountId]),
-    spawn('acdc_agent_sup', 'stop', [Supervisor]),
+    _ = wh_util:spawn('acdc_agent_sup', 'stop', [Supervisor]),
     'ignore';
 pvt_start_link(AccountId, AgentId, Supervisor, Props, IsThief) ->
     gen_fsm:start_link(?MODULE, [AccountId, AgentId, Supervisor, Props, IsThief], []).
@@ -366,7 +366,7 @@ new_endpoint(FSM, EP) ->
     lager:debug("sending EP to ~p: ~p", [FSM, EP]).
 edited_endpoint(FSM, EP) ->
     lager:debug("sending EP to ~p: ~p", [FSM, EP]),
-    gen_fsm:send_all_state_event(FSM, {'edited_endpoint', wh_json:get_value(<<"_id">>, EP), EP}).
+    gen_fsm:send_all_state_event(FSM, {'edited_endpoint', wh_doc:id(EP), EP}).
 deleted_endpoint(FSM, EP) -> lager:debug("sending EP to ~p: ~p", [FSM, EP]).
 
 %%%===================================================================
@@ -392,7 +392,7 @@ init([AccountId, AgentId, Supervisor, Props, IsThief]) ->
     lager:debug("started acdc agent fsm"),
 
     Self = self(),
-    _P = spawn(?MODULE, 'wait_for_listener', [Supervisor, Self, Props, IsThief]),
+    _P = wh_util:spawn(?MODULE, 'wait_for_listener', [Supervisor, Self, Props, IsThief]),
     lager:debug("waiting for listener in ~p", [_P]),
     AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
 
@@ -518,7 +518,8 @@ sync({'sync_resp', JObj}, #state{sync_ref=Ref
             _ = erlang:cancel_timer(Ref),
             acdc_agent_stats:agent_ready(AccountId, AgentId),
             acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
-            {Next, SwitchTo, State} = apply_state_updates(State#state{sync_ref='undefined'}),
+            {Next, SwitchTo, State} =
+                apply_state_updates(State#state{sync_ref='undefined'}),
             {Next, SwitchTo, State, 'hibernate'};
         {'EXIT', _} ->
             lager:debug("other agent sent unusable state, ignoring"),
@@ -1556,9 +1557,9 @@ handle_event({'resume'}, 'ready', State) ->
 handle_event({'resume'}, 'paused', State) ->
     ReadyState = handle_resume(State),
     apply_state_updates(ReadyState);
-handle_event({'resume'}, StateName, #state{agent_state_updates = Queue} = State) ->
+handle_event({'resume'} = Event, StateName, #state{agent_state_updates = Queue} = State) ->
     lager:debug("recv resume during ~p, delaying", [StateName]),
-    NewQueue = [{'resume'} | Queue],
+    NewQueue = [Event | Queue],
     {'next_state', StateName, State#state{agent_state_updates = NewQueue}};
 handle_event({'pause', Timeout}, 'ringing', #state{agent_listener=AgentListener
                                                    ,account_id=AccountId
@@ -1583,8 +1584,8 @@ handle_event({'pause', _} = Event, StateName, #state{agent_state_updates = Queue
     lager:debug("recv pause during ~p, delaying", [StateName]),
     NewQueue = [Event | Queue],
     {'next_state', StateName, State#state{agent_state_updates = NewQueue}};
-handle_event({'update_presence', PresenceID, PresenceState}, 'ready', State) ->
-    handle_presence_update(PresenceID, PresenceState, State),
+handle_event({'update_presence', PresenceId, PresenceState}, 'ready', State) ->
+    handle_presence_update(PresenceId, PresenceState, State),
     {'next_state', 'ready', State};
 handle_event({'update_presence', _, _} = Event, StateName, #state{agent_state_updates = Queue} = State) ->
     NewQueue = [Event | Queue],
@@ -1601,15 +1602,13 @@ handle_event('load_endpoints', StateName, #state{agent_id=AgentId
                                                  ,account_id=AccountId
                                                  ,account_db=AccountDb
                                                 }=State) ->
-    Setters = [fun(C) -> whapps_call:set_account_id(AccountId, C) end
-               ,fun(C) -> whapps_call:set_account_db(AccountDb, C) end
-               ,fun(C) -> whapps_call:set_owner_id(AgentId, C) end
-               ,fun(C) -> whapps_call:set_resource_type(?RESOURCE_TYPE_AUDIO, C) end
+    Setters = [{fun whapps_call:set_account_id/2, AccountId}
+               ,{fun whapps_call:set_account_db/2, AccountDb}
+               ,{fun whapps_call:set_owner_id/2, AgentId}
+               ,{fun whapps_call:set_resource_type/2, ?RESOURCE_TYPE_AUDIO}
               ],
 
-    Call = lists:foldl(fun(F, C) -> F(C) end
-                       ,whapps_call:new(), Setters
-                      ),
+    Call = whapps_call:exec(Setters, whapps_call:new()),
 
     %% Inform us of things with us as owner
     catch gproc:reg(?OWNER_UPDATE_REG(AccountId, AgentId)),
@@ -1664,7 +1663,7 @@ handle_info({'endpoint_edited', EP}, StateName, #state{endpoints=EPs
                                                        ,agent_id=AgentId
                                                        ,agent_listener=AgentListener
                                                       }=State) ->
-    EPId = wh_json:get_value(<<"_id">>, EP),
+    EPId = wh_doc:id(EP),
     case wh_json:get_value(<<"owner_id">>, EP) of
         AgentId ->
             lager:debug("device ~s edited, we're the owner, maybe adding it", [EPId]),
@@ -1677,7 +1676,7 @@ handle_info({'endpoint_deleted', EP}, StateName, #state{endpoints=EPs
                                                         ,account_id=AccountId
                                                         ,agent_listener=AgentListener
                                                        }=State) ->
-    EPId = wh_json:get_value(<<"_id">>, EP),
+    EPId = wh_doc:id(EP),
     lager:debug("device ~s deleted, maybe removing it", [EPId]),
     {'next_state', StateName, State#state{endpoints=maybe_remove_endpoint(EPId, EPs, AccountId, AgentListener)}, 'hibernate'};
 handle_info({'endpoint_created', EP}, StateName, #state{endpoints=EPs
@@ -1685,7 +1684,7 @@ handle_info({'endpoint_created', EP}, StateName, #state{endpoints=EPs
                                                         ,agent_id=AgentId
                                                         ,agent_listener=AgentListener
                                                        }=State) ->
-    EPId = wh_json:get_value(<<"_id">>, EP),
+    EPId = wh_doc:id(EP),
     case wh_json:get_value(<<"owner_id">>, EP) of
         AgentId ->
             lager:debug("device ~s created, we're the owner, maybe adding it", [EPId]),
@@ -1890,7 +1889,7 @@ start_outbound_call_handling(CallId, #state{agent_listener=AgentListener
                                             ,account_id=AccountId
                                             ,agent_id=AgentId
                                            }=State) when is_binary(CallId) ->
-    _ = put('callid', CallId),
+    wh_util:put_callid(CallId),
     lager:debug("agent making outbound call, not receiving ACDc calls"),
     acdc_agent_listener:outbound_call(AgentListener, CallId),
     acdc_agent_stats:agent_outbound(AccountId, AgentId, CallId),
@@ -1951,12 +1950,12 @@ find_sip_username(_EP, Username) -> Username.
 -spec find_endpoint_id(wh_json:object(), api_binary()) -> api_binary().
 
 find_endpoint_id(EP) ->
-    find_endpoint_id(EP, wh_json:get_value(<<"_id">>, EP)).
+    find_endpoint_id(EP, wh_doc:id(EP)).
 
 find_endpoint_id(EP, 'undefined') -> wh_json:get_value(<<"Endpoint-ID">>, EP);
 find_endpoint_id(_EP, EPId) -> EPId.
 
--spec monitor_endpoint(wh_json:object(), ne_binary(), server_ref()) -> any().
+-spec monitor_endpoint(wh_json:object(), ne_binary(), server_ref()) -> _.
 monitor_endpoint(EP, AccountId, AgentListener) ->
     %% Bind for outbound call requests
     acdc_agent_listener:add_endpoint_bindings(AgentListener
@@ -1967,7 +1966,7 @@ monitor_endpoint(EP, AccountId, AgentListener) ->
     catch gproc:reg(?ENDPOINT_UPDATE_REG(AccountId, find_endpoint_id(EP))),
     catch gproc:reg(?NEW_CHANNEL_REG(AccountId, find_username(EP))).
 
--spec unmonitor_endpoint(wh_json:object(), ne_binary(), server_ref()) -> any().
+-spec unmonitor_endpoint(wh_json:object(), ne_binary(), server_ref()) -> _.
 unmonitor_endpoint(EP, AccountId, AgentListener) ->
     %% Bind for outbound call requests
     acdc_agent_listener:remove_endpoint_bindings(AgentListener
@@ -1975,12 +1974,12 @@ unmonitor_endpoint(EP, AccountId, AgentListener) ->
                                         ,find_username(EP)
                                        ),
     %% Inform us of device changes
-    catch gproc:unreg(?ENDPOINT_UPDATE_REG(AccountId, wh_json:get_value(<<"_id">>, EP))),
+    catch gproc:unreg(?ENDPOINT_UPDATE_REG(AccountId, wh_doc:id(EP))),
     catch gproc:unreg(?NEW_CHANNEL_REG(AccountId, find_username(EP))).
 
--spec maybe_add_endpoint(ne_binary(), wh_json:object(), wh_json:objects(), ne_binary(), server_ref()) -> any().
+-spec maybe_add_endpoint(ne_binary(), wh_json:object(), wh_json:objects(), ne_binary(), server_ref()) -> _.
 maybe_add_endpoint(EPId, EP, EPs, AccountId, AgentListener) ->
-    case lists:partition(fun(E) -> wh_json:get_value(<<"_id">>, E) =:= EPId end, EPs) of
+    case lists:partition(fun(E) -> wh_doc:id(E) =:= EPId end, EPs) of
         {[], _} ->
             lager:debug("endpoint ~s not in our list, adding it", [EPId]),
             [begin monitor_endpoint(EP, AccountId, AgentListener), EP end | EPs];
@@ -1989,7 +1988,7 @@ maybe_add_endpoint(EPId, EP, EPs, AccountId, AgentListener) ->
 
 -spec maybe_remove_endpoint(ne_binary(), wh_json:objects(), ne_binary(), server_ref()) -> wh_json:objects().
 maybe_remove_endpoint(EPId, EPs, AccountId, AgentListener) ->
-    case lists:partition(fun(EP) -> wh_json:get_value(<<"_id">>, EP) =:= EPId end, EPs) of
+    case lists:partition(fun(EP) -> wh_doc:id(EP) =:= EPId end, EPs) of
         {[], _} -> EPs; %% unknown endpoint
         {[RemoveEP], EPs1} ->
             lager:debug("endpoint ~s in our list, removing it", [EPId]),
@@ -2058,12 +2057,12 @@ maybe_notify(Ns, Key, State) ->
                 'undefined' -> 'ok';
                 Url ->
                     lager:debug("send update for ~s to ~s", [?NOTIFY_ALL, Url]),
-                    _P = spawn(fun() -> notify(Url, get_method(Ns), Key, State) end),
+                    _P = wh_util:spawn(fun() -> notify(Url, get_method(Ns), Key, State) end),
                     'ok'
             end;
         Url ->
             lager:debug("send update for ~s to ~s", [Key, Url]),
-            _P = spawn(fun() -> notify(Url, get_method(Ns), Key, State) end),
+            _P = wh_util:spawn(fun() -> notify(Url, get_method(Ns), Key, State) end),
             'ok'
     end.
 

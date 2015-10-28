@@ -40,9 +40,11 @@
 -export([maybe_add_expires_deviation/1, maybe_add_expires_deviation_ms/1]).
 
 -export([get_dial_separator/2]).
+-export([fix_contact/3]).
 
 -include_lib("whistle/src/api/wapi_dialplan.hrl").
 -include("ecallmgr.hrl").
+-include_lib("nksip/include/nksip.hrl").
 
 -define(HTTP_GET_PREFIX, "http_cache://").
 
@@ -219,7 +221,7 @@ get_orig_port(Prop) ->
         Port -> Port
     end.
 
--spec get_sip_interface_from_db(ne_binary()) -> ne_binary().
+-spec get_sip_interface_from_db(ne_binaries()) -> ne_binary().
 get_sip_interface_from_db([FsPath]) ->
     NetworkMap = ecallmgr_config:get(<<"network_map">>, wh_json:new()),
     case map_fs_path_to_sip_profile(FsPath, NetworkMap) of
@@ -231,7 +233,7 @@ get_sip_interface_from_db([FsPath]) ->
             Else
     end.
 
--spec map_fs_path_to_sip_profile(ne_binary(), wh_json:object()) -> ne_binary().
+-spec map_fs_path_to_sip_profile(ne_binary(), wh_json:object()) -> api_binary().
 map_fs_path_to_sip_profile(FsPath, NetworkMap) ->
     SIPInterfaceObj = wh_json:filter(fun({K, _}) ->
                                wh_network_utils:verify_cidr(FsPath, K)
@@ -380,8 +382,7 @@ maybe_sanitize_fs_value(_, Val) -> Val.
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec set(atom(), ne_binary(), wh_proplist()) ->
-                 ecallmgr_util:send_cmd_ret().
+-spec set(atom(), ne_binary(), wh_proplist()) -> send_cmd_ret().
 set(_, _, []) -> 'ok';
 set(Node, UUID, [{<<"Auto-Answer", _/binary>> = K, V}]) ->
     ecallmgr_fs_command:set(Node, UUID, [{<<"alert_info">>, <<"intercom">>}, get_fs_key_and_value(K, V, UUID)]);
@@ -455,8 +456,7 @@ set_fold(Node, UUID, {K, V}, Acc) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec export(atom(), ne_binary(), wh_proplist()) ->
-                    ecallmgr_util:send_cmd_ret().
+-spec export(atom(), ne_binary(), wh_proplist()) -> send_cmd_ret().
 export(_, _, []) -> 'ok';
 export(Node, UUID, [{<<"Auto-Answer", _/binary>> = K, V} | Props]) ->
     Exports = [get_fs_key_and_value(Key, Val, UUID)
@@ -470,8 +470,7 @@ export(Node, UUID, Props) ->
     Exports = [get_fs_key_and_value(Key, Val, UUID) || {Key, Val} <- Props],
     ecallmgr_fs_command:export(Node, UUID, props:filter(Exports, 'skip')).
 
--spec bridge_export(atom(), ne_binary(), wh_proplist()) ->
-                    ecallmgr_util:send_cmd_ret().
+-spec bridge_export(atom(), ne_binary(), wh_proplist()) -> send_cmd_ret().
 bridge_export(_, _, []) -> 'ok';
 bridge_export(Node, UUID, [{<<"Auto-Answer", _/binary>> = K, V} | Props]) ->
     BridgeExports = get_fs_keys_and_values(UUID, Props),
@@ -662,7 +661,7 @@ build_bridge_channels([#bridge_endpoint{invite_format = <<"loopback">>}=Endpoint
 %% If this does not have an explicted sip route and we have no ip address, lookup the registration
 build_bridge_channels([#bridge_endpoint{ip_address='undefined'}=Endpoint|Endpoints], Channels) ->
     S = self(),
-    Pid = spawn(fun() -> S ! {self(), build_channel(Endpoint)} end),
+    Pid = wh_util:spawn(fun() -> S ! {self(), build_channel(Endpoint)} end),
     build_bridge_channels(Endpoints, [{'worker', Pid}|Channels]);
 %% If we have been given a IP to route to then do that now
 build_bridge_channels([Endpoint|Endpoints], Channels) ->
@@ -686,7 +685,7 @@ maybe_collect_worker_channel(Pid, Channels) ->
         {Pid, {'error', _}} -> Channels;
         {Pid, {'ok', Channel}} -> [Channel|Channels]
     after
-        2000 -> Channels
+        2 * ?MILLISECONDS_IN_SECOND -> Channels
     end.
 
 -spec build_channel(bridge_endpoint() | wh_json:object()) ->
@@ -1107,7 +1106,7 @@ media_url_cache_props(_MediaName) ->
 cached_media_expelled(?ECALLMGR_PLAYBACK_MEDIA_KEY(MediaName), MediaUrl, _Reason) ->
     lager:debug("media ~s was expelled(~p), flushing from media servers", [MediaName, _Reason]),
     Nodes = ecallmgr_fs_nodes:connected(),
-    [maybe_flush_node_of_media(MediaUrl, N) || N <- Nodes],
+    _ = [maybe_flush_node_of_media(MediaUrl, N) || N <- Nodes],
     'ok'.
 
 -spec maybe_flush_node_of_media(ne_binary(), atom()) -> 'ok'.
@@ -1164,7 +1163,7 @@ maybe_add_expires_deviation_ms('undefined') -> 'undefined';
 maybe_add_expires_deviation_ms(Expires) when not is_integer(Expires) ->
     maybe_add_expires_deviation_ms(wh_util:to_integer(Expires));
 maybe_add_expires_deviation_ms(Expires) ->
-    maybe_add_expires_deviation(Expires) * 1000.
+    maybe_add_expires_deviation(Expires) * ?MILLISECONDS_IN_SECOND.
 
 -spec get_dial_separator(api_object() | ne_binary(), wh_json:objects()) -> ne_binary().
 get_dial_separator(?DIAL_METHOD_SIMUL, [_|T]) when T =/= [] -> ?SEPARATOR_SIMULTANEOUS;
@@ -1174,3 +1173,25 @@ get_dial_separator(JObj, Endpoints) ->
     get_dial_separator(wh_json:get_value(<<"Dial-Endpoint-Method">>, JObj, ?DIAL_METHOD_SINGLE)
                        ,Endpoints
                       ).
+
+-spec fix_contact(api_binary() | list(), ne_binary(), ne_binary()) -> api_binary().
+fix_contact('undefined', _, _) -> 'undefined';
+fix_contact(<<";", _/binary>> = OriginalContact, Username, Realm) ->
+    fix_contact(<<"sip:", Username/binary, "@", Realm/binary, OriginalContact/binary>>, Username, Realm);
+fix_contact(OriginalContact, Username, Realm)
+  when is_binary(OriginalContact) ->
+    fix_contact(binary:split(wh_util:strip_binary(OriginalContact), <<";">>, ['global']), Username, Realm);
+fix_contact([<<>> | Options], Username, Realm) ->
+    [<<"sip:", Username/binary, "@", Realm/binary>> | Options];
+fix_contact([Contact | Options], Username, Realm) ->
+    case nksip_parse_uri:uris(Contact) of
+        [#uri{user = <<>>, domain = <<>>}=Uri] ->
+            fix_contact([nksip_unparse:ruri(Uri#uri{user=Username, domain=Realm}) | Options], Username, Realm);
+        [#uri{user = <<>>}=Uri] ->
+            fix_contact([nksip_unparse:ruri(Uri#uri{user=Username}) | Options], Username, Realm);
+        [#uri{domain = <<>>}=Uri] ->
+            fix_contact([nksip_unparse:ruri(Uri#uri{domain=Realm}) | Options], Username, Realm);
+        [#uri{}=Uri] ->
+            list_to_binary([nksip_unparse:ruri(Uri)] ++ [<<";", Option/binary>> || Option <- Options]);
+        _Else -> 'undefined'
+    end.

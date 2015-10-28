@@ -36,6 +36,9 @@
 -define(CB_LIST, <<"devices/crossbar_listing">>).
 -define(CB_LIST_MAC, <<"devices/listing_by_macaddress">>).
 
+-define(KEY_MAC_ADDRESS, <<"mac_address">>).
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -50,7 +53,7 @@ init() ->
     _ = crossbar_bindings:bind(<<"v2_resource.execute.put.devices">>, ?MODULE, 'put'),
     _ = crossbar_bindings:bind(<<"v2_resource.execute.post.devices">>, ?MODULE, 'post'),
     _ = crossbar_bindings:bind(<<"v2_resource.execute.delete.devices">>, ?MODULE, 'delete'),
-    crossbar_bindings:bind(<<"v1_resource.finish_request.*.devices">>, 'cb_modules_util', 'reconcile_services').
+    crossbar_bindings:bind(<<"v2_resource.finish_request.*.devices">>, 'crossbar_services', 'reconcile').
 
 %%--------------------------------------------------------------------
 %% @public
@@ -112,11 +115,19 @@ billing(Context) ->
 
 billing(Context, ?HTTP_GET, [{<<"devices">>, _}|_]) ->
     Context;
-billing(Context, _ReqVerb, [{<<"devices">>, _}|_]) ->
+billing(Context, _ReqVerb, [{<<"devices">>, _}|_Nouns]) ->
     try wh_services:allow_updates(cb_context:account_id(Context)) of
-        'true' -> Context
+        'true' ->
+            lager:debug("allowing service updates"),
+            Context
     catch
         'throw':{Error, Reason} ->
+            lager:debug("account ~s is not allowed to make billing updates: ~s: ~p"
+                        ,[props:get_value(<<"accounts">>, _Nouns)
+                          ,Error
+                          ,Reason
+                         ]
+                       ),
             crossbar_util:response('error', wh_util:to_binary(Error), 500, Reason, Context)
     end;
 billing(Context, _ReqVerb, _Nouns) -> Context.
@@ -221,29 +232,30 @@ validate(Context, DeviceId, ?QUICKCALL_PATH_TOKEN, _ToDial) ->
     end.
 
 -spec post(cb_context:context(), path_token()) -> cb_context:context().
--spec post(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 post(Context, DeviceId) ->
     case changed_mac_address(Context) of
         'true' ->
             _ = crossbar_util:maybe_refresh_fs_xml('device', Context),
-            Context1 = crossbar_doc:save(Context),
-            _ = maybe_aggregate_device(DeviceId, Context1),
-            _ = registration_update(Context),
-            _ = provisioner_util:maybe_provision(Context1),
+            Context1 = cb_modules_util:take_sync_field(Context),
+            Context2 = crossbar_doc:save(Context1),
+            _ = maybe_aggregate_device(DeviceId, Context2),
+            _ = wh_util:spawn(
+                  fun() ->
+                          _ = provisioner_util:maybe_provision(Context2),
+                          _ = provisioner_util:maybe_sync_sip_data(Context1, 'device'),
+                          _ = crossbar_util:flush_registration(Context)
+                  end),
             Context1;
         'false' ->
             error_used_mac_address(Context)
     end.
 
+-spec post(cb_context:context(), path_token(), path_token()) ->
+                  cb_context:context().
 post(Context, DeviceId, ?CHECK_SYNC_PATH_TOKEN) ->
     lager:debug("publishing check_sync for ~s", [DeviceId]),
-
-    Req = [{<<"Realm">>, crossbar_util:get_account_realm(Context)}
-           ,{<<"Username">>, kz_device:sip_username(cb_context:doc(Context))}
-           ,{<<"Msg-ID">>, cb_context:req_id(Context)}
-           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-          ],
-    wh_amqp_worker:cast(Req, fun wapi_switch:publish_check_sync/1),
+    Context1 = cb_context:store(Context, 'sync', 'force'),
+    _ = provisioner_util:maybe_sync_sip_data(Context1, 'device'),
     crossbar_util:response_202(<<"sync request sent">>, Context).
 
 -spec put(cb_context:context()) -> cb_context:context().
@@ -252,7 +264,7 @@ put(Context) ->
         fun() ->
             Context1 = crossbar_doc:save(Context),
             _ = maybe_aggregate_device('undefined', Context1),
-            _ = provisioner_util:maybe_provision(Context1),
+            _ = wh_util:spawn('provisioner_util', 'maybe_provision', [Context1]),
             Context1
         end,
     crossbar_services:maybe_dry_run(Context, Callback).
@@ -261,17 +273,14 @@ put(Context) ->
 delete(Context, DeviceId) ->
     _ = crossbar_util:refresh_fs_xml(Context),
     Context1 = crossbar_doc:delete(Context),
-    _ = registration_update(Context),
-    _ = provisioner_util:maybe_delete_provision(Context),
+    _ = crossbar_util:flush_registration(Context),
+    _ = wh_util:spawn('provisioner_util', 'maybe_delete_provision', [Context]),
     _ = maybe_remove_aggregate(DeviceId, Context),
     Context1.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
--spec registration_update(cb_context:context()) -> 'ok'.
-registration_update(Context) ->
-    cb_devices_v1:registration_update(Context).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -298,8 +307,8 @@ validate_request(DeviceId, Context) ->
 
 -spec changed_mac_address(cb_context:context()) -> boolean().
 changed_mac_address(Context) ->
-    NewAddress = cb_context:req_value(Context, <<"mac_address">>),
-    OldAddress = wh_json:get_ne_value(<<"mac_address">>, cb_context:fetch(Context, 'db_doc')),
+    NewAddress = cb_context:req_value(Context, ?KEY_MAC_ADDRESS),
+    OldAddress = wh_json:get_ne_value(?KEY_MAC_ADDRESS, cb_context:fetch(Context, 'db_doc')),
     case NewAddress =:= OldAddress of
         'true' -> 'true';
         'false' ->
@@ -308,7 +317,7 @@ changed_mac_address(Context) ->
 
 -spec check_mac_address(api_binary(), cb_context:context()) -> cb_context:context().
 check_mac_address(DeviceId, Context) ->
-    MacAddress = cb_context:req_value(Context, <<"mac_address">>),
+    MacAddress = cb_context:req_value(Context, ?KEY_MAC_ADDRESS),
     case unique_mac_address(MacAddress, Context) of
         'true' ->
             prepare_outbound_flags(DeviceId, Context);
@@ -325,16 +334,16 @@ unique_mac_address(MacAddress, Context) ->
 
 -spec error_used_mac_address(cb_context:context()) -> cb_context:context().
 error_used_mac_address(Context) ->
-    MacAddress = cb_context:req_value(Context, <<"mac_address">>),
+    MacAddress = cb_context:req_value(Context, ?KEY_MAC_ADDRESS),
     cb_context:add_validation_error(
-        <<"mac_address">>
-        ,<<"unique">>
-        ,wh_json:from_list([
-            {<<"message">>, <<"Mac address already in use">>}
-            ,{<<"cause">>, MacAddress}
+      ?KEY_MAC_ADDRESS
+      ,<<"unique">>
+      ,wh_json:from_list(
+         [{<<"message">>, <<"Mac address already in use">>}
+          ,{<<"cause">>, MacAddress}
          ])
-        ,Context
-    ).
+      ,Context
+     ).
 
 -spec get_mac_addresses(ne_binary()) -> ne_binaries().
 get_mac_addresses(DbName) ->
@@ -360,7 +369,7 @@ prepare_outbound_flags(DeviceId, Context) ->
 
 -spec prepare_device_realm(api_binary(), cb_context:context()) -> cb_context:context().
 prepare_device_realm(DeviceId, Context) ->
-    AccountRealm = crossbar_util:get_account_realm(Context),
+    AccountRealm = wh_util:get_account_realm(cb_context:account_id(Context)),
     Realm = cb_context:req_value(Context, [<<"sip">>, <<"realm">>], AccountRealm),
     case AccountRealm =:= Realm of
         'true' ->
@@ -484,7 +493,7 @@ load_device(DeviceId, Context) ->
 %%--------------------------------------------------------------------
 -spec load_device_status(cb_context:context()) -> cb_context:context().
 load_device_status(Context) ->
-    AccountRealm = crossbar_util:get_account_realm(Context),
+    AccountRealm = wh_util:get_account_realm(cb_context:account_id(Context)),
     RegStatuses = lookup_regs(AccountRealm),
     lager:debug("reg statuses: ~p", [RegStatuses]),
     crossbar_util:response(RegStatuses, Context).
@@ -572,7 +581,7 @@ is_creds_locally_unique(AccountDb, Username, DeviceId) ->
 
 is_creds_global_unique(Realm, Username, DeviceId) ->
     ViewOptions = [{<<"key">>, [wh_util:to_lower_binary(Realm)
-                                , wh_util:to_lower_binary(Username)
+                                ,wh_util:to_lower_binary(Username)
                                ]
                    }],
     case couch_mgr:get_results(?WH_SIP_DB, <<"credentials/lookup">>, ViewOptions) of

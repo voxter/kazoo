@@ -93,8 +93,11 @@ maybe_closed_group_restriction(JObj, Call) ->
 
 -spec maybe_classification_restriction(wh_json:object(), whapps_call:call()) -> boolean().
 maybe_classification_restriction(JObj, Call) ->
-    Number = whapps_call:request_user(Call),
-    Classification = wnm_util:classify_number(Number),
+    Request = whapps_call:request_user(Call),
+    AccountId = whapps_call:account_id(Call),
+    DialPlan = wh_json:get_value(<<"dial_plan">>, JObj, wh_json:new()),
+    Number = wnm_util:to_e164(Request, AccountId, DialPlan),
+    Classification = wnm_util:classify_number(Number, AccountId),
     lager:debug("classified number as ~s, testing for call restrictions", [Classification]),
     wh_json:get_value([<<"call_restriction">>, Classification, <<"action">>], JObj) =:= <<"deny">>.
 
@@ -237,7 +240,11 @@ update_ccvs(Call) ->
                        'undefined' -> <<"internal">>;
                        _Else -> <<"external">>
                    end,
-    {CIDNumber, CIDName} = cf_attributes:caller_id(CallerIdType, Call),
+    {CIDNumber, CIDName} =
+        cf_attributes:caller_id(
+          CallerIdType
+          ,Call
+         ),
     lager:info("bootstrapping with caller id type ~s: \"~s\" ~s"
                ,[CallerIdType, CIDName, CIDNumber]
               ),
@@ -247,11 +254,8 @@ update_ccvs(Call) ->
                ,{<<"Caller-ID-Number">>, CIDNumber}
                | get_incoming_security(Call)
               ]),
-    Unsetters = [fun(Call2) -> whapps_call:kvs_erase('prepend_cid_name', Call2) end
-                 ,fun(Call2) -> whapps_call:kvs_erase('prepend_cid_number', Call2) end
-                ],
-    Call2 = lists:foldl(fun(Unsetter, Call2) -> Unsetter(Call2) end, Call, Unsetters),
-    whapps_call:set_custom_channel_vars(Props, Call2).
+    Call1 = whapps_call:kvs_erase(['prepend_cid_name', 'prepend_cid_number'], Call),
+    whapps_call:set_custom_channel_vars(Props, Call1).
 
 -spec maybe_start_metaflow(whapps_call:call()) -> whapps_call:call().
 maybe_start_metaflow(Call) ->

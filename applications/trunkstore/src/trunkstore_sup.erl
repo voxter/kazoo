@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz
+%%% @copyright (C) 2012-2015, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -18,11 +18,10 @@
 
 -include("ts.hrl").
 
--define(ORIGIN_BINDINGS, [[{'type', <<"account">>}
-                           ,{'type', <<"connectivity">>}
-                           ,{'type', <<"sys_info">>}
-                           ,{'type', <<"number">>}
-                          ]
+-define(ORIGIN_BINDINGS, [[{'type', <<"account">>}]
+                          ,[{'type', <<"connectivity">>}]
+                          ,[{'type', <<"sys_info">>}]
+                          ,[{'type', <<"number">>}]
                          ]).
 -define(CACHE_PROPS, [{'origin_bindings', ?ORIGIN_BINDINGS}]).
 

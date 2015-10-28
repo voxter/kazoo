@@ -632,7 +632,7 @@ is_digit(_) -> 'false'.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec lookup_callflow_patterns(ne_binary(), ne_binary()) ->
-                                      {'ok', {wh_json:object(), ne_binary()}} |
+                                      {'ok', {wh_json:object(), api_binary()}} |
                                       {'error', term()}.
 lookup_callflow_patterns(Number, Db) ->
     lager:info("lookup callflow patterns for ~s in ~s", [Number, Db]),
@@ -663,7 +663,6 @@ test_callflow_patterns([Pattern|T], Number, {_, Capture}=Result) ->
     Regex = wh_json:get_value(<<"key">>, Pattern),
     case re:run(Number, Regex) of
         {'match', [{Start,End}]} ->
-            Match = binary:part(Number, Start, End),
             Flow = wh_json:get_value(<<"doc">>, Pattern),
             case binary:part(Number, Start, End) of
                 <<>> when Capture =:= <<>> ->
@@ -758,7 +757,7 @@ encryption_method_map(JObj, Endpoint) ->
 -spec maybe_start_metaflows(whapps_call:call(), wh_json:objects()) -> 'ok'.
 -spec maybe_start_metaflow(whapps_call:call(), wh_json:object()) -> 'ok'.
 maybe_start_metaflows(Call, Endpoints) ->
-    [maybe_start_metaflow(Call, Endpoint) || Endpoint <- Endpoints],
+    _ = [maybe_start_metaflow(Call, Endpoint) || Endpoint <- Endpoints],
     'ok'.
 
 maybe_start_metaflow(Call, Endpoint) ->
@@ -861,12 +860,18 @@ check_value_of_fields(Perms, Def, Data, Call) ->
 
 -spec sip_users_from_device_ids(ne_binaries(), whapps_call:call()) -> ne_binaries().
 sip_users_from_device_ids(EndpointIds, Call) ->
-    lists:foldl(fun(EndpointId, Acc) ->
-        case sip_user_from_device_id(EndpointId, Call) of
-            'undefined' -> Acc;
-            Username -> [Username|Acc]
-        end
-    end, [], EndpointIds).
+    lists:foldl(fun(EID, Acc) -> sip_users_from_device_id(EID, Acc, Call) end
+                ,[]
+                ,EndpointIds
+               ).
+
+-spec sip_users_from_device_id(ne_binary(), ne_binaries(), whapps_call:call()) ->
+                                      ne_binaries().
+sip_users_from_device_id(EndpointId, Acc, Call) ->
+    case sip_user_from_device_id(EndpointId, Call) of
+        'undefined' -> Acc;
+        Username -> [Username|Acc]
+    end.
 
 -spec sip_user_from_device_id(ne_binary(), whapps_call:call()) -> api_binary().
 sip_user_from_device_id(EndpointId, Call) ->
@@ -910,22 +915,19 @@ process_event(Call, NoopId, JObj) ->
             wait_for_noop(Call, NoopId)
     end.
 
--define(DEFAULT_TIMEZONE, <<"America/Los_Angeles">>).
-
 -spec get_timezone(wh_json:object(), whapps_call:call()) -> ne_binary().
 get_timezone(JObj, Call) ->
     case wh_json:get_value(<<"timezone">>, JObj) of
-        'undefined' -> cf_util:account_timezone(Call);
+        'undefined'   -> account_timezone(Call);
+        <<"inherit">> -> account_timezone(Call);  %% UI-1808
         TZ -> TZ
     end.
 
 -spec account_timezone(whapps_call:call()) -> ne_binary().
 account_timezone(Call) ->
-    case couch_mgr:open_cache_doc(whapps_call:account_db(Call)
-                                  ,whapps_call:account_id(Call)
-                                 )
-    of
-        {'ok', JObj} -> wh_json:get_value(<<"timezone">>, JObj, ?DEFAULT_TIMEZONE);
+    case kz_account:fetch(whapps_call:account_id(Call)) of
+        {'ok', AccountJObj} ->
+            kz_account:timezone(AccountJObj, ?DEFAULT_TIMEZONE);
         {'error', _E} ->
             whapps_config:get(<<"accounts">>, <<"timezone">>, ?DEFAULT_TIMEZONE)
     end.

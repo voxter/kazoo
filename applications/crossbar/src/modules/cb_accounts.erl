@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2015, 2600Hz INC
 %%% @doc
 %%% Account module
 %%%
@@ -20,6 +20,7 @@
          ,put/1, put/2
          ,post/2, post/3
          ,delete/2
+         ,patch/2
         ]).
 
 -export([is_unique_realm/2]).
@@ -58,6 +59,7 @@ init() ->
                 ,{<<"*.validate.accounts">>, 'validate'}
                 ,{<<"*.execute.put.accounts">>, 'put'}
                 ,{<<"*.execute.post.accounts">>, 'post'}
+                ,{<<"*.execute.patch.accounts">>, 'patch'}
                 ,{<<"*.execute.delete.accounts">>, 'delete'}
                ],
     cb_modules_util:bind(?MODULE, Bindings).
@@ -81,13 +83,13 @@ allowed_methods(AccountId) ->
     case whapps_util:get_master_account_id() of
         {'ok', AccountId} ->
             lager:debug("accessing master account, disallowing DELETE"),
-            [?HTTP_GET, ?HTTP_PUT, ?HTTP_POST];
+            [?HTTP_GET, ?HTTP_PUT, ?HTTP_POST, ?HTTP_PATCH];
         {'ok', _MasterId} ->
-            [?HTTP_GET, ?HTTP_PUT, ?HTTP_POST, ?HTTP_DELETE];
+            [?HTTP_GET, ?HTTP_PUT, ?HTTP_POST, ?HTTP_PATCH, ?HTTP_DELETE];
         {'error', _E} ->
             lager:debug("failed to get master account id: ~p", [_E]),
             lager:info("disallowing DELETE while we can't determine the master account id"),
-            [?HTTP_GET, ?HTTP_PUT, ?HTTP_POST]
+            [?HTTP_GET, ?HTTP_PUT, ?HTTP_POST, ?HTTP_PATCH]
     end.
 
 allowed_methods(_, ?MOVE) ->
@@ -180,6 +182,8 @@ validate_account(Context, _AccountId, ?HTTP_PUT) ->
     validate_request('undefined', prepare_context('undefined', Context));
 validate_account(Context, AccountId, ?HTTP_POST) ->
     validate_request(AccountId, prepare_context(AccountId, Context));
+validate_account(Context, AccountId, ?HTTP_PATCH) ->
+    validate_patch_request(AccountId, prepare_context(AccountId, Context));
 validate_account(Context, AccountId, ?HTTP_DELETE) ->
     validate_delete_request(AccountId, prepare_context(AccountId, Context)).
 
@@ -245,7 +249,7 @@ post(Context, AccountId) ->
     Context1 = crossbar_doc:save(Context),
     case cb_context:resp_status(Context1) of
         'success' ->
-            _ = provisioner_util:maybe_update_account(Context1),
+            _ = wh_util:spawn('provisioner_util', 'maybe_update_account', [Context1]),
             JObj = cb_context:doc(Context1),
             _ = replicate_account_definition(JObj),
             support_depreciated_billing_id(wh_json:get_value(<<"billing_id">>, JObj)
@@ -261,6 +265,10 @@ post(Context, AccountId, ?MOVE) ->
         _Status -> Context
     end.
 
+-spec patch(cb_context:context(), path_token()) -> cb_context:context().
+patch(Context, AccountId) ->
+    post(Context, AccountId).
+
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
@@ -272,7 +280,7 @@ post(Context, AccountId, ?MOVE) ->
 
 put(Context) ->
     JObj = cb_context:doc(Context),
-    AccountId = wh_json:get_value(<<"_id">>, JObj, couch_mgr:get_uuid()),
+    AccountId = wh_doc:id(JObj, couch_mgr:get_uuid()),
     try create_new_account_db(prepare_context(AccountId, Context)) of
         C ->
             Tree = kz_account:tree(JObj),
@@ -280,13 +288,18 @@ put(Context) ->
             leak_pvt_fields(C)
     catch
         'throw':C ->
+            lager:debug("failed to create account, unrolling changes"),
+
             case cb_context:is_context(C) of
-                'true' ->  delete(C, AccountId);
+                'true' -> delete(C, AccountId);
                 'false' ->
                     C = cb_context:add_system_error('unspecified_fault', Context),
                     delete(C, AccountId)
             end;
-        _:_ ->
+        _E:_R ->
+            ST = erlang:get_stacktrace(),
+            lager:debug("unexpected failure when creating account: ~s: ~p", [_E, _R]),
+            wh_util:log_stacktrace(ST),
             C = cb_context:add_system_error('unspecified_fault', Context),
             delete(C, AccountId)
     end.
@@ -309,8 +322,7 @@ delete(Context, Account) ->
             cb_context:add_system_error('bad_identifier', wh_json:from_list([{<<"cause">>, AccountId}]),  Context);
         'true' ->
             Context1 = delete_remove_services(prepare_context(Context, AccountId, AccountDb)),
-            Tree = wh_json:get_value(<<"pvt_tree">>, cb_context:doc(Context1)),
-            _ = maybe_update_descendants_count(Tree),
+            _ = maybe_update_descendants_count(kz_account:tree(cb_context:doc(Context1))),
             Context1
     end.
 %%--------------------------------------------------------------------
@@ -321,7 +333,7 @@ delete(Context, Account) ->
 -spec maybe_update_descendants_count(ne_binaries()) -> 'ok'.
 maybe_update_descendants_count([]) -> 'ok';
 maybe_update_descendants_count(Tree) ->
-    _ = spawn('crossbar_util', 'descendants_count', [lists:last(Tree)]),
+    _ = wh_util:spawn('crossbar_util', 'descendants_count', [lists:last(Tree)]),
     'ok'.
 
 %%--------------------------------------------------------------------
@@ -407,6 +419,7 @@ validate_request(AccountId, Context) ->
                     ,fun validate_realm_is_unique/2
                     ,fun validate_account_name_is_unique/2
                     ,fun validate_account_schema/2
+                    ,fun disallow_direct_clients/2
                    ],
     lists:foldl(fun(F, C) -> F(AccountId, C) end
                 ,Context
@@ -541,6 +554,36 @@ maybe_import_enabled(Context, JObj, IsEnabled) ->
                        ,wh_json:delete_key(<<"enabled">>, JObj1)
                       ).
 
+-spec disallow_direct_clients(api_binary(), cb_context:context()) -> cb_context:context().
+disallow_direct_clients(AccountId, Context) ->
+    AllowDirect = whapps_config:get_is_true(?WH_ACCOUNTS_DB, 'allow_subaccounts_for_direct', 'true'),
+    maybe_disallow_direct_clients(AllowDirect, AccountId, Context).
+
+-spec maybe_disallow_direct_clients(boolean(), api_binary(), cb_context:context()) ->
+                                           cb_context:context().
+maybe_disallow_direct_clients('true', _AccountId, Context) ->
+    Context;
+maybe_disallow_direct_clients('false', _AccountId, Context) ->
+    {'ok', MasterAccountId} = whapps_util:get_master_account_id(),
+    AuthAccountId = cb_context:auth_account_id(Context),
+    AuthUserReseller = wh_services:get_reseller_id(AuthAccountId),
+    case AuthUserReseller =/= MasterAccountId
+        orelse wh_services:is_reseller(AuthAccountId)
+    of
+        'true' -> Context;
+        'false' ->
+            lager:debug("direct account ~p is disallowed from creating sub-accounts", [AuthAccountId]),
+            cb_context:add_validation_error(
+              [<<"account">>]
+              ,<<"forbidden">>
+              ,wh_json:from_list(
+                 [{<<"message">>, <<"Direct account is not allowed to create sub-accounts">>}
+                  ,{<<"cause">>, AuthAccountId}
+                 ])
+              ,Context
+             )
+    end.
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -556,11 +599,16 @@ validate_delete_request(AccountId, Context) ->
         {'error', 'not_found'} -> cb_context:add_system_error('datastore_missing_view', Context);
         {'error', _} -> cb_context:add_system_error('datastore_fault', Context);
         {'ok', JObjs} ->
-            case [JObj || JObj <- JObjs, wh_json:get_value(<<"id">>, JObj) =/= AccountId] of
+            case [JObj || JObj <- JObjs, wh_doc:id(JObj) =/= AccountId] of
                 [] -> cb_context:set_resp_status(Context, 'success');
                 _Else -> cb_context:add_system_error('account_has_descendants', Context)
             end
     end.
+
+%% @private
+-spec validate_patch_request(ne_binary(), cb_context:context()) -> cb_context:context().
+validate_patch_request(AccountId, Context) ->
+    crossbar_doc:patch_and_validate(AccountId, Context, fun validate_request/2).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -642,7 +690,6 @@ leak_pvt_created(Context) ->
 -spec leak_pvt_enabled(cb_context:context()) -> cb_context:context().
 leak_pvt_enabled(Context) ->
     RespJObj = cb_context:resp_data(Context),
-
     case kz_account:is_enabled(cb_context:doc(Context)) of
         'true' ->
             cb_context:set_resp_data(Context
@@ -676,10 +723,8 @@ leak_is_reseller(Context) ->
 -spec leak_billing_mode(cb_context:context()) -> cb_context:context().
 leak_billing_mode(Context) ->
     {'ok', MasterAccountId} = whapps_util:get_master_account_id(),
-
     AuthAccountId = cb_context:auth_account_id(Context),
     RespJObj = cb_context:resp_data(Context),
-
     case cb_context:reseller_id(Context) of
         AuthAccountId ->
             cb_context:set_resp_data(Context
@@ -892,7 +937,7 @@ get_authorized_account_tree(Context) ->
 format_account_tree_results(Context, JObjs) ->
     RespData =
         [wh_json:from_list(
-           [{<<"id">>, wh_json:get_value(<<"id">>, JObj)}
+           [{<<"id">>, wh_doc:id(JObj)}
             ,{<<"name">>, wh_json:get_value([<<"doc">>, <<"name">>], JObj)}
            ])
          || JObj <- JObjs
@@ -976,7 +1021,7 @@ find_accounts_from_tree([AccountId|Tree], JObjs, AuthAccountId, Acc) ->
 
 -spec account_from_tree(wh_json:object()) -> wh_json:object().
 account_from_tree(JObj) ->
-    wh_json:from_list([{<<"id">>, wh_json:get_value(<<"id">>, JObj)}
+    wh_json:from_list([{<<"id">>, wh_doc:id(JObj)}
                        ,{<<"name">>, kz_account:name(JObj)}
                       ]).
 
@@ -1015,7 +1060,7 @@ add_pvt_type(Context) ->
 
 -spec add_pvt_vsn(cb_context:context()) -> cb_context:context().
 add_pvt_vsn(Context) ->
-    cb_context:set_doc(Context, wh_json:set_value(<<"pvt_vsn">>, <<"1">>, cb_context:doc(Context))).
+    cb_context:set_doc(Context, wh_doc:set_vsn(cb_context:doc(Context), <<"1">>)).
 
 -spec add_pvt_enabled(cb_context:context()) -> cb_context:context().
 add_pvt_enabled(Context) ->
@@ -1049,7 +1094,7 @@ maybe_add_pvt_api_key(Context) ->
 
 -spec maybe_add_pvt_tree(cb_context:context()) -> cb_context:context().
 maybe_add_pvt_tree(Context) ->
-    case wh_json:get_value(<<"pvt_tree">>, cb_context:doc(Context)) of
+    case kz_account:tree(cb_context:doc(Context)) of
         [_|_] -> Context;
         _Else -> add_pvt_tree(Context)
     end.
@@ -1057,10 +1102,8 @@ maybe_add_pvt_tree(Context) ->
 -spec add_pvt_tree(cb_context:context()) -> cb_context:context().
 add_pvt_tree(Context) ->
     case create_new_tree(Context) of
-        'error' ->
-            cb_context:add_system_error('empty_tree_accounts_exist', Context);
-        Tree ->
-            cb_context:set_doc(Context, kz_account:set_tree(cb_context:doc(Context), Tree))
+        'error' -> cb_context:add_system_error('empty_tree_accounts_exist', Context);
+        Tree -> cb_context:set_doc(Context, kz_account:set_tree(cb_context:doc(Context), Tree))
     end.
 
 -spec create_new_tree(cb_context:context() | api_binary()) -> ne_binaries() | 'error'.
@@ -1090,8 +1133,7 @@ create_new_tree(Context, _Verb, _Nouns) ->
     JObj = cb_context:auth_doc(Context),
     case wh_json:is_json_object(JObj) of
         'false' -> create_new_tree('undefined');
-        'true' ->
-            create_new_tree(wh_json:get_value(<<"account_id">>, JObj))
+        'true' -> create_new_tree(wh_json:get_value(<<"account_id">>, JObj))
     end.
 
 %%--------------------------------------------------------------------
@@ -1144,15 +1186,30 @@ create_new_account_db(Context) ->
             lager:debug("failed to create database: ~s", [AccountDb]),
             throw(cb_context:add_system_error('datastore_fault', Context));
         'true' ->
-            lager:debug("created DB ~s", [AccountDb]),
+            lager:debug("created account database: ~s", [AccountDb]),
             C = create_account_definition(prepare_context(AccountDb, Context)),
+            lager:debug("created account definition"),
+
             _ = load_initial_views(C),
+            lager:debug("laoded initial views"),
+
             _ = crossbar_bindings:map(<<"account.created">>, C),
+            lager:debug("alerted listeners of new account"),
+
             _ = notify_new_account(C),
+            lager:debug("sent notification of new account"),
+
             _ = wh_services:reconcile(AccountDb),
+            lager:debug("performed initial services reconcile"),
+
             _ = create_account_mod(cb_context:account_id(C)),
+            lager:debug("created this month's MODb for account"),
+
             _ = create_first_transaction(cb_context:account_id(C)),
+            lager:debug("created first transaction for account"),
+
             _ = maybe_set_notification_preference(C),
+            lager:debug("set notification preference"),
             C
     end.
 
@@ -1270,9 +1327,9 @@ replicate_account_definition(JObj) ->
     AccountId = wh_json:get_value(<<"_id">>, JObj),
     case couch_mgr:lookup_doc_rev(?WH_ACCOUNTS_DB, AccountId) of
         {'ok', Rev} ->
-            couch_mgr:ensure_saved(?WH_ACCOUNTS_DB, wh_json:set_value(<<"_rev">>, Rev, JObj));
+            couch_mgr:ensure_saved(?WH_ACCOUNTS_DB, wh_doc:set_revision(JObj, Rev));
         _Else ->
-            couch_mgr:ensure_saved(?WH_ACCOUNTS_DB, wh_json:delete_key(<<"_rev">>, JObj))
+            couch_mgr:ensure_saved(?WH_ACCOUNTS_DB, wh_doc:delete_revision(JObj))
     end.
 
 %%--------------------------------------------------------------------
@@ -1287,7 +1344,7 @@ is_unique_realm(AccountId, Realm) ->
     ViewOptions = [{'key', wh_util:to_lower_binary(Realm)}],
     case couch_mgr:get_results(?WH_ACCOUNTS_DB, ?AGG_VIEW_REALM, ViewOptions) of
         {'ok', []} -> 'true';
-        {'ok', [JObj]} -> wh_json:get_value(<<"id">>, JObj) =:= AccountId;
+        {'ok', [JObj]} -> wh_doc:id(JObj) =:= AccountId;
         {'error', 'not_found'} -> 'true';
         _Else -> 'false'
     end.
@@ -1312,7 +1369,7 @@ is_unique_account_name(AccountId, Name) ->
     case couch_mgr:get_results(?WH_ACCOUNTS_DB, ?AGG_VIEW_NAME, ViewOptions) of
         {'ok', []} -> 'true';
         {'error', 'not_found'} -> 'true';
-        {'ok', [JObj|_]} -> wh_json:get_value(<<"id">>, JObj) =:= AccountId;
+        {'ok', [JObj|_]} -> wh_doc:id(JObj) =:= AccountId;
         _Else ->
             lager:error("error ~p checking view ~p in ~p", [_Else, ?AGG_VIEW_NAME, ?WH_ACCOUNTS_DB]),
             'false'
@@ -1361,14 +1418,14 @@ support_depreciated_billing_id(BillingId, AccountId, Context) ->
     catch
         'throw':{Error, Reason} ->
             cb_context:add_validation_error(
-                <<"billing_id">>
-                ,<<"not_found">>
-                ,wh_json:from_list([
-                        {<<"message">>, wh_util:to_binary(Error)}
-                        ,{<<"cause">>, AccountId}
-                     ])
-                ,Reason
-            )
+              <<"billing_id">>
+              ,<<"not_found">>
+              ,wh_json:from_list(
+                 [{<<"message">>, wh_util:to_binary(Error)}
+                  ,{<<"cause">>, AccountId}
+                 ])
+              ,Reason
+             )
     end.
 
 %%--------------------------------------------------------------------
@@ -1446,7 +1503,7 @@ delete_mod_dbs(AccountId, Year, Month) ->
 delete_remove_from_accounts(Context) ->
     case couch_mgr:open_doc(?WH_ACCOUNTS_DB, cb_context:account_id(Context)) of
         {'ok', JObj} ->
-            _ = provisioner_util:maybe_delete_account(Context),
+            _ = wh_util:spawn('provisioner_util', 'maybe_delete_account', [Context]),
             crossbar_doc:delete(
               cb_context:setters(Context
                                  ,[{fun cb_context:set_account_db/2, ?WH_ACCOUNTS_DB}

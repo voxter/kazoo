@@ -58,6 +58,7 @@
 -export([uri_encode/1
          ,uri_decode/1
          ,resolve_uri/2
+         ,normalize_amqp_uri/1
         ]).
 
 -export([uri/2]).
@@ -87,6 +88,7 @@
         ]).
 
 -export([put_callid/1, get_callid/0
+         ,spawn/1, spawn/3
          ,set_startup/0, startup/0
         ]).
 -export([get_event_type/1]).
@@ -105,7 +107,14 @@
 
 -export([node_name/0, node_hostname/0]).
 
--export([delete_file/1]).
+-export([anonymous_caller_id_name/0
+         ,anonymous_caller_id_number/0
+        ]).
+
+-export([write_file/2, write_file/3
+         ,delete_file/1
+         ,make_dir/1
+        ]).
 
 -include_lib("kernel/include/inet.hrl").
 
@@ -137,7 +146,7 @@ log_stacktrace_mfa(M, F, Arity, Info) when is_integer(Arity) ->
     lager:info("st: ~s:~s/~b at (~b)", [M, F, Arity, props:get_value('line', Info, 0)]);
 log_stacktrace_mfa(M, F, Args, Info) ->
     lager:info("st: ~s:~s at ~p", [M, F, props:get_value('line', Info, 0)]),
-    [lager:info("args: ~p", [Arg]) || Arg <- Args],
+    _ = [lager:info("args: ~p", [Arg]) || Arg <- Args],
     'ok'.
 
 -define(LOG_LEVELS, ['emergency'
@@ -525,6 +534,22 @@ callid(Prop) when is_list(Prop) ->
     props:get_first_defined([<<"Call-ID">>, <<"Msg-ID">>], Prop, ?LOG_SYSTEM_ID);
 callid(JObj) ->
     wh_json:get_first_defined([<<"Call-ID">>, <<"Msg-ID">>], JObj, ?LOG_SYSTEM_ID).
+
+%% @public
+-spec spawn(fun(() -> any())) -> pid().
+-spec spawn(atom(), atom(), list()) -> pid().
+spawn(Module, Function, Arguments) ->
+    CallId = get_callid(),
+    erlang:spawn(fun () ->
+                         _ = put_callid(CallId),
+                         erlang:apply(Module, Function, Arguments)
+                 end).
+spawn(Fun) ->
+    CallId = get_callid(),
+    erlang:spawn(fun() ->
+                         _ = put_callid(CallId),
+                         Fun()
+                 end).
 
 -spec set_startup() -> 'undefined' | gregorian_seconds().
 set_startup() ->
@@ -1003,7 +1028,7 @@ whistle_version() ->
     case file:open(VersionFile, ['read']) of
         {'ok', File} ->
             {'ok', Line} = file:read_line(File),
-            file:close(File),
+            _ = file:close(File),
             wh_util:to_binary(string:strip(Line, 'right', $\n));
         _ -> <<"unknown">>
     end.
@@ -1124,7 +1149,7 @@ decr_timeout(Timeout, Start) ->
 
 -spec microseconds_to_seconds(float() | integer() | string() | binary()) -> non_neg_integer().
 microseconds_to_seconds(Microseconds) -> to_integer(Microseconds) div 1000000.
-milliseconds_to_seconds(Milliseconds) -> to_integer(Milliseconds) div 1000.
+milliseconds_to_seconds(Milliseconds) -> to_integer(Milliseconds) div ?MILLISECONDS_IN_SECOND.
 
 -spec elapsed_s(wh_now() | pos_integer()) -> pos_integer().
 -spec elapsed_ms(wh_now() | pos_integer()) -> pos_integer().
@@ -1146,10 +1171,10 @@ elapsed_s({_,_,_}=Start, Now) -> elapsed_s(now_s(Start), Now);
 elapsed_s(Start, {_,_,_}=Now) -> elapsed_s(Start, now_s(Now));
 elapsed_s(Start, Now) when is_integer(Start), is_integer(Now) -> Now - Start.
 
-elapsed_ms({_,_,_}=Start, {_,_,_}=Now) -> timer:now_diff(Now, Start) div 1000;
+elapsed_ms({_,_,_}=Start, {_,_,_}=Now) -> timer:now_diff(Now, Start) div ?MILLISECONDS_IN_SECOND;
 elapsed_ms({_,_,_}=Start, Now) -> elapsed_ms(now_s(Start), Now);
 elapsed_ms(Start, {_,_,_}=Now) -> elapsed_ms(Start, now_s(Now));
-elapsed_ms(Start, Now) when is_integer(Start), is_integer(Now) -> (Now - Start) * 1000.
+elapsed_ms(Start, Now) when is_integer(Start), is_integer(Now) -> (Now - Start) * 1 * ?MILLISECONDS_IN_SECOND.
 
 elapsed_us({_,_,_}=Start, {_,_,_}=Now) -> timer:now_diff(Now, Start);
 elapsed_us({_,_,_}=Start, Now) -> elapsed_us(now_s(Start), Now);
@@ -1161,7 +1186,7 @@ elapsed_us(Start, Now) when is_integer(Start), is_integer(Now) -> (Now - Start) 
 -spec now_us(wh_now()) -> pos_integer().
 now_us({MegaSecs,Secs,MicroSecs}) ->
     (MegaSecs*1000000 + Secs)*1000000 + MicroSecs.
-now_ms({_,_,_}=Now) -> now_us(Now) div 1000.
+now_ms({_,_,_}=Now) -> now_us(Now) div ?MILLISECONDS_IN_SECOND.
 now_s({_,_,_}=Now) -> unix_seconds_to_gregorian_seconds(now_us(Now) div 1000000).
 
 -spec format_date() -> binary().
@@ -1200,6 +1225,22 @@ node_hostname() ->
     [_Name, Host] = binary:split(to_binary(node()), <<"@">>),
     Host.
 
+
+%% @public
+-spec write_file(file:name(), iodata()) -> 'ok'.
+write_file(Filename, Bytes) ->
+    write_file(Filename, Bytes, []).
+
+%% @public
+-spec write_file(file:name(), iodata(), [file:mode()]) -> 'ok'.
+write_file(Filename, Bytes, Modes) ->
+    case file:write_file(Filename, Bytes, Modes) of
+        'ok' -> 'ok';
+        {'error', _}=_E ->
+            lager:debug("writing file ~s (~p) failed : ~p", [Filename, Modes, _E])
+    end.
+
+%% @public
 -spec delete_file(file:name()) -> 'ok'.
 delete_file(Filename) ->
     case file:delete(Filename) of
@@ -1208,11 +1249,31 @@ delete_file(Filename) ->
             lager:debug("deleting file ~s failed : ~p", [Filename, _E])
     end.
 
+%% @public
+-spec make_dir(file:name()) -> 'ok'.
+make_dir(Filename) ->
+    case file:make_dir(Filename) of
+        'ok' -> 'ok';
+        {'error', _}=_E ->
+            lager:debug("creating directory ~s failed : ~p", [Filename, _E])
+    end.
+
+normalize_amqp_uri(URI) ->
+    to_binary(amqp_uri:remove_credentials(to_list(URI))).
+
+-spec anonymous_caller_id_name() -> ne_binary().
+anonymous_caller_id_name() ->
+    <<"anonymous">>.
+
+-spec anonymous_caller_id_number() -> ne_binary().
+anonymous_caller_id_number() ->
+    <<"0000000000">>.
+
 -ifdef(TEST).
 
 -include_lib("eunit/include/eunit.hrl").
 
--spec resolve_uri_test() -> any().
+-spec resolve_uri_test() -> _.
 resolve_uri_test() ->
     RawPath = <<"http://pivot/script.php">>,
     Relative = <<"script2.php">>,

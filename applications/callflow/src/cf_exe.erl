@@ -40,6 +40,7 @@
         ]).
 
 -include("callflow.hrl").
+-include_lib("whistle/src/wh_json.hrl").
 
 -define(CALL_SANITY_CHECK, 30000).
 
@@ -294,22 +295,15 @@ handle_call({'get_branch_keys', 'all'}, _From, #state{flow = Flow}=State) ->
     Reply = {'branch_keys', wh_json:get_keys(Children)},
     {'reply', Reply, State};
 handle_call({'attempt', Key}, _From, #state{flow=Flow}=State) ->
-    case wh_json:get_value([<<"children">>, Key], Flow) of
+    case wh_json:get_ne_value([<<"children">>, Key], Flow) of
         'undefined' ->
             lager:info("attempted 'undefined' child ~s", [Key]),
-            Reply = {'attempt_resp', {'error', 'undefined'}},
+            Reply = {'attempt_resp', {'error', 'empty'}},
             {'reply', Reply, State};
         NewFlow ->
-            case wh_json:is_empty(NewFlow) of
-                'true' ->
-                    lager:info("attempted empty child ~s", [Key]),
-                    Reply = {'attempt_resp', {'error', 'empty'}},
-                    {'reply', Reply, State};
-                'false' ->
-                    lager:info("branching to attempted child ~s", [Key]),
-                    Reply = {'attempt_resp', 'ok'},
-                    {'reply', Reply, launch_cf_module(State#state{flow = NewFlow})}
-            end
+            lager:info("branching to attempted child ~s", [Key]),
+            Reply = {'attempt_resp', 'ok'},
+            {'reply', Reply, launch_cf_module(State#state{flow = NewFlow})}
     end;
 handle_call('wildcard_is_empty', _From, #state{flow = Flow}=State) ->
     case wh_json:get_value([<<"children">>, <<"_">>], Flow) of
@@ -354,12 +348,7 @@ handle_cast({'continue', Key}, #state{flow=Flow
             ?MODULE:continue(self()),
             {'noreply', State};
         NewFlow ->
-            case wh_json:is_empty(NewFlow) of
-                'false' -> {'noreply', launch_cf_module(State#state{flow=NewFlow})};
-                'true' ->
-                    ?MODULE:stop(self()),
-                    {'noreply', State}
-            end
+            {'noreply', launch_cf_module(State#state{flow=NewFlow})}
     end;
 handle_cast('stop', #state{flows=[]}=State) ->
     {'stop', 'normal', State};
@@ -378,8 +367,12 @@ handle_cast({'continue_with_flow', NewFlow}, State) ->
     {'noreply', launch_cf_module(State#state{flow=NewFlow})};
 handle_cast({'branch', NewFlow}, #state{flow=Flow, flows=Flows}=State) ->
     lager:info("callflow has been branched"),
-    NewFlows = [wh_json:get_value([<<"children">>, <<"_">>], Flow, wh_json:new())|Flows],
-    {'noreply', launch_cf_module(State#state{flow=NewFlow, flows=NewFlows})};
+    case wh_json:get_ne_value([<<"children">>, <<"_">>], Flow) of
+        'undefined' ->
+            {'noreply', launch_cf_module(State#state{flow=NewFlow})};
+        PrevFlow ->
+            {'noreply', launch_cf_module(State#state{flow=NewFlow, flows=[PrevFlow|Flows]})}
+    end;
 handle_cast({'callid_update', NewCallId}, #state{call=Call}=State) ->
     put('callid', NewCallId),
     PrevCallId = whapps_call:call_id_direct(Call),
@@ -411,7 +404,7 @@ handle_cast('initialize', #state{call=Call}) ->
                 ,fun(C) -> whapps_call:control_queue_helper(fun cf_exe:control_queue/2, C) end
                ],
     CallWithHelpers = lists:foldr(fun(F, C) -> F(C) end, Call, Updaters),
-    spawn('cf_singular_call_hooks', 'maybe_hook_call', [CallWithHelpers]),
+    _ = wh_util:spawn('cf_singular_call_hooks', 'maybe_hook_call', [CallWithHelpers]),
     StopOnDestroy = whapps_config:get_is_true(<<"callflow">>, <<"stop_on_destroy">>, 'false'),
     {'noreply', #state{call=CallWithHelpers
                        ,flow=Flow
@@ -626,9 +619,14 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec launch_cf_module(state()) -> state().
+launch_cf_module(#state{flow=?EMPTY_JSON_OBJECT}=State) ->
+    lager:debug("no flow left to launch, maybe stopping"),
+    gen_listener:cast(self(), 'stop'),
+    State;
 launch_cf_module(#state{call=Call
                         ,flow=Flow
                        }=State) ->
+    lager:debug("launching next flow module: ~p", [Flow]),
     Module = <<"cf_", (wh_json:get_value(<<"module">>, Flow))/binary>>,
     Data = wh_json:get_value(<<"data">>, Flow, wh_json:new()),
     {PidRef, Action} = maybe_start_cf_module(Module, Data, Call),

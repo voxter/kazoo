@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2015, 2600Hz INC
 %%% @doc
 %%% Functions shared between crossbar modules
 %%% @end
@@ -20,21 +20,18 @@
 
          ,bucket_name/1
          ,token_cost/1, token_cost/2, token_cost/3
-         ,reconcile_services/1
          ,bind/2
 
-         ,range_view_options/1, range_view_options/2
+         ,range_view_options/1, range_view_options/2, range_view_options/3
 
          ,range_modb_view_options/1, range_modb_view_options/2, range_modb_view_options/3
+
+         ,take_sync_field/1
+
+         ,remove_plaintext_password/1
         ]).
 
 -include("../crossbar.hrl").
-
--define(MAX_RANGE, whapps_config:get_integer(?CONFIG_CAT
-                                             ,<<"maximum_range">>
-                                             ,(?SECONDS_IN_DAY * 31 + ?SECONDS_IN_HOUR)
-                                            )
-       ).
 
 -spec range_view_options(cb_context:context()) ->
                                 {gregorian_seconds(), gregorian_seconds()} |
@@ -45,36 +42,39 @@
 range_view_options(Context) ->
     range_view_options(Context, ?MAX_RANGE).
 range_view_options(Context, MaxRange) ->
-    TStamp =  wh_util:current_tstamp(),
-    CreatedTo = created_to(Context, TStamp),
-    CreatedFrom = created_from(Context, CreatedTo, MaxRange),
+    range_view_options(Context, MaxRange, <<"created">>).
 
-    case CreatedTo - CreatedFrom of
+range_view_options(Context, MaxRange, Key) ->
+    TStamp =  wh_util:current_tstamp(),
+    RangeTo = range_to(Context, TStamp, Key),
+    RangeFrom = range_from(Context, RangeTo, MaxRange, Key),
+
+    case RangeTo - RangeFrom of
         N when N < 0 ->
             cb_context:add_validation_error(
-              <<"created_from">>
+              <<Key/binary, "_from">>
               ,<<"date_range">>
               ,wh_json:from_list(
-                 [{<<"message">>, <<"created_from is prior to created_to">>}
-                  ,{<<"cause">>, CreatedFrom}
+                 [{<<"message">>, <<Key/binary, "_from is prior to ", Key/binary, "_to">>}
+                  ,{<<"cause">>, RangeFrom}
                  ])
               ,Context
              );
         N when N > MaxRange ->
-            Message = <<"created_to is more than "
+            Message = <<Key/binary, "_to is more than "
                         ,(wh_util:to_binary(MaxRange))/binary
-                        ," seconds from created_from"
+                        ," seconds from ", Key/binary, "_from"
                       >>,
             cb_context:add_validation_error(
-              <<"created_from">>
+              <<Key/binary, "_from">>
               ,<<"date_range">>
               ,wh_json:from_list(
                  [{<<"message">>, Message}
-                  ,{<<"cause">>, CreatedTo}
+                  ,{<<"cause">>, RangeTo}
                  ])
               ,Context
              );
-        _N -> {CreatedFrom, CreatedTo}
+        _N -> {RangeFrom, RangeTo}
     end.
 
 -spec range_modb_view_options(cb_context:context()) ->
@@ -113,60 +113,44 @@ range_modb_view_options(Context, PrefixKeys, SuffixKeys) ->
         Context1 -> Context1
     end.
 
--spec created_to(cb_context:context(), pos_integer()) -> pos_integer().
-created_to(Context, TStamp) ->
+-spec range_to(cb_context:context(), pos_integer(), ne_binary()) -> pos_integer().
+range_to(Context, TStamp, Key) ->
     case crossbar_doc:start_key(Context) of
         'undefined' ->
-            lager:debug("building created_to from req value"),
-            wh_util:to_integer(cb_context:req_value(Context, <<"created_to">>, TStamp));
+            lager:debug("building ~s_to from req value", [Key]),
+            wh_util:to_integer(cb_context:req_value(Context, <<Key/binary, "_to">>, TStamp));
         StartKey ->
-            lager:debug("found startkey ~p as created_to", [StartKey]),
+            lager:debug("found startkey ~p as ~s_to", [StartKey, Key]),
             wh_util:to_integer(StartKey)
     end.
 
--spec created_from(cb_context:context(), pos_integer(), pos_integer()) -> pos_integer().
-created_from(Context, CreatedTo, MaxRange) ->
-    lager:debug("building created_from from req value"),
-    wh_util:to_integer(cb_context:req_value(Context, <<"created_from">>, CreatedTo - MaxRange)).
+-spec range_from(cb_context:context(), pos_integer(), pos_integer(), ne_binary()) -> pos_integer().
+range_from(Context, CreatedTo, MaxRange, Key) ->
+    lager:debug("building ~s_from from req value", [Key]),
+    wh_util:to_integer(cb_context:req_value(Context, <<Key/binary, "_from">>, CreatedTo - MaxRange)).
 
--spec bind(atom(), wh_proplist()) -> 'ok'.
+-type binding() :: {ne_binary(), atom()}.
+-type bindings() :: [binding(),...].
+-spec bind(atom(), bindings()) -> 'ok'.
 bind(Module, Bindings) ->
-    [crossbar_bindings:bind(Binding, Module, Function)
-     || {Binding, Function} <- Bindings
-    ],
+    _ = [crossbar_bindings:bind(Binding, Module, Function)
+         || {Binding, Function} <- Bindings
+        ],
     'ok'.
-
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Bill for devices
-%% @end
-%%--------------------------------------------------------------------
--spec reconcile_services(cb_context:context()) -> cb_context:context().
-reconcile_services(Context) ->
-    case cb_context:resp_status(Context) =:= 'success'
-        andalso cb_context:req_verb(Context) =/= <<"GET">>
-    of
-        'false' -> Context;
-        'true' ->
-            lager:debug("maybe reconciling services for account ~s"
-                       ,[cb_context:account_id(Context)]),
-            _ = wh_services:save_as_dirty(cb_context:account_id(Context))
-    end.
 
 -spec pass_hashes(ne_binary(), ne_binary()) -> {ne_binary(), ne_binary()}.
 pass_hashes(Username, Password) ->
     Creds = list_to_binary([Username, ":", Password]),
-    SHA1 = wh_util:to_hex_binary(crypto:hash(sha, Creds)),
-    MD5 = wh_util:to_hex_binary(crypto:hash(md5, Creds)),
+    SHA1 = wh_util:to_hex_binary(crypto:hash('sha', Creds)),
+    MD5 = wh_util:to_hex_binary(crypto:hash('md5', Creds)),
     {MD5, SHA1}.
 
 -spec update_mwi(api_binary(), ne_binary()) -> pid().
 update_mwi(OwnerId, AccountDb) ->
-    spawn(fun() ->
-                  timer:sleep(1000),
-                  cf_util:unsolicited_owner_mwi_update(AccountDb, OwnerId)
-          end).
+    wh_util:spawn(fun() ->
+                          timer:sleep(?MILLISECONDS_IN_SECOND),
+                          cf_util:unsolicited_owner_mwi_update(AccountDb, OwnerId)
+                  end).
 
 -spec get_devices_owned_by(ne_binary(), ne_binary()) -> wh_json:objects().
 get_devices_owned_by(OwnerID, DB) ->
@@ -212,8 +196,9 @@ create_call_from_context(Context) ->
           ]),
     whapps_call:exec(Routines, whapps_call:new()).
 
--spec request_specific_extraction_funs(cb_context:context()) -> functions().
--spec request_specific_extraction_funs_from_nouns(cb_context:context(), req_nouns()) -> functions().
+-spec request_specific_extraction_funs(cb_context:context()) -> whapps_call:exec_funs().
+-spec request_specific_extraction_funs_from_nouns(cb_context:context(), req_nouns()) ->
+                                                         whapps_call:exec_funs().
 request_specific_extraction_funs(Context) ->
     request_specific_extraction_funs_from_nouns(Context, cb_context:req_nouns(Context)).
 
@@ -537,3 +522,23 @@ get_token_cost(JObj, Default, Keys) ->
         'undefined' -> Default;
         V -> wh_util:to_integer(V)
     end.
+
+%% @public
+-spec take_sync_field(cb_context:context()) -> cb_context:context().
+take_sync_field(Context) ->
+    Doc = cb_context:doc(Context),
+    ShouldSync = wh_json:is_true(<<"sync">>, Doc, 'false'),
+    CleansedDoc = wh_json:delete_key(<<"sync">>, Doc),
+    cb_context:setters(Context, [{fun cb_context:store/3, 'sync', ShouldSync}
+                                 ,{fun cb_context:set_doc/2, CleansedDoc}
+                                ]).
+
+%% @public
+-spec remove_plaintext_password(cb_context:context()) -> cb_context:context().
+remove_plaintext_password(Context) ->
+    Doc = wh_json:delete_keys(
+            [<<"password">>,
+             <<"confirm_password">>
+            ], cb_context:doc(Context)
+           ),
+    cb_context:set_doc(Context, Doc).

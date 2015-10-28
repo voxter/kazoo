@@ -45,19 +45,18 @@
 -spec init() -> 'ok'.
 init() ->
     wh_util:put_callid(?MODULE),
-
-    teletype_util:init_template(?TEMPLATE_ID, [{'macros', ?TEMPLATE_MACROS}
-                                               ,{'text', ?TEMPLATE_TEXT}
-                                               ,{'html', ?TEMPLATE_HTML}
-                                               ,{'subject', ?TEMPLATE_SUBJECT}
-                                               ,{'category', ?TEMPLATE_CATEGORY}
-                                               ,{'friendly_name', ?TEMPLATE_NAME}
-                                               ,{'to', ?TEMPLATE_TO}
-                                               ,{'from', ?TEMPLATE_FROM}
-                                               ,{'cc', ?TEMPLATE_CC}
-                                               ,{'bcc', ?TEMPLATE_BCC}
-                                               ,{'reply_to', ?TEMPLATE_REPLY_TO}
-                                              ]).
+    teletype_templates:init(?TEMPLATE_ID, [{'macros', ?TEMPLATE_MACROS}
+                                           ,{'text', ?TEMPLATE_TEXT}
+                                           ,{'html', ?TEMPLATE_HTML}
+                                           ,{'subject', ?TEMPLATE_SUBJECT}
+                                           ,{'category', ?TEMPLATE_CATEGORY}
+                                           ,{'friendly_name', ?TEMPLATE_NAME}
+                                           ,{'to', ?TEMPLATE_TO}
+                                           ,{'from', ?TEMPLATE_FROM}
+                                           ,{'cc', ?TEMPLATE_CC}
+                                           ,{'bcc', ?TEMPLATE_BCC}
+                                           ,{'reply_to', ?TEMPLATE_REPLY_TO}
+                                          ]).
 
 -spec handle_new_voicemail(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_new_voicemail(JObj, _Props) ->
@@ -126,7 +125,7 @@ process_req(DataJObj) ->
              ],
 
     %% Load templates
-    Templates = teletype_util:fetch_templates(?TEMPLATE_ID, DataJObj),
+    Templates = teletype_templates:fetch(?TEMPLATE_ID, DataJObj),
 
     %% Populate templates
     RenderedTemplates =
@@ -136,7 +135,7 @@ process_req(DataJObj) ->
           ]),
 
     AccountId = wh_json:get_value(<<"account_id">>, DataJObj),
-    {'ok', TemplateMetaJObj} = teletype_util:fetch_template_meta(?TEMPLATE_ID, AccountId),
+    {'ok', TemplateMetaJObj} = teletype_templates:fetch_meta(?TEMPLATE_ID, AccountId),
 
     Subject = teletype_util:render_subject(
                 wh_json:find(<<"subject">>, [DataJObj, TemplateMetaJObj], ?TEMPLATE_SUBJECT)
@@ -263,13 +262,8 @@ build_date_called_data(DataJObj) ->
     DateCalled = date_called(DataJObj),
     DateTime = calendar:gregorian_seconds_to_datetime(DateCalled),
 
-    Timezone = wh_json:get_first_defined([[<<"voicemail">>, <<"timezone">>]
-                                          ,[<<"owner">>, <<"timezone">>]
-                                          ,[<<"account">>, <<"timezone">>]
-                                         ]
-                                         ,DataJObj
-                                         ,<<"UTC">>
-                                        ),
+    VMBox = wh_json:get_value(<<"voicemail">>, DataJObj),
+    Timezone = kzd_voicemail_box:timezone(VMBox, <<"UTC">>),
     ClockTimezone = whapps_config:get_string(<<"servers">>, <<"clock_timezone">>, <<"UTC">>),
 
     lager:debug("using tz ~s (system ~s) for ~p", [Timezone, ClockTimezone, DateTime]),
@@ -296,8 +290,8 @@ build_voicemail_data(DataJObj) ->
 -spec pretty_print_length(api_object() | pos_integer()) -> ne_binary().
 pretty_print_length('undefined') -> <<"00:00">>;
 pretty_print_length(Ms) when is_integer(Ms) ->
-    Seconds = round(Ms / 1000) rem 60,
-    Minutes = trunc(Ms / (1000*60)) rem 60,
+    Seconds = round(Ms / ?MILLISECONDS_IN_SECOND) rem 60,
+    Minutes = trunc(Ms / (?MILLISECONDS_IN_MINUTE)) rem 60,
     wh_util:to_binary(io_lib:format("~2..0w:~2..0w", [Minutes, Seconds]));
 pretty_print_length(JObj) ->
     pretty_print_length(wh_json:get_integer_value(<<"voicemail_length">>, JObj)).

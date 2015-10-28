@@ -535,7 +535,7 @@ cache_if_not_media(CacheProps, DbName, DocId, CacheValue) ->
     %%   message bus anytime a http_put is issued (or maybe if the store
     %%   url is built in media IF everything uses that helper function,
     %    which is not currently the case...)
-    case wh_json:get_value(<<"pvt_type">>, CacheValue) of
+    case wh_doc:type(CacheValue) of
         <<"media">> -> 'ok';
         <<"private_media">> -> 'ok';
         _Else ->
@@ -986,10 +986,11 @@ retry504s(Fun, Cnt) ->
 maybe_publish_docs(#db{}=Db, Docs, JObjs) ->
     case couch_mgr:change_notice() of
         'true' ->
-            spawn(fun() ->
+            _ = wh_util:spawn(
+                  fun() ->
                           [publish_doc(Db, Doc, JObj)
-                           || {Doc, JObj} <- lists:zip(Docs, JObjs),
-                              should_publish_doc(Doc)
+                           || {Doc, JObj} <- lists:zip(Docs, JObjs)
+                                  , should_publish_doc(Doc)
                           ]
                   end),
             'ok';
@@ -1001,7 +1002,9 @@ maybe_publish_doc(#db{}=Db, Doc, JObj) ->
     case couch_mgr:change_notice()
         andalso should_publish_doc(Doc)
     of
-        'true' -> spawn(fun() -> publish_doc(Db, Doc, JObj) end), 'ok';
+        'true' ->
+            _ = wh_util:spawn(fun() -> publish_doc(Db, Doc, JObj) end),
+            'ok';
         'false' -> 'ok'
     end.
 
@@ -1158,8 +1161,8 @@ move_doc(Conn, CopySpec, Options) ->
                  ,source_doc_id = SourceDocId
                 } = CopySpec,
     case copy_doc(Conn, CopySpec, Options) of
-         {'ok', JObj} ->
-             del_doc(Conn, SourceDbName, SourceDocId),
-             {'ok', JObj};
-         Error -> Error
+        {'ok', JObj} ->
+            _ = del_doc(Conn, SourceDbName, SourceDocId),
+            {'ok', JObj};
+        Error -> Error
      end.

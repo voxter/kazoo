@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012, VoIP INC
+%%% @copyright (C) 2012-2015, 2600Hz INC
 %%% @doc
 %%% Handlers for various AMQP payloads
 %%% @end
@@ -11,7 +11,7 @@
 
 -include("jonny5.hrl").
 
--spec handle_req(wh_json:object(), wh_proplist()) -> any().
+-spec handle_req(wh_json:object(), wh_proplist()) -> _.
 handle_req(JObj, _) ->
     'true' = wapi_authz:authz_req_v(JObj),
     wh_util:put_callid(JObj),
@@ -43,26 +43,45 @@ determine_account_id(Request) ->
 
 -spec maybe_local_resource(ne_binary(), wh_proplist(), j5_request:request()) -> 'ok'.
 maybe_local_resource(AccountId, Props, Request) ->
-    %% TODO: we need to check system_config to determine if we authz local
     case wh_number_properties:is_local_number(Props) of
+        'true' -> maybe_authz_local_resource(AccountId, Request);
         'false' ->
             maybe_account_limited(
               j5_request:set_account_id(AccountId, Request)
-             );
-        'true' ->
-            Number = j5_request:number(Request),
-            lager:debug("number ~s is a local number for account ~s, allowing"
-                       ,[Number, AccountId]),
-            Routines = [fun(R) -> j5_request:authorize_account(<<"limits_disabled">>, R) end
-                       ,fun(R) -> j5_request:authorize_reseller(<<"limits_disabled">>, R) end
-                       ,fun(R) -> j5_request:set_account_id(AccountId, R) end
-                       ,fun(R) ->
-                                ResellerId = wh_services:find_reseller_id(AccountId),
-                                j5_request:set_reseller_id(ResellerId, R)
-                        end
-                       ],
-            send_response(lists:foldl(fun(F, R) -> F(R) end, Request, Routines))
+             )
     end.
+
+-spec maybe_authz_local_resource(ne_binary(), j5_request:request()) -> 'ok'.
+maybe_authz_local_resource(AccountId, Request) ->
+    case should_authz_local(Request) of
+        'false' -> allow_local_resource(AccountId, Request);
+        'true' ->
+            lager:debug("authz_local_resources enabled, applying limits for local numbers"),
+            maybe_account_limited(
+              j5_request:set_account_id(AccountId, Request)
+             )
+    end.
+
+-spec allow_local_resource(ne_binary(), j5_request:request()) -> 'ok'.
+allow_local_resource(AccountId, Request) ->
+    Number = j5_request:number(Request),
+    lager:debug("number ~s is a local number for account ~s, allowing"
+                ,[Number, AccountId]
+               ),
+    Routines = [fun(R) -> j5_request:authorize_account(<<"limits_disabled">>, R) end
+                ,fun(R) -> j5_request:authorize_reseller(<<"limits_disabled">>, R) end
+                ,fun(R) -> j5_request:set_account_id(AccountId, R) end
+                ,fun(R) ->
+                         ResellerId = wh_services:find_reseller_id(AccountId),
+                         j5_request:set_reseller_id(ResellerId, R)
+                 end
+                       ],
+    send_response(lists:foldl(fun(F, R) -> F(R) end, Request, Routines)).
+
+-spec should_authz_local(j5_request:request()) -> boolean().
+should_authz_local(Request) ->
+    Node = j5_request:node(Request),
+    whapps_config:get_is_true(<<"ecallmgr">>, <<"authz_local_resources">>, 'false', Node).
 
 -spec maybe_account_limited(j5_request:request()) -> 'ok'.
 maybe_account_limited(Request) ->
@@ -97,7 +116,7 @@ maybe_reseller_limited(Request) ->
     ResellerId = j5_request:reseller_id(Request),
     case j5_request:account_id(Request) =:= ResellerId of
         'true' ->
-            lager:debug("channel belongs to reseller, ignoring reseller billing", []),
+            lager:debug("channel belongs to reseller, ignoring reseller billing"),
             send_response(
               j5_request:authorize_reseller(<<"limits_disabled">>, Request)
              );
@@ -191,6 +210,9 @@ maybe_inbound_soft_limit(Request, Limits) ->
 -spec send_response(j5_request:request()) -> 'ok'.
 send_response(Request) ->
     ServerId = j5_request:server_id(Request),
+    CCVs = wh_json:from_list([{<<"Account-Trunk-Usage">>, trunk_usage(j5_request:account_id(Request))}
+                              ,{<<"Reseller-Trunk-Usage">>, trunk_usage(j5_request:reseller_id(Request))}
+                             ]),
     Resp = props:filter_undefined(
              [{<<"Is-Authorized">>, wh_util:to_binary(j5_request:is_authorized(Request))}
               ,{<<"Account-ID">>, j5_request:account_id(Request)}
@@ -202,6 +224,7 @@ send_response(Request) ->
               ,{<<"Soft-Limit">>, wh_util:to_binary(j5_request:soft_limit(Request))}
               ,{<<"Msg-ID">>, j5_request:message_id(Request)}
               ,{<<"Call-ID">>, j5_request:call_id(Request)}
+              ,{<<"Custom-Channel-Vars">>, CCVs}
               | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     wapi_authz:publish_authz_resp(ServerId, Resp),
@@ -211,3 +234,14 @@ send_response(Request) ->
             j5_channels:authorized(wh_json:from_list(Resp));
         'false' -> j5_util:send_system_alert(Request)
     end.
+
+%% @private
+-spec trunk_usage(ne_binary()) -> ne_binary().
+trunk_usage(Id) ->
+    Limits = j5_limits:get(Id),
+    <<
+      (wh_util:to_binary(j5_limits:inbound_trunks(Limits)))/binary, "/",
+      (wh_util:to_binary(j5_limits:outbound_trunks(Limits)))/binary, "/",
+      (wh_util:to_binary(j5_limits:twoway_trunks(Limits)))/binary, "/",
+      (wh_util:to_binary(j5_limits:burst_trunks(Limits)))/binary
+    >>.

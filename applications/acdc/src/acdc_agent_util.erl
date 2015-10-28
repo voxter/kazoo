@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2014, 2600Hz
+%%% @copyright (C) 2013-2015, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -80,7 +80,8 @@ most_recent_db_status(AccountId, AgentId) ->
             ,'descending'
            ],
     case couch_mgr:get_results(acdc_stats_util:db_name(AccountId), <<"agent_stats/status_log">>, Opts) of
-        {'ok', [StatusJObj]} -> {'ok', wh_json:get_value(<<"value">>, StatusJObj)};
+        {'ok', [StatusJObj]} ->
+            {'ok', wh_json:get_value(<<"value">>, StatusJObj)};
         {'ok', []} ->
             lager:debug("could not find a recent status for agent ~s, checking previous modb", [AgentId]),
             prev_month_recent_db_status(AccountId, AgentId);

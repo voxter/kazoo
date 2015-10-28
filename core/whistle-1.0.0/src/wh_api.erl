@@ -88,6 +88,12 @@ app_version(JObj) ->
 node(JObj) ->
     wh_json:get_value(<<"Node">>, JObj).
 
+-spec msg_id(api_terms()) -> api_binary().
+msg_id(Props) when is_list(Props) ->
+    props:get_value(<<"Msg-ID">>, Props);
+msg_id(JObj) ->
+    wh_json:get_value(<<"Msg-ID">>, JObj).
+
 %%--------------------------------------------------------------------
 %% @doc Default Headers in all messages - see wiki
 %% Creates the seed proplist for the eventual message to be sent

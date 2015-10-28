@@ -24,11 +24,11 @@ flush() ->
 
 -spec start_check_sms_by_device_id(ne_binary(), ne_binary()) -> pid().
 start_check_sms_by_device_id(AccountId, DeviceId) ->
-    spawn(?MODULE, 'check_sms_by_device_id', [AccountId, DeviceId]).
+    wh_util:spawn(?MODULE, 'check_sms_by_device_id', [AccountId, DeviceId]).
 
 -spec start_check_sms_by_owner_id(ne_binary(), ne_binary()) -> pid().
 start_check_sms_by_owner_id(AccountId, OwnerId) ->
-    spawn(?MODULE, 'check_sms_by_owner_id', [AccountId, OwnerId]).
+    wh_util:spawn(?MODULE, 'check_sms_by_owner_id', [AccountId, OwnerId]).
 
 -spec check_sms_by_device_id(ne_binary(), ne_binary()) -> 'ok'.
 check_sms_by_device_id(_AccountId, 'undefined') -> 'ok';
@@ -55,16 +55,16 @@ check_sms_by_owner_id(AccountId, OwnerId) ->
 -spec start_check_sms_by_account(ne_binary(), wh_json:object()) -> pid().
 start_check_sms_by_account(AccountId, JObj) ->
      case wh_json:is_true(<<"pvt_deleted">>, JObj, 'false')
-         orelse wh_json:is_false(<<"enabled">>, JObj, 'true')
+         orelse wh_util:is_false(wh_json:get_value(<<"pvt_enabled">>, JObj, 'true'))
      of
          'true' -> 'ok';
-         'false' -> spawn(?MODULE, 'check_pending_sms_for_delivery', [AccountId])
+         'false' -> wh_util:spawn(?MODULE, 'check_pending_sms_for_delivery', [AccountId])
      end.
 
 -spec check_pending_sms_for_outbound_delivery(ne_binary()) -> pid().
 check_pending_sms_for_outbound_delivery(AccountId) ->
-    spawn(fun() -> check_pending_sms_for_offnet_delivery(AccountId) end),
-    spawn(fun() -> check_queued_sms(AccountId) end).
+    wh_util:spawn(fun() -> check_pending_sms_for_offnet_delivery(AccountId) end),
+    wh_util:spawn(fun() -> check_queued_sms(AccountId) end).
 
 -spec check_pending_sms_for_delivery(ne_binary()) -> 'ok'.
 check_pending_sms_for_delivery(AccountId) ->
@@ -91,9 +91,9 @@ check_queued_sms(AccountId) ->
 -spec replay_queue_sms(ne_binary(), wh_json:objects()) -> 'ok'.
 replay_queue_sms(AccountId, JObjs) ->
     lager:debug("starting queued sms for account ~s", [AccountId]),
-    [spawn_handler(AccountId, JObj)
-     || JObj <- JObjs
-    ],
+    _ = [spawn_handler(AccountId, JObj)
+         || JObj <- JObjs
+        ],
     'ok'.
 
 -spec spawn_handler(ne_binary(), wh_json:object()) -> 'ok'.
@@ -102,7 +102,7 @@ spawn_handler(AccountId, JObj) ->
     <<Year:4/binary, Month:2/binary, "-", _/binary>> = DocId,
     AccountDb = kazoo_modb:get_modb(AccountId, Year, Month),
 
-    spawn('doodle_api', 'handle_api_sms', [AccountDb, DocId]),
+    _ = wh_util:spawn('doodle_api', 'handle_api_sms', [AccountDb, DocId]),
     timer:sleep(200).
 
 -spec check_pending_sms_for_offnet_delivery(ne_binary()) -> 'ok'.
@@ -120,12 +120,12 @@ check_pending_sms_for_offnet_delivery(AccountId) ->
 -spec replay_sms(ne_binary(), wh_json:objects()) -> 'ok'.
 replay_sms(AccountId, JObjs) ->
     lager:debug("starting sms offnet delivery for account ~s", [AccountId]),
-    [begin
-         doodle_util:replay_sms(AccountId, wh_json:get_value(<<"id">>, JObj)),
-         timer:sleep(200)
-     end
-     || JObj <- JObjs
-    ],
+    _ = [begin
+             doodle_util:replay_sms(AccountId, wh_json:get_value(<<"id">>, JObj)),
+             timer:sleep(200)
+         end
+         || JObj <- JObjs
+        ],
     'ok'.
 
 -define(DEFAULT_ROUTEID, whapps_config:get_ne_binary(?CONFIG_CAT, <<"default_test_route_id">>, <<"syneverse">>)).

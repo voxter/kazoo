@@ -470,7 +470,7 @@ load_message_binary_from_message(MediaId, Context, Update, Media) ->
     Filename = generate_media_name(wh_json:get_value(<<"caller_id_number">>, VMMetaJObj)
                                    ,wh_json:get_value(<<"timestamp">>, VMMetaJObj)
                                    ,filename:extension(AttachmentId)
-                                   ,wh_json:get_value(<<"timezone">>, Doc)
+                                   ,kzd_voicemail_box:timezone(Doc)
                                   ),
     case couch_mgr:fetch_attachment(cb_context:account_db(Context), MediaId, AttachmentId) of
         {'error', 'db_not_reachable'} ->
@@ -630,7 +630,7 @@ cleanup_heard_voicemail(AccountDb, Duration) ->
     end.
 
 cleanup_heard_voicemail(AccountDb, Timestamp, Boxes) ->
-    [cleanup_voicemail_box(AccountDb, Timestamp, Box) || Box <- Boxes],
+    _ = [cleanup_voicemail_box(AccountDb, Timestamp, Box) || Box <- Boxes],
     'ok'.
 
 -spec cleanup_voicemail_box(ne_binary(), pos_integer(), {wh_json:object(), wh_json:objects()}) -> 'ok'.

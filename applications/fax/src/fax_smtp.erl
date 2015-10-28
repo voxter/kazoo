@@ -31,6 +31,8 @@
 
 -define(RELAY, 'true').
 -define(SMTP_MAX_SESSIONS, whapps_config:get_integer(?CONFIG_CAT, <<"smtp_sessions">>, 50)).
+-define(DEFAULT_IMAGE_SIZE_CMD_FMT, <<"echo -n `identify -format \"%[fx:w]x%[fx:h]\" ~s`">>).
+-define(IMAGE_SIZE_CMD_FMT, whapps_config:get_binary(?CONFIG_CAT, <<"image_size_cmd_format">>, ?DEFAULT_IMAGE_SIZE_CMD_FMT)).
 
 -record(state, {
           options = [] :: list()
@@ -96,9 +98,7 @@ handle_EHLO(Hostname, Extensions, #state{options=Options}=State) ->
                    end,
     {'ok', MyExtensions, State}.
 
--spec handle_MAIL(binary(), state()) ->
-                         {'ok', state()} |
-                         error_message().
+-spec handle_MAIL(binary(), state()) -> {'ok', state()}.
 handle_MAIL(From, State) ->
     lager:debug("Checking Mail from ~s", [From]),
     {'ok', State#state{from=From}}.
@@ -106,7 +106,7 @@ handle_MAIL(From, State) ->
 -spec handle_MAIL_extension(binary(), state()) ->
                                    'error'.
 handle_MAIL_extension(Extension, _State) ->
-    Error = io_lib:format("554 Unknown MAIL FROM extension ~s", [Extension]),
+    Error = wh_util:to_binary(io_lib:format("554 Unknown MAIL FROM extension ~s", [Extension])),
     lager:debug(Error),
     'error'.
 
@@ -120,7 +120,7 @@ handle_RCPT(To, State) ->
 -spec handle_RCPT_extension(binary(), state()) ->
                                    'error'.
 handle_RCPT_extension(Extension, _State) ->
-    Error = io_lib:format("554 Unknown RCPT TO extension ~s", [Extension]),
+    Error = wh_util:to_binary(io_lib:format("554 Unknown RCPT TO extension ~s", [Extension])),
     lager:debug(Error),
     'error'.
 
@@ -163,7 +163,7 @@ handle_DATA_exception(Options, Reference, Data) ->
             %% optionally dump the failed email somewhere for analysis
             File = "/tmp/"++Reference,
             case filelib:ensure_dir(File) of
-                'ok' -> file:write_file(File, Data);
+                'ok' -> wh_util:write_file(File, Data);
                 _ -> 'ok'
             end
     end.
@@ -175,7 +175,6 @@ handle_RSET(State) ->
     State.
 
 -spec handle_VRFY(binary(), state()) ->
-                         {'ok', string(), state()} |
                          {'error', string(), state()}.
 handle_VRFY(_Address, State) ->
     lager:debug("252 VRFY disabled by policy, just send some mail"),
@@ -202,13 +201,13 @@ handle_STARTTLS(State) ->
     lager:debug("SMTP TLS Started"),
     State.
 
--spec code_change(any(), state(), any()) -> {'ok', state()}.
+-spec code_change(_, state(), _) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
--spec terminate(any(), state()) ->  {'ok', any(), state()}.
+-spec terminate(_, state()) ->  {'ok', _, state()}.
 terminate('normal', State) ->
-    spawn(fun()-> handle_message(State) end),
+    _ = wh_util:spawn(fun()-> handle_message(State) end),
     {'ok', 'normal', State};
 terminate(Reason, State) ->
     lager:debug("terminate ~p", [Reason]),
@@ -234,8 +233,7 @@ handle_message(#state{filename=Filename
         {'ok', FileContents} ->
             case fax_util:save_fax_docs(Docs, FileContents, CT) of
                 'ok' ->
-                    file:delete(Filename),
-                    'ok';
+                    'ok' = file_delete(Filename);
                 {'error', Error} ->
                     maybe_faxbox_log(State#state{errors=[Error]})
             end;
@@ -243,6 +241,14 @@ handle_message(#state{filename=Filename
             Error = wh_util:to_binary(io_lib:format("error reading attachment ~s", [Filename])),
             maybe_faxbox_log(State#state{errors=[Error]})
     end.
+
+-spec file_delete(api_binary()) -> 'ok'.
+file_delete(Filename) ->
+     case file:delete(Filename) of
+         'ok' -> 'ok';
+         {'error', _}=_E ->
+             lager:debug("error deleting ~s : ~p", [Filename, _E])
+     end.
 
 -spec maybe_system_report(state()) -> 'ok'.
 maybe_system_report(#state{faxbox='undefined', account_id='undefined'}=State) ->
@@ -261,7 +267,7 @@ maybe_faxbox_log(#state{account_id='undefined'}=State) ->
     maybe_system_report(State);
 maybe_faxbox_log(#state{faxbox='undefined', account_id=AccountId}=State) ->
     maybe_faxbox_log(AccountId, wh_json:new(), State);
-maybe_faxbox_log(#state{faxbox=JObj, account_id=AccountId}=State) ->    
+maybe_faxbox_log(#state{faxbox=JObj, account_id=AccountId}=State) ->
     maybe_faxbox_log(AccountId, JObj, State).
 
 -spec maybe_faxbox_log(ne_binary(), wh_json:object(), state()) -> 'ok'.
@@ -303,7 +309,7 @@ faxbox_log(#state{account_id=AccountId}=State) ->
     kazoo_modb:save_doc(AccountId, Doc),
     maybe_system_report(State).
 
--spec error_doc() -> binary().
+-spec error_doc() -> ne_binary().
 error_doc() ->
     {Year, Month, _} = erlang:date(),
     <<(wh_util:to_binary(Year))/binary,(wh_util:pad_month(Month))/binary
@@ -525,7 +531,7 @@ maybe_faxbox_by_owner_id(AccountId, OwnerId, #state{errors=Errors, from=From}=St
                         ,errors=[]
                        };
         {'ok', [_JObj | _JObjs]} ->
-            Error = io_lib:format("user ~s : ~s has multiples faxboxes", [OwnerId, From]),
+            Error = wh_util:to_binary(io_lib:format("user ~s : ~s has multiples faxboxes", [OwnerId, From])),
             maybe_faxbox_by_rules(AccountId
                                   ,State#state{owner_id=OwnerId
                                                ,owner_email=From
@@ -533,7 +539,7 @@ maybe_faxbox_by_owner_id(AccountId, OwnerId, #state{errors=Errors, from=From}=St
                                               }
                                  );
         _ ->
-            Error = io_lib:format("user ~s : ~s does not have a faxbox", [OwnerId, From]),
+            Error = wh_util:to_binary(io_lib:format("user ~s : ~s does not have a faxbox", [OwnerId, From])),
             lager:debug("user ~s : ~s from account ~s does not have a faxbox, trying by rules"
                         ,[OwnerId, From, AccountId]
                        ),
@@ -607,10 +613,10 @@ add_fax_document(#state{docs=Docs
                ,{<<"fax_identity_name">>, wh_json:get_value(<<"fax_header">>, FaxBoxDoc)}
                ,{<<"from_number">>, wh_json:get_value(<<"caller_id">>, FaxBoxDoc)}
                ,{<<"fax_identity_number">>, wh_json:get_value(<<"fax_identity">>, FaxBoxDoc)}
-               ,{<<"fax_timezone">>, wh_json:get_value(<<"fax_timezone">>, FaxBoxDoc)}
+               ,{<<"fax_timezone">>, kzd_fax_box:timezone(FaxBoxDoc)}
                ,{<<"to_name">>, FaxNumber}
                ,{<<"to_number">>, FaxNumber}
-               ,{<<"retries">>, wh_json:get_value(<<"retries">>, FaxBoxDoc, 3)}
+               ,{<<"retries">>, kzd_fax_box:retries(FaxBoxDoc, 3)}
                ,{<<"notifications">>, Notify}
                ,{<<"faxbox_id">>, FaxBoxId}
                ,{<<"folder">>, <<"outbox">>}
@@ -636,10 +642,9 @@ add_fax_document(#state{docs=Docs
 process_message(<<"multipart">>, <<"mixed">>, _Headers, _Parameters, Body, #state{errors=Errors}=State) ->
     lager:debug("processing multipart/mixed"),
     case Body of
-        {Type, SubType, HeadersPart, ParametersPart, BodyPart} ->
+        {Type, SubType, _HeadersPart, ParametersPart, BodyPart} ->
             lager:debug("processing ~s/~s", [Type, SubType]),
-            process_part(<<Type/binary, "/", SubType/binary>>
-                         ,HeadersPart
+            maybe_process_part(<<Type/binary, "/", SubType/binary>>
                          ,ParametersPart
                          ,BodyPart
                          ,State
@@ -662,82 +667,146 @@ process_parts([], #state{filename='undefined'
     {'ok', State#state{errors=[<<"no valid attachment">> | Errors]}};
 process_parts([], State) ->
     {'ok', State};
-process_parts([{Type, SubType, Headers, Parameters, BodyPart}
+process_parts([{Type, SubType, _Headers, Parameters, BodyPart}
                |Parts
               ], State) ->
     {_ , NewState}
-        = process_part(<<Type/binary, "/", SubType/binary>>
-                       ,Headers
+        = maybe_process_part(fax_util:normalize_content_type(<<Type/binary, "/", SubType/binary>>)
                        ,Parameters
                        ,BodyPart
                        ,State
                       ),
     process_parts(Parts, NewState).
 
--spec process_part(ne_binary(), wh_proplist(), wh_proplist(), binary() | mimemail:mimetuple(), state()) ->
+-spec maybe_process_part(ne_binary(), wh_proplist(), binary() | mimemail:mimetuple(), state()) ->
                           {'ok', state()}.
-process_part(<<"application/pdf">>=CT, _Headers, _Parameters, Body, State) ->
-    lager:debug("part is application/pdf"),
-    Filename = <<"/tmp/email_attachment_", (wh_util:to_binary(wh_util:current_tstamp()))/binary, ".pdf">>,
-    file:write_file(Filename, Body),
-    {'ok', State#state{filename=Filename
-                       ,content_type=CT
-                      }};
-process_part(<<"image/tiff">>=CT, _Headers, _Parameters, Body, State) ->
-    lager:debug("Part is image/tiff"),
-    Filename = <<"/tmp/email_attachment_", (wh_util:to_binary(wh_util:current_tstamp()))/binary, ".tiff">>,
-    file:write_file(Filename, Body),
-    {'ok', State#state{filename=Filename
-                       ,content_type=CT
-                      }};
-process_part(<<"application/octet-stream">>, _Headers, Parameters, Body, State) ->
-    lager:debug("part is application/octet-stream, try check attachemnt filename extension"),
+maybe_process_part(<<"application/octet-stream">>, Parameters, Body, State) ->
+    lager:debug("part is application/octet-stream, try check attachment filename extension"),
     case props:get_value(<<"disposition">>, Parameters) of
         <<"attachment">> ->
-            Props = props:get_value(<<"disposition-params">>, Parameters),
-            maybe_process_part_attachment(Props, Body, State);
+            Props = props:get_value(<<"disposition-params">>, Parameters, []),
+            Filename = wh_util:to_lower_binary(props:get_value(<<"filename">>, Props, <<>>)),
+            Ext = filename:extension(Filename),
+            CT = fax_util:extension_to_content_type(Ext),
+            maybe_process_part(CT, Parameters, Body, State);
          _Else ->
             lager:debug("part is not attachment"),
             {'ok', State}
     end;
-process_part(_ContentType, _Headers, _Parameters, _Body, State) ->
-    lager:debug("ignoring Part ~s",[_ContentType]),
-    {'ok', State}.
-
--spec maybe_process_part_attachment(wh_proplist(), iolist(), state()) -> {'ok', state()}.
-maybe_process_part_attachment(Props, Body, State) ->
-    case props:get_value(<<"filename">>, Props) of
-        'undefined' ->
-            lager:debug("attachment without filename"),
-            {'ok', State};
-        Filename -> process_part_attachment(Filename, Body, State)
+maybe_process_part(CT, _Parameters, Body, State) ->
+    case {is_allowed_content_type(CT), CT} of
+        {true, <<"image/tiff">>} ->
+            process_part(CT, Body, State);
+        {true, <<"image/", _/binary>>} ->
+            maybe_process_image(CT, Body, State);
+        {true, _} ->
+            process_part(CT, Body, State);
+        _ ->
+            lager:debug("ignoring part ~s", [CT]),
+            {'ok', State}
     end.
 
--spec process_part_attachment(ne_binary(), iolist(), state()) -> {'ok', state()}.
-process_part_attachment(AttchFilename, Body, State) ->
-    case filename:extension(wh_util:to_lower_binary(AttchFilename)) of
-        <<".pdf">> ->
-            lager:debug("found pdf filename extension, set content-type to application/pdf"),
-            Filename = <<"/tmp/email_attachment_", (wh_util:to_binary(wh_util:current_tstamp()))/binary, ".pdf">>,
-            file:write_file(Filename, Body),
-            {'ok', State#state{filename=Filename
-                               ,content_type = <<"application/pdf">>
-                              }};
-        <<".tiff">> ->
-            lager:debug("found tiff filename extension, set content-type to image/tiff"),
-            Filename = <<"/tmp/email_attachment_", (wh_util:to_binary(wh_util:current_tstamp()))/binary, ".tiff">>,
-            file:write_file(Filename, Body),
-            {'ok', State#state{filename=Filename
-                               ,content_type = <<"image/tiff">>
-                              }};
-        <<".tif">> ->
-            lager:debug("found tif filename extension, set content-type to image/tiff"),
-            Filename = <<"/tmp/email_attachment_", (wh_util:to_binary(wh_util:current_tstamp()))/binary, ".tiff">>,
-            file:write_file(Filename, Body),
-            {'ok', State#state{filename=Filename
-                               ,content_type = <<"image/tiff">>
-                              }};
-        _Else ->
-            lager:debug("not acceptable filename extension ~p", [_Else]),
+-spec process_part(ne_binary(), binary() | mimemail:mimetuple(), state()) -> {'ok', state()}.
+process_part(CT, Body, State) ->
+    lager:debug("part is ~s", [CT]),
+    Extension = fax_util:content_type_to_extension(CT),
+    {'ok', Filename} = write_tmp_file(Extension, Body),
+    {'ok', State#state{filename=Filename
+                       ,content_type=CT
+                      }}.
+
+-spec is_allowed_content_type(ne_binary()) -> boolean().
+is_allowed_content_type(CT) ->
+    AllowedCT = whapps_config:get(?CONFIG_CAT, <<"allowed_content_types">>, ?DEFAULT_ALLOWED_CONTENT_TYPES),
+    DeniedCT = whapps_config:get(?CONFIG_CAT, <<"denied_content_types">>, [{[{<<"prefix">>, <<"image/">>}]}]),
+    AllowedBy = content_type_matched_by(CT, AllowedCT, <<>>),
+    DeniedBy = content_type_matched_by(CT, DeniedCT, <<>>),
+    byte_size(AllowedBy) > byte_size(DeniedBy).
+
+-spec content_type_matched_by(ne_binary(), [ne_binary() | wh_json:object()], binary()) -> binary().
+content_type_matched_by(CT, [CT | _T], _) ->
+    CT;
+content_type_matched_by(CT, [Type | T], GreaterMatch) when is_binary(Type) ->
+    content_type_matched_by(CT, T, GreaterMatch);
+content_type_matched_by(CT, [Type | T], GreaterMatch) ->
+    Matched = content_type_matched_json(CT, Type),
+    case byte_size(Matched) > byte_size(GreaterMatch) of
+        'true' -> content_type_matched_by(CT, T, Matched);
+        'false' -> content_type_matched_by(CT, T, GreaterMatch)
+    end;
+content_type_matched_by(_CT, [], GreaterMatch) ->
+    GreaterMatch.
+
+-spec content_type_matched_json(ne_binary(), wh_json:object()) -> binary().
+content_type_matched_json(CT, Type) ->
+    case wh_json:is_json_object(Type) of
+        'false' -> <<>>;
+        'true' ->
+            content_type_matched_json(CT, Type, <<"type">>)
+    end.
+
+-spec content_type_matched_json(ne_binary(), wh_json:object(), ne_binary()) -> binary().
+content_type_matched_json(CT, Type, <<"type">> = Field) ->
+    case wh_json:get_binary_value(Field, Type) of
+        CT -> CT;
+        _ -> content_type_matched_json(CT, Type, <<"prefix">>)
+    end;
+content_type_matched_json(CT, Type, <<"prefix">> = Field) ->
+    Prefix = wh_json:get_binary_value(Field, Type, <<>>),
+    L = byte_size(Prefix),
+    case {L, CT} of
+        {0, CT} -> <<>>;
+        {_, <<Prefix:L/binary, _/binary>>} -> Prefix;
+        {_, _} -> <<>>
+    end.
+
+-spec maybe_process_image(ne_binary(), binary() | mimemail:mimetyple(), state()) -> {'ok', state()}.
+maybe_process_image(CT, Body, State) ->
+    case whapps_config:get_binary(?CONFIG_CAT, <<"image_min_size">>, <<"700x10">>) of
+        'undefined' ->
+            lager:debug("ignoring part ~s", [CT]),
+            {'ok', State};
+        Size ->
+            maybe_process_image(CT, Body, Size, State)
+    end.
+
+-spec maybe_process_image(ne_binary(), binary() | mimemail:mimetuple(), ne_binary(), state()) -> {'ok', state()}.
+maybe_process_image(CT, Body, Size, State) ->
+    {MinX, MinY} = case re:split(Size, "x") of
+                       [P] -> {wh_util:to_integer(P), wh_util:to_integer(P)};
+                       [X, Y] -> {wh_util:to_integer(X), wh_util:to_integer(Y)}
+                   end,
+    {'ok', NewState = #state{filename = Filename}} = process_part(CT, Body, State),
+    Cmd = io_lib:format(?IMAGE_SIZE_CMD_FMT, [Filename]),
+    [W, H] = re:split(os:cmd(Cmd), "x"),
+    Width = wh_util:to_integer(W),
+    Height = wh_util:to_integer(H),
+    case MinX =< Width andalso MinY =< Height of
+        'true' ->
+            {'ok', NewState};
+        'false' ->
+            lager:debug("ignoring part ~s", [CT]),
+            wh_util:delete_file(Filename),
             {'ok', State}
+    end.
+
+-spec write_tmp_file(ne_binary(), binary() | mimemail:mimetuple()) ->
+    {'ok', api_binary()}
+    | {'error', any()}.
+-spec write_tmp_file(ne_binary() | 'undefined' , ne_binary(), binary() | mimemail:mimetuple()) ->
+    {'ok', api_binary()}
+    | {'error', any()}.
+write_tmp_file(Extension, Body) ->
+    write_tmp_file('undefined', Extension, Body).
+
+write_tmp_file('undefined', Extension, Body) ->
+    Filename = <<"/tmp/email_attachment_", (wh_util:to_binary(wh_util:current_tstamp()))/binary>>,
+    write_tmp_file(Filename, Extension, Body);
+write_tmp_file(Filename, Extension, Body) ->
+    File = <<Filename/binary, ".", Extension/binary>>,
+    case wh_util:write_file(File, Body) of
+        'ok' -> {'ok', File};
+        {'error', _}=Error ->
+            lager:debug("error writing file ~s : ~p", [Filename, Error]),
+            Error
     end.

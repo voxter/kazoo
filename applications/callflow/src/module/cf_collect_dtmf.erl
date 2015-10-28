@@ -39,8 +39,8 @@ handle(Data, Call) ->
 
 -spec maybe_collect_more_digits(wh_json:object(), whapps_call:call(), binary()) -> 'ok'.
 maybe_collect_more_digits(Data, Call, AlreadyCollected) ->
-	AlreadyCollectedSize = byte_size(AlreadyCollected),
-	MaxDigits = max_digits(Data),
+    AlreadyCollectedSize = byte_size(AlreadyCollected),
+    MaxDigits = max_digits(Data),
 
     maybe_collect_more_digits(Data, Call, AlreadyCollected, AlreadyCollectedSize, MaxDigits),
     cf_exe:continue(Call).

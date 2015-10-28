@@ -120,14 +120,16 @@ handle_cast(_Msg, State) ->
 %%--------------------------------------------------------------------
 handle_info({'fetch', 'directory', <<"domain">>, <<"name">>, _Value, Id, ['undefined' | Props]}
             ,#state{node=Node}=State) ->
-    spawn(?MODULE, 'handle_directory_lookup', [Id, Props, Node]),
+    _ = wh_util:spawn(?MODULE, 'handle_directory_lookup', [Id, Props, Node]),
     {'noreply', State};
 handle_info({'fetch', _Section, _Something, _Key, _Value, Id, ['undefined' | _Props]}, #state{node=Node}=State) ->
-    spawn(fun() ->
-                  lager:debug("sending empyt reply for request (~s) for ~s ~s from ~s", [Id, _Section, _Something, Node]),
-                  {'ok', Resp} = ecallmgr_fs_xml:empty_response(),
-                  freeswitch:fetch_reply(Node, Id, 'directory', Resp)
-          end),
+    wh_util:spawn(
+      fun() ->
+              lager:debug("sending empyt reply for request (~s) for ~s ~s from ~s",
+                          [Id, _Section, _Something, Node]),
+              {'ok', Resp} = ecallmgr_fs_xml:empty_response(),
+              freeswitch:fetch_reply(Node, Id, 'directory', Resp)
+      end),
     {'noreply', State};
 handle_info(_Info, State) ->
     lager:debug("unhandled msg: ~p", [_Info]),
@@ -200,9 +202,11 @@ get_auth_realm(Props) ->
     of
         'undefined' -> get_auth_uri_realm(Props);
         Realm ->
-            case wh_network_utils:is_ipv4(Realm) of
+            case wh_network_utils:is_ipv4(Realm)
+                orelse wh_network_utils:is_ipv6(Realm)
+            of
                 'true' -> get_auth_uri_realm(Props);
-                'false' -> Realm
+                'false' -> wh_util:to_lower_binary(Realm)
             end
     end.
 
@@ -210,7 +214,7 @@ get_auth_realm(Props) ->
 get_auth_uri_realm(Props) ->
     AuthURI = props:get_value(<<"sip_auth_uri">>, Props, <<>>),
     case binary:split(AuthURI, <<"@">>) of
-        [_, Realm] -> Realm;
+        [_, Realm] -> wh_util:to_lower_binary(Realm);
         _Else ->
             props:get_first_defined([<<"Auth-Realm">>
                                     ,<<"sip_request_host">>

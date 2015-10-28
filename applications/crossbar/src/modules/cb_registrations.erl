@@ -142,7 +142,7 @@ delete(Context, Username) ->
 
 -spec lookup_regs(cb_context:context()) -> wh_json:objects().
 lookup_regs(Context) ->
-    AccountRealm = crossbar_util:get_account_realm(Context),
+    AccountRealm = wh_util:get_account_realm(cb_context:account_id(Context)),
     Req = [{<<"Realm">>, AccountRealm}
            ,{<<"Fields">>, []}
            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
@@ -234,5 +234,5 @@ count_registrations(Context) ->
 get_realm_for_counting(Context) ->
     case cb_context:account_id(Context) of
         'undefined' -> <<"all">>;
-        _AccountId -> crossbar_util:get_account_realm(Context)
+        _AccountId -> wh_util:get_account_realm(cb_context:account_id(Context))
     end.

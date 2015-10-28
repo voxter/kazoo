@@ -98,12 +98,9 @@
 -include_lib("whistle/include/wh_types.hrl").
 -include_lib("whistle/include/wh_log.hrl").
 
--define(SERVER_RETRY_PERIOD, 30000).
--define(TIMEOUT_RETRY_CONN, 5000).
+-define(SERVER_RETRY_PERIOD, 30 * ?MILLISECONDS_IN_SECOND).
+-define(TIMEOUT_RETRY_CONN, 5 * ?MILLISECONDS_IN_SECOND).
 -define(CALLBACK_TIMEOUT_MSG, 'callback_timeout').
-
--define(START_TIMEOUT, 500).
--define(MAX_TIMEOUT, 5000).
 
 -define(BIND_WAIT, 100).
 
@@ -257,11 +254,12 @@ cast(Name, Request) -> gen_server:cast(Name, {'$client_cast', Request}).
 
 -spec delayed_cast(server_ref(), term(), pos_integer()) -> 'ok'.
 delayed_cast(Name, Request, Wait) when is_integer(Wait), Wait > 0 ->
-    _P = spawn(fun() ->
-                       wh_util:put_callid(?MODULE),
-                       timer:sleep(Wait),
-                       gen_server:cast(Name, Request)
-               end),
+    _P = wh_util:spawn(
+           fun() ->
+                   wh_util:put_callid(?MODULE),
+                   timer:sleep(Wait),
+                   gen_server:cast(Name, Request)
+           end),
     'ok'.
 
 -spec reply({pid(), reference()}, term()) -> no_return().
@@ -500,7 +498,7 @@ handle_cast({'wh_amqp_assignment', {'new_channel', 'true'}}, State) ->
 handle_cast({'wh_amqp_assignment', {'new_channel', 'false'}}, State) ->
     {'noreply', handle_amqp_channel_available(State)};
 handle_cast({'federated_event', JObj, BasicDeliver}, State) ->
-    spawn(?MODULE, 'distribute_event', [JObj, BasicDeliver, State]),
+    _ = wh_util:spawn(?MODULE, 'distribute_event', [JObj, BasicDeliver, State]),
     {'noreply', State};
 handle_cast({'$execute', Module, Function, Args}
             ,#state{federators=[]}=State) ->
@@ -554,7 +552,7 @@ handle_cast({'start_listener', _Params}, State) ->
     {'noreply', State};
 
 handle_cast({'pause_consumers'}, #state{is_consuming='true', consumer_tags=Tags}=State) ->
-    [amqp_util:basic_cancel(Tag) || Tag <- Tags],
+    _ = [amqp_util:basic_cancel(Tag) || Tag <- Tags],
     {'noreply', State};
 
 handle_cast({'resume_consumers'}, #state{queue='undefined'}=State) ->
@@ -564,8 +562,8 @@ handle_cast({'resume_consumers'}, #state{is_consuming='false'
                                          ,queue=Q
                                          ,other_queues=OtherQueues}=State) ->
     start_consumer(Q, props:get_value('consume_options', Params)),
-    [start_consumer(Q1, props:get_value('consume_options', P))
-                   || {Q1, {_, P}} <- OtherQueues],
+    _ = [start_consumer(Q1, props:get_value('consume_options', P))
+         || {Q1, {_, P}} <- OtherQueues],
     {'noreply', State};
 
 handle_cast(Message, State) ->
@@ -592,7 +590,7 @@ maybe_remove_binding(_BP, _B, _P, _Q) -> 'true'.
 handle_info({#'basic.deliver'{}=BD, #amqp_msg{props=#'P_basic'{content_type=CT}
                                               ,payload=Payload
                                              }}, State) ->
-    spawn(?MODULE, 'handle_event', [Payload, CT, BD, State]),
+    _ = wh_util:spawn(?MODULE, 'handle_event', [Payload, CT, BD, State]),
     {'noreply', State, 'hibernate'};
 handle_info({#'basic.return'{}=BR, #amqp_msg{props=#'P_basic'{content_type=CT}
                                              ,payload=Payload
@@ -965,7 +963,7 @@ handle_module_cast(Msg, #state{module=Module
                                ,module_state=ModuleState
                                ,module_timeout_ref=OldRef
                               }=State) ->
-    stop_timer(OldRef),
+    _ = stop_timer(OldRef),
     try Module:handle_cast(Msg, ModuleState) of
         {'noreply', ModuleState1} ->
             {'noreply', State#state{module_state=ModuleState1}, 'hibernate'};
@@ -1053,9 +1051,9 @@ start_new_listener(Broker, Binding, Props, #state{params=Ps}) ->
 
 -spec update_existing_listeners_bindings(federator_listeners(), binding_module(), wh_proplist()) -> 'ok'.
 update_existing_listeners_bindings(Listeners, Binding, Props) ->
-    [update_existing_listener_bindings(Listener, Binding, Props)
-     || Listener <- Listeners
-    ],
+    _ = [update_existing_listener_bindings(Listener, Binding, Props)
+         || Listener <- Listeners
+        ],
     'ok'.
 
 -spec update_existing_listener_bindings(federator_listener(), binding_module(), wh_proplist()) -> 'ok'.

@@ -10,6 +10,7 @@
 -behaviour(gen_listener).
 
 -export([start_link/0]).
+
 -export([init/1
          ,handle_call/3
          ,handle_cast/2
@@ -80,6 +81,9 @@
                      ,{'teletype_port_scheduled'
                        ,[{<<"notification">>, <<"port_scheduled">>}]
                       }
+                     ,{'teletype_port_rejected'
+                       ,[{<<"notification">>, <<"port_rejected">>}]
+                      }
                      ,{'teletype_port_cancel'
                        ,[{<<"notification">>, <<"port_cancel">>}]
                       }
@@ -89,30 +93,39 @@
                      ,{'teletype_port_comment'
                        ,[{<<"notification">>, <<"port_comment">>}]
                       }
+                     ,{{'teletype_webhook_disabled', 'handle_webhook_disabled'}
+                       ,[{<<"notification">>, <<"webhook_disabled">>}]
+                      }
+                     ,{'teletype_denied_emergency_bridge'
+                       ,[{<<"notification">>, <<"denied_emergency_bridge">>}]
+                      }
                     ]).
 
--define(RESTRICT_TO, ['new_voicemail'
-                      ,'voicemail_full'
+-define(RESTRICT_TO, ['cnam_requests'
+                      ,'denied_emergency_bridge'
+                      ,'deregister'
                       ,'inbound_fax'
-                      ,'outbound_fax'
+                      ,'inbound_fax_error'
+                      ,'low_balance'
                       ,'new_account'
                       ,'new_user'
-                      ,'inbound_fax_error'
+                      ,'new_voicemail'
+                      ,'outbound_fax'
                       ,'outbound_fax_error'
-                      ,'deregister'
-                      ,'pwd_recovery'
-                      ,'cnam_requests'
-                      ,'port_request'
-                      ,'port_pending'
-                      ,'port_scheduled'
-                      ,'port_cancel'
                       ,'ported'
+                      ,'port_cancel'
                       ,'port_comment'
-                      ,'low_balance'
+                      ,'port_pending'
+                      ,'pwd_recovery'
+                      ,'port_rejected'
+                      ,'port_request'
+                      ,'port_scheduled'
                       ,'system_alerts'
-                      ,'transaction'
-                      %%,'skel'
                       ,'topup'
+                      ,'transaction'
+                      ,'voicemail_full'
+                      ,'webhook_disabled'
+                      %%,'skel'
                      ]).
 
 -define(BINDINGS, [{'notifications', [{'restrict_to', ?RESTRICT_TO}]}
@@ -134,12 +147,15 @@
 %% @end
 %%--------------------------------------------------------------------
 start_link() ->
-    gen_listener:start_link(?MODULE, [{'bindings', ?BINDINGS}
-                                      ,{'responders', ?RESPONDERS}
-                                      ,{'queue_name', ?QUEUE_NAME}       % optional to include
-                                      ,{'queue_options', ?QUEUE_OPTIONS} % optional to include
-                                      ,{'consume_options', ?CONSUME_OPTIONS} % optional to include
-                                     ], []).
+    gen_listener:start_link(?MODULE
+                            ,[{'bindings', ?BINDINGS}
+                              ,{'responders', ?RESPONDERS}
+                              ,{'queue_name', ?QUEUE_NAME}
+                              ,{'queue_options', ?QUEUE_OPTIONS}
+                              ,{'consume_options', ?CONSUME_OPTIONS}
+                             ]
+                            ,[]
+                           ).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -216,7 +232,7 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_event(JObj, _State) ->
-    case should_handle(JObj) of
+    case teletype_util:should_handle_notification(JObj) of
         'false' -> 'ignore';
         'true' -> {'reply', []}
     end.
@@ -249,57 +265,3 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
--spec should_handle(wh_json:object()) -> boolean().
-should_handle(JObj) ->
-    should_handle(JObj, wh_json:is_true(<<"Preview">>, JObj, 'false')).
-
-should_handle(_JObj, 'true') -> 'true';
-should_handle(JObj, 'false') ->
-    case wh_json:get_first_defined([<<"Account-ID">>, <<"Account-DB">>], JObj) of
-        'undefined' -> should_handle_system();
-        Account -> should_handle_account(Account)
-    end.
-
--spec should_handle_system() -> boolean().
-should_handle_system() ->
-    lager:debug("should system handle notification"),
-    whapps_config:get(?NOTIFY_CONFIG_CAT
-                     ,<<"notification_app">>
-                     ,?APP_NAME
-                     ) =:= ?APP_NAME.
-
--spec should_handle_account(ne_binary()) -> boolean().
-should_handle_account(Account) ->
-    AccountId = wh_util:format_account_id(Account, 'raw'),
-    AccountDb = wh_util:format_account_id(Account, 'encoded'),
-
-    case couch_mgr:open_cache_doc(AccountDb, AccountId) of
-        {'error', _E} ->
-            lager:debug("teletype should handle account ~s", [AccountId]),
-            'true';
-        {'ok', AccountJObj} ->
-            should_handle_account(
-              Account
-              ,kz_account:notification_preference(AccountJObj)
-             )
-    end.
-
--spec should_handle_account(ne_binary(), api_binary()) -> boolean().
-should_handle_account(_Account, ?APP_NAME) -> 'true';
-should_handle_account(Account, 'undefined') ->
-    should_handle_reseller(Account);
-should_handle_account(_Account, _Preference) ->
-    lager:debug("not handling notification; unknown notification preference '~s' for '~s'"
-                ,[_Preference, _Account]
-               ).
-
--spec should_handle_reseller(api_binary()) -> boolean().
-should_handle_reseller(Account) ->
-    ResellerId = wh_services:find_reseller_id(Account),
-    lager:debug("should reseller ~s handle notification", [ResellerId]),
-    AccountDb = wh_util:format_account_id(ResellerId, 'encoded'),
-    case couch_mgr:open_cache_doc(AccountDb, ResellerId) of
-        {'error', _E} -> 'true';
-        {'ok', AccountJObj} ->
-            kz_account:notification_preference(AccountJObj) =:= ?APP_NAME
-    end.

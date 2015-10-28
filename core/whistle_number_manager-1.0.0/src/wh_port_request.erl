@@ -28,7 +28,9 @@
 -define(VIEW_LISTING_SUBMITTED, <<"port_requests/listing_submitted">>).
 
 -type transition_response() :: {'ok', wh_json:object()} |
-                               {'error', 'invalid_state_transition'}.
+                               {'error', 'invalid_state_transition'} |
+                               {'error', 'failed_to_charge'} |
+                               {'errors', wh_proplist()}.
 
 -spec init() -> any().
 init() ->
@@ -38,7 +40,7 @@ init() ->
 -spec current_state(wh_json:object()) -> api_binary().
 current_state(JObj) ->
     lager:debug("current state: ~p", [JObj]),
-    wh_json:get_value(?PORT_PVT_STATE, JObj, ?PORT_WAITING).
+    wh_json:get_value(?PORT_PVT_STATE, JObj, ?PORT_UNCONFIRMED).
 
 -spec get(ne_binary()) ->
                  {'ok', wh_json:object()} |
@@ -54,7 +56,7 @@ public_fields(JObj) ->
                         ,{<<"created">>, wh_json:get_value(<<"pvt_created">>, JObj)}
                         ,{<<"updated">>, wh_json:get_value(<<"pvt_modified">>, JObj)}
                         ,{<<"uploads">>, normalize_attachments(As)}
-                        ,{<<"port_state">>, wh_json:get_value(?PORT_PVT_STATE, JObj, ?PORT_WAITING)}
+                        ,{<<"port_state">>, wh_json:get_value(?PORT_PVT_STATE, JObj, ?PORT_UNCONFIRMED)}
                         ,{<<"sent">>, wh_json:get_value(?PVT_SENT, JObj, 'false')}
                        ]
                        ,wh_doc:public_fields(JObj)
@@ -93,7 +95,7 @@ normalize_number_map(N, Meta) ->
 -spec transition_to_canceled(wh_json:object()) -> transition_response().
 
 transition_to_submitted(JObj) ->
-    transition(JObj, [?PORT_WAITING, ?PORT_REJECT], ?PORT_SUBMITTED).
+    transition(JObj, [?PORT_UNCONFIRMED, ?PORT_REJECT], ?PORT_SUBMITTED).
 
 transition_to_pending(JObj) ->
     transition(JObj, [?PORT_SUBMITTED], ?PORT_PENDING).
@@ -104,14 +106,15 @@ transition_to_scheduled(JObj) ->
 transition_to_complete(JObj) ->
     case transition(JObj, [?PORT_PENDING, ?PORT_SCHEDULED, ?PORT_REJECT], ?PORT_COMPLETE) of
         {'error', _}=E -> E;
-        {'ok', Transitioned} -> completed_port(Transitioned)
+        {'ok', Transitioned} ->
+            completed_port(current_state(JObj), Transitioned)
     end.
 
 transition_to_rejected(JObj) ->
     transition(JObj, [?PORT_SUBMITTED, ?PORT_PENDING, ?PORT_SCHEDULED], ?PORT_REJECT).
 
 transition_to_canceled(JObj) ->
-    transition(JObj, [?PORT_WAITING, ?PORT_SUBMITTED, ?PORT_PENDING, ?PORT_SCHEDULED, ?PORT_REJECT], ?PORT_CANCELED).
+    transition(JObj, [?PORT_UNCONFIRMED, ?PORT_SUBMITTED, ?PORT_PENDING, ?PORT_SCHEDULED, ?PORT_REJECT], ?PORT_CANCELED).
 
 -spec maybe_transition(wh_json:object(), ne_binary()) -> transition_response().
 maybe_transition(PortReq, ?PORT_SUBMITTED) ->
@@ -154,69 +157,84 @@ charge_for_port(_JObj, AccountId) ->
     Transaction = wh_transaction:debit(AccountId, Cost),
     wh_services:commit_transactions(Services, [Transaction]).
 
--spec completed_port(wh_json:object()) ->
+-spec completed_port(ne_binary(), wh_json:object()) ->
                             transition_response().
-completed_port(PortReq) ->
+completed_port(PriorState, PortReq) ->
     case charge_for_port(PortReq) of
         'ok' ->
             lager:debug("successfully charged for port, transitioning numbers to active"),
-            transition_numbers(PortReq);
+            transition_numbers(PriorState, PortReq);
         'error' ->
-            throw({'error', 'failed_to_charge'})
+            {'error', 'failed_to_charge'}
     end.
 
--spec transition_numbers(wh_json:object()) ->
+-spec transition_numbers(ne_binary(), wh_json:object()) ->
                                 transition_response().
-transition_numbers(PortReq) ->
-    Numbers = wh_json:get_keys(<<"numbers">>, PortReq),
-    PortOps = [enable_number(N) || N <- Numbers],
-    case lists:all(fun(X) -> wh_util:is_true(X) end, PortOps) of
-        'true' ->
-            lager:debug("all numbers ported, removing from port request"),
-            ClearedPortRequest = clear_numbers_from_port(PortReq),
-            {'ok', ClearedPortRequest};
-        'false' ->
-            lager:debug("failed to transition numbers: ~p", [PortOps]),
-            {'error', PortReq}
+transition_numbers(PriorState, JObj) ->
+    finalize_number_transition(
+      PriorState
+      ,enable_numbers(
+         wh_json:get_keys(<<"numbers">>, JObj)
+         ,JObj
+         ,[]
+        )
+     ).
+
+-spec finalize_number_transition(ne_binary(), {wh_json:object(), wh_proplist()}) -> transition_response().
+finalize_number_transition(_, {JObj, []}) ->
+    {'ok', Updated} = couch_mgr:ensure_saved(?KZ_PORT_REQUESTS_DB, JObj),
+    {'ok', Updated};
+finalize_number_transition(PriorState, {JObj, Errors}) ->
+    _ = couch_mgr:ensure_saved(
+          ?KZ_PORT_REQUESTS_DB
+          ,wh_json:set_value(?PORT_PVT_STATE, PriorState, JObj)
+         ),
+    lager:debug("failed to transition all numbers: ~p", [Errors]),
+    {'errors', Errors}.
+
+-spec enable_numbers(ne_binaries(), wh_json:object(), wh_proplist()) -> {wh_json:object(), wh_proplist()}.
+enable_numbers([], JObj, Errors) -> {JObj, Errors};
+enable_numbers([Number|Numbers], JObj, Errors) ->
+    case enable_number(Number) of
+        'ok' ->
+            enable_numbers(
+              Numbers
+              ,wh_json:delete_key([<<"numbers">>, Number], JObj)
+              ,Errors
+             );
+        {'error', Reason} ->
+            enable_numbers(
+              Numbers
+              ,JObj
+              ,[{Number, Reason}|Errors]
+             )
     end.
 
--spec clear_numbers_from_port(wh_json:object()) -> wh_json:object().
-clear_numbers_from_port(PortReq) ->
-    case couch_mgr:save_doc(?KZ_PORT_REQUESTS_DB
-                            ,wh_json:set_value(<<"numbers">>, wh_json:new(), PortReq)
-                           )
-    of
-        {'ok', PortReq1} -> lager:debug("port numbers cleared"), PortReq1;
-        {'error', 'conflict'} ->
-            lager:debug("port request doc was updated before we could re-save"),
-            PortReq;
-        {'error', _E} ->
-            lager:debug("failed to clear numbers: ~p", [_E]),
-            PortReq
-    end.
-
--spec enable_number(ne_binary()) -> boolean().
+-spec enable_number(ne_binary()) -> 'ok' | {'error', _}.
 enable_number(N) ->
     try wh_number_manager:ported(N) of
         {'ok', _NumberDoc} ->
-            lager:debug("ported ~s: ~p", [N, _NumberDoc]),
-            'true';
-        _E ->
-            lager:debug("unexpected result to ported(~s): ~p", [N, _E]),
-            {'false', N}
+            lager:debug("ported ~s: ~p", [N, _NumberDoc]);
+        {_, Reason} ->
+            lager:debug("unexpected result to ported(~s): ~p", [N, Reason]),
+            {'error', Reason}
     catch
-        'throw':_E ->
-            lager:debug("throw from ported(~s): ~p", [N, _E]),
-            {'false', N}
+        'throw':Reason ->
+            lager:debug("throw from ported(~s): ~p", [N, Reason]),
+            {'error', Reason}
     end.
 
 -spec send_submitted_requests() -> 'ok'.
 send_submitted_requests() ->
-    case couch_mgr:get_results(?KZ_PORT_REQUESTS_DB, ?VIEW_LISTING_SUBMITTED, ['include_docs']) of
+    case couch_mgr:get_results(?KZ_PORT_REQUESTS_DB
+                               ,?VIEW_LISTING_SUBMITTED
+                               ,['include_docs']
+                              )
+    of
         {'error', _R} ->
             lager:error("failed to open view port_requests/listing_submitted ~p", [_R]);
         {'ok', JObjs} ->
-            [maybe_send_request(wh_json:get_value(<<"doc">>, JObj)) || JObj <- JObjs],
+            _ = [maybe_send_request(wh_json:get_value(<<"doc">>, JObj)) || JObj <- JObjs],
             lager:debug("sent requests")
     end.
 
@@ -229,7 +247,7 @@ maybe_send_request(JObj) ->
     AccountId = wh_json:get_value(<<"pvt_account_id">>, JObj),
     AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
 
-    case couch_mgr:open_doc(AccountDb, AccountId) of
+    case couch_mgr:open_cache_doc(AccountDb, AccountId) of
         {'error', _R} ->
             lager:error("failed to open account ~s:~p", [AccountId, _R]);
         {'ok', AccountDoc} ->

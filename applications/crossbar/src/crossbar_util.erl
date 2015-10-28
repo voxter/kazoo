@@ -37,11 +37,11 @@
          ,response_auth/2
          ,response_auth/3
         ]).
--export([get_account_realm/1
-         ,get_account_realm/2
+-export([get_account_realm/1, get_account_realm/2
+         ,get_account_doc/1, get_account_doc/2
         ]).
 -export([flush_registrations/1
-         ,flush_registration/2
+         ,flush_registration/1, flush_registration/2
         ]).
 -export([move_account/2]).
 -export([get_descendants/1]).
@@ -76,11 +76,17 @@
         ]).
 -export([maybe_validate_quickcall/1]).
 
+-ifdef(TEST).
+-export([trunkstore_servers_changed/2]).
+-endif.
+
 -include("crossbar.hrl").
 
 -define(DEFAULT_LANGUAGE
         ,whapps_config:get(?CONFIG_CAT, <<"default_language">>, <<"en-US">>)
        ).
+
+-define(KEY_EMERGENCY, <<"emergency">>).
 
 -type fails() :: 'error' | 'fatal'.
 
@@ -96,9 +102,9 @@
 response(JTerm, Context) ->
     create_response('success', 'undefined', 'undefined', JTerm, Context).
 
--spec response_202(wh_json:key(), cb_context:context()) ->
+-spec response_202(wh_json:json_term(), cb_context:context()) ->
                           cb_context:context().
--spec response_202(wh_json:key(), wh_json:json_term(), cb_context:context()) ->
+-spec response_202(wh_json:json_term(), wh_json:json_term(), cb_context:context()) ->
                           cb_context:context().
 response_202(Msg, Context) ->
     response_202(Msg, Msg, Context).
@@ -341,11 +347,23 @@ get_account_realm(Context) ->
 
 get_account_realm('undefined', _) -> 'undefined';
 get_account_realm(Db, AccountId) ->
-    case couch_mgr:open_cache_doc(Db, AccountId) of
-        {'ok', JObj} ->
-            kz_account:realm(JObj);
+    case get_account_doc(Db, AccountId) of
+        'undefined' -> 'undefined';
+        JObj -> kz_account:realm(JObj)
+    end.
+
+-spec get_account_doc(ne_binary()) -> api_object().
+-spec get_account_doc(ne_binary(), ne_binary()) -> api_object().
+get_account_doc(<<_/binary>> = Id) ->
+    get_account_doc(wh_util:format_account_id(Id, 'encoded')
+                    ,wh_util:format_account_id(Id, 'raw')
+                   ).
+
+get_account_doc(<<_/binary>> = Db, <<_/binary>> = Id) ->
+    case couch_mgr:open_cache_doc(Db, Id) of
+        {'ok', JObj} -> JObj;
         {'error', R} ->
-            lager:debug("error while looking up account realm: ~p", [R]),
+            lager:warning("error while looking up account realm: ~p", [R]),
             'undefined'
     end.
 
@@ -356,10 +374,11 @@ flush_registrations(<<_/binary>> = Realm) ->
                ],
     whapps_util:amqp_pool_send(FlushCmd, fun wapi_registration:publish_flush/1);
 flush_registrations(Context) ->
-    flush_registrations(crossbar_util:get_account_realm(Context)).
+    flush_registrations(wh_util:get_account_realm(cb_context:account_id(Context))).
 
 -spec flush_registration(api_binary(), ne_binary() | cb_context:context()) -> 'ok'.
-flush_registration('undefined', _Realm) -> 'ok';
+flush_registration('undefined', _Realm) ->
+    lager:debug("did not flush registration: username is undefined");
 flush_registration(Username, <<_/binary>> = Realm) ->
     FlushCmd = [{<<"Realm">>, Realm}
                 ,{<<"Username">>, Username}
@@ -367,7 +386,38 @@ flush_registration(Username, <<_/binary>> = Realm) ->
                ],
     whapps_util:amqp_pool_send(FlushCmd, fun wapi_registration:publish_flush/1);
 flush_registration(Username, Context) ->
-    flush_registration(Username, get_account_realm(Context)).
+    Realm = wh_util:get_account_realm(cb_context:account_id(Context)),
+    flush_registration(Username, Realm).
+
+%% @public
+-spec flush_registration(cb_context:context()) -> 'ok'.
+flush_registration(Context) ->
+    OldDevice = cb_context:fetch(Context, 'db_doc'),
+    NewDevice = cb_context:doc(Context),
+    AccountId = cb_context:account_id(Context),
+    Realm = wh_util:get_account_realm(AccountId),
+    maybe_flush_registration_on_password(Realm, OldDevice, NewDevice).
+
+-spec maybe_flush_registration_on_password(api_binary(), wh_json:object(), wh_json:object()) -> 'ok'.
+maybe_flush_registration_on_password(Realm, OldDevice, NewDevice) ->
+    case kz_device:sip_password(OldDevice) =:= kz_device:sip_password(NewDevice) of
+        'true' -> maybe_flush_registration_on_username(Realm, OldDevice, NewDevice);
+        'false' ->
+            lager:debug("the SIP password has changed, sending a registration flush"),
+            flush_registration(kz_device:sip_username(OldDevice), Realm)
+    end.
+
+-spec maybe_flush_registration_on_username(api_binary(), wh_json:object(), wh_json:object()) -> 'ok'.
+maybe_flush_registration_on_username(Realm, OldDevice, NewDevice) ->
+    OldUsername = kz_device:sip_username(OldDevice),
+
+    case kz_device:sip_username(NewDevice) of
+        OldUsername -> 'ok';
+        NewUsername ->
+            lager:debug("the SIP username has changed, sending a registration flush for both"),
+            flush_registration(OldUsername, Realm),
+            flush_registration(NewUsername, Realm)
+    end.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -376,10 +426,10 @@ flush_registration(Username, Context) ->
 %%--------------------------------------------------------------------
 -spec move_account(ne_binary(), ne_binary()) ->
                           {'ok', wh_json:object()} |
-                          {'error',any()}.
+                          {'error', _}.
 -spec move_account(ne_binary(), ne_binary(), wh_json:object(), ne_binaries()) ->
                           {'ok', wh_json:object()} |
-                          {'error',any()}.
+                          {'error', _}.
 move_account(<<_/binary>> = AccountId, <<_/binary>> = ToAccount) ->
     AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
     case validate_move(AccountId, ToAccount, AccountDb) of
@@ -558,12 +608,10 @@ get_tree(<<_/binary>> = Account) ->
                                           {'ok', wh_json:object()} |
                                           {'error', _}.
 replicate_account_definition(JObj) ->
-    AccountId = wh_json:get_value(<<"_id">>, JObj),
+    AccountId = wh_doc:id(JObj),
     case couch_mgr:lookup_doc_rev(?WH_ACCOUNTS_DB, AccountId) of
-        {'ok', Rev} ->
-            couch_mgr:ensure_saved(?WH_ACCOUNTS_DB, wh_json:set_value(<<"_rev">>, Rev, JObj));
-        _Else ->
-            couch_mgr:ensure_saved(?WH_ACCOUNTS_DB, wh_json:delete_key(<<"_rev">>, JObj))
+        {'ok', Rev} -> couch_mgr:ensure_saved(?WH_ACCOUNTS_DB, wh_doc:set_revision(JObj, Rev));
+        _Else       -> couch_mgr:ensure_saved(?WH_ACCOUNTS_DB, wh_doc:delete_revision(JObj))
     end.
 
 %%--------------------------------------------------------------------
@@ -796,20 +844,21 @@ get_user_timezone(AccountId, 'undefined') ->
 get_user_timezone(AccountId, UserId) ->
     AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
     case couch_mgr:open_cache_doc(AccountDb, UserId) of
-        {'ok', JObj} ->
-            wh_json:get_value(<<"timezone">>, JObj);
-        {'error', _E} -> get_account_timezone(AccountId)
+        {'ok', UserJObj} ->
+            kzd_user:timezone(UserJObj);
+        {'error', _E} ->
+            get_account_timezone(AccountId)
     end.
 
 -spec get_account_timezone(api_binary()) -> api_binary().
 get_account_timezone('undefined') ->
     'undefined';
 get_account_timezone(AccountId) ->
-    AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
-    case couch_mgr:open_cache_doc(AccountDb, AccountId) of
-        {'ok', JObj} ->
-            wh_json:get_value(<<"timezone">>, JObj);
-        {'error', _E} -> 'undefined'
+    case kz_account:fetch(AccountId) of
+        {'ok', AccountJObj} ->
+            kz_account:timezone(AccountJObj);
+        {'error', _E} ->
+            'undefined'
     end.
 
 -spec apply_response_map(cb_context:context(), wh_proplist()) -> cb_context:context().
@@ -828,7 +877,10 @@ apply_response_map(Context, Map) ->
 apply_response_map_item({Key, Fun}, J, JObj) when is_function(Fun, 1) ->
     wh_json:set_value(Key, Fun(JObj), J);
 apply_response_map_item({Key, Fun}, J, JObj) when is_function(Fun, 2) ->
-    Id = wh_json:get_first_defined([<<"_id">>,<<"Id">>], JObj),
+    Id = case wh_doc:id(JObj) of
+             'undefined' -> wh_json:get_value(<<"Id">>, JObj);
+             LeId -> LeId
+         end,
     wh_json:set_value(Key, Fun(Id, JObj), J);
 apply_response_map_item({Key, ExistingKey}, J, JObj) ->
     wh_json:set_value(Key, wh_json:get_value(ExistingKey, JObj), J).
@@ -873,7 +925,7 @@ create_auth_token(Context, Method, JObj) ->
                ,{<<"owner_id">>, OwnerId}
                ,{<<"as">>, wh_json:get_value(<<"as">>, Data)}
                ,{<<"api_key">>, wh_json:get_value(<<"api_key">>, Data)}
-               ,{<<"restrictions">>, wh_json:get_value(<<"restrictions">>, Data)}
+               ,{<<"restrictions">>, get_token_restrictions(Method, AccountId, OwnerId)}
                ,{<<"method">>, wh_util:to_binary(Method)}
               ]),
     JObjToken = wh_doc:update_pvt_parameters(wh_json:from_list(Token)
@@ -883,7 +935,7 @@ create_auth_token(Context, Method, JObj) ->
 
     case couch_mgr:save_doc(?KZ_TOKEN_DB, JObjToken) of
         {'ok', Doc} ->
-            AuthToken = wh_json:get_value(<<"_id">>, Doc),
+            AuthToken = wh_doc:id(Doc),
             lager:debug("created new local auth token ~s", [AuthToken]),
             ?MODULE:response(?MODULE:response_auth(JObj, AccountId, OwnerId)
                              ,cb_context:setters(
@@ -895,6 +947,62 @@ create_auth_token(Context, Method, JObj) ->
         {'error', R} ->
             lager:debug("could not create new local auth token, ~p", [R]),
             cb_context:add_system_error('invalid_credentials', Context)
+    end.
+
+-spec get_token_restrictions(ne_binary(), ne_binary(), ne_binary()) -> wh_json:object().
+get_token_restrictions(Method, AccountId, OwnerId) ->
+    %% dont restrict SuperAdmin
+    case wh_util:is_system_admin(AccountId) of
+        'true' -> 'undefined';
+        'false' ->
+            Restrictions = case get_account_token_restrictions(AccountId, Method) of
+                'undefined' -> get_system_token_restrictions(Method);
+                AccountRestrictions -> AccountRestrictions
+            end,
+            PrivLevel = get_priv_level(AccountId, OwnerId),
+            get_priv_level_restrictions(Restrictions, PrivLevel)
+    end.
+
+-spec get_priv_level(ne_binary(), ne_binary()) -> api_binary().
+%%
+%% for api_auth tokens we force "admin" priv_level
+%%
+get_priv_level(_AccountId, 'undefined') -> <<"admin">>;
+
+get_priv_level(AccountId, OwnerId) ->
+    AccountDB = wh_util:format_account_db(AccountId),
+    {'ok', Doc} = couch_mgr:open_cache_doc(AccountDB, OwnerId),
+    wh_json:get_ne_value(<<"priv_level">>, Doc).
+
+-spec get_system_token_restrictions(ne_binary()) -> api_object().
+get_system_token_restrictions(Method) ->
+    case whapps_config:get(<<(?CONFIG_CAT)/binary, ".token_restrictions">>, Method) of
+        'undefined' ->
+            whapps_config:get(<<(?CONFIG_CAT)/binary, ".token_restrictions">>, <<"_">>);
+        MethodRestrictions -> MethodRestrictions
+    end.
+
+-spec get_account_token_restrictions(ne_binary(), ne_binary()) -> api_object().
+get_account_token_restrictions(AccountId, Method) ->
+    AccountDB = wh_util:format_account_db(AccountId),
+    case couch_mgr:open_cache_doc(AccountDB, ?CB_ACCOUNT_TOKEN_RESTRICTIONS) of
+        {'ok', RestrictionsDoc} ->
+            wh_json:get_first_defined(
+              [[<<"restrictions">>, wh_util:to_binary(Method)]
+               ,[<<"restrictions">>, <<"_">>]
+              ]
+              ,RestrictionsDoc
+             );
+        {'error', _} -> 'undefined'
+    end.
+
+-spec get_priv_level_restrictions(api_object(), api_binary()) -> api_object().
+get_priv_level_restrictions('undefined', _PrivLevel) -> 'undefined';
+get_priv_level_restrictions(Restrictions, PrivLevel) ->
+    RestrictionLevels = wh_json:get_keys(Restrictions),
+    case lists:member(PrivLevel, RestrictionLevels) of
+        'true' -> wh_json:get_ne_value(PrivLevel, Restrictions);
+        'false' -> wh_json:get_ne_value(<<"_">>, Restrictions)
     end.
 
 %%--------------------------------------------------------------------
@@ -956,45 +1064,52 @@ handle_no_descendants(ViewOptions) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec format_emergency_caller_id_number(cb_context:context()) -> cb_context:context().
+-spec format_emergency_caller_id_number(cb_context:context()) ->
+                                               cb_context:context().
+-spec format_emergency_caller_id_number(cb_context:context(), wh_json:object()) ->
+                                               cb_context:context().
 format_emergency_caller_id_number(Context) ->
-    case cb_context:req_value(Context, [<<"caller_id">>, <<"emergency">>]) of
+    case cb_context:req_value(Context, [<<"caller_id">>, ?KEY_EMERGENCY]) of
         'undefined' -> Context;
         Emergency ->
-            case wh_json:get_value(<<"number">>, Emergency) of
-                'undefined' -> Context;
-                Number ->
-                    NEmergency = wh_json:set_value(<<"number">>, wnm_util:to_e164(Number), Emergency),
-                    CallerId = cb_context:req_value(Context, <<"caller_id">>),
-                    NCallerId = wh_json:set_value(<<"emergency">>, NEmergency, CallerId),
-                    cb_context:set_req_data(
-                        Context
-                        ,wh_json:set_value(<<"caller_id">>, NCallerId, cb_context:req_data(Context))
-                    )
-            end
+            format_emergency_caller_id_number(Context, Emergency)
+    end.
+
+format_emergency_caller_id_number(Context, Emergency) ->
+    case wh_json:get_value(<<"number">>, Emergency) of
+        'undefined' -> Context;
+        Number ->
+            NEmergency = wh_json:set_value(<<"number">>, wnm_util:to_e164(Number), Emergency),
+            CallerId = cb_context:req_value(Context, <<"caller_id">>),
+            NCallerId = wh_json:set_value(?KEY_EMERGENCY, NEmergency, CallerId),
+
+            cb_context:set_req_data(
+              Context
+              ,wh_json:set_value(<<"caller_id">>, NCallerId, cb_context:req_data(Context))
+             )
     end.
 
 %% @public
--spec maybe_refresh_fs_xml('user' | 'device', cb_context:context()) -> 'ok'.
+-type refresh_type() :: 'user' | 'device' | 'sys_info'.
+
+-spec maybe_refresh_fs_xml(refresh_type(), cb_context:context()) -> 'ok'.
 maybe_refresh_fs_xml(Kind, Context) ->
     DbDoc = cb_context:fetch(Context, 'db_doc'),
     Doc = cb_context:doc(Context),
     Precondition =
-        (wh_json:get_value(<<"presence_id">>, DbDoc) =/=
-             wh_json:get_value(<<"presence_id">>, Doc)
-        )
+        (kz_device:presence_id(DbDoc) =/= kz_device:presence_id(Doc))
         or (wh_json:get_value([<<"media">>, <<"encryption">>, <<"enforce_security">>], DbDoc) =/=
                 wh_json:get_value([<<"media">>, <<"encryption">>, <<"enforce_security">>], Doc)
            ),
     maybe_refresh_fs_xml(Kind, Context, Precondition).
 
--spec maybe_refresh_fs_xml('user' | 'device', cb_context:context(), boolean()) -> 'ok'.
+-spec maybe_refresh_fs_xml(refresh_type(), cb_context:context(), boolean()) -> 'ok'.
 maybe_refresh_fs_xml('user', _Context, 'false') -> 'ok';
 maybe_refresh_fs_xml('user', Context, 'true') ->
     Doc = cb_context:doc(Context),
     AccountDb = cb_context:account_db(Context),
-    Realm     = wh_util:get_account_realm(AccountDb),
-    Id = wh_json:get_value(<<"_id">>, Doc),
+    Realm = wh_util:get_account_realm(AccountDb),
+    Id = wh_doc:id(Doc),
     Devices = get_devices_by_owner(AccountDb, Id),
     lists:foreach(fun (DevDoc) -> refresh_fs_xml(Realm, DevDoc) end, Devices);
 maybe_refresh_fs_xml('device', Context, Precondition) ->
@@ -1013,8 +1128,64 @@ maybe_refresh_fs_xml('device', Context, Precondition) ->
           wh_util:get_account_realm(cb_context:account_db(Context))
           ,DbDoc
          ),
-    'ok'.
+    'ok';
+maybe_refresh_fs_xml('sys_info', Context, Precondition) ->
+    Doc = cb_context:doc(Context),
+    Servers = wh_json:get_value(<<"servers">>, Doc, []),
 
+    DbDoc = cb_context:fetch(Context, 'db_doc'),
+    DbServers = wh_json:get_value(<<"servers">>, DbDoc, []),
+
+    ( Precondition
+      or trunkstore_servers_changed(Servers, DbServers)
+    ).
+
+-spec trunkstore_servers_changed(wh_json:objects(), wh_json:objects()) -> boolean().
+trunkstore_servers_changed([], []) -> 'false';
+trunkstore_servers_changed([], _DbServers) -> 'true';
+trunkstore_servers_changed(_Servers, []) -> 'true';
+trunkstore_servers_changed(Servers, DbServers) ->
+    MappedServers = map_servers(Servers),
+    DbMappedServers = map_servers(DbServers),
+
+    servers_changed(MappedServers, DbMappedServers)
+        orelse servers_changed(DbMappedServers, MappedServers).
+
+-spec servers_changed(wh_json:object(), wh_json:object()) -> boolean().
+servers_changed(Servers1, Servers2) ->
+    wh_json:any(fun({Name, S}) ->
+                        server_changed(S, wh_json:get_value(Name, Servers2))
+                end
+                ,Servers1
+               ).
+
+-spec server_changed(wh_json:object(), api_object()) -> boolean().
+server_changed(_Server, 'undefined') ->
+    lager:debug("server ~s existence has changed", [wh_json:get_value(<<"server_name">>, _Server)]),
+    'true';
+server_changed(Server1, Server2) ->
+    Keys = [ [<<"auth">>, <<"auth_method">>]
+             ,[<<"auth">>, <<"ip">>]
+             ,[<<"auth">>, <<"auth_user">>]
+             ,[<<"auth">>, <<"auth_password">>]
+             ,[<<"options">>, <<"enabled">>]
+           ],
+    lists:any(fun(K) ->
+                      wh_json:get_value(K, Server1) =/= wh_json:get_value(K, Server2)
+              end
+              ,Keys
+             ).
+
+-spec map_servers(wh_json:objects()) -> wh_json:object().
+map_servers(Servers) ->
+    lists:foldl(fun map_server/2, wh_json:new(), Servers).
+
+-spec map_server(wh_json:object(), wh_json:object()) -> wh_json:object().
+map_server(Server, Acc) ->
+    Name = wh_json:get_value(<<"server_name">>, Server),
+    wh_json:set_value(Name, Server, Acc).
+
+%% @public
 -spec refresh_fs_xml(cb_context:context()) -> 'ok'.
 refresh_fs_xml(Context) ->
     Realm = wh_util:get_account_realm(cb_context:account_db(Context)),
@@ -1130,31 +1301,33 @@ update_descendants_count(AccountId, JObj, NewCount) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_validate_quickcall(cb_context:context()) -> cb_context:context().
--spec maybe_validate_quickcall(cb_context:context(), crossbar_status()) -> cb_context:context().
+-spec maybe_validate_quickcall(cb_context:context()) ->
+                                      cb_context:context().
+-spec maybe_validate_quickcall(cb_context:context(), crossbar_status()) ->
+                                      cb_context:context().
 maybe_validate_quickcall(Context) ->
     case
         kz_buckets:consume_tokens(?APP_NAME
-                                 ,cb_modules_util:bucket_name(Context)
-                                 ,cb_modules_util:token_cost(Context, 1, [?QUICKCALL_PATH_TOKEN])
+                                  ,cb_modules_util:bucket_name(Context)
+                                  ,cb_modules_util:token_cost(Context, 1, [?QUICKCALL_PATH_TOKEN])
                                  )
     of
         'false' -> cb_context:add_system_error('too_many_requests', Context);
-        'true' ->
-            maybe_validate_quickcall(Context, cb_context:resp_status(Context))
+        'true' -> maybe_validate_quickcall(Context, cb_context:resp_status(Context))
     end.
 
 maybe_validate_quickcall(Context, 'success') ->
-    case wh_json:is_true(<<"allow_anoymous_quickcalls">>, cb_context:doc(Context))
+    AllowAnon = wh_json:get_value(<<"allow_anonymous_quickcalls">>, cb_context:doc(Context)),
+
+    case wh_util:is_true(AllowAnon)
         orelse cb_context:is_authenticated(Context)
         orelse
-        (wh_json:get_value(<<"allow_anoymous_quickcalls">>, cb_context:doc(Context)) =:= 'undefined'
+        (AllowAnon =:= 'undefined'
          andalso
-         whapps_config:get_is_true(?CONFIG_CAT, <<"default_allow_anoymous_quickcalls">>, 'true')
+         whapps_config:get_is_true(?CONFIG_CAT, <<"default_allow_anonymous_quickcalls">>, 'true')
         )
     of
-        'false' ->
-            cb_context:add_system_error('invalid_credentials', Context);
+        'false' -> cb_context:add_system_error('invalid_credentials', Context);
         'true' -> Context
     end;
 maybe_validate_quickcall(Context, _) -> Context.

@@ -24,37 +24,69 @@
 %%--------------------------------------------------------------------
 -spec handle(wh_json:object(), whapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
-    case get_endpoints(Data, Call) of
-        [] ->
-            lager:notice("ring group has no endpoints, moving to next callflow element"),
-            cf_exe:continue(Call);
-        Endpoints -> attempt_endpoints(Endpoints, Data, Call)
-    end.
+    repeat(Data, Call, repeats(Data)).
 
--spec attempt_endpoints(wh_json:objects(), wh_json:object(), whapps_call:call()) -> 'ok'.
+-spec repeat(wh_json:object(), whapps_call:call(), non_neg_integer()) -> 'ok'.
+repeat(_Data, Call, 0) ->
+    cf_exe:continue(Call);
+repeat(Data, Call, N) ->
+    Next = case get_endpoints(Data, Call) of
+               [] ->
+                   lager:notice("ring group has no endpoints, moving to next callflow element"),
+                   'no_endpoints';
+               Endpoints -> attempt_endpoints(Endpoints, Data, Call)
+           end,
+    repeat(Data, Call, N, Next).
+
+-type attempt_result() :: 'stop' |
+                          'continue' |
+                          'no_endpoints' |
+                          'fail'.
+
+-spec repeat(wh_json:object(), whapps_call:call(), non_neg_integer(), attempt_result()) -> 'ok'.
+repeat(_Data, Call, _N, 'stop') ->
+    cf_exe:stop(Call);
+repeat(Data, Call, N, 'continue') ->
+    repeat(Data, Call, N-1);
+repeat(_Data, Call, _N, 'no_endpoints') ->
+    cf_exe:continue(Call);
+repeat(_Data, _Call, _N, 'fail') ->
+    'ok'.
+
+-spec attempt_endpoints(wh_json:objects(), wh_json:object(), whapps_call:call()) ->
+    'stop' | 'fail' | 'continue'.
 attempt_endpoints(Endpoints, Data, Call) ->
     Timeout = wh_json:get_integer_value(<<"timeout">>, Data, ?DEFAULT_TIMEOUT_S),
     Strategy = wh_json:get_binary_value(<<"strategy">>, Data, ?DIAL_METHOD_SIMUL),
     Ringback = wh_json:get_value(<<"ringback">>, Data),
     IgnoreForward = wh_json:get_binary_boolean(<<"ignore_forward">>, Data, <<"true">>),
     lager:info("attempting ring group of ~b members with strategy ~s", [length(Endpoints), Strategy]),
-    case whapps_call_command:b_bridge(Endpoints, Timeout, Strategy, <<"true">>, Ringback, 'undefined', IgnoreForward, Call) of
+    case whapps_call_command:b_bridge(Endpoints
+                                      ,Timeout
+                                      ,Strategy
+                                      ,<<"true">>
+                                      ,Ringback
+                                      ,'undefined'
+                                      ,IgnoreForward
+                                      ,Call
+                                     )
+    of
         {'ok', _} ->
             lager:info("completed successful bridge to the ring group - call finished normally"),
-            cf_exe:stop(Call);
+            'stop';
         {'fail', _}=F ->
             case cf_util:handle_bridge_failure(F, Call) of
-                'ok' -> lager:debug("bridge failure handled");
-                'not_found' -> cf_exe:continue(Call)
+                'ok' -> lager:debug("bridge failure handled"), 'fail';
+                'not_found' -> 'continue'
             end;
         {'error', 'timeout'} ->
             lager:debug("bridge timed out waiting for someone to answer"),
-            cf_exe:continue(Call);
+            'continue';
         {'error', _R} ->
             lager:info("error bridging to ring group: ~p"
                        ,[wh_json:get_value(<<"Error-Message">>, _R)]
                       ),
-            cf_exe:continue(Call)
+            'continue'
     end.
 
 -spec get_endpoints(wh_json:object(), whapps_call:call()) -> wh_json:objects().
@@ -83,9 +115,9 @@ start_builders(Data, Call) ->
 -spec start_builder(ne_binary(), wh_json:object(), whapps_call:call()) -> pid().
 start_builder(EndpointId, Member, Call) ->
     S = self(),
-    spawn(
+    wh_util:spawn(
       fun() ->
-              put('callid', whapps_call:call_id(Call)),
+              wh_util:put_callid(whapps_call:call_id(Call)),
               S ! {self(), catch cf_endpoint:build(EndpointId, Member, Call)}
       end
      ).
@@ -204,3 +236,11 @@ create_group_member(Key, Endpoint, Member) ->
                        ]
                        ,Member
                       ).
+
+-spec repeats(wh_json:object()) -> pos_integer().
+repeats(Data) ->
+    case wh_json:get_integer_value(<<"repeats">>, Data) of
+        'undefined' -> 1;
+        N when N < 1 -> 1;
+        N -> N
+    end.

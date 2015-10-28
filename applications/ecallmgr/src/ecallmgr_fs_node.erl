@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2014, 2600Hz INC
+%%% @copyright (C) 2010-2015, 2600Hz INC
 %%% @doc
 %%% Manage a FreeSWITCH node and its resources
 %%% @end
@@ -23,6 +23,7 @@
 -export([sip_external_ip/1]).
 -export([fs_node/1]).
 -export([hostname/1]).
+-export([interface/1]).
 -export([fetch_timeout/0, fetch_timeout/1]).
 -export([init/1
          ,handle_call/3
@@ -66,6 +67,7 @@
                     ,aggressive_nat
                     ,stun_enabled
                     ,stun_auto_disabled
+                    ,interface_props = []
                    }).
 -type interface() :: #interface{}.
 
@@ -153,7 +155,7 @@
 -define(SEC_TO_MICRO(Sec), wh_util:to_integer(Sec)*1000000).
 -define(MILLI_TO_MICRO(Mil), wh_util:to_integer(Mil)*1000).
 
--define(FS_TIMEOUT, 5000).
+-define(FS_TIMEOUT, 5 * ?MILLISECONDS_IN_SECOND).
 
 -define(REPLAY_REG_MAP,
         [{<<"Realm">>, <<"realm">>}
@@ -328,6 +330,8 @@ handle_call('sip_external_ip', _, #state{interface=Interface}=State) ->
     {'reply', Interface#interface.ext_sip_ip, State};
 handle_call('sip_url', _, #state{interface=Interface}=State) ->
     {'reply', Interface#interface.url, State};
+handle_call('interface_props', _, #state{interface=Interface}=State) ->
+    {'reply', Interface#interface.interface_props, State};
 handle_call('node', _, #state{node=Node}=State) ->
     {'reply', Node, State}.
 
@@ -346,9 +350,9 @@ handle_cast('sync_interface', #state{node=Node
                                     }=State) ->
     {'noreply', State#state{interface=node_interface(Node, Interface)}};
 handle_cast('sync_capabilities', #state{node=Node}=State) ->
-    _Pid = spawn(fun() ->
-                         probe_capabilities(Node)
-                 end),
+    _Pid = wh_util:spawn(fun() ->
+                                 probe_capabilities(Node)
+                         end),
     lager:debug("syncing capabilities in ~p", [_Pid]),
     {'noreply', State};
 handle_cast('sync_channels', #state{node=Node}=State) ->
@@ -358,7 +362,7 @@ handle_cast('sync_channels', #state{node=Node}=State) ->
     _ = ecallmgr_fs_channels:sync(Node, Channels),
     {'noreply', State};
 handle_cast('sync_registrations', #state{node=Node}=State) ->
-    _Pid = spawn(fun() -> maybe_replay_registrations(Node) end),
+    _Pid = wh_util:spawn(fun() -> maybe_replay_registrations(Node) end),
     lager:debug("syncing registrations in ~p", [_Pid]),
     {'noreply', State};
 handle_cast(_Req, State) ->
@@ -446,7 +450,7 @@ run_start_cmds(Node, Options) ->
 -spec run_start_cmds(atom(), wh_proplist(), pid()) -> any().
 run_start_cmds(Node, Options, Parent) ->
     wh_util:put_callid(Node),
-    timer:sleep(ecallmgr_config:get_integer(<<"fs_cmds_wait_ms">>, 5000, Node)),
+    timer:sleep(ecallmgr_config:get_integer(<<"fs_cmds_wait_ms">>, 5 * ?MILLISECONDS_IN_SECOND, Node)),
 
     run_start_cmds(Node, Options, Parent, is_restarting(Node)).
 
@@ -549,7 +553,7 @@ execute_command(Node, Options, ApiCmd0, ApiArg, Acc, ArgFormat) ->
                     process_cmd(Node, Options, ApiCmd0, ApiArg, Acc, 'list');
                 {'bgerror', BGApiID, Error} ->
                     process_resp(ApiCmd, ApiArg, binary:split(Error, <<"\n">>, ['global']), Acc)
-            after 120000 ->
+            after 120 * ?MILLISECONDS_IN_SECOND ->
                     [{'timeout', {ApiCmd, ApiArg}} | Acc]
             end;
         {'error', _}=Error ->
@@ -652,6 +656,7 @@ interface_from_props(Props) ->
                ,aggressive_nat=props:get_is_true(<<"AGGRESSIVENAT">>, Props)
                ,stun_enabled=props:get_is_true(<<"STUN-ENABLED">>, Props)
                ,stun_auto_disabled=props:get_is_true(<<"STUN-AUTO-DISABLE">>, Props)
+               ,interface_props=Props
               }.
 
 -spec split_codes(ne_binary(), wh_proplist()) -> ne_binaries().
@@ -757,8 +762,12 @@ node_interface(Node, CurrInterface) ->
     case ecallmgr_util:get_interface_properties(Node) of
         [] ->
             lager:debug("no interface properties available at the moment, will sync again"),
-            _ = erlang:send_after(1000, self(), 'sync_interface'),
+            _ = erlang:send_after(?MILLISECONDS_IN_SECOND, self(), 'sync_interface'),
             CurrInterface;
         Props ->
             interface_from_props(Props)
     end.
+
+-spec interface(atom() | binary()) -> wh_proplist().
+interface(Node) ->
+    gen_server:call(find_srv(Node), 'interface_props').

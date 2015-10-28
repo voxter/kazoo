@@ -75,11 +75,11 @@ handle_push_event(_JID, <<"GCP">>, <<"Queued-Job">>, PrinterId) ->
                 {'ok', "200", _RespHeaders, RespBody} ->
                     JObj = wh_json:decode(RespBody),
                     JObjs = wh_json:get_value(<<"jobs">>, JObj, []),
-                    _P = spawn(?MODULE, 'maybe_process_job', [JObjs, Authorization]),
+                    _P = wh_util:spawn(?MODULE, 'maybe_process_job', [JObjs, Authorization]),
                     lager:debug("maybe processing job in ~p", [_P]);
                 {'ok', "403", _RespHeaders, _RespBody} ->
                     lager:debug("something wrong with oauth credentials"),
-                    [lager:debug("resp header: ~p", [_RespHeader]) || _RespHeader <- _RespHeaders],
+                    _ = [lager:debug("resp header: ~p", [_RespHeader]) || _RespHeader <- _RespHeaders],
                     lager:debug("body: ~s", [_RespBody]);
                 _Other ->
                     lager:debug("unexpected response from gcp ~p", [_Other])
@@ -189,22 +189,30 @@ send_update_job_status(JobId, Status, Authorization) ->
 
 -spec download_file(ne_binary(), ne_binary()) ->
                            {'ok', ne_binary(), ne_binary()} |
-                           {'error', any()}.
+                           {'error', _}.
 download_file(URL, Authorization) ->
     Headers = [?GPC_PROXY_HEADER , {"Authorization",Authorization}],
     case ibrowse:send_req(wh_util:to_list(URL), Headers, 'get') of
         {'ok', "200", RespHeaders, RespBody} ->
             CT = wh_util:to_binary(props:get_value("Content-Type", RespHeaders)),
             Ext = fax_util:content_type_to_extension(CT),
-            FileName = <<"/tmp/fax_printer_",(wh_util:to_binary(wh_util:current_tstamp()))/binary,".",Ext/binary>>,
-            file:write_file(FileName,RespBody),
-            {'ok', CT, RespBody};
+            FileName = <<"/tmp/fax_printer_"
+                         ,(wh_util:to_binary(wh_util:current_tstamp()))/binary
+                         ,"."
+                         ,Ext/binary
+                       >>,
+            case file:write_file(FileName,RespBody) of
+                'ok' -> {'ok', CT, RespBody};
+                {'error', _}=Error ->
+                    lager:debug("error writing file ~s from ~s : ~p", [URL, FileName, Error]),
+                    Error
+            end;
         Response ->
             lager:debug("error downloading file ~s : ~p",[URL, Response]),
             {'error', Response}
     end.
 
--spec maybe_save_fax_document(wh_json:object(), ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> any().
+-spec maybe_save_fax_document(wh_json:object(), ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> _.
 maybe_save_fax_document(Job, JobId, PrinterId, FaxNumber, FileURL ) ->
     case save_fax_document(Job, JobId, PrinterId, FaxNumber) of
         {'ok', JObj} ->
@@ -269,7 +277,7 @@ save_fax_document(Job, JobId, PrinterId, FaxNumber ) ->
                ,{<<"from_number">>,wh_json:get_value(<<"caller_id">>,FaxBoxDoc)}
                ,{<<"fax_identity_name">>, wh_json:get_value(<<"fax_header">>, FaxBoxDoc)}
                ,{<<"fax_identity_number">>, wh_json:get_value(<<"fax_identity">>, FaxBoxDoc)}
-               ,{<<"fax_timezone">>, wh_json:get_value(<<"fax_timezone">>, FaxBoxDoc)}
+               ,{<<"fax_timezone">>, kzd_fax_box:timezone(FaxBoxDoc)}
                ,{<<"to_name">>,FaxNumber}
                ,{<<"to_number">>,FaxNumber}
                ,{<<"retries">>,wh_json:get_value(<<"retries">>,FaxBoxDoc,3)}
@@ -378,7 +386,7 @@ handle_faxbox_created(JObj, _Props) ->
     State = wh_json:get_value(<<"pvt_cloud_state">>, Doc),
     ResellerId = wh_json:get_value(<<"pvt_reseller_id">>, Doc),
     AppId = whapps_account_config:get(ResellerId, ?CONFIG_CAT, <<"cloud_oauth_app">>),
-    spawn(?MODULE, 'check_registration', [AppId, State, Doc]).
+    wh_util:spawn(?MODULE, 'check_registration', [AppId, State, Doc]).
 
 -spec check_registration(ne_binary(), ne_binary(), wh_json:object() ) -> 'ok'.
 check_registration('undefined', _, _JObj) -> 'ok';
@@ -423,7 +431,7 @@ process_registration_result('true', AppId, JObj, Result) ->
         ,JObj
        )),
 
-    timer:sleep(15000),
+    timer:sleep(15 * ?MILLISECONDS_IN_SECOND),
     Payload = props:filter_undefined(
                 [{<<"Event-Name">>, <<"start">>}
                  ,{<<"Application-Name">>, <<"fax">>}

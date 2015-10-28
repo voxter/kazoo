@@ -35,8 +35,8 @@
                 ,status :: binary()
                 ,fax_status :: api_object()
                 ,pages  :: integer()
-                ,page = 0  ::integer()
-                ,file :: api_binary()
+                ,page = 0  :: integer()
+                ,file :: ne_binary()
                }).
 -type state() :: #state{}.
 
@@ -67,10 +67,31 @@
 -define(DEFAULT_COMPARE_FIELD, whapps_config:get_binary(?CONFIG_CAT, <<"default_compare_field">>, <<"result_cause">>)).
 
 -define(COUNT_PAGES_CMD, <<"echo -n `tiffinfo ~s | grep 'Page Number' | grep -c 'P'`">>).
--define(CONVERT_PDF_CMD, <<"/usr/bin/gs -q -r204x98 -g1728x1078 -dNOPAUSE -dBATCH -dSAFER -sDEVICE=tiffg3 -sOutputFile=~s -- ~s &> /dev/null && echo -n \"success\"">>).
+-define(CONVERT_PDF_CMD, <<"/usr/bin/gs -q "
+                            "-r204x98 "
+                            "-g1728x1078 "
+                            "-dNOPAUSE "
+                            "-dBATCH "
+                            "-dSAFER "
+                            "-sDEVICE=tiffg3 "
+                            "-sOutputFile=~s -- ~s > /dev/null "
+                            "&& echo -n \"success\"">>).
+-define(CONVERT_IMAGE_CMD, <<"convert -density 204x98 "
+                            "-units PixelsPerInch "
+                            "-size 1728x1078 ~s ~s > /dev/null "
+                            "&& echo -n success">>).
+-define(CONVERT_OO_DOC_CMD, <<"unoconv -c ~s -f pdf --stdout ~s "
+                            "| /usr/bin/gs -q "
+                            "-r204x98 "
+                            "-g1728x1078 "
+                            "-dNOPAUSE "
+                            "-dBATCH "
+                            "-dSAFER "
+                            "-sDEVICE=tiffg3 "
+                            "-sOutputFile=~s - > /dev/null"
+                            "&& echo -n success">>).
 
 -define(CALLFLOW_LIST, <<"callflow/listing_by_number">>).
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -318,6 +339,11 @@ handle_cast({'error', 'invalid_number', Number}, #state{job=JObj, pool=Pid}=Stat
     release_failed_job('invalid_number', Number, JObj),
     gen_server:cast(Pid, {'job_complete', self()}),
      {'noreply', reset(State)};
+handle_cast({'error', 'invalid_cid', Number}, #state{job=JObj, pool=Pid}=State) ->
+    send_error_status(State, <<"invalid fax cid number">>),
+    release_failed_job('invalid_cid', Number, JObj),
+    gen_server:cast(Pid, {'job_complete', self()}),
+     {'noreply', reset(State)};
 handle_cast({'gen_listener', {'created_queue', QueueName}}, State) ->
     lager:debug("worker discovered queue name ~s", [QueueName]),
     {'noreply', State#state{queue_name=QueueName}};
@@ -483,6 +509,15 @@ release_failed_job('invalid_number', Number, JObj) ->
     Msg = wh_util:to_binary(io_lib:format("invalid fax number: ~s", [Number])),
     Result = [{<<"success">>, 'false'}
               ,{<<"result_code">>, 500}
+              ,{<<"result_text">>, Msg}
+              ,{<<"pages_sent">>, 0}
+              ,{<<"time_elapsed">>, elapsed_time(JObj)}
+             ],
+    release_job(Result, JObj);
+release_failed_job('invalid_cid', Number, JObj) ->
+    Msg = wh_util:to_binary(io_lib:format("invalid fax cid number: ~s", [Number])),
+    Result = [{<<"success">>, 'false'}
+              ,{<<"result_code">>, 400}
               ,{<<"result_text">>, Msg}
               ,{<<"pages_sent">>, 0}
               ,{<<"time_elapsed">>, elapsed_time(JObj)}
@@ -692,8 +727,7 @@ fetch_document(JObj) ->
     end.
 
 -spec fetch_document_from_attachment(wh_json:object(), ne_binaries()) ->
-                                            {'ok', string(), wh_proplist(), ne_binary()} |
-                                            {'error', term()}.
+                                            {'ok', string(), wh_proplist(), ne_binary()}.
 fetch_document_from_attachment(JObj, [AttachmentName|_]) ->
     JobId = wh_json:get_value(<<"_id">>, JObj),
     Extension = filename:extension(AttachmentName),
@@ -732,18 +766,20 @@ fetch_document_from_url(JObj) ->
 prepare_contents(JobId, RespHeaders, RespContent) ->
     lager:debug("preparing fax contents", []),
     TmpDir = whapps_config:get_binary(?CONFIG_CAT, <<"file_cache_path">>, <<"/tmp/">>),
-    case normalize_content_type(props:get_value("Content-Type", RespHeaders, <<"application/octet-stream">>)) of
+    case fax_util:normalize_content_type(props:get_value("Content-Type", RespHeaders, <<"application/octet-stream">>)) of
         <<"image/tiff">> ->
             OutputFile = list_to_binary([TmpDir, JobId, ".tiff"]),
-            R = file:write_file(OutputFile, RespContent),
-            lager:debug("result of tmp file write: ~s", [R]),
+            wh_util:write_file(OutputFile, RespContent),
             {'ok', OutputFile};
         <<"application/pdf">> ->
             InputFile = list_to_binary([TmpDir, JobId, ".pdf"]),
             OutputFile = list_to_binary([TmpDir, JobId, ".tiff"]),
-            R = file:write_file(InputFile, RespContent),
-            lager:debug("result of tmp file write: ~s", [R]),
-            ConvertCmd = whapps_config:get_binary(<<"fax">>, <<"conversion_command">>, ?CONVERT_PDF_CMD),
+            wh_util:write_file(InputFile, RespContent),
+            ConvertCmd = whapps_config:get_binary(?CONFIG_CAT
+                                                  ,<<"conversion_pdf_command">>
+                                                  ,whapps_config:get_binary(?CONFIG_CAT
+                                                                            ,<<"conversion_command">>
+                                                                            ,?CONVERT_PDF_CMD)),
             Cmd = io_lib:format(ConvertCmd, [OutputFile, InputFile]),
             lager:debug("attempting to convert pdf: ~s", [Cmd]),
             case os:cmd(Cmd) of
@@ -753,40 +789,82 @@ prepare_contents(JobId, RespHeaders, RespContent) ->
                     lager:debug("could not covert file: ~s", [_Else]),
                     {'error', <<"can not convert file, try uploading a tiff">>}
             end;
+        <<"image/", SubType/binary>> ->
+            InputFile = list_to_binary([TmpDir, JobId, ".", SubType]),
+            OutputFile = list_to_binary([TmpDir, JobId, ".tiff"]),
+            wh_util:write_file(InputFile, RespContent),
+            ConvertCmd = whapps_config:get_binary(?CONFIG_CAT, <<"conversion_image_command">>, ?CONVERT_IMAGE_CMD),
+            Cmd = io_lib:format(ConvertCmd, [InputFile, OutputFile]),
+            lager:debug("attempting to convert ~s: ~s", [SubType, Cmd]),
+            case os:cmd(Cmd) of
+                "success" ->
+                    {'ok', OutputFile};
+                _Else ->
+                    lager:debug("could not convert file: ~s", [_Else]),
+                    {'error', <<"can not convert file, try uploading a tiff">>}
+            end;
+        <<?OPENXML_MIME_PREFIX, _/binary>> = CT ->
+            convert_openoffice_document(CT, TmpDir, JobId, RespContent);
+        <<?OPENOFFICE_MIME_PREFIX, _/binary>> = CT ->
+            convert_openoffice_document(CT, TmpDir, JobId, RespContent);
+        CT when ?OPENOFFICE_COMPATIBLE(CT) ->
+            convert_openoffice_document(CT, TmpDir, JobId, RespContent);
         Else ->
             lager:debug("unsupported file type: ~p", [Else]),
             {'error', list_to_binary(["file type '", Else, "' is unsupported"])}
     end.
 
--spec get_sizes(ne_binary()) -> {integer(), integer()}.
-get_sizes(OutputFile) ->
-    CmdCount = whapps_config:get_binary(<<"fax">>, <<"count_pages_command">>, ?COUNT_PAGES_CMD),
+-spec convert_openoffice_document(ne_binary(), ne_binary(), ne_binary(), ne_binary()) ->
+    {'ok', ne_binary()}
+    | {'error', ne_binary()}.
+convert_openoffice_document(CT, TmpDir, JobId, RespContent) ->
+    Extension = fax_util:content_type_to_extension(CT),
+    InputFile = list_to_binary([TmpDir, JobId, ".", Extension]),
+    OutputFile = list_to_binary([TmpDir, JobId, ".tiff"]),
+    wh_util:write_file(InputFile, RespContent),
+    ConvertCmd = whapps_config:get_binary(?CONFIG_CAT, <<"conversion_openoffice_document_command">>, ?CONVERT_OO_DOC_CMD),
+    OpenOfficeServer = whapps_config:get_binary(?CONFIG_CAT, <<"openoffice_server">>, <<"'socket,host=localhost,port=2002;urp;StarOffice.ComponentContext'">>),
+    Cmd = io_lib:format(ConvertCmd, [OpenOfficeServer, InputFile, OutputFile]),
+    lager:debug("attemting to convert openoffice document: ~s", [Cmd]),
+    case os:cmd(Cmd) of
+        "success" ->
+            {'ok', OutputFile};
+        _Else ->
+            lager:debug("could not convert file: ~s", [_Else]),
+            {'error', <<"can not convert file, try uploading a tiff">>}
+    end.
+
+-spec get_sizes(ne_binary()) -> {integer(), non_neg_integer()}.
+get_sizes(OutputFile) when is_binary(OutputFile) ->
+    CmdCount = whapps_config:get_binary(?CONFIG_CAT, <<"count_pages_command">>, ?COUNT_PAGES_CMD),
     Cmd = io_lib:format(CmdCount, [OutputFile]),
     Result = os:cmd(wh_util:to_list(Cmd)),
     NumberOfPages = wh_util:to_integer(Result),
-    FileSize = filelib:file_size(OutputFile),
+    FileSize = filelib:file_size(wh_util:to_list(OutputFile)),
     {NumberOfPages, FileSize}.
-
--spec normalize_content_type(text()) -> ne_binary().
-normalize_content_type(<<"image/tif">>) -> <<"image/tiff">>;
-normalize_content_type(<<"image/x-tif">>) -> <<"image/tiff">>;
-normalize_content_type(<<"image/tiff">>) -> <<"image/tiff">>;
-normalize_content_type(<<"image/x-tiff">>) -> <<"image/tiff">>;
-normalize_content_type(<<"application/tif">>) -> <<"image/tiff">>;
-normalize_content_type(<<"apppliction/x-tif">>) -> <<"image/tiff">>;
-normalize_content_type(<<"apppliction/tiff">>) -> <<"image/tiff">>;
-normalize_content_type(<<"apppliction/x-tiff">>) -> <<"image/tiff">>;
-normalize_content_type(<<"application/pdf">>) -> <<"application/pdf">>;
-normalize_content_type(<<"application/x-pdf">>) -> <<"application/pdf">>;
-normalize_content_type(<<"text/pdf">>) -> <<"application/pdf">>;
-normalize_content_type(<<"text/x-pdf">>) -> <<"application/pdf">>;
-normalize_content_type(<<_/binary>> = Else) -> Else;
-normalize_content_type(CT) ->
-    normalize_content_type(wh_util:to_binary(CT)).
 
 -spec send_fax(ne_binary(), wh_json:object(), ne_binary()) -> 'ok'.
 send_fax(JobId, JObj, Q) ->
-    send_fax(JobId, JObj, Q, get_did(JObj)).
+    SendFax = fun() -> send_fax(JobId, JObj, Q, get_did(JObj)) end,
+    maybe_ensure_valid_caller_id(JObj, SendFax).
+
+-spec maybe_ensure_valid_caller_id(wh_json:object(), function()) -> 'ok'.
+maybe_ensure_valid_caller_id(JObj, SendFax) ->
+    case wh_json:is_true(<<"ensure_valid_caller_id">>, JObj, 'true') of
+        'false' -> SendFax();
+        'true' ->
+            ensure_valid_caller_id(JObj, SendFax)
+    end.
+
+-spec ensure_valid_caller_id(wh_json:object(), function()) -> 'ok'.
+ensure_valid_caller_id(JObj, SendFax) ->
+    CIDNum = wh_json:get_value(<<"from_number">>, JObj),
+    AccountId =  wh_json:get_value(<<"pvt_account_id">>, JObj),
+    case fax_util:is_valid_caller_id(CIDNum, AccountId) of
+        'true' -> SendFax();
+        'false' ->
+            gen_server:cast(self(), {'error', 'invalid_cid', CIDNum})
+    end.
 
 -spec send_fax(ne_binary(), wh_json:object(), ne_binary(), binary() | 'undefined') -> 'ok'.
 send_fax(_JobId, _JObj, _Q, 'undefined') ->
@@ -811,7 +889,7 @@ send_fax(JobId, JObj, Q, ToDID) ->
                  ,{<<"To-DID">>, ToDID}
                  ,{<<"Fax-Identity-Number">>, wh_json:get_value(<<"fax_identity_number">>, JObj)}
                  ,{<<"Fax-Identity-Name">>, wh_json:get_value(<<"fax_identity_name">>, JObj)}
-                 ,{<<"Fax-Timezone">>, wh_json:get_value(<<"fax_timezone">>, JObj)}
+                 ,{<<"Fax-Timezone">>, kzd_fax_box:timezone(JObj)}
                  ,{<<"Flags">>, [<<"fax">> | wh_json:get_value(<<"flags">>, JObj, [])]}
                  ,{<<"Resource-Type">>, <<"originate">>}
                  ,{<<"Hunt-Account-ID">>, get_hunt_account_id(AccountId)}
@@ -837,7 +915,7 @@ get_hunt_account_id(AccountId) ->
     AccountDb = wh_util:format_account_db(AccountId),
     Options = [{'key', <<"no_match">>}, 'include_docs'],
     case couch_mgr:get_results(AccountDb, ?CALLFLOW_LIST, Options) of
-        {'ok', [JObj]} -> maybe_hunt_account_id(wh_json:get_value(<<"doc">>, JObj)); 
+        {'ok', [JObj]} -> maybe_hunt_account_id(wh_json:get_value(<<"doc">>, JObj));
         _ -> 'undefined'
     end.
 
@@ -846,7 +924,7 @@ maybe_hunt_account_id('undefined') -> 'undefined';
 maybe_hunt_account_id(JObj) ->
     case wh_json:get_value([<<"flow">>, <<"module">>], JObj) of
         <<"resources">> ->
-            case wh_json:get_value([<<"flow">>, <<"data">>, <<"hunt_account_id">>], JObj) of                
+            case wh_json:get_value([<<"flow">>, <<"data">>, <<"hunt_account_id">>], JObj) of
                 'undefined' -> wh_json:get_value(<<"pvt_account_id">>, JObj);
                 HuntAccountID -> HuntAccountID
             end;
@@ -881,19 +959,19 @@ reset(State) ->
                 ,page=0
                }.
 
--spec send_status(state(), ne_binary()) -> any().
+-spec send_status(state(), ne_binary()) -> _.
 send_status(State, Status) ->
     send_status(State, Status, ?FAX_SEND, 'undefined').
 
--spec send_error_status(state(), text()) -> any().
+-spec send_error_status(state(), text()) -> _.
 send_error_status(State, Status) ->
     send_status(State, Status, ?FAX_ERROR, 'undefined').
 
--spec send_status(state(), text(), api_object()) -> any().
+-spec send_status(state(), text(), api_object()) -> _.
 send_status(State, Status, FaxInfo) ->
     send_status(State, Status, ?FAX_SEND, FaxInfo).
 
--spec send_status(state(), text(), ne_binary(), api_object()) -> any().
+-spec send_status(state(), text(), ne_binary(), api_object()) -> _.
 send_status(#state{job=JObj
                    ,page=Page
                    ,job_id=JobId

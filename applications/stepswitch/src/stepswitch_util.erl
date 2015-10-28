@@ -48,7 +48,7 @@ get_realm(JObj) ->
 -spec get_inbound_destination(wh_json:object()) -> ne_binary().
 get_inbound_destination(JObj) ->
     {Number, _} = whapps_util:get_destination(JObj, ?APP_NAME, <<"inbound_user_field">>),
-    case whapps_config:get_is_true(<<"stepswitch">>, <<"assume_inbound_e164">>, 'false') of
+    case whapps_config:get_is_true(?SS_CONFIG_CAT, <<"assume_inbound_e164">>, 'false') of
         'true' -> assume_e164(Number);
         'false' -> wnm_util:to_e164(Number)
     end.
@@ -122,8 +122,8 @@ correct_shortdial(<<"+", Number/binary>>, CIDNum) ->
 correct_shortdial(Number, <<"+", CIDNum/binary>>) ->
     correct_shortdial(Number, CIDNum);
 correct_shortdial(Number, CIDNum) when is_binary(CIDNum) ->
-    MaxCorrection = whapps_config:get_integer(<<"stepswitch">>, <<"max_shortdial_correction">>, 5),
-    MinCorrection = whapps_config:get_integer(<<"stepswitch">>, <<"min_shortdial_correction">>, 2),
+    MaxCorrection = whapps_config:get_integer(?SS_CONFIG_CAT, <<"max_shortdial_correction">>, 5),
+    MinCorrection = whapps_config:get_integer(?SS_CONFIG_CAT, <<"min_shortdial_correction">>, 2),
     case is_binary(CIDNum) andalso (size(CIDNum) - size(Number)) of
         Length when Length =< MaxCorrection, Length >= MinCorrection ->
             Correction = binary:part(CIDNum, 0, Length),

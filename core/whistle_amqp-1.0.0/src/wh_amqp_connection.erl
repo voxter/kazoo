@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2015, 2600Hz INC
 %%% @doc
 %%% Handle a host's connection/channels
 %%% @end
@@ -28,7 +28,7 @@
 
 -define(SERVER, ?MODULE).
 -define(START_TIMEOUT, 200).
--define(MAX_TIMEOUT, 1000).
+-define(MAX_TIMEOUT, ?MILLISECONDS_IN_SECOND).
 
 %%%===================================================================
 %%% API
@@ -128,7 +128,7 @@ handle_cast('create_prechannel'
     {'noreply', Connection};
 handle_cast('create_prechannel'
             ,#wh_amqp_connection{available='true'}=Connection) ->
-    spawn(fun() -> establish_prechannel(Connection) end),
+    _ = wh_util:spawn(fun() -> establish_prechannel(Connection) end),
     {'noreply', Connection, 'hibernate'};
 handle_cast({'new_exchange', _}
             ,#wh_amqp_connection{available='false'}=Connection) ->
@@ -215,7 +215,7 @@ code_change(_OldVsn, Connection, _Extra) ->
 -spec connected(wh_amqp_connection()) -> wh_amqp_connection().
 connected(#wh_amqp_connection{reconnect_ref=Ref}=Connection)
   when is_reference(Ref) ->
-    erlang:cancel_timer(Ref),
+    _ = erlang:cancel_timer(Ref),
     connected(Connection#wh_amqp_connection{reconnect_ref='undefined'});
 connected(#wh_amqp_connection{channel='undefined'}=Connection) ->
     case create_control_channel(Connection) of

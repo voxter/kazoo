@@ -14,6 +14,8 @@
 -export([content_type_to_extension/1, extension_to_content_type/1]).
 -export([notify_email_list/3]).
 -export([filter_numbers/1]).
+-export([is_valid_caller_id/2]).
+-export([normalize_content_type/1]).
 
 -include("fax.hrl").
 
@@ -57,11 +59,17 @@ collect_channel_prop(Key, JObj) ->
 -spec content_type_to_extension(ne_binary() | string() | list()) -> ne_binary().
 content_type_to_extension(CT) when not is_binary(CT) ->
     content_type_to_extension(wh_util:to_binary(CT));
-content_type_to_extension(<<"application/pdf">>) -> <<"pdf">>;
-content_type_to_extension(<<"image/tiff">>) -> <<"tiff">>;
 content_type_to_extension(CT) when is_binary(CT) ->
-    lager:debug("content-type ~s not handled, returning 'tmp'",[CT]),
-    <<"tmp">>.
+    Cmd = binary_to_list(<<"echo -n `grep -E '^", CT/binary, "\\s' /etc/mime.types "
+                           "2> /dev/null "
+                           "| head -n1 "
+                           "| awk '{print $2}'`">>),
+    case os:cmd(Cmd) of
+        [] ->
+            lager:debug("content-type ~s not handled, returning 'tmp'",[CT]),
+            <<"tmp">>;
+        Ext -> wh_util:to_binary(Ext)
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -72,12 +80,19 @@ content_type_to_extension(CT) when is_binary(CT) ->
 -spec extension_to_content_type(ne_binary() | string() | list()) -> ne_binary().
 extension_to_content_type(Ext) when not is_binary(Ext) ->
     extension_to_content_type(wh_util:to_binary(Ext));
-extension_to_content_type(<<".pdf">>) -> <<"application/pdf">>;
-extension_to_content_type(<<".tif">>) -> <<"image/tiff">>;
-extension_to_content_type(<<".tiff">>) -> <<"image/tiff">>;
-extension_to_content_type(Ext) ->
-    lager:debug("extension ~s not handled, returning 'application/octet-stream'",[Ext]),
-    <<"application/octet-stream">>.
+extension_to_content_type(<<".", Ext/binary>>) ->
+    extension_to_content_type(Ext);
+extension_to_content_type(Ext) when is_binary(Ext) ->
+    Cmd = binary_to_list(<<"echo -n `grep -E '\\s", Ext/binary, "($|\\s)' /etc/mime.types "
+                           "2> /dev/null "
+                           "| head -n1 "
+                           "| cut -f1`">>),
+    case os:cmd(Cmd) of
+        "" ->
+            lager:debug("extension ~s not handled, returning 'application/octet-stream'",[Ext]),
+            <<"application/octet-stream">>;
+        CT -> CT
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -199,5 +214,30 @@ notify_email_list(From, OwnerEmail, List) ->
 filter_numbers(Number) ->
     << <<X>> || <<X>> <= Number, is_digit(X)>>.
 
+-spec is_valid_caller_id(api_binary(), ne_binary()) -> boolean().
+is_valid_caller_id('undefined', _) -> 'false';
+is_valid_caller_id(Number, AccountId) ->
+    case wh_number_manager:lookup_account_by_number(Number) of
+        {'ok', AccountId, _} -> 'true';
+        _Else -> 'false'
+    end.
+
 -spec is_digit(integer()) -> boolean().
 is_digit(N) -> N >= $0 andalso N =< $9.
+
+-spec normalize_content_type(text()) -> ne_binary().
+normalize_content_type(<<"image/tif">>) -> <<"image/tiff">>;
+normalize_content_type(<<"image/x-tif">>) -> <<"image/tiff">>;
+normalize_content_type(<<"image/tiff">>) -> <<"image/tiff">>;
+normalize_content_type(<<"image/x-tiff">>) -> <<"image/tiff">>;
+normalize_content_type(<<"application/tif">>) -> <<"image/tiff">>;
+normalize_content_type(<<"apppliction/x-tif">>) -> <<"image/tiff">>;
+normalize_content_type(<<"apppliction/tiff">>) -> <<"image/tiff">>;
+normalize_content_type(<<"apppliction/x-tiff">>) -> <<"image/tiff">>;
+normalize_content_type(<<"application/pdf">>) -> <<"application/pdf">>;
+normalize_content_type(<<"application/x-pdf">>) -> <<"application/pdf">>;
+normalize_content_type(<<"text/pdf">>) -> <<"application/pdf">>;
+normalize_content_type(<<"text/x-pdf">>) -> <<"application/pdf">>;
+normalize_content_type(<<_/binary>> = Else) -> Else;
+normalize_content_type(CT) ->
+    normalize_content_type(wh_util:to_binary(CT)).

@@ -7,29 +7,44 @@
 %%%   James Aimonetti
 %%%   Edouard Swiac
 %%%   Ben Wann
+%%%   KAZOO-3596: Sponsored by GTNetwork LLC, implemented by SIPLABS LLC
 %%%-------------------------------------------------------------------
 -module(cdr_channel_destroy).
 
 -include("cdr.hrl").
+
+-define(IGNORED_APP, whapps_config:get(?CONFIG_CAT, <<"ignore_apps">>, [<<"milliwatt">>])).
 
 -export([handle_req/2]).
 
 handle_req(JObj, _Props) ->
     'true' = wapi_call:event_v(JObj),
     _ = wh_util:put_callid(JObj),
-
     couch_mgr:suppress_change_notice(),
+    maybe_ignore(JObj).
 
+-spec maybe_ignore(wh_json:object()) -> 'ok'.
+maybe_ignore(JObj) ->
+    AppName = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Application-Name">>], JObj),
+    case lists:member(AppName, ?IGNORED_APP) of
+        'false'-> handle_req(JObj);
+        'true' ->
+            lager:debug("ignoring cdr request from ~s", [AppName])
+    end.
+
+-spec handle_req(wh_json:object()) -> 'ok'.
+handle_req(JObj) ->
     AccountId = kz_call_event:account_id(JObj),
     Timestamp = kz_call_event:timestamp(JObj),
     prepare_and_save(AccountId, Timestamp, JObj).
 
--spec prepare_and_save(account_id(), gregorian_seconds(), wh_json:object()) -> wh_json:object().
+-spec prepare_and_save(account_id(), gregorian_seconds(), wh_json:object()) -> 'ok'.
 prepare_and_save(AccountId, Timestamp, JObj) ->
     Routines = [fun update_pvt_parameters/3
                 ,fun update_ccvs/3
                 ,fun set_doc_id/3
                 ,fun set_recording_url/3
+                ,fun set_call_priority/3
                 ,fun maybe_set_e164_destination/3
                 ,fun is_conference/3
                 ,fun save_cdr/3
@@ -40,7 +55,8 @@ prepare_and_save(AccountId, Timestamp, JObj) ->
                 end
                 ,wh_json:normalize_jobj(JObj)
                 ,Routines
-               ).
+               ),
+    'ok'.
 
 -spec update_pvt_parameters(api_binary(), gregorian_seconds(), wh_json:object()) -> wh_json:object().
 update_pvt_parameters('undefined', _, JObj) ->
@@ -82,7 +98,11 @@ update_ccvs_foldl(Key, Value,  {JObj, CCVs}=Acc) ->
 set_doc_id(_, Timestamp, JObj) ->
     CallId = wh_json:get_value(<<"call_id">>, JObj),
     DocId = cdr_util:get_cdr_doc_id(Timestamp, CallId),
-    wh_json:set_value(<<"_id">>, DocId, JObj).
+    wh_doc:set_id(JObj, DocId).
+
+-spec set_call_priority(api_binary(), gregorian_seconds(), wh_json:object()) -> wh_json:object().
+set_call_priority(_AccountId, _Timestamp, JObj) ->
+    maybe_leak_ccv(JObj, <<"call_priority">>).
 
 -spec set_recording_url(api_binary(), gregorian_seconds(), wh_json:object()) -> wh_json:object().
 set_recording_url(_AccountId, _Timestamp, JObj) ->

@@ -39,7 +39,7 @@
 
 -include("doodle.hrl").
 
--define(CALL_SANITY_CHECK, 30000).
+-define(CALL_SANITY_CHECK, 30 * ?MILLISECONDS_IN_SECOND).
 
 -define(RESPONDERS, [{{?MODULE, 'relay_amqp'}
                       ,[{<<"*">>, <<"*">>}]
@@ -87,7 +87,7 @@ start_link(Call) ->
 
 -spec get_call(pid() | whapps_call:call()) -> {'ok', whapps_call:call()}.
 get_call(Srv) when is_pid(Srv) ->
-    gen_server:call(Srv, 'get_call', 1000);
+    gen_server:call(Srv, 'get_call', ?MILLISECONDS_IN_SECOND);
 get_call(Call) ->
     Srv = whapps_call:kvs_fetch('consumer_pid', Call),
     get_call(Srv).
@@ -161,7 +161,7 @@ callid_update(CallId, Call) ->
 -spec callid(api_binary(), whapps_call:call()) -> ne_binary().
 
 callid(Srv) when is_pid(Srv) ->
-    CallId = gen_server:call(Srv, 'callid', 1000),
+    CallId = gen_server:call(Srv, 'callid', ?MILLISECONDS_IN_SECOND),
     put('callid', CallId),
     CallId;
 callid(Call) ->
@@ -353,7 +353,7 @@ handle_cast({'continue', Key}, #state{flow=Flow
             end
     end;
 handle_cast('stop', #state{call=Call}=State) ->
-    spawn('doodle_util', 'save_sms', [whapps_call:clear_helpers(Call)]),
+    _ = wh_util:spawn('doodle_util', 'save_sms', [whapps_call:clear_helpers(Call)]),
     {'stop', 'normal', State};
 handle_cast('transfer', State) ->
     {'stop', {'shutdown', 'transfer'}, State};
@@ -651,7 +651,7 @@ spawn_cf_module(CFModule, Data, Call) ->
     {spawn_monitor(
        fun() ->
                _ = wh_amqp_channel:consumer_pid(AMQPConsumer),
-               put('callid', whapps_call:call_id_direct(Call)),
+               wh_util:put_callid(whapps_call:call_id_direct(Call)),
                try CFModule:handle(Data, Call) of
                    _ -> 'ok'
                catch

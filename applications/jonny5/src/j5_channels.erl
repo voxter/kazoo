@@ -53,7 +53,7 @@
                   ,account_id :: api_binary() | '$1' | '_'
                   ,account_billing :: api_binary() | '$1' | '_'
                   ,account_allotment = 'false' :: boolean() | '_'
-                  ,reseller_id :: api_binary() | '$1' | '_'
+                  ,reseller_id :: api_binary() | '$1' | '$2' | '_'
                   ,reseller_billing :: api_binary() | '$1' | '_'
                   ,reseller_allotment = 'false' :: boolean() | '_'
                   ,soft_limit = 'false' :: boolean() | '_'
@@ -69,6 +69,7 @@
                   ,rate_id :: api_binary() | '_'
                   ,base_cost :: api_binary() | '_'
                  }).
+
 -type channel() :: #channel{}.
 -type channels() :: [channel(),...] | [].
 -export_type([channel/0
@@ -77,20 +78,23 @@
 
 -define(BINDINGS, [{'authz', [{'restrict_to', ['broadcast']}
                               ,'federate'
-                             ]}
+                             ]
+                   }
                    ,{'rate', [{'restrict_to', ['broadcast']}
                               ,'federate'
-                             ]}
+                             ]
+                    }
                   ]).
 -define(RESPONDERS, [{{?MODULE, 'handle_authz_resp'}
-                      ,[{<<"authz">>, <<"authz_resp">>}]}
+                      ,[{<<"authz">>, <<"authz_resp">>}]
+                     }
                      ,{{?MODULE, 'handle_rate_resp'}
-                       ,[{<<"rate">>, <<"resp">>}]}
+                       ,[{<<"rate">>, <<"resp">>}]
+                      }
                     ]).
 -define(QUEUE_NAME, <<>>).
 -define(QUEUE_OPTIONS, []).
 -define(CONSUME_OPTIONS, []).
-
 
 %%%===================================================================
 %%% API
@@ -104,12 +108,16 @@
 %% @end
 %%--------------------------------------------------------------------
 start_link() ->
-    gen_listener:start_link({'local', ?SERVER}, ?MODULE, [{'bindings', ?BINDINGS}
-                                                          ,{'responders', ?RESPONDERS}
-                                                          ,{'queue_name', ?QUEUE_NAME}
-                                                          ,{'queue_options', ?QUEUE_OPTIONS}
-                                                          ,{'consume_options', ?CONSUME_OPTIONS}
-                                                         ], []).
+    gen_listener:start_link({'local', ?SERVER}
+                            ,?MODULE
+                            ,[{'bindings', ?BINDINGS}
+                              ,{'responders', ?RESPONDERS}
+                              ,{'queue_name', ?QUEUE_NAME}
+                              ,{'queue_options', ?QUEUE_OPTIONS}
+                              ,{'consume_options', ?CONSUME_OPTIONS}
+                             ]
+                            ,[]
+                           ).
 
 -spec sync() -> 'ok'.
 sync() -> gen_server:cast(?SERVER, 'synchronize_channels').
@@ -597,26 +605,46 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 -spec from_jobj(wh_json:object()) -> channel().
 from_jobj(JObj) ->
-    %% CHANNEL_CREATE has bunch of stuff in CCVs where as auth_resp
-    %%  is root level, so if no CCVs then just use the JObj as is...
-    CCVs = wh_json:get_value(<<"Custom-Channel-Vars">>, JObj, JObj),
-    AccountBilling = wh_json:get_value(<<"Account-Billing">>, CCVs),
-    ResellerBilling = wh_json:get_value(<<"Reseller-Billing">>, CCVs),
+    AccountId = wh_json:get_first_defined(
+                       [<<"Account-ID">>
+                       ,[<<"Custom-Channel-Vars">>, <<"Account-ID">>]
+                       ], JObj
+                      ),
+    AccountBilling = wh_json:get_first_defined(
+                       [<<"Account-Billing">>
+                       ,[<<"Custom-Channel-Vars">>, <<"Account-Billing">>]
+                       ], JObj
+                      ),
+    ResellerId = wh_json:get_first_defined(
+                       [<<"Reseller-ID">>
+                       ,[<<"Custom-Channel-Vars">>, <<"Reseller-ID">>]
+                       ], JObj
+                      ),
+    ResellerBilling = wh_json:get_first_defined(
+                       [<<"Reseller-Billing">>
+                       ,[<<"Custom-Channel-Vars">>, <<"Reseller-Billing">>]
+                       ], JObj
+                      ),
+    SoftLimit = wh_json:get_first_defined(
+                       [<<"Soft-Limit">>
+                       ,[<<"Custom-Channel-Vars">>, <<"Soft-Limit">>]
+                       ], JObj
+                      ),
     #channel{call_id = wh_json:get_value(<<"Call-ID">>, JObj)
              ,other_leg_call_id = wh_json:get_value(<<"Other-Leg-Call-ID">>, JObj)
              ,direction = wh_json:get_value(<<"Call-Direction">>, JObj)
-             ,account_id = wh_json:get_value(<<"Account-ID">>, CCVs)
+             ,account_id = AccountId
              ,account_billing = AccountBilling
-             ,account_allotment = is_alloment(AccountBilling)
-             ,reseller_id = wh_json:get_value(<<"Reseller-ID">>, CCVs)
+             ,account_allotment = is_allotment(AccountBilling)
+             ,reseller_id = ResellerId
              ,reseller_billing = ResellerBilling
-             ,reseller_allotment = is_alloment(ResellerBilling)
-             ,soft_limit = wh_json:is_true(<<"Soft-Limit">>, JObj)
+             ,reseller_allotment = is_allotment(ResellerBilling)
+             ,soft_limit = wh_util:is_true(SoftLimit)
             }.
 
--spec is_alloment(ne_binary()) -> boolean().
-is_alloment(<<"allotment_", _/binary>>) -> 'true';
-is_alloment(_) -> 'false'.
+-spec is_allotment(ne_binary()) -> boolean().
+is_allotment(<<"allotment_", _/binary>>) -> 'true';
+is_allotment(_) -> 'false'.
 
 -type unique_channel() :: {ne_binary(), api_binary()}.
 -type unique_channels() :: [unique_channel(),...] | [].

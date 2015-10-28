@@ -1,7 +1,10 @@
 {
-    "_id": "_design/conferences"
-    ,"language": "javascript"
-    ,"views": {
+    "_id": "_design/conferences",
+    "filters": {
+        "export": "function(doc, req) { return ( doc.pvt_type == 'conference' ); }"
+    },
+    "language": "javascript",
+    "views": {
         "crossbar_listing": {
             "map": "function(doc) { if (doc.pvt_type != 'conference' || doc.pvt_deleted) return; emit(doc._id, {'id': doc._id, 'name': doc.name, 'owner_id': doc.owner_id}); }"
         },
@@ -11,8 +14,5 @@
         "conference_map": {
         	"map": "function(doc) { if (doc.flow.module != 'conference' || doc.pvt_deleted) return; var featurecode = (!doc.featurecode) ? false : doc.featurecode; emit(doc.flow.data.id, {'numbers': doc.numbers}); }"
 	}
-    }
-    ,"filters": {
-        "export":"function(doc, req) { return ( doc.pvt_type == 'conference' ); }"
     }
 }
