@@ -109,7 +109,10 @@ maybe_start_agent(AccountId, AgentId, JObj) ->
             end;
         {'exists', Sup} ->
             FSM = acdc_agent_sup:fsm(Sup),
-            acdc_agent_fsm:update_presence(FSM, presence_id(JObj), presence_state(JObj, 'undefuned')),
+            case presence_state(JObj, 'undefined') of
+                'undefined' -> 'ok';
+                PresenceState -> acdc_agent_fsm:update_presence(FSM, presence_id(JObj), PresenceState)
+            end,
             login_success(JObj);
         {'error', _E} ->
             acdc_agent_stats:agent_logged_out(AccountId, AgentId),

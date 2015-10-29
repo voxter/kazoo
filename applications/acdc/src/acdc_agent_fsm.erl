@@ -1354,12 +1354,22 @@ paused({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentLis
 paused({'member_connect_win', _, 'different_node'}, State) ->
     lager:debug("received member_connect_win for different node (paused)"),
     {'next_state', 'paused', State};
+paused({'originate_uuid', ACallId, ACtrlQ}, #state{ignored_agent_calls=IgnoredAgentCalls}=State) ->
+    lager:debug("recv originate_uuid for agent call ~s(~s)", [ACallId, ACtrlQ]),
+    IgnoredAgentCalls1 = [ACallId | IgnoredAgentCalls],
+    {'next_state', 'paused', State#state{ignored_agent_calls=IgnoredAgentCalls1}};
 paused(?NEW_CHANNEL_FROM(CallId), State) ->
     lager:debug("paused call_from outbound: ~s", [CallId]),
     {'next_state', 'outbound', start_outbound_call_handling(CallId, State), 'hibernate'};
-paused(?NEW_CHANNEL_TO(CallId), State) ->
-    lager:debug("paused call_to outbound: ~s", [CallId]),
-    {'next_state', 'outbound', start_outbound_call_handling(CallId, State), 'hibernate'};
+paused(?NEW_CHANNEL_TO(CallId), #state{ignored_agent_calls=IgnoredAgentCalls}=State) ->
+    case lists:member(CallId, IgnoredAgentCalls) of
+        'true' ->
+            lager:debug("ignoring an outbound call that is the result of a failed originate"),
+            {'next_state', 'ready', State};
+        'false' ->
+            lager:debug("paused call_to outbound: ~s", [CallId]),
+            {'next_state', 'outbound', start_outbound_call_handling(CallId, State), 'hibernate'}
+    end;
 paused({'channel_hungup', CallId, _Reason}, #state{agent_listener=AgentListener
                                                    ,pause_ref=Ref
                                                    ,account_id=AccountId
@@ -1404,6 +1414,18 @@ outbound({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentL
 outbound({'member_connect_win', _, 'different_node'}, State) ->
     lager:debug("received member_connect_win for different node (outbound)"),
     {'next_state', 'outbound', State};
+outbound({'originate_uuid', CallId, ACtrlQ}, #state{agent_listener=AgentListener
+                                                    ,outbound_call_id=CallId
+                                                    ,ignored_agent_calls=IgnoredAgentCalls
+                                                   }=State) ->
+    lager:debug("recv originate_uuid for agent call ~s(~s), cancel outbound", [CallId, ACtrlQ]),
+    acdc_agent_listener:outbound_invalid(AgentListener, CallId),
+    IgnoredAgentCalls1 = [CallId | IgnoredAgentCalls],
+    outbound_hungup(State#state{ignored_agent_calls=IgnoredAgentCalls1});
+outbound({'originate_uuid', ACallId, ACtrlQ}, #state{ignored_agent_calls=IgnoredAgentCalls}=State) ->
+    lager:debug("recv originate_uuid for agent call ~s(~s)", [ACallId, ACtrlQ]),
+    IgnoredAgentCalls1 = [ACallId | IgnoredAgentCalls],
+    {'next_state', 'outbound', State#state{ignored_agent_calls=IgnoredAgentCalls1}};
 outbound({'timeout', Ref, ?PAUSE_MESSAGE}, #state{pause_ref=Ref}=State) ->
     lager:debug("pause timer expired while outbound"),
     {'next_state', 'outbound', State#state{pause_ref='undefined'}};
@@ -1425,6 +1447,13 @@ outbound({'channel_bridged', _}, State) ->
     {'next_state', 'outbound', State};
 outbound({'channel_unbridged', _}, State) ->
     {'next_state', 'outbound', State};
+outbound({'channel_replaced', JObj}, #state{agent_listener=AgentListener}=State) ->
+    CallId = kz_call_event:call_id(JObj),
+    ReplacedBy = kz_call_event:replaced_by(JObj),
+    acdc_agent_listener:rebind_events(AgentListener, CallId, ReplacedBy),
+    wh_util:put_callid(ReplacedBy),
+    lager:info("channel ~s replaced by ~s", [CallId, ReplacedBy]),
+    {'next_state', 'outbound', State#state{outbound_call_id=ReplacedBy}};
 outbound(?NEW_CHANNEL_TO(CallId), #state{outbound_call_id=CallId}=State) ->
     {'next_state', 'outbound', State};
 outbound(_Msg, State) ->
@@ -1513,18 +1542,22 @@ monitoring('current_call', _, State) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-handle_event({'agent_logout'}, 'ready', State) ->
-    handle_agent_logout(State),
-    {'next_state', 'ready', State};
-handle_event({'agent_logout'} = Event, StateName, #state{agent_state_updates = Queue} = State) ->
-    NewQueue = [Event | Queue],
-    {'next_state', StateName, State#state{agent_state_updates = NewQueue}};
+handle_event({'agent_logout'}=Event, StateName, #state{agent_state_updates=Queue}=State) ->
+    case valid_state_for_logout(StateName) of
+        'true' ->
+            handle_agent_logout(State),
+            {'next_state', 'ready', State};
+        'false' ->
+            NewQueue = [Event | Queue],
+            {'next_state', StateName, State#state{agent_state_updates = NewQueue}}
+    end;
 handle_event({'resume'}, 'ready', State) ->
     {'next_state', 'ready', State};
 handle_event({'resume'}, 'paused', State) ->
     ReadyState = handle_resume(State),
     apply_state_updates(ReadyState);
 handle_event({'resume'}, StateName, #state{agent_state_updates = Queue} = State) ->
+    lager:debug("recv resume during ~p, delaying", [StateName]),
     NewQueue = [{'resume'} | Queue],
     {'next_state', StateName, State#state{agent_state_updates = NewQueue}};
 handle_event({'pause', Timeout}, 'ringing', #state{agent_listener=AgentListener
@@ -1547,6 +1580,7 @@ handle_event({'pause', Timeout}, 'ready', State) ->
     lager:debug("recv status update: pausing for up to ~b s", [Timeout]),
     {'next_state', 'paused', handle_pause(Timeout, State)};
 handle_event({'pause', _} = Event, StateName, #state{agent_state_updates = Queue} = State) ->
+    lager:debug("recv pause during ~p, delaying", [StateName]),
     NewQueue = [Event | Queue],
     {'next_state', StateName, State#state{agent_state_updates = NewQueue}};
 handle_event({'update_presence', PresenceID, PresenceState}, 'ready', State) ->
@@ -1875,7 +1909,8 @@ outbound_hungup(#state{agent_listener=AgentListener
     case time_left(WRef) of
         N when is_integer(N), N > 0 ->
             acdc_agent_stats:agent_wrapup(AccountId, AgentId, N),
-            {'next_state', 'wrapup', clear_call(State, 'wrapup'), 'hibernate'};
+            {Next, SwitchTo, State1} = apply_state_updates(clear_call(State, 'wrapup')),
+            {Next, SwitchTo, State1, 'hibernate'};
         _W ->
             case time_left(PRef) of
                 N when is_integer(N), N > 0 ->
@@ -1890,8 +1925,8 @@ outbound_hungup(#state{agent_listener=AgentListener
                     lager:debug("wrapup left: ~p pause left: ~p", [_W, _P]),
                     acdc_agent_stats:agent_ready(AccountId, AgentId),
                     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
-                    {Next, SwitchTo, State} = apply_state_updates(clear_call(State, 'ready')),
-                    {Next, SwitchTo, State, 'hibernate'}
+                    {Next, SwitchTo, State1} = apply_state_updates(clear_call(State, 'ready')),
+                    {Next, SwitchTo, State1, 'hibernate'}
             end
     end.
 
@@ -2119,8 +2154,21 @@ uri(URI, QueryString) ->
     end.
 
 -spec apply_state_updates(fsm_state()) -> {'next_state', atom(), fsm_state()}.
-apply_state_updates(#state{agent_state_updates=Q}=State) ->
-    {Atom, ModState} = lists:foldl(fun state_step/2, {'ready', State}, lists:reverse(Q)),
+apply_state_updates(#state{agent_state_updates=Q
+                           ,wrapup_ref=WRef
+                           ,pause_ref=PRef
+                          }=State) ->
+    FoldDefaultState = case time_left(WRef) of
+        N when is_integer(N), N > 0 -> 'wrapup';
+        _W ->
+            case time_left(PRef) of
+                N when is_integer(N), N > 0 -> 'paused';
+                <<"infinity">> -> 'paused';
+                _P -> 'ready'
+            end
+    end,
+    lager:debug("default state for applying state updates ~s", [FoldDefaultState]),
+    {Atom, ModState} = lists:foldl(fun state_step/2, {FoldDefaultState, State}, lists:reverse(Q)),
     {'next_state', Atom, ModState#state{agent_state_updates = []}}.
 
 -type state_acc() :: {atom(), fsm_state()}.
@@ -2137,6 +2185,12 @@ state_step({'agent_logout'}, {NextState, State}) ->
 state_step({'update_presence', PresenceId, PresenceState}, {NextState, State}) ->
     handle_presence_update(PresenceId, PresenceState, State),
     {NextState, State}.
+
+-spec valid_state_for_logout(atom()) -> boolean().
+valid_state_for_logout('ready') -> 'true';
+valid_state_for_logout('wrapup') -> 'true';
+valid_state_for_logout('paused') -> 'true';
+valid_state_for_logout(_) -> 'false'.
 
 -spec handle_agent_logout(fsm_state()) -> 'ok'.
 handle_agent_logout(#state{account_id = AccountId
