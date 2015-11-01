@@ -472,12 +472,9 @@ wait('current_call', _, State) ->
 %% @end
 %%--------------------------------------------------------------------
 sync({'timeout', Ref, ?SYNC_RESPONSE_MESSAGE}, #state{sync_ref=Ref
-                                                      ,account_id=AccountId
-                                                      ,agent_id=AgentId
                                                       ,agent_listener=AgentListener
                                                      }=State) when is_reference(Ref) ->
     lager:debug("done waiting for sync responses"),
-    acdc_agent_stats:agent_ready(AccountId, AgentId),
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
 
     apply_state_updates(State#state{sync_ref=Ref});
@@ -505,8 +502,6 @@ sync({'sync_req', JObj}, #state{agent_listener=AgentListener
             {'next_state', 'sync', State}
     end;
 sync({'sync_resp', JObj}, #state{sync_ref=Ref
-                                 ,account_id=AccountId
-                                 ,agent_id=AgentId
                                  ,agent_listener=AgentListener
                                 }=State) ->
     case catch wh_util:to_atom(wh_json:get_value(<<"Status">>, JObj)) of
@@ -516,7 +511,6 @@ sync({'sync_resp', JObj}, #state{sync_ref=Ref
         'ready' ->
             lager:debug("other agent is in ready state, joining"),
             _ = erlang:cancel_timer(Ref),
-            acdc_agent_stats:agent_ready(AccountId, AgentId),
             acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
             {Next, SwitchTo, State} = apply_state_updates(State#state{sync_ref='undefined'}),
             {Next, SwitchTo, State, 'hibernate'};
@@ -824,7 +818,6 @@ ringing({'channel_hungup', AgentCallId, Cause}, #state{agent_listener=AgentListe
     end;
 ringing({'channel_hungup', MemberCallId, _Cause}, #state{agent_listener=AgentListener
                                                          ,account_id=AccountId
-                                                         ,agent_id=AgentId
                                                          ,member_call_id=MemberCallId
                                                          ,member_call_queue_id=QueueId
                                                         }=State) ->
@@ -832,7 +825,6 @@ ringing({'channel_hungup', MemberCallId, _Cause}, #state{agent_listener=AgentLis
     acdc_agent_listener:channel_hungup(AgentListener, MemberCallId),
 
     acdc_stats:call_abandoned(AccountId, QueueId, MemberCallId, ?ABANDON_HANGUP),
-    acdc_agent_stats:agent_ready(AccountId, AgentId),
 
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
     apply_state_updates(clear_call(State, 'ready'));
@@ -840,7 +832,6 @@ ringing({'dtmf_pressed', DTMF}, #state{caller_exit_key=DTMF
                                        ,agent_listener=AgentListener
                                        ,agent_call_id=AgentCallId
                                        ,account_id=AccountId
-                                       ,agent_id=AgentId
                                        ,member_call_queue_id=QueueId
                                        ,member_call_id=CallId
                                       }=State) when is_binary(DTMF) ->
@@ -848,7 +839,6 @@ ringing({'dtmf_pressed', DTMF}, #state{caller_exit_key=DTMF
     acdc_agent_listener:channel_hungup(AgentListener, AgentCallId),
 
     acdc_stats:call_abandoned(AccountId, QueueId, CallId, ?ABANDON_EXIT),
-    acdc_agent_stats:agent_ready(AccountId, AgentId),
 
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
 
@@ -1102,7 +1092,6 @@ awaiting_callback({'channel_hungup', MemberCallId, Reason}, #state{account_id=Ac
     acdc_agent_listener:channel_hungup(AgentListener, MemberCallId),
 
     acdc_stats:call_processed(AccountId, QueueId, AgentId, MemberCallId, 'agent'),
-    acdc_agent_stats:agent_ready(AccountId, AgentId),
 
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
     apply_state_updates(clear_call(State, 'ready'));
@@ -1167,7 +1156,6 @@ answered({'dialplan_error', _App}, #state{agent_listener=AgentListener
     acdc_agent_listener:member_connect_retry(AgentListener, CallId),
 
     acdc_stats:call_missed(AccountId, QueueId, AgentId, CallId, <<"dialplan_error">>),
-    acdc_agent_stats:agent_ready(AccountId, AgentId),
 
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
     apply_state_updates(clear_call(State, 'ready'));
@@ -1272,12 +1260,9 @@ wrapup({'member_connect_win', _, 'different_node'}, State) ->
     lager:debug("received member_connect_win for different node (wrapup)"),
     {'next_state', 'wrapup', State#state{wrapup_timeout=0}};
 wrapup({'timeout', Ref, ?WRAPUP_FINISHED}, #state{wrapup_ref=Ref
-                                                  ,account_id=AccountId
-                                                  ,agent_id=AgentId
                                                   ,agent_listener=AgentListener
                                                  }=State) ->
     lager:debug("wrapup timer expired, ready for action!"),
-    acdc_agent_stats:agent_ready(AccountId, AgentId),
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
 
     apply_state_updates(clear_call(State, 'ready'));
@@ -1324,8 +1309,6 @@ wrapup('current_call', _, #state{member_call=Call
 %% @end
 %%--------------------------------------------------------------------
 paused({'timeout', Ref, ?PAUSE_MESSAGE}, #state{pause_ref=Ref
-                                                ,account_id=AccountId
-                                                ,agent_id=AgentId
                                                 ,agent_listener=AgentListener
                                                }=State) when is_reference(Ref) ->
     lager:debug("pause timer expired, putting agent back into action"),
@@ -1334,7 +1317,6 @@ paused({'timeout', Ref, ?PAUSE_MESSAGE}, #state{pause_ref=Ref
 
     acdc_agent_listener:send_status_resume(AgentListener),
 
-    acdc_agent_stats:agent_ready(AccountId, AgentId),
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
 
     apply_state_updates(clear_call(State#state{sync_ref='undefined'}, 'ready'));
@@ -1575,10 +1557,12 @@ handle_event({'pause', Timeout}, 'ringing', #state{agent_listener=AgentListener
     handle_event({'pause', Timeout}, 'ready', NewFSMState);
 handle_event({'pause', <<"infinity">>}, 'ready', State) ->
     lager:debug("recv status update:, pausing for up to infinity s"),
-    {'next_state', 'paused', handle_pause('infinity', State)};
+    State1 = handle_pause(<<"infinity">>, State),
+    apply_state_updates(State1);
 handle_event({'pause', Timeout}, 'ready', State) ->
     lager:debug("recv status update: pausing for up to ~b s", [Timeout]),
-    {'next_state', 'paused', handle_pause(Timeout, State)};
+    State1 = handle_pause(Timeout, State),
+    apply_state_updates(State1);
 handle_event({'pause', _} = Event, StateName, #state{agent_state_updates = Queue} = State) ->
     lager:debug("recv pause during ~p, delaying", [StateName]),
     NewQueue = [Event | Queue],
@@ -1798,11 +1782,8 @@ clear_call(#state{connect_failures=Fails
     clear_call(State#state{connect_failures=Fails+1}, 'paused');
 clear_call(#state{connect_failures=Fails
                   ,max_connect_failures=_MaxFails
-                  ,account_id=AccountId
-                  ,agent_id=AgentId
                  }=State, 'failed') ->
     lager:debug("agent has failed to connect ~b times(~b)", [Fails+1, _MaxFails]),
-    acdc_agent_stats:agent_ready(AccountId, AgentId),
     clear_call(State#state{connect_failures=Fails+1}, 'ready');
 clear_call(#state{fsm_call_id=FSMemberCallId
                   ,wrapup_ref=WRef
@@ -1901,29 +1882,23 @@ start_outbound_call_handling(Call, State) ->
 
 -spec outbound_hungup(fsm_state()) -> {'next_state', atom(), fsm_state(), 'hibernate'}.
 outbound_hungup(#state{agent_listener=AgentListener
-                       ,account_id=AccountId
-                       ,agent_id=AgentId
                        ,wrapup_ref=WRef
                        ,pause_ref=PRef
                       }=State) ->
     case time_left(WRef) of
         N when is_integer(N), N > 0 ->
-            acdc_agent_stats:agent_wrapup(AccountId, AgentId, N),
             {Next, SwitchTo, State1} = apply_state_updates(clear_call(State, 'wrapup')),
             {Next, SwitchTo, State1, 'hibernate'};
         _W ->
             case time_left(PRef) of
                 N when is_integer(N), N > 0 ->
-                    acdc_agent_stats:agent_paused(AccountId, AgentId, N),
                     {Next, SwitchTo, State1} = apply_state_updates(clear_call(State, 'paused')),
                     {Next, SwitchTo, State1, 'hibernate'};
                 <<"infinity">> ->
-                    acdc_agent_stats:agent_paused(AccountId, AgentId, <<"infinity">>),
                     {Next, SwitchTo, State1} = apply_state_updates(clear_call(State, 'paused')),
                     {Next, SwitchTo, State1, 'hibernate'};
                 _P ->
                     lager:debug("wrapup left: ~p pause left: ~p", [_W, _P]),
-                    acdc_agent_stats:agent_ready(AccountId, AgentId),
                     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
                     {Next, SwitchTo, State1} = apply_state_updates(clear_call(State, 'ready')),
                     {Next, SwitchTo, State1, 'hibernate'}
@@ -2023,9 +1998,8 @@ get_endpoints(OrigEPs, AgentListener, Call, AgentId, QueueId) ->
 return_to_state(Fails, MaxFails, _, _) when is_integer(MaxFails), Fails >= MaxFails ->
     lager:debug("fails ~b max ~b going to pause", [Fails, MaxFails]),
     'paused';
-return_to_state(_Fails, _MaxFails, AccountId, AgentId) ->
+return_to_state(_Fails, _MaxFails, _AccountId, _AgentId) ->
     lager:debug("fails ~b max ~b going to pause", [_Fails, _MaxFails]),
-    acdc_agent_stats:agent_ready(AccountId, AgentId),
     'ready'.
 
 %% {Add, Rm}
@@ -2154,7 +2128,9 @@ uri(URI, QueryString) ->
     end.
 
 -spec apply_state_updates(fsm_state()) -> {'next_state', atom(), fsm_state()}.
-apply_state_updates(#state{agent_state_updates=Q
+apply_state_updates(#state{account_id=AccountId
+                           ,agent_id=AgentId
+                           ,agent_state_updates=Q
                            ,wrapup_ref=WRef
                            ,pause_ref=PRef
                           }=State) ->
@@ -2168,7 +2144,16 @@ apply_state_updates(#state{agent_state_updates=Q
             end
     end,
     lager:debug("default state for applying state updates ~s", [FoldDefaultState]),
-    {Atom, ModState} = lists:foldl(fun state_step/2, {FoldDefaultState, State}, lists:reverse(Q)),
+    {Atom, #state{wrapup_ref=WRef1
+                  ,pause_ref=PRef1
+                 }=ModState} = lists:foldl(fun state_step/2, {FoldDefaultState, State}, lists:reverse(Q)),
+    lager:debug("resulting agent state ~s", [Atom]),
+    case Atom of
+        'ready' -> acdc_agent_stats:agent_ready(AccountId, AgentId);
+        'wrapup' -> acdc_agent_stats:agent_wrapup(AccountId, AgentId, time_left(WRef1));
+        'paused' -> acdc_agent_stats:agent_paused(AccountId, AgentId, time_left(PRef1));
+        _ -> 'ok'
+    end,
     {'next_state', Atom, ModState#state{agent_state_updates = []}}.
 
 -type state_acc() :: {atom(), fsm_state()}.
@@ -2212,9 +2197,7 @@ handle_presence_update(PresenceId, PresenceState, #state{agent_id = AgentId
     acdc_agent_listener:presence_update(Listener, PresenceState).
 
 -spec handle_resume(fsm_state()) -> fsm_state().
-handle_resume(#state{account_id=AccountId
-                     ,agent_id=AgentId
-                     ,agent_listener=AgentListener
+handle_resume(#state{agent_listener=AgentListener
                      ,pause_ref=Ref
                     }=State) ->
     lager:debug("resume received, putting agent back into action"),
@@ -2223,23 +2206,17 @@ handle_resume(#state{account_id=AccountId
     acdc_agent_listener:update_agent_status(AgentListener, <<"resume">>),
 
     acdc_agent_listener:send_status_resume(AgentListener),
-    acdc_agent_stats:agent_ready(AccountId, AgentId),
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
     State#state{pause_ref='undefined'}.
 
 -spec handle_pause(integer() | 'infinity', fsm_state()) -> fsm_state().
-handle_pause(Timeout, #state{account_id=AccountId
-                             ,agent_id=AgentId
-                             ,agent_listener=AgentListener
-                            }=State) ->
+handle_pause(Timeout, #state{agent_listener=AgentListener}=State) ->
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_RED_FLASH),
     case Timeout of
         'infinity' ->
-            acdc_agent_stats:agent_paused(AccountId, AgentId, <<"infinity">>),
             State#state{pause_ref='infinity'};
         _ ->
             Ref = start_pause_timer(Timeout),
-            acdc_agent_stats:agent_paused(AccountId, AgentId, Timeout),
             State#state{pause_ref=Ref}
     end.
 
