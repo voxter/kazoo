@@ -52,7 +52,8 @@ agent_cur_status_table_opts() ->
      ,{'keypos', agent_cur_status_key_pos()}
     ].
 
-agent_ready(AcctId, AgentId) ->
+-spec agent_ready(ne_binary(), ne_binary()) -> 'ok'.
+agent_ready(AccountId, AgentId) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AccountId}
               ,{<<"Agent-ID">>, AgentId}
@@ -351,7 +352,7 @@ cur_status_build_match_spec(JObj) ->
         'undefined' ->
             {'error', wh_json:from_list([{<<"Account-ID">>, <<"missing but required">>}])};
         AccountId ->
-            AcctMatch = {#status_stat{acct_id='$1', _='_'}
+            AcctMatch = {#status_stat{account_id='$1', _='_'}
                          ,[{'=:=', '$1', {'const', AccountId}}]
                         },
             cur_status_build_match_spec(JObj, AcctMatch)

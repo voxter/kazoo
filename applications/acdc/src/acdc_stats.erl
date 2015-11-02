@@ -492,7 +492,7 @@ handle_cast({'create_call', JObj}, State) ->
     lager:debug("creating new call stat ~s", [Id]),
     Stat = #call_stat{id = Id
                       ,call_id = wh_json:get_value(<<"Call-ID">>, JObj)
-                      ,acct_id = wh_json:get_value(<<"Account-ID">>, JObj)
+                      ,account_id = wh_json:get_value(<<"Account-ID">>, JObj)
                       ,queue_id = wh_json:get_value(<<"Queue-ID">>, JObj)
                       ,entered_timestamp = wh_json:get_value(<<"Entered-Timestamp">>, JObj, wh_util:current_tstamp())
                       ,abandoned_timestamp = wh_json:get_value(<<"Abandon-Timestamp">>, JObj)
@@ -1160,8 +1160,6 @@ handle_missed_stat(JObj, Props) ->
     case find_call_stat(Id) of
         'undefined' -> lager:debug("can't update stat ~s with missed data, missing", [Id]);
         _ -> gen_listener:cast(props:get_value('server', Props), {'add_miss', JObj})
-            % Updates = [{#call_stat.misses, [create_miss(JObj) | Misses]}],
-            % update_call_stat(Id, Updates, Props)
     end.
 
 -spec create_miss(wh_json:object()) -> agent_miss().
@@ -1264,7 +1262,7 @@ update_call_stat(Id, Updates, Props) ->
 -spec call_stat_to_summary_stat(call_stat()) -> call_summary_stat().
 call_stat_to_summary_stat(#call_stat{id=Id
                                      ,call_id=CallId
-                                     ,acct_id=AccountId
+                                     ,account_id=AccountId
                                      ,queue_id=QueueId
                                      ,entered_timestamp=EnteredTimestamp
                                      ,abandoned_timestamp=AbandonedTimestamp
@@ -1281,7 +1279,7 @@ call_stat_to_summary_stat(#call_stat{id=Id
 
 -spec call_stat_to_agent_call_stat(call_stat()) -> agent_call_stat().
 call_stat_to_agent_call_stat(#call_stat{call_id=CallId
-                                        ,acct_id=AccountId
+                                        ,account_id=AccountId
                                         ,queue_id=QueueId
                                         ,agent_id=AgentId
                                         ,status=Status
