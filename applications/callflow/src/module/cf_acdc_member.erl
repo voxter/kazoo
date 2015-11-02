@@ -113,13 +113,19 @@ maybe_enter_queue(#member_call{call=Call
                                ,max_wait=MaxWait
                               }=MC
                   ,'false') ->
-    lager:info("asking for an agent, waiting up to ~p ms", [MaxWait]),
+    case whapps_call_command:b_channel_status(whapps_call:call_id(Call)) of
+        {'ok', _} ->
+            lager:info("asking for an agent, waiting up to ~p ms", [MaxWait]),
 
-    cf_exe:send_amqp(Call, MemberCall, fun wapi_acdc_queue:publish_member_call/1),
-    _ = whapps_call_command:flush_dtmf(Call),
-    wait_for_bridge(MC#member_call{call=whapps_call:kvs_store('queue_id', QueueId, Call)}
-                    ,MaxWait
-                   ).
+            cf_exe:send_amqp(Call, MemberCall, fun wapi_acdc_queue:publish_member_call/1),
+            _ = whapps_call_command:flush_dtmf(Call),
+            wait_for_bridge(MC#member_call{call=whapps_call:kvs_store('queue_id', QueueId, Call)}
+                            ,MaxWait
+                           );
+        {'error', E} ->
+            lager:info("not entering queue; call was destroyed already (~s)", [E]),
+            cf_exe:stop(Call)
+    end.
 
 -spec wait_for_bridge(member_call(), max_wait()) -> 'ok'.
 -spec wait_for_bridge(member_call(), max_wait(), wh_now()) -> 'ok'.

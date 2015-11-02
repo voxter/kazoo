@@ -44,6 +44,25 @@
          }).
 -type call_stat() :: #call_stat{}.
 
+-record(call_summary_stat, {
+          id :: api_binary() | '_'
+          ,account_id :: api_binary() | '_'
+          ,queue_id :: api_binary() | '_'
+          ,call_id :: api_binary() | '_'
+          ,status :: api_binary() | '_'
+          ,wait_time :: pos_integer() | '_'
+         }).
+-type call_summary_stat() :: #call_summary_stat{}.
+
+-record(agent_call_stat, {
+          agent_id :: api_binary() | '_'
+          ,account_id :: api_binary() | '$1'
+          ,queue_id :: api_binary() | '_'
+          ,call_id :: api_binary() | '_'
+          ,status :: api_binary() | '_'
+          ,timestamp :: pos_integer() | '_'
+         }).
+-type agent_call_stat() :: #agent_call_stat{}.
 
 -define(STATUS_STATUSES, [<<"logged_in">>, <<"logged_out">>, <<"ready">>
                           ,<<"connecting">>, <<"connected">>
