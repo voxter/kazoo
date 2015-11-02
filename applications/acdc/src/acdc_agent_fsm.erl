@@ -1179,13 +1179,22 @@ answered({'channel_bridged', CallId}, #state{agent_call_id=CallId
     acdc_agent_listener:member_connect_accepted(AgentListener, CallId),
     maybe_notify(Ns, ?NOTIFY_PICKUP, State),
     {'next_state', 'answered', State};
-answered({'channel_replaced', JObj}, #state{agent_listener=AgentListener}=State) ->
+answered({'channel_replaced', JObj}, #state{agent_listener=AgentListener
+                                            ,member_call_id=MemberCallId
+                                            ,agent_call_id=AgentCallId
+                                           }=State) ->
     CallId = kz_call_event:call_id(JObj),
     ReplacedBy = kz_call_event:replaced_by(JObj),
     acdc_agent_listener:rebind_events(AgentListener, CallId, ReplacedBy),
-    wh_util:put_callid(ReplacedBy),
-    lager:info("channel ~s replaced by ~s", [CallId, ReplacedBy]),
-    {'next_state', 'answered', State#state{member_call_id = ReplacedBy}};
+    case CallId of
+        MemberCallId ->
+            wh_util:put_callid(ReplacedBy),
+            lager:info("caller channel ~s replaced by ~s", [CallId, ReplacedBy]),
+            {'next_state', 'answered', State#state{member_call_id=ReplacedBy}};
+        AgentCallId ->
+            lager:info("agent channel ~s replaced by ~s", [CallId, ReplacedBy]),
+            {'next_state', 'answered', State#state{agent_call_id=ReplacedBy}}
+    end;
 answered({'channel_hungup', CallId, <<"ATTENDED_TRANSFER">> = _Cause}, #state{member_call_id = CallId}=State) ->
     lager:info("caller's channel hung up: ~s", [_Cause]),
     {'next_state', 'answered', State};
