@@ -178,6 +178,8 @@ call_event(FSM, <<"call_event">>, <<"usurp_control">>, JObj) ->
     gen_fsm:send_event(FSM, {'usurp_control', call_id(JObj)});
 call_event(FSM, <<"call_event">>, <<"CHANNEL_DESTROY">>, JObj) ->
     gen_fsm:send_event(FSM, {'channel_hungup', call_id(JObj), hangup_cause(JObj)});
+call_event(FSM, <<"call_event">>, <<"CHANNEL_DISCONNECTED">>, JObj) ->
+    gen_fsm:send_event(FSM, {'channel_hungup', call_id(JObj), <<"MEDIA_SERVER_UNREACHABLE">>});
 call_event(FSM, <<"call_event">>, <<"LEG_CREATED">>, JObj) ->
     gen_fsm:send_event(FSM, {'leg_created', call_id(JObj)});
 call_event(FSM, <<"call_event">>, <<"LEG_DESTROYED">>, JObj) ->
