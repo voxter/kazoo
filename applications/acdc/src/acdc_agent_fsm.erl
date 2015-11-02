@@ -1365,7 +1365,7 @@ paused(?NEW_CHANNEL_TO(CallId), #state{ignored_agent_calls=IgnoredAgentCalls}=St
     case lists:member(CallId, IgnoredAgentCalls) of
         'true' ->
             lager:debug("ignoring an outbound call that is the result of a failed originate"),
-            {'next_state', 'ready', State};
+            {'next_state', 'paused', State};
         'false' ->
             lager:debug("paused call_to outbound: ~s", [CallId]),
             {'next_state', 'outbound', start_outbound_call_handling(CallId, State), 'hibernate'}
