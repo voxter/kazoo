@@ -168,9 +168,6 @@ account_doc(Context) ->
 is_authenticated(#cb_context{auth_doc='undefined'}) -> 'false';
 is_authenticated(#cb_context{}) -> 'true'.
 
-is_authenticated(#cb_context{auth_doc='undefined'}) -> 'false';
-is_authenticated(#cb_context{}) -> 'true'.
-
 auth_token(#cb_context{auth_token=AuthToken}) -> AuthToken.
 auth_doc(#cb_context{auth_doc=AuthDoc}) -> AuthDoc.
 auth_account_id(#cb_context{auth_account_id=AuthBy}) -> AuthBy.

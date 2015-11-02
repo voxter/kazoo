@@ -64,10 +64,6 @@
 server_id(JObj) ->
     wh_json:get_value(<<"Server-ID">>, JObj).
 
--spec msg_id(wh_json:object()) -> api_binary().
-msg_id(JObj) ->
-    wh_json:get_value(<<"Msg-ID">>, JObj).
-
 -spec event_category(wh_json:object()) -> api_binary().
 event_category(JObj) ->
     wh_json:get_value(<<"Event-Category">>, JObj).

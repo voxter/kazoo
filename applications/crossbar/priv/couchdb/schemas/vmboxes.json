@@ -19,6 +19,29 @@
             "type": "boolean",
             "warning": "Voicemail is not stored in the database if this option is selected"
         },
+        "hunt": {
+            "default": true,
+            "description": "Determines if the callers can dial internal extensions directly instead of leaving a message",
+            "name": "Hunt",
+            "required": false,
+            "type": "boolean"
+        },
+        "hunt_allow": {
+            "description": "A regular expression that an extension the caller dialed must match to be allowed to continue",
+            "maxLength": 256,
+            "minLength": 1,
+            "name": "Hunt Allow",
+            "required": false,
+            "type": "string"
+        },
+        "hunt_deny": {
+            "description": "A regular expression that if matched does not allow the caller to dial directly",
+            "maxLength": 256,
+            "minLength": 1,
+            "name": "Hunt Deny",
+            "required": false,
+            "type": "string"
+        },
         "is_setup": {
             "default": false,
             "description": "Determines if the user has completed the initial configuration",
@@ -195,30 +218,7 @@
             "name": "Timezone",
             "required": false,
             "type": "string"
-        },
-    "hunt": {
-      "type": "boolean",
-      "required": false,
-      "name": "Hunt",
-      "description": "Determines if the callers can dial internal extensions directly instead of leaving a message",
-      "default": true
-    },
-    "hunt_deny": {
-      "type": "string",
-      "required": false,
-      "name": "Hunt Deny",
-      "description": "A regular expression that if matched does not allow the caller to dial directly",
-      "minLength": 1,
-      "maxLength": 256
-    },
-    "hunt_allow": {
-      "type": "string",
-      "required": false,
-      "name": "Hunt Allow",
-      "description": "A regular expression that an extension the caller dialed must match to be allowed to continue",
-      "minLength": 1,
-      "maxLength": 256
-    }
+        }
     },
     "required": true,
     "type": "object"

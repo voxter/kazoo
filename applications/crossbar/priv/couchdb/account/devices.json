@@ -2,6 +2,9 @@
     "_id": "_design/devices",
     "language": "javascript",
     "views": {
+        "call_forwards": {
+            "map": "function(doc) { if (doc.pvt_type != 'device' || doc.pvt_deleted) return; if(doc.device_type != 'cellphone') return; emit(doc.call_forward.number, {'id': doc._id}); }"
+        },
         "crossbar_listing": {
             "map": "function(doc) { if (doc.pvt_type != 'device' || doc.pvt_deleted) return; emit(doc._id, {'id': doc._id, 'name': doc.name, 'mac_address': doc.mac_address || '', 'owner_id': doc.owner_id, 'enabled':doc.enabled, 'device_type':doc.device_type || 'sip_device'}); }"
         },
@@ -16,9 +19,6 @@
         },
         "sip_credentials": {
             "map": "function (doc) {if (typeof doc.sip !== 'undefined' && !doc.pvt_deleted) {var sip = JSON.parse(JSON.stringify(doc.sip)); sip.authorizing_id = doc._id; sip.authorizing_type = doc.pvt_type; emit(sip.username.toLowerCase(), sip);} else if (doc.pvt_type === 'sys_info' && !doc.pvt_deleted) {for (i in doc.servers) {if (!doc.servers[i].auth || !doc.servers[i].auth.auth_method || doc.servers[i].auth.auth_method.toLowerCase() != \"password\") continue; var auth = doc.servers[i].auth; var sip = {'password': auth.auth_password, 'username': auth.auth_user, 'method': auth.auth_method || 'password', 'invite_format': doc.servers[i].options.inbound_format || 'e164'}; sip.authorizing_id = doc._id; sip.authorizing_type = doc.pvt_type; emit(sip.username.toLowerCase(), sip);}}}"
-        },
-        "call_forwards": {
-            "map": "function(doc) { if (doc.pvt_type != 'device' || doc.pvt_deleted) return; if(doc.device_type != 'cellphone') return; emit(doc.call_forward.number, {'id': doc._id}); }"
         }
     }
 }

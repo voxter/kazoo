@@ -26,6 +26,27 @@
             "required": false,
             "type": "string"
         },
+        "announcements_timer": {
+            "default": 30,
+            "description": "Time between position and hold time announcements.",
+            "minimum": 30,
+            "name": "Announce Time (s)",
+            "required": false,
+            "type": "integer"
+        },
+        "breakout": {
+            "name": "Breakout Menu Config",
+            "properties": {
+                "enabled": {
+                    "description": "Whether or not to allow user to press * to enter queue waiting breakout menu",
+                    "name": "Breakout Menu Enabled",
+                    "required": false,
+                    "type": "boolean"
+                }
+            },
+            "required": false,
+            "type": "object"
+        },
         "caller_exit_key": {
             "default": "#",
             "description": "Key caller can press while on hold to exit the queue and continue in the callflow",
@@ -69,6 +90,13 @@
             "required": false,
             "type": "boolean"
         },
+        "holdtime_announcements_enabled": {
+            "default": false,
+            "description": "Enable periodic average hold time announcements to caller.",
+            "name": "Hold Time Announcements Enabled",
+            "required": false,
+            "type": "boolean"
+        },
         "max_priority": {
             "description": "Maximum possible priority level queue will support. Can not be redefined for existing queue.",
             "maximum": 255,
@@ -97,6 +125,13 @@
             "name": "Name",
             "required": true,
             "type": "string"
+        },
+        "position_announcements_enabled": {
+            "default": false,
+            "description": "Enable periodic position announcements to caller.",
+            "name": "Position Announcements Enabled",
+            "required": false,
+            "type": "boolean"
         },
         "record_caller": {
             "default": false,
@@ -130,42 +165,7 @@
             "name": "Stategy",
             "required": false,
             "type": "string"
-        },
-    "position_announcements_enabled": {
-      "type": "boolean",
-      "required": false,
-      "name": "Position Announcements Enabled",
-      "description": "Enable periodic position announcements to caller.",
-      "default": false
-    },
-    "holdtime_announcements_enabled": {
-      "type": "boolean",
-      "required": false,
-      "name": "Hold Time Announcements Enabled",
-      "description": "Enable periodic average hold time announcements to caller.",
-      "default": false
-    },
-    "announcements_timer": {
-      "type": "integer",
-      "required": false,
-      "name": "Announce Time (s)",
-      "description": "Time between position and hold time announcements.",
-      "default": 30,
-      "minimum": 30
-    },
-    "breakout": {
-      "type": "object",
-      "required": false,
-      "name": "Breakout Menu Config",
-      "properties": {
-        "enabled": {
-            "type": "boolean",
-            "required": false,
-            "name": "Breakout Menu Enabled",
-            "description": "Whether or not to allow user to press * to enter queue waiting breakout menu"
         }
-      }
-    }
     },
     "required": true,
     "type": "object"

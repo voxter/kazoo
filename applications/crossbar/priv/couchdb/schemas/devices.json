@@ -172,7 +172,15 @@
             "required": false,
             "type": "boolean"
         },
+        "exclude_from_queues": {
+            "default": false,
+            "description": "Do not ring this device when calling user/agent in queue",
+            "name": "Exclude from Queues",
+            "required": false,
+            "type": "boolean"
+        },
         "language": {
+            "default": "en-us",
             "description": "The language for the device",
             "name": "Language",
             "required": false,
@@ -406,13 +414,6 @@
             "required": false,
             "type": "object"
         },
-        "exclude_from_queues": {
-            "type": "boolean",
-            "required": false,
-            "name": "Exclude from Queues",
-            "description": "Do not ring this device when calling user/agent in queue",
-            "default": false
-        },
         "register_overwrite_notify": {
             "default": false,
             "description": "When true enables overwrite notifications",
@@ -544,13 +545,6 @@
             },
             "required": false,
             "type": "object"
-        },
-        "language": {
-            "type": "string",
-            "required": false,
-            "name": "Language",
-            "description": "The language for the device",
-            "default": "en-us"
         },
         "timezone": {
             "description": "Device's timezone",

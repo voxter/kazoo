@@ -38,10 +38,6 @@
         },
         "listing_by_sso": {
             "map": "function(doc) { if (doc.pvt_type != 'account' || doc.pvt_deleted || !doc.sso ) return; for(id in doc.sso.ids) {emit([doc.sso.provider, doc.sso.ids[id]], {'account_id': doc._id, 'account_db': doc.pvt_account_db});} }"
-        },
-        "listing_by_descendants_count": {
-            "map": "function(doc) {if (doc.pvt_type != 'account' || doc.pvt_deleted) return;var t = doc.pvt_tree.slice(0);for (var i in t) {emit(t[i], 1);}}",
-            "reduce": "_count"
         }
     }
 }

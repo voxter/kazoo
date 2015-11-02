@@ -76,13 +76,6 @@ get_balance_threshold(DataJObj) ->
     Dollars = wh_json:get_float_value(Key, DataJObj, Default),
     wht_util:pretty_print_dollars(Dollars).
 
--spec get_balance_threshold(wh_json:object()) -> float().
-get_balance_threshold(DataJObj) ->
-    Default = 5.00,
-    Key = [<<"account">>, <<"topup">>, <<"threshold">>],
-    Dollars = wh_json:get_float_value(Key, DataJObj, Default),
-    wht_util:pretty_print_dollars(Dollars).
-
 -spec handle_req(wh_json:object()) -> 'ok'.
 handle_req(DataJObj) ->
     Macros = [{<<"system">>, teletype_util:system_params()}

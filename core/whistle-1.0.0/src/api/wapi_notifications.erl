@@ -1136,7 +1136,7 @@ bind_to_q(Q, ['webhook'|T], Props) ->
 bind_to_q(Q, ['webhook_disabled'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_WEBHOOK_DISABLED),
     bind_to_q(Q, T, Props);
-bind_to_q(Q, ['denied_emergency_bridge'|T, Props]) ->
+bind_to_q(Q, ['denied_emergency_bridge'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_DENIED_EMERGENCY_BRIDGE),
     bind_to_q(Q, T, Props);
 bind_to_q(Q, ['skel'|T], Props) ->

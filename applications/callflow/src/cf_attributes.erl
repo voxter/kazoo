@@ -10,7 +10,6 @@
 
 -include("callflow.hrl").
 
--export([valid_emergency_numbers/1]).
 -export([temporal_rules/1]).
 -export([groups/1, groups/2]).
 -export([caller_id/2]).
