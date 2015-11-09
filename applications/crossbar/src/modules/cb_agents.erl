@@ -271,10 +271,15 @@ read(Id, Context) -> crossbar_doc:load(Id, Context).
 -define(CB_AGENTS_LIST, <<"users/crossbar_listing">>).
 -spec fetch_all_agent_statuses(cb_context:context()) -> cb_context:context().
 fetch_all_agent_statuses(Context) ->
-    fetch_all_current_statuses(Context
-                               ,'undefined'
-                               ,cb_context:req_value(Context, <<"status">>)
-                              ).
+    case wh_util:is_true(cb_context:req_value(Context, <<"recent">>)) of
+        'false' ->
+            fetch_current_status(Context, 'undefined');
+        'true' ->
+            fetch_all_current_statuses(Context
+                                       ,'undefined'
+                                       ,cb_context:req_value(Context, <<"status">>)
+                                      )
+    end.
 
 -spec fetch_agent_status(api_binary(), cb_context:context()) -> cb_context:context().
 fetch_agent_status(AgentId, Context) ->
