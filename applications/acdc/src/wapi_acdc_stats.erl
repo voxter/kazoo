@@ -1096,19 +1096,19 @@ publish_status_resp(RespQ, API, ContentType) ->
 publish_agent_cur_status_req(JObj) ->
     publish_agent_cur_status_req(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_agent_cur_status_req(API, ContentType) ->
-    {'ok', Payload} = wh_api:prepare_api_payload(API, ?STATUS_REQ_VALUES, fun agent_cur_status_req/1),
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?AGENT_CUR_STATUS_REQ_VALUES, fun agent_cur_status_req/1),
     amqp_util:whapps_publish(query_status_stat_routing_key(API), Payload, ContentType).
 
 publish_agent_cur_status_err(RespQ, JObj) ->
     publish_agent_cur_status_err(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_agent_cur_status_err(RespQ, API, ContentType) ->
-    {'ok', Payload} = wh_api:prepare_api_payload(API, ?STATUS_ERR_VALUES, fun agent_cur_status_err/1),
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?AGENT_CUR_STATUS_ERR_VALUES, fun agent_cur_status_err/1),
     amqp_util:targeted_publish(RespQ, Payload, ContentType).
 
 publish_agent_cur_status_resp(RespQ, JObj) ->
     publish_agent_cur_status_resp(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_agent_cur_status_resp(RespQ, API, ContentType) ->
-    {'ok', Payload} = wh_api:prepare_api_payload(API, ?STATUS_RESP_VALUES, fun agent_cur_status_resp/1),
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?AGENT_CUR_STATUS_RESP_VALUES, fun agent_cur_status_resp/1),
     amqp_util:targeted_publish(RespQ, Payload, ContentType).
 
 call_stat_routing_key(Prop) when is_list(Prop) ->

@@ -6,6 +6,7 @@
 %%% @contributors
 %%%   James Aimonetti
 %%%   KAZOO-3596: Sponsored by GTNetwork LLC, implemented by SIPLABS LLC
+%%%   Daniel Finke
 %%%-------------------------------------------------------------------
 -module(acdc_stats).
 
@@ -321,11 +322,11 @@ call_summary_table_id() -> 'acdc_stats_call_summary'.
 call_summary_key_pos() -> #call_summary_stat.id.
 call_summary_table_opts() ->
     ['protected', 'named_table'
-     ,{'keypos', call_key_pos()}
+     ,{'keypos', call_summary_key_pos()}
     ].
 
 agent_call_table_id() -> 'acdc_stats_agent_call'.
-agent_call_key_pos() -> #agent_call_stat.agent_id.
+agent_call_key_pos() -> #agent_call_stat.id.
 agent_call_table_opts() ->
     ['bag', 'protected', 'named_table'
      ,{'keypos', agent_call_key_pos()}
@@ -520,16 +521,9 @@ handle_cast({'update_call', Id, Updates}, State) ->
     ets:update_element(call_table_id(), Id, Updates),
 
     Stat = find_call_stat(Id),
-    case Stat#call_stat.status of
-        <<"abandoned">> ->
-            ets:insert_new(call_summary_table_id(), call_stat_to_summary_stat(Stat));
-        <<"processed">> ->
-            ets:insert_new(call_summary_table_id(), call_stat_to_summary_stat(Stat));
-        _ -> 'ok'
-    end,
+    maybe_add_summary_stat(Stat),
+    maybe_add_agent_call_stat(Stat),
 
-    AgentStat = call_stat_to_agent_call_stat(Stat),
-    ets:insert(agent_call_table_id(), AgentStat),
     {'noreply', State};
 handle_cast({'add_miss', JObj}, State) ->
     Id = call_stat_id(JObj),
@@ -538,19 +532,26 @@ handle_cast({'add_miss', JObj}, State) ->
     Updates = [{#call_stat.misses, [create_miss(JObj) | Misses]}],
     ets:update_element(call_table_id(), Id, Updates),
 
-    AgentStat = call_stat_to_agent_call_stat(Stat),
-    AgentStat1 = AgentStat#agent_call_stat{agent_id = wh_json:get_value(<<"Agent-ID">>, JObj)
-                                           ,status = <<"missed">>
-                                           ,timestamp = wh_json:get_value(<<"Miss-Timestamp">>, JObj)
-                                          },
-    ets:insert(agent_call_table_id(), AgentStat1),
+    add_agent_call_stat_miss(Stat
+                             ,wh_json:get_value(<<"Agent-ID">>, JObj)
+                             ,wh_json:get_value(<<"Miss-Timestamp">>, JObj)),
+
     {'noreply', State};
 handle_cast({'flush_call', Id}, State) ->
     lager:debug("flushing call stat ~s", [Id]),
+
     ets:delete(call_table_id(), Id),
     ets:delete(call_summary_table_id(), Id),
+    ets:delete(agent_call_table_id(), Id),
+
     {'noreply', State};
-handle_cast({'remove_call', [{M, P, _}]}, State) ->
+handle_cast({'remove_call', [{M, P, _}]=MatchSpec}, State) ->
+    Stats = ets:select(call_table_id(), MatchSpec),
+    lists:foreach(fun(#call_stat{id=Id}) ->
+                    ets:delete(call_summary_table_id(), Id),
+                    ets:delete(agent_call_table_id(), Id)
+                  end, Stats),
+
     Match = [{M, P, ['true']}],
     N = ets:select_delete(call_table_id(), Match),
     N > 1 andalso lager:debug("removed calls: ~p", [N]),
@@ -726,7 +727,7 @@ call_summary_build_match_spec(JObj) ->
             call_summary_build_match_spec(JObj, AccountMatch)
     end.
 
--spec call_summary_build_match_spec(wh_json:object(), {call_stat(), list()}) ->
+-spec call_summary_build_match_spec(wh_json:object(), {call_summary_stat(), list()}) ->
                                    {'ok', ets:match_spec()} |
                                    {'error', wh_json:object()}.
 call_summary_build_match_spec(JObj, AccountMatch) ->
@@ -749,7 +750,7 @@ agent_call_build_match_spec(JObj) ->
             agent_call_build_match_spec(JObj, AccountMatch)
     end.
 
--spec agent_call_build_match_spec(wh_json:object(), {call_stat(), list()}) ->
+-spec agent_call_build_match_spec(wh_json:object(), {agent_call_stat(), list()}) ->
                                    {'ok', ets:match_spec()} |
                                    {'error', wh_json:object()}.
 agent_call_build_match_spec(JObj, AccountMatch) ->
@@ -800,33 +801,30 @@ query_call_summary(Match, _Limit) ->
             lager:debug("no stats found, sorry"),
             [];
         Stats ->
-            QueryResult = lists:foldl(fun query_call_summary_fold/2, wh_json:new(), Stats),
-            [{<<"Data">>, QueryResult}]
+            QueryResult = lists:foldl(fun query_call_summary_fold/2, [], Stats),
+            JsonResult = lists:foldl(fun({QueueId, {TotalCalls, AbandonedCalls, TotalWaitTime}}, JObj) ->
+                                       QueueJObj = wh_json:set_values([{<<"total_calls">>, TotalCalls}
+                                                                       ,{<<"abandoned_calls">>, AbandonedCalls}
+                                                                       ,{<<"total_wait_time">>, TotalWaitTime}]
+                                                                      ,wh_json:new()),
+                                       wh_json:set_value(QueueId, QueueJObj, JObj)
+                                     end
+                                     ,wh_json:new()
+                                     ,QueryResult),
+            [{<<"Data">>, JsonResult}]
     end.
 
--spec query_call_summary_fold(call_summary_stat(), wh_json:object()) -> wh_json:object().
-query_call_summary_fold(#call_summary_stat{queue_id=QueueId}=Stat, JObj) ->
-    QueueJObj = wh_json:get_value(QueueId, JObj, []),
-    wh_json:set_value(QueueId, add_stat_to_queue_summary(Stat, QueueJObj), JObj).
-
--spec add_stat_to_queue_summary(call_summary_stat(), wh_json:object()) -> wh_json:object().
-add_stat_to_queue_summary(#call_summary_stat{status=Status
-                                             ,wait_time=WaitTime
-                                            }, QueueJObj) ->
-    case Status of
-        <<"abandoned">> ->
-            AbandonedCount = wh_json:get_integer_value(<<"abandoned_calls">>, QueueJObj, 0) + 1,
-            TotalCount = wh_json:get_integer_value(<<"total_calls">>, QueueJObj, 0) + 1,
-            wh_json:set_values([{<<"abandoned_calls">>, AbandonedCount}
-                                ,{<<"total_calls">>, TotalCount}
-                               ], QueueJObj);
-        <<"processed">> ->
-            TotalCount = wh_json:get_integer_value(<<"total_calls">>, QueueJObj, 0) + 1,
-            TotalWaitTime = wh_json:get_integer_value(<<"total_wait_time">>, QueueJObj, 0) + WaitTime,
-            wh_json:set_values([{<<"total_calls">>, TotalCount}
-                                ,{<<"total_wait_time">>, TotalWaitTime}
-                               ], QueueJObj)
-    end.
+-spec query_call_summary_fold(call_summary_stat(), wh_proplist()) -> wh_proplist().
+query_call_summary_fold(#call_summary_stat{queue_id=QueueId
+                                           ,status=Status
+                                           ,wait_time=WaitTime
+                                          }, Props) ->
+    {TotalCalls, AbandonedCalls, TotalWaitTime} = props:get_value(QueueId, Props, {0, 0, 0}),
+    {AbandonedCalls1, TotalWaitTime1} = case Status of
+        <<"processed">> -> {AbandonedCalls, TotalWaitTime + WaitTime};
+        <<"abandoned">> -> {AbandonedCalls + 1, TotalWaitTime}
+    end,
+    props:set_value(QueueId, {TotalCalls+1, AbandonedCalls1, TotalWaitTime1}, Props).
 
 -spec query_agent_calls(ne_binary(), ne_binary(), ets:match_spec(), pos_integer()) -> 'ok'.
 query_agent_calls(RespQ, MsgId, Match, _Limit) ->
@@ -859,7 +857,6 @@ increment_agent_calls(#agent_call_stat{queue_id=QueueId
                                       }, AgentJObj) ->
     case Status of
         <<"handled">> -> increment_agent_calls(QueueId, AgentJObj, <<"answered_calls">>);
-        % <<"processed">> -> increment_agent_calls(QueueId, AgentJObj, <<"answered_calls">>);
         <<"missed">> -> increment_agent_calls(QueueId, AgentJObj, <<"missed_calls">>);
         _ -> AgentJObj
     end.
@@ -1085,7 +1082,10 @@ miss_to_doc(#agent_miss{agent_id=AgentId
                        ,{<<"timestamp">>, T}
                       ]).
 
--spec publish_summary_data(ne_binary(), ne_binary(), wh_proplist(), wh_proplist()) -> 'ok'.
+-spec publish_summary_data(ne_binary()
+                           ,ne_binary()
+                           ,wh_proplist() | {'error', _}
+                           ,wh_proplist() | {'error', _}) -> 'ok'.
 publish_summary_data(RespQ, MsgId, {'error', Errors}, _) ->
     publish_call_summary_query_errors(RespQ, MsgId, Errors);
 publish_summary_data(RespQ, MsgId, _, {'error', Errors}) ->
@@ -1259,6 +1259,26 @@ update_call_stat(Id, Updates, Props) ->
                       ,{'update_call', Id, Updates}
                      ).
 
+-spec maybe_add_summary_stat(call_stat()) -> boolean().
+maybe_add_summary_stat(#call_stat{status=Status}=Stat)
+                         when Status =:= <<"processed">> orelse Status =:= <<"abandoned">> ->
+    ets:insert(call_summary_table_id(), call_stat_to_summary_stat(Stat));
+maybe_add_summary_stat(_) -> 'false'.
+
+-spec maybe_add_agent_call_stat(call_stat()) -> boolean().
+maybe_add_agent_call_stat(#call_stat{status= <<"handled">>}=Stat) ->
+    ets:insert(agent_call_table_id(), call_stat_to_agent_call_stat(Stat));
+maybe_add_agent_call_stat(_) -> 'false'.
+
+-spec add_agent_call_stat_miss(call_stat(), ne_binary(), non_neg_integer()) -> 'true'.
+add_agent_call_stat_miss(Stat, AgentId, Timestamp) ->
+    AgentStat = call_stat_to_agent_call_stat(Stat),
+    AgentStat1 = AgentStat#agent_call_stat{agent_id=AgentId
+                                           ,status= <<"missed">>
+                                           ,timestamp=Timestamp
+                                          },
+    ets:insert(agent_call_table_id(), AgentStat1).
+
 -spec call_stat_to_summary_stat(call_stat()) -> call_summary_stat().
 call_stat_to_summary_stat(#call_stat{id=Id
                                      ,call_id=CallId
@@ -1278,22 +1298,19 @@ call_stat_to_summary_stat(#call_stat{id=Id
                       }.
 
 -spec call_stat_to_agent_call_stat(call_stat()) -> agent_call_stat().
-call_stat_to_agent_call_stat(#call_stat{call_id=CallId
+call_stat_to_agent_call_stat(#call_stat{id=Id
+                                        ,call_id=CallId
                                         ,account_id=AccountId
                                         ,queue_id=QueueId
                                         ,agent_id=AgentId
                                         ,status=Status
                                         ,handled_timestamp=HandledTimestamp
-                                        ,processed_timestamp=ProcessedTimestamp
                                        }) ->
-    Timestamp = case ProcessedTimestamp of
-        'undefined' -> HandledTimestamp;
-        _ -> ProcessedTimestamp
-    end,
-    #agent_call_stat{agent_id=AgentId
+    #agent_call_stat{id=Id
                      ,account_id=AccountId
                      ,queue_id=QueueId
+                     ,agent_id=AgentId
                      ,call_id=CallId
                      ,status=Status
-                     ,timestamp=Timestamp
+                     ,timestamp=HandledTimestamp
                     }.

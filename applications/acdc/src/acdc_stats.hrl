@@ -47,21 +47,23 @@
 
 -record(call_summary_stat, {
           id :: api_binary() | '_'
-          ,account_id :: api_binary() | '_'
-          ,queue_id :: api_binary() | '_'
-          ,call_id :: api_binary() | '_'
-          ,status :: api_binary() | '_'
-          ,wait_time :: pos_integer() | '_'
-         }).
--type call_summary_stat() :: #call_summary_stat{}.
-
--record(agent_call_stat, {
-          agent_id :: api_binary() | '_'
           ,account_id :: api_binary() | '$1'
           ,queue_id :: api_binary() | '_'
           ,call_id :: api_binary() | '_'
           ,status :: api_binary() | '_'
-          ,timestamp :: pos_integer() | '_'
+          ,wait_time :: api_integer() | '_'
+          ,timestamp :: api_integer() | '_'
+         }).
+-type call_summary_stat() :: #call_summary_stat{}.
+
+-record(agent_call_stat, {
+          id :: api_binary() | '_'
+          ,account_id :: api_binary() | '$1'
+          ,queue_id :: api_binary() | '_'
+          ,agent_id :: api_binary() | '_'
+          ,call_id :: api_binary() | '_'
+          ,status :: api_binary() | '_'
+          ,timestamp :: api_integer() | '_'
          }).
 -type agent_call_stat() :: #agent_call_stat{}.
 
