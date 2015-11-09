@@ -353,7 +353,11 @@ fetch_current_status(Context, AgentId) ->
                                    ,Context
                                   );
         {'ok', Resp} ->
-            crossbar_util:response(wh_json:get_value([<<"Agents">>], Resp, wh_json:new()), Context)
+            Agents = wh_json:get_value(<<"Agents">>, Resp, wh_json:new()),
+            Results = wh_json:foldl(fun(K, V, Acc) ->
+                                      wh_json:set_value(K, wh_doc:public_fields(V), Acc)
+                                    end, wh_json:new(), Agents),
+            crossbar_util:response(Results, Context)
     end.
 
 -spec fetch_all_current_statuses(cb_context:context(), api_binary(), api_binary()) ->

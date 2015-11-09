@@ -5,6 +5,7 @@
 %%% @end
 %%% @contributors
 %%%   James Aimonetti
+%%%   Daniel Finke
 %%%-------------------------------------------------------------------
 -module(acdc_agent_stats).
 
@@ -246,7 +247,7 @@ handle_status_query(JObj, _Prop) ->
 
 -spec handle_agent_cur_status_req(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_agent_cur_status_req(JObj, _Prop) ->
-    'true' = wapi_acdc_stats:status_req_v(JObj),
+    'true' = wapi_acdc_stats:agent_cur_status_req_v(JObj),
     RespQ = wh_json:get_value(<<"Server-ID">>, JObj),
     MsgId = wh_json:get_value(<<"Msg-ID">>, JObj),
 
@@ -410,11 +411,9 @@ query_cur_statuses(RespQ, MsgId, Match) ->
             wapi_acdc_stats:publish_agent_cur_status_err(RespQ, Resp);
         Stats ->
             QueryResults = lists:foldl(fun query_status_fold/2, wh_json:new(), Stats),
-            lager:debug("QueryResults ~p", [QueryResults]),
             Results = wh_json:map(fun(AgentId, {[{_Timestamp, StatusJObj}]}) ->
                                       {AgentId, StatusJObj}
                                   end, QueryResults),
-            lager:debug("Results ~p", [Results]),
             Resp = [{<<"Agents">>, Results}
                     ,{<<"Msg-ID">>, MsgId}
                     | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
