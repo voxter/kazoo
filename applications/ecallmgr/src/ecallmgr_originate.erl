@@ -556,7 +556,7 @@ originate_execute(Node, Dialstrings, Timeout) ->
     case freeswitch:api(Node
                         ,'originate'
                         ,wh_util:to_list(Dialstrings)
-                        ,Timeout*?MILLISECONDS_IN_SECOND
+                        ,(Timeout+1)*?MILLISECONDS_IN_SECOND
                        )
     of
         {'ok', <<"+OK ", ID/binary>>} ->
