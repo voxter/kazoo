@@ -715,7 +715,11 @@ queue_entries(QueueId, Number, WaitingCalls) ->
     CallIds = ami_sm:queue_calls(QueueId),
     lists:foldl(fun(CallId, Acc) ->
         Call = ami_sm:call(CallId),
-        [queue_entry(Call, Number, waiting_call_stat(CallId, WaitingCalls)) | Acc]
+        case Call of
+            'undefined' -> Acc;
+            _ ->
+                [queue_entry(Call, Number, waiting_call_stat(CallId, WaitingCalls)) | Acc]
+        end
     end, [], CallIds).
 
 queue_entry(Call, Number, WaitingCallStat) ->
