@@ -289,10 +289,14 @@ handle_cast('stop_call', #state{is_recording='true'
                                }=State) ->
     lager:debug("recv stop_call event"),
     save_recording(Call, MediaName, Format, Store),
-    lager:debug("sent store command"),
-    {'noreply', State#state{store_attempted='true'
-                            ,is_recording='false'
-                           }};
+    case Store of
+        'false' -> {'stop', 'normal', State};
+        _ -> 
+            lager:debug("sent store command"),
+            {'noreply', State#state{store_attempted='true'
+                                    ,is_recording='false'
+                                   }}
+    end;
 handle_cast({'store_recording', MediaName}, #state{media_name=MediaName
                                                    ,format=Format
                                                    ,call=Call
@@ -302,9 +306,12 @@ handle_cast({'store_recording', MediaName}, #state{media_name=MediaName
                                                   }=State) ->
     lager:debug("recv store_recording event"),
     save_recording(Call, MediaName, Format, Store),
-    {'noreply', State#state{store_attempted='true'
-                            ,is_recording='false'
-                           }};
+    case Store of
+        'false' -> {'stop', 'normal', State};
+        _ -> {'noreply', State#state{store_attempted='true'
+                                     ,is_recording='false'
+                                    }}
+    end;
 handle_cast({'channel_status',<<"active">>}, #state{channel_status_ref='undefined'}=State) ->
     {'noreply', State#state{channel_status_ref=start_check_call_timer()}};
 handle_cast({'channel_status', <<"terminated">>}, #state{channel_status_ref='undefined'
