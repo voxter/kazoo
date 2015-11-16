@@ -180,8 +180,8 @@ reduce_agent_statuses(_, Data, {T, _}=Acc) ->
 receive_statuses(Reqs) -> receive_statuses(Reqs, wh_json:new()).
 
 receive_statuses([], AccJObj) -> AccJObj;
-receive_statuses(['undefined' | Reqs], AccJObj) ->
-    receive_statuses(Reqs, AccJObj);
+% receive_statuses(['undefined' | Reqs], AccJObj) ->
+%     receive_statuses(Reqs, AccJObj);
 receive_statuses([{Pid, Ref} | Reqs], AccJObj) ->
     receive
         {'statuses', Statuses, Pid} ->
