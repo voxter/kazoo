@@ -36,8 +36,11 @@ handle(Data, Call) ->
                ,Call
               ),
 
-    {'ok', Call1} = cf_util:wait_for_noop(Call, NoopId),
+    case cf_util:wait_for_noop(Call, NoopId) of
+        {'error', 'channel_hungup'} -> cf_exe:stop(Call);
+        {'ok', Call1} ->
+            %% Give control back to cf_exe process
+            cf_exe:set_call(Call1),
+            cf_exe:continue(Call1)
+    end.
 
-    %% Give control back to cf_exe process
-    cf_exe:set_call(Call1),
-    cf_exe:continue(Call1).
