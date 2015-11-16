@@ -18,7 +18,7 @@ bindings(Props) ->
             {'account_id', AccountId}
         ]},
         {'acdc_queue', [
-            {'restrict_to', ['member_call']},
+            {'restrict_to', ['member_call', 'member_call_result']},
             {'account_id', AccountId}
         ]},
         {'acdc_stats', [
