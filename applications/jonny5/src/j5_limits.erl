@@ -98,14 +98,12 @@ fetch(Account) ->
     wh_cache:store_local(?JONNY5_CACHE, ?LIMITS_KEY(AccountId), Limits, CacheProps),
     Limits.
 
--spec cached() -> [limits(),...] | [].
+-spec cached() -> [limits()].
 cached() ->
-    [Limit
-     || {_, Limit} <- wh_cache:filter_local(?JONNY5_CACHE
-                                            ,fun(_, #limits{}) -> 'true';
-                                                (_, _) -> 'false'
-                                             end)
-    ].
+    IsLimit = fun (_, #limits{}) -> 'true';
+                  (_, _) -> 'false'
+              end,
+    [Limit || {_, Limit} <- wh_cache:filter_local(?JONNY5_CACHE, IsLimit)].
 
 %%--------------------------------------------------------------------
 %% @public
@@ -330,7 +328,7 @@ get_limit_boolean(Key, JObj, Default) ->
     end.
 
 -spec get_public_limit_boolean(ne_binary(), wh_json:object(), boolean()) -> boolean().
-%% NOTE: all other booleans (inbound_soft_limit, allow_postpay, ect) should
+%% NOTE: all other booleans (inbound_soft_limit, allow_postpay, etc) should
 %%  not be made public via this helper.
 get_public_limit_boolean(<<"allow_prepay">> = Key, JObj, Default) ->
     case wh_json:get_value(Key, JObj) of
@@ -410,7 +408,7 @@ get_limit_jobj(AccountDb) ->
             lager:debug("limits doc in account db ~s not found", [AccountDb]),
             create_limit_jobj(AccountDb);
         {'error', _R} ->
-            lager:debug("failed to open limits doc in account db ~s: ~p"
+            lager:debug("failed to open limits doc in account db '~s': ~p"
                         ,[AccountDb, _R]),
             wh_json:new()
     end.
@@ -435,4 +433,3 @@ create_limit_jobj(AccountDb) ->
             lager:debug("failed to create initial limits document in db ~s: ~p", [AccountDb, _R]),
             wh_json:new()
     end.
-

@@ -2,6 +2,7 @@
 -include_lib("whistle/include/wh_types.hrl").
 -include_lib("whistle/include/wh_log.hrl").
 -include_lib("whistle/include/wh_databases.hrl").
+-include_lib("whistle/include/wh_api.hrl").
 
 -define(CONFIG_CAT, <<"acdc">>).
 
@@ -33,7 +34,7 @@
 -type abandon_reason() :: ?ABANDON_TIMEOUT | ?ABANDON_EXIT |
                           ?ABANDON_HANGUP.
 
--type deliveries() :: [gen_listener:basic_deliver(),...] | [].
+-type deliveries() :: [gen_listener:basic_deliver()].
 
 -type announce_pid_list() :: [{api_binary(), pid()},...] | [].
 -type callback_list() :: [{api_binary(), binary()},...] | [].

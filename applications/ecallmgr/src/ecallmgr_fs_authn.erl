@@ -63,7 +63,7 @@ start_link(Node, Options) -> gen_server:start_link(?MODULE, [Node, Options], [])
 %% @end
 %%--------------------------------------------------------------------
 init([Node, Options]) ->
-    put('callid', Node),
+    wh_util:put_callid(Node),
     lager:info("starting new fs authn listener for ~s", [Node]),
     gen_server:cast(self(), 'bind_to_directory'),
     {'ok', #state{node=Node
@@ -164,7 +164,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 handle_directory_lookup(Id, Props, Node) ->
-    put('callid', Id),
+    wh_util:put_callid(Id),
     case props:get_value(<<"sip_auth_method">>, Props) of
         <<"REGISTER">> ->
             lager:debug("received fetch request (~s) for sip registration creds from ~s", [Id, Node]);
@@ -243,7 +243,7 @@ handle_lookup_resp(_, _, _, {'error', _R}) ->
 
 -spec maybe_query_registrar(ne_binary(), ne_binary(), atom(), ne_binary(), ne_binary(), wh_proplist()) ->
                                    {'ok', wh_json:object()} |
-                                   {'error', _}.
+                                   {'error', any()}.
 maybe_query_registrar(Realm, Username, Node, Id, Method, Props) ->
     case wh_cache:peek_local(?ECALLMGR_AUTH_CACHE, ?CREDS_KEY(Realm, Username)) of
         {'ok', _}=Ok -> Ok;
@@ -252,7 +252,7 @@ maybe_query_registrar(Realm, Username, Node, Id, Method, Props) ->
 
 -spec query_registrar(ne_binary(), ne_binary(), atom(), ne_binary(), ne_binary(), wh_proplist()) ->
                              {'ok', wh_json:object()} |
-                             {'error', _}.
+                             {'error', any()}.
 query_registrar(Realm, Username, Node, Id, Method, Props) ->
     lager:debug("looking up credentials of ~s@~s for a ~s", [Username, Realm, Method]),
     Req = [{<<"Msg-ID">>, Id}
@@ -283,7 +283,7 @@ query_registrar(Realm, Username, Node, Id, Method, Props) ->
 
 %% NOTE: Kamailio needs registrar errors since it is blocking with no
 %%   timeout (at the moment) but when we seek auth for INVITEs we need
-%%   to wait for conferences, ect.  Since Kamailio does not honor
+%%   to wait for conferences, etc.  Since Kamailio does not honor
 %%   Defer-Response we can use that flag on registrar errors
 %%   to queue in Kazoo but still advance Kamailio, just need to check here.
 -spec maybe_defered_error(ne_binary(), ne_binary(), wh_json:object()) -> {'ok', wh_json:object()} | {'error', 'timeout'}.

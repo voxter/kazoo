@@ -83,7 +83,7 @@
                  }).
 
 -type channel() :: #channel{}.
--type channels() :: [channel(),...] | [].
+-type channels() :: [channel()].
 
 -record(conference, {name :: api_binary() | '$1' | '_'
                      ,uuid :: api_binary() | '$1' | '_'
@@ -106,7 +106,7 @@
                     }).
 
 -type conference() :: #conference{}.
--type conferences() :: [conference(),...] | [].
+-type conferences() :: [conference()].
 
 -record(participant, {uuid :: api_binary() | '$1' | '_'
                       ,node :: atom() | '$2' | '_'
@@ -127,7 +127,7 @@
                       ,is_moderator = 'false' :: boolean() | '_'
                      }).
 -type participant() :: #participant{}.
--type participants() :: [participant(),...] | [].
+-type participants() :: [participant()].
 
 -define(DEFAULT_REALM, ecallmgr_config:get(<<"default_realm">>, <<"nodomain.com">>)).
 -define(MAX_TIMEOUT_FOR_NODE_RESTART, ecallmgr_config:get_integer(<<"max_timeout_for_node_restart">>, 10 * ?MILLISECONDS_IN_SECOND)). % 10 seconds
@@ -296,6 +296,7 @@
                                ,{<<"noop">>, <<"noop">>}
                                ,{<<"execute_extension">>, <<"execute_extension">>}
                                ,{<<"endless_playback">>, <<"hold">>}
+                               ,{<<"soft_hold">>, <<"soft_hold">>}
                                ,{<<"uuid_record">>, <<"record_call">>}
                                ,{<<"record">>, <<"record_call">>}
                                ,{<<"presence">>, <<"presence">>}
@@ -421,6 +422,8 @@
 
 -define(SEPARATOR_SIMULTANEOUS, <<",">>).
 -define(SEPARATOR_SINGLE, <<"|">>).
+
+-define(CHANNEL_VARS_EXT, "Execute-Extension-Original-").
 
 -define(ECALLMGR_HRL, 'true').
 -endif.

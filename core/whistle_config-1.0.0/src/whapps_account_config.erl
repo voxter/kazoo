@@ -53,7 +53,7 @@ maybe_get_global_from_reseller(_AccountId, ResellerId, Category, Key, Default) -
 
 -spec get_global_from_account(account(), ne_binary(), wh_json:key(), wh_json:json_term()) ->
                                      {'ok', wh_json:object()} |
-                                     {'error', _}.
+                                     {'error', any()}.
 get_global_from_account(Account, Category, _Key, _Default) ->
     AccountId = account_id(Account),
     AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
@@ -73,7 +73,7 @@ get(Account, Config) ->
     AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
     DocId = config_doc_id(Config),
     case couch_mgr:open_cache_doc(AccountDb, DocId, [{'cache_failures', ['not_found']}]) of
-        {'error', _} -> wh_json:set_value(<<"_id">>, DocId, wh_json:new());
+        {'error', _} -> wh_doc:set_id(wh_json:new(), DocId);
         {'ok', JObj} -> JObj
     end.
 

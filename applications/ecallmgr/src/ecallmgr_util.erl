@@ -27,7 +27,6 @@
 -export([create_masquerade_event/2, create_masquerade_event/3]).
 -export([media_path/3, media_path/4
          ,lookup_media/4
-         ,cached_media_expelled/3
         ]).
 -export([unserialize_fs_array/1]).
 -export([convert_fs_evt_name/1, convert_whistle_app_name/1]).
@@ -108,7 +107,7 @@ send_cmd(Node, UUID, "hangup", _) ->
     lager:debug("terminate call on node ~s", [Node]),
     freeswitch:api(Node, 'uuid_kill', wh_util:to_list(UUID));
 send_cmd(Node, UUID, "conference", Args) ->
-    Args1 = iolist_to_binary([UUID, " conference:", Args, ",park inline"]),
+    Args1 = iolist_to_binary([UUID, " conference:", Args, " inline"]),
     lager:debug("starting conference on ~s: ~s", [Node, Args1]),
     freeswitch:api(Node, 'uuid_transfer', wh_util:to_list(Args1));
 send_cmd(Node, _UUID, "transfer", Args) ->
@@ -300,8 +299,8 @@ unserialize_fs_array(_) -> [].
 varstr_to_proplist(VarStr) ->
     [to_kv(X, "=") || X <- string:tokens(wh_util:to_list(VarStr), ",")].
 
--spec get_setting(wh_json:key()) -> {'ok', term()}.
--spec get_setting(wh_json:key(), Default) -> {'ok', term() | Default}.
+-spec get_setting(wh_json:key()) -> {'ok', any()}.
+-spec get_setting(wh_json:key(), Default) -> {'ok', Default | any()}.
 get_setting(Setting) -> {'ok', ecallmgr_config:get(Setting)}.
 get_setting(Setting, Default) -> {'ok', ecallmgr_config:get(Setting, Default)}.
 
@@ -341,7 +340,7 @@ get_fs_kv(Key, Val, _) ->
                            ,ne_binary()
                           ) ->
                                   {ne_binary(), binary()} |
-                                  [{ne_binary(), binary()},...] | [] |
+                                  [{ne_binary(), binary()}] |
                                   'skip'.
 get_fs_key_and_value(<<"Hold-Media">>, Media, UUID) ->
     {<<"hold_music">>, media_path(Media, 'extant', UUID, wh_json:new())};
@@ -510,8 +509,8 @@ get_fs_kvs_fold({K, V}, Acc, UUID) ->
 -type bridge_channel() :: ne_binary().
 -type bridge_channels() :: ne_binaries().
 -type build_return() :: bridge_channel() | {'worker', pid()}.
--type build_returns() :: [build_return(),...] | [].
--type bridge_endpoints() :: [bridge_endpoint(),...] | [].
+-type build_returns() :: [build_return()].
+-type bridge_endpoints() :: [bridge_endpoint()].
 
 -spec build_bridge_string(wh_json:objects()) -> ne_binary().
 -spec build_bridge_string(wh_json:objects(), ne_binary()) -> ne_binary().
@@ -690,7 +689,7 @@ maybe_collect_worker_channel(Pid, Channels) ->
 
 -spec build_channel(bridge_endpoint() | wh_json:object()) ->
                            {'ok', bridge_channel()} |
-                           {'error', _}.
+                           {'error', any()}.
 build_channel(#bridge_endpoint{endpoint_type = <<"freetdm">>}=Endpoint) ->
     build_freetdm_channel(Endpoint);
 build_channel(#bridge_endpoint{endpoint_type = <<"skype">>}=Endpoint) ->
@@ -739,7 +738,7 @@ build_skype_channel(#bridge_endpoint{user=User, interface=IFace}) ->
 
 -spec build_sip_channel(bridge_endpoint()) ->
                                {'ok', bridge_channel()} |
-                               {'error', _}.
+                               {'error', any()}.
 build_sip_channel(#bridge_endpoint{failover=Failover}=Endpoint) ->
     Routines = [fun(C) -> maybe_clean_contact(C, Endpoint) end
                 ,fun(C) -> ensure_username_present(C, Endpoint) end
@@ -764,7 +763,7 @@ build_sip_channel(#bridge_endpoint{failover=Failover}=Endpoint) ->
 
 -spec maybe_failover(wh_json:object()) ->
                             {'ok', bridge_channel()} |
-                            {'error', _}.
+                            {'error', any()}.
 maybe_failover(Endpoint) ->
     case wh_util:is_empty(Endpoint) of
         'true' -> {'error', 'invalid'};
@@ -913,6 +912,7 @@ media_path(MediaName, UUID, JObj) -> media_path(MediaName, 'new', UUID, JObj).
 
 -spec media_path(api_binary(), media_types(), ne_binary(), wh_json:object()) -> ne_binary().
 media_path('undefined', _Type, _UUID, _) -> <<"silence_stream://5">>;
+media_path(<<>>, _Type, _UUID, _) -> <<"silence_stream://5">>;
 media_path(MediaName, Type, UUID, JObj) when not is_binary(MediaName) ->
     media_path(wh_util:to_binary(MediaName), Type, UUID, JObj);
 media_path(<<"silence">> = Media, _Type, _UUID, _) -> Media;
@@ -923,6 +923,7 @@ media_path(<<?LOCAL_MEDIA_PATH, _/binary>> = FSPath, _Type, _UUID, _) -> FSPath;
 media_path(<<"http://", _/binary>> = URI, _Type, _UUID, _) -> get_fs_playback(URI);
 media_path(<<"https://", _/binary>> = URI, _Type, _UUID, _) -> get_fs_playback(URI);
 media_path(<<?HTTP_GET_PREFIX, _/binary>> = Media, _Type, _UUID, _) -> Media;
+media_path(<<"$", _/binary>> = Media, _Type, _UUID, _) -> Media;
 media_path(MediaName, Type, UUID, JObj) ->
     case lookup_media(MediaName, UUID, JObj, Type) of
         {'error', _E} ->
@@ -1027,7 +1028,7 @@ convert_whistle_app_name(App) ->
 -type media_types() :: 'new' | 'extant'.
 -spec lookup_media(ne_binary(), ne_binary(), wh_json:object(), media_types()) ->
                           {'ok', ne_binary()} |
-                          {'error', _}.
+                          {'error', any()}.
 lookup_media(MediaName, CallId, JObj, Type) ->
     case wh_cache:fetch_local(?ECALLMGR_UTIL_CACHE
                               ,?ECALLMGR_PLAYBACK_MEDIA_KEY(MediaName)
@@ -1042,7 +1043,7 @@ lookup_media(MediaName, CallId, JObj, Type) ->
 
 -spec request_media_url(ne_binary(), ne_binary(), wh_json:object(), media_types()) ->
                                {'ok', ne_binary()} |
-                               {'error', _}.
+                               {'error', any()}.
 request_media_url(MediaName, CallId, JObj, Type) ->
     Request = wh_json:set_values(
                 props:filter_undefined(
@@ -1079,43 +1080,18 @@ request_media_url(MediaName, CallId, JObj, Type) ->
             E
     end.
 
--define(DEFAULT_MEDIA_CACHE_PROPS
-        ,[{'callback', fun ?MODULE:cached_media_expelled/3}]
-       ).
-
 -spec media_url_cache_props(ne_binary()) -> wh_cache:store_options().
 media_url_cache_props(<<"/", _/binary>> = MediaName) ->
     case binary:split(MediaName, <<"/">>, ['global']) of
         [<<>>, AccountId, MediaId] ->
             AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
-            [{'origin', {'db', AccountDb, MediaId}}
-             | ?DEFAULT_MEDIA_CACHE_PROPS
-            ];
-        _Parts ->
-            ?DEFAULT_MEDIA_CACHE_PROPS
+            [{'origin', {'db', AccountDb, MediaId}}];
+        _Parts -> []
     end;
 media_url_cache_props(<<"tts://", Text/binary>>) ->
     Id = wh_util:binary_md5(Text),
-    [{'origin', {'db', <<"tts">>, Id}}
-     | ?DEFAULT_MEDIA_CACHE_PROPS
-    ];
-media_url_cache_props(_MediaName) ->
-    ?DEFAULT_MEDIA_CACHE_PROPS.
-
--spec cached_media_expelled(?ECALLMGR_PLAYBACK_MEDIA_KEY(ne_binary()), ne_binary(), atom()) -> 'ok'.
-cached_media_expelled(?ECALLMGR_PLAYBACK_MEDIA_KEY(MediaName), MediaUrl, _Reason) ->
-    lager:debug("media ~s was expelled(~p), flushing from media servers", [MediaName, _Reason]),
-    Nodes = ecallmgr_fs_nodes:connected(),
-    _ = [maybe_flush_node_of_media(MediaUrl, N) || N <- Nodes],
-    'ok'.
-
--spec maybe_flush_node_of_media(ne_binary(), atom()) -> 'ok'.
-maybe_flush_node_of_media(_MediaUrl, _Node) ->
-    %% TODO: We need to both reduce the expelled
-    %%  notifications (they currently include things
-    %%  like voicemail message saves) as well as
-    %%  massively increase the effeciency of the flush.
-    'ok'.
+    [{'origin', {'db', <<"tts">>, Id}}];
+media_url_cache_props(_MediaName) -> [].
 
 -spec custom_sip_headers(wh_proplist()) -> wh_proplist().
 custom_sip_headers(Props) ->
@@ -1137,12 +1113,12 @@ maybe_aggregate_headers(<<"Diversion">>, Diversion, Acc) ->
 maybe_aggregate_headers(K, V, Acc) ->
     [{K,V} | Acc].
 
--spec normalize_custom_sip_header_name(term()) -> term().
+-spec normalize_custom_sip_header_name(any()) -> any().
 normalize_custom_sip_header_name({<<"variable_sip_h_", K/binary>>, V}) -> {K, V};
 normalize_custom_sip_header_name({<<"sip_h_", K/binary>>, V}) -> {K, V};
 normalize_custom_sip_header_name(A) -> A.
 
--spec is_custom_sip_header(term()) -> boolean().
+-spec is_custom_sip_header(any()) -> boolean().
 is_custom_sip_header({<<"P-", _/binary>>, _}) -> 'true';
 is_custom_sip_header({<<"X-", _/binary>>, _}) -> 'true';
 is_custom_sip_header({<<"sip_h_", _/binary>>, _}) -> 'true';

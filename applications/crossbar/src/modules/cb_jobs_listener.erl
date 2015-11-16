@@ -77,7 +77,6 @@ publish_new_job(Context) ->
     AccountId = cb_context:account_id(Context),
     JobId = wh_doc:id(cb_context:doc(Context)),
     ReqId = cb_context:req_id(Context),
-
     publish(AccountId, JobId, ReqId).
 
 -spec publish(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
@@ -213,7 +212,7 @@ build_number_properties(JObj) ->
 
 -spec update_status(wh_json:object(), ne_binary()) -> wh_json:object().
 update_status(Job, Status) ->
-    {'ok', Job1} = couch_mgr:save_doc(wh_json:get_value(<<"pvt_account_db">>, Job)
+    {'ok', Job1} = couch_mgr:save_doc(wh_doc:account_db(Job)
                                       ,wh_json:set_values([{<<"pvt_status">>, Status}
                                                            ,{<<"pvt_node">>, wh_util:to_binary(node())}
                                                           ]
@@ -256,7 +255,7 @@ maybe_recover_incomplete_jobs(IncompleteJobs) ->
 -spec maybe_recover_incomplete_job(wh_json:object()) -> 'ok'.
 maybe_recover_incomplete_job(Job) ->
     Now = wh_util:current_tstamp(),
-    case (Now - wh_json:get_integer_value(<<"pvt_modified">>, Job)) > ?RECOVERY_THRESHOLD_S of
+    case (Now - wh_doc:modified(Job)) > ?RECOVERY_THRESHOLD_S of
         'false' -> 'ok';
         'true' ->
             lager:debug("job ~s in ~s is old and incomplete, attempting to restart it"
@@ -395,9 +394,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 -spec job_modb(ne_binary(), ne_binary()) -> ne_binary().
-job_modb(AccountId, <<Year:4/binary, Month:2/binary, "-", _/binary>>) ->
+job_modb(AccountId, ?MATCH_MODB_PREFIX(Year,Month,_)) ->
     wh_util:format_account_mod_id(AccountId, wh_util:to_integer(Year), wh_util:to_integer(Month));
-job_modb(AccountId, <<Year:4/binary, Month:1/binary, "-", _/binary>>) ->
+job_modb(AccountId, ?MATCH_MODB_PREFIX_M1(Year,Month,_)) ->
     wh_util:format_account_mod_id(AccountId, wh_util:to_integer(Year), wh_util:to_integer(Month)).
 
 -spec start_timer() -> reference().

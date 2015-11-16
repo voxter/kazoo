@@ -33,14 +33,15 @@
 -export([update_discount_quantity/3]).
 -export([increment_discount_quantity/2]).
 -export([is_cancelled/1]).
+-export([is_expired/1]).
 
 -import('wh_util', [get_xml_value/2]).
 
 -include_lib("braintree/include/braintree.hrl").
 
--type changes() :: [{atom(), proplist(), [proplist(),...] | []}] | [].
+-type changes() :: [{atom(), proplist(), [proplist()]}].
 -type subscription() :: #bt_subscription{}.
--type subscriptions() :: [subscription(),...] | [].
+-type subscriptions() :: [subscription()].
 
 -export_type([subscription/0
               ,subscriptions/0
@@ -420,20 +421,41 @@ increment_discount_quantity(SubscriptionId, DiscountId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update_payment_token(subscription(), ne_binary()) -> subscription().
-update_payment_token(#bt_subscription{}=Subscription, PaymentToken) ->
-    Subscription#bt_subscription{payment_token = PaymentToken
-                                 ,start_immediately = 'false'
-                                }.
+update_payment_token(#bt_subscription{id=Id}, PaymentToken) ->
+    %% Fixes: 91920: Cannot edit price changing fields on past due subscription.
+    %% For reference:
+    %% https://developers.braintreepayments.com/ios+ruby/guides/recurring-billing/manage
+    %% https://articles.braintreepayments.com/guides/recurring-billing/subscriptions
+    #bt_subscription{payment_token = PaymentToken
+                     ,id = Id
+                     ,do_not_inherit = 'undefined'
+                     ,revert_on_prorate_fail = 'undefined'
+                     ,replace_add_ons = 'undefined'
+                     ,start_immediately = 'undefined'
+                     ,prorate_charges = 'undefined'
+                     ,never_expires = 'undefined'
+                     ,trial_period = <<"false">>
+                   }.
 
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
-%% Update payment token and reset fields to be able to push update back
+%% Returns whether subscription is cancelled (impossible to update)
 %% @end
 %%--------------------------------------------------------------------
 -spec is_cancelled(subscription()) -> boolean().
-is_cancelled(#bt_subscription{status = <<"Canceled">>}) -> 'true';
+is_cancelled(#bt_subscription{status = ?BT_CANCELED}) -> 'true';
 is_cancelled(#bt_subscription{}) -> 'false'.
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Returns whether subscription is cancelled (impossible to update)
+%% @end
+%%--------------------------------------------------------------------
+-spec is_expired(subscription()) -> boolean().
+is_expired(#bt_subscription{status = ?BT_EXPIRED}) -> 'true';
+is_expired(#bt_subscription{}) -> 'false'.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -598,7 +620,8 @@ should_prorate(#bt_subscription{prorate_charges=Value}, Props) ->
 %% Determine the necessary steps to change the add ons
 %% @end
 %%--------------------------------------------------------------------
--spec update_options(_, _, wh_proplist()) -> wh_proplist().
+-spec update_options(any(), any(), wh_proplist()) -> wh_proplist().
+update_options(_, 'undefined', Props) -> Props;
 update_options(Key, Value, Props) ->
     case props:get_value('options', Props) of
         'undefined' ->
@@ -647,7 +670,7 @@ create_addon_changes(AddOns) ->
 %% Determine the necessary steps to change the discounts
 %% @end
 %%--------------------------------------------------------------------
--spec create_discount_changes([#bt_discount{},...] | []) -> changes().
+-spec create_discount_changes([#bt_discount{}]) -> changes().
 create_discount_changes(Discounts) ->
     lists:foldr(fun(#bt_discount{id=Id, quantity=0}, C) ->
                         append_items('remove', Id, C);

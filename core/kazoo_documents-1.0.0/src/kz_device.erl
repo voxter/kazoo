@@ -25,9 +25,13 @@
          ,language/1, language/2, set_language/2
          ,device_type/1, device_type/2, set_device_type/2
          ,owner_id/1, owner_id/2, set_owner_id/2
+         ,enabled/1, enabled/2, set_enabled/2
          ,timezone/1, timezone/2
+         ,unsolicitated_mwi_updates/1, set_unsolicitated_mwi_updates/2
 
          ,new/0
+         ,type/0
+         ,is_device/1
         ]).
 
 -include("kz_documents.hrl").
@@ -53,11 +57,18 @@
 -define(LANGUAGE, <<"language">>).
 -define(DEVICE_TYPE, <<"device_type">>).
 -define(KEY_OWNER_ID, <<"owner_id">>).
+-define(ENABLED, <<"enabled">>).
+-define(PVT_TYPE, <<"device">>).
 -define(KEY_TIMEZONE, <<"timezone">>).
+-define(KEY_UNSOLICITATED_MWI_UPDATES, <<"mwi_unsolicitated_updates">>).
 
 -spec new() -> doc().
 new() ->
-    wh_json:new().
+    wh_json:from_list([{<<"pvt_type">>, type()}]).
+
+-spec is_device(doc() | wh_json:object()) -> boolean().
+is_device(Doc) ->
+    wh_doc:type(Doc) =:= ?PVT_TYPE.
 
 -spec sip_username(doc()) -> api_binary().
 -spec sip_username(doc(), Default) -> ne_binary() | Default.
@@ -170,7 +181,7 @@ set_sip_settings(DeviceJObj, SipJObj) ->
 -spec presence_id(doc()) -> api_binary().
 -spec presence_id(doc(), Default) -> ne_binary() | Default.
 presence_id(DeviceJObj) ->
-    presence_id(DeviceJObj, 'undefined').
+    presence_id(DeviceJObj, sip_username(DeviceJObj)).
 presence_id(DeviceJObj, Default) ->
     wh_json:get_binary_value(?PRESENCE_ID, DeviceJObj, Default).
 
@@ -214,6 +225,7 @@ language(DeviceJObj, Default) ->
 -spec set_language(doc(), ne_binary()) -> doc().
 set_language(DeviceJObj, Language) ->
     wh_json:set_value(?LANGUAGE, Language, DeviceJObj).
+
 -spec device_type(doc()) -> api_binary().
 -spec device_type(doc(), Default) -> ne_binary() | Default.
 device_type(DeviceJObj) ->
@@ -224,6 +236,9 @@ device_type(DeviceJObj, Default) ->
 -spec set_device_type(doc(), ne_binary()) -> doc().
 set_device_type(DeviceJObj, MacAddress) ->
     wh_json:set_value(?DEVICE_TYPE, MacAddress, DeviceJObj).
+
+-spec type() -> ne_binary().
+type() -> ?PVT_TYPE.
 
 -spec owner_id(doc()) -> api_binary().
 -spec owner_id(doc(), Default) -> ne_binary() | Default.
@@ -236,6 +251,17 @@ owner_id(DeviceJObj, Default) ->
 set_owner_id(DeviceJObj, OwnerId) ->
     wh_json:set_value(?KEY_OWNER_ID, OwnerId, DeviceJObj).
 
+
+-spec enabled(doc()) -> boolean().
+-spec enabled(doc(), boolean()) -> boolean().
+enabled(DeviceJObj) ->
+    enabled(DeviceJObj, 'true').
+enabled(DeviceJObj, Default) ->
+    wh_json:get_value(?ENABLED, DeviceJObj, Default).
+
+-spec set_enabled(doc(), boolean()) -> doc().
+set_enabled(DeviceJObj, Enabled) ->
+    wh_json:set_value(?ENABLED, Enabled, DeviceJObj).
 
 -spec timezone(doc()) -> api_binary().
 -spec timezone(doc(), Default) -> ne_binary() | Default.
@@ -285,3 +311,12 @@ owner_timezone(Box, Default, OwnerJObj) ->
 account_timezone(Box, Default) ->
     {'ok', AccountJObj} = kz_account:fetch(wh_doc:account_id(Box)),
     kz_account:timezone(AccountJObj, Default).
+
+-spec unsolicitated_mwi_updates(doc()) -> boolean().
+unsolicitated_mwi_updates(DeviceJObj) ->
+    wh_json:get_value(?KEY_UNSOLICITATED_MWI_UPDATES, DeviceJObj, 'true').
+
+-spec set_unsolicitated_mwi_updates(doc(), boolean()) -> doc().
+set_unsolicitated_mwi_updates(DeviceJObj, Enabled) ->
+    wh_json:set_value(?KEY_UNSOLICITATED_MWI_UPDATES, Enabled, DeviceJObj).
+

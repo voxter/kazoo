@@ -23,11 +23,16 @@
 -export([hard_stop/1]).
 -export([transfer/1]).
 -export([control_usurped/1]).
+-export([channel_destroyed/1]).
+-export([stop_on_destroy/1
+         ,continue_on_destroy/1
+        ]).
 -export([get_branch_keys/1, get_all_branch_keys/1]).
 -export([attempt/1, attempt/2]).
 -export([wildcard_is_empty/1]).
 -export([callid_update/2]).
 -export([add_event_listener/2]).
+-export([next/1, next/2]).
 
 %% gen_listener callbacks
 -export([init/1
@@ -59,7 +64,7 @@
                 ,status = <<"sane">> :: ne_binary()
                 ,queue :: api_binary()
                 ,self = self()
-                ,stop_on_destroy = 'false' :: boolean()
+                ,stop_on_destroy = 'true' :: boolean()
                 ,destroyed = 'false' :: boolean()
                }).
 -type state() :: #state{}.
@@ -124,6 +129,16 @@ branch(Flow, Call) ->
     Srv = whapps_call:kvs_fetch('consumer_pid', Call),
     branch(Flow, Srv).
 
+-spec next(whapps_call:call() | pid()) -> api_object().
+-spec next(ne_binary(), whapps_call:call() | pid()) -> api_object().
+next(Srv) -> next(<<"_">>, Srv).
+
+next(Key, Srv) when is_pid(Srv) ->
+    gen_listener:call(Srv, {'next', Key});
+next(Key, Call) ->
+    Srv = whapps_call:kvs_fetch('consumer_pid', Call),
+    next(Key, Srv).
+
 -spec add_event_listener(whapps_call:call() | pid(), {atom(), list()}) -> 'ok'.
 add_event_listener(Srv, {_,_}=SpawnInfo) when is_pid(Srv) ->
     gen_listener:cast(Srv, {'add_event_listener', SpawnInfo});
@@ -158,6 +173,27 @@ control_usurped(Call) ->
     Srv = whapps_call:kvs_fetch('consumer_pid', Call),
     control_usurped(Srv).
 
+-spec channel_destroyed(whapps_call:call() | pid()) -> 'ok'.
+channel_destroyed(Srv) when is_pid(Srv) ->
+    gen_listener:cast(Srv, 'channel_destroyed');
+channel_destroyed(Call) ->
+    Srv = whapps_call:kvs_fetch('consumer_pid', Call),
+    channel_destroyed(Srv).
+
+-spec stop_on_destroy(whapps_call:call() | pid()) -> 'ok'.
+stop_on_destroy(Srv) when is_pid(Srv) ->
+    gen_listener:cast(Srv, 'stop_on_destroy');
+stop_on_destroy(Call) ->
+    Srv = whapps_call:kvs_fetch('consumer_pid', Call),
+    stop_on_destroy(Srv).
+
+-spec continue_on_destroy(whapps_call:call() | pid()) -> 'ok'.
+continue_on_destroy(Srv) when is_pid(Srv) ->
+    gen_listener:cast(Srv, 'continue_on_destroy');
+continue_on_destroy(Call) ->
+    Srv = whapps_call:kvs_fetch('consumer_pid', Call),
+    continue_on_destroy(Srv).
+
 -spec callid_update(ne_binary(), whapps_call:call() | pid()) -> 'ok'.
 callid_update(CallId, Srv) when is_pid(Srv) ->
     gen_listener:cast(Srv, {'callid_update', CallId});
@@ -170,7 +206,7 @@ callid_update(CallId, Call) ->
 
 callid(Srv) when is_pid(Srv) ->
     CallId = gen_server:call(Srv, 'callid', 1000),
-    put('callid', CallId),
+    wh_util:put_callid(CallId),
     CallId;
 callid(Call) ->
     Srv = whapps_call:kvs_fetch('consumer_pid', Call),
@@ -210,10 +246,10 @@ get_all_branch_keys(Call) ->
 
 -spec attempt(whapps_call:call() | pid()) ->
                      {'attempt_resp', 'ok'} |
-                     {'attempt_resp', {'error', term()}}.
+                     {'attempt_resp', {'error', any()}}.
 -spec attempt(ne_binary(), whapps_call:call() | pid()) ->
                      {'attempt_resp', 'ok'} |
-                     {'attempt_resp', {'error', term()}}.
+                     {'attempt_resp', {'error', any()}}.
 attempt(Srv) -> attempt(<<"_">>, Srv).
 
 attempt(Key, Srv) when is_pid(Srv) ->
@@ -235,8 +271,7 @@ relay_amqp(JObj, Props) ->
                P when is_pid(P) -> [P | props:get_value('cf_event_pids', Props, [])];
                _ -> props:get_value('cf_event_pids', Props, [])
            end,
-    [whapps_call_command:relay_event(Pid, JObj) || Pid <- Pids, is_pid(Pid)],
-    maybe_flag_destroyed(props:get_value('server', Props), wh_util:get_event_type(JObj)).
+    [whapps_call_command:relay_event(Pid, JObj) || Pid <- Pids, is_pid(Pid)].
 
 -spec send_amqp(pid() | whapps_call:call(), api_terms(), wh_amqp_worker:publish_fun()) -> 'ok'.
 send_amqp(Srv, API, PubFun) when is_pid(Srv), is_function(PubFun, 1) ->
@@ -262,7 +297,7 @@ send_amqp(Call, API, PubFun) when is_function(PubFun, 1) ->
 init([Call]) ->
     process_flag('trap_exit', 'true'),
     CallId = whapps_call:call_id(Call),
-    put('callid', CallId),
+    wh_util:put_callid(CallId),
     gen_listener:cast(self(), 'initialize'),
     {'ok', #state{call=Call}}.
 
@@ -310,6 +345,15 @@ handle_call('wildcard_is_empty', _From, #state{flow = Flow}=State) ->
         'undefined' -> {'reply', 'true', State};
         ChildFlow -> {'reply', wh_json:is_empty(ChildFlow), State}
     end;
+handle_call({'next', Key}, _From, #state{flow=Flow}=State) ->
+    {'reply'
+     ,wh_json:get_first_defined([[<<"children">>, Key]
+                                 ,[<<"children">>, <<"_">>]
+                                ]
+                                ,Flow
+                               )
+     ,State
+    };
 handle_call(_Request, _From, State) ->
     Reply = {'error', 'unimplemented'},
     {'reply', Reply, State}.
@@ -330,7 +374,7 @@ handle_cast({'continue', _}, #state{stop_on_destroy='true'
                                     ,destroyed='true'
                                    }=State) ->
     lager:info("channel no longer active, not continuing"),
-    ?MODULE:hard_stop(self()),
+    hard_stop(self()),
     {'noreply', State};
 handle_cast({'continue', Key}, #state{flow=Flow
                                       ,cf_module_pid=OldPidRef
@@ -360,8 +404,12 @@ handle_cast('transfer', State) ->
     {'stop', {'shutdown', 'transfer'}, State};
 handle_cast('control_usurped', State) ->
     {'stop', {'shutdown', 'control_usurped'}, State};
-handle_cast('flag_destroyed', State) ->
+handle_cast('channel_destroyed', State) ->
     {'noreply', State#state{destroyed='true'}};
+handle_cast('stop_on_destroy', State) ->
+    {'noreply', State#state{stop_on_destroy='true'}};
+handle_cast('continue_on_destroy', State) ->
+    {'noreply', State#state{stop_on_destroy='false'}};
 handle_cast({'continue_with_flow', NewFlow}, State) ->
     lager:info("callflow has been reset"),
     {'noreply', launch_cf_module(State#state{flow=NewFlow})};
@@ -374,7 +422,7 @@ handle_cast({'branch', NewFlow}, #state{flow=Flow, flows=Flows}=State) ->
             {'noreply', launch_cf_module(State#state{flow=NewFlow, flows=[PrevFlow|Flows]})}
     end;
 handle_cast({'callid_update', NewCallId}, #state{call=Call}=State) ->
-    put('callid', NewCallId),
+    wh_util:put_callid(NewCallId),
     PrevCallId = whapps_call:call_id_direct(Call),
     lager:info("updating callid to ~s (from ~s), catch you on the flip side", [NewCallId, PrevCallId]),
     lager:info("removing call event bindings for ~s", [PrevCallId]),
@@ -400,8 +448,8 @@ handle_cast('initialize', #state{call=Call}) ->
     log_call_information(Call),
     Flow = whapps_call:kvs_fetch('cf_flow', Call),
     Updaters = [fun(C) -> whapps_call:kvs_store('consumer_pid', self(), C) end
-                ,fun(C) -> whapps_call:call_id_helper(fun cf_exe:callid/2, C) end
-                ,fun(C) -> whapps_call:control_queue_helper(fun cf_exe:control_queue/2, C) end
+                ,fun(C) -> whapps_call:call_id_helper(fun ?MODULE:callid/2, C) end
+                ,fun(C) -> whapps_call:control_queue_helper(fun ?MODULE:control_queue/2, C) end
                ],
     CallWithHelpers = lists:foldr(fun(F, C) -> F(C) end, Call, Updaters),
     _ = wh_util:spawn('cf_singular_call_hooks', 'maybe_hook_call', [CallWithHelpers]),
@@ -502,6 +550,16 @@ handle_event(JObj, #state{cf_module_pid=PidRef
     CallId = whapps_call:call_id_direct(Call),
     Others = whapps_call:kvs_fetch('cf_event_pids', [], Call),
     case {whapps_util:get_event_type(JObj), wh_json:get_value(<<"Call-ID">>, JObj)} of
+        {{<<"call_event">>, <<"CHANNEL_DESTROY">>}, CallId} ->
+            channel_destroyed(Self),
+            {'reply', [{'cf_module_pid', get_pid(PidRef)}
+                       ,{'cf_event_pids', Others}
+                      ]};
+        {{<<"call_event">>, <<"CHANNEL_DISCONNECTED">>}, CallId} ->
+            channel_destroyed(Self),
+            {'reply', [{'cf_module_pid', get_pid(PidRef)}
+                       ,{'cf_event_pids', Others}
+                      ]};
         {{<<"call_event">>, <<"CHANNEL_TRANSFEREE">>}, _} ->
             ExeFetchId = whapps_call:custom_channel_var(<<"Fetch-ID">>, Call),
             TransferFetchId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Fetch-ID">>], JObj),
@@ -556,7 +614,7 @@ handle_event(JObj, #state{cf_module_pid=PidRef
             {'reply', [{'cf_event_pids', Others}]}
     end.
 
--spec get_pid({pid(), _}) -> pid().
+-spec get_pid({pid(), any()}) -> pid().
 get_pid({Pid, _}) when is_pid(Pid) -> Pid;
 get_pid(_) -> 'undefined'.
 
@@ -592,7 +650,6 @@ hangup_call(Call) ->
     Cmd = [{<<"Event-Name">>, <<"command">>}
            ,{<<"Event-Category">>, <<"call">>}
            ,{<<"Application-Name">>, <<"hangup">>}
-%           ,{<<"Insert-At">>, <<"now">>}   %% PISTON-17 - TODO: needs more investigation
           ],
     send_command(Cmd, whapps_call:control_queue_direct(Call), whapps_call:call_id_direct(Call)).
 
@@ -626,7 +683,6 @@ launch_cf_module(#state{flow=?EMPTY_JSON_OBJECT}=State) ->
 launch_cf_module(#state{call=Call
                         ,flow=Flow
                        }=State) ->
-    lager:debug("launching next flow module: ~p", [Flow]),
     Module = <<"cf_", (wh_json:get_value(<<"module">>, Flow))/binary>>,
     Data = wh_json:get_value(<<"data">>, Flow, wh_json:new()),
     {PidRef, Action} = maybe_start_cf_module(Module, Data, Call),
@@ -676,7 +732,7 @@ spawn_cf_module(CFModule, Data, Call) ->
     {spawn_monitor(
        fun() ->
                _ = wh_amqp_channel:consumer_pid(AMQPConsumer),
-               put('callid', whapps_call:call_id_direct(Call)),
+               wh_util:put_callid(whapps_call:call_id_direct(Call)),
                try CFModule:handle(Data, Call) of
                    Result -> Result
                catch
@@ -700,12 +756,6 @@ spawn_cf_module(CFModule, Data, Call) ->
 -spec send_amqp_message(api_terms(), wh_amqp_worker:publish_fun(), ne_binary()) -> 'ok'.
 send_amqp_message(API, PubFun, Q) ->
     PubFun(add_server_id(API, Q)).
-
--spec maybe_flag_destroyed(pid(), {api_binary(), api_binary()}) -> 'ok'.
-maybe_flag_destroyed(Srv, {<<"call_event">>, <<"CHANNEL_DESTROY">>}) ->
-    gen_listener:cast(Srv, 'flag_destroyed');
-maybe_flag_destroyed(_, _) ->
-    'ok'.
 
 -spec send_command(wh_proplist(), api_binary(), api_binary()) -> 'ok'.
 send_command(_, 'undefined', _) -> lager:debug("no control queue to send command to");

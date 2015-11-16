@@ -12,6 +12,7 @@
 %% API
 -export([start_link/0
          ,start_app/1
+         ,start_default_apps/0
          ,stop_app/1
          ,restart_app/1
          ,running_apps/0, running_apps/1
@@ -35,6 +36,9 @@
 start_link() ->
     _ = wh_util:spawn(fun initialize_whapps/0),
     'ignore'.
+
+start_default_apps() ->
+    [{App, start_app(App)} || App <- ?DEFAULT_WHAPPS].
 
 -spec start_app(atom() | nonempty_string() | ne_binary()) ->
                        'ok' | 'error' | 'exists'.
@@ -72,7 +76,7 @@ stop_app(App) ->
 -spec restart_app(atom() | nonempty_string() | ne_binary()) ->
                          'ok' | 'error' | 'exists'.
 restart_app(App) when not is_atom(App) ->
-    restart_app(wh_util:to_atom(App));
+    restart_app(wh_util:to_atom(App, 'true'));
 restart_app(App) when is_atom(App) ->
     lager:info("restarting whistle application ~s", [App]),
     _ = stop_app(App),

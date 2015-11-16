@@ -122,10 +122,8 @@ delete_account(AccountId, AuthToken) ->
 -spec update_account(ne_binary(), ne_binary()) -> 'ok'.
 update_account(Account, AuthToken) ->
     AccountId = wh_util:format_account_id(Account, 'raw'),
-    AccountDb = wh_util:format_account_id(Account, 'encoded'),
-    case couch_mgr:open_cache_doc(AccountDb, AccountId) of
-        {'ok', JObj} ->
-            update_account(AccountId, JObj, AuthToken);
+    case kz_account:fetch(AccountId) of
+        {'ok', JObj} -> update_account(AccountId, JObj, AuthToken);
         {'error', _R} ->
             lager:debug("unable to fetch account ~s: ~p", [AccountId, _R])
     end.
@@ -144,9 +142,8 @@ account_settings(JObj) ->
 %%--------------------------------------------------------------------
 -spec update_user(ne_binary(), wh_json:object(), ne_binary()) -> 'ok'.
 update_user(AccountId, JObj, AuthToken) ->
-    case wh_json:get_value(<<"pvt_type">>, JObj) of
-        <<"user">> ->
-            save_user(AccountId, JObj, AuthToken);
+    case wh_doc:type(JObj) of
+        <<"user">> -> save_user(AccountId, JObj, AuthToken);
         _ -> 'ok' %% Gets rid of VMbox
     end.
 
@@ -154,8 +151,7 @@ update_user(AccountId, JObj, AuthToken) ->
 save_user(AccountId, JObj, AuthToken) ->
     _ = update_account(AccountId, AuthToken),
     AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
-    OwnerId = wh_json:get_value(<<"id">>, JObj),
-    Devices = crossbar_util:get_devices_by_owner(AccountDb, OwnerId),
+    Devices = crossbar_util:get_devices_by_owner(AccountDb, wh_doc:id(JObj)),
     Settings = settings(JObj),
     lists:foreach(
       fun(Device) ->
@@ -331,16 +327,20 @@ settings_feature_keys(JObj) ->
     Brand = get_brand(JObj),
     Family = get_family(JObj),
     AccountId = wh_doc:account_id(JObj),
-    wh_json:foldl(
-      fun(Key, Value, Acc) ->
-              Type = wh_json:get_binary_value(<<"type">>, Value),
-              V = wh_json:get_binary_value(<<"value">>, Value),
-              FeatureKey = get_feature_key(Type, V, Brand, Family, AccountId),
-              maybe_add_feature_key(Key, FeatureKey, Acc)
-      end
-      ,wh_json:new()
-      ,FeatureKeys
-     ).
+    Keys =
+        wh_json:foldl(
+          fun(Key, Value, Acc) ->
+                  Type = wh_json:get_binary_value(<<"type">>, Value),
+                  V = wh_json:get_binary_value(<<"value">>, Value),
+                  FeatureKey = get_feature_key(Type, V, Brand, Family, AccountId),
+                  maybe_add_feature_key(Key, FeatureKey, Acc)
+          end
+          ,wh_json:new()
+          ,FeatureKeys
+         ),
+    wh_json:merge_jobjs(wh_json:from_list([{<<"account">>, get_line_key(Brand, Family)}])
+                        ,Keys
+                       ).
 
 -spec get_feature_key(ne_binary(), ne_binary(), binary(), binary(), ne_binary()) ->
                              api_object().
@@ -396,7 +396,7 @@ get_feature_key_type(Type, Brand, Family) ->
                              ).
 
 -spec get_user(ne_binary(), ne_binary()) -> {'ok', wh_json:object()} |
-                                            {'error', _}.
+                                            {'error', any()}.
 get_user(AccountId, UserId) ->
     AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
     couch_mgr:open_cache_doc(AccountDb, UserId).
@@ -548,9 +548,15 @@ req_headers(Token) ->
          ,{"User-Agent", wh_util:to_list(erlang:node())}
         ]).
 
--spec get_cluster_id() -> 'undefined' | string().
+-spec get_cluster_id() -> string().
 get_cluster_id() ->
-    whapps_config:get_string(?MOD_CONFIG_CAT, <<"cluster_id">>).
+    case whapps_config:get_string(?MOD_CONFIG_CAT, <<"cluster_id">>) of
+        'undefined' ->
+            ClusterId = wh_util:rand_hex_binary(16),
+            {'ok', _JObj} = whapps_config:set_default(?MOD_CONFIG_CAT, <<"cluster_id">>, ClusterId),
+            wh_util:to_list(ClusterId);
+        ClusterId -> ClusterId
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

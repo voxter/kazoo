@@ -46,11 +46,9 @@ start_link() ->
 -spec check(ne_binary()) -> 'ok'.
 check(Account) when is_binary(Account) ->
     AccountId = wh_util:format_account_id(Account, 'raw'),
-    AccountDb = wh_util:format_account_id(Account, 'encoded'),
     case couch_mgr:open_doc(?WH_ACCOUNTS_DB, AccountId) of
         {'ok', JObj} ->
-            AccountDb = wh_json:get_value(<<"pvt_account_db">>, JObj),
-            process_account(AccountId, AccountDb, JObj);
+            process_account(AccountId, wh_doc:account_db(JObj), JObj);
         {'error', _R} ->
             lager:warning("unable to open account definition for ~s: ~p", [AccountId, _R])
     end;
@@ -124,7 +122,7 @@ handle_info('next_account', []) ->
     erlang:send_after(Cycle, self(), 'crawl_accounts'),
     {'noreply', [], 'hibernate'};
 handle_info('next_account', [Account|Accounts]) ->
-    _ = case wh_json:get_value(<<"id">>, Account) of
+    _ = case wh_doc:id(Account) of
             <<"_design", _/binary>> -> 'ok';
             AccountId ->
                 %% do not open the account def in the account db or we will
@@ -149,14 +147,13 @@ handle_info(_Info, State) ->
     lager:debug("unhandled msg: ~p", [_Info]),
     {'noreply', State}.
 
--spec check_then_process_account(ne_binary(), {'ok', wh_json:object()} | {'error',_}) -> 'ok'.
+-spec check_then_process_account(ne_binary(), {'ok', wh_json:object()} | {'error',any()}) -> 'ok'.
 check_then_process_account(AccountId, {'ok', JObj}) ->
     case wh_doc:is_soft_deleted(JObj) of
         'true' ->
             lager:debug("not processing account ~p (soft-destroyed)", [AccountId]);
         'false' ->
-            AccountDb = wh_json:get_value(<<"pvt_account_db">>, JObj),
-            process_account(AccountId, AccountDb, JObj)
+            process_account(AccountId, wh_doc:account_db(JObj), JObj)
     end;
 check_then_process_account(AccountId, {'error', _R}) ->
     lager:warning("unable to open account definition for ~s: ~p", [AccountId, _R]).
@@ -401,12 +398,12 @@ notify_low_balance(CurrentBalance, AccountId, AccountDb, JObj) ->
 
 -spec low_balance_threshold(ne_binary()) -> float().
 low_balance_threshold(Account) ->
-    AccountId = wh_util:format_account_id(Account, 'raw'),
-    AccountDb = wh_util:format_account_id(Account, 'encoded'),
     ConfigCat = <<(?NOTIFY_CONFIG_CAT)/binary, ".low_balance">>,
     Default = whapps_config:get_float(ConfigCat, <<"threshold">>, 5.00),
-    case couch_mgr:open_doc(AccountDb, AccountId) of
+
+    case kz_account:fetch(Account) of
         {'error', _R} -> Default;
         {'ok', JObj} ->
-            wh_json:get_float_value([<<"topup">>, <<"threshold">>], JObj, Default)
+            TopUp = wh_json:get_float_value([<<"topup">>, <<"threshold">>], JObj, Default),
+            kz_account:threshold(JObj, TopUp)
     end.

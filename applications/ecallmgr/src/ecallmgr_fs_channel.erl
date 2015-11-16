@@ -22,6 +22,7 @@
          ,set_account_id/2
          ,fetch/1, fetch/2
          ,renew/2
+         ,channel_data/2
          ,get_other_leg/2
         ]).
 -export([to_json/1
@@ -122,7 +123,7 @@ set_node(Node, UUID) ->
 
 -spec former_node(ne_binary()) ->
                          {'ok', atom()} |
-                         {'error', _}.
+                         {'error', any()}.
 former_node(UUID) ->
     MatchSpec = [{#channel{uuid = '$1', former_node = '$2', _ = '_'}
                   ,[{'=:=', '$1', {'const', UUID}}]
@@ -167,11 +168,19 @@ set_account_id(UUID, Value) ->
                    {'ok', channel()} |
                    {'error', 'timeout' | 'badarg'}.
 renew(Node, UUID) ->
-    case freeswitch:api(Node, 'uuid_dump', wh_util:to_list(UUID)) of
-        {'ok', Dump} ->
-            Props = ecallmgr_util:eventstr_to_proplist(Dump),
+    case channel_data(Node, UUID) of
+        {'ok', Props} ->
             {'ok', props_to_record(Props, Node)};
         {'error', _}=E -> E
+    end.
+
+-spec channel_data(atom(), ne_binary()) -> {'ok', wh_proplist()} |
+                                           {'error', 'timeout' | 'badarg'}.
+channel_data(Node, UUID) ->
+    case freeswitch:api(Node, 'uuid_dump', UUID) of
+        {'error', _}=E -> E;
+        {'ok', Dump} ->
+            {'ok', ecallmgr_util:eventstr_to_proplist(Dump)}
     end.
 
 -spec to_json(channel()) -> wh_json:object().
@@ -266,7 +275,7 @@ to_api_props(Channel) ->
 %% @end
 %%--------------------------------------------------------------------
 init([Node, Options]) ->
-    put('callid', Node),
+    wh_util:put_callid(Node),
     lager:info("starting new fs channel listener for ~s", [Node]),
     gen_server:cast(self(), 'bind_to_events'),
     {'ok', #state{node=Node, options=Options}}.
@@ -386,7 +395,7 @@ handle_channel_req(UUID, FetchId, Node) ->
 -spec handle_channel_req(ne_binary(), ne_binary(), atom(), pid()) -> 'ok'.
 handle_channel_req(UUID, FetchId, Node, Pid) ->
     wh_amqp_channel:consumer_pid(Pid),
-    case ecallmgr_fs_channel:fetch(UUID, 'proplist') of
+    case ?MODULE:fetch(UUID, 'proplist') of
         {'error', 'not_found'} -> fetch_channel(UUID, FetchId, Node);
         {'ok', Props} ->
             ChannelNode = props:get_value(<<"node">>, Props),
@@ -479,9 +488,13 @@ maybe_publish_channel_state(Props, _Node) ->
     %% NOTE: this will significantly reduce AMQP request however if a ecallmgr
     %%   becomes disconnected any calls it previsouly controlled will not produce
     %%   CDRs.  The long-term strategy is to round-robin CDR events from mod_kazoo.
-    case ecallmgr_config:get_boolean(<<"restrict_channel_state_publisher">>, 'false') of
-        'false' -> ecallmgr_call_events:process_channel_event(Props);
-        'true' -> maybe_publish_restricted(Props)
+    case ecallmgr_config:get_boolean(<<"publish_channel_state">>, 'true') of
+        'false' -> 'ok';
+        'true' ->
+            case ecallmgr_config:get_boolean(<<"restrict_channel_state_publisher">>, 'false') of
+                'false' -> ecallmgr_call_events:process_channel_event(Props);
+                'true' -> maybe_publish_restricted(Props)
+            end
     end.
 
 -spec maybe_publish_restricted(wh_proplist()) -> 'ok'.

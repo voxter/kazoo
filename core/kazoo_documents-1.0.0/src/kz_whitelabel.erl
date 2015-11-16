@@ -26,12 +26,12 @@
 
 -include("kz_documents.hrl").
 
--spec fetch(api_binary()) -> {'ok', wh_json:object()} | {'error', _}.
+-spec fetch(api_binary()) -> {'ok', wh_json:object()} | {'error', any()}.
 fetch('undefined') ->
     {'error', 'account_id_undefined'};
 fetch(Account) ->
     AccoundDb = wh_util:format_account_id(Account, 'encoded'),
-    couch_mgr:open_doc(AccoundDb, ?ID).
+    couch_mgr:open_cache_doc(AccoundDb, ?ID).
 
 -spec port_hide(wh_json:object()) -> boolean().
 port_hide(JObj) ->

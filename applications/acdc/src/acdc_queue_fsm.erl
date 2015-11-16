@@ -790,7 +790,7 @@ clear_member_call(#state{connection_timer_ref=ConnRef
                          ,collect_ref=CollectRef
                          ,queue_id=QueueId
                         }=State) ->
-    put('callid', QueueId),
+    wh_util:put_callid(QueueId),
     maybe_stop_timer(ConnRef),
     maybe_stop_timer(AgentRef),
     maybe_stop_timer(CollectRef),
@@ -836,7 +836,7 @@ current_call(Call, QueueTimeLeft, Start) ->
                        ,{<<"wait_time">>, elapsed(Start)}
                       ]).
 
--spec elapsed('undefined' | reference() | wh_timeout() | integer()) -> api_integer().
+-spec elapsed(api_reference() | wh_timeout() | integer()) -> api_integer().
 elapsed('undefined') -> 'undefined';
 elapsed(Ref) when is_reference(Ref) ->
     case erlang:read_timer(Ref) of
@@ -855,7 +855,9 @@ elapsed(Time) -> wh_util:elapsed_s(Time).
 %%                   queue_fsm_state()
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_connect_re_req(pid(), pid(), queue_fsm_state()) -> queue_fsm_state().
+-spec maybe_connect_re_req(pid(), pid(), queue_fsm_state()) ->
+                                {'next_state', atom(), queue_fsm_state()}
+                                | {'next_state', atom(), queue_fsm_state(), 'hibernate'}.
 maybe_connect_re_req(MgrSrv, ListenerSrv, #state{account_id=AccountId
                                                  ,queue_id=QueueId
                                                  ,member_call=Call

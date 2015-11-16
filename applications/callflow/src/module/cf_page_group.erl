@@ -20,7 +20,7 @@
 %% stop when successfull.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(wh_json:object(), whapps_call:call()) -> _.
+-spec handle(wh_json:object(), whapps_call:call()) -> any().
 handle(Data, Call) ->
     case get_endpoints(wh_json:get_value(<<"endpoints">>, Data, []), Call) of
         [] ->
@@ -62,8 +62,7 @@ get_endpoints(Members, Call) ->
                         end
                 end, [], Builders).
 
--spec resolve_endpoint_ids(wh_json:objects(), whapps_call:call()) ->
-                                  [] | [{ne_binary(), wh_json:object()},...].
+-spec resolve_endpoint_ids(wh_json:objects(), whapps_call:call()) -> [{ne_binary(), wh_json:object()}].
 resolve_endpoint_ids(Members, Call) ->
     [{Id, wh_json:set_value(<<"source">>, ?MODULE, Member)}
      || {Type, Id, Member} <- resolve_endpoint_ids(Members, [], Call)
@@ -72,13 +71,13 @@ resolve_endpoint_ids(Members, Call) ->
     ].
 
 -type endpoint_intermediate() :: {ne_binary(), ne_binary(), api_object()}.
--type endpoint_intermediates() :: [] | [endpoint_intermediate(),...].
+-type endpoint_intermediates() :: [endpoint_intermediate()].
 -spec resolve_endpoint_ids(wh_json:objects(), endpoint_intermediates(), whapps_call:call()) ->
                                   endpoint_intermediates().
 resolve_endpoint_ids([], EndpointIds, _) ->
     EndpointIds;
 resolve_endpoint_ids([Member|Members], EndpointIds, Call) ->
-    Id = wh_json:get_value(<<"id">>, Member),
+    Id = wh_doc:id(Member),
     Type = wh_json:get_value(<<"endpoint_type">>, Member, <<"device">>),
     case wh_util:is_empty(Id)
         orelse lists:keymember(Id, 2, EndpointIds)

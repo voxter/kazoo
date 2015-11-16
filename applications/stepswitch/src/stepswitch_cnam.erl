@@ -47,6 +47,9 @@
 -define(HTTP_CONNECT_TIMEOUT_MS
         ,whapps_config:get_integer(?CONFIG_CAT, <<"http_connect_timeout_ms">>, 500)
        ).
+-define(DISABLE_NORMALIZE
+        ,whapps_config:get_is_true(?CONFIG_CAT, <<"disable_normalize">>, 'false')
+       ).
 
 -define(CACHE_KEY(Number), {'cnam', Number}).
 
@@ -68,18 +71,23 @@ start_link(_) ->
 
 -spec lookup(wh_json:object() | ne_binary()) -> wh_json:object().
 lookup(<<_/binary>> = Number) ->
-    Num = wnm_util:normalize_number(Number),
+    Num = case ?DISABLE_NORMALIZE of
+              'false' -> wnm_util:normalize_number(Number);
+              'true'  -> Number
+          end,
     lookup(
-      wh_json:set_values(
+      wh_json:from_list(
         [{<<"phone_number">>, wh_util:uri_encode(Num)}
          ,{<<"Caller-ID-Number">>, Num}
         ]
-        ,wh_json:new()
        )
      );
 lookup(JObj) ->
-    Number = wh_json:get_value(<<"Caller-ID-Number">>, JObj, wh_util:anonymous_caller_id_number()),
-    Num = wnm_util:normalize_number(Number),
+    Number = wh_json:get_value(<<"Caller-ID-Number">>, JObj,  wh_util:anonymous_caller_id_number()),
+    Num = case ?DISABLE_NORMALIZE of
+              'false' -> wnm_util:normalize_number(Number);
+              'true'  -> Number
+          end,
     case wh_cache:fetch_local(?STEPSWITCH_CACHE, cache_key(Num)) of
         {'ok', CNAM} ->
             update_request(JObj, CNAM, 'true');
@@ -101,7 +109,7 @@ update_request(JObj, CNAM, FromCache) ->
             ],
     wh_json:set_values(Props, JObj).
 
--spec flush() -> 'ok'.
+-spec flush() -> non_neg_integer().
 flush() ->
     wh_cache:filter_erase_local(?STEPSWITCH_CACHE, fun flush_entries/2).
 

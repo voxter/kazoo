@@ -27,6 +27,8 @@
          ,test_connection/0
          ,test_admin_connection/0
 
+         ,run_replication/5
+
          ,archive/1
          ,archive/2
         ]).
@@ -81,6 +83,14 @@ test_connection() ->
 test_admin_connection() ->
     wh_couch_connections:test_admin_conn().
 
+-spec run_replication(ne_binary(), ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+run_replication(Host, AdminPort, Port, TargetHost, TargetPort) ->
+    Admin = couch_util:get_new_connection(Host, wh_util:to_integer(AdminPort), "", ""),
+    Source = couch_util:get_new_connection(Host, wh_util:to_integer(Port), "", ""),
+    Target = couch_util:get_new_connection(TargetHost, wh_util:to_integer(TargetPort), "", ""),
+    couch_replicator:start(Admin, Source, Target),
+    'ok'.
+
 -spec archive(ne_binary()) -> 'ok'.
 archive(Db) ->
     couch_util:archive(Db).
@@ -125,7 +135,7 @@ maybe_update_user_urls(AppName, ApiUrl, AccountDb, UserJObj) ->
         ApiUrl -> 'ok';
         OldApiUrl ->
             io:format("  user ~s in account ~s has old api url ~s, updating...~n"
-                      ,[wh_json:get_value(<<"_id">>, UserJObj)
+                      ,[wh_doc:id(UserJObj)
                         ,whapps_util:get_account_name(AccountDb)
                         ,OldApiUrl
                        ]

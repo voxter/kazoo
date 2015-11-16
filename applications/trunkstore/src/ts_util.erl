@@ -113,9 +113,9 @@ lookup_did(DID, AccountId) ->
                     lager:info("cache miss for ~s, no results", [DID]),
                     {'error', 'no_did_found'};
                 {'ok', [ViewJObj]} ->
-                    lager:info("cache miss for ~s, found result with id ~s", [DID, wh_json:get_value(<<"id">>, ViewJObj)]),
+                    lager:info("cache miss for ~s, found result with id ~s", [DID, wh_doc:id(ViewJObj)]),
                     ValueJObj = wh_json:get_value(<<"value">>, ViewJObj),
-                    Resp = wh_json:set_value(<<"id">>, wh_json:get_value(<<"id">>, ViewJObj), ValueJObj),
+                    Resp = wh_json:set_value(<<"id">>, wh_doc:id(ViewJObj), ValueJObj),
                     wh_cache:store_local(?TRUNKSTORE_CACHE
                                          ,{'lookup_did', DID, AccountId}
                                          ,Resp
@@ -124,9 +124,9 @@ lookup_did(DID, AccountId) ->
                     {'ok', Resp};
                 {'ok', [ViewJObj | _Rest]} ->
                     lager:notice("multiple results for did ~s in acct ~s", [DID, AccountId]),
-                    lager:info("cache miss for ~s, found multiple results, using first with id ~s", [DID, wh_json:get_value(<<"id">>, ViewJObj)]),
+                    lager:info("cache miss for ~s, found multiple results, using first with id ~s", [DID, wh_doc:id(ViewJObj)]),
                     ValueJObj = wh_json:get_value(<<"value">>, ViewJObj),
-                    Resp = wh_json:set_value(<<"id">>, wh_json:get_value(<<"id">>, ViewJObj), ValueJObj),
+                    Resp = wh_json:set_value(<<"id">>, wh_doc:id(ViewJObj), ValueJObj),
                     wh_cache:store_local(?TRUNKSTORE_CACHE
                                          ,{'lookup_did', DID, AccountId}
                                          ,Resp
@@ -193,11 +193,11 @@ lookup_user_flags(Name, Realm, AccountId, _) ->
                     lager:info("cache miss for ~s@~s, no results", [Name, Realm]),
                     {'ok', wh_json:new()};
                 {'ok', [User|_]} ->
-                    lager:info("cache miss, found view result for ~s@~s with id ~s", [Name, Realm, wh_json:get_value(<<"id">>, User)]),
+                    lager:info("cache miss, found view result for ~s@~s with id ~s", [Name, Realm, wh_doc:id(User)]),
                     ValJObj = wh_json:get_value(<<"value">>, User),
                     JObj = wh_json:set_value(<<"id">>, wh_doc:id(User), ValJObj),
 
-                    {'ok', AccountJObj} = couch_mgr:open_cache_doc(AccountDb, AccountId),
+                    {'ok', AccountJObj} = kz_account:fetch(AccountId),
                     Restriction = wh_json:get_value(<<"call_restriction">>, AccountJObj, wh_json:new()),
                     FlagsJObj = wh_json:set_value(<<"call_restriction">>, Restriction, JObj),
                     wh_cache:store_local(?TRUNKSTORE_CACHE
@@ -368,6 +368,6 @@ maybe_restrict_call(#ts_callflow_state{acctid=AccountId
     lager:debug("Trunkstore classified number as ~p", [Classification]),
     Username = wh_json:get_value([<<"Custom-Channel-Vars">>,<<"Username">>], RRObj),
     Realm = wh_json:get_value([<<"Custom-Channel-Vars">>,<<"Realm">>], RRObj),
-    {'ok', Opts} = ts_util:lookup_user_flags(Username, Realm, AccountId),
+    {'ok', Opts} = ?MODULE:lookup_user_flags(Username, Realm, AccountId),
     lager:debug("Trunkstore lookup_user_flag results: ~p", [Opts]),
     wh_json:get_value([<<"call_restriction">>, Classification, <<"action">>], Opts) =:= <<"deny">>.

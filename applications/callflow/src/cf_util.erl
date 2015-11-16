@@ -6,25 +6,10 @@
 %%% @contributors
 %%%   Karl Anderson
 %%%   James Aimonetti
+%%%   Sponsored by Conversant Ltd,
+%%%     implemented by SIPLABS, LLC (Ilya Ashchepkov)
 %%%-------------------------------------------------------------------
 -module(cf_util).
-
--include("callflow.hrl").
--include_lib("whistle/src/wh_json.hrl").
-
--define(OWNER_KEY(Db, User), {?MODULE, 'owner_id', Db, User}).
--define(CF_FLOW_CACHE_KEY(Number, Db), {'cf_flow', Number, Db}).
--define(SIP_USER_OWNERS_KEY(Db, User), {?MODULE, 'sip_user_owners', Db, User}).
--define(SIP_ENDPOINT_ID_KEY(Db, User), {?MODULE, 'sip_endpoint_id', Db, User}).
--define(PARKING_PRESENCE_KEY(Db, Request), {?MODULE, 'parking_callflow', Db, Request}).
--define(MANUAL_PRESENCE_KEY(Db), {?MODULE, 'manual_presence', Db}).
--define(OPERATOR_KEY, whapps_config:get(?CF_CONFIG_CAT, <<"operator_key">>, <<"0">>)).
-
--define(ENCRYPTION_MAP, [{<<"srtp">>, [{<<"RTP-Secure-Media">>, <<"true">>}]}
-                        ,{<<"zrtp">>, [{<<"ZRTP-Secure-Media">>, <<"true">>}
-                                       ,{<<"ZRTP-Enrollment">>, <<"true">>}
-                                      ]}
-                        ]).
 
 -export([presence_probe/2]).
 -export([presence_mwi_query/2]).
@@ -60,6 +45,25 @@
 
 -export([wait_for_noop/2]).
 -export([start_task/3]).
+
+-include("callflow.hrl").
+-include_lib("whistle/src/wh_json.hrl").
+
+-define(OWNER_KEY(Db, User), {?MODULE, 'owner_id', Db, User}).
+-define(CF_FLOW_CACHE_KEY(Number, Db), {'cf_flow', Number, Db}).
+-define(SIP_USER_OWNERS_KEY(Db, User), {?MODULE, 'sip_user_owners', Db, User}).
+-define(SIP_ENDPOINT_ID_KEY(Db, User), {?MODULE, 'sip_endpoint_id', Db, User}).
+-define(PARKING_PRESENCE_KEY(Db, Request), {?MODULE, 'parking_callflow', Db, Request}).
+-define(MANUAL_PRESENCE_KEY(Db), {?MODULE, 'manual_presence', Db}).
+-define(OPERATOR_KEY, whapps_config:get(?CF_CONFIG_CAT, <<"operator_key">>, <<"0">>)).
+-define(MWI_SEND_UNSOLICITATED_UPDATES, <<"mwi_send_unsoliciated_updates">>).
+-define(VM_CACHE_KEY(Db, Id), {?MODULE, 'vmbox', Db, Id}).
+
+-define(ENCRYPTION_MAP, [{<<"srtp">>, [{<<"RTP-Secure-Media">>, <<"true">>}]}
+                        ,{<<"zrtp">>, [{<<"ZRTP-Secure-Media">>, <<"true">>}
+                                       ,{<<"ZRTP-Enrollment">>, <<"true">>}
+                                      ]}
+                        ]).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -185,12 +189,24 @@ mwi_query(JObj) ->
         {'ok', AccountDb} ->
             lager:debug("replying to mwi query"),
             Username = wh_json:get_value(<<"Username">>, JObj),
-            mwi_resp(Username, Realm, AccountDb, JObj);
+            maybe_vm_mwi_resp(Username, Realm, AccountDb, JObj);
         _Else -> 'ok'
     end.
 
--spec mwi_resp(api_binary(), ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
-mwi_resp('undefined', _Realm, _AccountDb, _JObj) -> 'ok';
+-spec maybe_vm_mwi_resp(api_binary(), ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
+maybe_vm_mwi_resp('undefined', _Realm, _AccountDb, _JObj) -> 'ok';
+maybe_vm_mwi_resp(<<_/binary>> = VMNumber, Realm, AccountDb, JObj) ->
+    case mailbox(AccountDb, VMNumber) of
+        {'ok', Doc} -> vm_mwi_resp(Doc, VMNumber, Realm, JObj);
+        {'error', _} -> mwi_resp(VMNumber, Realm, AccountDb, JObj)
+    end.
+
+-spec vm_mwi_resp(wh_json:object(), ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
+vm_mwi_resp(Doc, VMNumber, Realm, JObj) ->
+    {New, Saved} = vm_count(Doc),
+    send_mwi_update(New, Saved, VMNumber, Realm, JObj).
+
+-spec mwi_resp(ne_binary(), ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
 mwi_resp(Username, Realm, AccountDb, JObj) ->
     case owner_ids_by_sip_username(AccountDb, Username) of
         {'ok', [<<_/binary>> = OwnerId]} ->
@@ -200,8 +216,13 @@ mwi_resp(Username, Realm, AccountDb, JObj) ->
 
 -spec mwi_resp(ne_binary(), ne_binary(), ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
 mwi_resp(Username, Realm, OwnerId, AccountDb, JObj) ->
-    {New, Waiting} = vm_count_by_owner(AccountDb, OwnerId),
-    send_mwi_update(New, Waiting, Username, Realm, JObj).
+    {New, Saved} = vm_count_by_owner(AccountDb, OwnerId),
+    send_mwi_update(New, Saved, Username, Realm, JObj).
+
+-spec is_unsolicited_mwi_enabled(ne_binary()) -> boolean().
+is_unsolicited_mwi_enabled(AccountId) ->
+    whapps_config:get_is_true(?CF_CONFIG_CAT, ?MWI_SEND_UNSOLICITATED_UPDATES, 'true') andalso
+    wh_util:is_true(whapps_account_config:get(AccountId, ?CF_CONFIG_CAT, ?MWI_SEND_UNSOLICITATED_UPDATES, 'true')).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -215,9 +236,20 @@ mwi_resp(Username, Realm, OwnerId, AccountDb, JObj) ->
                                           'ok' |
                                           {'error', mwi_update_return()} |
                                           couch_mgr:couchbeam_error().
+-spec unsolicited_owner_mwi_update(ne_binary(), ne_binary(), boolean()) ->
+                                          'ok' |
+                                          {'error', mwi_update_return()} |
+                                          couch_mgr:couchbeam_error().
 unsolicited_owner_mwi_update('undefined', _) -> {'error', 'missing_account_db'};
 unsolicited_owner_mwi_update(_, 'undefined') -> {'error', 'missing_owner_id'};
 unsolicited_owner_mwi_update(AccountDb, OwnerId) ->
+    AccountId = wh_util:format_account_id(AccountDb),
+    MWIUpdate = is_unsolicited_mwi_enabled(AccountId),
+    unsolicited_owner_mwi_update(AccountDb, OwnerId, MWIUpdate).
+
+unsolicited_owner_mwi_update(_AccountDb, _OwnerId, 'false') ->
+    lager:debug("unsolicitated mwi updated disabled : ~s", [_AccountDb]);
+unsolicited_owner_mwi_update(AccountDb, OwnerId, 'true') ->
     ViewOptions = [{'key', [OwnerId, <<"device">>]}
                    ,'include_docs'
                   ],
@@ -244,27 +276,44 @@ maybe_send_mwi_update(JObj, AccountId, New, Saved) ->
         andalso Username =/= 'undefined'
         andalso Realm =/= 'undefined'
         andalso OwnerId =/= 'undefined'
+        andalso kz_device:unsolicitated_mwi_updates(J)
     of
         'true' -> send_mwi_update(New, Saved, Username, Realm);
         'false' -> 'ok'
     end.
 
 -spec unsolicited_endpoint_mwi_update(api_binary(), api_binary()) ->
-                                             'ok' | {'error', _}.
+                                             'ok' | {'error', any()}.
+-spec unsolicited_endpoint_mwi_update(ne_binary(), ne_binary(), boolean()) ->
+                                             'ok' | {'error', any()}.
 unsolicited_endpoint_mwi_update('undefined', _) ->
     {'error', 'missing_account_db'};
 unsolicited_endpoint_mwi_update(_, 'undefined') ->
     {'error', 'missing_owner_id'};
 unsolicited_endpoint_mwi_update(AccountDb, EndpointId) ->
+    AccountId = wh_util:format_account_id(AccountDb),
+    MWIUpdate = is_unsolicited_mwi_enabled(AccountId),
+    unsolicited_endpoint_mwi_update(AccountDb, EndpointId, MWIUpdate).
+
+unsolicited_endpoint_mwi_update(_AccountDb, _EndpointId, 'false') ->
+    lager:debug("unsolicitated mwi updated disabled : ~s", [_AccountDb]);
+unsolicited_endpoint_mwi_update(AccountDb, EndpointId, 'true') ->
     case couch_mgr:open_cache_doc(AccountDb, EndpointId) of
         {'error', _}=E -> E;
-        {'ok', JObj} ->
-            maybe_send_endpoint_mwi_update(JObj, AccountDb)
+        {'ok', JObj} -> maybe_send_endpoint_mwi_update(AccountDb, JObj)
     end.
 
--spec maybe_send_endpoint_mwi_update(wh_json:object(), ne_binary()) ->
+-spec maybe_send_endpoint_mwi_update(ne_binary(), wh_json:object()) ->
                                             'ok' | {'error', 'not_appropriate'}.
-maybe_send_endpoint_mwi_update(JObj, AccountDb) ->
+-spec maybe_send_endpoint_mwi_update(ne_binary(), wh_json:object(), boolean()) ->
+                                            'ok' | {'error', 'not_appropriate'}.
+
+maybe_send_endpoint_mwi_update(AccountDb, JObj) ->
+    maybe_send_endpoint_mwi_update(AccountDb, JObj, kz_device:unsolicitated_mwi_updates(JObj)).
+
+maybe_send_endpoint_mwi_update(_AccountDb, _JObj, 'false') ->
+    lager:debug("unsolicitated mwi updates disabled for ~s/~s", [_AccountDb, wh_doc:id(_JObj)]);
+maybe_send_endpoint_mwi_update(AccountDb, JObj, 'true') ->
     AccountId = wh_util:format_account_id(AccountDb, 'raw'),
     Username = kz_device:sip_username(JObj),
     Realm = get_sip_realm(JObj, AccountId),
@@ -287,18 +336,18 @@ maybe_send_endpoint_mwi_update(JObj, AccountDb) ->
 %%--------------------------------------------------------------------
 -type vm_count() :: ne_binary() | non_neg_integer().
 -spec send_mwi_update(vm_count(), vm_count(), ne_binary(), ne_binary()) -> 'ok'.
-send_mwi_update(New, Waiting, Username, Realm) ->
-    send_mwi_update(New, Waiting, Username, Realm, wh_json:new()).
+send_mwi_update(New, Saved, Username, Realm) ->
+    send_mwi_update(New, Saved, Username, Realm, wh_json:new()).
 
 -spec send_mwi_update(vm_count(), vm_count(), ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
-send_mwi_update(New, Waiting, Username, Realm, JObj) ->
+send_mwi_update(New, Saved, Username, Realm, JObj) ->
     Command = [{<<"To">>, <<Username/binary, "@", Realm/binary>>}
                ,{<<"Messages-New">>, New}
-               ,{<<"Messages-Waiting">>, Waiting}
+               ,{<<"Messages-Saved">>, Saved}
                ,{<<"Call-ID">>, wh_json:get_value(<<"Call-ID">>, JObj)}
                | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
               ],
-    lager:debug("updating MWI for ~s@~s (~b/~b)", [Username, Realm, New, Waiting]),
+    lager:debug("updating MWI for ~s@~s (~b/~b)", [Username, Realm, New, Saved]),
     whapps_util:amqp_pool_send(Command, fun wapi_presence:publish_mwi_update/1).
 
 %%--------------------------------------------------------------------
@@ -339,7 +388,7 @@ vm_count_by_owner(<<_/binary>> = AccountDb, <<_/binary>> = OwnerId) ->
 %%--------------------------------------------------------------------
 -spec alpha_to_dialpad(ne_binary()) -> ne_binary().
 alpha_to_dialpad(Value) ->
-    << <<(dialpad_digit(C))>> || <<C>> <= strip_nonalpha(wh_util:to_lower_binary(Value))>>.
+    << <<(dialpad_digit(C))>> || <<C>> <= wh_util:to_lower_binary(Value), is_alpha(C) >>.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -347,11 +396,9 @@ alpha_to_dialpad(Value) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec strip_nonalpha(ne_binary()) -> ne_binary().
-strip_nonalpha(Value) ->
-    re:replace(Value, <<"[^[:alpha:]]">>, <<>>, [{'return', 'binary'}
-                                                 ,'global'
-                                                ]).
+-spec is_alpha(char()) -> boolean().
+is_alpha(Char) ->
+    Char =< $z andalso Char >= $a.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -405,7 +452,7 @@ correct_media_path(Media, Call) ->
 %%--------------------------------------------------------------------
 -spec owner_ids_by_sip_username(ne_binary(), ne_binary()) ->
                                        {'ok', ne_binaries()} |
-                                       {'error', _}.
+                                       {'error', any()}.
 owner_ids_by_sip_username(AccountDb, Username) ->
     case wh_cache:peek_local(?CALLFLOW_CACHE, ?SIP_USER_OWNERS_KEY(AccountDb, Username)) of
         {'ok', _}=Ok -> Ok;
@@ -415,12 +462,12 @@ owner_ids_by_sip_username(AccountDb, Username) ->
 
 -spec get_owner_ids_by_sip_username(ne_binary(), ne_binary()) ->
                                            {'ok', ne_binaries()} |
-                                           {'error', _}.
+                                           {'error', any()}.
 get_owner_ids_by_sip_username(AccountDb, Username) ->
     ViewOptions = [{'key', Username}],
     case couch_mgr:get_results(AccountDb, <<"cf_attributes/sip_username">>, ViewOptions) of
         {'ok', [JObj]} ->
-            EndpointId = wh_json:get_value(<<"id">>, JObj),
+            EndpointId = wh_doc:id(JObj),
             OwnerIds = wh_json:get_value(<<"value">>, JObj, []),
             CacheProps = [{'origin', {'db', AccountDb, EndpointId}}],
             wh_cache:store_local(?CALLFLOW_CACHE, ?SIP_USER_OWNERS_KEY(AccountDb, Username), OwnerIds, CacheProps),
@@ -456,7 +503,7 @@ get_endpoint_id_by_sip_username(AccountDb, Username) ->
     ViewOptions = [{'key', Username}],
     case couch_mgr:get_results(AccountDb, <<"cf_attributes/sip_username">>, ViewOptions) of
         {'ok', [JObj]} ->
-            EndpointId = wh_json:get_value(<<"id">>, JObj),
+            EndpointId = wh_doc:id(JObj),
             CacheProps = [{'origin', {'db', AccountDb, EndpointId}}],
             wh_cache:store_local(?CALLFLOW_CACHE, ?SIP_ENDPOINT_ID_KEY(AccountDb, Username), EndpointId, CacheProps),
             {'ok', EndpointId};
@@ -571,7 +618,7 @@ get_account_realm(AccountId, Default) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -type lookup_callflow_ret() :: {'ok', wh_json:object(), boolean()} |
-                               {'error', _}.
+                               {'error', any()}.
 
 -spec lookup_callflow(whapps_call:call()) -> lookup_callflow_ret().
 lookup_callflow(Call) ->
@@ -633,7 +680,7 @@ is_digit(_) -> 'false'.
 %%-----------------------------------------------------------------------------
 -spec lookup_callflow_patterns(ne_binary(), ne_binary()) ->
                                       {'ok', {wh_json:object(), api_binary()}} |
-                                      {'error', term()}.
+                                      {'error', any()}.
 lookup_callflow_patterns(Number, Db) ->
     lager:info("lookup callflow patterns for ~s in ~s", [Number, Db]),
     case couch_mgr:get_results(Db, ?LIST_BY_PATTERN, ['include_docs']) of
@@ -722,6 +769,12 @@ apply_dialplan(Number, DialPlan) ->
 
 -spec maybe_apply_dialplan(wh_json:keys(), wh_json:object(), ne_binary()) -> ne_binary().
 maybe_apply_dialplan([], _, Number) -> Number;
+maybe_apply_dialplan([<<"system">>], DialPlan, Number) ->
+    SystemDialPlans = load_system_dialplans(wh_json:get_value(<<"system">>, DialPlan)),
+    SystemRegexs = wh_json:get_keys(SystemDialPlans),
+    maybe_apply_dialplan(SystemRegexs, SystemDialPlans, Number);
+maybe_apply_dialplan([<<"system">>|Regexs], DialPlan, Number) ->
+    maybe_apply_dialplan(Regexs ++ [<<"system">>], DialPlan, Number);
 maybe_apply_dialplan([Regex|Regexs], DialPlan, Number) ->
     case re:run(Number, Regex, [{'capture', 'all', 'binary'}]) of
         'nomatch' ->
@@ -733,6 +786,23 @@ maybe_apply_dialplan([Regex|Regexs], DialPlan, Number) ->
             Prefix = wh_json:get_binary_value([Regex, <<"prefix">>], DialPlan, <<>>),
             Suffix = wh_json:get_binary_value([Regex, <<"suffix">>], DialPlan, <<>>),
             <<Prefix/binary, Root/binary, Suffix/binary>>
+    end.
+
+-spec load_system_dialplans(ne_binaries()) -> wh_json:object().
+load_system_dialplans(Names) ->
+    LowerNames = [wh_util:to_lower_binary(Name) || Name <- Names],
+    Plans = whapps_config:get_all_kvs(<<"dialplans">>),
+    lists:foldl(fold_system_dialplans(LowerNames), wh_json:new(), Plans).
+
+-spec fold_system_dialplans(ne_binaries()) ->
+                                   fun(({ne_binary(), wh_json:object()}, wh_json:object()) -> wh_json:object()).
+fold_system_dialplans(Names) ->
+    fun({Key, Val}, Acc) ->
+            Name = wh_util:to_lower_binary(wh_json:get_value(<<"name">>, Val)),
+            case lists:member(Name, Names) of
+                'true' -> wh_json:set_value(Key, Val, Acc);
+                'false' -> Acc
+            end
     end.
 
 -spec encryption_method_map(api_object(), api_binaries() | wh_json:object()) -> api_object().
@@ -801,7 +871,7 @@ find_group_endpoints(GroupId, Call) ->
     GroupsJObj = cf_attributes:groups(Call),
     case [wh_json:get_value(<<"value">>, JObj)
           || JObj <- GroupsJObj,
-             wh_json:get_value(<<"id">>, JObj) =:= GroupId
+             wh_doc:id(JObj) =:= GroupId
          ]
     of
         [] -> [];
@@ -895,7 +965,7 @@ wait_for_noop(Call, NoopId) ->
 
 -spec process_event(whapps_call:call(), ne_binary(), wh_json:object()) ->
                            {'ok', whapps_call:call()} |
-                           {'error', _}.
+                           {'error', any()}.
 process_event(Call, NoopId, JObj) ->
     case whapps_call_command:get_event_type(JObj) of
         {<<"call_event">>, <<"CHANNEL_DESTROY">>, _} ->
@@ -936,3 +1006,41 @@ account_timezone(Call) ->
 start_task(Fun, Args, Call) ->
     SpawnInfo = {'cf_task', [Fun, Args]},
     cf_exe:add_event_listener(Call, SpawnInfo).
+
+-spec mailbox(ne_binary(), ne_binary()) -> {'ok', wh_json:object()} |
+                                           {'error', any()}.
+mailbox(AccountDb, VMNumber) ->
+    case wh_cache:peek_local(?CALLFLOW_CACHE, ?VM_CACHE_KEY(AccountDb, VMNumber)) of
+        {'ok', _}=Ok -> Ok;
+        {'error', 'not_found'} -> get_mailbox(AccountDb, VMNumber)
+    end.
+
+-spec get_mailbox(ne_binary(), ne_binary()) -> {'ok', wh_json:object()} |
+                                               {'error', any()}.
+get_mailbox(AccountDb, VMNumber) ->
+    ViewOptions = [{'key', VMNumber}, 'include_docs'],
+    case couch_mgr:get_results(AccountDb, <<"vmboxes/listing_by_mailbox">>, ViewOptions) of
+        {'ok', [JObj]} ->
+            Doc = wh_json:get_value(<<"doc">>, JObj),
+            EndpointId = wh_doc:id(Doc),
+            CacheProps = [{'origin', {'db', AccountDb, EndpointId}}],
+            wh_cache:store_local(?CALLFLOW_CACHE, ?VM_CACHE_KEY(AccountDb, VMNumber), Doc, CacheProps),
+            {'ok', Doc};
+        {'ok', [_JObj1, _JObj2 | _]} ->
+            lager:debug("multiple voicemail boxes with same number (~s)  in account db ~s", [VMNumber, AccountDb]),
+            {'error', 'not_found'};
+        {'ok', []} ->
+            {'error', 'not_found'};
+        {'error', _R}=E ->
+            lager:warning("unable to lookup voicemail number ~s in account ~s: ~p", [VMNumber, AccountDb, _R]),
+            E
+    end.
+
+-spec vm_count(wh_json:object()) -> {non_neg_integer(), non_neg_integer()}.
+vm_count(JObj) ->
+    Messages = wh_json:get_value(?VM_KEY_MESSAGES, JObj, []),
+    {vc_sum(Messages, ?VM_FOLDER_NEW), vc_sum(Messages, ?VM_FOLDER_SAVED)}.
+
+-spec vc_sum(wh_json:objects(), ne_binary()) -> non_neg_integer().
+vc_sum(Ms, F) ->
+    lists:sum([1 || M <- Ms, wh_json:get_value(?VM_KEY_FOLDER, M) =:= F]).

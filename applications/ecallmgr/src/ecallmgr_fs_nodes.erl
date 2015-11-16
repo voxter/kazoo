@@ -80,7 +80,7 @@
                      ,is_loaded = 'false' :: boolean() | '$3' | '_'
                     }).
 -type capability() :: #capability{}.
--type capabilities() :: [capability(),...] | [].
+-type capabilities() :: [capability()].
 
 -define(CAPABILITY_TBL, 'ecallmgr_fs_node_capabilities').
 
@@ -345,7 +345,7 @@ handle_fs_xml_flush(JObj, _Props) ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    put('callid', ?LOG_SYSTEM_ID),
+    wh_util:put_callid(?LOG_SYSTEM_ID),
     process_flag('trap_exit', 'true'),
     lager:debug("starting new fs handler"),
     _ = ets:new('sip_subscriptions', ['set', 'public', 'named_table', {'keypos', #sip_subscription.key}]),
@@ -577,7 +577,7 @@ maybe_handle_nodedown(NodeName, #state{nodes=Nodes}=State) ->
     end.
 
 -spec maybe_add_node(text(), text(), wh_proplist(), state()) ->
-                            'ok' | {'error', _}.
+                            'ok' | {'error', any()}.
 maybe_add_node(NodeName, Cookie, Options, #state{self=Srv, nodes=Nodes}) ->
     case dict:find(NodeName, Nodes) of
         {'ok', #node{}} -> {'error', 'node_exists'};
@@ -603,8 +603,9 @@ maybe_rm_fs_node(NodeName, #state{nodes=Nodes}=State) ->
     end.
 
 -spec rm_fs_node(fs_node(), state()) -> 'ok'.
-rm_fs_node(#node{}=Node, #state{self=Srv}) ->
+rm_fs_node(#node{node=NodeName}=Node, #state{self=Srv}) ->
     _ = maybe_disconnect_from_node(Node),
+    _ = ecallmgr_fs_pinger_sup:remove_node(NodeName),
     gen_server:cast(Srv, {'remove_node', Node}).
 
 -spec handle_nodeup(fs_node(), state()) -> 'ok'.
@@ -621,7 +622,7 @@ handle_nodeup(#node{}=Node, #state{self=Srv}) ->
 
 -spec handle_nodedown(fs_node(), state()) -> 'ok'.
 handle_nodedown(#node{node=NodeName}=Node, #state{self=Srv}) ->
-    lager:critical("recieved node down notice for ~s", [NodeName]),
+    lager:critical("received node down notice for ~s", [NodeName]),
     _ = maybe_disconnect_from_node(Node),
     gen_server:cast(Srv, {'remove_capabilities', NodeName}),
     case maybe_connect_to_node(Node) of
@@ -633,7 +634,7 @@ handle_nodedown(#node{node=NodeName}=Node, #state{self=Srv}) ->
             gen_server:cast(Srv, {'update_node', Node#node{connected='true'}})
     end.
 
--spec maybe_connect_to_node(fs_node()) -> 'ok' | {'error', _}.
+-spec maybe_connect_to_node(fs_node()) -> 'ok' | {'error', any()}.
 maybe_connect_to_node(#node{node=NodeName}=Node) ->
     lager:debug("attempting to connect to freeswitch node ~s", [NodeName]),
     case maybe_ping_node(Node) of
@@ -644,7 +645,7 @@ maybe_connect_to_node(#node{node=NodeName}=Node) ->
             'ok'
     end.
 
--spec maybe_ping_node(fs_node()) -> 'ok' | {'error', _}.
+-spec maybe_ping_node(fs_node()) -> 'ok' | {'error', any()}.
 maybe_ping_node(#node{node=NodeName
                       ,cookie=Cookie
                      }=Node) ->
@@ -658,7 +659,7 @@ maybe_ping_node(#node{node=NodeName
             {'error', 'no_connection'}
     end.
 
--spec maybe_start_node_handlers(fs_node()) -> 'ok' | {'error', _}.
+-spec maybe_start_node_handlers(fs_node()) -> 'ok' | {'error', any()}.
 maybe_start_node_handlers(#node{node=NodeName
                                 ,client_version=Version
                                 ,cookie=Cookie
@@ -759,7 +760,7 @@ start_node_stats(#node{}) ->
 
 -spec start_preconfigured_servers() -> 'ok'.
 start_preconfigured_servers() ->
-    put('callid', ?LOG_SYSTEM_ID),
+    wh_util:put_callid(?LOG_SYSTEM_ID),
     case ecallmgr_config:get(<<"fs_nodes">>) of
         [] ->
             lager:info("no preconfigured servers available. Is the sysconf whapp running?"),
@@ -776,7 +777,7 @@ start_preconfigured_servers() ->
             _ = ecallmgr_config:flush(<<"fs_nodes">>),
             start_preconfigured_servers();
         _E ->
-            lager:debug("recieved a non-list for fs_nodes: ~p", [_E]),
+            lager:debug("received a non-list for fs_nodes: ~p", [_E]),
             timer:sleep(5 * ?MILLISECONDS_IN_SECOND),
             _ = ecallmgr_config:flush(<<"fs_nodes">>),
             start_preconfigured_servers()

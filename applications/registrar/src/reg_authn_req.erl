@@ -80,7 +80,7 @@ send_auth_resp(#auth_user{password=Password
 send_auth_error(JObj) ->
     %% NOTE: Kamailio needs registrar errors since it is blocking with no
     %%   timeout (at the moment) but when we seek auth for INVITEs we need
-    %%   to wait for conferences, ect.  Since Kamailio does not honor
+    %%   to wait for conferences, etc.  Since Kamailio does not honor
     %%   Defer-Response we can use that flag on registrar errors
     %%   to queue in Kazoo but still advance Kamailio.
     Resp = [{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, JObj)}
@@ -199,7 +199,7 @@ get_tel_uri(Number) -> <<"<tel:", Number/binary,">">>.
 %%-----------------------------------------------------------------------------
 -spec lookup_auth_user(ne_binary(), ne_binary(), wh_json:object()) ->
                               {'ok', auth_user()} |
-                              {'error', _}.
+                              {'error', any()}.
 lookup_auth_user(Username, Realm, Req) ->
     case get_auth_user(Username, Realm) of
         {'error', _}=E -> E;
@@ -275,49 +275,10 @@ get_auth_user_in_account(Username, Realm, AccountDB) ->
 %%-----------------------------------------------------------------------------
 -spec lookup_account_by_ip(ne_binary()) ->
                                   {'ok', wh_proplist()} |
-                                  couch_mgr:couchbeam_error().
+                                  {'error', 'not_founnd'}.
 lookup_account_by_ip(IP) ->
     lager:debug("looking up IP: ~s in db ~s", [IP, ?WH_SIP_DB]),
-    case wh_cache:peek_local(?REG_CACHE, ip_cache_key(IP)) of
-        {'ok', _AccountCCVs}=OK -> OK;
-        {'error', 'not_found'} -> fetch_account_by_ip(IP)
-    end.
-
--spec fetch_account_by_ip(ne_binary()) ->
-                                 {'ok', wh_proplist()} |
-                                 couch_mgr:couchbeam_error().
-fetch_account_by_ip(IP) ->
-    case couch_mgr:get_results(?WH_SIP_DB, <<"credentials/lookup_by_ip">>, [{'key', IP}]) of
-        {'ok', []} ->
-            lager:debug("no entry in ~s for IP: ~s", [?WH_SIP_DB, IP]),
-            {'error', 'not_found'};
-        {'ok', [Doc|_]} ->
-            lager:debug("found IP ~s in db ~s (~s)", [IP, ?WH_SIP_DB, wh_json:get_value(<<"id">>, Doc)]),
-            AccountCCVs = account_ccvs_from_ip_auth(Doc),
-            wh_cache:store_local(?REG_CACHE, ip_cache_key(IP), AccountCCVs),
-            {'ok', AccountCCVs};
-        {'error', _E} = Error ->
-            lager:debug("error looking up by IP: ~s: ~p", [IP, _E]),
-            Error
-    end.
-
--spec ip_cache_key(ne_binary()) -> {'auth_ip', ne_binary()}.
-ip_cache_key(IP) ->
-    {'auth_ip', IP}.
-
--spec account_ccvs_from_ip_auth(wh_json:object()) -> wh_proplist().
-account_ccvs_from_ip_auth(Doc) ->
-    AccountID = wh_json:get_value([<<"value">>, <<"account_id">>], Doc),
-    OwnerID = wh_json:get_value([<<"value">>, <<"owner_id">>], Doc),
-    AuthType = wh_json:get_value([<<"value">>, <<"authorizing_type">>], Doc, <<"anonymous">>),
-
-    props:filter_undefined(
-      [{<<"Account-ID">>, AccountID}
-       ,{<<"Owner-ID">>, OwnerID}
-       ,{<<"Authorizing-ID">>, wh_json:get_value(<<"id">>, Doc)}
-       ,{<<"Inception">>, <<"on-net">>}
-       ,{<<"Authorizing-Type">>, AuthType}
-      ]).
+    whapps_util:get_ccvs_by_ip(IP).
 
 %%-----------------------------------------------------------------------------
 %% @private
@@ -327,7 +288,7 @@ account_ccvs_from_ip_auth(Doc) ->
 %%-----------------------------------------------------------------------------
 -spec check_auth_user(wh_json:object(), ne_binary(), ne_binary(), wh_json:object()) ->
                              {'ok', auth_user()} |
-                             {'error', _}.
+                             {'error', any()}.
 check_auth_user(JObj, Username, Realm, Req) ->
     case is_account_enabled(JObj)
         andalso maybe_auth_type_enabled(JObj)
@@ -360,9 +321,7 @@ is_device_enabled(JObj) ->
     case wh_json:is_true([<<"doc">>, <<"enabled">>], JObj, Default) of
         'true' -> 'true';
         'false' ->
-            lager:notice("rejecting authn for disabled device ~s"
-                         ,[wh_json:get_value(<<"id">>, JObj)]
-                        ),
+            lager:notice("rejecting authn for disabled device ~s", [wh_doc:id(JObj)]),
             'false'
     end.
 
@@ -381,9 +340,7 @@ is_owner_enabled(AccountDb, OwnerId) ->
             case kzd_user:is_enabled(UserJObj, Default) of
                 'true' -> 'true';
                 'false' ->
-                    lager:notice("rejecting authn for disabled owner ~s"
-                                 ,[OwnerId]
-                                ),
+                    lager:notice("rejecting authn for disabled owner ~s", [OwnerId]),
                     'false'
             end;
         {'error', _R} ->
@@ -403,7 +360,7 @@ jobj_to_auth_user(JObj, Username, Realm, Req) ->
                           ,account_id = get_account_id(AuthDoc)
                           ,account_db = get_account_db(AuthDoc)
                           ,password = wh_json:get_value(<<"password">>, AuthValue, wh_util:rand_hex_binary(6))
-                          ,authorizing_type = wh_json:get_value(<<"pvt_type">>, AuthDoc, <<"anonymous">>)
+                          ,authorizing_type = wh_doc:type(AuthDoc, <<"anonymous">>)
                           ,authorizing_id = wh_doc:id(JObj)
                           ,method = wh_util:to_lower_binary(Method)
                           ,owner_id = wh_json:get_value(<<"owner_id">>, AuthDoc)
@@ -428,9 +385,9 @@ add_account_name(#auth_user{account_id=AccountId}=AuthUser) ->
         {'error', _} -> AuthUser;
         {'ok', Account} ->
             Realm = kz_account:realm(Account),
-            AuthUser#auth_user{account_name=kz_account:name(Account)
-                               ,account_realm=Realm
-                               ,account_normalized_realm=wh_util:to_lower_binary(Realm)
+            AuthUser#auth_user{account_name = kz_account:name(Account)
+                               ,account_realm = Realm
+                               ,account_normalized_realm = wh_util:to_lower_binary(Realm)
                               }
     end.
 
@@ -549,14 +506,9 @@ gsm_auth(AuthUser) -> {'ok', AuthUser}.
 %%-----------------------------------------------------------------------------
 -spec get_account_id(wh_json:object()) -> api_binary().
 get_account_id(JObj) ->
-    case wh_json:get_first_defined([[<<"doc">>, <<"pvt_account_id">>]
-                                    ,<<"pvt_account_id">>
-                                    ,[<<"doc">>, <<"pvt_account_db">>]
-                                    ,<<"pvt_account_db">>
-                                   ], JObj)
-    of
+    case get_account_db(JObj) of
         'undefined' -> 'undefined';
-        AccountId -> wh_util:format_account_id(AccountId, 'raw')
+        AccountDb -> wh_util:format_account_id(AccountDb, 'raw')
     end.
 
 %%-----------------------------------------------------------------------------
@@ -586,19 +538,12 @@ encryption_method_map(Props, []) -> Props;
 encryption_method_map(Props, [Method|Methods]) ->
     case props:get_value(Method, ?ENCRYPTION_MAP, []) of
         [] -> encryption_method_map(Props, Methods);
-        Values ->
-            encryption_method_map(props:set_values(Values, Props), Methods)
+        Values -> encryption_method_map(props:set_values(Values, Props), Methods)
     end;
 encryption_method_map(Props, JObj) ->
-    encryption_method_map(Props
-                          ,wh_json:get_value([<<"media">>
-                                              ,<<"encryption">>
-                                              ,<<"methods">>
-                                             ]
-                                             ,JObj
-                                             ,[]
-                                            )
-                         ).
+    Key = [<<"media">>, <<"encryption">>, <<"methods">>],
+    Methods = wh_json:get_value(Key, JObj, []),
+    encryption_method_map(Props, Methods).
 
 -spec generate_security_ccvs(auth_user()) -> wh_proplist().
 -spec generate_security_ccvs(auth_user(), wh_proplist()) -> wh_proplist().

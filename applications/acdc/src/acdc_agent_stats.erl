@@ -229,7 +229,7 @@ handle_status_stat(JObj, Props) ->
                        }
                      ).
 
--spec status_stat_id(ne_binary(), pos_integer(), _) -> ne_binary().
+-spec status_stat_id(ne_binary(), pos_integer(), any()) -> ne_binary().
 status_stat_id(AgentId, Timestamp, _EventName) ->
     <<AgentId/binary, "::", (wh_util:to_binary(Timestamp))/binary>>.
 
@@ -477,7 +477,7 @@ status_stat_to_doc(#status_stat{id=Id
        ]).
 
 archive_status_data(Srv, 'true') ->
-    put('callid', <<"acdc_stats.force_status_archiver">>),
+    wh_util:put_callid(<<"acdc_stats.force_status_archiver">>),
 
     Match = [{#status_stat{is_archived='$1'
                            ,_='_'
@@ -487,7 +487,7 @@ archive_status_data(Srv, 'true') ->
              }],
     maybe_archive_status_data(Srv, Match);
 archive_status_data(Srv, 'false') ->
-    put('callid', <<"acdc_stats.status_archiver">>),
+    wh_util:put_callid(<<"acdc_stats.status_archiver">>),
 
     Past = wh_util:current_tstamp() - ?ARCHIVE_WINDOW,
     Match = [{#status_stat{timestamp='$1'
@@ -502,7 +502,7 @@ archive_status_data(Srv, 'false') ->
     maybe_archive_status_data(Srv, Match).
 
 maybe_archive_status_data(Srv, Match) ->
-    case ets:select(acdc_agent_stats:status_table_id(), Match) of
+    case ets:select(?MODULE:status_table_id(), Match) of
         [] -> 'ok';
         Stats ->
             couch_mgr:suppress_change_notice(),

@@ -181,7 +181,7 @@
 %% @end
 %%--------------------------------------------------------------------
 start_link(Supervisor, AgentJObj) ->
-    AgentId = wh_json:get_value(<<"_id">>, AgentJObj),
+    AgentId = wh_doc:id(AgentJObj),
     AcctId = account_id(AgentJObj),
 
     Queues = case wh_json:get_value(<<"queues">>, AgentJObj) of
@@ -484,7 +484,7 @@ handle_cast({'queue_logout', Q}, #state{agent_queues=[Q]
                                        }=State) ->
     lager:debug("agent logged out of last known queue ~s, logging out", [Q]),
     logout_from_queue(AcctId, AgentId, Q),
-    acdc_agent_listener:logout_agent(self()),
+    ?MODULE:logout_agent(self()),
     {'noreply', State#state{agent_queues=[]}};
 handle_cast({'queue_logout', Q}, #state{agent_queues=Qs
                                         ,acct_id=AcctId
@@ -544,7 +544,7 @@ handle_cast({'channel_hungup', CallId}, #state{call=Call
                      ,'hibernate'};
                 'true' ->
                     lager:debug("thief is done, going down"),
-                    acdc_agent_listener:stop(self()),
+                    ?MODULE:stop(self()),
                     {'noreply', State}
             end;
         _ ->
@@ -572,7 +572,7 @@ handle_cast('agent_timeout', #state{agent_call_ids=ACallIds
 
     _ = filter_agent_calls(ACallIds, AgentId),
 
-    put('callid', AgentId),
+    wh_util:put_callid(AgentId),
     {'noreply', State#state{msg_queue_id='undefined'
                             ,acdc_queue_id='undefined'
                             ,agent_call_ids=[]
@@ -1154,7 +1154,7 @@ call_id(Call) ->
                                     ne_binaries().
 maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
     MCallId = whapps_call:call_id(Call),
-    put('callid', MCallId),
+    wh_util:put_callid(MCallId),
 
     ReqId = wh_util:rand_hex_binary(6),
     AcctId = whapps_call:account_id(Call),

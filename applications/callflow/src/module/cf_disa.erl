@@ -18,6 +18,9 @@
 
 -export([handle/2]).
 
+-define(DEFAULT_USE_ACCOUNT_CALLER_ID, whapps_config:get(?CF_CONFIG_CAT, <<"default_use_account_caller_id">>, 'true')).
+-define(DEFAULT_PIN_LENGTH, whapps_config:get_integer(?CF_CONFIG_CAT, <<"default_pin_length">>, 10)).
+
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
@@ -53,8 +56,7 @@ try_collect_pin(Call, _Pin, 0, _Interdigit) ->
 try_collect_pin(Call, Pin, Retries, Interdigit) ->
     Prompt = <<"disa-enter_pin">>,
     NoopId = whapps_call_command:prompt(Prompt, Call),
-    DefaultPinLength = whapps_config:get_integer(?CF_CONFIG_CAT, <<"default_pin_length">>, 10),
-    PinLength = erlang:max(DefaultPinLength, byte_size(Pin)),
+    PinLength = erlang:max(?DEFAULT_PIN_LENGTH, byte_size(Pin)),
 
     lager:debug("collecting up to ~p digits for pin", [PinLength]),
     case whapps_call_command:collect_digits(PinLength
@@ -106,7 +108,7 @@ allow_dial(Data, Call, Retries, Interdigit) ->
 maybe_route_to_callflow(Data, Call, Retries, Interdigit, Number) ->
     case cf_util:lookup_callflow(Number, whapps_call:account_id(Call)) of
         {'ok', Flow, NoMatch} ->
-            lager:info("callflow ~s satisfies request", [wh_json:get_value(<<"_id">>, Flow)]),
+            lager:info("callflow ~s satisfies request", [wh_doc:id(Flow)]),
             Updates = [{fun whapps_call:set_request/2
                         ,list_to_binary([Number, "@", whapps_call:request_realm(Call)])
                        }
@@ -147,8 +149,8 @@ maybe_restrict_call(Data, Call, Number, Flow) ->
 
 -spec maybe_update_caller_id(wh_json:object(), whapps_call:call()) -> whapps_call:call().
 maybe_update_caller_id(Data, Call) ->
-    case wh_json:is_true(<<"use_account_caller_id">>, Data, 'false') of
-        'true' -> set_caller_id(Call);
+    case wh_json:is_true(<<"use_account_caller_id">>, Data, ?DEFAULT_USE_ACCOUNT_CALLER_ID) of
+        'true'  -> set_caller_id(Call);
         'false' -> Call
     end.
 
@@ -222,11 +224,9 @@ set_caller_id(Call) ->
 maybe_get_account_cid(AccountId, Call) ->
     Name = whapps_call:caller_id_name(Call),
     Number = whapps_call:caller_id_number(Call),
-    AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
-    case couch_mgr:open_cache_doc(AccountDb, AccountId) of
+    case kz_account:fetch(AccountId) of
         {'error', _} -> cf_attributes:maybe_get_assigned_number(Number, Name, Call);
-        {'ok', JObj} ->
-            maybe_get_account_external_number(Number, Name, JObj, Call)
+        {'ok', JObj} -> maybe_get_account_external_number(Number, Name, JObj, Call)
     end.
 
 %%--------------------------------------------------------------------
@@ -274,9 +274,7 @@ should_restrict_call(Data, Call, Number) ->
 %%--------------------------------------------------------------------
 -spec should_restrict_call_by_account(whapps_call:call(), ne_binary()) -> boolean().
 should_restrict_call_by_account(Call, Number) ->
-    AccountId = whapps_call:account_id(Call),
-    AccountDb = whapps_call:account_db(Call),
-    case couch_mgr:open_cache_doc(AccountDb, AccountId) of
+    case kz_account:fetch(whapps_call:account_id(Call)) of
         {'error', _} -> 'false';
         {'ok', JObj} ->
             Classification = wnm_util:classify_number(Number),

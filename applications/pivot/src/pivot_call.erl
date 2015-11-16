@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
+%%% @copyright (C) 2012-2015, 2600Hz INC
 %%% @doc
 %%% Handle processing of the pivot call
 %%% @end
@@ -137,7 +137,7 @@ relay_cdr_event(JObj, Props) ->
 %%--------------------------------------------------------------------
 -spec init([whapps_call:call() | wh_json:object()]) -> {'ok', state(), 'hibernate'}.
 init([Call, JObj]) ->
-    put('callid', whapps_call:call_id(Call)),
+    wh_util:put_callid(whapps_call:call_id(Call)),
 
     Method = kzt_util:http_method(wh_json:get_value(<<"HTTP-Method">>, JObj, 'get')),
     VoiceUri = wh_json:get_value(<<"Voice-URI">>, JObj),
@@ -173,7 +173,7 @@ init([Call, JObj]) ->
 %%                                   {'stop', Reason, State}
 %% @end
 %%--------------------------------------------------------------------
--spec handle_call(term(), pid_ref(), state()) -> {'reply', 'ok', state()}.
+-spec handle_call(any(), pid_ref(), state()) -> {'reply', 'ok', state()}.
 handle_call(_Request, _From, State) ->
     {'reply', 'ok', State}.
 
@@ -187,8 +187,8 @@ handle_call(_Request, _From, State) ->
 %%                                  {'stop', Reason, State}
 %% @end
 %%--------------------------------------------------------------------
--spec handle_cast(term(), state()) -> {'noreply', state()} |
-                                      {'stop', 'normal', state()}.
+-spec handle_cast(any(), state()) -> {'noreply', state()} |
+                                     {'stop', 'normal', state()}.
 handle_cast('usurp', State) ->
     lager:debug("terminating pivot call because of usurp"),
     {'stop', 'normal', State#state{call='undefined'}};
@@ -228,8 +228,9 @@ handle_cast({'gen_listener', {'created_queue', Q}}, #state{call=Call}=State) ->
     %% TODO: Block on waiting for controller queue
     {'noreply', State#state{call=whapps_call:set_controller_queue(Q, Call)}};
 
-handle_cast({'stop', _Call}, #state{cdr_uri='undefined'}=State) ->
-    lager:debug("no cdr callback, server going down"),
+handle_cast({'stop', Call}, #state{cdr_uri='undefined'}=State) ->
+    lager:debug("no cdr callback, terminating call"),
+    whapps_call_command:hangup(Call),
     {'stop', 'normal', State};
 
 handle_cast({'cdr', _JObj}, #state{cdr_uri='undefined'
@@ -282,8 +283,8 @@ handle_cast(_Req, State) ->
 %%                                   {'stop', Reason, State}
 %% @end
 %%--------------------------------------------------------------------
--spec handle_info(term(), state()) -> {'noreply', state()} |
-                                      {'stop', term(), state()}.
+-spec handle_info(any(), state()) -> {'noreply', state()} |
+                                     {'stop', any(), state()}.
 handle_info({'stop', _Call}, State) ->
     {'stop', 'normal', State};
 handle_info({'ibrowse_async_headers', ReqId, "200"=StatusCode, Hdrs}
@@ -292,10 +293,10 @@ handle_info({'ibrowse_async_headers', ReqId, "200"=StatusCode, Hdrs}
     RespHeaders = normalize_resp_headers(Hdrs),
     lager:debug("recv resp headers"),
     {'noreply', State#state{
-                    response_content_type=props:get_value(<<"content-type">>, RespHeaders)
-                    ,response_code=wh_util:to_binary(StatusCode)
-                    ,response_headers=RespHeaders
-                }
+                  response_content_type=props:get_value(<<"content-type">>, RespHeaders)
+                  ,response_code=wh_util:to_binary(StatusCode)
+                  ,response_headers=RespHeaders
+                 }
     };
 
 handle_info({'ibrowse_async_headers', ReqId, "302"=StatusCode, Hdrs}
@@ -317,24 +318,22 @@ handle_info({'ibrowse_async_headers', ReqId, "302"=StatusCode, Hdrs}
     ?MODULE:new_request(self(), Redirect1, Method, Params),
     {'noreply', State};
 handle_info({'ibrowse_async_headers', ReqId, "4"++_=StatusCode, RespHeaders}
-            ,#state{request_id=ReqId
-                   }=State) ->
+            ,#state{request_id=ReqId}=State) ->
     lager:info("recv client failure status code ~s", [StatusCode]),
     {'noreply', State#state{
-                    response_content_type=props:get_value(<<"content-type">>, RespHeaders)
-                    ,response_code=wh_util:to_binary(StatusCode)
-                    ,response_headers=RespHeaders
-                }
+                  response_content_type=props:get_value(<<"content-type">>, RespHeaders)
+                  ,response_code=wh_util:to_binary(StatusCode)
+                  ,response_headers=RespHeaders
+                 }
     };
 handle_info({'ibrowse_async_headers', ReqId, "5"++_=StatusCode, RespHeaders}
-            ,#state{request_id=ReqId
-                   }=State) ->
+            ,#state{request_id=ReqId}=State) ->
     lager:info("recv server failure status code ~s", [StatusCode]),
     {'noreply', State#state{
-                    response_content_type=props:get_value(<<"content-type">>, RespHeaders)
-                    ,response_code=wh_util:to_binary(StatusCode)
-                    ,response_headers=RespHeaders
-                }
+                  response_content_type=props:get_value(<<"content-type">>, RespHeaders)
+                  ,response_code=wh_util:to_binary(StatusCode)
+                  ,response_headers=RespHeaders
+                 }
     };
 
 handle_info({'ibrowse_async_response', ReqId, {'error', 'connection_closed'}}
@@ -423,7 +422,7 @@ handle_event(_JObj, #state{response_pid=Pid
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
--spec terminate(term(), state()) -> 'ok'.
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, #state{response_pid=Pid}) ->
     exit(Pid, 'kill'),
     lager:info("pivot call terminating: ~p", [_Reason]).
@@ -436,7 +435,7 @@ terminate(_Reason, #state{response_pid=Pid}) ->
 %% @spec code_change(OldVsn, State, Extra) -> {'ok', NewState}
 %% @end
 %%--------------------------------------------------------------------
--spec code_change(term(), state(), term()) -> {'ok', state()}.
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
@@ -516,7 +515,7 @@ normalize_resp_headers(Headers) ->
 
 -spec handle_resp(api_binary(), whapps_call:call(), ne_binary(), binary()) -> 'ok'.
 handle_resp(RequesterQ, Call, CT, RespBody) ->
-    put('callid', whapps_call:call_id(Call)),
+    wh_util:put_callid(whapps_call:call_id(Call)),
     Srv = kzt_util:get_amqp_listener(Call),
 
     case process_resp(RequesterQ, Call, CT, RespBody) of

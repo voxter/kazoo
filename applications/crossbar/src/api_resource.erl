@@ -25,19 +25,15 @@
          ,content_types_accepted/2
          ,languages_provided/2
          ,charsets_provided/2
-         ,encodings_provided/2
          ,resource_exists/2
          ,moved_temporarily/2
          ,moved_permanently/2
          ,previously_existed/2
          ,allow_missing_post/2
-         ,post_is_create/2
-         ,create_path/2
-         ,process_post/2
          ,delete_resource/2
          ,delete_completed/2
          ,is_conflict/2
-         ,to_json/2, to_binary/2, to_csv/2
+         ,to_json/2, to_binary/2, to_csv/2, to_pdf/2
          ,from_json/2, from_binary/2, from_form/2
          ,multiple_choices/2
          ,generate_etag/2
@@ -63,7 +59,7 @@ rest_init(Req0, Opts) ->
                 {'undefined', _} -> couch_mgr:get_uuid();
                 {UserReqId, _} -> wh_util:to_binary(UserReqId)
             end,
-    put('callid', ReqId),
+    wh_util:put_callid(ReqId),
     ProfileId = case cowboy_req:header(<<"x-profile-id">>, Req0) of
                     {'undefined', _} -> 'undefined';
                     {ProfId, _} -> wh_util:to_binary(ProfId)
@@ -84,26 +80,36 @@ rest_init(Req0, Opts) ->
 
     {Headers, _} = cowboy_req:headers(Req7),
 
-    Context0 = #cb_context{
-                  req_id = ReqId
-                  ,req_headers = Headers
-                  ,raw_host = wh_util:to_binary(Host)
-                  ,port = wh_util:to_integer(Port)
-                  ,raw_path = wh_util:to_binary(Path)
-                  ,raw_qs = wh_util:to_binary(QS)
-                  ,method = wh_util:to_binary(Method)
-                  ,resp_status = 'fatal'
-                  ,resp_error_msg = <<"init failed">>
-                  ,resp_error_code = 500
-                  ,client_ip = ClientIP
-                  ,profile_id = ProfileId
-                  ,api_version = Version
-                  ,magic_pathed = props:is_defined('magic_path', Opts)
-                 },
-    Event = api_util:create_event_name(Context0, <<"init">>),
-    {Context1, _} = crossbar_bindings:fold(Event, {Context0, Opts}),
-    lager:info("~s: ~s?~s from ~s", [Method, Path, QS, ClientIP]),
-    {'ok', cowboy_req:set_resp_header(<<"x-request-id">>, ReqId, Req7), Context1}.
+    Setters = [{fun cb_context:set_req_id/2, ReqId}
+              ,{fun cb_context:set_req_headers/2, Headers}
+              ,{fun cb_context:set_raw_host/2, wh_util:to_binary(Host)}
+              ,{fun cb_context:set_port/2, wh_util:to_integer(Port)}
+              ,{fun cb_context:set_raw_path/2, wh_util:to_binary(Path)}
+              ,{fun cb_context:set_raw_qs/2, wh_util:to_binary(QS)}
+              ,{fun cb_context:set_method/2, wh_util:to_binary(Method)}
+              ,{fun cb_context:set_resp_status/2, 'fatal'}
+              ,{fun cb_context:set_resp_error_msg/2, <<"init failed">>}
+              ,{fun cb_context:set_resp_error_code/2, 500}
+              ,{fun cb_context:set_client_ip/2, ClientIP}
+              ,{fun cb_context:set_profile_id/2, ProfileId}
+              ,{fun cb_context:set_api_version/2, Version}
+              ,{fun cb_context:set_magic_pathed/2, props:is_defined('magic_path', Opts)}
+              ],
+
+    Context0 = cb_context:setters(cb_context:new(), Setters),
+
+    case api_util:get_req_data(Context0, Req7) of
+        {'halt', Req8, Context1} ->
+            lager:debug("getting request data failed, halting"),
+            {Req9, Context2} = api_util:get_auth_token(Req8, Context1),
+            {'ok', Req9, Context2};
+        {Context1, Req8} ->
+            {Req9, Context2} = api_util:get_auth_token(Req8, Context1),
+            Event = api_util:create_event_name(Context2, <<"init">>),
+            {Context3, _} = crossbar_bindings:fold(Event, {Context2, Opts}),
+            lager:info("~s: ~s?~s from ~s", [Method, Path, QS, ClientIP]),
+            {'ok', cowboy_req:set_resp_header(<<"x-request-id">>, ReqId, Req9), Context3}
+    end.
 
 find_version(Path, Req) ->
     case cowboy_req:binding('version', Req) of
@@ -157,14 +163,20 @@ rest_terminate(Req, Context, Verb) ->
 -spec known_methods(cowboy_req:req(), cb_context:context()) ->
                            {http_methods(), cowboy_req:req(), cb_context:context()}.
 known_methods(Req, Context) ->
-    lager:debug("run: known_methods"),
-    {?ALLOWED_METHODS
-     ,Req
-     ,cb_context:set_allowed_methods(
-        cb_context:set_allow_methods(Context, ?ALLOWED_METHODS)
-        ,?ALLOWED_METHODS
-       )
-    }.
+    case cb_context:resp_status(Context) of
+        'halt' ->
+            lager:debug("error during init, returning error response"),
+            {'halt', Req, Context};
+        _Status ->
+            lager:debug("run: known_methods"),
+            {?ALLOWED_METHODS
+             ,Req
+             ,cb_context:set_allowed_methods(
+                cb_context:set_allow_methods(Context, ?ALLOWED_METHODS)
+                ,?ALLOWED_METHODS
+               )
+            }
+    end.
 
 -spec path_tokens(cb_context:context()) -> ne_binaries().
 path_tokens(Context) ->
@@ -176,7 +188,7 @@ path_tokens(Context) ->
 
 -spec allowed_methods(cowboy_req:req(), cb_context:context()) ->
                              {http_methods() | 'halt', cowboy_req:req(), cb_context:context()}.
-allowed_methods(Req0, Context) ->
+allowed_methods(Req, Context) ->
     lager:debug("run: allowed_methods"),
     Methods = cb_context:allowed_methods(Context),
     Tokens = path_tokens(Context),
@@ -186,14 +198,9 @@ allowed_methods(Req0, Context) ->
             %% Because we allow tunneling of verbs through the request,
             %% we have to check and see if we need to override the actual
             %% HTTP method with the tunneled version
-            case api_util:get_req_data(Context, Req0) of
-                {'halt', _Req1, _Context1}=Halt ->
-                    Halt;
-                {Context1, Req1} ->
-                    determine_http_verb(Req1, cb_context:set_req_nouns(Context1, Nouns))
-            end;
+            determine_http_verb(Req, cb_context:set_req_nouns(Context, Nouns));
         [] ->
-            {Methods, Req0, cb_context:set_allow_methods(Context, Methods)}
+            {Methods, Req, cb_context:set_allow_methods(Context, Methods)}
     end.
 
 -spec determine_http_verb(cowboy_req:req(), cb_context:context()) ->
@@ -350,7 +357,7 @@ options(Req0, Context) ->
 
 -type content_type_callbacks() :: [{{ne_binary(), ne_binary(), wh_proplist()}, atom()} |
                                    {ne_binary(), atom()}
-                                   ,...] | [].
+                                   ].
 -spec content_types_provided(cowboy_req:req(), cb_context:context()) ->
                                     {content_type_callbacks(), cowboy_req:req(), cb_context:context()}.
 content_types_provided(Req, Context0) ->
@@ -422,7 +429,7 @@ default_content_types_accepted(Req, Context) ->
     {CTA, Req, Context}.
 
 -type content_type_fun() :: {content_type(), atom()}.
--type content_types_funs() :: [content_type_fun(),...] | [].
+-type content_types_funs() :: [content_type_fun()].
 
 -spec content_types_accepted(content_type(), cowboy_req:req(), cb_context:context()) ->
                                     {content_types_funs(), cowboy_req:req(), cb_context:context()}.
@@ -454,7 +461,7 @@ content_types_accepted_fold({Fun, L}, Acc, CT) ->
                 ,L
                ).
 
--spec content_type_accepted_fold(_, content_type_fun(), atom(), content_type()) ->
+-spec content_type_accepted_fold(any(), content_type_fun(), atom(), content_type()) ->
                                         content_type_fun().
 content_type_accepted_fold({Type, SubType}, Acc, Fun, CT) ->
     case api_util:content_type_matches(CT, {Type, SubType, []}) of
@@ -484,17 +491,6 @@ languages_provided(Req0, Context0) ->
 
 charsets_provided(_Req, _Context) ->
     'no_call'.
-
--spec encodings_provided(cowboy_req:req(), cb_context:context()) ->
-                                {ne_binaries(), cowboy_req:req(), cb_context:context()}.
-encodings_provided(Req0, Context0) ->
-    lager:debug("run: encodings_provided"),
-
-    [{Mod, Params} | _] = cb_context:req_nouns(Context0),
-    Event = api_util:create_event_name(Context0, <<"encodings_provided.", Mod/binary>>),
-    Payload = {Req0, Context0, Params},
-    {Req1, Context1, _} = crossbar_bindings:fold(Event, Payload),
-    {cb_context:encodings_provided(Context1), Req1, Context1}.
 
 -spec resource_exists(cowboy_req:req(), cb_context:context()) ->
                              {boolean(), cowboy_req:req(), cb_context:context()}.
@@ -573,42 +569,6 @@ delete_completed(Req, Context) ->
     lager:debug("run: delete_completed"),
     api_util:create_push_response(Req, Context).
 
-%% If allow_missing_post returned true (cause it was a POST) and PUT has been tunnelled,
-%% POST is a create
--spec post_is_create(cowboy_req:req(), cb_context:context()) ->
-                            {boolean(), cowboy_req:req(), cb_context:context()}.
-post_is_create(Req, Context) ->
-    post_is_create(Req, Context, cb_context:req_verb(Context)).
-
-post_is_create(Req, Context, ?HTTP_PUT) ->
-    lager:debug("treating post request as a create"),
-    {'true', Req, Context};
-post_is_create(Req, Context, _ReqVerb) ->
-    lager:debug("run: post_is_create: false"),
-    {'false', Req, Context}.
-
-%% set the location header
--spec create_path(cowboy_req:req(), cb_context:context()) ->
-                         {ne_binary(), cowboy_req:req(), cb_context:context()}.
-create_path(Req, Context) ->
-    lager:debug("run: create_path"),
-
-    Path = props:get_value(<<"Location">>, cb_context:resp_headers(Context), <<>>),
-    lager:debug("setting path to: ~s", [Path]),
-    {crossbar_util:get_path(Req, Path), Req, Context}.
-
--spec process_post(cowboy_req:req(), cb_context:context()) ->
-                          {boolean(), cowboy_req:req(), cb_context:context()}.
-process_post(Req0, Context0) ->
-    lager:debug("run: process_post"),
-    case api_util:execute_request(Req0, Context0) of
-        {'true', Req1, Context1} ->
-            Event = api_util:create_event_name(Context1, <<"process_post">>),
-            _ = crossbar_bindings:map(Event, {Req1, Context1}),
-            api_util:create_push_response(Req1, Context1);
-        Else -> Else
-    end.
-
 -spec is_conflict(cowboy_req:req(), cb_context:context()) ->
                          {boolean(), cowboy_req:req(), cb_context:context()}.
 is_conflict(Req, Context) ->
@@ -678,6 +638,9 @@ to_json(Req0, Context0, 'undefined') ->
 to_json(Req, Context, <<"csv">>) ->
     lager:debug("overridding json with csv builder"),
     to_csv(Req, Context);
+to_json(Req, Context, <<"pdf">>) ->
+    lager:debug("overridding json with pdf builder"),
+    to_pdf(Req, Context);
 to_json(Req, Context, Accept) ->
     case to_fun(Context, Accept, 'to_json') of
         'to_json' -> to_json(Req, Context, 'undefined');
@@ -758,6 +721,28 @@ to_csv(Req, Context) ->
              ,Context1
             }
     end.
+
+-spec to_pdf(cowboy_req:req(), cb_context:context()) ->
+                    {binary(), cowboy_req:req(), cb_context:context()}.
+to_pdf(Req, Context) ->
+    lager:debug("run: to_pdf"),
+    [{Mod, _Params}|_] = cb_context:req_nouns(Context),
+    Verb = cb_context:req_verb(Context),
+    Event = api_util:create_event_name(Context, [<<"to_pdf">>
+                                                 ,wh_util:to_lower_binary(Verb)
+                                                 ,Mod
+                                                ]),
+    {Req1, Context1} = crossbar_bindings:fold(Event, {Req, Context}),
+    RespData = cb_context:resp_data(Context1),
+    RespHeaders = [{<<"Content-Type">>, <<"application/pdf">>}
+                    ,{<<"Content-Length">>, erlang:size(RespData)}
+                    ,{<<"Content-Disposition">>, <<"attachment; filename=\"file.pdf\"">>}
+                    | cb_context:resp_headers(Context1)
+                   ],
+    {RespData
+     ,api_util:set_resp_headers(Req1, cb_context:set_resp_headers(Context1, RespHeaders))
+     ,Context1
+    }.
 
 -spec accept_override(cb_context:context()) -> api_binary().
 accept_override(Context) ->
@@ -841,7 +826,7 @@ csv_ize([F|Rest]) ->
      ,<<"\n">>
     ].
 
--spec try_to_binary(_) -> binary().
+-spec try_to_binary(any()) -> binary().
 try_to_binary(Value) ->
     try wh_util:to_binary(Value) of
         V -> V

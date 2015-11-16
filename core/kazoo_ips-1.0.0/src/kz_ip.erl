@@ -55,7 +55,7 @@ from_json(JObj) -> JObj.
 %%--------------------------------------------------------------------
 -spec create(ne_binary(), ne_binary(), ne_binary()) ->
                     {'ok', ip()} |
-                    {'error', _}.
+                    {'error', any()}.
 create(IP, Zone, Host) ->
     Timestamp = wh_util:current_tstamp(),
     JObj = wh_json:from_list(
@@ -72,7 +72,7 @@ create(IP, Zone, Host) ->
     case couch_mgr:save_doc(?WH_DEDICATED_IP_DB, JObj) of
         {'error', 'not_found'} ->
             kz_ip_utils:refresh_database(
-              fun() -> kz_ip:create(IP, Zone, Host) end
+              fun() -> ?MODULE:create(IP, Zone, Host) end
              );
         {'ok', SavedJObj} ->
             lager:debug("created dedicated ip ~s in zone ~s on host ~s"
@@ -94,7 +94,7 @@ create(IP, Zone, Host) ->
 %%--------------------------------------------------------------------
 -spec fetch(ne_binary()) ->
                    {'ok', ip()} |
-                   {'error', _}.
+                   {'error', any()}.
 fetch(IP) ->
     case couch_mgr:open_doc(?WH_DEDICATED_IP_DB, IP) of
         {'ok', JObj} -> {'ok', from_json(JObj)};
@@ -113,7 +113,7 @@ fetch(IP) ->
 %%--------------------------------------------------------------------
 -spec assign(ne_binary(), ne_binary() | ip()) ->
                     {'ok', ip()} |
-                    {'error', _}.
+                    {'error', any()}.
 assign(Account, <<_/binary>> = Ip) ->
     case fetch(Ip) of
         {'ok', IP} -> assign(Account, IP);
@@ -144,7 +144,7 @@ assign(Account, IP) ->
 %%--------------------------------------------------------------------
 -spec release(ne_binary() | ip()) ->
                      {'ok', ip()} |
-                     {'error', _}.
+                     {'error', any()}.
 release(<<_/binary>> = Ip) ->
     case fetch(Ip) of
         {'ok', IP} -> release(IP);
@@ -169,7 +169,7 @@ release(IP) ->
 %%--------------------------------------------------------------------
 -spec delete(ne_binary() | ip()) ->
                      {'ok', ip()} |
-                    {'error', _}.
+                    {'error', any()}.
 delete(<<_/binary>> = IP) ->
     case couch_mgr:open_doc(?WH_DEDICATED_IP_DB, IP) of
         {'ok', JObj} -> delete(from_json(JObj));
@@ -186,7 +186,7 @@ delete(IP) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec ip(ip()) -> ne_binary().
-ip(IP) -> wh_json:get_value(<<"_id">>, IP).
+ip(IP) -> wh_doc:id(IP).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -204,7 +204,7 @@ zone(IP) -> wh_json:get_value(<<"pvt_zone">>, IP).
 %% @end
 %%--------------------------------------------------------------------
 -spec modified(ip()) -> ne_binary().
-modified(IP) -> wh_json:get_value(<<"pvt_modified">>, IP).
+modified(IP) -> wh_doc:modified(IP).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -213,7 +213,7 @@ modified(IP) -> wh_json:get_value(<<"pvt_modified">>, IP).
 %% @end
 %%--------------------------------------------------------------------
 -spec created(ip()) -> ne_binary().
-created(IP) -> wh_json:get_value(<<"pvt_created">>, IP).
+created(IP) -> wh_doc:created(IP).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -241,7 +241,7 @@ assigned_to(IP) -> wh_json:get_value(<<"pvt_assigned_to">>, IP).
 %%--------------------------------------------------------------------
 -spec is_dedicated_ip(ip()) -> boolean().
 is_dedicated_ip(IP) ->
-    wh_json:get_value(<<"pvt_type">>, IP) =:= ?PVT_TYPE.
+    wh_doc:type(IP) =:= ?PVT_TYPE.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -266,7 +266,7 @@ is_available(IP) ->
 %%--------------------------------------------------------------------
 -spec save(wh_json:object(), api_binary()) ->
                   {'ok', ip()} |
-                  {'error', _}.
+                  {'error', any()}.
 save(JObj, PrevAccountId) ->
     case couch_mgr:save_doc(?WH_DEDICATED_IP_DB, JObj) of
         {'ok', J} ->
@@ -274,9 +274,7 @@ save(JObj, PrevAccountId) ->
             _ = reconcile_services(PrevAccountId, AccountId),
             {'ok', from_json(J)};
         {'error', _R}=E ->
-            lager:debug("failed to save dedicated ip ~s: ~p"
-                        ,[wh_json:get_value(<<"_id">>, JObj), _R]
-                       ),
+            lager:debug("failed to save dedicated ip ~s: ~p", [wh_doc:id(JObj), _R]),
             E
     end.
 

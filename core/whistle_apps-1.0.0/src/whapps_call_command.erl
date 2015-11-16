@@ -64,6 +64,9 @@
          ,park/1
          ,park_command/1
         ]).
+-export([soft_hold/1, soft_hold/2
+         ,soft_hold_command/2, soft_hold_command/4, soft_hold_command/5
+        ]).
 -export([play/2, play/3, play/4
          ,play_command/2, play_command/3, play_command/4
          ,b_play/2, b_play/3, b_play/4
@@ -197,7 +200,7 @@
                               {'tts', ne_binary()} |
                               {'tts', ne_binary(), ne_binary()} |
                               {'tts', ne_binary(), ne_binary(), ne_binary()}.
--type audio_macro_prompts() :: [audio_macro_prompt(),...] | [].
+-type audio_macro_prompts() :: [audio_macro_prompt()].
 -export_type([audio_macro_prompt/0
               ,audio_macro_prompts/0
              ]).
@@ -351,7 +354,7 @@ channel_status_filter([JObj|JObjs]) ->
 %%      for them in the receive blocks below.
 %% @end
 %%--------------------------------------------------------------------
--type relay_fun() :: fun((pid() | atom(), term()) -> any()).
+-type relay_fun() :: fun((pid() | atom(), any()) -> any()).
 -spec relay_event(pid(), wh_json:object()) -> any().
 -spec relay_event(pid(), wh_json:object(), relay_fun()) -> any().
 relay_event(Pid, JObj) ->
@@ -364,7 +367,7 @@ relay_event(Pid, JObj, RelayFun) ->
                            {'error', 'timeout'}.
 -spec receive_event(wh_timeout(), boolean()) ->
                            {'ok', wh_json:object()} |
-                           {'other', wh_json:object() | term()} |
+                           {'other', wh_json:object() | any()} |
                            {'error', 'timeout'}.
 receive_event(Timeout) -> receive_event(Timeout, 'true').
 receive_event(T, _) when T =< 0 -> {'error', 'timeout'};
@@ -947,28 +950,49 @@ b_page(Endpoints, Timeout, CIDName, CIDNumber, SIPHeaders, Call) ->
 -spec b_bridge(wh_json:objects(), integer(), api_binary(), api_binary(), api_binary(), api_object(), api_binary(), whapps_call:call()) ->
                       whapps_api_bridge_return().
 
+bridge_command(Endpoints, Call) ->
+    bridge_command(Endpoints, ?DEFAULT_TIMEOUT_S, Call).
+bridge_command(Endpoints, Timeout, Call) ->
+    bridge_command(Endpoints, Timeout, wapi_dialplan:dial_method_single(), Call).
+bridge_command(Endpoints, Timeout, Strategy, Call) ->
+    bridge_command(Endpoints, Timeout, Strategy, <<"true">>, Call).
+bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Call) ->
+    bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, 'undefined', Call).
+bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, Call) ->
+    bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, 'undefined', Call).
+bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHeaders, Call) ->
+    bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHeaders, <<"false">>, Call).
+bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHeaders, IgnoreFoward, Call) ->
+    [{<<"Application-Name">>, <<"bridge">>}
+     ,{<<"Endpoints">>, Endpoints}
+     ,{<<"Timeout">>, Timeout}
+     ,{<<"Ignore-Early-Media">>, IgnoreEarlyMedia}
+     ,{<<"Ringback">>, wh_media_util:media_path(Ringback, Call)}
+     ,{<<"Dial-Endpoint-Method">>, Strategy}
+     ,{<<"Custom-SIP-Headers">>, SIPHeaders}
+     ,{<<"Ignore-Forward">>, IgnoreFoward}
+    ].
+
 bridge(Endpoints, Call) ->
-    bridge(Endpoints, ?DEFAULT_TIMEOUT_S, Call).
+    Command = bridge_command(Endpoints, Call),
+    send_command(Command, Call).
 bridge(Endpoints, Timeout, Call) ->
-    bridge(Endpoints, Timeout, wapi_dialplan:dial_method_single(), Call).
+    Command = bridge_command(Endpoints, Timeout, Call),
+    send_command(Command, Call).
 bridge(Endpoints, Timeout, Strategy, Call) ->
-    bridge(Endpoints, Timeout, Strategy, <<"true">>, Call).
+    Command = bridge_command(Endpoints, Timeout, Strategy, Call),
+    send_command(Command, Call).
 bridge(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Call) ->
-    bridge(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, 'undefined', Call).
+    Command = bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Call),
+    send_command(Command, Call).
 bridge(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, Call) ->
-    bridge(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, 'undefined', Call).
+    Command = bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, Call),
+    send_command(Command, Call).
 bridge(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHeaders, Call) ->
-    bridge(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHeaders, <<"false">>, Call).
+    Command = bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHeaders, Call),
+    send_command(Command, Call).
 bridge(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHeaders, IgnoreFoward, Call) ->
-    Command = [{<<"Application-Name">>, <<"bridge">>}
-               ,{<<"Endpoints">>, Endpoints}
-               ,{<<"Timeout">>, Timeout}
-               ,{<<"Dial-Endpoint-Method">>, Strategy}
-               ,{<<"Ignore-Early-Media">>, IgnoreEarlyMedia}
-               ,{<<"Ringback">>, wh_media_util:media_path(Ringback, Call)}
-               ,{<<"Custom-SIP-Headers">>, SIPHeaders}
-               ,{<<"Ignore-Forward">>, IgnoreFoward}
-              ],
+    Command = bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHeaders, IgnoreFoward, Call),
     send_command(Command, Call).
 
 b_bridge(Endpoints, Call) ->
@@ -1001,16 +1025,62 @@ b_bridge_wait(Timeout, Call) ->
 -spec unbridge(whapps_call:call(), ne_binary()) -> 'ok'.
 -spec unbridge(whapps_call:call(), ne_binary(), ne_binary()) -> 'ok'.
 unbridge(Call) ->
-    unbridge(Call, <<"Both">>).
-unbridge(Call, Leg) ->
-    unbridge(Call, Leg, <<"now">>).
-unbridge(Call, Leg, Insert) ->
-    Command = [{<<"Application-Name">>, <<"unbridge">>}
-               ,{<<"Leg">>, Leg}
-               ,{<<"Insert-At">>, Insert}
-               ,{<<"Call-ID">>, whapps_call:call_id(Call)}
-              ],
+    Command = unbridge_command(Call),
     send_command(Command, Call).
+unbridge(Call, Leg) ->
+    Command = unbridge_command(Call, Leg),
+    send_command(Command, Call).
+unbridge(Call, Leg, Insert) ->
+    Command = unbridge_command(Call, Leg, Insert),
+    send_command(Command, Call).
+
+-spec unbridge_command(whapps_call:call()) -> wh_proplist().
+-spec unbridge_command(whapps_call:call(), ne_binary()) -> wh_proplist().
+-spec unbridge_command(whapps_call:call(), ne_binary(), ne_binary()) -> wh_proplist().
+unbridge_command(Call) ->
+    unbridge_command(Call, <<"Both">>).
+unbridge_command(Call, Leg) ->
+    unbridge_command(Call, Leg, <<"now">>).
+unbridge_command(Call, Leg, Insert) ->
+    [{<<"Application-Name">>, <<"unbridge">>}
+     ,{<<"Insert-At">>, Insert}
+     ,{<<"Leg">>, Leg}
+     ,{<<"Call-ID">>, whapps_call:call_id(Call)}
+    ].
+
+-spec soft_hold(whapps_call:call()) -> 'ok'.
+-spec soft_hold(whapps_call:call(), api_binary()) -> 'ok'.
+soft_hold(Call) ->
+    soft_hold(Call, <<"1">>).
+soft_hold(Call, UnholdKey) ->
+    Command = soft_hold_command(whapps_call:call_id(Call), UnholdKey),
+    send_command(Command, Call).
+
+-spec soft_hold_command(ne_binary(), ne_binary()) ->
+                               wh_proplist().
+-spec soft_hold_command(ne_binary(), ne_binary(), api_binary(), api_binary()) ->
+                               wh_proplist().
+-spec soft_hold_command(ne_binary(), ne_binary(), api_binary(), api_binary(), ne_binary()) ->
+                               wh_proplist().
+soft_hold_command(CallId, UnholdKey) ->
+    soft_hold_command(CallId, UnholdKey, 'undefined', 'undefined').
+soft_hold_command(CallId, UnholdKey, AMOH, BMOH) ->
+    soft_hold_command(CallId, UnholdKey, AMOH, BMOH, <<"now">>).
+soft_hold_command(CallId, UnholdKey, AMOH, BMOH, InsertAt) ->
+    props:filter_undefined([{<<"Application-Name">>, <<"soft_hold">>}
+                            ,{<<"Call-ID">>, CallId}
+                            ,{<<"Insert-At">>, InsertAt}
+                            ,{<<"Unhold-Key">>, UnholdKey}
+                            | build_moh_keys(AMOH, BMOH)
+                           ]).
+
+-spec build_moh_keys(api_binary(), api_binary()) ->
+                            wh_proplist_kv(ne_binary(), api_binary()).
+build_moh_keys('undefiend', _) -> [];
+build_moh_keys(AMOH, BMOH) ->
+    [{<<"A-MOH">>, AMOH}
+     ,{<<"B-MOH">>, BMOH}
+    ].
 
 %%--------------------------------------------------------------------
 %% @public
@@ -1842,7 +1912,7 @@ conference(ConfId, Mute, Call) ->
 conference(ConfId, Mute, Deaf, Call) ->
     conference(ConfId, Mute, Deaf, 'false', Call).
 conference(ConfId, Mute, Deaf, Moderator, Call) ->
-    conference(ConfId, Mute, Deaf, Moderator, <<"default">>, Call).
+    conference(ConfId, Mute, Deaf, Moderator, <<"undefined">>, Call).
 conference(ConfId, Mute, Deaf, Moderator, ProfileName, Call) ->
     conference(ConfId, Mute, Deaf, Moderator, ProfileName, 'false', Call).
 conference(ConfId, Mute, Deaf, Moderator, ProfileName, Reinvite, Call) ->
@@ -2080,13 +2150,13 @@ do_collect_digits(#wcc_collect_digits{max_digits=MaxDigits
                                         {'noop_complete'} |
                                         {'continue'} |
                                         {'decrement'} |
-                                        {'error', _}.
+                                        {'error', any()}.
 -spec handle_collect_digit_event(wh_json:object(), api_binary(), {ne_binary(), ne_binary(), ne_binary()}) ->
                                         {'dtmf', ne_binary()} |
                                         {'noop_complete'} |
                                         {'continue'} |
                                         {'decrement'} |
-                                        {'error', _}.
+                                        {'error', any()}.
 handle_collect_digit_event(JObj, NoopId) ->
     handle_collect_digit_event(JObj, NoopId, get_event_type(JObj)).
 

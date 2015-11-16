@@ -88,7 +88,8 @@
 
 -define(WRAPUP_FINISHED, 'wrapup_finished').
 
--define(MAX_FAILURES, whapps_config:get_integer(?CONFIG_CAT, <<"max_connect_failures">>, 3)).
+-define(MAX_CONNECT_FAILURES, <<"max_connect_failures">>).
+-define(MAX_FAILURES, whapps_config:get_integer(?CONFIG_CAT, ?MAX_CONNECT_FAILURES, 3)).
 
 -define(NOTIFY_PICKUP, <<"pickup">>).
 -define(NOTIFY_HANGUP, <<"hangup">>).
@@ -390,34 +391,28 @@ deleted_endpoint(FSM, EP) -> lager:debug("sending EP to ~p: ~p", [FSM, EP]).
 %%--------------------------------------------------------------------
 init([AccountId, AgentId, Supervisor, Props, IsThief]) ->
     FSMCallId = <<"fsm_", AccountId/binary, "_", AgentId/binary>>,
-    put('callid', FSMCallId),
+    wh_util:put_callid(FSMCallId),
     lager:debug("started acdc agent fsm"),
 
     Self = self(),
     _P = wh_util:spawn(?MODULE, 'wait_for_listener', [Supervisor, Self, Props, IsThief]),
     lager:debug("waiting for listener in ~p", [_P]),
-    AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
 
-    {'ok', 'wait', #state{account_id=AccountId
-                          ,account_db=AccountDb
-                          ,agent_id=AgentId
-                          ,fsm_call_id=FSMCallId
-                          ,max_connect_failures=max_failures(AccountDb, AccountId)
+    {'ok', 'wait', #state{account_id = AccountId
+                          ,account_db = wh_util:format_account_id(AccountId, 'encoded')
+                          ,agent_id = AgentId
+                          ,fsm_call_id = FSMCallId
+                          ,max_connect_failures = max_failures(AccountId)
                          }}.
 
--spec max_failures(ne_binary(), ne_binary()) -> non_neg_integer().
--spec max_failures(wh_json:object()) -> non_neg_integer().
-max_failures(AccountDb, AccountId) ->
-    case couch_mgr:open_cache_doc(AccountDb, AccountId) of
+-spec max_failures(ne_binary() | wh_json:object()) -> non_neg_integer().
+max_failures(Account) when is_binary(Account) ->
+    case kz_account:fetch(Account) of
         {'ok', AccountJObj} -> max_failures(AccountJObj);
         {'error', _} -> ?MAX_FAILURES
-    end.
-
+    end;
 max_failures(JObj) ->
-    case wh_json:get_integer_value(<<"max_connect_failures">>, JObj) of
-        'undefined' -> ?MAX_FAILURES;
-        N -> N
-    end.
+    wh_json:get_integer_value(?MAX_CONNECT_FAILURES, JObj, ?MAX_FAILURES).
 
 -spec wait_for_listener(pid(), pid(), wh_proplist(), boolean()) -> 'ok'.
 wait_for_listener(Supervisor, FSM, Props, IsThief) ->
@@ -561,7 +556,7 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
     Call = whapps_call:from_json(wh_json:get_value(<<"Call">>, JObj)),
     CallId = whapps_call:call_id(Call),
 
-    put('callid', CallId),
+    wh_util:put_callid(CallId),
 
     WrapupTimer = wh_json:get_integer_value(<<"Wrapup-Timeout">>, JObj, 0),
     CallerExitKey = wh_json:get_value(<<"Caller-Exit-Key">>, JObj, <<"#">>),
@@ -601,7 +596,7 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
             {'next_state', 'ringing', State#state{wrapup_timeout=WrapupTimer
                                                   ,member_call=Call
                                                   ,member_call_id=CallId
-                                                  ,member_call_start=erlang:now()
+                                                  ,member_call_start=wh_util:now()
                                                   ,member_call_queue_id=QueueId
                                                   ,caller_exit_key=CallerExitKey
                                                   ,endpoints=UpdatedEPs
@@ -1291,7 +1286,6 @@ answered('current_call', _, #state{member_call=Call
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
-
 wrapup({'member_connect_req', _}, State) ->
     {'next_state', 'wrapup', State#state{wrapup_timeout=0}};
 wrapup({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentListener}=State) ->
@@ -1830,9 +1824,9 @@ clear_call(#state{fsm_call_id=FSMemberCallId
                   ,wrapup_ref=WRef
                   ,pause_ref=PRef
                  }=State, NextState)->
-    put('callid', FSMemberCallId),
+    wh_util:put_callid(FSMemberCallId),
 
-    ReadyForAction = not(NextState =:= 'wrapup' orelse NextState =:= 'paused'),
+    ReadyForAction = not (NextState =:= 'wrapup' orelse NextState =:= 'paused'),
     lager:debug("ready for action: ~s: ~s", [NextState, ReadyForAction]),
 
     _ = maybe_stop_timer(WRef, ReadyForAction),
@@ -2023,7 +2017,7 @@ maybe_remove_endpoint(EPId, EPs, AccountId, AgentListener) ->
 
 -spec get_endpoints(wh_json:objects(), server_ref(), whapps_call:call(), api_binary(), api_binary()) ->
                            {'ok', wh_json:objects()} |
-                           {'error', _}.
+                           {'error', any()}.
 get_endpoints(OrigEPs, AgentListener, Call, AgentId, QueueId) ->
     case catch acdc_util:get_endpoints(Call, AgentId) of
         [] ->
@@ -2108,7 +2102,7 @@ notify(Url, Method, Key, #state{account_id=AccountId
                                 ,agent_call_id=AgentCallId
                                 ,member_call_queue_id=QueueId
                                }) ->
-    put('callid', whapps_call:call_id(MemberCall)),
+    wh_util:put_callid(whapps_call:call_id(MemberCall)),
     Data = wh_json:from_list(
              props:filter_undefined(
                [{<<"account_id">>, AccountId}
@@ -2206,7 +2200,7 @@ apply_state_updates(#state{account_id=AccountId
     {'next_state', Atom, ModState#state{agent_state_updates = []}}.
 
 -type state_acc() :: {atom(), fsm_state()}.
--spec state_step(term(), state_acc()) -> state_acc().
+-spec state_step(any(), state_acc()) -> state_acc().
 state_step({'pause', <<"infinity">>}, {_, State}) ->
     {'paused', handle_pause('infinity', State)};
 state_step({'pause', Timeout}, {_, State}) ->

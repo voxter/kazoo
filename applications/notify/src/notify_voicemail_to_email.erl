@@ -69,7 +69,7 @@ handle_req(JObj, _Props) ->
 
     'ok' = notify_util:send_update(RespQ, MsgId, <<"pending">>),
     lager:debug("VM->Email enabled for user, sending to ~p", [Emails]),
-    {'ok', AccountJObj} = couch_mgr:open_cache_doc(AccountDb, wh_util:format_account_id(AccountDb, 'raw')),
+    {'ok', AccountJObj} = kz_account:fetch(AccountDb),
     Timezone = kzd_voicemail_box:timezone(VMBox, <<"UTC">>),
 
     Props = [{<<"email_address">>, Emails}
@@ -141,7 +141,7 @@ create_template_props(Event, Timezone, Account) ->
                            ,{<<"call_id">>, wh_json:get_value(<<"Call-ID">>, Event)}
                            ,{<<"magic_hash">>, magic_hash(Event)}
                           ])}
-     ,{<<"account_db">>, wh_json:get_value(<<"pvt_account_db">>, Account)}
+     ,{<<"account_db">>, wh_doc:account_db(Account)}
     ].
 
 -spec magic_hash(wh_json:object()) -> api_binary().
@@ -289,7 +289,7 @@ mime_to_extension(_) -> <<"wav">>.
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec preaty_print_length('undefined' | integer() | wh_json:object()) -> ne_binary().
+-spec preaty_print_length(integer() | api_object()) -> ne_binary().
 preaty_print_length('undefined') ->
     <<"00:00">>;
 preaty_print_length(Milliseconds) when is_integer(Milliseconds) ->

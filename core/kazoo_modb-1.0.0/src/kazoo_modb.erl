@@ -16,7 +16,9 @@
 -export([get_modb/1, get_modb/2, get_modb/3]).
 -export([maybe_archive_modb/1]).
 -export([refresh_views/1]).
--export([create/1]).
+-export([create/1
+         ,add_routine/1
+        ]).
 -export([maybe_delete/2]).
 -export([get_range/3]).
 -export([get_year_month_sequence/3, get_year_month_sequence/4]).
@@ -41,7 +43,7 @@ get_results(_Account, _View, _ViewOptions, Retry) when Retry =< 0 ->
     {'error', 'retries_exceeded'};
 get_results(Account, View, ViewOptions, Retry) ->
     AccountMODb = get_modb(Account, ViewOptions),
-    EncodedMODb = wh_util:format_account_id(AccountMODb, 'encoded'),
+    EncodedMODb = wh_util:format_account_modb(AccountMODb, 'encoded'),
     case couch_mgr:get_results(EncodedMODb, View, ViewOptions) of
         {'error', 'not_found'} ->
             get_results_not_found(Account, View, ViewOptions, Retry);
@@ -52,7 +54,7 @@ get_results(Account, View, ViewOptions, Retry) ->
                                    {'ok', wh_json:objects()}.
 get_results_not_found(Account, View, ViewOptions, Retry) ->
     AccountMODb = get_modb(Account, ViewOptions),
-    EncodedMODb = wh_util:format_account_id(AccountMODb, 'encoded'),
+    EncodedMODb = wh_util:format_account_modb(AccountMODb, 'encoded'),
     case couch_mgr:db_exists(EncodedMODb) of
         'true' ->
             refresh_views(AccountMODb),
@@ -85,7 +87,7 @@ get_results_missing_db(Account, View, ViewOptions, Retry) ->
 -spec open_doc(ne_binary(), ne_binary(), wh_year() | ne_binary(), wh_month() | ne_binary()) ->
                       {'ok', wh_json:object()} |
                       {'error', atom()}.
-open_doc(Account, <<Year:4/binary, Month:2/binary, "-", _/binary>> = DocId) ->
+open_doc(Account, ?MATCH_MODB_PREFIX(Year,Month,_) = DocId) ->
     AccountMODb = get_modb(Account, wh_util:to_integer(Year), wh_util:to_integer(Month)),
     couch_open(AccountMODb, DocId);
 open_doc(Account, DocId) ->
@@ -104,7 +106,7 @@ open_doc(Account, DocId, Year, Month) ->
                         {'ok', wh_json:object()} |
                         {'error', atom()}.
 couch_open(AccountMODb, DocId) ->
-    EncodedMODb = wh_util:format_account_id(AccountMODb, 'encoded'),
+    EncodedMODb = wh_util:format_account_modb(AccountMODb, 'encoded'),
     case couch_mgr:open_doc(EncodedMODb, DocId) of
         {'ok', _}=Ok -> Ok;
         {'error', _E}=Error ->
@@ -143,9 +145,10 @@ save_doc(Account, Doc, Year, Month) ->
                         {'ok', wh_json:object()} |
                         {'error', atom()}.
 couch_save(AccountMODb, _Doc, 0) ->
-    lager:error("failed to save doc in ~p", AccountMODb);
+    lager:error("failed to save doc in ~p", AccountMODb),
+    {'error', 'doc_save_failed'};
 couch_save(AccountMODb, Doc, Retry) ->
-     EncodedMODb = wh_util:format_account_id(AccountMODb, 'encoded'),
+     EncodedMODb = wh_util:format_account_modb(AccountMODb, 'encoded'),
     case couch_mgr:save_doc(EncodedMODb, Doc) of
         {'ok', _}=Ok -> Ok;
         {'error', 'not_found'} ->
@@ -168,13 +171,13 @@ couch_save(AccountMODb, Doc, Retry) ->
                       ne_binary().
 -spec get_modb(ne_binary(), wh_year() | ne_binary(), wh_month() | ne_binary()) ->
                       ne_binary().
-get_modb(<<_:32/binary, "-", _:4/binary, _:2/binary>>=AccountMODb) ->
+get_modb(?MATCH_MODB_SUFFIX_RAW(_,_,_) = AccountMODb) ->
     AccountMODb;
 get_modb(Account) ->
     {Year, Month, _} = erlang:date(),
     get_modb(Account, Year, Month).
 
-get_modb(<<_:32/binary, "-", _:4/binary, _:2/binary>>=AccountMODb, _) ->
+get_modb(?MATCH_MODB_SUFFIX_RAW(_,_,_) = AccountMODb, _) ->
     AccountMODb;
 get_modb(Account, Props) when is_list(Props) ->
     case {props:get_value('month', Props)
@@ -190,7 +193,7 @@ get_modb(Account, Props) when is_list(Props) ->
 get_modb(Account, Timestamp) ->
     wh_util:format_account_mod_id(Account, Timestamp).
 
-get_modb(<<_:32/binary, "-", _:4/binary, _:2/binary>>=AccountMODb, _Year, _Month) ->
+get_modb(?MATCH_MODB_SUFFIX_RAW(_,_,_) = AccountMODb, _Year, _Month) ->
     AccountMODb;
 get_modb(Account, Year, Month) ->
     wh_util:format_account_mod_id(Account, Year, Month).
@@ -202,7 +205,7 @@ get_modb(Account, Year, Month) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_create(ne_binary()) -> boolean().
-maybe_create(<<_:32/binary, "-", Year:4/binary, Month:2/binary>>=AccountMODb) ->
+maybe_create(?MATCH_MODB_SUFFIX_RAW(_,Year,Month) = AccountMODb) ->
     {Y, M, _} = erlang:date(),
     case {wh_util:to_binary(Y), wh_util:pad_month(M)} of
         {Year, Month} ->
@@ -217,14 +220,14 @@ maybe_create(<<"account%2F", AccountId/binary>>) ->
 
 -spec create(ne_binary()) -> 'ok'.
 create(AccountMODb) ->
-    EncodedMODb = wh_util:format_account_id(AccountMODb, 'encoded'),
+    EncodedMODb = wh_util:format_account_modb(AccountMODb, 'encoded'),
     do_create(AccountMODb, couch_mgr:db_exists(EncodedMODb)).
 
 -spec do_create(ne_binary(), boolean()) -> 'ok'.
 do_create(_AccountMODb, 'true') -> 'ok';
 do_create(AccountMODb, 'false') ->
     lager:debug("create modb ~p", [AccountMODb]),
-    EncodedMODb = wh_util:format_account_id(AccountMODb, 'encoded'),
+    EncodedMODb = wh_util:format_account_modb(AccountMODb, 'encoded'),
     _ = couch_mgr:db_create(EncodedMODb),
     _ = refresh_views(EncodedMODb),
     create_routines(AccountMODb).
@@ -232,7 +235,7 @@ do_create(AccountMODb, 'false') ->
 -spec refresh_views(ne_binary()) -> 'ok'.
 refresh_views(AccountMODb) ->
     lager:debug("init modb ~p", [AccountMODb]),
-    EncodedMODb = wh_util:format_account_id(AccountMODb, 'encoded'),
+    EncodedMODb = wh_util:format_account_modb(AccountMODb, 'encoded'),
     Views = get_modb_views(),
     _ = whapps_util:update_views(EncodedMODb, Views, 'true'),
     'ok'.
@@ -260,15 +263,24 @@ fetch_modb_views() ->
 -spec create_routines(ne_binary()) -> 'ok'.
 create_routines(AccountMODb) ->
     Routines = whapps_config:get(?CONFIG_CAT, <<"routines">>, []),
-    lists:foldl(
-        fun(Mod, _) ->
-            Module = wh_util:to_atom(Mod),
-            _ = Module:modb(AccountMODb),
+    _ = [run_routine(AccountMODb, Routine) || Routine <- Routines],
+    'ok'.
+
+-spec run_routine(ne_binary(), ne_binary()) -> any().
+run_routine(AccountMODb, Routine) ->
+    Module = wh_util:to_atom(Routine),
+    _ = Module:modb(AccountMODb).
+
+-spec add_routine(ne_binary() | atom()) -> 'ok'.
+add_routine(Module) ->
+    Routine = wh_util:to_binary(Module),
+    Routines = whapps_config:get(?CONFIG_CAT, <<"routines">>, []),
+    case lists:member(Routine, Routines) of
+        'true' -> 'ok';
+        'false' ->
+            whapps_config:set_default(?CONFIG_CAT, <<"routines">>, [Routine | Routines]),
             'ok'
-        end
-        ,'ok'
-        ,Routines
-    ).
+    end.
 
 %%--------------------------------------------------------------------
 %% @public

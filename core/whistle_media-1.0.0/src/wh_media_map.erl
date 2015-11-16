@@ -32,6 +32,7 @@
         ]).
 
 -include("whistle_media.hrl").
+-include_lib("whistle/include/wapi_conf.hrl").
 
 -record(state, {}).
 
@@ -103,7 +104,7 @@ handle_media_doc(JObj, _Props) ->
     handle_media_doc_change(JObj, wh_json:get_value(<<"Event-Name">>, JObj)).
 
 -spec handle_media_doc_change(wh_json:object(), ne_binary()) -> 'ok'.
-handle_media_doc_change(JObj, <<"doc_deleted">>) ->
+handle_media_doc_change(JObj, ?DOC_DELETED) ->
     MediaId = wh_json:get_value(<<"ID">>, JObj),
     Database = wh_json:get_value(<<"Database">>, JObj),
     gen_listener:cast(?MODULE, {'rm_mapping'
@@ -282,10 +283,8 @@ init_map(Db, View, StartKey, Limit, SendFun) ->
               ],
     case couch_mgr:get_results(Db, View, Options) of
         {'ok', []} -> lager:debug("no more results in ~s:~s", [Db, View]);
-        {'ok', ViewResults} ->
-            init_map(Db, View, StartKey, Limit, SendFun, ViewResults);
-        {'error', _E} ->
-            lager:debug("error loading ~s in ~s: ~p", [View, Db, _E])
+        {'ok', ViewResults} -> init_map(Db, View, StartKey, Limit, SendFun, ViewResults);
+        {'error', _E} -> lager:debug("error loading ~s in ~s: ~p", [View, Db, _E])
     end.
 
 init_map(Db, View, _StartKey, Limit, SendFun, ViewResults) ->
@@ -316,8 +315,7 @@ maybe_add_prompt(AccountId, JObj) ->
     maybe_add_prompt(AccountId, JObj, wh_json:get_value(<<"prompt_id">>, JObj)).
 
 maybe_add_prompt(?WH_MEDIA_DB, JObj, 'undefined') ->
-    Id = wh_json:get_value(<<"_id">>, JObj),
-
+    Id = wh_doc:id(JObj),
     MapId = mapping_id(?WH_MEDIA_DB, Id),
 
     case ets:lookup(table_id(), MapId) of
@@ -328,9 +326,9 @@ maybe_add_prompt(?WH_MEDIA_DB, JObj, 'undefined') ->
             lager:debug("old prompt ~s being ignored, has languages ~p", [Id, _Ls])
     end;
 maybe_add_prompt(_AccountId, _JObj, 'undefined') ->
-    lager:debug("no prompt id, ignoring ~s for ~s", [wh_json:get_value(<<"_id">>, _JObj), _AccountId]);
+    lager:debug("no prompt id, ignoring ~s for ~s", [wh_doc:id(_JObj), _AccountId]);
 maybe_add_prompt(AccountId, JObj, PromptId) ->
-    lager:debug("add prompt ~s to ~s (~s)", [PromptId, AccountId, wh_json:get_value(<<"_id">>, JObj)]),
+    lager:debug("add prompt ~s to ~s (~s)", [PromptId, AccountId, wh_doc:id(JObj)]),
     Lang = wh_util:to_lower_binary(
              wh_json:get_value(<<"language">>, JObj, wh_media_util:prompt_language(AccountId))
             ),
@@ -343,8 +341,8 @@ maybe_add_prompt(AccountId, JObj, PromptId) ->
                   account_id=AccountId
                   ,prompt_id=PromptId
                   ,languages=wh_json:set_value(Lang
-                                               ,wh_media_util:prompt_path(wh_json:get_value(<<"pvt_account_db">>, JObj)
-                                                                          ,wh_json:get_value(<<"_id">>, JObj)
+                                               ,wh_media_util:prompt_path(wh_doc:account_id(JObj)
+                                                                          ,wh_doc:id(JObj)
                                                                          )
                                                ,Langs
                                               )

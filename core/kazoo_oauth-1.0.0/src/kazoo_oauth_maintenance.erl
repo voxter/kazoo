@@ -26,10 +26,8 @@ register_oauth_app(AccountId, OAuthId, EMail, Secret, Provider) ->
           ,{<<"pvt_type">>, <<"app">>}
           ]),
     case couch_mgr:open_doc(?KZ_OAUTH_DB, OAuthId) of
-        {'ok', _JObj} ->
-            {'error', <<"already registered">>};
-        {'error', _} ->
-            couch_mgr:save_doc(?KZ_OAUTH_DB, Doc)
+        {'ok', _JObj} -> {'error', <<"already registered">>};
+        {'error', _} -> couch_mgr:save_doc(?KZ_OAUTH_DB, Doc)
     end.
 
 -spec register_common_providers() -> 'ok'.

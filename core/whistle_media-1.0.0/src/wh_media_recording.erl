@@ -64,11 +64,16 @@
                                           ,[<<"call_recording">>, <<"storage_retry_times">>]
                                           ,5
                                          )).
+
 %% By convention, we put the options here in macros, but not required.
 -define(BINDINGS(CallId), [{'call', [{'callid', CallId}
-                                     ,{'restrict_to', ['CHANNEL_ANSWER', 'CHANNEL_DESTROY'
-                                                       ,'CHANNEL_BRIDGE', 'CHANNEL_EXECUTE_COMPLETE'
-                                                       ,'RECORD_START', 'RECORD_STOP'
+                                     ,{'restrict_to', ['CHANNEL_ANSWER'
+                                                       ,'CHANNEL_BRIDGE'
+                                                       ,'CHANNEL_DESTROY'
+                                                       ,'CHANNEL_EXECUTE_COMPLETE'
+                                                       ,'CHANNEL_REPLACED'
+                                                       ,'RECORD_START'
+                                                       ,'RECORD_STOP'
                                                       ]}
                                     ]}
                            ,{'self', []}
@@ -112,39 +117,48 @@ strip_tmp(File) -> File.
 -spec handle_call_event(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_call_event(JObj, Props) ->
     wh_util:put_callid(JObj),
+    Pid = props:get_value('server', Props),
+
     case wh_util:get_event_type(JObj) of
         {<<"call_event">>, <<"CHANNEL_BRIDGE">>} ->
             lager:debug("channel bridge maybe start recording on bridge"),
-            gen_listener:cast(props:get_value('server', Props), 'maybe_start_recording');
+            gen_listener:cast(Pid, 'maybe_start_recording');
         {<<"call_event">>, <<"CHANNEL_ANSWER">>} ->
             lager:debug("channel bridge maybe start recording on answer"),
-            gen_listener:cast(props:get_value('server', Props), 'maybe_start_recording_on_answer');
+            gen_listener:cast(Pid, 'maybe_start_recording_on_answer');
+        {<<"call_event">>, <<"CHANNEL_REPLACED">>} ->
+            gen_listener:cast(Pid, {'channel_replaced', kz_call_event:replaced_by(JObj)});
         {<<"call_event">>, <<"RECORD_START">>} ->
-            lager:debug("record_start event recv'd"),
-            gen_listener:cast(props:get_value('server', Props), {'record_start', get_response_media(JObj)});
+            lager:debug("record_start event received"),
+            gen_listener:cast(Pid, {'record_start', get_response_media(JObj)});
         {<<"call_event">>, <<"RECORD_STOP">>} ->
-            lager:debug("record_stop event recv'd"),
-            gen_listener:cast(props:get_value('server', Props), {'store_recording', get_response_media(JObj)});
+            lager:debug("record_stop event received"),
+            gen_listener:cast(Pid, {'store_recording', get_response_media(JObj)});
         {<<"call_event">>, <<"CHANNEL_DESTROY">>} ->
-            gen_listener:cast(props:get_value('server', Props), 'stop_call');
+            gen_listener:cast(Pid, 'stop_call');
         {<<"call_event">>, <<"channel_status_resp">>} ->
-            gen_listener:cast(props:get_value('server', Props)
+            gen_listener:cast(Pid
                               ,{'channel_status', wh_json:get_value(<<"Status">>, JObj)}
                              );
         {<<"call_event">>, <<"CHANNEL_EXECUTE_COMPLETE">>} ->
-            case {wh_json:get_value(<<"Application-Name">>, JObj), wh_json:get_value(<<"Application-Response">>, JObj)} of
+            case {kz_call_event:application_name(JObj)
+                  ,kz_call_event:application_response(JObj)
+                 }
+            of
                 {<<"store">>, <<"failure">>} ->
-                    gen_listener:cast(props:get_value('server', Props), 'store_failed');
+                    gen_listener:cast(Pid, 'store_failed');
                 {<<"store">>, <<"success">>} ->
-                    gen_listener:cast(props:get_value('server', Props), 'store_succeeded');
-                {_App, _Res} -> lager:debug("ignore exec complete: ~s: ~s", [_App, _Res])
+                    gen_listener:cast(Pid, 'store_succeeded');
+                {_App, _Res} ->
+                    lager:debug("ignore exec complete: ~s: ~s", [_App, _Res])
             end;
         {<<"error">>, <<"dialplan">>} ->
-            case wh_json:get_value([<<"Request">>, <<"Application-Name">>], JObj) of
+            App = wh_json:get_value([<<"Request">>, <<"Application-Name">>], JObj),
+            case App of
                 <<"store">> ->
-                    gen_listener:cast(props:get_value('server', Props), 'store_failed');
-                _App ->
-                    lager:debug("ignore dialplan error: ~s", [_App])
+                    gen_listener:cast(Pid, 'store_failed');
+                _ ->
+                    lager:debug("ignore dialplan error: ~s", [App])
             end;
         {_, _Evt} -> lager:debug("ignore event ~p", [_Evt])
     end.
@@ -201,7 +215,9 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({'record_start', Media}, #state{media_name=Media, time_limit=TimeLimit}=State) ->
+handle_cast({'record_start', Media}, #state{media_name=Media
+                                            ,time_limit=TimeLimit
+                                           }=State) ->
     {'noreply', State#state{is_recording='true'
                             ,channel_status_ref=start_check_call_timer()
                             ,time_limit_ref=start_time_limit_timer(TimeLimit)
@@ -219,8 +235,11 @@ handle_cast('maybe_start_recording', #state{is_recording='false'
                                             ,record_min_sec = RecordMinSec
                                            }=State) ->
     start_recording(Call, MediaName, TimeLimit, SampleRate, RecordMinSec),
-    lager:debug("started recording shutting down"),
-    {'stop', 'normal', State};
+    {'noreply', State#state{
+                  channel_status_ref=start_check_call_timer()
+                  ,time_limit_ref=start_time_limit_timer(TimeLimit)
+                 }
+    };
 handle_cast('maybe_start_recording', #state{is_recording='false'
                                             ,record_on_answer='false'
                                             ,call=Call
@@ -235,17 +254,6 @@ handle_cast('maybe_start_recording', #state{is_recording='false'
                   ,time_limit_ref=start_time_limit_timer(TimeLimit)
                  }
     };
-handle_cast('maybe_start_recording', #state{is_recording='false'
-                                            ,record_on_answer='true'
-                                            ,call=Call
-                                            ,media_name=MediaName
-                                            ,time_limit=TimeLimit
-                                            ,should_store={'true', 'other', _}
-                                            ,sample_rate = SampleRate
-                                            ,record_min_sec = RecordMinSec
-                                           }=State) ->
-    start_recording(Call, MediaName, TimeLimit, SampleRate, RecordMinSec),
-    {'stop', 'normal', State};
 handle_cast('maybe_start_recording_on_answer', #state{is_recording='true'}=State) ->
     lager:debug("we've already starting a recording for this call"),
     {'noreply', State};
@@ -259,8 +267,11 @@ handle_cast('maybe_start_recording_on_answer', #state{is_recording='false'
                                                       ,record_min_sec = RecordMinSec
                                                      }=State) ->
     start_recording(Call, MediaName, TimeLimit, SampleRate, RecordMinSec),
-    lager:debug("statred recording on answer shutting down"),
-    {'stop', 'normal', State};
+    {'noreply', State#state{
+                  channel_status_ref=start_check_call_timer()
+                  ,time_limit_ref=start_time_limit_timer(TimeLimit)
+                 }
+    };
 handle_cast('maybe_start_recording_on_answer', #state{is_recording='false'
                                                       ,record_on_answer='true'
                                                       ,call=Call
@@ -275,12 +286,20 @@ handle_cast('maybe_start_recording_on_answer', #state{is_recording='false'
                   ,time_limit_ref=start_time_limit_timer(TimeLimit)
                  }
     };
+handle_cast({'channel_replaced', ReplacedId}, #state{call=Call
+                                                     ,format=Format
+                                                    }=State) ->
+    lager:debug("recv channel_replaced event"),
+    {'noreply', State#state{call=whapps_call:set_call_id(ReplacedId, Call)
+                            ,media_name=get_media_name(ReplacedId, Format)
+                           }
+    };
 handle_cast('stop_call', #state{store_attempted='true'}=State) ->
     lager:debug("we've already sent a store attempt, waiting to hear back"),
     {'noreply', State};
 handle_cast('stop_call', #state{is_recording='false'}=State) ->
-    lager:debug("recv stop_call event, but recording is not started, ignoring event"),
-    {'noreply', State};
+    lager:debug("recv stop_call event, recording is not started, shutting down"),
+    {'stop', 'normal', State};
 handle_cast('stop_call', #state{is_recording='true'
                                 ,media_name=MediaName
                                 ,format=Format
@@ -346,7 +365,7 @@ handle_cast('store_failed', #state{retries=Retries
     lager:debug("store failed, retrying ~p times", [Retries]),
     save_recording(Call, MediaName, Format, Store),
     {'noreply', State#state{retries=Retries - 1}};
-  
+
 handle_cast({'gen_listener',{'created_queue',Queue}}, #state{call=Call}=State) ->
     Call1 = whapps_call:kvs_store('consumer_pid', wh_amqp_channel:consumer_pid(), Call),
     {'noreply', State#state{call=whapps_call:set_controller_queue(Queue, Call1)}};
@@ -364,7 +383,7 @@ handle_cast({'gen_listener',{'is_consuming', 'true'}}, #state{record_on_answer='
                                                              }=State) ->
     start_recording(Call, MediaName, TimeLimit, <<"wh_media_recording">>, SampleRate, RecordMinSec),
     lager:debug("started the recording"),
-    {'noreply', State};
+    {'noreply', State#state{is_recording='true'}};
 
 handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p", [_Msg]),
@@ -458,13 +477,13 @@ start_check_call_timer() ->
 start_time_limit_timer(TimeLimit) ->
     erlang:start_timer((TimeLimit+10) * ?MILLISECONDS_IN_SECOND, self(), 'stop_recording').
 
--spec maybe_stop_timer(term()) -> 'ok'.
+-spec maybe_stop_timer(any()) -> 'ok'.
 maybe_stop_timer(Timer) when is_reference(Timer) ->
     catch erlang:cancel_timer(Timer),
     'ok';
 maybe_stop_timer(_) -> 'ok'.
 
--spec get_timelimit('undefined' | integer()) -> pos_integer().
+-spec get_timelimit(api_integer()) -> pos_integer().
 get_timelimit('undefined') ->
     whapps_config:get(?CONFIG_CAT, <<"max_recording_time_limit">>, 600);
 get_timelimit(TL) ->
@@ -537,7 +556,7 @@ get_url(Data) ->
 -spec store_url(whapps_call:call(), wh_json:object()) -> ne_binary().
 store_url(Call, JObj) ->
     AccountDb = whapps_call:account_db(Call),
-    MediaId = wh_json:get_value(<<"_id">>, JObj),
+    MediaId = wh_doc:id(JObj),
     MediaName = wh_json:get_value(<<"name">>, JObj),
     {'ok', URL} = wh_media_url:store(AccountDb, MediaId, MediaName),
     URL.
@@ -584,9 +603,9 @@ save_recording(Call, MediaName, _Format, {'true', 'other', Url}) ->
 
 -spec store_recording_to_third_party_bigcouch(whapps_call:call(), ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
 store_recording_to_third_party_bigcouch(Call, MediaName, Format, BCHost) ->
-    BCPort = whapps_config:get(?CONFIG_CAT, <<"third_party_bigcouch_port">>, <<"5984">>),
+    BCPort = whapps_config:get_binary(?CONFIG_CAT, <<"third_party_bigcouch_port">>, <<"5984">>),
     lager:info("storing to third-party bigcouch ~s:~p", [BCHost, BCPort]),
-    AcctMODb = wh_util:format_account_id(kazoo_modb:get_modb(whapps_call:account_db(Call)),'encoded'),
+    AcctMODb = wh_util:format_account_modb(kazoo_modb:get_modb(whapps_call:account_db(Call)),'encoded'),
     CallId = whapps_call:call_id(Call),
     MediaDocId = get_recording_doc_id(CallId),
     MediaDoc = wh_doc:update_pvt_parameters(
@@ -608,10 +627,10 @@ store_recording_to_third_party_bigcouch(Call, MediaName, Format, BCHost) ->
                  ,AcctMODb
                 ),
     Options = [],
-    S = couchbeam:server_connection(BCHost, wh_util:to_list(BCPort)),
+    S = couchbeam:server_connection(wh_util:to_list(BCHost), wh_util:to_list(BCPort)),
     {'ok', Db} = couchbeam:open_or_create_db(S, AcctMODb, Options),
     {'ok', DocRes} = couchbeam:save_doc(Db, MediaDoc),
-    DocRev = wh_json:get_value(<<"_rev">>, DocRes),
+    DocRev = wh_doc:revision(DocRes),
     StoreUrl = <<"http://", BCHost/binary, ":", BCPort/binary,"/", AcctMODb/binary, "/", MediaDocId/binary, "/", MediaName/binary, "?rev=", DocRev/binary>>,
     lager:info("store to third-party modb url: ~s", [StoreUrl]),
     'ok' = whapps_call_command:store(MediaName, StoreUrl, Call).

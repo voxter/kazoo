@@ -48,9 +48,13 @@ init() ->
 %% allowed to access the resource, or false if not.
 %% @end
 %%--------------------------------------------------------------------
--spec authorize(cb_context:context()) -> 'true'.
-authorize(#cb_context{req_nouns=[{<<"apps_link">>, _}]}) ->
-    'true'.
+-spec authorize(cb_context:context()) -> boolean().
+authorize(Context) ->
+    authorize_nouns(cb_context:req_nouns(Context)).
+
+-spec authorize_nouns(req_nouns()) -> boolean().
+authorize_nouns([{<<"apps_link">>, _}]) -> 'true';
+authorize_nouns(_Nouns) -> 'false'.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -121,7 +125,7 @@ auth_info(Context) ->
         ,{<<"owner_id">>, OwnerId}
         ,{<<"account_name">>, whapps_util:get_account_name(AccountId)}
         ,{<<"method">>, wh_json:get_value(<<"method">>, JObj)}
-        ,{<<"created">>, wh_json:get_value(<<"pvt_created">>, JObj)}
+        ,{<<"created">>, wh_doc:created(JObj)}
         ,{<<"language">>, crossbar_util:get_language(AccountId, OwnerId)}
         ,{<<"is_reseller">>, wh_services:is_reseller(AccountId)}
         ,{<<"reseller_id">>, wh_services:find_reseller_id(AccountId)}

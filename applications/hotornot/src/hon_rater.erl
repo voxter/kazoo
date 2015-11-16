@@ -74,8 +74,9 @@ get_rate_data(JObj) ->
 get_rate_data(JObj, ToDID, FromDID, Rates) ->
     lager:debug("candidate rates found, filtering"),
     RouteOptions = wh_json:get_value(<<"Options">>, JObj, []),
-    Direction = wh_json:get_value(<<"Direction">>, JObj),
-    Matching = hon_util:matching_rates(Rates, ToDID, Direction, RouteOptions),
+    RouteFlags   = wh_json:get_value(<<"Outbound-Flags">>, JObj, []),
+    Direction    = wh_json:get_value(<<"Direction">>, JObj),
+    Matching     = hon_util:matching_rates(Rates, ToDID, Direction, RouteOptions++RouteFlags),
 
     case hon_util:sort_rates(Matching) of
         [] ->
@@ -89,7 +90,8 @@ get_rate_data(JObj, ToDID, FromDID, Rates) ->
                         ,[wh_json:get_value(<<"rate_name">>, Rate)
                           ,FromDID
                           ,ToDID
-                         ]),
+                         ]
+                       ),
             {'ok', rate_resp(Rate, JObj)}
     end.
 
@@ -164,8 +166,7 @@ maybe_update_callee_id(JObj) ->
 
 -spec update_callee_id(wh_json:object()) -> boolean().
 update_callee_id(AccountId) ->
-    AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
-    case couch_mgr:open_cache_doc(AccountDb, AccountId) of
+    case kz_account:fetch(AccountId) of
         {'ok', AccountDoc} ->
             wh_json:is_true([<<"caller_id_options">>, <<"show_rate">>], AccountDoc, 'false');
         {'error', _R} ->

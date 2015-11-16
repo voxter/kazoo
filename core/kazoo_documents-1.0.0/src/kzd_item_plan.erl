@@ -14,9 +14,11 @@
          ,exceptions/1, exceptions/2
          ,should_cascade/1, should_cascade/2
          ,masquerade_as/1, masquerade_as/2
+         ,name/1
          ,discounts/1, discounts/2
          ,single_discount/1, single_discount/2
          ,cumulative_discount/1, cumulative_discount/2
+         ,activation_charge/1, activation_charge/2
          ,is_enabled/1
          ,keys/1
         ]).
@@ -37,6 +39,7 @@
 -define(EXCEPTIONS, <<"exceptions">>).
 -define(CASCADE, <<"cascade">>).
 -define(MASQUERADE, <<"as">>).
+-define(NAME, <<"name">>).
 -define(DISCOUNTS, <<"discounts">>).
 -define(SINGLE, <<"single">>).
 -define(CUMULATIVE, <<"cumulative">>).
@@ -95,6 +98,13 @@ masquerade_as(ItemPlan) ->
 masquerade_as(ItemPlan, Default) ->
     wh_json:get_value(?MASQUERADE, ItemPlan, Default).
 
+-spec name(doc()) -> api_binary().
+name(ItemPlan) ->
+    case wh_json:get_value(?NAME, ItemPlan) of
+        'undefined' -> masquerade_as(ItemPlan);
+        Name -> Name
+    end.
+
 -spec discounts(doc()) -> wh_json:object().
 -spec discounts(doc(), Default) -> wh_json:object() | Default.
 discounts(ItemPlan) ->
@@ -115,6 +125,13 @@ cumulative_discount(ItemPlan) ->
     cumulative_discount(ItemPlan, 'undefined').
 cumulative_discount(ItemPlan, Default) ->
     wh_json:get_json_value([?DISCOUNTS, ?CUMULATIVE], ItemPlan, Default).
+
+-spec activation_charge(doc()) -> api_object().
+-spec activation_charge(doc(), Default) -> wh_json:object() | Default.
+activation_charge(ItemPlan) ->
+    activation_charge(ItemPlan, 0).
+activation_charge(ItemPlan, Default) ->
+    wh_json:get_float_value(?ACTIVATION_CHARGE, ItemPlan, Default).
 
 -spec is_enabled(doc()) -> boolean().
 is_enabled(ItemPlan) ->

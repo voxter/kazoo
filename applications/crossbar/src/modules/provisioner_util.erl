@@ -198,19 +198,11 @@ maybe_send_contact_list(_Context, _Status) -> 'ok'.
 
 -spec do_full_provisioner_provider(cb_context:context()) -> boolean().
 do_full_provisioner_provider(Context) ->
-    do_full_provision_contact_list(cb_context:account_id(Context), cb_context:account_db(Context)).
+    do_full_provision_contact_list(cb_context:account_id(Context)).
 
--spec do_full_provision_contact_list(cb_context:context()) -> boolean().
--spec do_full_provision_contact_list(ne_binary(), ne_binary()) -> boolean().
-
-do_full_provision_contact_list(Context) ->
-    case should_build_contact_list(Context) of
-        'false' -> 'false';
-        'true' -> do_full_provision_contact_list(cb_context:account_id(Context), cb_context:account_db(Context))
-    end.
-
-do_full_provision_contact_list(AccountId, AccountDb) ->
-    case couch_mgr:open_cache_doc(AccountDb, AccountId) of
+-spec do_full_provision_contact_list(ne_binary() | cb_context:context()) -> boolean().
+do_full_provision_contact_list(AccountId) when is_binary(AccountId) ->
+    case kz_account:fetch(AccountId) of
         {'ok', JObj} ->
             Routines = [fun wh_json:public_fields/1
                         ,fun(J) ->
@@ -219,6 +211,7 @@ do_full_provision_contact_list(AccountId, AccountDb) ->
                          end
                         ,fun(J) -> wh_json:delete_key(<<"available_apps">>, J) end
                         ,fun(J) ->
+                                 AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
                                  ContactList = provisioner_contact_list:build(AccountDb),
                                  wh_json:set_value(<<"directory">>, ContactList, J)
                          end
@@ -229,6 +222,11 @@ do_full_provision_contact_list(AccountId, AccountDb) ->
         {'error', _R} ->
             lager:warning("failed to get account definition for ~s: ~p", [AccountId, _R]),
             'false'
+    end;
+do_full_provision_contact_list(Context) ->
+    case should_build_contact_list(Context) of
+        'false' -> 'false';
+        'true' -> do_full_provision_contact_list(cb_context:account_id(Context))
     end.
 
 -spec should_build_contact_list(cb_context:context()) -> boolean().
@@ -237,9 +235,9 @@ should_build_contact_list(Context) ->
     JObj = cb_context:doc(Context),
     case wh_json:is_json_object(OriginalJObj) of
         'false' ->
-            wh_json:get_value(<<"pvt_type">>, JObj) =:= <<"callflow">>;
+            wh_doc:type(JObj) =:= <<"callflow">>;
         'true' ->
-            wh_json:get_value(<<"pvt_type">>, JObj) =:= <<"callflow">>
+            wh_doc:type(JObj) =:= <<"callflow">>
                 orelse wh_json:get_value(<<"name">>, JObj) =/=  wh_json:get_value(<<"name">>, OriginalJObj)
                 orelse wh_json:get_value(<<"first_name">>, JObj) =/=  wh_json:get_value(<<"first_name">>, OriginalJObj)
                 orelse wh_json:get_value(<<"last_name">>, JObj) =/=  wh_json:get_value(<<"last_name">>, OriginalJObj)
@@ -353,35 +351,26 @@ delete_account(Context) ->
     delete_account(cb_context:account_id(Context)).
 
 
--spec delete_full_provision(ne_binary(), cb_context:context() | wh_json:object()) -> boolean().
-delete_full_provision(MACAddress, #cb_context{}=Context) ->
-    case get_merged_device(MACAddress, Context) of
-        {'ok', Context1} ->
-            delete_full_provision(MACAddress, cb_context:doc(Context1))
-    end;
-delete_full_provision(MACAddress, JObj) ->
-    PartialURL = <<(wh_json:get_binary_value(<<"account_id">>, JObj))/binary
-                   ,"/", MACAddress/binary
-                 >>,
+-spec delete_full_provision(ne_binary(), cb_context:context()) -> boolean().
+delete_full_provision(MACAddress, Context) ->
+    {'ok', Context1} = get_merged_device(MACAddress, Context),
+    AccountId = wh_json:get_binary_value(<<"account_id">>, cb_context:doc(Context1)),
+    PartialURL = <<AccountId/binary, "/", MACAddress/binary>>,
     maybe_send_to_full_provisioner(PartialURL).
 
--spec do_full_provision(ne_binary(), cb_context:context() | wh_json:object()) -> boolean().
-do_full_provision(MACAddress, #cb_context{}=Context) ->
-    case get_merged_device(MACAddress, Context) of
-        {'ok', Context1} ->
-            OldMACAddress = get_old_mac_address(Context),
-            case OldMACAddress =/= MACAddress
-                andalso OldMACAddress =/= 'undefined'
-            of
-                'true' -> delete_full_provision(OldMACAddress, Context);
-                _ -> 'ok'
-            end,
-            do_full_provision(MACAddress, cb_context:doc(Context1))
-    end;
-do_full_provision(MACAddress, JObj) ->
-    PartialURL = <<(wh_json:get_binary_value(<<"account_id">>, JObj))/binary
-                   ,"/", MACAddress/binary
-                 >>,
+-spec do_full_provision(ne_binary(), cb_context:context()) -> boolean().
+do_full_provision(MACAddress, Context) ->
+    {'ok', Context1} = get_merged_device(MACAddress, Context),
+    OldMACAddress = get_old_mac_address(Context),
+    _ = case OldMACAddress =/= MACAddress
+            andalso OldMACAddress =/= 'undefined'
+        of
+            'true' -> delete_full_provision(OldMACAddress, Context);
+            _ -> 'ok'
+        end,
+    JObj = cb_context:doc(Context1),
+    AccountId = wh_json:get_binary_value(<<"account_id">>, JObj),
+    PartialURL = <<AccountId/binary, "/", MACAddress/binary>>,
     maybe_send_to_full_provisioner(PartialURL, JObj).
 
 -spec maybe_send_to_full_provisioner(ne_binary()) -> boolean().
@@ -546,7 +535,7 @@ send_provisioning_template(JObj, Context) ->
 %%--------------------------------------------------------------------
 -spec get_template(cb_context:context()) ->
                           {'ok', wh_json:object()} |
-                          {'error', term()}.
+                          {'error', any()}.
 get_template(Context) ->
     DocId = wh_json:get_value([<<"provision">>, <<"id">>], cb_context:doc(Context)),
     case is_binary(DocId)
@@ -584,7 +573,7 @@ set_account_id(Context) ->
 -spec set_account_line_defaults(cb_context:context()) ->
                                        [fun((wh_json:object()) -> wh_json:object()),...].
 set_account_line_defaults(Context) ->
-    Account = case couch_mgr:open_cache_doc(cb_context:account_db(Context), cb_context:account_id(Context)) of
+    Account = case kz_account:fetch(cb_context:account_id(Context)) of
                   {'ok', JObj} -> JObj;
                   {'error', _} -> wh_json:new()
               end,
@@ -675,7 +664,7 @@ set_global_overrides(_) ->
 -spec set_account_overrides(cb_context:context()) ->
                                    [fun((wh_json:object()) -> wh_json:object()),...].
 set_account_overrides(Context) ->
-    Account = case couch_mgr:open_cache_doc(cb_context:account_db(Context), cb_context:account_id(Context)) of
+    Account = case kz_account:fetch(cb_context:account_id(Context)) of
                   {'ok', JObj} -> JObj;
                   {'error', _} -> wh_json:new()
               end,

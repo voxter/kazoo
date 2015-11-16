@@ -314,7 +314,7 @@ crawl_numbers_db(NumberDb) ->
 get_numbers(JObjs) ->
     [Number
      || JObj <- JObjs
-            ,case (Number = wh_json:get_value(<<"id">>, JObj)) of
+            ,case (Number = wh_doc:id(JObj)) of
                  <<"_design/", _/binary>> -> 'false';
                  _Else -> 'true'
              end
@@ -364,7 +364,7 @@ maybe_export_number(_, _, _) -> 'ok'.
 -spec process_callflows(ne_binary(), ne_binary(), wh_json:objects()) -> 'ok'.
 process_callflows(_, _, []) -> 'ok';
 process_callflows(Number, AccountId, [JObj | JObjs]) ->
-    FlowId = wh_json:get_value(<<"_id">>, JObj),
+    FlowId = wh_doc:id(JObj),
     Flow = wh_json:get_value(<<"flow">>, JObj),
     lager:debug("processing callflow ~s in account ~s with number ~s"
                 ,[FlowId, AccountId, Number]),
@@ -407,7 +407,8 @@ process_callflow(Number, AccountId, <<"user">>, UserId) ->
     case couch_mgr:get_results(AccountDb, ?DEVICES_VIEW, ViewOptions) of
         {'ok', JObjs} ->
             Devices = [wh_json:get_value([<<"value">>,<<"id">>], JObj)
-                       || JObj <- JObjs
+                       || JObj <- JObjs,
+                          wh_json:is_false([<<"value">>, <<"hotdesked">>], JObj)
                       ],
             [process_callflow(Number, AccountId, <<"device">>, DeviceId)
              || DeviceId <- Devices
@@ -499,7 +500,7 @@ maybe_accumulate_realm('false', Realm) ->
     put(<<"Realms">>, [Realm | get(<<"Realms">>)]).
 
 -spec query_registrar(ne_binary(), ne_binary()) -> {'ok', wh_json:object()}
-                                                       | {'error', _}.
+                                                       | {'error', any()}.
 query_registrar(Realm, Username) ->
     FullUser = <<Username/binary, "@", Realm/binary>>,
     Req = [{<<"To">>, FullUser}
@@ -527,7 +528,7 @@ template_file_name(?FS_CHATPLAN) -> "chatplan_template.xml";
 template_file_name(?FS_DIRECTORY) -> "directory_template.xml";
 template_file_name(?FS_DIRECTORY_REALM) -> "directory_realm_template.xml".
 
--spec compile_templates() -> ['ok',...] | [].
+-spec compile_templates() -> ['ok'].
 compile_templates() ->
     [compile_template(wh_util:to_atom(T,'true')) || T <- ?FS_ALL_TEMPLATES].
 
@@ -548,7 +549,7 @@ compile_template(Module, Template) ->
             lager:debug("compiled template ~s with warnings: ~p", [_T, _W])
     end.
 
--spec render(atom(), wh_proplist()) -> {'ok', iolist()} | {'error', _}.
+-spec render(atom(), wh_proplist()) -> {'ok', iolist()} | {'error', any()}.
 render(Module, Props) ->
     try Module:render(props:filter_empty(Props)) of
         {'ok', _}=OK -> OK

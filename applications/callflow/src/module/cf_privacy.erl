@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2013, 2600Hz INC
+%%% @copyright (C) 2012-2015, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -19,7 +19,8 @@ handle(Data, Call) ->
             Mode = wh_json:get_value(<<"mode">>, Data),
             whapps_call_command:privacy(Mode, Call),
             update_call(CaptureGroup
-                           ,cf_exe:get_call(Call)),
+                        ,cf_exe:get_call(Call)
+                       ),
             cf_exe:branch(wh_json:get_value(<<"flow">>, CallFlow), Call);
         {'error', _} ->
             cf_exe:stop(Call)

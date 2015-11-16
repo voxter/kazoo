@@ -150,7 +150,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
--spec handle_cast(term(), state()) -> handle_cast_return().
+-spec handle_cast(any(), state()) -> handle_cast_return().
 handle_cast('start_action', #state{call=_Call
                                    ,action='receive'
                                    ,owner_id=OwnerId
@@ -288,7 +288,7 @@ get_fax_storage(Call) ->
     AccountId = whapps_call:account_id(Call),
     {Year, Month, _} = erlang:date(),
     AccountMODb = kazoo_modb:get_modb(AccountId, Year, Month),
-    FaxDb = wh_util:format_account_id(AccountMODb, 'encoded'),
+    FaxDb = wh_util:format_account_modb(AccountMODb, 'encoded'),
     FaxId = <<(wh_util:to_binary(Year))/binary
               ,(wh_util:pad_month(Month))/binary
               ,"-"
@@ -363,9 +363,7 @@ maybe_add_owner_to_notify_list(List, OwnerEmail) ->
 
 -spec maybe_update_fax_settings_from_account(state()) -> any().
 maybe_update_fax_settings_from_account(#state{call=Call}=State) ->
-    AccountId = whapps_call:account_id(Call),
-    AccountDb = whapps_call:account_db(Call),
-    case couch_mgr:open_cache_doc(AccountDb, AccountId) of
+    case kz_account:fetch(whapps_call:account_id(Call)) of
         {'ok', JObj} ->
             case wh_json:is_json_object(<<"fax_settings">>, JObj) of
                 'true' ->
@@ -455,7 +453,7 @@ maybe_store_fax(JObj, #state{storage=#fax_storage{id=FaxId}}=State) ->
 
 -spec store_fax(wh_json:object(), state() ) ->
                        {'ok', ne_binary()} |
-                       {'error', _}.
+                       {'error', any()}.
 store_fax(JObj, #state{storage=#fax_storage{id=FaxDocId
                                             ,attachment_id=_AttachmentId
                                            }
@@ -561,7 +559,7 @@ create_fax_doc(JObj, #state{owner_id = OwnerId
                            ," " , wh_util:to_binary(H), ":", wh_util:to_binary(I), ":", wh_util:to_binary(S)
                            ," UTC"
                           ]),
-    <<Year:4/binary, Month:2/binary, "-", _/binary>> = FaxDocId,
+    ?MATCH_MODB_PREFIX(Year,Month,_) = FaxDocId,
     CdrId = <<(wh_util:to_binary(Year))/binary
               ,(wh_util:pad_month(Month))/binary
               ,"-"

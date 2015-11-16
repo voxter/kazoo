@@ -33,10 +33,10 @@ convert(FromFormat0, ToFormat0, Bin) ->
     Response = case os:cmd(Cmd) of
                    "success" ->
                        case file:read_file(ToFile) of
-                           {'ok', PDF} -> 
+                           {'ok', PDF} ->
                                lager:debug("convert file ~s to ~s succeeded", [FromFile, ToFile]),
                                {'ok', PDF};
-                           {'error', _R}=E -> 
+                           {'error', _R}=E ->
                                lager:debug("unable to read converted file ~s : ~p", [ToFile, _R]),
                                E
                        end;
@@ -105,7 +105,7 @@ maybe_convert_attachment(Macros, ContentType, Bin) ->
     FromFormat = from_format_from_content_type(ContentType),
     lager:debug("converting from ~s to ~s", [FromFormat, ToFormat]),
 
-    case teletype_fax_util:convert(FromFormat, ToFormat, Bin) of
+    case ?MODULE:convert(FromFormat, ToFormat, Bin) of
         {'ok', Converted} ->
             Filename = get_file_name(Macros, ToFormat),
             lager:debug("adding attachment as ~s", [Filename]),

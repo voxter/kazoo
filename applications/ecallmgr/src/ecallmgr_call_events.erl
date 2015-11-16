@@ -142,7 +142,7 @@ handle_publisher_usurp(JObj, Props) ->
     Ref = props:get_value('reference', Props),
     Node = wh_util:to_binary(props:get_value('node', Props)),
 
-    lager:debug("recieved publisher usurp for ~s on ~s (if ~s != ~s)"
+    lager:debug("received publisher usurp for ~s on ~s (if ~s != ~s)"
                 ,[wh_json:get_value(<<"Call-ID">>, JObj)
                   ,wh_json:get_value(<<"Media-Node">>, JObj)
                   ,Ref
@@ -155,7 +155,7 @@ handle_publisher_usurp(JObj, Props) ->
     of
         'false' -> 'ok';
         'true' ->
-            put('callid', CallId),
+            wh_util:put_callid(CallId),
             gen_listener:cast(props:get_value('server', Props), {'passive'})
     end.
 
@@ -562,7 +562,7 @@ maybe_process_channel_destroy(Node, CallId, Props) ->
 
 -spec process_channel_event(wh_proplist()) -> 'ok'.
 process_channel_event(Props) ->
-    put('callid', get_call_id(Props)),
+    wh_util:put_callid(get_call_id(Props)),
     EventName = get_event_name(Props),
     ApplicationName = get_application_name(Props),
     Masqueraded = is_masquerade(Props),
@@ -744,7 +744,7 @@ specific_call_event_props(<<"RECORD_START">>, _, Props) ->
      ,{<<"Application-Response">>, props:get_first_defined([<<"Record-File-Path">>
                                                             ,<<"whistle_application_response">>
                                                            ], Props)
-      }    
+      }
     ];
 specific_call_event_props(<<"RECORD_STOP">>, _, Props) ->
     [{<<"Application-Name">>, <<"record">>}
@@ -884,7 +884,7 @@ silence_terminated(Prop) when is_list(Prop) ->
 is_channel_moving(Props) ->
     props:get_is_true(<<"variable_channel_is_moving">>, Props, 'false').
 
--spec get_channel_moving(wh_proplist()) -> 'undefined' | boolean().
+-spec get_channel_moving(wh_proplist()) -> api_boolean().
 get_channel_moving(Props) ->
     case is_channel_moving(Props) of
         'false' -> 'undefined';

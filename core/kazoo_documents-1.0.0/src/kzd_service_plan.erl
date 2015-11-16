@@ -22,6 +22,8 @@
          ,category_activation_charge/2, category_activation_charge/3
 
          ,item_minimum/3, item_minimum/4
+         ,item_name/3
+         ,item_exceptions/3
 
          ,categories/1, category/2, category/3
          ,items/2, item/3
@@ -34,7 +36,7 @@
 -include("kz_documents.hrl").
 
 -type doc() :: wh_json:object().
--type docs() :: [doc(),...] | [].
+-type docs() :: [doc()].
 -type api_doc() :: api_object().
 -export_type([doc/0
               ,api_doc/0
@@ -73,12 +75,16 @@ merge_overrides(Plan, Overrides) ->
 -spec item_activation_charge(doc(), ne_binary(), ne_binary()) -> api_float().
 -spec item_activation_charge(doc(), ne_binary(), ne_binary(), Default) -> float() | Default.
 item_activation_charge(Plan, Category, Item) ->
-    item_activation_charge(Plan, Category, Item, 'undefined').
+    item_activation_charge(Plan, Category, Item, 0).
 item_activation_charge(Plan, Category, Item, Default) ->
-    wh_json:get_float_value([?PLAN, Category, Item, ?ACTIVATION_CHARGE]
-                            ,Plan
-                            ,Default
-                           ).
+    kzd_item_plan:activation_charge(
+        wh_json:get_json_value(
+            [?PLAN, Category, Item]
+            ,Plan
+            ,wh_json:new()
+        )
+        ,Default
+    ).
 
 -spec category_activation_charge(doc(), ne_binary()) -> float().
 -spec category_activation_charge(doc(), ne_binary(), Default) -> float() | Default.
@@ -129,6 +135,30 @@ item_minimum(Plan, CategoryId, ItemId, Default) ->
                              ,wh_json:new()
                             )
       ,Default
+     ).
+
+-spec item_name(doc(), ne_binary(), ne_binary()) -> ne_binary().
+item_name(Plan, CategoryId, ItemId) ->
+    kzd_item_plan:name(
+        wh_json:get_json_value(
+            [?PLAN, CategoryId, ItemId]
+            ,Plan
+            ,wh_json:new()
+        )
+     ).
+
+-spec item_exceptions(doc(), ne_binary(), ne_binary()) -> ne_binary().
+-spec item_exceptions(doc(), ne_binary(), ne_binary(), ne_binaries()) -> ne_binary().
+item_exceptions(Plan, CategoryId, ItemId) ->
+    item_exceptions(Plan, CategoryId, ItemId, []).
+item_exceptions(Plan, CategoryId, ItemId, Default) ->
+    kzd_item_plan:exceptions(
+        wh_json:get_json_value(
+            [?PLAN, CategoryId, ItemId]
+            ,Plan
+            ,wh_json:new()
+        )
+        ,Default
      ).
 
 -spec item_plan(doc(), ne_binary(), ne_binary()) -> wh_json:object().

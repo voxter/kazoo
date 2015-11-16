@@ -34,12 +34,7 @@
 
 -spec search(whapps_conference:conference() | api_binary() | string()) ->
                     {'ok', wh_json:object()} |
-                    {'error', _}.
-search(ConferenceId) when is_list(ConferenceId) ->
-	search(list_to_binary(ConferenceId));
-search(ConferenceId) when is_binary(ConferenceId) ->
-	Conference = whapps_conference:new(),
-	search(whapps_conference:set_id(ConferenceId, Conference));
+                    {'error', any()}.
 search(Conference) ->
     AppName = whapps_conference:application_name(Conference),
     AppVersion = whapps_conference:application_version(Conference),
@@ -54,19 +49,21 @@ search(Conference) ->
     lager:debug("searching for conference ~s", [ConferenceId]),
     case ReqResp of
         {'error', _R}=E ->
-            lager:info("recieved error while searching for ~s: ~-800p", [ConferenceId, _R]),
+            lager:info("received error while searching for ~s: ~-800p", [ConferenceId, _R]),
             E;
         {_, JObjs} -> conference_search_filter(JObjs, ConferenceId)
     end.
 
--spec conference_search_filter(wh_json:objects(), ne_binary()) -> {'ok', wh_json:object()} | {'error', 'not_found'}.
+-spec conference_search_filter(wh_json:objects(), ne_binary()) ->
+                                      {'ok', wh_json:object()} |
+                                      {'error', 'not_found'}.
 conference_search_filter([], ConferenceId) ->
-    lager:info("recieved invalid conference search response for ~s", [ConferenceId]),
+    lager:info("received invalid conference search response for ~s", [ConferenceId]),
     {'error', 'not_found'};
 conference_search_filter([JObj|JObjs], ConferenceId) ->
     case wapi_conference:search_resp_v(JObj) of
         'true' ->
-            lager:info("recieved valid conference search response for ~s", [ConferenceId]),
+            lager:info("received valid conference search response for ~s", [ConferenceId]),
             {'ok', JObj};
         'false' ->
             conference_search_filter(JObjs, ConferenceId)

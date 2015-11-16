@@ -55,7 +55,7 @@ clean(Account) ->
     case couch_mgr:open_doc(?WH_SERVICES_DB, AccountId) of
         {'error', _}=E -> E;
         {'ok', ServiceJObj} ->
-            immediate_sync(AccountId, wh_json:set_value(<<"pvt_deleted">>, 'true', ServiceJObj))
+            immediate_sync(AccountId, wh_doc:set_soft_deleted(ServiceJObj, 'true'))
     end.
 
 %%%===================================================================
@@ -132,14 +132,15 @@ handle_info({'try_sync_service'}, State) ->
     _ = maybe_clear_process_dictionary(),
     _Ref = start_sync_service_timer(),
     {'noreply', State, 'hibernate'};
-handle_info(_Msg, State) ->
+handle_info(_Info, State) ->
+    lager:debug("unhandled msg: ~p", [_Info]),
     {'noreply', State}.
 
 -spec maybe_clear_process_dictionary() -> 'ok'.
 maybe_clear_process_dictionary() ->
     lists:foreach(fun maybe_clear_dictionary_entry/1, get()).
 
--spec maybe_clear_dictionary_entry({term(), term()}) -> any().
+-spec maybe_clear_dictionary_entry({any(), any()}) -> any().
 maybe_clear_dictionary_entry({{'phone_number_doc', _AccountId}=Key, _Doc}) ->
     erase(Key);
 maybe_clear_dictionary_entry(_) -> 'ok'.
@@ -197,12 +198,12 @@ maybe_sync_service() ->
 
 -spec bump_modified(wh_json:object()) -> wh_std_return().
 bump_modified(JObj) ->
-    AccountId = wh_json:get_value(<<"pvt_account_id">>, JObj),
+    AccountId = wh_doc:account_id(JObj),
     Services = wh_services:reconcile_only(AccountId),
     'true' = (Services =/= 'false'),
 
     UpdatedJObj = wh_json:set_values([{<<"pvt_modified">>, wh_util:current_tstamp()}
-                                      ,{<<"_rev">>, wh_json:get_value(<<"_rev">>, JObj)}
+                                      ,{<<"_rev">>, wh_doc:revision(JObj)}
                                      ]
                                      ,wh_services:to_json(Services)
                                     ),
@@ -215,8 +216,8 @@ bump_modified(JObj) ->
             %% If we can change the timestamp then (since the view requires the
             %% modified time to be x mins in the past) we have gain exclusive
             %% control for x mins.... good luck!
-            [RevNum, _] = binary:split(wh_json:get_value(<<"_rev">>, NewJObj), <<"-">>),
-            put('callid', <<AccountId/binary, "-", RevNum/binary>>),
+            [RevNum, _] = binary:split(wh_doc:revision(NewJObj), <<"-">>),
+            wh_util:put_callid(<<AccountId/binary, "-", RevNum/binary>>),
             lager:debug("start synchronization of services with bookkeepers"),
             maybe_follow_billing_id(AccountId, NewJObj)
     end.
@@ -268,7 +269,7 @@ sync_services(AccountId, ServiceJObj, ServiceItems) ->
             _ = mark_clean_and_status(wh_util:to_binary(Reason), ServiceJObj),
             maybe_sync_reseller(AccountId, ServiceJObj);
         _E:R ->
-            %% TODO: certain errors (such as no CC or expired, ect) should
+            %% TODO: certain errors (such as no CC or expired, etc) should
             %%    move the account of good standing...
             lager:info("unable to sync services(~p): ~p", [_E, R]),
             {'error', R}
@@ -332,7 +333,7 @@ did_topup_failed(JObjs) ->
 
 -spec maybe_sync_reseller(ne_binary(), wh_json:object()) -> wh_std_return().
 maybe_sync_reseller(AccountId, ServiceJObj) ->
-    case wh_json:get_ne_value(<<"pvt_reseller_id">>, ServiceJObj, AccountId) of
+    case kzd_services:reseller_id(ServiceJObj, AccountId) of
         AccountId -> {'ok', ServiceJObj};
         ResellerId ->
             lager:debug("marking reseller ~s as dirty", [ResellerId]),
@@ -341,9 +342,9 @@ maybe_sync_reseller(AccountId, ServiceJObj) ->
 
 -spec get_billing_id(ne_binary(), wh_json:object()) -> ne_binary().
 get_billing_id(AccountId, JObj) ->
-    case wh_json:is_true(<<"pvt_reseller">>, JObj) of
+    case kzd_services:is_reseller(JObj) of
         'true' -> AccountId;
-        'false' -> wh_json:get_ne_value(<<"billing_id">>, JObj, AccountId)
+        'false' -> kzd_services:billing_id(JObj, AccountId)
     end.
 
 -spec mark_dirty(ne_binary() | wh_json:object()) -> wh_std_return().
@@ -363,7 +364,7 @@ mark_dirty(JObj) ->
 
 -spec mark_clean(wh_json:object()) -> wh_std_return().
 mark_clean(JObj) ->
-    couch_mgr:save_doc(?WH_SERVICES_DB, wh_json:set_value(<<"pvt_dirty">>, 'false', JObj)).
+    couch_mgr:save_doc(?WH_SERVICES_DB, kzd_services:set_is_dirty(JObj, 'false')).
 
 -spec mark_clean_and_status(ne_binary(), wh_json:object()) -> wh_std_return().
 mark_clean_and_status(Status, JObj) ->
@@ -376,14 +377,16 @@ mark_clean_and_status(Status, JObj) ->
 maybe_update_billing_id(BillingId, AccountId, ServiceJObj) ->
     case couch_mgr:open_doc(?WH_ACCOUNTS_DB, BillingId) of
         {'error', _} ->
-            lager:debug("billing id ~s on ~s does not exist anymore, updating to bill self", [BillingId, AccountId]),
-            couch_mgr:save_doc(?WH_SERVICES_DB, wh_json:set_value(<<"billing_id">>, AccountId, ServiceJObj));
+            lager:debug("billing id ~s on ~s does not exist anymore, updating to bill self"
+                        ,[BillingId, AccountId]),
+            couch_mgr:save_doc(?WH_SERVICES_DB, kzd_services:set_billing_id(ServiceJObj, AccountId));
         {'ok', JObj} ->
             case wh_doc:is_soft_deleted(JObj) of
                 'false' -> wh_services:reconcile(BillingId);
                 'true' ->
-                    lager:debug("billing id ~s on ~s was deleted, updating to bill self", [BillingId, AccountId]),
-                    couch_mgr:save_doc(?WH_SERVICES_DB, wh_json:set_value(<<"billing_id">>, AccountId, ServiceJObj))
+                    lager:debug("billing id ~s on ~s was deleted, updating to bill self"
+                                ,[BillingId, AccountId]),
+                    couch_mgr:save_doc(?WH_SERVICES_DB, kzd_services:set_billing_id(ServiceJObj, AccountId))
             end
     end.
 

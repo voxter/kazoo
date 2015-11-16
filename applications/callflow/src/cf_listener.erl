@@ -25,7 +25,6 @@
 -define(SERVER, ?MODULE).
 
 -define(RESPONDERS, [{'cf_route_req', [{<<"dialplan">>, <<"route_req">>}]}
-                     ,{'cf_route_win', [{<<"dialplan">>, <<"route_win">>}]}
                     ]).
 -define(BINDINGS, [{'route', []}
                    ,{'self', []}
@@ -143,7 +142,7 @@ handle_event(_JObj, _State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
--spec terminate(term(), term()) -> 'ok'.
+-spec terminate(any(), any()) -> 'ok'.
 terminate(_Reason, _) ->
     lager:info("callflow listner ~p termination", [_Reason]).
 

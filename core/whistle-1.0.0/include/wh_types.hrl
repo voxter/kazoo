@@ -1,6 +1,17 @@
 -ifndef(WHISTLE_TYPES_INCLUDED).
 -include_lib("xmerl/include/xmerl.hrl").
 
+-ifdef(OTP_AT_LEAST_18).
+- type array() :: array:array().
+- type dict() :: dict:dict().
+- type digraph() :: digraph:digraph().
+- type gb_set() :: gb_sets:set().
+- type gb_tree() :: gb_trees:tree().
+- type queue() :: queue:queue().
+- type set() :: sets:set().
+-else.
+-endif.
+
 -define(MICROSECONDS_IN_SECOND, 1000000).
 
 -define(MILLISECONDS_IN_SECOND, 1000).
@@ -27,15 +38,15 @@
 
 -type text() :: string() | atom() | binary() | iolist().
 
--type atoms() :: [atom(),...] | [].
--type pids() :: [pid(),...] | [].
+-type atoms() :: [atom()].
+-type pids() :: [pid()].
 
 -type pid_ref() :: {pid(), reference()}.
--type pid_refs() :: [pid_ref(),...] | [].
+-type pid_refs() :: [pid_ref()].
 
 -type api_terms() :: wh_json:object() | wh_json:json_proplist().
 -type api_binary() :: binary() | 'undefined'.
--type api_binaries() :: [api_binary(),...] | [] | 'undefined'.
+-type api_binaries() :: [api_binary()] | 'undefined'.
 -type api_object() :: wh_json:object() | 'undefined'.
 -type api_objects() :: wh_json:objects() | 'undefined'.
 -type api_boolean() :: boolean() | 'undefined'.
@@ -52,23 +63,23 @@
 -type api_non_neg_integer() :: non_neg_integer() | 'undefined'.
 -type api_float() :: float() | 'undefined'.
 
--type wh_deeplist() :: iolist(). %[term() | wh_deeplist()].
+-type wh_deeplist() :: iolist(). %[any() | wh_deeplist()].
 
--type wh_std_return() :: {'ok', _} | {'error', _}.
+-type wh_std_return() :: {'ok', any()} | {'error', any()}.
 
--type wh_jobj_return() :: {'ok', wh_json:object()} | {'error', _}.
--type wh_jobjs_return() :: {'ok', wh_json:objects()} | {'error', _}.
+-type wh_jobj_return() :: {'ok', wh_json:object()} | {'error', any()}.
+-type wh_jobjs_return() :: {'ok', wh_json:objects()} | {'error', any()}.
 
 %% non-empty binary
 -define(NE_BINARY, <<_:8,_/binary>>).
 -type ne_binary() :: <<_:8,_:_*8>>.
--type ne_binaries() :: [ne_binary(),...] | [].
--type binaries() :: [binary(),...] | [].
+-type ne_binaries() :: [ne_binary()].
+-type binaries() :: [binary()].
 
--type strings() :: [string(),...] | [].
--type integers() :: [integer(),...] | [].
+-type strings() :: [string()].
+-type integers() :: [integer()].
 
--type functions() :: [function(),...] | [].
+-type functions() :: [function()].
 
 %% when using gen_smtp to send emails, it takes a 5-tuple for a message-body part
 -type mail_message_body() :: {ne_binary(), ne_binary(), proplist(), proplist(), ne_binary() | iolist()}.
@@ -77,13 +88,13 @@
 -type dict(K,V) :: [{K, V}].
 
 -type wh_proplist_value() :: any().
--type wh_proplist_values() :: [wh_proplist_value(),...] | [].
+-type wh_proplist_values() :: [wh_proplist_value()].
 -type wh_proplist_key() :: ne_binary() | atom() | number() | string() | function() | ne_binaries().
--type wh_proplist_keys() :: [wh_proplist_key(),...] | [].
--type wh_proplist_kv(K, V) :: [{K, V} | atom(),...] | [].
+-type wh_proplist_keys() :: [wh_proplist_key()].
+-type wh_proplist_kv(K, V) :: [{K, V} | atom()].
 -type wh_proplist_k(K) :: wh_proplist_kv(K, wh_proplist_value()).
 -type wh_proplist() :: wh_proplist_kv(wh_proplist_key(), wh_proplist_value()).
--type wh_proplists() :: [wh_proplist(),...] | [].
+-type wh_proplists() :: [wh_proplist()].
 
 -type proplist_key() :: wh_proplist_key().
 -type proplist() :: wh_proplist().
@@ -117,12 +128,17 @@
 
 %% Recreate the non-exported types defined in the erlang supervisor source
 -type sup_child_spec() :: supervisor:child_spec().
--type sup_child_specs() :: [sup_child_spec()] | [].
+-type sup_child_specs() :: [sup_child_spec()].
 -type sup_start_flags() :: {supervisor:strategy(), non_neg_integer(), non_neg_integer()}.
--type sup_init_ret() :: {'ok', {sup_start_flags(), sup_child_specs()}}.
+-type sup_init_ret() :: {'ok', {sup_start_flags(), sup_child_specs()}} |
+                        'ignore'.
+
 -type sup_child_id() :: pid() | 'undefined'.
--type sup_startchild_err() :: 'already_present' | {'already_started', sup_child_id()} | term().
--type sup_startchild_ret() :: {'ok', sup_child_id()} | {'ok', sup_child_id(), term()} |
+-type sup_startchild_err() :: 'already_present' |
+                              {'already_started', sup_child_id()} |
+                              any().
+-type sup_startchild_ret() :: {'ok', sup_child_id()} |
+                              {'ok', sup_child_id(), any()} |
                               {'error', sup_startchild_err()}.
 
 %% Helper macro for declaring children of supervisor
@@ -143,51 +159,71 @@
 -define(CACHE_ARGS(N, Arg), {N, {'wh_cache', 'start_link', [N, Arg]}, 'permanent', 5 * ?MILLISECONDS_IN_SECOND, 'worker', ['wh_cache']}).
 
 %% Recreate the non-exported types defined in the erlang gen_server source
--type startlink_err() :: {'already_started', pid()} | 'shutdown' | term().
--type startlink_ret() :: {'ok', pid()} | 'ignore' | {'error', startlink_err()}.
--type startapp_ret() :: {'ok', pid()} | {'ok', pid(), term()} | {'error', startlink_err()}.
+-type startlink_err() :: {'already_started', pid()} |
+                         'shutdown' |
+                         any().
+-type startlink_ret() :: {'ok', pid()} |
+                         'ignore' |
+                         {'error', startlink_err()}.
+-type startapp_ret() :: {'ok', pid()} |
+                        {'ok', pid(), any()} |
+                        {'error', startlink_err()}.
 
 -type call_from() :: pid_ref().
 -type gen_server_timeout() :: 'hibernate' | non_neg_integer().
--type handle_call_ret() :: {'reply', term(), term()} | {'reply', term(), term(), gen_server_timeout()} |
-                           {'noreply', term()} | {'noreply', term(), gen_server_timeout()} |
-                           {'stop', term(), term()} | {'stop', term(), term(), term()}.
+-type handle_call_ret() :: {'reply', any(), any()} |
+                           {'reply', any(), any(), gen_server_timeout()} |
+                           {'noreply', any()} |
+                           {'noreply', any(), gen_server_timeout()} |
+                           {'stop', any(), any()} |
+                           {'stop', any(), any(), any()}.
 
--type handle_call_ret_state(State) :: {'reply', term(), State} | {'reply', term(), State, gen_server_timeout()} |
-                                      {'noreply', State} | {'noreply', State, gen_server_timeout()} |
-                                      {'stop', term(), State} | {'stop', term(), State, term()}.
+-type handle_call_ret_state(State) :: {'reply', any(), State} |
+                                      {'reply', any(), State, gen_server_timeout()} |
+                                      {'noreply', State} |
+                                      {'noreply', State, gen_server_timeout()} |
+                                      {'stop', any(), State} |
+                                      {'stop', any(), State, any()}.
 
--type handle_cast_ret() :: {'noreply', term()} | {'noreply', term(), gen_server_timeout()} |
-                           {'stop', term(), term()}.
--type handle_cast_ret_state(State) :: {'noreply', State} | {'noreply', State, gen_server_timeout()} |
-                                      {'stop', term(), State}.
+-type handle_cast_ret() :: {'noreply', any()} |
+                           {'noreply', any(), gen_server_timeout()} |
+                           {'stop', any(), any()}.
+-type handle_cast_ret_state(State) :: {'noreply', State} |
+                                      {'noreply', State, gen_server_timeout()} |
+                                      {'stop', any(), State}.
 
--type handle_info_ret() :: {'noreply', term()} | {'noreply', term(), gen_server_timeout()} |
-                           {'stop', term(), term()}.
--type handle_info_ret_state(State) :: {'noreply', State} | {'noreply', State, gen_server_timeout()} |
-                                      {'stop', term(), State}.
+-type handle_info_ret() :: {'noreply', any()} |
+                           {'noreply', any(), gen_server_timeout()} |
+                           {'stop', any(), any()}.
+-type handle_info_ret_state(State) :: {'noreply', State} |
+                                      {'noreply', State, gen_server_timeout()} |
+                                      {'stop', any(), State}.
 
 -type handle_event_ret() :: 'ignore' |
                             {'reply', wh_proplist()}.
 
--type server_ref() :: atom() | {atom(), atom()} | {'global', term()} | {'via', atom(), term()} | pid().
+-type server_ref() :: atom() |
+                      {atom(), atom()} |
+                      {'global', any()} |
+                      {'via', atom(), any()} |
+                      pid().
 
 -type gen_server_name() :: {'local', atom()} |
-                           {'global', term()} |
-                           {'via', atom(), term()}.
+                           {'global', any()} |
+                           {'via', atom(), any()}.
 -type gen_server_option() :: {'debug', list()} |
                              {'timeout', non_neg_integer()} |
                              {'spawn_opt', list()}.
--type gen_server_options() :: [gen_server_option(),...] | [].
+-type gen_server_options() :: [gen_server_option()].
 
 %% Ibrowse-related types
 -type ibrowse_error() :: {'error', 'req_timedout'
                           | 'sel_conn_closed'
-                          | {'EXIT', term()}
+                          | {'EXIT', any()}
                           | {'conn_failed', {'error', atom()}}
                          }.
 -type ibrowse_ret() :: {'ok', string(), wh_proplist(), string() | binary()} |
-                       {'ibrowse_req_id', term()} |
+                       {'ibrowse_req_id', any()} |
                        ibrowse_error().
 %% When using the stream_to option, ibrowse:send_req returns this tuple ReqID
 -type ibrowse_req_id() :: {pos_integer(), pos_integer(), pos_integer()}.
@@ -196,13 +232,13 @@
 -type xml_attrib_name() :: atom().
 -type xml_attrib_value() :: ne_binary() | nonempty_string() | iolist() | atom() | number().
 -type xml_attrib() :: #xmlAttribute{}.
--type xml_attribs() :: [xml_attrib(),...] | [].
+-type xml_attribs() :: [xml_attrib()].
 
 -type xml_el() :: #xmlElement{}.
--type xml_els() :: [xml_el(),...] | [].
+-type xml_els() :: [xml_el()].
 
 -type xml_text() :: #xmlText{value :: iolist()}.
--type xml_texts() :: [xml_text(),...] | [].
+-type xml_texts() :: [xml_text()].
 
 %% Used by ecallmgr and wapi_dialplan at least
 -define(CALL_EVENTS,
@@ -223,6 +259,74 @@
 
 -type xml_thing() :: xml_el() | xml_text().
 -type xml_things() :: xml_els() | xml_texts().
+
+
+-define(MATCH_ACCOUNT_RAW(Account),
+        <<(Account):32/binary>>
+       ).
+-define(MATCH_ACCOUNT_UNENCODED(Account),
+        <<"account/", (Account):34/binary>>
+       ).
+-define(MATCH_ACCOUNT_ENCODED(Account),
+        <<"account%2F", (Account):38/binary>>
+       ).
+-define(MATCH_ACCOUNT_encoded(Account),
+        <<"account%2f", (Account):38/binary>>
+       ).
+
+-define(MATCH_ACCOUNT_RAW(A, B, Rest),
+        <<(A):2/binary, (B):2/binary, (Rest)/binary>>  %% FIXME: add mising size
+       ).
+-define(MATCH_ACCOUNT_UNENCODED(A, B, Rest),
+        <<"account/", (A):2/binary, "/", (B):2/binary, "/", (Rest):28/binary>>
+       ).
+-define(MATCH_ACCOUNT_ENCODED(A, B, Rest),
+        <<"account%2F", (A):2/binary, "%2F", (B):2/binary, "%2F", (Rest):28/binary>>
+       ).
+-define(MATCH_ACCOUNT_encoded(A, B, Rest),
+        <<"account%2f", (A):2/binary, "%2f", (B):2/binary, "%2f", (Rest):28/binary>>
+       ).
+
+-define(MATCH_MODB_SUFFIX_RAW(A, B, Rest, Year, Month),
+        <<(A):2/binary, (B):2/binary, (Rest):28/binary
+          ,"-", (Year):4/binary, (Month):2/binary
+        >>
+       ).
+-define(MATCH_MODB_SUFFIX_UNENCODED(A, B, Rest, Year, Month),
+        <<"account/", (A):2/binary, "/", (B):2/binary, "/", (Rest):28/binary
+          ,"-", (Year):4/binary, (Month):2/binary
+        >>
+       ).
+-define(MATCH_MODB_SUFFIX_ENCODED(A, B, Rest, Year, Month),
+        <<"account%2F", (A):2/binary, "%2F", (B):2/binary, "%2F", (Rest):28/binary
+          ,"-", (Year):4/binary, (Month):2/binary
+        >>
+       ).
+-define(MATCH_MODB_SUFFIX_encoded(A, B, Rest, Year, Month),
+        <<"account%2f", (A):2/binary, "%2f", (B):2/binary, "%2f", (Rest):28/binary
+          ,"-", (Year):4/binary, (Month):2/binary
+        >>
+       ).
+
+%% FIXME: replace these with the above ones, actually matching: "account..."
+%%   and then add MATCH_MODB_SUFFIX_encoded/3.
+-define(MATCH_MODB_SUFFIX_RAW(Account, Year, Month),
+        <<(Account):32/binary, "-", (Year):4/binary, (Month):2/binary>>
+       ).
+-define(MATCH_MODB_SUFFIX_UNENCODED(Account, Year, Month),
+        <<(Account):42/binary, "-", (Year):4/binary, (Month):2/binary>>
+       ).
+-define(MATCH_MODB_SUFFIX_ENCODED(Account, Year, Month),
+        <<(Account):48/binary, "-", (Year):4/binary, (Month):2/binary>>
+       ).
+
+-define(MATCH_MODB_PREFIX(Year, Month, Account),
+        <<(Year):4/binary, (Month):2/binary, "-", (Account)/binary>>  %% FIXME: add mising size
+       ).
+-define(MATCH_MODB_PREFIX_M1(Year, Month, Account),
+        <<(Year):4/binary, (Month):1/binary, "-", (Account)/binary>>  %% FIXME: add mising size
+       ).
+
 
 -define(WHISTLE_TYPES_INCLUDED, 'true').
 -endif.

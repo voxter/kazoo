@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz, INC
+%%% @copyright (C) 2011-2015, 2600Hz, INC
 %%% @doc
 %%% Make a request for authorization, and answer queries about the CallID
 %%% @end
@@ -192,11 +192,18 @@ set_ccv_trunk_usage(JObj, CallId, Node) ->
                                boolean().
 authorize_account(JObj, Props, CallId, Node) ->
     AccountId = wh_json:get_value(<<"Account-ID">>, JObj),
-    Type = wh_json:get_value(<<"Account-Billing">>, JObj),
+    Type      = wh_json:get_value(<<"Account-Billing">>, JObj),
+    ChanVars  = wh_json:get_value(<<"Custom-Channel-Vars">>, JObj),
+
     lager:debug("call authorized by account ~s as ~s", [AccountId, Type]),
-    P = props:set_values([{?GET_CCV(<<"Account-ID">>), AccountId}
-                          ,{?GET_CCV(<<"Account-Billing">>), Type}
-                         ], Props),
+    P = props:set_values(
+          [{?GET_CCV(<<"Account-ID">>), AccountId}
+           ,{?GET_CCV(<<"Account-Billing">>), Type}
+           ,{<<"Outbound-Flags">>, wh_json:get_value(<<"Outbound-Flags">>, ChanVars)}
+          ]
+          ,Props
+         ),
+
     authorize_reseller(JObj, P, CallId, Node).
 
 -spec authorize_reseller(wh_json:object(), wh_proplist(), ne_binary(), atom()) ->
@@ -210,7 +217,9 @@ authorize_reseller(JObj, Props, CallId, Node) ->
             lager:debug("call authorized by reseller ~s as ~s", [ResellerId, Type]),
             P = props:set_values([{?GET_CCV(<<"Reseller-ID">>), ResellerId}
                                   ,{?GET_CCV(<<"Reseller-Billing">>), Type}
-                                 ], Props),
+                                 ]
+                                 ,Props
+                                ),
             rate_call(P, CallId, Node)
     end.
 
@@ -360,6 +369,8 @@ authz_req(Props) ->
        ,{<<"Other-Leg-Call-ID">>, kzd_freeswitch:other_leg_call_id(Props)}
        ,{<<"Caller-ID-Name">>, kzd_freeswitch:caller_id_name(Props, wh_util:anonymous_caller_id_name())}
        ,{<<"Caller-ID-Number">>, kzd_freeswitch:caller_id_number(Props, wh_util:anonymous_caller_id_number())}
+       ,{<<"From-Network-Addr">>, kzd_freeswitch:from_network_ip(Props)}
+       ,{<<"From-Network-Port">>, kzd_freeswitch:from_network_port(Props)}
        ,{<<"Custom-Channel-Vars">>, wh_json:from_list(ecallmgr_util:custom_channel_vars(Props))}
        | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
       ]).
@@ -372,5 +383,6 @@ rating_req(CallId, Props) ->
      ,{<<"Account-ID">>, kzd_freeswitch:account_id(Props)}
      ,{<<"Direction">>, kzd_freeswitch:call_direction(Props)}
      ,{<<"Send-Empty">>, 'true'}
+     ,{<<"Outbound-Flags">>, props:get_value(<<"Outbound-Flags">>, Props)}
      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
     ].

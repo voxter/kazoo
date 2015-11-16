@@ -40,7 +40,7 @@
 -define(AGG_VIEW_REALM, <<"accounts/listing_by_realm">>).
 -define(AGG_VIEW_NAME, <<"accounts/listing_by_name">>).
 
--define(PVT_TYPE, <<"account">>).
+-define(PVT_TYPE, kz_account:type()).
 -define(CHILDREN, <<"children">>).
 -define(DESCENDANTS, <<"descendants">>).
 -define(SIBLINGS, <<"siblings">>).
@@ -285,6 +285,7 @@ put(Context) ->
         C ->
             Tree = kz_account:tree(JObj),
             _ = maybe_update_descendants_count(Tree),
+            _ = create_apps_store_doc(AccountId),
             leak_pvt_fields(C)
     catch
         'throw':C ->
@@ -325,6 +326,7 @@ delete(Context, Account) ->
             _ = maybe_update_descendants_count(kz_account:tree(cb_context:doc(Context1))),
             Context1
     end.
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -334,6 +336,16 @@ delete(Context, Account) ->
 maybe_update_descendants_count([]) -> 'ok';
 maybe_update_descendants_count(Tree) ->
     _ = wh_util:spawn('crossbar_util', 'descendants_count', [lists:last(Tree)]),
+    'ok'.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec create_apps_store_doc(ne_binary()) -> 'ok'.
+create_apps_store_doc(AccountId) ->
+    _ = wh_util:spawn('cb_apps_util', 'create_apps_store_doc', [AccountId]),
     'ok'.
 
 %%--------------------------------------------------------------------
@@ -641,6 +653,7 @@ leak_pvt_fields(Context, 'success') ->
                 ,fun leak_is_reseller/1
                 ,fun leak_billing_mode/1
                 ,fun leak_notification_preference/1
+                ,fun leak_trial_time_left/1
                ],
     cb_context:setters(Context, Routines);
 leak_pvt_fields(Context, _Status) -> Context.
@@ -750,6 +763,23 @@ leak_notification_preference(Context, 'undefined') ->
 leak_notification_preference(Context, Pref) ->
     UpdatedRespJObj = wh_json:set_value(<<"notification_preference">>, Pref, cb_context:resp_data(Context)),
     cb_context:set_resp_data(Context, UpdatedRespJObj).
+
+-spec leak_trial_time_left(cb_context:context()) ->
+                                  cb_context:context().
+-spec leak_trial_time_left(cb_context:context(), wh_json:object(), api_integer()) ->
+                                  cb_context:context().
+leak_trial_time_left(Context) ->
+    JObj = cb_context:doc(Context),
+    leak_trial_time_left(Context, JObj, kz_account:trial_expiration(JObj)).
+
+leak_trial_time_left(Context, _JObj, 'undefined') ->
+    Context;
+leak_trial_time_left(Context, JObj, _Expiration) ->
+    RespData = wh_json:set_value(<<"trial_time_left">>
+                                 ,kz_account:trial_time_left(JObj)
+                                 ,cb_context:resp_data(Context)
+                                ),
+    cb_context:set_resp_data(Context, RespData).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1054,9 +1084,7 @@ set_private_properties(Context) ->
 
 -spec add_pvt_type(cb_context:context()) -> cb_context:context().
 add_pvt_type(Context) ->
-    cb_context:set_doc(Context
-                       ,wh_json:set_value(<<"pvt_type">>, ?PVT_TYPE, cb_context:doc(Context))
-                      ).
+    cb_context:set_doc(Context, wh_doc:set_type(cb_context:doc(Context), ?PVT_TYPE)).
 
 -spec add_pvt_vsn(cb_context:context()) -> cb_context:context().
 add_pvt_vsn(Context) ->
@@ -1148,9 +1176,9 @@ create_new_tree(Context, _Verb, _Nouns) ->
 load_account_db([AccountId|_], Context) ->
     load_account_db(AccountId, Context);
 load_account_db(AccountId, Context) when is_binary(AccountId) ->
-    AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
-    case couch_mgr:open_cache_doc(AccountDb, AccountId) of
+    case kz_account:fetch(AccountId) of
         {'ok', _JObj} ->
+            AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
             lager:debug("account ~s db exists, setting operating database as ~s", [AccountId, AccountDb]),
             ResellerId = wh_services:find_reseller_id(AccountId),
             cb_context:setters(Context
@@ -1217,8 +1245,7 @@ create_new_account_db(Context) ->
 maybe_set_notification_preference(Context) ->
     AccountId = cb_context:account_id(Context),
     ResellerId = wh_services:find_reseller_id(AccountId),
-    ResellerDb = wh_util:format_account_id(ResellerId, 'encoded'),
-    case couch_mgr:open_cache_doc(ResellerDb, ResellerId) of
+    case kz_account:fetch(ResellerId) of
         {'error', _E} ->
             lager:error("failed to open reseller '~s': ~p", [ResellerId, _E]);
         {'ok', AccountJObj} ->
@@ -1322,9 +1349,9 @@ ensure_views(Context, [Id|Ids], Retries) ->
 %%--------------------------------------------------------------------
 -spec replicate_account_definition(wh_json:object()) ->
                                           {'ok', wh_json:object()} |
-                                          {'error', _}.
+                                          {'error', any()}.
 replicate_account_definition(JObj) ->
-    AccountId = wh_json:get_value(<<"_id">>, JObj),
+    AccountId = wh_doc:id(JObj),
     case couch_mgr:lookup_doc_rev(?WH_ACCOUNTS_DB, AccountId) of
         {'ok', Rev} ->
             couch_mgr:ensure_saved(?WH_ACCOUNTS_DB, wh_doc:set_revision(JObj, Rev));

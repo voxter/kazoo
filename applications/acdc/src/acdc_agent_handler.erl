@@ -25,6 +25,7 @@
         ]).
 
 -include("acdc.hrl").
+-include_lib("whistle/include/wapi_conf.hrl").
 
 -define(DEFAULT_PAUSE ,whapps_config:get(<<"acdc">>, <<"default_agent_pause_timeout">>, 600)).
 
@@ -144,7 +145,7 @@ login_resp(JObj, Status) ->
 -spec maybe_start_agent(api_binary(), api_binary()) ->
                                {'ok', pid()} |
                                {'exists', pid()} |
-                               {'error', _}.
+                               {'error', any()}.
 maybe_start_agent(AccountId, AgentId) ->
     case acdc_agents_sup:find_agent_supervisor(AccountId, AgentId) of
         'undefined' ->
@@ -250,8 +251,7 @@ handle_call_event(JObj, Props) ->
             end
     end.
 
--spec handle_call_event(ne_binary(), ne_binary(), server_ref(), wh_json:object(), wh_proplist()) ->
-                               any().
+-spec handle_call_event(ne_binary(), ne_binary(), server_ref(), wh_json:object(), wh_proplist()) -> any().
 handle_call_event(Category, <<"CHANNEL_DESTROY">> = Name, FSM, JObj, Props) ->
     Urls = props:get_value('cdr_urls', Props),
     CallId = wh_json:get_value(<<"Call-ID">>, JObj),
@@ -359,8 +359,9 @@ handle_change(JObj, <<"undefined">>) ->
                                  )
     of
         {'ok', Doc} ->
-            lager:debug("found doc of type ~s", [wh_json:get_value(<<"pvt_type">>, Doc)]),
-            handle_change(JObj, wh_json:get_value(<<"pvt_type">>, Doc));
+            Type = wh_doc:type(Doc),
+            lager:debug("found doc of type ~s", [Type]),
+            handle_change(JObj, Type);
         {'error', _E} ->
             lager:debug("failed to find doc")
     end.
@@ -370,56 +371,56 @@ handle_device_change(AccountDb, AccountId, DeviceId, Rev, Type) ->
 
 handle_device_change(_AccountDb, _AccountId, DeviceId, Rev, _Type, Cnt) when Cnt > 3 ->
     lager:debug("retried ~p times to refresh endpoint ~s(~s), giving up", [Cnt, DeviceId, Rev]);
-handle_device_change(AccountDb, AccountId, DeviceId, Rev, <<"doc_created">>, Cnt) ->
+handle_device_change(AccountDb, AccountId, DeviceId, Rev, ?DOC_CREATED, Cnt) ->
     case cf_endpoint:get(DeviceId, AccountDb) of
         {'ok', EP} ->
-            case wh_json:get_value(<<"_rev">>, EP) of
+            case wh_doc:revision(EP) of
                 Rev ->
                     gproc:send(?ENDPOINT_UPDATE_REG(AccountId, DeviceId), ?ENDPOINT_CREATED(EP)),
                     gproc:send(?OWNER_UPDATE_REG(AccountId, wh_json:get_value(<<"owner_id">>, EP)), ?ENDPOINT_CREATED(EP));
                 _OldRev ->
                     timer:sleep(250),
-                    handle_device_change(AccountDb, AccountId, DeviceId, Rev, <<"doc_created">>, Cnt+1)
+                    handle_device_change(AccountDb, AccountId, DeviceId, Rev, ?DOC_CREATED, Cnt+1)
             end;
         _ -> lager:debug("ignoring the fact that device ~s was created", [DeviceId])
     end;
-handle_device_change(AccountDb, AccountId, DeviceId, Rev, <<"doc_edited">>, Cnt) ->
+handle_device_change(AccountDb, AccountId, DeviceId, Rev, ?DOC_EDITED, Cnt) ->
     case cf_endpoint:get(DeviceId, AccountDb) of
         {'ok', EP} ->
-            case wh_json:get_value(<<"_rev">>, EP) of
+            case wh_doc:revision(EP) of
                 Rev ->
                     gproc:send(?ENDPOINT_UPDATE_REG(AccountId, DeviceId), ?ENDPOINT_EDITED(EP)),
                     gproc:send(?OWNER_UPDATE_REG(AccountId, wh_json:get_value(<<"owner_id">>, EP)), ?ENDPOINT_EDITED(EP));
                 _OldRev ->
                     timer:sleep(250),
-                    handle_device_change(AccountDb, AccountId, DeviceId, Rev, <<"doc_edited">>, Cnt+1)
+                    handle_device_change(AccountDb, AccountId, DeviceId, Rev, ?DOC_EDITED, Cnt+1)
             end;
         _ -> lager:debug("ignoring the fact that device ~s was edited", [DeviceId])
     end;
-handle_device_change(AccountDb, AccountId, DeviceId, Rev, <<"doc_deleted">>, Cnt) ->
+handle_device_change(AccountDb, AccountId, DeviceId, Rev, ?DOC_DELETED, Cnt) ->
     case cf_endpoint:get(DeviceId, AccountDb) of
         {'ok', EP} ->
-            case wh_json:get_value(<<"_rev">>, EP) of
+            case wh_doc:revision(EP) of
                 Rev ->
                     gproc:send(?ENDPOINT_UPDATE_REG(AccountId, DeviceId), ?ENDPOINT_DELETED(EP)),
                     gproc:send(?OWNER_UPDATE_REG(AccountId, wh_json:get_value(<<"owner_id">>, EP)), ?ENDPOINT_DELETED(EP));
                 _OldRev ->
                     timer:sleep(250),
-                    handle_device_change(AccountDb, AccountId, DeviceId, Rev, <<"doc_deleted">>, Cnt+1)
+                    handle_device_change(AccountDb, AccountId, DeviceId, Rev, ?DOC_DELETED, Cnt+1)
             end;
         _ -> lager:debug("ignoring the fact that device ~s was edited", [DeviceId])
     end.
 
-handle_agent_change(_AccountDb, AccountId, AgentId, <<"doc_created">>) ->
+handle_agent_change(_AccountDb, AccountId, AgentId, ?DOC_CREATED) ->
     lager:debug("new agent ~s(~s) created, hope they log in soon!", [AgentId, AccountId]);
-handle_agent_change(AccountDb, AccountId, AgentId, <<"doc_edited">>) ->
+handle_agent_change(AccountDb, AccountId, AgentId, ?DOC_EDITED) ->
     {'ok', JObj} = couch_mgr:open_doc(AccountDb, AgentId),
     lager:debug("agent ~s edited", [AgentId]),
     case acdc_agents_sup:find_agent_supervisor(AccountId, AgentId) of
         'undefined' -> lager:debug("failed to find agent ~s", [AgentId]);
         P when is_pid(P) -> acdc_agent_fsm:refresh(acdc_agent_sup:fsm(P), JObj)
     end;
-handle_agent_change(_, AccountId, AgentId, <<"doc_deleted">>) ->
+handle_agent_change(_, AccountId, AgentId, ?DOC_DELETED) ->
     case acdc_agents_sup:find_agent_supervisor(AccountId, AgentId) of
         'undefined' -> lager:debug("user ~s has left us, but wasn't started", [AgentId]);
         P when is_pid(P) ->

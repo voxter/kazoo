@@ -19,7 +19,7 @@ start_link(RouteReqJObj) ->
 
 init(Parent, RouteReqJObj) ->
     proc_lib:init_ack(Parent, {'ok', self()}),
-    start_amqp(ts_callflow:init(RouteReqJObj, 'undefined')).
+    start_amqp(ts_callflow:init(RouteReqJObj, ['undefined', <<"resource">>])).
 
 start_amqp({'error', 'not_ts_account'}) -> 'ok';
 start_amqp(State) ->
@@ -89,7 +89,8 @@ wait_for_bridge(State) ->
 
 try_failover(State) ->
     case {ts_callflow:get_control_queue(State)
-          ,ts_callflow:get_failover(State)}
+          ,ts_callflow:get_failover(State)
+         }
     of
         {<<>>, _} ->
             lager:info("no callctl for failover");
@@ -175,7 +176,14 @@ get_endpoint_data(JObj) ->
     {'ok', AcctId, NumberProps} = wh_number_manager:lookup_account_by_number(ToDID),
     ForceOut = wh_number_properties:should_force_outbound(NumberProps),
     lager:info("acct ~s force out ~s", [AcctId, ForceOut]),
-    RoutingData = routing_data(ToDID, AcctId),
+    RoutingData1 = routing_data(ToDID, AcctId),
+
+    CidOptions  = proplists:get_value(<<"Caller-ID-Options">>, RoutingData1),
+    CidFormat   = wh_json:get_ne_value(<<"format">>, CidOptions),
+    OldCallerId = wh_json:get_value(<<"Caller-ID-Number">>, JObj),
+    NewCallerId = whapps_call:maybe_format_caller_id_str(OldCallerId, CidFormat),
+    RoutingData = RoutingData1 ++ [{<<"Outbound-Caller-ID-Number">>, NewCallerId}],
+
     AuthUser = props:get_value(<<"To-User">>, RoutingData),
     AuthRealm = props:get_value(<<"To-Realm">>, RoutingData),
     InFormat = props:get_value(<<"Invite-Format">>, RoutingData, <<"username">>),
@@ -191,8 +199,8 @@ get_endpoint_data(JObj) ->
                    ])
     }.
 
--spec routing_data(ne_binary(), ne_binary()) -> [{<<_:48,_:_*8>>,_},...] | [].
--spec routing_data(ne_binary(), ne_binary(), wh_json:object()) -> [{<<_:48,_:_*8>>,_},...] | [].
+-spec routing_data(ne_binary(), ne_binary()) -> [{<<_:48,_:_*8>>, any()}].
+-spec routing_data(ne_binary(), ne_binary(), wh_json:object()) -> [{<<_:48,_:_*8>>, any()}].
 routing_data(ToDID, AcctID) ->
     case ts_util:lookup_did(ToDID, AcctID) of
         {'ok', Settings} ->
@@ -235,9 +243,11 @@ routing_data(ToDID, AcctID, Settings) ->
     ToPort = wh_json:find(<<"port">>, [AuthOpts, SrvOptions]),
 
     case wh_json:is_true(<<"enabled">>, SrvOptions, 'true') of
-        'false' -> throw({'server_disabled', wh_json:get_value(<<"id">>, Srv)});
+        'false' -> throw({'server_disabled', wh_doc:id(Srv)});
         'true' -> 'ok'
     end,
+
+    CidOptions = wh_json:get_ne_value(<<"caller_id_options">>, SrvOptions),
 
     InboundFormat = wh_json:get_value(<<"inbound_format">>, SrvOptions, <<"npan">>),
     {CalleeName, CalleeNumber} = callee_id([wh_json:get_value(<<"caller_id">>, DIDOptions)
@@ -277,8 +287,7 @@ routing_data(ToDID, AcctID, Settings) ->
                                   ,wh_json:get_value(<<"timeout">>, SrvOptions)
                                   ,wh_json:get_value(<<"timeout">>, AcctStuff)
                                  ]),
-    %% Bridge Endpoint fields go here
-    %% See http://wiki.2600hz.org/display/whistle/Dialplan+Actions#DialplanActions-Endpoint
+
     [KV || {_,V}=KV <- [ {<<"Invite-Format">>, InboundFormat}
                          ,{<<"Codecs">>, wh_json:find(<<"codecs">>, [SrvOptions, Srv])}
                          ,{<<"Bypass-Media">>, BypassMedia}
@@ -292,6 +301,7 @@ routing_data(ToDID, AcctID, Settings) ->
                          ,{<<"Callee-ID-Number">>, CalleeNumber}
                          ,{<<"To-User">>, AuthU}
                          ,{<<"To-Realm">>, AuthR}
+                         ,{<<"Caller-ID-Options">>, CidOptions}
                          ,{<<"To-DID">>, ToDID}
                          ,{<<"To-IP">>, build_ip(ToIP, ToPort)}
                          ,{<<"Route-Options">>, RouteOpts}

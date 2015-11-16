@@ -38,6 +38,7 @@
          ,reseller_id/1, set_reseller_id/2
          ,account_realm/1
          ,account_doc/1
+         ,auth_token_type/1, set_auth_token_type/2
          ,auth_token/1, set_auth_token/2
          ,auth_doc/1, set_auth_doc/2
          ,auth_account_id/1, set_auth_account_id/2
@@ -51,7 +52,7 @@
          ,req_headers/1, set_req_headers/2
          ,req_header/2
          ,query_string/1, set_query_string/2
-         ,client_ip/1
+         ,client_ip/1, set_client_ip/2
          ,doc/1, set_doc/2, update_doc/2
          ,load_merge_bypass/1, set_load_merge_bypass/2
          ,start/1, set_start/2
@@ -83,6 +84,12 @@
 
          ,validation_errors/1, set_validation_errors/2
 
+         ,set_raw_host/2
+         ,set_port/2
+         ,set_raw_path/2
+         ,set_raw_qs/2
+         ,profile_id/1 ,set_profile_id/2
+
          %% Special accessors
          ,req_value/2, req_value/3
          ,accepting_charges/1
@@ -93,8 +100,8 @@
 
 -type context() :: #cb_context{}.
 -type setter_fun_1() :: fun((context()) -> context()).
--type setter_fun_2() :: fun((context(), term()) -> context()).
--type setter_fun_3() :: fun((context(), term(), term()) -> context()).
+-type setter_fun_2() :: fun((context(), any()) -> context()).
+-type setter_fun_3() :: fun((context(), any(), any()) -> context()).
 -type setter_fun() :: setter_fun_1() | setter_fun_2() | setter_fun_3().
 -export_type([context/0
               ,setter_fun/0
@@ -104,9 +111,9 @@
              ]).
 
 -type setter_kv() :: setter_fun_1() |
-                     {setter_fun_2(), term()} |
-                     {setter_fun_3(), term(), term()}.
--type setters() :: [setter_kv(),...] | [].
+                     {setter_fun_2(), any()} |
+                     {setter_fun_3(), any(), any()}.
+-type setters() :: [setter_kv()].
 
 -spec new() -> context().
 new() -> #cb_context{}.
@@ -142,12 +149,14 @@ accepting_charges(Context) ->
 -spec account_modb(context(), wh_year(), wh_month()) -> api_binary().
 -spec account_realm(context()) -> api_binary().
 -spec account_doc(context()) -> api_object().
+-spec profile_id(context()) -> api_binary().
 
 account_id(#cb_context{account_id=AcctId}) -> AcctId.
 user_id(#cb_context{user_id=UserId}) -> UserId.
 device_id(#cb_context{device_id=DeviceId}) -> DeviceId.
 reseller_id(#cb_context{reseller_id=AcctId}) -> AcctId.
 account_db(#cb_context{db_name=AcctDb}) -> AcctDb.
+profile_id(#cb_context{profile_id = Value}) -> Value.
 
 account_modb(Context) ->
     kazoo_modb:get_modb(account_id(Context)).
@@ -168,6 +177,7 @@ account_doc(Context) ->
 is_authenticated(#cb_context{auth_doc='undefined'}) -> 'false';
 is_authenticated(#cb_context{}) -> 'true'.
 
+auth_token_type(#cb_context{auth_token_type=AuthTokenType}) -> AuthTokenType.
 auth_token(#cb_context{auth_token=AuthToken}) -> AuthToken.
 auth_doc(#cb_context{auth_doc=AuthDoc}) -> AuthDoc.
 auth_account_id(#cb_context{auth_account_id=AuthBy}) -> AuthBy.
@@ -290,6 +300,12 @@ setters_fold(F, C) when is_function(F, 1) -> F(C).
 -spec set_magic_pathed(context(), boolean()) -> context().
 -spec set_should_paginate(context(), boolean()) -> context().
 -spec set_validation_errors(context(), wh_json:object()) -> context().
+-spec set_port(context(), integer()) -> context().
+-spec set_raw_host(context(), binary()) -> context().
+-spec set_raw_path(context(), binary()) -> context().
+-spec set_raw_qs(context(), binary()) -> context().
+-spec set_client_ip(context(), ne_binary()) -> context().
+-spec set_profile_id(context(), ne_binary()) -> context().
 
 set_account_id(#cb_context{}=Context, AcctId) ->
     Context#cb_context{account_id=AcctId}.
@@ -305,6 +321,8 @@ set_account_modb(#cb_context{}=Context, Year, Month) ->
     Context#cb_context{db_name=kazoo_modb:get_modb(account_id(Context), Year, Month)}.
 set_account_modb(#cb_context{}=Context, AcctId, Year, Month) ->
     Context#cb_context{db_name=kazoo_modb:get_modb(AcctId, Year, Month)}.
+set_auth_token_type(#cb_context{}=Context, AuthTokenType) ->
+    Context#cb_context{auth_token_type=AuthTokenType}.
 set_auth_token(#cb_context{}=Context, AuthToken) ->
     Context#cb_context{auth_token=AuthToken}.
 set_auth_doc(#cb_context{}=Context, AuthDoc) ->
@@ -364,7 +382,7 @@ set_encodings_provided(#cb_context{}=Context, EP) ->
 set_magic_pathed(#cb_context{}=Context, MP) ->
     Context#cb_context{magic_pathed=wh_util:is_true(MP)}.
 set_should_paginate(#cb_context{}=Context, SP) ->
-    Context#cb_context{magic_pathed=wh_util:is_true(SP)}.
+    Context#cb_context{should_paginate=wh_util:is_true(SP)}.
 
 set_resp_error_code(#cb_context{}=Context, Code) ->
     Context#cb_context{resp_error_code=Code}.
@@ -383,12 +401,31 @@ add_resp_headers(#cb_context{resp_headers=RespHeaders}=Context, Headers) ->
 add_resp_header(#cb_context{resp_headers=RespHeaders}=Context, K, V) ->
     Context#cb_context{resp_headers=add_resp_header_fold({K, V}, RespHeaders)}.
 
--spec add_resp_header_fold({ne_binary(), _}, wh_proplist()) -> wh_proplist().
+-spec add_resp_header_fold({ne_binary(), any()}, wh_proplist()) -> wh_proplist().
 add_resp_header_fold({K, V}, Hs) ->
     props:set_value(wh_util:to_lower_binary(K), V, Hs).
 
 set_validation_errors(#cb_context{}=Context, Errors) ->
     Context#cb_context{validation_errors=Errors}.
+
+set_port(#cb_context{}=Context, Value) ->
+    Context#cb_context{port = Value}.
+
+set_raw_host(#cb_context{}=Context, Value) ->
+    Context#cb_context{raw_host = Value}.
+
+set_raw_path(#cb_context{}=Context, Value) ->
+    Context#cb_context{raw_path = Value}.
+
+set_raw_qs(#cb_context{}=Context, Value) ->
+    Context#cb_context{raw_qs = Value}.
+
+set_client_ip(#cb_context{}=Context, Value) ->
+    Context#cb_context{client_ip = Value}.
+
+set_profile_id(#cb_context{}=Context, Value) ->
+    Context#cb_context{profile_id = Value}.
+
 
 -spec update_doc(context(), setter_fun_1()) -> context().
 update_doc(#cb_context{doc=Doc}=Context, Updater) ->
@@ -436,7 +473,7 @@ maybe_add_content_type_provided(Context, AttachmentId) ->
 %% this request.
 %% @end
 %%--------------------------------------------------------------------
--spec store(context(), term(), term()) -> context().
+-spec store(context(), any(), any()) -> context().
 store(#cb_context{storage=Storage}=Context, Key, Data) ->
     Context#cb_context{storage=[{Key, Data} | props:delete(Key, Storage)]}.
 
@@ -446,8 +483,8 @@ store(#cb_context{storage=Storage}=Context, Key, Data) ->
 %% Fetches a previously stored value from the current request.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch(context(), term()) -> term().
--spec fetch(context(), term(), term()) -> term().
+-spec fetch(context(), any()) -> any().
+-spec fetch(context(), any(), any()) -> any().
 
 fetch(#cb_context{}=Context, Key) ->
     fetch(Context, Key, 'undefined').
@@ -467,7 +504,7 @@ fetch(#cb_context{storage=Storage}, Key, Default) ->
 %%--------------------------------------------------------------------
 -spec put_reqid(context()) -> api_binary().
 put_reqid(#cb_context{req_id=ReqId}) ->
-    put('callid', ReqId).
+    wh_util:put_callid(ReqId).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -555,7 +592,7 @@ validate_request_data(SchemaJObj, Context) ->
               set_doc(Context, wh_json_schema:add_defaults(JObj, SchemaJObj))
              );
         {'error', Errors} ->
-            lager:debug("request data did not validate against ~s: ~p", [wh_json:get_value(<<"_id">>, SchemaJObj)
+            lager:debug("request data did not validate against ~s: ~p", [wh_doc:id(SchemaJObj)
                                                                          ,Errors
                                                                         ]),
             failed(Context, Errors)
@@ -905,12 +942,12 @@ passed(Context) ->
     passed(Context, 'success').
 
 passed(#cb_context{req_data=Data}=Context, Status) ->
-    case wh_json:get_ne_value(<<"_id">>, Data) of
+    case wh_doc:id(Data) of
         'undefined' ->
-            Context#cb_context{resp_status=Status};
+            Context#cb_context{resp_status = Status};
         Id ->
-            Context#cb_context{resp_status=Status
-                               ,doc=wh_json:set_value(<<"_id">>, Id, doc(Context))
+            Context#cb_context{resp_status = Status
+                               ,doc = wh_doc:set_id(doc(Context), Id)
                               }
     end.
 
@@ -1025,7 +1062,7 @@ add_system_error(Error, JObj, Context) ->
 -spec build_system_error(integer(), atom() | ne_binary(), ne_binary() | wh_json:object(), cb_context:context()) ->
                                 cb_context:context().
 build_system_error(Code, Error, JObj, Context) ->
-    ApiVersion = cb_context:api_version(Context),
+    ApiVersion = ?MODULE:api_version(Context),
     Message = build_error_message(ApiVersion, JObj),
     Context#cb_context{resp_status='error'
                        ,resp_error_code=Code
@@ -1085,6 +1122,8 @@ add_validation_error(Property, <<"patternProperties">> = C, Message, Context) ->
     add_depreciated_validation_error(Property, C, Message, Context);
 add_validation_error(Property, <<"disabled">> = C, Message, Context) ->
     add_depreciated_validation_error(Property, C, Message, Context);
+add_validation_error(Property, <<"expired">> = C, Message, Context) ->
+    add_depreciated_validation_error(Property, C, Message, Context);
 % Generic
 add_validation_error(Property, <<"invalid">> = C, Message, Context) ->
     add_depreciated_validation_error(Property, C, Message, Context);
@@ -1093,19 +1132,36 @@ add_validation_error(Property, Code, Message, Context) ->
     lager:warning("UNKNOWN ERROR CODE: ~p", [Code]),
     add_depreciated_validation_error(Property, Code, Message, Context).
 
-add_depreciated_validation_error(Property, Code, Message, Context) when is_binary(Property) ->
-    add_depreciated_validation_error([Property], Code, Message, Context);
-add_depreciated_validation_error(Property, Code, Message, #cb_context{validation_errors=JObj}=Context) ->
+
+add_depreciated_validation_error(<<"account">>, <<"expired">>, Message, Context) ->
+    add_depreciated_validation_error(<<"account">>, <<"expired">>, Message, Context, 423, <<"locked">>);
+add_depreciated_validation_error(<<"account">>, <<"disabled">>, Message, Context) ->
+    add_depreciated_validation_error(<<"account">>, <<"disabled">>, Message, Context, 423, <<"locked">>);
+add_depreciated_validation_error(Property, Code, Message, Context) ->
+    add_depreciated_validation_error(Property, Code, Message, Context, resp_error_code(Context), resp_error_msg(Context)).
+
+add_depreciated_validation_error(Property, Code, Message, Context, 'undefined', ErrMsg) ->
+    add_depreciated_validation_error(Property, Code, Message, Context, 400, ErrMsg);
+add_depreciated_validation_error(Property, Code, Message, Context, ErrorCode, 'undefined') ->
+    add_depreciated_validation_error(Property, Code, Message, Context, ErrorCode, <<"invalid request">>);
+add_depreciated_validation_error(Property, Code, Message, Context, ErrorCode, <<"init failed">>) ->
+    add_depreciated_validation_error(Property, Code, Message, Context, ErrorCode, <<"invalid request">>);
+add_depreciated_validation_error(<<_/binary>> = Property, Code, Message, Context, ErrCode, ErrMsg) ->
+    add_depreciated_validation_error([Property], Code, Message, Context, ErrCode, ErrMsg);
+add_depreciated_validation_error(Property, Code, Message, Context, ErrCode, ErrMsg) ->
     %% Maintain the same error format we are currently using until we are ready to
     %% convert to something that makes sense....
-    ApiVersion = cb_context:api_version(Context),
+    ApiVersion = ?MODULE:api_version(Context),
+
+    JObj = cb_context:validation_errors(Context),
     Error = build_error_message(ApiVersion, Message),
+
     Key = wh_util:join_binary(Property, <<".">>),
     Context#cb_context{validation_errors=wh_json:set_value([Key, Code], Error, JObj)
                        ,resp_status='error'
-                       ,resp_error_code=400
+                       ,resp_error_code=ErrCode
                        ,resp_data=wh_json:new()
-                       ,resp_error_msg = <<"invalid data">>
+                       ,resp_error_msg=ErrMsg
                       }.
 
 -spec build_error_message('v1', ne_binary() | wh_json:object()) ->

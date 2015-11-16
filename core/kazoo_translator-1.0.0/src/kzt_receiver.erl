@@ -393,7 +393,7 @@ wait_for_conference(Call) ->
                                          ,record_call=RecordCall
                                          ,call_timeout=CallTimeout
                                          ,call_time_limit=CallTimeLimit
-                                         ,start=erlang:now()
+                                         ,start=wh_util:now()
                                         }).
 
 -spec call_status(ne_binary()) -> ne_binary().
@@ -651,7 +651,7 @@ maybe_start_recording(#dial_req{record_call='true'
 
 -spec recording_meta(whapps_call:call(), ne_binary()) ->
                             {'ok', wh_json:object()} |
-                            {'error', _}.
+                            {'error', any()}.
 recording_meta(Call, MediaName) ->
     AcctDb = whapps_call:account_db(Call),
     MediaDoc = wh_doc:update_pvt_parameters(

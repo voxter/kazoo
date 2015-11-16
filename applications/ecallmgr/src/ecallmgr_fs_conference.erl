@@ -30,7 +30,11 @@
                       ,[{<<"conference">>, <<"command">>}]
                      }
                     ]).
--define(BINDINGS, [{'conference', [{'restrict_to', ['command']}]}]).
+-define(BINDINGS, [{'conference'
+                    ,[{'restrict_to', ['command']}
+                      ,'federate'
+                     ]}
+                  ]).
 %% This queue is used to round-robin conference commands among ALL the
 %% conference listeners with the hopes that the one receiving the command
 %% can send it to the focus (barring network connectivity)...
@@ -89,7 +93,7 @@ do_handle_command(_, _) -> 'ok'.
 %% @end
 %%--------------------------------------------------------------------
 init([Node, Options]) ->
-    put('callid', ?LOG_SYSTEM_ID),
+    wh_util:put_callid(?LOG_SYSTEM_ID),
     lager:info("starting new fs conference listener for ~s", [Node]),
     gen_server:cast(self(), 'bind_to_events'),
     ecallmgr_fs_conferences:sync_node(Node),

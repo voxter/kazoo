@@ -99,7 +99,7 @@ init([Type]) ->
 init({'file', <<_/binary>>=Filename}) ->
     init({'file', Filename, Filename});
 init({'file', Name, PreFilename}=Type) ->
-    put('callid', Name),
+    wh_util:put_callid(Name),
 
     Filename = create_filename(PreFilename),
 
@@ -121,7 +121,7 @@ init({'file', Name, PreFilename}=Type) ->
 init({'db', Database}) ->
     init({'db', wh_util:rand_hex_binary(4), Database});
 init({'db', Name, Database}=Type) ->
-    put('callid', Name),
+    wh_util:put_callid(Name),
 
     case couch_mgr:db_exists(Database) of
         'true' ->
@@ -225,7 +225,7 @@ write_to_db(Database, Name, Str, Args) ->
 
 -spec start_file(ne_binary()) ->
                         {'ok', file:io_device()} |
-                        {'error', _}.
+                        {'error', any()}.
 start_file(Filename) ->
     _ = file:rename(Filename, iolist_to_binary([Filename, ".", wh_util:to_binary(wh_util:current_tstamp())])),
     file:open(Filename, ['append', 'raw', 'delayed_write']).
@@ -248,7 +248,7 @@ trunc_database(Database, Name) ->
 
 -spec get_docs_by_name(ne_binary(), ne_binary()) ->
                               {'ok', wh_json:objects()} |
-                              {'error', _}.
+                              {'error', any()}.
 get_docs_by_name(Database, Name) ->
     get_docs_by_name(Database, Name, []).
 get_docs_by_name(Database, Name, Opts) ->

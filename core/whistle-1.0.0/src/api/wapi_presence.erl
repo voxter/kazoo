@@ -108,19 +108,19 @@
 %% MWI Update
 -define(MWI_REQ_HEADERS, [<<"To">>
                           ,<<"Messages-New">>
-                          ,<<"Messages-Waiting">>
+                          ,<<"Messages-Saved">>
                          ]).
 -define(OPTIONAL_MWI_REQ_HEADERS, [<<"Messages-Urgent">>
-                                   ,<<"Messages-Urgent-Waiting">>
+                                   ,<<"Messages-Urgent-Saved">>
                                    ,<<"Call-ID">>
                                   ]).
 -define(MWI_REQ_VALUES, [{<<"Event-Category">>, <<"presence">>}
                          ,{<<"Event-Name">>, <<"mwi_update">>}
                         ]).
--define(MWI_REQ_TYPES, [{<<"Messages-New">>, fun(I) -> is_integer(wh_util:to_integer(I)) end}
-                        ,{<<"Messages-Waiting">>, fun(I) -> is_integer(wh_util:to_integer(I)) end}
-                        ,{<<"Messages-Urgent">>, fun(I) -> is_integer(wh_util:to_integer(I)) end}
-                        ,{<<"Messages-Urgent-Waiting">>, fun(I) -> is_integer(wh_util:to_integer(I)) end}
+-define(MWI_REQ_TYPES, [{<<"Messages-New">>, fun is_integer/1}
+                        ,{<<"Messages-Saved">>, fun is_integer/1}
+                        ,{<<"Messages-Urgent">>, fun is_integer/1}
+                        ,{<<"Messages-Urgent-Saved">>, fun is_integer/1}
                        ]).
 
 %% MWI Query
@@ -476,16 +476,18 @@ publish_reset(Req, ContentType) ->
 -spec reset_routing_key(ne_binary(), ne_binary()) -> ne_binary().
 reset_routing_key(Req) when is_list(Req) ->
     reset_routing_key(props:get_value(<<"Realm">>, Req)
-                      ,props:get_value(<<"Username">>, Req));
+                      ,props:get_value(<<"Username">>, Req)
+                     );
 reset_routing_key(Req) ->
     reset_routing_key(wh_json:get_value(<<"Realm">>, Req)
-                      ,wh_json:get_value(<<"Username">>, Req)).
+                      ,wh_json:get_value(<<"Username">>, Req)
+                     ).
 
 reset_routing_key(Realm, Username) when is_binary(Realm) ->
     list_to_binary([<<"presence.reset.">>
-                      ,amqp_util:encode(Realm)
-                      ,"."
-                      ,amqp_util:encode(Username)
+                    ,amqp_util:encode(Realm)
+                    ,"."
+                    ,amqp_util:encode(Username)
                    ]).
 
 %%--------------------------------------------------------------------

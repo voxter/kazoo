@@ -75,16 +75,16 @@
 -record(whapp_info, {startup :: gregorian_seconds()}).
 
 -type whapp_info() :: #whapp_info{}.
--type whapps_info() :: [{binary(), whapp_info()},...] | [].
+-type whapps_info() :: [{binary(), whapp_info()}].
 
 -type media_server() :: {ne_binary(), wh_json:object()}.
--type media_servers() :: [media_server(),...] | [].
+-type media_servers() :: [media_server()].
 
 -record(node, {node = node() :: atom() | '$1' | '$2' | '_'
                ,expires = 0 :: non_neg_integer() | 'undefined' | '$2' | '_'
                ,whapps = [] :: whapps_info() | '$1' | '_'
                ,media_servers = [] :: media_servers() | '_'
-               ,last_heartbeat = wh_util:now_ms(now()) :: pos_integer() | 'undefined' | '$3' | '_'
+               ,last_heartbeat = wh_util:now_ms(wh_util:now()) :: pos_integer() | 'undefined' | '$3' | '_'
                ,zone :: atom() | 'undefined' | '$2' | '_'
                ,broker :: api_binary() | '_'
                ,used_memory = 0 :: non_neg_integer() | '_'
@@ -96,7 +96,7 @@
               }).
 
 -type wh_node() :: #node{}.
--type wh_nodes() :: [wh_node(),...] | [].
+-type wh_nodes() :: [wh_node()].
 
 %%%===================================================================
 %%% API
@@ -148,7 +148,7 @@ whapp_count(Whapp, 'true') ->
 whapp_count(Whapp, 'remote') ->
     Zone = local_zone(),
     MatchSpec = [{#node{whapps='$1'
-                        ,zone='$2' 
+                        ,zone='$2'
                         ,_ = '_'
                        }
                   ,[{'andalso', {'=/=', '$1', []}
@@ -447,7 +447,7 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info('expire_nodes', #state{tab=Tab}=State) ->
-    Now = wh_util:now_ms(now()),
+    Now = wh_util:now_ms(wh_util:now()),
     FindSpec = [{#node{node='$1'
                        ,expires='$2'
                        ,last_heartbeat='$3'
@@ -783,7 +783,7 @@ notify_expire([Node|Nodes], Pids) ->
 notify_new(Node, #state{notify_new=Set}) ->
     notify_new(Node, sets:to_list(Set));
 notify_new(Node, Pids) ->
-    lager:info("recieved heartbeat from new node ~s", [Node]),
+    lager:info("received heartbeat from new node ~s", [Node]),
     _ = [gen_listener:cast(Pid, {'wh_nodes', {'new', Node}})
          || Pid <- Pids
         ],

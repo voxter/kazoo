@@ -26,6 +26,7 @@
         ]).
 -export([get_account_by_id/1
          ,get_account_by_realm/1
+         ,get_account_by_ip/1, get_ccvs_by_ip/1
          ,get_accounts_by_name/1
         ]).
 -export([get_master_account_id/0
@@ -33,7 +34,7 @@
         ]).
 -export([get_account_name/1]).
 -export([find_oldest_doc/1]).
--export([get_event_type/1, put_callid/1]).
+-export([get_event_type/1]).
 -export([get_call_termination_reason/1]).
 -export([get_view_json/1, get_view_json/2]).
 -export([get_views_json/2]).
@@ -59,10 +60,12 @@
 -define(REPLICATE_ENCODING, 'encoded').
 -define(AGG_LIST_BY_REALM, <<"accounts/listing_by_realm">>).
 -define(AGG_LIST_BY_NAME, <<"accounts/listing_by_name">>).
+-define(AGG_LIST_BY_IP, <<"credentials/lookup_by_ip">>).
 -define(PROMPTS_CONFIG_CAT, <<"prompts">>).
 
 -define(ACCT_BY_NAME_CACHE(Name), {?MODULE, 'account_by_name', Name}).
 -define(ACCT_BY_REALM_CACHE(Name), {?MODULE, 'account_by_realm', Name}).
+-define(ACCT_BY_IP_CACHE(IP), {?MODULE, 'account_by_ip', IP}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -163,7 +166,7 @@ find_master_account_id({'ok', Accounts}) ->
     Ok.
 
 -spec get_master_account_db() -> {'ok', ne_binary()} |
-                                 {'error', _}.
+                                 {'error', any()}.
 get_master_account_db() ->
     case get_master_account_id() of
         {'error', _}=E -> E;
@@ -178,11 +181,9 @@ get_master_account_db() ->
 %%--------------------------------------------------------------------
 -spec get_account_name(ne_binary()) -> ne_binary().
 get_account_name(Account) ->
-    AccountId = wh_util:format_account_id(Account, 'raw'),
-    AccountDb = wh_util:format_account_id(Account, 'encoded'),
-    case couch_mgr:open_cache_doc(AccountDb, AccountId) of
+    case kz_account:fetch(Account) of
         {'error', _} -> 'undefined';
-        {'ok', JObj} -> wh_json:get_ne_value(<<"name">>, JObj)
+        {'ok', JObj} -> kz_account:name(JObj)
     end.
 
 %%--------------------------------------------------------------------
@@ -198,15 +199,13 @@ find_oldest_doc([]) -> {'error', 'no_docs'};
 find_oldest_doc([First|Docs]) ->
     {_, OldestDocID} =
         lists:foldl(fun(Doc, {Created, _}=Eldest) ->
-                            Older = wh_json:get_integer_value(<<"pvt_created">>, Doc),
+                            Older = wh_doc:created(Doc),
                             case Older < Created  of
-                                'true' -> {Older, wh_json:get_value(<<"_id">>, Doc)};
+                                'true' -> {Older, wh_doc:id(Doc)};
                                 'false' -> Eldest
                             end
                     end
-                    ,{wh_json:get_integer_value(<<"pvt_created">>, First)
-                      ,wh_json:get_value(<<"_id">>, First)
-                     }
+                    ,{wh_doc:created(First), wh_doc:id(First)}
                     ,Docs),
     {'ok', OldestDocID}.
 
@@ -227,7 +226,7 @@ get_all_accounts(Encoding) ->
                                                       ]),
     [wh_util:format_account_id(Id, Encoding)
      || Db <- Dbs,
-        is_account_db((Id = wh_json:get_value(<<"id">>, Db)))
+        is_account_db((Id = wh_doc:id(Db)))
     ].
 
 -spec get_all_accounts_and_mods() -> ne_binaries().
@@ -236,7 +235,25 @@ get_all_accounts_and_mods() -> get_all_accounts_and_mods(?REPLICATE_ENCODING).
 
 get_all_accounts_and_mods(Encoding) ->
     {'ok', Databases} = couch_mgr:db_info(),
-    [wh_util:format_account_id(Db, Encoding) || Db <- Databases, is_account_db(Db) orelse is_account_mod(Db)].
+    [format_db(Db, Encoding)
+     || Db <- Databases,
+        is_account_db(Db)
+            orelse is_account_mod(Db)
+    ].
+
+-spec format_db(ne_binary(), 'unencoded' | 'encoded' | 'raw') -> ne_binary().
+format_db(Db, Encoding) ->
+    Fs =
+        [{fun is_account_db/1, fun wh_util:format_account_id/2}
+         ,{fun is_account_mod/1, fun wh_util:format_account_modb/2}
+        ],
+    format_db(Db, Encoding, Fs).
+
+format_db(Db, Encoding, [{Predicate, Formatter}|Fs]) ->
+    case Predicate(Db) of
+        'true' -> Formatter(Db, Encoding);
+        'false' -> format_db(Db, Encoding, Fs)
+    end.
 
 -spec get_all_account_mods() -> ne_binaries().
 -spec get_all_account_mods('unencoded' | 'encoded' | 'raw') -> ne_binaries().
@@ -245,7 +262,7 @@ get_all_account_mods() ->
 
 get_all_account_mods(Encoding) ->
     {'ok', Databases} = couch_mgr:db_info(),
-    [wh_util:format_account_id(Db, Encoding) || Db <- Databases, is_account_mod(Db)].
+    [wh_util:format_account_modb(Db, Encoding) || Db <- Databases, is_account_mod(Db)].
 
 -spec get_account_mods(ne_binary()) -> ne_binaries().
 -spec get_account_mods(ne_binary(), 'unencoded' | 'encoded' | 'raw') -> ne_binaries().
@@ -261,13 +278,13 @@ get_account_mods(AccountId, Encoding) ->
     ].
 
 -spec is_matched_account_mod(ne_binary(), ne_binary()) -> boolean().
-is_matched_account_mod(<<"account/", DbActId:34/binary, _/binary>>
-                       ,<<"account/", SearchId/binary>>
-                      ) when DbActId =:= SearchId ->
+is_matched_account_mod(?MATCH_MODB_SUFFIX_UNENCODED(A, B, Rest, _, _)  %% DbActId
+                       ,?MATCH_ACCOUNT_UNENCODED(A, B, Rest)  %% SearchId
+                      ) ->
     'true';
-is_matched_account_mod(<<"account%2F", DbActId:38/binary, _/binary>>
-                       ,<<"account%2F",SearchId/binary>>
-                      ) when DbActId =:= SearchId ->
+is_matched_account_mod(?MATCH_MODB_SUFFIX_ENCODED(A, B, Rest, _, _)  %% DbActId
+                       ,?MATCH_ACCOUNT_ENCODED(A, B, Rest)  %% SearchId
+                      ) ->
     'true';
 is_matched_account_mod(_, _) ->
     'false'.
@@ -310,6 +327,56 @@ get_account_by_id(Id) ->
 get_account_by_realm(RawRealm) ->
     Realm = wh_util:to_lower_binary(RawRealm),
     get_accounts_by(Realm, ?ACCT_BY_REALM_CACHE(Realm), ?AGG_LIST_BY_REALM).
+
+-spec get_account_by_ip(ne_binary()) -> getby_return().
+get_account_by_ip(IP) ->
+    case get_ccvs_by_ip(IP) of
+        {'error', 'not_found'}=E -> E;
+        {'ok', AccountCCVs} ->
+            {'ok', props:get_value(<<"Account-ID">>, AccountCCVs)}
+    end.
+
+-spec get_ccvs_by_ip(ne_binary()) -> {'ok', wh_proplist()} |
+                                     {'error', 'not_found'}.
+get_ccvs_by_ip(IP) ->
+    case wh_cache:peek_local(?WHAPPS_GETBY_CACHE, ?ACCT_BY_IP_CACHE(IP)) of
+        {'ok', {'error', 'not_found'}=E} -> E;
+        {'error', 'not_found'} -> do_get_ccvs_by_ip(IP);
+        {'ok', _AccountCCVs} = OK -> OK
+    end.
+
+-spec do_get_ccvs_by_ip(ne_binary()) ->
+                               {'ok', wh_proplist()} |
+                               {'error', 'not_found'}.
+do_get_ccvs_by_ip(IP) ->
+    case couch_mgr:get_results(?WH_SIP_DB, ?AGG_LIST_BY_IP, [{'key', IP}]) of
+        {'ok', []} ->
+            lager:debug("no entry in ~s for IP: ~s", [?WH_SIP_DB, IP]),
+            wh_cache:store_local(?WHAPPS_GETBY_CACHE, ?ACCT_BY_IP_CACHE(IP), {'error', 'not_found'}),
+            {'error', 'not_found'};
+        {'ok', [Doc|_]} ->
+            lager:debug("found IP ~s in db ~s (~s)", [IP, ?WH_SIP_DB, wh_doc:id(Doc)]),
+            AccountCCVs = account_ccvs_from_ip_auth(Doc),
+            wh_cache:store_local(?WHAPPS_GETBY_CACHE, ?ACCT_BY_IP_CACHE(IP), AccountCCVs),
+            {'ok', AccountCCVs};
+        {'error', _E} = Error ->
+            lager:debug("error looking up by IP: ~s: ~p", [IP, _E]),
+            Error
+    end.
+
+-spec account_ccvs_from_ip_auth(wh_json:object()) -> wh_proplist().
+account_ccvs_from_ip_auth(Doc) ->
+    AccountID = wh_json:get_value([<<"value">>, <<"account_id">>], Doc),
+    OwnerID = wh_json:get_value([<<"value">>, <<"owner_id">>], Doc),
+    AuthType = wh_json:get_value([<<"value">>, <<"authorizing_type">>], Doc, <<"anonymous">>),
+
+    props:filter_undefined(
+      [{<<"Account-ID">>, AccountID}
+       ,{<<"Owner-ID">>, OwnerID}
+       ,{<<"Authorizing-ID">>, wh_doc:id(Doc)}
+       ,{<<"Inception">>, <<"on-net">>}
+       ,{<<"Authorizing-Type">>, AuthType}
+      ]).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -369,16 +436,6 @@ get_event_type(JObj) -> wh_util:get_event_type(JObj).
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
-%% Given an JSON Object extracts the Call-ID into the processes
-%% dictionary, failing that the Msg-ID and finally a generic
-%% @end
-%%--------------------------------------------------------------------
--spec put_callid(wh_json:object()) -> api_binary().
-put_callid(JObj) -> wh_util:put_callid(JObj).
-
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
 %% Given an JSON Object for a hangup event, or bridge completion
 %% this returns the cause and code for the call termination
 %% @end
@@ -428,7 +485,7 @@ get_view_json(Path) ->
     lager:debug("fetch view from ~s", [Path]),
     {'ok', Bin} = file:read_file(Path),
     JObj = wh_json:decode(Bin),
-    {wh_json:get_value(<<"_id">>, JObj), JObj}.
+    {wh_doc:id(JObj), JObj}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -456,9 +513,9 @@ update_views([], Db, [{Id,View}|Views], Remove) ->
     _ = couch_mgr:ensure_saved(Db, View),
     update_views([], Db, Views, Remove);
 update_views([Found|Finds], Db, Views, Remove) ->
-    Id = wh_json:get_value(<<"id">>, Found),
+    Id = wh_doc:id(Found),
     Doc = wh_json:get_value(<<"doc">>, Found),
-    RawDoc = wh_json:delete_key(<<"_rev">>, Doc),
+    RawDoc = wh_doc:delete_revision(Doc),
     case props:get_value(Id, Views) of
         'undefined' when Remove ->
             lager:debug("removing view '~s' from '~s'", [Id, Db]),
@@ -471,8 +528,8 @@ update_views([Found|Finds], Db, Views, Remove) ->
             update_views(Finds, Db, props:delete(Id, Views), Remove);
         View2 ->
             lager:debug("updating view '~s' in '~s'", [Id, Db]),
-            Rev = wh_json:get_value(<<"_rev">>, Doc),
-            _ = couch_mgr:ensure_saved(Db, wh_json:set_value(<<"_rev">>, Rev, View2)),
+            Rev = wh_doc:revision(Doc),
+            _ = couch_mgr:ensure_saved(Db, wh_doc:set_revision(View2, Rev)),
             update_views(Finds, Db, props:delete(Id, Views), Remove)
     end.
 
@@ -485,14 +542,14 @@ update_views([Found|Finds], Db, Views, Remove) ->
 -spec add_aggregate_device(ne_binary(), api_binary()) -> 'ok'.
 add_aggregate_device(_, 'undefined') -> 'ok';
 add_aggregate_device(Db, Device) ->
-    DeviceId = wh_json:get_value(<<"_id">>, Device),
+    DeviceId = wh_doc:id(Device),
     _ = case couch_mgr:lookup_doc_rev(?WH_SIP_DB, DeviceId) of
             {'ok', Rev} ->
                 lager:debug("aggregating device ~s/~s", [Db, DeviceId]),
-                couch_mgr:ensure_saved(?WH_SIP_DB, wh_json:set_value(<<"_rev">>, Rev, Device));
+                couch_mgr:ensure_saved(?WH_SIP_DB, wh_doc:set_revision(Device, Rev));
             {'error', 'not_found'} ->
                 lager:debug("aggregating device ~s/~s", [Db, DeviceId]),
-                couch_mgr:ensure_saved(?WH_SIP_DB, wh_json:delete_key(<<"_rev">>, Device))
+                couch_mgr:ensure_saved(?WH_SIP_DB, wh_doc:delete_revision(Device))
         end,
     'ok'.
 
@@ -513,7 +570,7 @@ rm_aggregate_device(Db, DeviceId) when is_binary(DeviceId) ->
             'ok'
     end;
 rm_aggregate_device(Db, Device) ->
-    rm_aggregate_device(Db, wh_json:get_value(<<"_id">>, Device)).
+    rm_aggregate_device(Db, wh_doc:id(Device)).
 
 -spec amqp_pool_send(api_terms(), wh_amqp_worker:publish_fun()) ->
                             'ok' | {'error', any()}.
@@ -608,18 +665,20 @@ get_destination(JObj, Cat, Key) ->
             end
     end.
 
+-spec try_split(api_binary()) ->
+                       {ne_binary(), ne_binary()} |
+                       'undefined'.
 -spec try_split(ne_binary(), wh_json:object()) ->
                        {ne_binary(), ne_binary()} |
                        'undefined'.
 try_split(Key, JObj) ->
-    case wh_json:get_value(Key, JObj) of
-        'undefined' -> 'undefined';
-        Bin when is_binary(Bin) ->
-            case binary:split(Bin, <<"@">>) of
-                [<<"nouser">>, _] -> 'undefined';
-                [_, _]=Dest -> list_to_tuple(Dest)
-            end
-    end.
+    try_split(wh_json:get_value(Key, JObj)).
+
+try_split('undefined') -> 'undefined';
+try_split(<<"nouser@", _/binary>>) -> 'undefined';
+try_split(<<_/binary>> = Bin) ->
+    [_, _] = Dest = binary:split(Bin, <<"@">>),
+    list_to_tuple(Dest).
 
 -spec write_tts_file(ne_binary(), ne_binary()) ->
                             'ok' |

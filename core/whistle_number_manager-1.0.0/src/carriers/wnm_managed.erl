@@ -29,7 +29,7 @@ find_numbers(Number, Quantity, Opts) ->
     find_numbers(<<"+",Number/binary>>, Quantity,Opts).
 
 -spec find_numbers_in_account(ne_binary(), pos_integer(), api_binary()) ->
-          {'error', any()} | {'ok', wh_json:object()}.
+          {'error', _} | {'ok', wh_json:object()}.
 find_numbers_in_account(Number, Quantity, AccountId) ->
     case do_find_numbers_in_account(Number, Quantity, AccountId) of
         {'error', 'non_available'}=A ->
@@ -41,7 +41,7 @@ find_numbers_in_account(Number, Quantity, AccountId) ->
     end.
 
 -spec do_find_numbers_in_account(ne_binary(), pos_integer(), api_binary()) ->
-          {'error', any()} | {'ok', wh_json:object()}.
+          {'error', _} | {'ok', wh_json:object()}.
 do_find_numbers_in_account(Number, Quantity, AccountId) ->
     ViewOptions = [{'startkey', [AccountId, ?NUMBER_STATE_AVAILABLE, Number]}
                    ,{'endkey', [AccountId, ?NUMBER_STATE_AVAILABLE, <<Number/binary, "\ufff0">>]}
@@ -65,13 +65,14 @@ format_numbers_resp(JObjs) ->
     wh_json:from_list(Numbers).
 
 format_numbers_resp_fold(JObj, Acc) ->
-    Doc = wh_json:get_value(<<"doc">>,JObj),
+    Doc = wh_json:get_value(<<"doc">>, JObj),
+    Id = wh_doc:id(Doc),
     Props = props:filter_undefined(
-              [{<<"number">>, wh_json:get_value(<<"_id">>, Doc)}
+              [{<<"number">>, Id}
                ,{<<"rate">>, wh_json:get_value(<<"rate">>, Doc, <<"1">>)}
                ,{<<"activation_charge">>, wh_json:get_value(<<"activation_charge">>, Doc, <<"0">>)}
               ]),
-    [{wh_json:get_value(<<"_id">>, Doc), wh_json:from_list(Props)} | Acc].
+    [{Id, wh_json:from_list(Props)} | Acc].
 
 -spec is_number_billable(wnm_number()) -> 'true' | 'false'.
 is_number_billable(_Number) -> 'false'.

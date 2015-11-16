@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2015, 2600Hz INC
 %%% @doc
 %%% Receive route(dialplan) requests from FS, request routes and respond
 %%% @end
@@ -28,6 +28,20 @@
 -record(state, {node = 'undefined' :: atom()
                 ,options = [] :: wh_proplist()
                }).
+
+-define(CALLER_PRIVACY(Props)
+        ,props:is_true(<<"Caller-Screen-Bit">>, Props, 'false')
+       ).
+
+-define(CALLER_PRIVACY_NUMBER(Props)
+        ,?CALLER_PRIVACY(Props)
+        andalso props:is_true(<<"Caller-Privacy-Hide-Number">>, Props, 'false')
+       ).
+
+-define(CALLER_PRIVACY_NAME(Props)
+        ,?CALLER_PRIVACY(Props)
+        andalso props:is_true(<<"Caller-Privacy-Hide-Name">>, Props, 'false')
+       ).
 
 %%%===================================================================
 %%% API
@@ -63,7 +77,7 @@ start_link(Node, Options) ->
 %% @end
 %%--------------------------------------------------------------------
 init([Node, Options]) ->
-    put('callid', Node),
+    wh_util:put_callid(Node),
     lager:info("starting new fs route listener for ~s", [Node]),
     gen_server:cast(self(), 'bind_to_dialplan'),
     gen_server:cast(self(), 'bind_to_chatplan'),
@@ -195,7 +209,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
--spec should_expand_var(term()) -> boolean().
+-spec should_expand_var(any()) -> boolean().
 should_expand_var({<<?CHANNEL_VAR_PREFIX, _/binary>>, _}) -> 'true';
 should_expand_var({<<"sip_", _/binary>>, _}) -> 'true';
 should_expand_var(_) -> 'false'.
@@ -229,7 +243,7 @@ expand_message_vars(Props) ->
 
 -spec process_route_req(atom(), atom(), ne_binary(), ne_binary(), wh_proplist()) -> 'ok'.
 process_route_req(Section, Node, FetchId, CallId, Props) ->
-    put('callid', CallId),
+    wh_util:put_callid(CallId),
     case wh_util:is_true(props:get_value(<<"variable_recovered">>, Props)) of
         'false' -> search_for_route(Section, Node, FetchId, CallId, Props);
         'true' ->
@@ -319,7 +333,7 @@ reply_affirmative(Section, Node, FetchId, CallId, JObj) ->
 -spec maybe_start_call_handling(atom(), ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
 maybe_start_call_handling(Node, FetchId, CallId, JObj) ->
     case wh_json:get_value(<<"Method">>, JObj) of
-        <<"error">> -> 'ok';
+        <<"error">> -> lager:debug("sent error response to ~s, not starting call handling", [Node]);
         <<"sms">> -> start_message_handling(Node, FetchId, CallId, JObj);
         _Else -> start_call_handling(Node, FetchId, CallId, JObj)
     end.
@@ -329,13 +343,16 @@ start_call_handling(Node, FetchId, CallId, JObj) ->
     ServerQ = wh_json:get_value(<<"Server-ID">>, JObj),
     CCVs =
         wh_json:set_values(
-            [{<<"Application-Name">>, wh_json:get_value(<<"App-Name">>, JObj)}
-             ,{<<"Application-Node">>, wh_json:get_value(<<"Node">>, JObj)}
-            ]
-            ,wh_json:get_value(<<"Custom-Channel-Vars">>, JObj, wh_json:new())
-        ),
-    _ = ecallmgr_call_sup:start_event_process(Node, CallId),
-    _ = ecallmgr_call_sup:start_control_process(Node, CallId, FetchId, ServerQ, CCVs),
+          [{<<"Application-Name">>, wh_json:get_value(<<"App-Name">>, JObj)}
+           ,{<<"Application-Node">>, wh_json:get_value(<<"Node">>, JObj)}
+          ]
+          ,wh_json:get_value(<<"Custom-Channel-Vars">>, JObj, wh_json:new())
+         ),
+    _Evt = ecallmgr_call_sup:start_event_process(Node, CallId),
+    _Ctl = ecallmgr_call_sup:start_control_process(Node, CallId, FetchId, ServerQ, CCVs),
+
+    lager:debug("started event ~p and control ~p processes", [_Evt, _Ctl]),
+
     ecallmgr_util:set(Node, CallId, wh_json:to_proplist(CCVs)).
 
 -spec start_message_handling(atom(), ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
@@ -359,21 +376,11 @@ route_req(CallId, FetchId, Props, Node) ->
     [{<<"Msg-ID">>, FetchId}
      ,{<<"Call-ID">>, CallId}
      ,{<<"Message-ID">>, props:get_value(<<"Message-ID">>, Props)}
-     ,{<<"Caller-ID-Name">>, props:get_first_defined([<<"variable_effective_caller_id_name">>
-                                                      ,<<"Caller-Caller-ID-Name">>
-                                                     ], Props, <<"Unknown">>)}
-     ,{<<"Caller-ID-Number">>, props:get_first_defined([<<"variable_effective_caller_id_number">>
-                                                        ,<<"Caller-Caller-ID-Number">>
-                                                       ], Props, <<"0000000000">>)}
-     ,{<<"From-Network-Addr">>, props:get_first_defined([<<"variable_sip_h_X-AUTH-IP">>
-                                                         ,<<"variable_sip_received_ip">>
-                                                        ], Props)}
-     ,{<<"From-Network-Port">>, props:get_first_defined([<<"variable_sip_h_X-AUTH-PORT">>
-                                                         ,<<"variable_sip_received_port">>
-                                                        ], Props)}
-     ,{<<"User-Agent">>, props:get_first_defined([<<"variable_sip_user_agent">>
-                                                  ,<<"sip_user_agent">>
-                                                 ], Props)}
+     ,{<<"Caller-ID-Name">>, caller_id_name(Props)}
+     ,{<<"Caller-ID-Number">>, caller_id_number(Props)}
+     ,{<<"From-Network-Addr">>, kzd_freeswitch:from_network_ip(Props)}
+     ,{<<"From-Network-Port">>, kzd_freeswitch:from_network_port(Props)}
+     ,{<<"User-Agent">>, kzd_freeswitch:user_agent(Props)}
      ,{<<"To">>, ecallmgr_util:get_sip_to(Props)}
      ,{<<"From">>, ecallmgr_util:get_sip_from(Props)}
      ,{<<"Request">>, ecallmgr_util:get_sip_request(Props)}
@@ -385,7 +392,7 @@ route_req(CallId, FetchId, Props, Node) ->
      ,{<<"Switch-URI">>, SwitchURI}
      ,{<<"Custom-Channel-Vars">>, wh_json:from_list(route_req_ccvs(FetchId, Props))}
      ,{<<"Custom-SIP-Headers">>, wh_json:from_list(ecallmgr_util:custom_sip_headers(Props))}
-     ,{<<"Resource-Type">>, props:get_value(<<"Resource-Type">>, Props, <<"audio">>)}
+     ,{<<"Resource-Type">>, kzd_freeswitch:resource_type(Props, <<"audio">>)}
      ,{<<"To-Tag">>, props:get_value(<<"variable_sip_to_tag">>, Props)}
      ,{<<"From-Tag">>, props:get_value(<<"variable_sip_from_tag">>, Props)}
      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
@@ -399,6 +406,8 @@ route_req_ccvs(FetchId, Props) ->
       [{<<"Fetch-ID">>, FetchId}
        ,{<<"Redirected-By">>, RedirectedBy}
        ,{<<"Redirected-Reason">>, RedirectedReason}
+       ,{<<"Caller-Privacy-Number">>, ?CALLER_PRIVACY_NUMBER(Props)}
+       ,{<<"Caller-Privacy-Name">>, ?CALLER_PRIVACY_NAME(Props)}
        | ecallmgr_util:custom_channel_vars(Props)
       ]
      ).
@@ -424,3 +433,23 @@ get_redirected(Props) ->
             end;
         _ -> {'undefined' , 'undefined'}
     end.
+
+-spec caller_id_name(wh_proplist()) -> ne_binary().
+caller_id_name(Props) ->
+    caller_id_name(?CALLER_PRIVACY_NAME(Props), Props).
+
+-spec caller_id_name(boolean(), wh_proplist()) -> ne_binary().
+caller_id_name('true', _Props) ->
+    wh_util:anonymous_caller_id_name();
+caller_id_name('false', Props) ->
+    kzd_freeswitch:caller_id_name(Props, wh_util:anonymous_caller_id_name()).
+
+-spec caller_id_number(wh_proplist()) -> ne_binary().
+caller_id_number(Props) ->
+    caller_id_number(?CALLER_PRIVACY_NUMBER(Props), Props).
+
+-spec caller_id_number(boolean(), wh_proplist()) -> ne_binary().
+caller_id_number('true', _Props) ->
+    wh_util:anonymous_caller_id_number();
+caller_id_number('false', Props) ->
+    kzd_freeswitch:caller_id_number(Props, wh_util:anonymous_caller_id_number()).

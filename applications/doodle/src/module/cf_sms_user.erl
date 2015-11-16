@@ -24,7 +24,7 @@
 %%--------------------------------------------------------------------
 -spec handle(wh_json:object(), whapps_call:call()) -> 'ok'.
 handle(Data, Call1) ->
-    UserId = wh_json:get_ne_value(<<"id">>, Data),
+    UserId = wh_doc:id(Data),
     Funs = [{fun doodle_util:set_callee_id/2, UserId}
             ,{fun whapps_call:kvs_store/3, <<"target_owner_id">>, UserId}
            ],
@@ -60,7 +60,7 @@ handle_result_status(Call, _Status) ->
     lager:info("completed successful message to the user"),
     doodle_exe:continue(Call).
 
--spec maybe_handle_bridge_failure(_, whapps_call:call()) -> 'ok'.
+-spec maybe_handle_bridge_failure(any(), whapps_call:call()) -> 'ok'.
 maybe_handle_bridge_failure({_ , R}=Reason, Call) ->
     case doodle_util:handle_bridge_failure(Reason, Call) of
         'not_found' ->

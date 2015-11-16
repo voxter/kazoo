@@ -22,9 +22,9 @@
          ,token_cost/1, token_cost/2, token_cost/3
          ,bind/2
 
-         ,range_view_options/1, range_view_options/2, range_view_options/3
+         ,range_view_options/1, range_view_options/2, range_view_options/3, range_view_options/5
 
-         ,range_modb_view_options/1, range_modb_view_options/2, range_modb_view_options/3
+         ,range_modb_view_options/1, range_modb_view_options/2, range_modb_view_options/3, range_modb_view_options/5
 
          ,take_sync_field/1
 
@@ -32,6 +32,8 @@
         ]).
 
 -include("../crossbar.hrl").
+
+-define(QCALL_NUMBER_FILTER, [<<" ">>, <<",">>, <<".">>, <<"-">>, <<"(">>, <<")">>]).
 
 -spec range_view_options(cb_context:context()) ->
                                 {gregorian_seconds(), gregorian_seconds()} |
@@ -43,12 +45,12 @@ range_view_options(Context) ->
     range_view_options(Context, ?MAX_RANGE).
 range_view_options(Context, MaxRange) ->
     range_view_options(Context, MaxRange, <<"created">>).
-
 range_view_options(Context, MaxRange, Key) ->
     TStamp =  wh_util:current_tstamp(),
     RangeTo = range_to(Context, TStamp, Key),
     RangeFrom = range_from(Context, RangeTo, MaxRange, Key),
-
+    range_view_options(Context, MaxRange, Key, RangeFrom, RangeTo).
+range_view_options(Context, MaxRange, Key, RangeFrom, RangeTo) ->
     case RangeTo - RangeFrom of
         N when N < 0 ->
             cb_context:add_validation_error(
@@ -97,20 +99,36 @@ range_modb_view_options(Context, 'undefined', SuffixKeys) ->
 range_modb_view_options(Context, PrefixKeys, 'undefined') ->
     range_modb_view_options(Context, PrefixKeys, []);
 range_modb_view_options(Context, PrefixKeys, SuffixKeys) ->
-    case cb_modules_util:range_view_options(Context) of
+    case ?MODULE:range_view_options(Context) of
         {CreatedFrom, CreatedTo} ->
-            AccountId = cb_context:account_id(Context),
-            case PrefixKeys =:= [] andalso SuffixKeys =:= [] of
-                'true' -> {'ok', [{'startkey', CreatedFrom}
-                                  ,{'endkey', CreatedTo}
-                                  ,{'databases', kazoo_modb:get_range(AccountId, CreatedFrom, CreatedTo)}
-                                 ]};
-                'false' -> {'ok', [{'startkey', [Key || Key <- PrefixKeys ++ [CreatedFrom] ++ SuffixKeys] }
-                                   ,{'endkey', [Key || Key <- PrefixKeys  ++ [CreatedTo]   ++ SuffixKeys] }
-                                   ,{'databases', kazoo_modb:get_range(AccountId, CreatedFrom, CreatedTo)}
-                                  ]}
-            end;
+            range_modb_view_options1(Context, PrefixKeys, SuffixKeys, CreatedFrom, CreatedTo);
         Context1 -> Context1
+    end.
+
+-spec range_modb_view_options(cb_context:context(), api_binaries(), api_binaries(), gregorian_seconds(), gregorian_seconds()) ->
+                                     {'ok', crossbar_doc:view_options()} |
+                                     cb_context:context().
+range_modb_view_options(Context, PrefixKeys, SuffixKeys, CreatedFrom, CreatedTo) ->
+    case ?MODULE:range_view_options(Context, ?MAX_RANGE, <<"created">>, CreatedFrom, CreatedTo) of
+        {CreatedFrom, CreatedTo} ->
+            range_modb_view_options1(Context, PrefixKeys, SuffixKeys, CreatedFrom, CreatedTo);
+        Context1 -> Context1
+    end.
+
+-spec range_modb_view_options1(cb_context:context(), api_binaries(), api_binaries(), gregorian_seconds(), gregorian_seconds()) ->
+                                     {'ok', crossbar_doc:view_options()} |
+                                     cb_context:context().
+range_modb_view_options1(Context, PrefixKeys, SuffixKeys, CreatedFrom, CreatedTo) ->
+    AccountId = cb_context:account_id(Context),
+    case PrefixKeys =:= [] andalso SuffixKeys =:= [] of
+        'true' -> {'ok', [{'startkey', CreatedFrom}
+                          ,{'endkey', CreatedTo}
+                          ,{'databases', kazoo_modb:get_range(AccountId, CreatedFrom, CreatedTo)}
+                         ]};
+        'false' -> {'ok', [{'startkey', [Key || Key <- PrefixKeys ++ [CreatedFrom] ++ SuffixKeys] }
+                           ,{'endkey', [Key || Key <- PrefixKeys  ++ [CreatedTo]   ++ SuffixKeys] }
+                           ,{'databases', kazoo_modb:get_range(AccountId, CreatedFrom, CreatedTo)}
+                          ]}
     end.
 
 -spec range_to(cb_context:context(), pos_integer(), ne_binary()) -> pos_integer().
@@ -219,10 +237,31 @@ request_specific_extraction_funs_from_nouns(Context, ?USERS_QCALL_NOUNS(UserId, 
 request_specific_extraction_funs_from_nouns(_Context, _ReqNouns) ->
     [].
 
+-spec filter_number_regex(ne_binary(), ne_binary()) -> ne_binary().
+filter_number_regex(Number, Regex) ->
+    case re:run(Number, Regex, [{'capture', 'all_but_first', 'binary'}]) of
+        {'match', [Match|_]} ->
+            lager:info("filtered number using regex ~p, result: ~p", [Regex, Match]),
+            Match;
+
+        _NotMatching ->
+            lager:warning("tried to filter number ~p with regex ~p, but no match found", [Number, Regex]),
+            Number
+    end.
+
 -spec build_number_uri(cb_context:context(), ne_binary()) -> ne_binary().
 build_number_uri(Context, Number) ->
+    QueryStr  = cb_context:query_string(Context),
+    FilterVal = wh_json:get_value(<<"number_filter">>, QueryStr, <<"true">>),
+
+    UseNumber = case FilterVal of
+        <<"false">> -> Number;
+        <<"true">>  -> binary:replace(Number, ?QCALL_NUMBER_FILTER, <<>>, ['global']);
+        FilterRegex -> filter_number_regex(Number, FilterRegex)
+    end,
+
     Realm = wh_util:get_account_realm(cb_context:account_id(Context)),
-    <<Number/binary, "@", Realm/binary>>.
+    <<UseNumber/binary, "@", Realm/binary>>.
 
 -spec get_endpoints(whapps_call:call(), cb_context:context()) -> wh_json:objects().
 -spec get_endpoints(whapps_call:call(), cb_context:context(), req_nouns()) -> wh_json:objects().
@@ -271,7 +310,8 @@ default_bleg_cid(Call, Context) ->
                                 ,wh_json:merge_jobjs(cb_context:query_string(Context), Defaults)
                                ).
 
--spec originate_quickcall(wh_json:objects(), whapps_call:call(), cb_context:context()) -> cb_context:context().
+-spec originate_quickcall(wh_json:objects(), whapps_call:call(), cb_context:context()) ->
+                                 cb_context:context().
 originate_quickcall(Endpoints, Call, Context) ->
     AutoAnswer = wh_json:is_true(<<"auto_answer">>, cb_context:query_string(Context), 'true'),
     CCVs = [{<<"Account-ID">>, cb_context:account_id(Context)}
@@ -284,11 +324,10 @@ originate_quickcall(Endpoints, Call, Context) ->
                 'true' -> wh_util:rand_hex_binary(16);
                 'false' -> cb_context:req_id(Context)
             end,
-    CallId = <<(wh_util:rand_hex_binary(18))/binary, "-quickcall">>,
     Request = [{<<"Application-Name">>, <<"transfer">>}
                ,{<<"Application-Data">>, get_application_data(Context)}
                ,{<<"Msg-ID">>, MsgId}
-               ,{<<"Endpoints">>, maybe_auto_answer(Endpoints, AutoAnswer)}
+               ,{<<"Endpoints">>, update_quickcall_endpoints(AutoAnswer, Endpoints)}
                ,{<<"Timeout">>, get_timeout(Context)}
                ,{<<"Ignore-Early-Media">>, get_ignore_early_media(Context)}
                ,{<<"Media">>, get_media(Context)}
@@ -296,7 +335,6 @@ originate_quickcall(Endpoints, Call, Context) ->
                ,{<<"Outbound-Caller-ID-Number">>, whapps_call:request_user(Call)}
                ,{<<"Outbound-Callee-ID-Name">>, get_caller_id_name(Context)}
                ,{<<"Outbound-Callee-ID-Number">>, get_caller_id_number(Context)}
-               ,{<<"Outbound-Call-ID">>, CallId}
                ,{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
                ,{<<"Continue-On-Fail">>, 'false'}
                ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
@@ -307,11 +345,17 @@ originate_quickcall(Endpoints, Call, Context) ->
     JObj = wh_json:normalize(wh_json:from_list(wh_api:remove_defaults(Request))),
     crossbar_util:response_202(<<"quickcall initiated">>, JObj, cb_context:set_resp_data(Context, Request)).
 
--spec maybe_auto_answer(wh_json:objects(), boolean()) -> wh_json:objects().
-maybe_auto_answer([Endpoint], AutoAnswer) ->
-    [wh_json:set_value([<<"Custom-Channel-Vars">>, <<"Auto-Answer">>], AutoAnswer, Endpoint)];
-maybe_auto_answer(Endpoints, _) ->
-    Endpoints.
+-spec update_quickcall_endpoints(boolean(), wh_json:objects()) -> wh_json:objects().
+update_quickcall_endpoints(AutoAnswer, [Endpoint]) ->
+    WithAA = wh_json:set_value([<<"Custom-Channel-Vars">>, <<"Auto-Answer">>], AutoAnswer, Endpoint),
+    [set_quickcall_outbound_call_id(WithAA)];
+update_quickcall_endpoints(_AutoAnswer, Endpoints) ->
+    [set_quickcall_outbound_call_id(Endpoint) || Endpoint <- Endpoints].
+
+-spec set_quickcall_outbound_call_id(wh_json:object()) -> wh_json:object().
+set_quickcall_outbound_call_id(Endpoint) ->
+    CallId = <<(wh_util:rand_hex_binary(18))/binary, "-quickcall">>,
+    wh_json:set_value(<<"Outbound-Call-ID">>, CallId, Endpoint).
 
 -spec get_application_data(cb_context:context()) -> wh_json:object().
 -spec get_application_data_from_nouns(req_nouns()) -> wh_json:object().
@@ -325,13 +369,14 @@ get_application_data_from_nouns(?USERS_QCALL_NOUNS(_UserId, Number)) ->
 get_application_data_from_nouns(_Nouns) ->
     wh_json:from_list([{<<"Route">>, <<"0">>}]).
 
+-define(DEFAULT_TIMEOUT_S, 30).
 -spec get_timeout(cb_context:context()) -> pos_integer().
 get_timeout(Context) ->
-    try wh_util:to_integer(cb_context:req_value(Context, <<"timeout">>, 30)) of
-        Timeout when Timeout > 3 -> Timeout;
-        _ -> 30
+    try wh_util:to_integer(cb_context:req_value(Context, <<"timeout">>, ?DEFAULT_TIMEOUT_S)) of
+        Timeout when is_integer(Timeout), Timeout > 3 -> Timeout;
+        _ -> ?DEFAULT_TIMEOUT_S
     catch
-        _:_ -> 30
+        _:_ -> ?DEFAULT_TIMEOUT_S
     end.
 
 -spec get_ignore_early_media(cb_context:context()) -> boolean().
@@ -366,16 +411,10 @@ get_caller_id_number(Context) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_superduper_admin(api_binary() | cb_context:context()) -> boolean().
--spec is_superduper_admin(ne_binary(), ne_binary()) -> boolean().
 is_superduper_admin('undefined') -> 'false';
 is_superduper_admin(<<_/binary>> = AccountId) ->
-    is_superduper_admin(AccountId, wh_util:format_account_id(AccountId, 'encoded'));
-is_superduper_admin(Context) ->
-    is_superduper_admin(cb_context:auth_account_id(Context)).
-
-is_superduper_admin(AccountId, AccountDb) ->
-    lager:debug("checking for superduper admin: ~s (~s)", [AccountId, AccountDb]),
-    case couch_mgr:open_cache_doc(AccountDb, AccountId) of
+    lager:debug("checking for superduper admin: ~s", [AccountId]),
+    case kz_account:fetch(AccountId) of
         {'ok', JObj} ->
             case kz_account:is_superduper_admin(JObj) of
                 'true' ->
@@ -388,7 +427,9 @@ is_superduper_admin(AccountId, AccountDb) ->
         {'error', _E} ->
             lager:debug("not authorizing, error during lookup: ~p", [_E]),
             'false'
-    end.
+    end;
+is_superduper_admin(Context) ->
+    is_superduper_admin(cb_context:auth_account_id(Context)).
 
 %%--------------------------------------------------------------------
 %% @private

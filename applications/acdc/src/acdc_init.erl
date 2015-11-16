@@ -24,9 +24,9 @@ start_link() ->
     _ = wh_util:spawn(?MODULE, 'init_acdc', []),
     'ignore'.
 
--spec init_acdc() -> _.
+-spec init_acdc() -> any().
 init_acdc() ->
-    put('callid', ?MODULE),
+    wh_util:put_callid(?MODULE),
     case couch_mgr:get_all_results(?KZ_ACDC_DB, <<"acdc/accounts_listing">>) of
         {'ok', []} ->
             lager:debug("no accounts configured for acdc");
@@ -40,7 +40,7 @@ init_acdc() ->
             lager:debug("failed to query acdc db: ~p", [_E])
     end.
 
--spec init_db() -> _.
+-spec init_db() -> any().
 init_db() ->
     _ = couch_mgr:db_create(?KZ_ACDC_DB),
     _ = couch_mgr:revise_doc_from_file(?KZ_ACDC_DB, 'crossbar', <<"views/acdc.json">>).
@@ -61,7 +61,7 @@ init_acct(Account) ->
                 ,couch_mgr:get_results(AccountDb, <<"users/crossbar_listing">>, [])
                ).
 
--spec init_acct_queues(ne_binary()) -> _.
+-spec init_acct_queues(ne_binary()) -> any().
 init_acct_queues(Account) ->
     AccountDb = wh_util:format_account_id(Account, 'encoded'),
     AccountId = wh_util:format_account_id(Account, 'raw'),
@@ -71,7 +71,7 @@ init_acct_queues(Account) ->
                 ,couch_mgr:get_results(AccountDb, <<"queues/crossbar_listing">>, [])
                ).
 
--spec init_acct_agents(ne_binary()) -> _.
+-spec init_acct_agents(ne_binary()) -> any().
 init_acct_agents(Account) ->
     AccountDb = wh_util:format_account_id(Account, 'encoded'),
     AccountId = wh_util:format_account_id(Account, 'raw'),
@@ -81,7 +81,7 @@ init_acct_agents(Account) ->
                 ,couch_mgr:get_results(AccountDb, <<"users/crossbar_listing">>, [])
                ).
 
--spec init_queues(ne_binary(), couch_mgr:get_results_return()) -> _.
+-spec init_queues(ne_binary(), couch_mgr:get_results_return()) -> any().
 init_queues(_, {'ok', []}) -> 'ok';
 init_queues(AccountId, {'error', 'gateway_timeout'}) ->
     lager:debug("gateway timed out loading queues in account ~s, trying again in a moment", [AccountId]),
@@ -97,9 +97,9 @@ init_queues(AccountId, {'error', _E}) ->
     'ok';
 init_queues(AccountId, {'ok', Qs}) ->
     acdc_stats:init_db(AccountId),
-    [acdc_queues_sup:new(AccountId, wh_json:get_value(<<"id">>, Q)) || Q <- Qs].
+    [acdc_queues_sup:new(AccountId, wh_doc:id(Q)) || Q <- Qs].
 
--spec init_agents(ne_binary(), couch_mgr:get_results_return()) -> _.
+-spec init_agents(ne_binary(), couch_mgr:get_results_return()) -> any().
 init_agents(_, {'ok', []}) -> 'ok';
 init_agents(AccountId, {'error', 'gateway_timeout'}) ->
     lager:debug("gateway timed out loading agents in account ~s, trying again in a moment", [AccountId]),
@@ -114,7 +114,7 @@ init_agents(AccountId, {'error', _E}) ->
     wait_a_bit(),
     'ok';
 init_agents(AccountId, {'ok', As}) ->
-    [acdc_agents_sup:new(AccountId, wh_json:get_value(<<"id">>, A)) || A <- As].
+    [acdc_agents_sup:new(AccountId, wh_doc:id(A)) || A <- As].
 
 wait_a_bit() -> timer:sleep(1000 + random:uniform(500)).
 

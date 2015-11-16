@@ -181,7 +181,7 @@ start_all_printers() ->
     {'ok', Results} = couch_mgr:get_results(?WH_FAXES_DB, <<"faxbox/cloud">>),
     [ send_start_printer(Id, Jid)
        || {Id, Jid, <<"claimed">>}
-              <- [{wh_json:get_value(<<"id">>, Result)
+              <- [{wh_doc:id(Result)
                    ,wh_json:get_value([<<"value">>,<<"xmpp_jid">>], Result)
                    ,wh_json:get_value([<<"value">>,<<"state">>], Result)
                   }
@@ -189,7 +189,7 @@ start_all_printers() ->
                  ]
     ].
 
--spec send_start_printer(ne_binary(), ne_binary()) -> _.
+-spec send_start_printer(ne_binary(), ne_binary()) -> any().
 send_start_printer(PrinterId, JID) ->
     Payload = props:filter_undefined(
                 [{<<"Event-Name">>, <<"start">>}

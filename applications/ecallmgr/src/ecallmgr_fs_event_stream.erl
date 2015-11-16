@@ -66,9 +66,9 @@ start_link(Node, Bindings, Subclasses) ->
 %% @end
 %%--------------------------------------------------------------------
 init([Node, Bindings, Subclasses]) ->
-    put('callid', list_to_binary([wh_util:to_binary(Node)
-                                  ,<<"-eventstream">>
-                                 ])),
+    wh_util:put_callid(list_to_binary([wh_util:to_binary(Node)
+                                       ,<<"-eventstream">>
+                                      ])),
     gen_server:cast(self(), 'request_event_stream'),
     {'ok', #state{node=Node
                   ,bindings=Bindings
@@ -109,10 +109,10 @@ handle_cast('request_event_stream', #state{node=Node}=State) ->
         {'ok', {IP, Port}} ->
             {'ok', IPAddress} = inet_parse:address(IP),
             gen_server:cast(self(), 'connect'),
-            put('callid', list_to_binary([wh_util:to_binary(Node)
-                                          ,$-, wh_util:to_binary(IP)
-                                         ,$:, wh_util:to_binary(Port)
-                                         ])),
+            wh_util:put_callid(list_to_binary([wh_util:to_binary(Node)
+                                               ,$-, wh_util:to_binary(IP)
+                                               ,$:, wh_util:to_binary(Port)
+                                              ])),
             {'noreply', State#state{ip=IPAddress, port=wh_util:to_integer(Port)}};
         {'error', Reason} ->
             lager:warning("unable to establish event stream to ~p for ~p: ~p", [Node, Bindings, Reason]),
@@ -169,17 +169,18 @@ handle_info({'tcp', Socket, Data}, #state{socket=Socket
             handle_no_switch({'tcp', Socket, Data}, State)
     end;
 handle_info({'tcp', Socket, Data}, #state{socket=Socket
-                                         ,node=Node
-                                         ,idle_alert=Timeout
-                                         ,switch_uri=SwitchURI
-                                         ,switch_url=SwitchURL
+                                          ,node=Node
+                                          ,idle_alert=Timeout
+                                          ,switch_uri=SwitchURI
+                                          ,switch_url=SwitchURL
                                          }=State) ->
     try binary_to_term(Data) of
         {'event', [UUID | Props]} when is_binary(UUID) orelse UUID =:= 'undefined' ->
             EventName = props:get_value(<<"Event-Subclass">>, Props, props:get_value(<<"Event-Name">>, Props)),
             EventProps = props:filter_undefined([{<<"Switch-URL">>, SwitchURL}
                                                  ,{<<"Switch-URI">>, SwitchURI}
-                                                ]) ++ Props ,
+                                                ]
+                                               ) ++ Props ,
             _ = wh_util:spawn(fun() ->
                                       maybe_send_event(EventName, UUID, EventProps, Node),
                                       process_event(EventName, UUID, EventProps, Node)
@@ -206,7 +207,8 @@ handle_info({'tcp_error', Socket, _Reason}, #state{socket=Socket}=State) ->
     {'noreply', State#state{socket='undefined'}};
 handle_info('timeout', #state{node=Node, idle_alert=Timeout}=State) ->
     lager:warning("event stream for ~p on node ~p is unexpectedly idle",
-                  [get_event_bindings(State), Node]),
+                  [get_event_bindings(State), Node]
+                 ),
     {'noreply', State, Timeout};
 handle_info(_Msg, #state{socket='undefined'}=State) ->
     lager:debug("unhandled message: ~p", [_Msg]),
@@ -215,9 +217,9 @@ handle_info(_Msg, #state{idle_alert=Timeout}=State) ->
     lager:debug("unhandled message: ~p", [_Msg]),
     {'noreply', State, Timeout}.
 
--spec handle_no_switch({'tcp', term(), binary()}, state()) ->
+-spec handle_no_switch({'tcp', any(), binary()}, state()) ->
                               {'noreply', state(), wh_timeout()} |
-                              {'stop', _, state()}.
+                              {'stop', any(), state()}.
 handle_no_switch({'tcp', Socket, Data}, State) ->
     case handle_info({'tcp', Socket, Data}, State#state{switch_info='true'}) of
         {'noreply', _State, Timeout} -> {'noreply', State, Timeout};
@@ -300,10 +302,10 @@ get_event_bindings(#state{bindings=Binding}=State, Acc) when is_binary(Binding) 
 
 -spec maybe_bind(atom(), atoms()) ->
                         {'ok', {text(), inet:port_number()}} |
-                        {'error', _}.
+                        {'error', any()}.
 -spec maybe_bind(atom(), atoms(), non_neg_integer()) ->
                         {'ok', {text(), inet:port_number()}} |
-                        {'error', _}.
+                        {'error', any()}.
 maybe_bind(Node, Bindings) ->
     maybe_bind(Node, Bindings, 0).
 

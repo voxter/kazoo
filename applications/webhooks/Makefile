@@ -6,7 +6,7 @@ EBINS = $(shell find $(ROOT)/core/whistle-* -maxdepth 2 -name ebin -print) \
 	$(shell find $(ROOT)/deps/lager-* -maxdepth 2 -name ebin -print)
 PA = $(foreach EBIN,$(EBINS),-pa $(EBIN))
 
-ERLC_OPTS = -Werror +debug_info +warn_export_all $(PA)
+ERLC_OPTS += -Werror +debug_info +warn_export_all $(PA)
 
 .PHONY: all compile clean
 
@@ -15,7 +15,7 @@ all: compile
 MODULES = $(shell ls src/*.erl | sed 's/src\///;s/\.erl/,/' | sed '$$s/.$$//')
 CB_MODULES = $(shell ls src/modules/*.erl | sed 's/src\/modules\///;s/\.erl/,/' | sed '$$s/.$$//')
 
-compile: ebin/$(PROJECT).app
+compile: ebin/$(PROJECT).app json
 	@cat src/$(PROJECT).app.src \
 		| sed 's/{modules, \[\]}/{modules, \[$(MODULES),$(CB_MODULES)\]}/' \
 		> ebin/$(PROJECT).app
@@ -24,6 +24,10 @@ compile: ebin/$(PROJECT).app
 ebin/$(PROJECT).app: src/*.erl src/*/*.erl
 	@mkdir -p ebin/
 	erlc -v $(ERLC_OPTS) -o ebin/ -pa ebin/ $?
+
+json: JSON = $(shell find priv/couchdb -name *.json -print)
+json:
+	@$(ROOT)/scripts/format-json.sh $(JSON)
 
 compile-test: test/$(PROJECT).app
 	@cat src/$(PROJECT).app.src \

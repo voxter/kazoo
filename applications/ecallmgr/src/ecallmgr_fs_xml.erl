@@ -19,6 +19,11 @@
          ,conference_resp_xml/1
         ]).
 
+-export([config_el/2, config_el/3]).
+-export([section_el/2, section_el/3]).
+-export([params_el/1, param_el/2, maybe_param_el/2]).
+-export([xml_attrib/2]).
+
 -include("ecallmgr.hrl").
 
 -define(DEFAULT_USER_CACHE_TIME_IN_MS, ?MILLISECONDS_IN_HOUR). %% 1 hour
@@ -167,8 +172,9 @@ conference_resp_xml([_|_]=Resp) ->
     ConfigurationEl = config_el(<<"conference.conf">>, <<"Built by Kazoo">>
                                 ,[AdvertiseEl, ProfilesEl, CallerControlsEl, ChatPermsEl]
                                ),
+    SectionEl = section_el(<<"configuration">>, ConfigurationEl),
+    {'ok', xmerl:export([SectionEl], 'fs_xml')};
 
-    {'ok', xmerl:export([ConfigurationEl], 'fs_xml')};
 conference_resp_xml(Resp) -> conference_resp_xml(wh_json:to_proplist(Resp)).
 
 conference_profiles_xml(Profiles) when is_list(Profiles) ->
@@ -482,6 +488,12 @@ get_channel_vars({<<"Forward-IP">>, V}, Vars) ->
 get_channel_vars({<<"Enable-T38-Gateway">>, Direction}, Vars) ->
     [<<"execute_on_answer='t38_gateway ", Direction/binary, "'">> | Vars];
 
+get_channel_vars({<<"Confirm-File">>, V}, Vars) ->
+    [list_to_binary(["group_confirm_file='"
+        ,wh_util:to_list(ecallmgr_util:media_path(V, 'extant', get('callid'), wh_json:new()))
+        ,"'"
+    ]) | Vars];
+
 get_channel_vars({AMQPHeader, V}, Vars) when not is_list(V) ->
     case lists:keyfind(AMQPHeader, 1, ?SPECIAL_CHANNEL_VARS) of
         'false' -> Vars;
@@ -706,7 +718,14 @@ params_el(Children) ->
 
 -spec param_el(xml_attrib_value(), xml_attrib_value()) -> xml_el().
 param_el(<<"moh-sound">> = Name, MediaName) ->
-    Value = ecallmgr_util:media_path(MediaName, get('callid'), wh_json:new()),
+    Value = ecallmgr_util:media_path(MediaName, wh_util:get_callid(), wh_json:new()),
+    #xmlElement{name='param'
+                ,attributes=[xml_attrib('name', Name)
+                             ,xml_attrib('value', Value)
+                            ]
+               };
+param_el(<<"max-members-sound">> = Name, MediaName) ->
+    Value = ecallmgr_util:media_path(MediaName, wh_util:get_callid(), wh_json:new()),
     #xmlElement{name='param'
                 ,attributes=[xml_attrib('name', Name)
                              ,xml_attrib('value', Value)
@@ -718,6 +737,13 @@ param_el(Name, Value) ->
                              ,xml_attrib('value', Value)
                             ]
                }.
+
+-spec maybe_param_el(xml_attrib_value(), xml_attrib_value()) -> xml_el() | 'undefined'.
+maybe_param_el(Name, Value) ->
+    case wh_util:is_empty(Value) of
+        'true' -> 'undefined';
+        'false' -> param_el(Name, Value)
+    end.
 
 profile_el(Name, Children) ->
     #xmlElement{name='profile'

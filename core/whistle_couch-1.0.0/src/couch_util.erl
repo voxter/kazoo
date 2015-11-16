@@ -76,6 +76,7 @@
 
 -include_lib("wh_couch.hrl").
 -include_lib("whistle_number_manager/include/wh_number_manager.hrl").
+-include_lib("whistle/include/wapi_conf.hrl").
 
 %% Throttle how many docs we bulk insert to BigCouch
 -define(MAX_BULK_INSERT, 2000).
@@ -87,7 +88,7 @@
                          ,<<"pvt_modified">>
                         ]).
 
--type db_create_options() :: [{'q',integer()} | {'n',integer()},...] | [].
+-type db_create_options() :: [{'q',integer()} | {'n',integer()}].
 
 -type ddoc() :: ne_binary() | 'all_docs' | 'design_docs'.
 
@@ -134,12 +135,12 @@ db_classification(?KZ_WEBHOOKS_DB) -> 'aggregate';
 db_classification(<<?WNM_DB_PREFIX_L, _Prefix:5/binary>>) -> 'numbers';
 db_classification(<<"numbers%2F", _Prefix:5/binary>>) -> 'numbers';
 db_classification(<<"numbers%2f", _Prefix:5/binary>>) -> 'numbers';
-db_classification(<<"account/", _AccountId:34/binary, "-", _Date:6/binary>>) -> 'modb';
-db_classification(<<"account%2F", _AccountId:38/binary, "-", _Date:6/binary>>) -> 'modb';
-db_classification(<<"account%2f", _AccountId:38/binary, "-", _Date:6/binary>>) -> 'modb';
-db_classification(<<"account/", _AccountId:34/binary>>) -> 'account';
-db_classification(<<"account%2f", _AccountId:38/binary>>) -> 'account';
-db_classification(<<"account%2F", _AccountId:38/binary>>) -> 'account';
+db_classification(?MATCH_MODB_SUFFIX_UNENCODED(_A,_B,_Rest,_Year,_Month)) -> 'modb';% these only need to match
+db_classification(?MATCH_MODB_SUFFIX_ENCODED(_A,_B,_Rest,_Year,_Month)) -> 'modb';%   "account..." then the
+db_classification(?MATCH_MODB_SUFFIX_encoded(_A,_B,_Rest,_Year,_Month)) -> 'modb';%   right size.
+db_classification(?MATCH_ACCOUNT_UNENCODED(_AccountId)) -> 'account';
+db_classification(?MATCH_ACCOUNT_encoded(_AccountId)) -> 'account';
+db_classification(?MATCH_ACCOUNT_ENCODED(_AccountId)) -> 'account';
 db_classification(?WH_RATES_DB) -> 'system';
 db_classification(?WH_OFFNET_DB) -> 'system';
 db_classification(?WH_ANONYMOUS_CDR_DB) -> 'system';
@@ -191,9 +192,7 @@ archive(Db, File, MaxDocs, N, Pos) when N =< MaxDocs ->
             'ok' = archive_docs(File, Docs),
             io:format("    archived ~p docs~n", [N]);
         {'error', _E} ->
-            io:format("    error ~p asking for ~p docs from pos ~p~n"
-                      ,[_E, N, Pos]
-                     ),
+            io:format("    error ~p asking for ~p docs from pos ~p~n", [_E, N, Pos]),
             timer:sleep(500),
             archive(Db, File, MaxDocs, N, Pos)
     end;
@@ -209,9 +208,7 @@ archive(Db, File, MaxDocs, N, Pos) ->
             io:format("    archived ~p docs~n", [MaxDocs]),
             archive(Db, File, MaxDocs, N - MaxDocs, Pos + MaxDocs);
         {'error', _E} ->
-            io:format("    error ~p asking for ~p docs from pos ~p~n"
-                      ,[_E, N, Pos]
-                     ),
+            io:format("    error ~p asking for ~p docs from pos ~p~n", [_E, N, Pos]),
             timer:sleep(500),
             archive(Db, File, MaxDocs, N, Pos)
     end.
@@ -239,7 +236,7 @@ max_bulk_insert() -> ?MAX_BULK_INSERT.
 %%------------------------------------------------------------------------------
 -spec get_new_connection(nonempty_string() | ne_binary(), pos_integer(), string(), string()) ->
                                 server() |
-                                {'error', 'timeout' | 'ehostunreach' | term()}.
+                                {'error', 'timeout' | 'ehostunreach' | _}.
 get_new_connection(Host, Port, "", "") ->
     get_new_conn(Host, Port, ?IBROWSE_OPTS);
 get_new_connection(Host, Port, User, Pass) ->
@@ -272,7 +269,7 @@ get_new_conn(Host, Port, Opts) ->
     end.
 
 -spec server_info(server()) -> {'ok', wh_json:object()} |
-                               {'error', _}.
+                               {'error', any()}.
 server_info(#server{}=Conn) -> couchbeam:server_info(Conn).
 
 -spec server_url(server()) -> ne_binary().
@@ -311,14 +308,18 @@ db_create(#server{}=Conn, DbName) ->
 db_create(#server{}=Conn, DbName, Options) ->
     case couchbeam:create_db(Conn, wh_util:to_list(DbName), [], Options) of
         {'error', _} -> 'false';
-        {'ok', _} -> 'true'
+        {'ok', _} ->
+            _ = maybe_publish_db(DbName, 'created'),
+            'true'
     end.
 
 -spec db_delete(server(), ne_binary()) -> boolean().
 db_delete(#server{}=Conn, DbName) ->
     case couchbeam:delete_db(Conn, wh_util:to_list(DbName)) of
         {'error', _} -> 'false';
-        {'ok', _} -> 'true'
+        {'ok', _} ->
+            _ = maybe_publish_db(DbName, 'deleted'),
+            'true'
     end.
 
 -spec db_replicate(server(), wh_json:object() | wh_proplist()) ->
@@ -331,8 +332,7 @@ db_replicate(#server{}=Conn, JObj) ->
 
 -spec db_view_cleanup(server(), ne_binary()) -> boolean().
 db_view_cleanup(#server{}=Conn, DbName) ->
-    Db = get_db(Conn, DbName),
-    do_db_view_cleanup(Db).
+    do_db_view_cleanup(get_db(Conn, DbName)).
 
 -spec db_info(server()) ->
                      {'ok', ne_binaries()} |
@@ -445,10 +445,8 @@ format_error({'conn_failed',{'error','econnrefused'}}) ->
     lager:warning("connection is being refused"),
     'econnrefused';
 format_error({'ok', "500", _Headers, Body}) ->
-    JObj = wh_json:decode(Body),
-    case wh_json:get_value(<<"error">>, JObj) of
-        <<"timeout">> ->
-            'server_timeout';
+    case wh_json:get_value(<<"error">>, wh_json:decode(Body)) of
+        <<"timeout">> -> 'server_timeout';
         _Error ->
             lager:warning("server error: ~s", [Body]),
             'server_error'
@@ -552,7 +550,7 @@ flush_cache_doc(#db{name=Name}, Doc, Options) ->
 flush_cache_doc(DbName, DocId, _Options) when is_binary(DocId) ->
     wh_cache:erase_local(?WH_COUCH_CACHE, {?MODULE, DbName, DocId});
 flush_cache_doc(DbName, Doc, Options) ->
-    flush_cache_doc(DbName, doc_id(Doc), Options).
+    flush_cache_doc(DbName, wh_doc:id(Doc), Options).
 
 -spec flush_cache_docs() -> 'ok'.
 flush_cache_docs() -> wh_cache:flush_local(?WH_COUCH_CACHE).
@@ -662,8 +660,8 @@ do_delete_docs(Conn, #db{}=Db, Docs) ->
 prepare_doc_for_del(Conn, Db, <<_/binary>> = DocId) ->
     prepare_doc_for_del(Conn, Db, wh_json:from_list([{<<"_id">>, DocId}]));
 prepare_doc_for_del(Conn, #db{name=DbName}, Doc) ->
-    Id = doc_id(Doc),
-    DocRev = case doc_rev(Doc) of
+    Id = wh_doc:id(Doc),
+    DocRev = case wh_doc:revision(Doc) of
                  'undefined' ->
                      {'ok', Rev} = lookup_doc_rev(Conn, wh_util:to_binary(DbName), Id),
                      Rev;
@@ -684,11 +682,11 @@ do_ensure_saved(#db{}=Db, Doc, Opts) ->
     case do_save_doc(Db, Doc, Opts) of
         {'ok', _}=Ok -> Ok;
         {'error', 'conflict'} ->
-            case do_fetch_rev(Db, doc_id(Doc)) of
+            case do_fetch_rev(Db, wh_doc:id(Doc)) of
                 {'error', 'not_found'} ->
-                    do_ensure_saved(Db, wh_json:delete_key(<<"_rev">>, Doc), Opts);
+                    do_ensure_saved(Db, wh_doc:delete_revision(Doc), Opts);
                 Rev ->
-                    do_ensure_saved(Db, wh_json:set_value(<<"_rev">>, Rev, Doc), Opts)
+                    do_ensure_saved(Db, wh_doc:set_revision(Doc, Rev), Opts)
             end;
         {'error', _}=E -> E
     end.
@@ -699,8 +697,7 @@ do_ensure_saved(#db{}=Db, Doc, Opts) ->
 do_fetch_rev(#db{}=Db, DocId) ->
     case wh_util:is_empty(DocId) of
         'true' -> {'error', 'empty_doc_id'};
-        'false' ->
-            ?RETRY_504(couchbeam:lookup_doc_rev(Db, DocId))
+        'false' -> ?RETRY_504(couchbeam:lookup_doc_rev(Db, DocId))
     end.
 
 -spec do_fetch_doc(couchbeam_db(), ne_binary(), wh_proplist()) ->
@@ -709,8 +706,7 @@ do_fetch_rev(#db{}=Db, DocId) ->
 do_fetch_doc(#db{}=Db, DocId, Options) ->
     case wh_util:is_empty(DocId) of
         'true' -> {'error', 'empty_doc_id'};
-        'false' ->
-            ?RETRY_504(couchbeam:open_doc(Db, DocId, Options))
+        'false' -> ?RETRY_504(couchbeam:open_doc(Db, DocId, Options))
     end.
 
 -spec do_save_doc(couchbeam_db(), wh_json:object() | wh_json:objects(), wh_proplist()) ->
@@ -741,8 +737,7 @@ do_save_docs(#db{}=Db, Docs, Options, Acc) ->
         {Save, Cont} ->
             case perform_save_docs(Db, Save, Options) of
                 {'error', _}=E -> E;
-                {'ok', JObjs} ->
-                    do_save_docs(Db, Cont, Options, JObjs ++ Acc)
+                {'ok', JObjs} -> do_save_docs(Db, Cont, Options, JObjs ++ Acc)
             end
     catch
         'error':'badarg' ->
@@ -769,7 +764,7 @@ perform_save_docs(Db, Docs, Options) ->
 -spec prepare_doc_for_save(couchbeam_db(), wh_json:object(), boolean()) ->
                                   {wh_json:object(), wh_json:object()}.
 prepare_doc_for_save(Db, JObj) ->
-    prepare_doc_for_save(Db, JObj, wh_util:is_empty(doc_id(JObj))).
+    prepare_doc_for_save(Db, JObj, wh_util:is_empty(wh_doc:id(JObj))).
 prepare_doc_for_save(_Db, JObj, 'true') ->
     prepare_publish(maybe_set_docid(JObj));
 prepare_doc_for_save(Db, JObj, 'false') ->
@@ -792,8 +787,8 @@ maybe_tombstone(JObj, 'false') -> JObj.
 
 -spec maybe_set_docid(wh_json:object()) -> wh_json:object().
 maybe_set_docid(Doc) ->
-    case doc_id(Doc) of
-        'undefined' -> wh_json:set_value(<<"_id">>, couch_mgr:get_uuid(), Doc);
+    case wh_doc:id(Doc) of
+        'undefined' -> wh_doc:set_id(Doc, couch_mgr:get_uuid());
         _ -> Doc
     end.
 
@@ -924,7 +919,7 @@ maybe_add_rev(#db{name=_Name}=Db, DocId, Options) ->
 %%------------------------------------------------------------------------------
 -spec maybe_add_pvt_type(couchbeam_db(), ne_binary(), wh_json:object()) -> wh_json:object().
 maybe_add_pvt_type(Db, DocId, JObj) ->
-    case wh_json:get_value(<<"pvt_type">>, JObj) =:= 'undefined'
+    case wh_doc:type(JObj) =:= 'undefined'
         andalso couchbeam:open_doc(Db, DocId)
     of
         {'error', R} ->
@@ -943,7 +938,7 @@ maybe_add_pvt_type(Db, DocId, JObj) ->
 %% until 3 failed retries occur.
 %% @end
 %%------------------------------------------------------------------------------
--type retry504_ret() :: any().
+-type retry504_ret() :: _.
 %% 'ok' | ne_binary() |
 %% {'ok', wh_json:object() | wh_json:objects() |
 %%  binary() | ne_binaries() | boolean() | integer()
@@ -1008,9 +1003,18 @@ maybe_publish_doc(#db{}=Db, Doc, JObj) ->
         'false' -> 'ok'
     end.
 
+-spec maybe_publish_db(ne_binary(), wapi_conf:action()) -> 'ok'.
+maybe_publish_db(DbName, Action) ->
+    case couch_mgr:change_notice() of
+        'true' ->
+            _ = wh_util:spawn(fun() -> publish_db(DbName, Action) end),
+            'ok';
+        'false' -> 'ok'
+    end.
+
 -spec should_publish_doc(wh_json:object()) -> boolean().
 should_publish_doc(Doc) ->
-    case doc_id(Doc) of
+    case wh_doc:id(Doc) of
         <<"_design/", _/binary>> = _D -> 'false';
         _Else -> 'true'
     end.
@@ -1023,13 +1027,28 @@ publish_doc(#db{name=DbName}, Doc, JObj) ->
         'true' ->
             publish('deleted', wh_util:to_binary(DbName), publish_fields(Doc, JObj));
         'false' ->
-            case doc_rev(JObj) of
+            case wh_doc:revision(JObj) of
                 <<"1-", _/binary>> ->
                     publish('created', wh_util:to_binary(DbName), publish_fields(Doc, JObj));
                 _Else ->
                     publish('edited', wh_util:to_binary(DbName), publish_fields(Doc, JObj))
             end
     end.
+
+-spec publish_db(ne_binary(), wapi_conf:action()) -> 'ok'.
+publish_db(DbName, Action) ->
+    Props =
+        [{<<"Type">>, 'database'}
+         ,{<<"ID">>, DbName}
+         ,{<<"Database">>, DbName}
+         | wh_api:default_headers(<<"configuration">>
+                                  ,<<"db_", (wh_util:to_binary(Action))/binary>>
+                                  ,?CONFIG_CAT
+                                  ,<<"1.0.0">>
+                                 )
+        ],
+    Fun = fun(P) -> wapi_conf:publish_db_update(Action, DbName, P) end,
+    whapps_util:amqp_pool_send(Props, Fun).
 
 -spec publish_fields(wh_json:object()) -> wh_proplist().
 -spec publish_fields(wh_json:object(), wh_json:object()) -> wh_json:object().
@@ -1044,19 +1063,23 @@ publish_fields(Doc, JObj) ->
 
 -spec publish(wapi_conf:action(), ne_binary(), wh_json:object()) -> 'ok'.
 publish(Action, Db, Doc) ->
-    Type = doc_type(Doc),
-    Id = doc_id(Doc),
+    Type = wh_doc:type(Doc),
+    Id = wh_doc:id(Doc),
+
+    IsSoftDeleted = wh_doc:is_soft_deleted(Doc),
+    EventName = doc_change_event_name(Action, IsSoftDeleted),
 
     Props =
         [{<<"ID">>, Id}
          ,{<<"Type">>, Type}
          ,{<<"Database">>, Db}
-         ,{<<"Rev">>, doc_rev(Doc)}
+         ,{<<"Rev">>, wh_doc:revision(Doc)}
          ,{<<"Account-ID">>, doc_acct_id(Db, Doc)}
-         ,{<<"Date-Modified">>, wh_json:get_binary_value(<<"pvt_created">>, Doc)}
-         ,{<<"Date-Created">>, wh_json:get_binary_value(<<"pvt_modified">>, Doc)}
+         ,{<<"Date-Modified">>, wh_doc:created(Doc)}
+         ,{<<"Date-Created">>, wh_doc:modified(Doc)}
+         ,{<<"Is-Soft-Deleted">>, IsSoftDeleted}
          | wh_api:default_headers(<<"configuration">>
-                                  ,<<"doc_", (wh_util:to_binary(Action))/binary>>
+                                  ,EventName
                                   ,?CONFIG_CAT
                                   ,<<"1.0.0">>
                                  )
@@ -1064,26 +1087,18 @@ publish(Action, Db, Doc) ->
     Fun = fun(P) -> wapi_conf:publish_doc_update(Action, Db, Type, Id, P) end,
     whapps_util:amqp_pool_send(Props, Fun).
 
--spec doc_rev(wh_json:object()) -> api_binary().
-doc_rev(Doc) ->
-    wh_json:get_first_defined([<<"_rev">>, <<"rev">>], Doc).
-
--spec doc_id(wh_json:object()) -> api_binary().
-doc_id(Doc) ->
-    wh_json:get_first_defined([<<"_id">>, <<"id">>], Doc).
-
--spec doc_type(wh_json:object()) -> ne_binary().
-doc_type(Doc) ->
-    wh_json:get_value(<<"pvt_type">>, Doc, <<"undefined">>).
+-spec doc_change_event_name(wapi_conf:action(), boolean()) -> ne_binary().
+doc_change_event_name(_Action, 'true') ->
+    ?DOC_DELETED;
+doc_change_event_name(Action, 'false') ->
+    <<"doc_", (wh_util:to_binary(Action))/binary>>.
 
 -spec doc_acct_id(ne_binary(), wh_json:object()) -> ne_binary().
 doc_acct_id(Db, Doc) ->
-    case wh_json:get_value(<<"pvt_account_id">>, Doc) of
+    case wh_doc:account_id(Doc) of
         'undefined' -> wh_util:format_account_id(Db, 'raw');
         AccountId -> AccountId
     end.
-
-
 
 -spec default_copy_function(boolean()) -> copy_function().
 default_copy_function('true') -> fun ensure_saved/4;

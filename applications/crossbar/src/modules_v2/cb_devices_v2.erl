@@ -34,26 +34,33 @@
 -define(MOD_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".devices">>).
 
 -define(CB_LIST, <<"devices/crossbar_listing">>).
+-define(OWNER_LIST, <<"devices/listing_by_owner">>).
 -define(CB_LIST_MAC, <<"devices/listing_by_macaddress">>).
 
 -define(KEY_MAC_ADDRESS, <<"mac_address">>).
-
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 init() ->
-    _ = crossbar_bindings:bind(<<"v2_resource.allowed_methods.devices">>, ?MODULE, 'allowed_methods'),
-    _ = crossbar_bindings:bind(<<"v2_resource.resource_exists.devices">>, ?MODULE, 'resource_exists'),
-    _ = crossbar_bindings:bind(<<"v2_resource.authenticate">>, ?MODULE, 'authenticate'),
-    _ = crossbar_bindings:bind(<<"v2_resource.authorize">>, ?MODULE, 'authorize'),
-    _ = crossbar_bindings:bind(<<"v2_resource.billing">>, ?MODULE, 'billing'),
-    _ = crossbar_bindings:bind(<<"v2_resource.validate_resource.devices">>, ?MODULE, 'validate_resource'),
-    _ = crossbar_bindings:bind(<<"v2_resource.validate.devices">>, ?MODULE, 'validate'),
-    _ = crossbar_bindings:bind(<<"v2_resource.execute.put.devices">>, ?MODULE, 'put'),
-    _ = crossbar_bindings:bind(<<"v2_resource.execute.post.devices">>, ?MODULE, 'post'),
-    _ = crossbar_bindings:bind(<<"v2_resource.execute.delete.devices">>, ?MODULE, 'delete'),
-    crossbar_bindings:bind(<<"v2_resource.finish_request.*.devices">>, 'crossbar_services', 'reconcile').
+    Bindings = [{<<"v2_resource.allowed_methods.devices">>, 'allowed_methods'}
+                ,{<<"v2_resource.resource_exists.devices">>, 'resource_exists'}
+                ,{<<"v2_resource.authenticate">>, 'authenticate'}
+                ,{<<"v2_resource.authorize">>, 'authorize'}
+                ,{<<"v2_resource.billing">>, 'billing'}
+                ,{<<"v2_resource.validate_resource.devices">>, 'validate_resource'}
+                ,{<<"v2_resource.validate.devices">>, 'validate'}
+                ,{<<"v2_resource.execute.put.devices">>, 'put'}
+                ,{<<"v2_resource.execute.post.devices">>, 'post'}
+                ,{<<"v2_resource.execute.delete.devices">>, 'delete'}
+               ],
+    cb_modules_util:bind(?MODULE, Bindings),
+
+    crossbar_bindings:bind(
+      <<"v2_resource.finish_request.*.devices">>
+      ,'crossbar_services'
+      ,'reconcile'
+     ).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -100,8 +107,11 @@ allowed_methods(_, ?QUICKCALL_PATH_TOKEN, _) ->
 -spec resource_exists(path_token(), path_token(), path_token()) -> 'true'.
 
 resource_exists() -> 'true'.
+
 resource_exists(_) -> 'true'.
+
 resource_exists(_DeviceId, ?CHECK_SYNC_PATH_TOKEN) -> 'true'.
+
 resource_exists(_, ?QUICKCALL_PATH_TOKEN, _) -> 'true'.
 
 %%--------------------------------------------------------------------
@@ -233,6 +243,7 @@ validate(Context, DeviceId, ?QUICKCALL_PATH_TOKEN, _ToDial) ->
 
 -spec post(cb_context:context(), path_token()) -> cb_context:context().
 post(Context, DeviceId) ->
+    _ = wh_util:spawn(fun() -> crossbar_util:flush_registration(Context) end),
     case changed_mac_address(Context) of
         'true' ->
             _ = crossbar_util:maybe_refresh_fs_xml('device', Context),
@@ -242,8 +253,7 @@ post(Context, DeviceId) ->
             _ = wh_util:spawn(
                   fun() ->
                           _ = provisioner_util:maybe_provision(Context2),
-                          _ = provisioner_util:maybe_sync_sip_data(Context1, 'device'),
-                          _ = crossbar_util:flush_registration(Context)
+                          _ = provisioner_util:maybe_sync_sip_data(Context1, 'device')
                   end),
             Context1;
         'false' ->
@@ -289,9 +299,29 @@ delete(Context, DeviceId) ->
 %% account summary.
 %% @end
 %%--------------------------------------------------------------------
--spec load_device_summary(cb_context:context()) -> cb_context:context().
+-spec load_device_summary(cb_context:context()) ->
+                                 cb_context:context().
+-spec load_device_summary(cb_context:context(), req_nouns()) ->
+                                 cb_context:context().
 load_device_summary(Context) ->
+    load_device_summary(Context, cb_context:req_nouns(Context)).
+
+load_device_summary(Context, [{<<"devices">>, []}
+                              ,{<<"users">>, [UserId]}
+                             |_]
+                   ) ->
+    load_users_device_summary(Context, UserId);
+load_device_summary(Context, _ReqNouns) ->
     crossbar_doc:load_view(?CB_LIST, [], Context, fun normalize_view_results/2).
+
+-spec load_users_device_summary(cb_context:context(), ne_binary()) ->
+                                       cb_context:context().
+load_users_device_summary(Context, UserId) ->
+    crossbar_doc:load_view(?OWNER_LIST
+                           ,[{'key', UserId}]
+                           ,Context
+                           ,fun normalize_view_results/2
+                          ).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -574,7 +604,7 @@ is_creds_locally_unique(AccountDb, Username, DeviceId) ->
     ViewOptions = [{<<"key">>, wh_util:to_lower_binary(Username)}],
     case couch_mgr:get_results(AccountDb, <<"devices/sip_credentials">>, ViewOptions) of
         {'ok', []} -> 'true';
-        {'ok', [JObj]} -> wh_json:get_value(<<"id">>, JObj) =:= DeviceId;
+        {'ok', [JObj]} -> wh_doc:id(JObj) =:= DeviceId;
         {'error', 'not_found'} -> 'true';
         _ -> 'false'
     end.
@@ -586,7 +616,7 @@ is_creds_global_unique(Realm, Username, DeviceId) ->
                    }],
     case couch_mgr:get_results(?WH_SIP_DB, <<"credentials/lookup">>, ViewOptions) of
         {'ok', []} -> 'true';
-        {'ok', [JObj]} -> wh_json:get_value(<<"id">>, JObj) =:= DeviceId;
+        {'ok', [JObj]} -> wh_doc:id(JObj) =:= DeviceId;
         {'error', 'not_found'} -> 'true';
         _ -> 'false'
     end.
@@ -609,7 +639,7 @@ maybe_aggregate_device(DeviceId, Context, 'success') ->
             maybe_remove_aggregate(DeviceId, Context);
         'true' ->
             lager:debug("adding device to the sip auth aggregate"),
-            {'ok', _} = couch_mgr:ensure_saved(?WH_SIP_DB, wh_json:delete_key(<<"_rev">>, cb_context:doc(Context))),
+            {'ok', _} = couch_mgr:ensure_saved(?WH_SIP_DB, wh_doc:delete_revision(cb_context:doc(Context))),
             whapps_util:amqp_pool_send([], fun(_) -> wapi_switch:publish_reload_acls() end),
             'true'
     end;

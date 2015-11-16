@@ -1,8 +1,10 @@
 -ifndef(CALLFLOW_HRL).
 -include_lib("whistle/include/wh_types.hrl").
 -include_lib("whistle/include/wh_log.hrl").
+-include_lib("whistle/include/wh_api.hrl").
 -include_lib("whistle_number_manager/include/wh_number_manager.hrl").
 -include_lib("whistle_apps/src/whapps_call_command_types.hrl").
+-include_lib("kazoo_documents/include/kazoo_documents.hrl").
 
 -type cf_exe_response() :: {'stop'} |
                            {'continue'} |

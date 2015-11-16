@@ -230,12 +230,9 @@ ensure_valid_caller_id(Number, Name, Call) ->
 -spec maybe_get_account_cid(ne_binary(), ne_binary(), whapps_call:call()) ->
                                    {api_binary(), api_binary()}.
 maybe_get_account_cid(Number, Name, Call) ->
-    AccountDb = whapps_call:account_db(Call),
-    AccountId = whapps_call:account_id(Call),
-    case couch_mgr:open_cache_doc(AccountDb, AccountId) of
+    case kz_account:fetch(whapps_call:account_id(Call)) of
         {'error', _} -> maybe_get_assigned_number(Number, Name, Call);
-        {'ok', JObj} ->
-            maybe_get_account_external_number(Number, Name, JObj, Call)
+        {'ok', JObj} -> maybe_get_account_external_number(Number, Name, JObj, Call)
     end.
 
 -spec maybe_get_account_external_number(ne_binary(), ne_binary(), wh_json:object(), whapps_call:call()) ->

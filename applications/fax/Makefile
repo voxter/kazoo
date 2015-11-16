@@ -8,7 +8,7 @@ EBINS = $(shell find $(ROOT)/core/whistle-* -maxdepth 2 -name ebin -print) \
 	$(shell find $(ROOT)/deps/exmpp-* -maxdepth 2 -name ebin -print)
 PA = $(foreach EBIN,$(EBINS),-pa $(EBIN))
 
-ERLC_OPTS = -Werror +debug_info +warn_export_all $(PA)
+ERLC_OPTS += -Werror +debug_info +warn_export_all $(PA)
 
 .PHONY: all compile clean
 
@@ -26,12 +26,9 @@ ebin/$(PROJECT).app: src/*.erl
 	@mkdir -p ebin/
 	erlc -v $(ERLC_OPTS) -o ebin/ -pa ebin/ $?
 
-json: JSON = $(shell find priv/couchdb -name *.json -print)
+json: JSON = $(shell find priv -name *.json -print)
 json:
-	@for jobj in $(JSON); do \
-		echo checking $$jobj; \
-		python2 -c 'import sys,json; json.encoder.FLOAT_REPR=str; data=json.load(open("'$$jobj'")); print json.dumps(data, sort_keys=True, indent=4, separators=(",", ": "))' >$$jobj~ && mv $$jobj~ $$jobj; \
-	done
+	@$(ROOT)/scripts/format-json.sh $(JSON)
 
 compile-test: test/$(PROJECT).app
 	@cat src/$(PROJECT).app.src \

@@ -459,7 +459,7 @@ recording_media_doc(Type, #cf_menu_data{name=MenuName
              ,{<<"streamable">>, 'true'}],
     Doc = wh_doc:update_pvt_parameters(wh_json:from_list(Props), AccountDb, [{'type', <<"media">>}]),
     {'ok', JObj} = couch_mgr:save_doc(AccountDb, Doc),
-    wh_json:get_value(<<"_id">>, JObj).
+    wh_doc:id(JObj).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -559,11 +559,11 @@ get_menu_profile(Data, Call) ->
 maybe_use_variable(Data, Call) ->
     case wh_json:get_value(<<"var">>, Data) of
         'undefined' ->
-            wh_json:get_value(<<"id">>, Data);
+            wh_doc:id(Data);
         Variable ->
             Value = wh_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
             case couch_mgr:open_cache_doc(whapps_call:account_db(Call), Value) of
                 {'ok', _} -> Value;
-                _ -> wh_json:get_value(<<"id">>, Data)
+                _ -> wh_doc:id(Data)
             end
     end.

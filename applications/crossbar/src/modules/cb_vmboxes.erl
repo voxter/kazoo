@@ -318,9 +318,10 @@ maybe_migrate_notification_emails(Context) ->
         'false' -> Context
     end.
 
--spec on_successful_validation(api_binary(), cb_context:context()) -> cb_context:context().
+-spec on_successful_validation(api_binary(), cb_context:context()) ->
+                                      cb_context:context().
 on_successful_validation('undefined', Context) ->
-    Props = [{<<"pvt_type">>, <<"vmbox">>}],
+    Props = [{<<"pvt_type">>, kzd_voicemail_box:type()}],
     cb_context:set_doc(Context, wh_json:set_values(Props, cb_context:doc(Context)));
 on_successful_validation(VMBoxId, Context) ->
     crossbar_doc:load_merge(VMBoxId, Context).
@@ -568,7 +569,7 @@ check_uniqueness(VMBoxId, Context, Mailbox) ->
     of
         {'ok', []} -> 'true';
         {'ok', [VMBox]} ->
-            VMBoxId =:= wh_json:get_value(<<"id">>, VMBox);
+            VMBoxId =:= wh_doc:id(VMBox);
         {'ok', _} ->
             lager:warning("found multiple mailboxs for '~p'", [Mailbox]),
             'false';
@@ -643,7 +644,7 @@ cleanup_voicemail_box(AccountDb, Timestamp, {Box, Msgs}) ->
     of
         {[], _} ->
             lager:debug("there are no old messages to remove from ~s"
-                        ,[wh_json:get_value(<<"_id">>, Box)]
+                        ,[wh_doc:id(Box)]
                        );
         {Older, Newer} ->
             lager:debug("there are ~b old messages to remove", [length(Older)]),
@@ -653,7 +654,7 @@ cleanup_voicemail_box(AccountDb, Timestamp, {Box, Msgs}) ->
 
             Box1 = wh_json:set_value(<<"messages">>, Newer, Box),
             {'ok', Box2} = couch_mgr:save_doc(AccountDb, Box1),
-            lager:debug("updated messages in voicemail box ~s", [wh_json:get_value(<<"_id">>, Box2)])
+            lager:debug("updated messages in voicemail box ~s", [wh_doc:id(Box2)])
     end.
 
 -spec delete_media(ne_binary(), ne_binary()) ->

@@ -62,7 +62,9 @@ should_delete(AccountModb, Months) ->
     ((ModYear * 12) + ModMonth) =< Months.
 
 -spec delete_modb(ne_binary()) -> 'ok'.
-delete_modb(<<_:42/binary, "-", _:4/binary, _:2/binary>> = AccountModb) ->
+delete_modb(?MATCH_MODB_SUFFIX_UNENCODED(_,_,_) = AccountModb) ->
+    delete_modb(wh_util:format_account_db(AccountModb));
+delete_modb(?MATCH_MODB_SUFFIX_ENCODED(_,_,_) = AccountModb) ->
     'ok' = couch_util:archive(AccountModb),
     _Deleted = couch_mgr:db_delete(AccountModb),
     io:format("    deleted: ~p~n", [_Deleted]),
@@ -180,7 +182,7 @@ rollup_account(AccountId, Balance) ->
 -spec rollup_balance(wh_json:object()) -> integer().
 rollup_balance(JObj) ->
     Balance = wh_json:get_integer_value(<<"pvt_amount">>, JObj, 0),
-    case wh_json:get_value(<<"pvt_type">>, JObj) of
+    case wh_doc:type(JObj) of
         <<"credit">> -> Balance;
         <<"debit">> -> Balance * -1
     end.

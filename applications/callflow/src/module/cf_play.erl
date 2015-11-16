@@ -38,16 +38,16 @@ handle(Data, Call) ->
 maybe_use_variable(Data, Call) ->
     case wh_json:get_value(<<"var">>, Data) of
         'undefined' ->
-            wh_json:get_value(<<"id">>, Data);
+            wh_doc:id(Data);
         Variable ->
             Value = wh_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
             case couch_mgr:open_cache_doc(whapps_call:account_db(Call), Value) of
                 {'ok', _} -> Value;
-                _ -> wh_json:get_value(<<"id">>, Data)
+                _ -> wh_doc:id(Data)
             end
     end.
 
--spec handle_noop_recv(whapps_call:call(), {'ok', whapps_call:call()} | {'error', _}) -> 'ok'.
+-spec handle_noop_recv(whapps_call:call(), {'ok', whapps_call:call()} | {'error', any()}) -> 'ok'.
 handle_noop_recv(_OldCall, {'ok', Call}) ->
     cf_exe:set_call(Call),
     cf_exe:continue(Call);

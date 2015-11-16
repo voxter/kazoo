@@ -28,6 +28,7 @@
 
          ,server_id/1
          ,msg_id/1
+         ,msg_reply_id/1
          ,event_category/1
          ,event_name/1
          ,app_name/1
@@ -62,33 +63,39 @@
 %%%===================================================================
 -spec server_id(wh_json:object()) -> api_binary().
 server_id(JObj) ->
-    wh_json:get_value(<<"Server-ID">>, JObj).
+    wh_json:get_value(?KEY_SERVER_ID, JObj).
 
 -spec event_category(wh_json:object()) -> api_binary().
 event_category(JObj) ->
-    wh_json:get_value(<<"Event-Category">>, JObj).
+    wh_json:get_value(?KEY_EVENT_CATEGORY, JObj).
 
 -spec event_name(wh_json:object()) -> api_binary().
 event_name(JObj) ->
-    wh_json:get_value(<<"Event-Name">>, JObj).
+    wh_json:get_value(?KEY_EVENT_NAME, JObj).
 
 -spec app_name(wh_json:object()) -> api_binary().
 app_name(JObj) ->
-    wh_json:get_value(<<"App-Name">>, JObj).
+    wh_json:get_value(?KEY_APP_NAME, JObj).
 
 -spec app_version(wh_json:object()) -> api_binary().
 app_version(JObj) ->
-    wh_json:get_value(<<"App-Version">>, JObj).
+    wh_json:get_value(?KEY_APP_VERSION, JObj).
 
 -spec node(wh_json:object()) -> api_binary().
 node(JObj) ->
-    wh_json:get_value(<<"Node">>, JObj).
+    wh_json:get_value(?KEY_NODE, JObj).
 
 -spec msg_id(api_terms()) -> api_binary().
 msg_id(Props) when is_list(Props) ->
-    props:get_value(<<"Msg-ID">>, Props);
+    props:get_value(?KEY_MSG_ID, Props);
 msg_id(JObj) ->
-    wh_json:get_value(<<"Msg-ID">>, JObj).
+    wh_json:get_value(?KEY_MSG_ID, JObj).
+
+-spec msg_reply_id(api_terms()) -> api_binary().
+msg_reply_id(Props) when is_list(Props) ->
+    props:get_value(?KEY_MSG_REPLY_ID, Props, msg_id(Props));
+msg_reply_id(JObj) ->
+    wh_json:get_value(?KEY_MSG_REPLY_ID, JObj, msg_id(JObj)).
 
 %%--------------------------------------------------------------------
 %% @doc Default Headers in all messages - see wiki
@@ -107,22 +114,22 @@ default_headers(AppName, AppVsn) ->
     default_headers('undefined', AppName, AppVsn).
 
 default_headers(ServerID, AppName, AppVsn) ->
-    [{<<"Server-ID">>, ServerID}
-     ,{<<"App-Name">>, AppName}
-     ,{<<"App-Version">>, AppVsn}
-     ,{<<"Node">>, wh_util:to_binary(node())}
+    [{?KEY_SERVER_ID, ServerID}
+     ,{?KEY_APP_NAME, AppName}
+     ,{?KEY_APP_VERSION, AppVsn}
+     ,{?KEY_NODE, wh_util:to_binary(node())}
     ].
 
 default_headers(EvtCat, EvtName, AppName, AppVsn) ->
     default_headers(<<>>, EvtCat, EvtName, AppName, AppVsn).
 
 default_headers(ServerID, EvtCat, EvtName, AppName, AppVsn) ->
-    [{<<"Server-ID">>, ServerID}
-     ,{<<"Event-Category">>, EvtCat}
-     ,{<<"Event-Name">>, EvtName}
-     ,{<<"App-Name">>, AppName}
-     ,{<<"App-Version">>, AppVsn}
-     ,{<<"Node">>, wh_util:to_binary(node())}
+    [{?KEY_SERVER_ID, ServerID}
+     ,{?KEY_EVENT_CATEGORY, EvtCat}
+     ,{?KEY_EVENT_NAME, EvtName}
+     ,{?KEY_APP_NAME, AppName}
+     ,{?KEY_APP_VERSION, AppVsn}
+     ,{?KEY_NODE, wh_util:to_binary(node())}
     ].
 
 default_headers_v(Props) when is_list(Props) ->
@@ -151,7 +158,7 @@ disambiguate_and_publish(ReqJObj, RespJObj, Binding) ->
 -type api_formatter_fun() :: fun((api_terms()) -> api_formatter_return()).
 -type prepare_option_el() :: {'formatter', api_formatter_fun()} |
                              {'remove_recursive', boolean()}.
--type prepare_options() :: [prepare_option_el(),...] | [].
+-type prepare_options() :: [prepare_option_el()].
 
 -spec prepare_api_payload(api_terms(), wh_proplist()) -> api_formatter_return() | wh_proplist().
 -spec prepare_api_payload(api_terms(), wh_proplist(), api_formatter_fun() | prepare_options()) ->
@@ -209,9 +216,9 @@ remove_empty_values(JObj, Recursive) ->
 
 do_empty_value_removal([], _Recursive, Acc) ->
     lists:reverse(Acc);
-do_empty_value_removal([{<<"Server-ID">>,_}=KV|T], Recursive, Acc) ->
+do_empty_value_removal([{?KEY_SERVER_ID,_}=KV|T], Recursive, Acc) ->
     do_empty_value_removal(T, Recursive, [KV|Acc]);
-do_empty_value_removal([{<<"Msg-ID">>,_}=KV|T], Recursive, Acc) ->
+do_empty_value_removal([{?KEY_MSG_ID,_}=KV|T], Recursive, Acc) ->
     do_empty_value_removal(T, Recursive, [KV|Acc]);
 do_empty_value_removal([{K,V}=KV|T], Recursive, Acc) ->
     case is_empty(V) of
@@ -230,7 +237,7 @@ do_empty_value_removal([{K,V}=KV|T], Recursive, Acc) ->
             end
     end.
 
--spec is_empty(term()) -> boolean().
+-spec is_empty(any()) -> boolean().
 is_empty('undefined') -> 'true';
 is_empty([]) -> 'true';
 is_empty(<<>>) -> 'true';
@@ -284,7 +291,7 @@ error_resp_v(JObj) ->
 publish_error(TargetQ, JObj) ->
     publish_error(TargetQ, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_error(TargetQ, Error, ContentType) ->
-    {'ok', Payload} = wh_api:prepare_api_payload(Error, ?ERROR_RESP_VALUES, fun ?MODULE:error_resp/1),
+    {'ok', Payload} = ?MODULE:prepare_api_payload(Error, ?ERROR_RESP_VALUES, fun ?MODULE:error_resp/1),
     amqp_util:targeted_publish(TargetQ, Payload, ContentType).
 
 %%%===================================================================
@@ -441,7 +448,7 @@ has_any(Prop, Headers) ->
 values_check(Prop, Values) ->
     lists:all(fun(Value) -> values_check_all(Prop, Value) end, Values).
 
--spec values_check_all(wh_proplist(), {_, _}) -> boolean().
+-spec values_check_all(wh_proplist(), {any(), any()}) -> boolean().
 values_check_all(Prop, {Key, Vs}) when is_list(Vs) ->
     case props:get_value(Key, Prop) of
         'undefined' -> 'true'; % isn't defined in Prop, has_all will error if req'd
@@ -469,7 +476,7 @@ values_check_all(Prop, {Key, V}) ->
 %% checks Prop against a list of {Key, Fun}, running the value of Key through Fun, which returns a
 %% boolean.
 -type typecheck() :: {ne_binary(), fun((_) -> boolean())}.
--type typechecks() :: [typecheck(),...] | [].
+-type typechecks() :: [typecheck()].
 -spec type_check(wh_proplist(), typechecks()) -> boolean().
 type_check(Prop, Types) ->
     lists:all(fun(Type) -> type_check_all(Prop, Type) end, Types).

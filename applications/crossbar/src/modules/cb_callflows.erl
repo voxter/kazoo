@@ -264,7 +264,7 @@ check_callflow_schema(CallflowId, Context) ->
 
 -spec on_successful_validation(api_binary(), cb_context:context()) -> cb_context:context().
 on_successful_validation('undefined', Context) ->
-    Props = [{<<"pvt_type">>, <<"callflow">>}],
+    Props = [{<<"pvt_type">>, kzd_callflow:type()}],
     cb_context:set_doc(Context, wh_json:set_values(Props, cb_context:doc(Context)));
 on_successful_validation(CallflowId, Context) ->
     crossbar_doc:load_merge(CallflowId, Context).
@@ -394,18 +394,33 @@ maybe_reconcile_numbers(Context) ->
 track_assignment('post', Context) ->
     NewNums = wh_json:get_value(<<"numbers">>, cb_context:doc(Context), []),
     OldNums = wh_json:get_value(<<"numbers">>, cb_context:fetch(Context, 'db_doc'), []),
-    Unassigned = [{Num, <<>>} || Num <- OldNums, not(lists:member(Num, NewNums)) andalso Num =/= <<"undefined">>],
-    Assigned =  [{Num, <<"callflow">>} || Num <- NewNums,  Num =/= <<"undefined">>],
+
+    Unassigned = [{Num, <<>>}
+                  || Num <- OldNums,
+                     not(lists:member(Num, NewNums))
+                         andalso Num =/= <<"undefined">>
+                 ],
+    Assigned =  [{Num, kzd_callflow:type()}
+                 || Num <- NewNums,
+                    Num =/= <<"undefined">>
+                ],
+
     lager:debug("assign ~p, unassign ~p", [Assigned, Unassigned]),
     wh_number_manager:track_assignment(cb_context:account_id(Context), Unassigned ++ Assigned);
 track_assignment('put', Context) ->
     NewNums = wh_json:get_value(<<"numbers">>, cb_context:doc(Context), []),
-    Assigned =  [{Num, <<"callflow">>} || Num <- NewNums, Num =/= <<"undefined">>],
+    Assigned =  [{Num, kzd_callflow:type()}
+                 || Num <- NewNums,
+                    Num =/= <<"undefined">>
+                ],
     lager:debug("assign ~p", [Assigned]),
     wh_number_manager:track_assignment(cb_context:account_id(Context), Assigned);
 track_assignment('delete', Context) ->
     Nums = wh_json:get_value(<<"numbers">>, cb_context:doc(Context), []),
-    Unassigned =  [{Num, <<>>} || Num <- Nums,  Num =/= <<"undefined">>],
+    Unassigned =  [{Num, <<>>}
+                   || Num <- Nums,
+                      Num =/= <<"undefined">>
+                  ],
     lager:debug("unassign ~p", [Unassigned]),
     wh_number_manager:track_assignment(cb_context:account_id(Context), Unassigned).
 
@@ -466,7 +481,7 @@ filter_callflow_list('undefined', JObjs) -> JObjs;
 filter_callflow_list(CallflowId, JObjs) ->
     [JObj
      || JObj <- JObjs,
-        wh_json:get_value(<<"id">>, JObj) =/= CallflowId
+        wh_doc:id(JObj) =/= CallflowId
     ].
 
 -spec patterns_dont_match(ne_binary(), ne_binaries()) -> boolean().
@@ -478,7 +493,7 @@ patterns_dont_match(Number, Patterns) ->
 -spec add_number_conflict(ne_binary(), wh_json:object(), cb_context:context()) ->
                                  cb_context:context().
 add_number_conflict(Number, JObj, Context) ->
-    Id = wh_json:get_value(<<"id">>, JObj),
+    Id = wh_doc:id(JObj),
     case wh_json:get_ne_value([<<"doc">>, <<"featurecode">>, <<"name">>], JObj) of
         'undefined' ->
             cb_context:add_validation_error(
@@ -558,7 +573,7 @@ create_metadata(Doc) ->
     %% simple funciton for setting the same key in one json object
     %% with the value of that key in another, unless it doesnt exist
     Metadata = fun(<<"name">> = K, D, J) ->
-                       case wh_json:get_value(<<"pvt_type">>, D) of
+                       case wh_doc:type(D) of
                            <<"user">> ->
                                case <<(wh_json:get_binary_value(<<"first_name">>, D, <<>>))/binary
                                         ," "

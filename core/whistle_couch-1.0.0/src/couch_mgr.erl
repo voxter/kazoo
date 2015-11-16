@@ -80,7 +80,6 @@
          ,change_notice/0
         ]).
 
-
 %% Types
 -export_type([get_results_return/0
               ,couchbeam_error/0
@@ -112,10 +111,10 @@ load_doc_from_file(DbName, App, File) ->
         ?MODULE:save_doc(DbName, wh_json:decode(Bin)) %% if it crashes on the match, the catch will let us know
     catch
         _Type:{'badmatch',{'error',Reason}} ->
-            lager:debug("badmatch error: ~p", [Reason]),
+            lager:debug("badmatch error reading ~s: ~p", [Path, Reason]),
             {'error', Reason};
         _Type:Reason ->
-            lager:debug("exception: ~p", [Reason]),
+            lager:debug("exception reading ~s: ~p", [Path, Reason]),
             {'error', Reason}
     end.
 
@@ -135,8 +134,8 @@ update_doc_from_file(DbName, App, File) when ?VALID_DBNAME ->
     try
         {'ok', Bin} = file:read_file(Path),
         JObj = wh_json:decode(Bin),
-        {'ok', Rev} = ?MODULE:lookup_doc_rev(DbName, wh_json:get_value(<<"_id">>, JObj)),
-        ?MODULE:save_doc(DbName, wh_json:set_value(<<"_rev">>, Rev, JObj))
+        {'ok', Rev} = ?MODULE:lookup_doc_rev(DbName, wh_doc:id(JObj)),
+        ?MODULE:save_doc(DbName, wh_doc:set_revision(JObj, Rev))
     catch
         _Type:{'badmatch',{'error',Reason}} ->
             lager:debug("bad match: ~p", [Reason]),
@@ -206,10 +205,10 @@ do_revise_docs_from_folder(DbName, Sleep, [H|T]) ->
         {'ok', Bin} = file:read_file(H),
         JObj = wh_json:decode(Bin),
         Sleep andalso timer:sleep(250),
-        case lookup_doc_rev(DbName, wh_json:get_value(<<"_id">>, JObj)) of
+        case lookup_doc_rev(DbName, wh_doc:id(JObj)) of
             {'ok', Rev} ->
                 lager:debug("update doc from file ~s in ~s", [H, DbName]),
-                save_doc(DbName, wh_json:set_value(<<"_rev">>, Rev, JObj));
+                save_doc(DbName, wh_doc:set_revision(JObj, Rev));
             {'error', 'not_found'} ->
                 lager:debug("import doc from file ~s in ~s", [H, DbName]),
                 save_doc(DbName, JObj);
@@ -240,7 +239,7 @@ do_load_fixtures_from_folder(DbName, [F|Fs]) ->
     try
         {'ok', Bin} = file:read_file(F),
         FixJObj = wh_json:decode(Bin),
-        FixId = wh_json:get_value(<<"_id">>, FixJObj),
+        FixId = wh_doc:id(FixJObj),
         case lookup_doc_rev(DbName, FixId) of
             {'ok', _Rev} ->
                 lager:debug("fixture ~s exists in ~s: ~s", [FixId, DbName, _Rev]);
@@ -728,12 +727,31 @@ ensure_saved(DbName, Doc, Options) ->
                       {'ok', wh_json:object()} |
                       couchbeam_error().
 save_doc(DbName, Doc, Options) when ?VALID_DBNAME ->
-    couch_util:save_doc(wh_couch_connections:get_server(), DbName, Doc, Options);
+    OldSetting = maybe_toggle_publish(Options),
+    Result = couch_util:save_doc(wh_couch_connections:get_server(), DbName, Doc, Options),
+    maybe_revert_publish(OldSetting),
+    Result;
 save_doc(DbName, Doc, Options) ->
     case maybe_convert_dbname(DbName) of
         {'ok', Db} -> save_doc(Db, Doc, Options);
         {'error', _}=E -> E
     end.
+
+-spec maybe_toggle_publish(wh_proplist()) -> boolean().
+maybe_toggle_publish(Options) ->
+    Old = change_notice(),
+    case props:get_value('publish_change_notice', Options) of
+        'true' -> enable_change_notice();
+        'false' -> suppress_change_notice();
+        'undefined' -> 'ok'
+    end,
+    Old.
+
+-spec maybe_revert_publish(boolean()) -> boolean().
+maybe_revert_publish('true') ->
+    enable_change_notice();
+maybe_revert_publish('false') ->
+    suppress_change_notice().
 
 -spec save_docs(text(), wh_json:objects()) ->
                        {'ok', wh_json:objects()} |
@@ -746,7 +764,10 @@ save_docs(DbName, Docs) when is_list(Docs) ->
     save_docs(DbName, Docs, []).
 
 save_docs(DbName, Docs, Options) when is_list(Docs) andalso ?VALID_DBNAME ->
-    couch_util:save_docs(wh_couch_connections:get_server(), DbName, Docs, Options);
+    OldSetting = maybe_toggle_publish(Options),
+    Result = couch_util:save_docs(wh_couch_connections:get_server(), DbName, Docs, Options),
+    maybe_revert_publish(OldSetting),
+    Result;
 save_docs(DbName, Docs, Options) when is_list(Docs) ->
     case maybe_convert_dbname(DbName) of
         {'ok', Db} -> save_docs(Db, Docs, Options);
@@ -835,7 +856,7 @@ fetch_attachment(DbName, DocId, AName) ->
 
 -spec stream_attachment(text(), ne_binary(), ne_binary()) ->
                                {'ok', reference()} |
-                               {'error', term()}.
+                               {'error', any()}.
 stream_attachment(DbName, DocId, AName) when ?VALID_DBNAME ->
     couch_util:stream_attachment(wh_couch_connections:get_server(), DbName, DocId, AName, self());
 stream_attachment(DbName, DocId, AName) ->
@@ -951,7 +972,7 @@ change_notice() ->
 
 -spec db_archive(ne_binary()) -> 'ok'.
 db_archive(Db) ->
-    {'ok', DbInfo} = couch_mgr:db_info(Db),
+    {'ok', DbInfo} = ?MODULE:db_info(Db),
 
     MaxDocs = whapps_config:get_integer(?CONFIG_CAT, <<"max_concurrent_docs_to_archive">>, 500),
     Timestamp = wh_util:to_binary(wh_util:current_tstamp()),
@@ -974,7 +995,7 @@ archive(Db, File, MaxDocs, N, Pos) when N =< MaxDocs ->
                    ,{'skip', Pos}
                    ,'include_docs'
                   ],
-    case couch_mgr:all_docs(Db, ViewOptions) of
+    case ?MODULE:all_docs(Db, ViewOptions) of
         {'ok', []} -> lager:debug("no docs left after pos ~p, done", [Pos]);
         {'ok', Docs} ->
             'ok' = archive_docs(File, Docs),
@@ -990,7 +1011,7 @@ archive(Db, File, MaxDocs, N, Pos) ->
                    ,{'skip', Pos}
                    ,'include_docs'
                   ],
-    case couch_mgr:all_docs(Db, ViewOptions) of
+    case ?MODULE:all_docs(Db, ViewOptions) of
         {'ok', []} -> lager:debug("no docs left after pos ~p, done", [Pos]);
         {'ok', Docs} ->
             'ok' = archive_docs(File, Docs),

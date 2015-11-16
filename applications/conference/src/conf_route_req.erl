@@ -46,7 +46,7 @@ send_route_response(JObj, Q, Call, Conference) ->
     whapps_util:amqp_pool_send(Resp, Publisher),
     lager:info("conference knows how to route the call! sent park response").
 
--spec find_conference(whapps_call:call()) -> {'error', _} |
+-spec find_conference(whapps_call:call()) -> {'error', any()} |
                                              {'ok', whapps_conference:conference()}.
 find_conference(Call) ->
     find_conference(Call, find_account_db(Call)).
@@ -56,7 +56,7 @@ find_conference(Call, AccountDb) ->
     ConferenceId = whapps_call:to_user(Call),
     case couch_mgr:open_cache_doc(AccountDb, ConferenceId) of
         {'ok', JObj} ->
-            <<"conference">> = wh_json:get_value(<<"pvt_type">>, JObj),
+            <<"conference">> = wh_doc:type(JObj),
             {'ok', whapps_conference:from_conference_doc(JObj)};
         {'error', _R}=Error ->
             lager:info("unable to find conference ~s in account db ~s: ~p"

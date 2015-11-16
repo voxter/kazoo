@@ -26,8 +26,7 @@ authorization_header(#oauth_token{type=Type,token=Token}) ->
 get_oauth_provider(ProviderId) ->
     case couch_mgr:open_doc(?KZ_OAUTH_DB, ProviderId) of
         {'ok', JObj} -> {'ok', oauth_provider_from_jobj(ProviderId, JObj)};
-        {'error', _} ->
-            {'error', <<"OAUTH - Provider ", ProviderId/binary, " not found">>}
+        {'error', _} -> {'error', <<"OAUTH - Provider ", ProviderId/binary, " not found">>}
     end.
 
 oauth_provider_from_jobj(ProviderId, JObj) ->
@@ -51,20 +50,18 @@ get_oauth_app(AppId) ->
         {'ok', JObj} ->
             ProviderId = wh_json:get_value(<<"pvt_oauth_provider">>, JObj),
             case get_oauth_provider(ProviderId) of
-                {'ok', Provider} ->
-                    {'ok', oauth_app_from_jobj(AppId, Provider, JObj)};
+                {'ok', Provider} -> {'ok', oauth_app_from_jobj(AppId, Provider, JObj)};
                 E -> E
             end;
-        {'error', _} ->
-            {'error', <<"OAUTH - App ", AppId/binary, " not found">>}
+        {'error', _} -> {'error', <<"OAUTH - App ", AppId/binary, " not found">>}
     end.
 
 oauth_app_from_jobj(AppId, Provider, JObj) ->
-    #oauth_app{name=AppId
-               ,account_id=wh_json:get_value(<<"pvt_account_id">>, JObj)
-               ,secret=wh_json:get_value(<<"pvt_secret">>, JObj)
-               ,user_prefix=wh_json:get_value(<<"pvt_user_prefix">>, JObj)
-               ,provider=Provider}.
+    #oauth_app{name = AppId
+               ,account_id = wh_doc:account_id(JObj)
+               ,secret = wh_json:get_value(<<"pvt_secret">>, JObj)
+               ,user_prefix = wh_json:get_value(<<"pvt_user_prefix">>, JObj)
+               ,provider = Provider}.
 
 get_oauth_service_app(AppId) ->
     case couch_mgr:open_doc(?KZ_OAUTH_DB, AppId) of
@@ -80,15 +77,15 @@ get_oauth_service_app(AppId) ->
     end.
 
 oauth_service_from_jobj(AppId, Provider, JObj) ->
-    #oauth_service_app{name=AppId
-                       ,account_id=wh_json:get_value(<<"pvt_account_id">>, JObj)
-                       ,email=wh_json:get_value(<<"email">>, JObj)
-                       ,public_key_fingerprints=wh_json:get_value(<<"public_key_fingerprints">>, JObj)
-                       ,provider=Provider}.
+    #oauth_service_app{name = AppId
+                       ,account_id = wh_doc:account_id(JObj)
+                       ,email = wh_json:get_value(<<"email">>, JObj)
+                       ,public_key_fingerprints = wh_json:get_value(<<"public_key_fingerprints">>, JObj)
+                       ,provider = Provider}.
 
 -spec load_service_app_keys(oauth_service_app()) ->
                                    {'ok', oauth_service_app()} |
-                                   {'error', _}.
+                                   {'error', any()}.
 load_service_app_keys(#oauth_service_app{name=AppId}=App) ->
     case couch_mgr:fetch_attachment(?KZ_OAUTH_DB, AppId, <<"public_key.pem">>) of
         {'ok', PublicKey} ->
@@ -111,7 +108,7 @@ oauth_service_app_from_keys(PublicKey, PrivateKey, App) ->
                           ,private_key=pem_to_rsa(PrivateKey)
                          }.
 
--spec pem_to_rsa(binary()) -> term().
+-spec pem_to_rsa(binary()) -> any().
 pem_to_rsa(PemFileContents) ->
     [RSAEntry] = public_key:pem_decode(PemFileContents),
     public_key:pem_entry_decode(RSAEntry).
@@ -217,7 +214,7 @@ verify_token(#oauth_provider{tokeninfo_url=TokenInfoUrl}, AccessToken) ->
 
 -spec refresh_token(oauth_app(), api_binary(), api_binary(), wh_proplist() ) ->
                            {'ok', api_object()} |
-                           {'error', _}.
+                           {'error', any()}.
 refresh_token(App, Scope, AuthorizationCode, ExtraHeaders) ->
     refresh_token(App, Scope, AuthorizationCode, ExtraHeaders, <<"postmessage">>).
 

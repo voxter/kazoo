@@ -78,12 +78,12 @@ handle(Data, Call) ->
 maybe_use_variable(Data, Call) ->
     case wh_json:get_value(<<"var">>, Data) of
         'undefined' ->
-            wh_json:get_value(<<"id">>, Data);
+            wh_doc:id(Data);
         Variable ->
             Value = wh_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
             case couch_mgr:open_cache_doc(whapps_call:account_db(Call), Value) of
                 {'ok', _} -> Value;
-                _ -> wh_json:get_value(<<"id">>, Data)
+                _ -> wh_doc:id(Data)
             end
     end.
 

@@ -27,6 +27,7 @@
         ]).
 
 -include("whistle_media.hrl").
+-include_lib("whistle/include/wapi_conf.hrl").
 
 -define(MOD_CONFIG_CAT, <<"speech">>).
 
@@ -40,7 +41,7 @@
           ,contents = <<>> :: binary()
           ,status :: 'streaming' | 'ready'
           ,ibrowse_req_id :: ibrowse_req_id()
-          ,reqs :: [{pid(), reference()},...] | []
+          ,reqs :: [{pid(), reference()}]
           ,meta :: wh_json:object()
           ,timer_ref :: reference()
           ,id :: ne_binary() %% used in publishing doc_deleted
@@ -86,7 +87,7 @@ stop(Srv) ->
 %% @end
 %%--------------------------------------------------------------------
 init([Text, JObj]) ->
-    put('callid', wh_util:binary_md5(Text)),
+    wh_util:put_callid(wh_util:binary_md5(Text)),
 
     Voice = list_to_binary([wh_json:get_value(<<"Voice">>, JObj, <<"female">>), "/"
                             ,get_language(wh_json:get_value(<<"Language">>, JObj, <<"en-us">>))
@@ -279,7 +280,7 @@ kv_to_bin(L) ->
 start_timer() ->
     erlang:start_timer(?TIMEOUT_LIFETIME, self(), ?TIMEOUT_MESSAGE).
 
--spec stop_timer(reference() | any()) -> 'ok'.
+-spec stop_timer(reference() | _) -> 'ok'.
 stop_timer(Ref) when is_reference(Ref) ->
     _ = erlang:cancel_timer(Ref),
     'ok';
@@ -292,7 +293,7 @@ publish_doc_update(Id) ->
          ,{<<"Type">>, Type = <<"media">>}
          ,{<<"Database">>, Db = <<"tts">>}
          ,{<<"Rev">>, <<"0">>}
-         | wh_api:default_headers(<<"configuration">>, <<"doc_deleted">>, ?APP_NAME, ?APP_VERSION)
+         | wh_api:default_headers(<<"configuration">>, ?DOC_DELETED, ?APP_NAME, ?APP_VERSION)
         ],
     wh_amqp_worker:cast(API
                         ,fun(P) -> wapi_conf:publish_doc_update('deleted', Db, Type, Id, P) end

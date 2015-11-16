@@ -13,6 +13,7 @@
          ,format_account_id/1, format_account_id/2, format_account_id/3
          ,format_account_mod_id/1, format_account_mod_id/2, format_account_mod_id/3
          ,format_account_db/1
+         ,format_account_modb/1, format_account_modb/2
          ,normalize_account_name/1
         ]).
 -export([is_in_account_hierarchy/2, is_in_account_hierarchy/3]).
@@ -20,8 +21,13 @@
          ,is_system_db/1
         ]).
 -export([get_account_realm/1, get_account_realm/2]).
--export([is_account_enabled/1]).
--export([is_account_expired/1]).
+-export([is_account_enabled/1, is_account_expired/1]).
+-export([maybe_disable_account/1
+         ,disable_account/1
+         ,enable_account/1
+         ,set_superduper_admin/2
+         ,set_allow_number_additions/2
+        ]).
 
 -export([try_load_module/1]).
 -export([shuffle_list/1]).
@@ -84,7 +90,7 @@
          ,milliseconds_to_seconds/1
          ,elapsed_s/1, elapsed_ms/1, elapsed_us/1
          ,elapsed_s/2, elapsed_ms/2, elapsed_us/2
-         ,now_s/1, now_ms/1, now_us/1
+         ,now/0, now_s/1, now_ms/1, now_us/1
         ]).
 
 -export([put_callid/1, get_callid/0
@@ -197,59 +203,69 @@ change_syslog_log_level(L) ->
 %% @end
 %%--------------------------------------------------------------------
 -type account_format() :: 'unencoded' | 'encoded' | 'raw'.
--spec format_account_id(ne_binaries() | api_binary() | wh_json:object()) -> api_binary().
--spec format_account_id(ne_binaries() | api_binary() | wh_json:object(), account_format()) -> api_binary().
--spec format_account_id(ne_binaries() | api_binary(), wh_year() | ne_binary(), wh_month() | ne_binary()) -> api_binary().
+-spec format_account_id(ne_binaries() | api_binary()) -> api_binary().
+-spec format_account_id(ne_binaries() | api_binary(), account_format()) ->
+                               api_binary().
+-spec format_account_id(ne_binaries() | api_binary(), wh_year() | ne_binary(), wh_month() | ne_binary()) ->
+                               api_binary().
 
-format_account_id(Doc) -> format_account_id(Doc, 'unencoded').
+format_account_id(Doc) -> format_account_id(Doc, 'raw').
 
 format_account_id('undefined', _Encoding) -> 'undefined';
-format_account_id(DbName, Timestamp) when is_integer(Timestamp) andalso Timestamp > 0 ->
+format_account_id(DbName, Timestamp)
+  when is_integer(Timestamp)
+       andalso Timestamp > 0 ->
     {{Year, Month, _}, _} = calendar:gregorian_seconds_to_datetime(Timestamp),
     format_account_id(DbName, Year, Month);
 format_account_id(<<"accounts">>, _) -> <<"accounts">>;
 
-%% unencode the account db name
-format_account_id(<<"account/", _/binary>> = DbName, 'unencoded') ->
-    DbName;
-format_account_id(<<"account%2F", _/binary>> = DbName, 'unencoded') ->
-    binary:replace(DbName, <<"%2F">>, <<"/">>, ['global']);
-
-%% encode the account db name
-format_account_id(<<"account%2F", _/binary>>=DbName, 'encoded') ->
-    DbName;
-format_account_id(<<"account/", _/binary>>=DbName, 'encoded') ->
-    binary:replace(DbName, <<"/">>, <<"%2F">>, ['global']);
-
-%% get just the account ID from the account db name
-format_account_id(<<"account/", AccountId:34/binary, "-", _Date:6/binary>>, 'raw') ->
-    binary:replace(AccountId, <<"/">>, <<>>, ['global']);
-format_account_id(<<"account%2F", AccountId:38/binary, "-", _Date:6/binary>>, 'raw') ->
-    binary:replace(AccountId, <<"%2F">>, <<>>, ['global']);
-
-format_account_id(<<"account%2F", AccountId/binary>>, 'raw') ->
-    binary:replace(AccountId, <<"%2F">>, <<>>, ['global']);
-format_account_id(<<"account/", AccountId/binary>>, 'raw') ->
-    binary:replace(AccountId, <<"/">>, <<>>, ['global']);
-
-format_account_id(<<AccountId:32/binary, "-", _Date:6/binary>>, 'raw') ->
+%% Short-circuit IDs already in encoding
+format_account_id(?MATCH_ACCOUNT_RAW(AccountId), 'raw') ->
+    AccountId;
+format_account_id(?MATCH_ACCOUNT_UNENCODED(_) = AccountId, 'unencoded') ->
+    AccountId;
+format_account_id(?MATCH_ACCOUNT_ENCODED(_) = AccountId, 'encoded') ->
     AccountId;
 
-format_account_id([AccountId], Encoding) when is_binary(AccountId) ->
-    format_account_id(AccountId, Encoding);
-format_account_id(Account, Encoding) when not is_binary(Account) ->
-    case wh_json:is_json_object(Account) of
-        'true' -> format_account_id([wh_json:get_value([<<"_id">>], Account)], Encoding);
-        'false' -> format_account_id(wh_util:to_binary(Account), Encoding)
-    end;
-
+format_account_id(AccountId, 'raw') ->
+    raw_account_id(AccountId);
 format_account_id(AccountId, 'unencoded') ->
-    [Id1, Id2, Id3, Id4 | IdRest] = to_list(AccountId),
-    to_binary(["account/", Id1, Id2, $/, Id3, Id4, $/, IdRest]);
-format_account_id(AccountId, 'encoded') when is_binary(AccountId) ->
-    [Id1, Id2, Id3, Id4 | IdRest] = to_list(AccountId),
-    to_binary(["account%2F", Id1, Id2, "%2F", Id3, Id4, "%2F", IdRest]);
-format_account_id(AccountId, 'raw') -> AccountId.
+    ?MATCH_ACCOUNT_RAW(A,B,Rest) = raw_account_id(AccountId),
+    to_binary(["account/", A, "/", B, "/", Rest]);
+format_account_id(AccountId, 'encoded') ->
+    ?MATCH_ACCOUNT_RAW(A,B,Rest) = raw_account_id(AccountId),
+    to_binary(["account%2F", A, "%2F", B, "%2F", Rest]).
+
+-spec raw_account_id(ne_binary()) -> ne_binary().
+raw_account_id(?MATCH_ACCOUNT_RAW(AccountId)) ->
+    AccountId;
+raw_account_id(?MATCH_ACCOUNT_UNENCODED(A, B, Rest)) ->
+    ?MATCH_ACCOUNT_RAW(A, B, Rest);
+raw_account_id(?MATCH_ACCOUNT_ENCODED(A, B, Rest)) ->
+    ?MATCH_ACCOUNT_RAW(A, B, Rest);
+raw_account_id(?MATCH_MODB_SUFFIX_RAW(AccountId, _, _)) ->
+    AccountId;
+raw_account_id(?MATCH_MODB_SUFFIX_ENCODED(A, B, Rest, _, _)) ->
+    ?MATCH_ACCOUNT_RAW(A, B, Rest);
+raw_account_id(?MATCH_MODB_SUFFIX_UNENCODED(A, B, Rest, _, _)) ->
+    ?MATCH_ACCOUNT_RAW(A, B, Rest);
+raw_account_id(<<"number/", _/binary>>=Other) ->
+    Other;
+raw_account_id(Other) ->
+    case lists:member(Other, ?KZ_SYSTEM_DBS) of
+        'true' -> Other;
+        'false' ->
+            lager:warning("raw account id doesn't process '~p'", [Other]),
+            Other
+    end.
+
+-spec raw_account_modb(ne_binary()) -> ne_binary().
+raw_account_modb(?MATCH_MODB_SUFFIX_RAW(_, _, _) = AccountId) ->
+    AccountId;
+raw_account_modb(?MATCH_MODB_SUFFIX_ENCODED(A, B, Rest, Year, Month)) ->
+    ?MATCH_MODB_SUFFIX_RAW(A, B, Rest, Year, Month);
+raw_account_modb(?MATCH_MODB_SUFFIX_UNENCODED(A, B, Rest, Year, Month)) ->
+    ?MATCH_MODB_SUFFIX_RAW(A, B, Rest, Year, Month).
 
 format_account_id('undefined', _Year, _Month) -> 'undefined';
 format_account_id(AccountId, Year, Month) when not is_integer(Year) ->
@@ -258,12 +274,8 @@ format_account_id(AccountId, Year, Month) when not is_integer(Month) ->
     format_account_id(AccountId, Year, to_integer(Month));
 format_account_id(Account, Year, Month) when is_integer(Year),
                                              is_integer(Month) ->
-    AccountId = format_account_id(Account, 'raw'),
-    <<(format_account_id(AccountId, 'encoded'))/binary
-      ,"-"
-      ,(to_binary(Year))/binary
-      ,(pad_month(Month))/binary
-    >>.
+    ?MATCH_ACCOUNT_RAW(A,B,Rest) = raw_account_id(Account),
+    ?MATCH_MODB_SUFFIX_ENCODED(A, B, Rest, to_binary(Year), pad_month(Month)).
 
 -spec format_account_mod_id(ne_binary()) -> ne_binary().
 -spec format_account_mod_id(ne_binary(), gregorian_seconds() | wh_now()) -> ne_binary().
@@ -282,7 +294,20 @@ format_account_mod_id(AccountId, Year, Month) ->
     format_account_id(AccountId, Year, Month).
 
 -spec format_account_db(ne_binaries() | api_binary() | wh_json:object()) -> api_binary().
-format_account_db(AccountId) -> format_account_id(AccountId, 'encoded').
+format_account_db(AccountId) ->
+    format_account_id(AccountId, 'encoded').
+
+-spec format_account_modb(ne_binary()) -> ne_binary().
+format_account_modb(AccountId) ->
+    format_account_modb(AccountId, 'raw').
+format_account_modb(AccountId, 'raw') ->
+    raw_account_modb(AccountId);
+format_account_modb(AccountId, 'unencoded') ->
+    ?MATCH_ACCOUNT_RAW(A,B,Rest) = raw_account_modb(AccountId),
+    to_binary(["account/", A, "/", B, "/", Rest]);
+format_account_modb(AccountId, 'encoded') ->
+    ?MATCH_ACCOUNT_RAW(A,B,Rest) = raw_account_modb(AccountId),
+    to_binary(["account%2F", A, "%2F", B, "%2F", Rest]).
 
 -spec pad_month(wh_month() | ne_binary()) -> ne_binary().
 pad_month(<<_/binary>> = Month) ->
@@ -296,7 +321,7 @@ pad_month(Month) ->
 normalize_account_name('undefined') -> 'undefined';
 normalize_account_name(AccountName) ->
     << <<Char>>
-       || <<Char>> <= wh_util:to_lower_binary(AccountName),
+       || <<Char>> <= ?MODULE:to_lower_binary(AccountName),
           (Char >= $a andalso Char =< $z)
               orelse (Char >= $0 andalso Char =< $9)
     >>.
@@ -318,10 +343,9 @@ is_in_account_hierarchy(CheckFor, InAccount) ->
 is_in_account_hierarchy('undefined', _, _) -> 'false';
 is_in_account_hierarchy(_, 'undefined', _) -> 'false';
 is_in_account_hierarchy(CheckFor, InAccount, IncludeSelf) ->
-    CheckId = wh_util:format_account_id(CheckFor, 'raw'),
-    AccountId = wh_util:format_account_id(InAccount, 'raw'),
-    AccountDb = wh_util:format_account_id(InAccount, 'encoded'),
-    case (IncludeSelf andalso AccountId =:= CheckId) orelse couch_mgr:open_cache_doc(AccountDb, AccountId) of
+    CheckId = ?MODULE:format_account_id(CheckFor, 'raw'),
+    AccountId = ?MODULE:format_account_id(InAccount, 'raw'),
+    case (IncludeSelf andalso AccountId =:= CheckId) orelse kz_account:fetch(AccountId) of
         'true' ->
             lager:debug("account ~s is the same as the account to fetch the hierarchy from", [CheckId]),
             'true';
@@ -349,9 +373,7 @@ is_in_account_hierarchy(CheckFor, InAccount, IncludeSelf) ->
 -spec is_system_admin(api_binary()) -> boolean().
 is_system_admin('undefined') -> 'false';
 is_system_admin(Account) ->
-    AccountId = wh_util:format_account_id(Account, 'raw'),
-    AccountDb = wh_util:format_account_id(Account, 'encoded'),
-    case couch_mgr:open_cache_doc(AccountDb, AccountId) of
+    case kz_account:fetch(Account) of
         {'ok', JObj} -> kz_account:is_superduper_admin(JObj);
         {'error', _R} ->
             lager:debug("unable to open account definition for ~s: ~p", [Account, _R]),
@@ -374,31 +396,97 @@ is_system_db(Db) ->
 -spec is_account_enabled(api_binary()) -> boolean().
 is_account_enabled('undefined') -> 'false';
 is_account_enabled(Account) ->
-    AccountId = wh_util:format_account_id(Account, 'raw'),
-    AccountDb = wh_util:format_account_id(Account, 'encoded'),
-    case couch_mgr:open_cache_doc(AccountDb, AccountId) of
+    case kz_account:fetch(Account) of
         {'error', _E} ->
-            lager:error("could not open account ~p in ~p", [AccountId, AccountDb]),
+            lager:error("could not open account ~s", [Account]),
             'false';
         {'ok', JObj} ->
             kz_account:is_enabled(JObj)
-                andalso wh_json:is_true(<<"enabled">>, JObj, 'true')
-
     end.
 
--spec is_account_expired(api_binary()) -> boolean().
+-spec is_account_expired(api_binary()) -> 'false' | {'true', gregorian_seconds()}.
 is_account_expired('undefined') -> 'false';
 is_account_expired(Account) ->
-    AccountId = wh_util:format_account_id(Account, 'raw'),
-    AccountDb = wh_util:format_account_id(Account, 'encoded'),
-    case couch_mgr:open_cache_doc(AccountDb, AccountId) of
-        {'ok', Doc} ->
-            Now = wh_util:current_tstamp(),
-            Trial = wh_json:get_integer_value(<<"pvt_trial_expires">>, Doc, Now+1),
-            Trial < Now;
+    case kz_account:fetch(Account) of
         {'error', _R} ->
             lager:debug("failed to check if expired token auth, ~p", [_R]),
-            'false'
+            'false';
+        {'ok', JObj} ->
+             kz_account:is_expired(JObj)
+    end.
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_disable_account(ne_binary()) ->'ok' | {'error', any()}.
+maybe_disable_account(Account) ->
+    case is_account_enabled(Account) of
+        'false' -> 'ok';
+        'true' ->
+            disable_account(Account)
+    end.
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec disable_account(ne_binary()) ->'ok' | {'error', any()}.
+disable_account(Account) ->
+    account_update(Account, fun kz_account:disable/1).
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec enable_account(ne_binary()) ->'ok' | {'error', any()}.
+enable_account(Account) ->
+    account_update(Account, fun kz_account:enable/1).
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec set_superduper_admin(ne_binary(), boolean()) ->'ok' | {'error', any()}.
+set_superduper_admin(Account, IsAdmin) ->
+    account_update(Account, fun(J) -> kz_account:set_superduper_admin(J, IsAdmin) end).
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec set_allow_number_additions(ne_binary(), boolean()) ->'ok' | {'error', any()}.
+set_allow_number_additions(Account, IsAllowed) ->
+    account_update(Account, fun(J) -> kz_account:set_allow_number_additions(J, IsAllowed) end).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec account_update(wh_json:object()) -> 'ok' | {'error', any()}.
+-spec account_update(ne_binary(), function()) -> 'ok' | {'error', any()}.
+account_update(JObj) ->
+    AccountDb = wh_doc:account_db(JObj),
+    case couch_mgr:save_doc(AccountDb, JObj) of
+        {'error', _R}=E -> E;
+        {'ok', SavedJObj} ->
+            case couch_mgr:save_doc(?WH_ACCOUNTS_DB, SavedJObj) of
+                {'error', _R}=E -> E;
+                {'ok', _} -> 'ok'
+            end
+    end.
+
+account_update(Account, UpdateFun) ->
+    case kz_account:fetch(Account) of
+        {'error', _R}=E -> E;
+        {'ok', AccountJObj} ->
+            account_update(UpdateFun(AccountJObj))
     end.
 
 %%--------------------------------------------------------------------
@@ -411,8 +499,8 @@ is_account_expired(Account) ->
 -spec get_account_realm(api_binary(), ne_binary()) -> api_binary().
 get_account_realm(AccountId) ->
     get_account_realm(
-      wh_util:format_account_id(AccountId, 'encoded')
-      ,wh_util:format_account_id(AccountId, 'raw')
+      ?MODULE:format_account_id(AccountId, 'encoded')
+      ,?MODULE:format_account_id(AccountId, 'raw')
      ).
 
 get_account_realm('undefined', _) -> 'undefined';
@@ -433,7 +521,7 @@ get_account_realm(Db, AccountId) ->
 %%--------------------------------------------------------------------
 -spec try_load_module(string() | binary()) -> atom() | 'false'.
 try_load_module(Name) ->
-    Module = wh_util:to_atom(Name, 'true'),
+    Module = ?MODULE:to_atom(Name, 'true'),
     try Module:module_info('imports') of
         _ when Module =:= 'undefined' -> 'false';
         _ ->
@@ -551,11 +639,11 @@ spawn(Fun) ->
                          Fun()
                  end).
 
--spec set_startup() -> 'undefined' | gregorian_seconds().
+-spec set_startup() -> api_seconds().
 set_startup() ->
     put('$startup', current_tstamp()).
 
--spec startup() -> 'undefined' | gregorian_seconds().
+-spec startup() -> api_seconds().
 startup() ->
     get('$startup').
 
@@ -587,15 +675,15 @@ get_xml_value(Paths, Xml) ->
     Path = lists:flatten(Paths),
     try xmerl_xpath:string(Path, Xml) of
         [#xmlText{value=Value}] ->
-            wh_util:to_binary(Value);
+            ?MODULE:to_binary(Value);
         [#xmlText{}|_]=Values ->
-            iolist_to_binary([wh_util:to_binary(Value)
+            iolist_to_binary([?MODULE:to_binary(Value)
                               || #xmlText{value=Value} <- Values
                              ]);
         [#xmlAttribute{value=Value}] ->
-            wh_util:to_binary(Value);
+            ?MODULE:to_binary(Value);
         [#xmlAttribute{}|_]=Values ->
-            iolist_to_binary([wh_util:to_binary(Value)
+            iolist_to_binary([?MODULE:to_binary(Value)
                               || #xmlAttribute{value=Value} <- Values
                              ]);
         _Else -> 'undefined'
@@ -653,7 +741,7 @@ hex_char_to_binary(B) ->
 
 -spec rand_hex_binary(pos_integer() | ne_binary()) -> ne_binary().
 rand_hex_binary(Size) when not is_integer(Size) ->
-    rand_hex_binary(wh_util:to_integer(Size));
+    rand_hex_binary(?MODULE:to_integer(Size));
 rand_hex_binary(Size) when is_integer(Size) andalso Size > 0 ->
     to_hex_binary(rand_hex(Size)).
 
@@ -779,7 +867,7 @@ to_list(X) when is_list(X) -> X.
 
 %% Known limitations:
 %%   Converting [256 | _], lists with integers > 255
--spec to_binary(atom() | string() | binary() | integer() | float() | pid()) -> binary().
+-spec to_binary(atom() | string() | binary() | integer() | float() | pid() | iolist()) -> binary().
 to_binary(X) when is_float(X) -> to_binary(mochinum:digits(X));
 to_binary(X) when is_integer(X) -> list_to_binary(integer_to_list(X));
 to_binary(X) when is_atom(X) -> list_to_binary(atom_to_list(X));
@@ -853,7 +941,7 @@ is_boolean("false") -> 'true';
 is_boolean('false') -> 'true';
 is_boolean(_) -> 'false'.
 
--spec is_empty(term()) -> boolean().
+-spec is_empty(any()) -> boolean().
 is_empty(0) -> 'true';
 is_empty([]) -> 'true';
 is_empty("0") -> 'true';
@@ -875,7 +963,7 @@ is_empty(MaybeJObj) ->
         'true' -> wh_json:is_empty(MaybeJObj)
     end.
 
--spec is_not_empty(term()) -> boolean().
+-spec is_not_empty(any()) -> boolean().
 is_not_empty(Term) -> (not is_empty(Term)).
 
 -spec is_proplist(any()) -> boolean().
@@ -886,12 +974,12 @@ is_proplist(_) -> 'false'.
 -spec identity(X) -> X.
 identity(X) -> X.
 
--spec to_lower_binary(term()) -> api_binary().
+-spec to_lower_binary(any()) -> api_binary().
 to_lower_binary('undefined') -> 'undefined';
 to_lower_binary(Bin) when is_binary(Bin) -> << <<(to_lower_char(B))>> || <<B>> <= Bin>>;
 to_lower_binary(Else) -> to_lower_binary(to_binary(Else)).
 
--spec to_lower_string(term()) -> 'undefined' | list().
+-spec to_lower_string(any()) -> 'undefined' | list().
 to_lower_string('undefined') -> 'undefined';
 to_lower_string(L) when is_list(L) ->
     [to_lower_char(C) || C <- L];
@@ -911,12 +999,12 @@ to_lower_char(C) when is_integer(C), 16#C0 =< C, C =< 16#D6 -> C + 32; % from st
 to_lower_char(C) when is_integer(C), 16#D8 =< C, C =< 16#DE -> C + 32; % so we only loop once
 to_lower_char(C) -> C.
 
--spec to_upper_binary(term()) -> api_binary().
+-spec to_upper_binary(any()) -> api_binary().
 to_upper_binary('undefined') -> 'undefined';
 to_upper_binary(Bin) when is_binary(Bin) -> << <<(to_upper_char(B))>> || <<B>> <= Bin>>;
 to_upper_binary(Else) -> to_upper_binary(to_binary(Else)).
 
--spec to_upper_string(term()) -> 'undefined' | list().
+-spec to_upper_string(any()) -> 'undefined' | list().
 to_upper_string('undefined') -> 'undefined';
 to_upper_string(L) when is_list(L) -> [to_upper_char(C) || C <- L];
 to_upper_string(Else) -> to_upper_string(to_list(Else)).
@@ -928,9 +1016,9 @@ to_upper_char(C) when is_integer(C), 16#F8 =< C, C =< 16#FE -> C - 32;
 to_upper_char(C) -> C.
 
 -spec strip_binary(binary()) -> binary().
--spec strip_binary(binary(), 'both' | 'left' | 'right' | char() | list(char())) -> binary().
--spec strip_left_binary(binary(), char()) -> binary().
--spec strip_right_binary(binary(), char()) -> binary().
+-spec strip_binary(binary(), 'both' | 'left' | 'right' | char() | [char()]) -> binary().
+-spec strip_left_binary(binary(), char() | binary()) -> binary().
+-spec strip_right_binary(binary(), char() | binary()) -> binary().
 strip_binary(B) -> strip_binary(B, 'both').
 
 strip_binary(B, 'left') -> strip_left_binary(B, $\s);
@@ -942,7 +1030,6 @@ strip_binary(B, Cs) when is_list(Cs) ->
                 ,B
                 ,Cs
                ).
-
 
 strip_left_binary(<<C, B/binary>>, C) -> strip_left_binary(B, C);
 strip_left_binary(B, _) -> B.
@@ -1029,7 +1116,7 @@ whistle_version() ->
         {'ok', File} ->
             {'ok', Line} = file:read_line(File),
             _ = file:close(File),
-            wh_util:to_binary(string:strip(Line, 'right', $\n));
+            ?MODULE:to_binary(string:strip(Line, 'right', $\n));
         _ -> <<"unknown">>
     end.
 
@@ -1037,7 +1124,7 @@ whistle_version() ->
 write_pid(FileName) ->
     file:write_file(FileName, io_lib:format("~s", [os:getpid()]), ['write', 'binary']).
 
--spec ensure_started(atom()) -> 'ok' | {'error', term()}.
+-spec ensure_started(atom()) -> 'ok' | {'error', any()}.
 ensure_started(App) when is_atom(App) ->
     case application:start(App) of
         'ok' -> 'ok';
@@ -1145,7 +1232,7 @@ decr_timeout(Timeout, Elapsed) when is_integer(Elapsed) ->
         'false' -> Diff
     end;
 decr_timeout(Timeout, Start) ->
-    decr_timeout(Timeout, wh_util:elapsed_ms(Start)).
+    decr_timeout(Timeout, ?MODULE:elapsed_ms(Start)).
 
 -spec microseconds_to_seconds(float() | integer() | string() | binary()) -> non_neg_integer().
 microseconds_to_seconds(Microseconds) -> to_integer(Microseconds) div 1000000.
@@ -1174,16 +1261,22 @@ elapsed_s(Start, Now) when is_integer(Start), is_integer(Now) -> Now - Start.
 elapsed_ms({_,_,_}=Start, {_,_,_}=Now) -> timer:now_diff(Now, Start) div ?MILLISECONDS_IN_SECOND;
 elapsed_ms({_,_,_}=Start, Now) -> elapsed_ms(now_s(Start), Now);
 elapsed_ms(Start, {_,_,_}=Now) -> elapsed_ms(Start, now_s(Now));
-elapsed_ms(Start, Now) when is_integer(Start), is_integer(Now) -> (Now - Start) * 1 * ?MILLISECONDS_IN_SECOND.
+elapsed_ms(Start, Now)
+  when is_integer(Start),
+       is_integer(Now) ->
+    (Now - Start) * ?MILLISECONDS_IN_SECOND.
 
 elapsed_us({_,_,_}=Start, {_,_,_}=Now) -> timer:now_diff(Now, Start);
 elapsed_us({_,_,_}=Start, Now) -> elapsed_us(now_s(Start), Now);
 elapsed_us(Start, {_,_,_}=Now) -> elapsed_us(Start, now_s(Now));
 elapsed_us(Start, Now) when is_integer(Start), is_integer(Now) -> (Now - Start) * 1000000.
 
+-spec now() -> wh_now().
 -spec now_s(wh_now()) -> gregorian_seconds().
 -spec now_ms(wh_now()) -> pos_integer().
 -spec now_us(wh_now()) -> pos_integer().
+%% Replace now_ms/1 with erlang:system_time('milli_seconds')
+now() -> erlang:now().  %% FIXME: replace this erlang:timestamp/0 later on
 now_us({MegaSecs,Secs,MicroSecs}) ->
     (MegaSecs*1000000 + Secs)*1000000 + MicroSecs.
 now_ms({_,_,_}=Now) -> now_us(Now) div ?MILLISECONDS_IN_SECOND.
@@ -1201,14 +1294,14 @@ format_date() ->
 
 format_date(Timestamp) ->
     {{Y,M,D}, _ } = calendar:gregorian_seconds_to_datetime(Timestamp),
-    list_to_binary([wh_util:to_binary(Y), "-", wh_util:to_binary(M), "-", wh_util:to_binary(D)]).
+    list_to_binary([?MODULE:to_binary(Y), "-", ?MODULE:to_binary(M), "-", ?MODULE:to_binary(D)]).
 
 format_time() ->
     format_time(current_tstamp()).
 
 format_time(Timestamp) ->
     { _, {H,I,S}} = calendar:gregorian_seconds_to_datetime(Timestamp),
-    list_to_binary([wh_util:to_binary(H), ":", wh_util:to_binary(I), ":", wh_util:to_binary(S)]).
+    list_to_binary([?MODULE:to_binary(H), ":", ?MODULE:to_binary(I), ":", ?MODULE:to_binary(S)]).
 
 format_datetime() ->
     format_datetime(current_tstamp()).
@@ -1273,7 +1366,7 @@ anonymous_caller_id_number() ->
 
 -include_lib("eunit/include/eunit.hrl").
 
--spec resolve_uri_test() -> _.
+-spec resolve_uri_test() -> any().
 resolve_uri_test() ->
     RawPath = <<"http://pivot/script.php">>,
     Relative = <<"script2.php">>,

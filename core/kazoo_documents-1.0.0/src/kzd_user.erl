@@ -15,6 +15,8 @@
          ,presence_id/1, presence_id/2, set_presence_id/2
          ,is_enabled/1, is_enabled/2
          ,enable/1, disable/1
+         ,type/0
+         ,devices/1
         ]).
 
 -include("kz_documents.hrl").
@@ -26,6 +28,8 @@
 -define(KEY_TIMEZONE, <<"timezone">>).
 -define(KEY_PRESENCE_ID, <<"presence_id">>).
 -define(KEY_IS_ENABLED, <<"enabled">>).
+
+-define(PVT_TYPE, <<"user">>).
 
 -spec email(doc()) -> api_binary().
 -spec email(doc(), Default) -> ne_binary() | Default.
@@ -80,8 +84,7 @@ vcard_escape_chars(Val) ->
     Val1 = re:replace(Val, "(:|;|,)", "\\\\&", ['global', {'return', 'binary'}]),
     re:replace(Val1, "\n", "\\\\n", ['global', {'return', 'binary'}]).
 
--spec vcard_fields_acc(vcard_field(), list({ne_binary(), binary()})) ->
-                              list({ne_binary(), binary()}).
+-spec vcard_fields_acc(vcard_field(), [{ne_binary(), binary()}]) -> [{ne_binary(), binary()}].
 vcard_fields_acc({_, Val}, Acc)
   when Val =:= 'undefined'; Val =:= []; Val =:= <<>> ->
     Acc;
@@ -110,9 +113,9 @@ vcard_normalize_type(T) -> T.
 
 -type vcard_val() :: binary() | {char(), binaries()} | 'undefined'.
 -type vcard_type_token() :: ne_binary() | {ne_binary(), ne_binary()}.
--type vcard_type() :: list(vcard_type_token()) | vcard_type_token().
+-type vcard_type() :: [vcard_type_token()] | vcard_type_token().
 -type vcard_field_token() :: {vcard_type(), vcard_val()}.
--type vcard_field() :: vcard_field_token() | list(vcard_field_token()).
+-type vcard_field() :: vcard_field_token() | [vcard_field_token()].
 
 -spec card_field(ne_binary(), wh_json:object()) -> vcard_field().
 card_field(Key = <<"BEGIN">>, _) ->
@@ -233,3 +236,21 @@ enable(JObj) ->
 -spec disable(doc()) -> doc().
 disable(JObj) ->
     wh_json:set_value(?KEY_IS_ENABLED, 'false', JObj).
+
+-spec type() -> ne_binary().
+type() -> ?PVT_TYPE.
+
+devices(UserJObj) ->
+    AccountDb = wh_doc:account_db(UserJObj),
+    UserId = wh_doc:id(UserJObj),
+
+    ViewOptions = [{'startkey', [UserId]}
+                   ,{'endkey', [UserId, wh_json:new()]}
+                   ,'include_docs'
+                  ],
+    case couch_mgr:get_results(AccountDb, <<"cf_attributes/owned">>, ViewOptions) of
+        {'ok', JObjs} -> [wh_json:get_value(<<"doc">>, JObj) || JObj <- JObjs];
+        {'error', _R} ->
+            lager:warning("unable to find documents owned by ~s: ~p", [UserId, _R]),
+            []
+    end.

@@ -19,7 +19,7 @@
 %% { {Event-Category, Event-Name}, CallbackModule | {CallbackModule, Function} }
 -type responder_callback() :: {atom(), atom()}.
 -type responder() :: {{binary(), binary()}, responder_callback()}.
--type responders() :: [responder(),...] | [].
+-type responders() :: [responder()].
 -export_type([responder/0
               ,responders/0
              ]).
@@ -82,4 +82,4 @@ maybe_init_responder({Responder, _Fun}, 'true') when is_atom(Responder) ->
             wh_util:log_stacktrace(ST)
     end;
 maybe_init_responder({_Responder, _Fun}, 'false') ->
-    lager:debug("ignoring init for responder ~s: ~p", [_Responder, _Fun]).
+    lager:debug("init/0 not found for responder ~s, skipping", [_Responder]).

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2015, 2600Hz INC
 %%% @doc
 %%% handler for route wins, bootstraps callflow execution
 %%% @end
@@ -8,33 +8,24 @@
 %%%-------------------------------------------------------------------
 -module(cf_route_win).
 
+-export([execute_callflow/2
+        ]).
+
 -include("callflow.hrl").
 
 -define(JSON(L), wh_json:from_list(L)).
 
--define(DEFAULT_SERVICES, ?JSON([{<<"audio">>, ?JSON([{<<"enabled">>, 'true'}])}
-                                 ,{<<"video">>,?JSON([{<<"enabled">>, 'true'}])}
-                                 ,{<<"sms">>,  ?JSON([{<<"enabled">>, 'true'}])}
-                                ])).
+-define(DEFAULT_SERVICES
+        ,?JSON([{<<"audio">>, ?JSON([{<<"enabled">>, 'true'}])}
+                ,{<<"video">>,?JSON([{<<"enabled">>, 'true'}])}
+                ,{<<"sms">>,  ?JSON([{<<"enabled">>, 'true'}])}
+               ]
+              )
+       ).
 
--export([handle_req/2
-         ,maybe_restrict_call/2
-        ]).
-
--spec handle_req(wh_json:object(), wh_proplist()) -> any().
-handle_req(JObj, _Options) ->
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
-    put('callid', CallId),
-    lager:info("callflow has received a route win, taking control of the call"),
-    case whapps_call:retrieve(CallId, ?APP_NAME) of
-        {'ok', Call} ->
-            maybe_restrict_call(JObj, whapps_call:from_route_win(JObj, Call));
-        {'error', R} ->
-            lager:info("unable to find callflow during second lookup (HUH?) ~p", [R])
-    end.
-
--spec maybe_restrict_call(wh_json:object(), whapps_call:call()) -> 'ok' | {'ok', pid()}.
-maybe_restrict_call(JObj, Call) ->
+-spec execute_callflow(wh_json:object(), whapps_call:call()) ->
+                                 'ok' | {'ok', pid()}.
+execute_callflow(JObj, Call) ->
     case should_restrict_call(Call) of
         'true' ->
             lager:debug("endpoint is restricted from making this call, terminate", []),
@@ -56,7 +47,7 @@ should_restrict_call(Call) ->
 
 -spec maybe_service_unavailable(wh_json:object(), whapps_call:call()) -> boolean().
 maybe_service_unavailable(JObj, Call) ->
-    Id = wh_json:get_value(<<"_id">>, JObj),
+    Id = wh_doc:id(JObj),
     Services = wh_json:merge_recursive(
                  wh_json:get_value(<<"services">>, JObj, ?DEFAULT_SERVICES),
                  wh_json:get_value(<<"pvt_services">>, JObj, wh_json:new())),
@@ -71,8 +62,7 @@ maybe_service_unavailable(JObj, Call) ->
 -spec maybe_account_service_unavailable(wh_json:object(), whapps_call:call()) -> boolean().
 maybe_account_service_unavailable(JObj, Call) ->
     AccountId = whapps_call:account_id(Call),
-    AccountDb = whapps_call:account_db(Call),
-    {'ok', Doc} = couch_mgr:open_cache_doc(AccountDb, AccountId),
+    {'ok', Doc} = kz_account:fetch(AccountId),
     Services = wh_json:merge_recursive(
                  wh_json:get_value(<<"services">>, Doc, ?DEFAULT_SERVICES),
                  wh_json:get_value(<<"pvt_services">>, Doc, wh_json:new())),
@@ -84,22 +74,38 @@ maybe_account_service_unavailable(JObj, Call) ->
             'true'
     end.
 
--spec maybe_closed_group_restriction(wh_json:object(), whapps_call:call()) -> boolean().
+-spec maybe_closed_group_restriction(wh_json:object(), whapps_call:call()) ->
+                                            boolean().
 maybe_closed_group_restriction(JObj, Call) ->
     case wh_json:get_value([<<"call_restriction">>, <<"closed_groups">>, <<"action">>], JObj) of
         <<"deny">> -> enforce_closed_groups(JObj, Call);
         _Else -> maybe_classification_restriction(JObj, Call)
     end.
 
--spec maybe_classification_restriction(wh_json:object(), whapps_call:call()) -> boolean().
+-spec maybe_classification_restriction(wh_json:object(), whapps_call:call()) ->
+                                              boolean().
 maybe_classification_restriction(JObj, Call) ->
-    Request = whapps_call:request_user(Call),
+    Request = find_request(Call),
     AccountId = whapps_call:account_id(Call),
     DialPlan = wh_json:get_value(<<"dial_plan">>, JObj, wh_json:new()),
     Number = wnm_util:to_e164(Request, AccountId, DialPlan),
     Classification = wnm_util:classify_number(Number, AccountId),
-    lager:debug("classified number as ~s, testing for call restrictions", [Classification]),
+    lager:debug("classified number ~s as ~s, testing for call restrictions"
+                ,[Number, Classification]
+               ),
     wh_json:get_value([<<"call_restriction">>, Classification, <<"action">>], JObj) =:= <<"deny">>.
+
+-spec find_request(whapps_call:call()) -> ne_binary().
+find_request(Call) ->
+    case whapps_call:kvs_fetch('cf_capture_group', Call) of
+        'undefined' ->
+            whapps_call:request_user(Call);
+        CaptureGroup ->
+            lager:debug("capture group ~s being used instead of request ~s"
+                        ,[CaptureGroup, whapps_call:request_user(Call)]
+                       ),
+            CaptureGroup
+    end.
 
 -spec enforce_closed_groups(wh_json:object(), whapps_call:call()) -> boolean().
 enforce_closed_groups(JObj, Call) ->
@@ -129,7 +135,10 @@ get_caller_groups(Groups, JObj, Call) ->
     lists:foldl(fun('undefined', Set) -> Set;
                    (Id, Set) ->
                         get_group_associations(Id, Groups, Set)
-                end, sets:new(), Ids).
+                end
+                ,sets:new()
+                ,Ids
+               ).
 
 -spec maybe_device_groups_intersect(ne_binary(), set(), wh_json:objects(), whapps_call:call()) -> boolean().
 maybe_device_groups_intersect(CalleeId, CallerGroups, Groups, Call) ->
@@ -141,8 +150,11 @@ maybe_device_groups_intersect(CalleeId, CallerGroups, Groups, Call) ->
             %% the owner of the device shares any groups with the caller
             UserIds = cf_attributes:owner_ids(CalleeId, Call),
             UsersGroups = lists:foldl(fun(UserId, Set) ->
-                                             get_group_associations(UserId, Groups, Set)
-                                     end, sets:new(), UserIds),
+                                              get_group_associations(UserId, Groups, Set)
+                                      end
+                                      ,sets:new()
+                                      ,UserIds
+                                     ),
             sets:size(sets:intersection(CallerGroups, UsersGroups)) =:= 0
     end.
 
@@ -155,9 +167,7 @@ get_group_associations(Id, Groups, Set) ->
     lists:foldl(fun(Group, S) ->
                         case wh_json:get_value([<<"value">>, Id], Group) of
                             'undefined' -> S;
-                            _Else ->
-                                GroupId = wh_json:get_value(<<"id">>, Group),
-                                sets:add_element(GroupId, S)
+                            _Else -> sets:add_element(wh_doc:id(Group), S)
                         end
                 end, Set, Groups).
 
@@ -263,7 +273,10 @@ maybe_start_metaflow(Call) ->
     Call.
 
 -spec maybe_start_endpoint_metaflow(whapps_call:call(), api_binary()) -> 'ok'.
-maybe_start_endpoint_metaflow(_Call, 'undefined') -> 'ok';
+maybe_start_endpoint_metaflow(Call, 'undefined') ->
+    Account = whapps_call:account_id(Call),
+    HackedCall = whapps_call:set_authorizing_id(Account, Call),
+    maybe_start_endpoint_metaflow(HackedCall, Account);
 maybe_start_endpoint_metaflow(Call, EndpointId) ->
     lager:debug("looking up endpoint for ~s", [EndpointId]),
     case cf_endpoint:get(EndpointId, Call) of

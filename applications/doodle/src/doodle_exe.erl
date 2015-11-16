@@ -162,7 +162,7 @@ callid_update(CallId, Call) ->
 
 callid(Srv) when is_pid(Srv) ->
     CallId = gen_server:call(Srv, 'callid', ?MILLISECONDS_IN_SECOND),
-    put('callid', CallId),
+    wh_util:put_callid(CallId),
     CallId;
 callid(Call) ->
     Srv = whapps_call:kvs_fetch('consumer_pid', Call),
@@ -201,10 +201,10 @@ get_all_branch_keys(Call) ->
 
 -spec attempt(whapps_call:call() | pid()) ->
                      {'attempt_resp', 'ok'} |
-                     {'attempt_resp', {'error', term()}}.
+                     {'attempt_resp', {'error', any()}}.
 -spec attempt(wh_json:key(), whapps_call:call() | pid()) ->
                      {'attempt_resp', 'ok'} |
-                     {'attempt_resp', {'error', term()}}.
+                     {'attempt_resp', {'error', any()}}.
 attempt(Srv) -> attempt(<<"_">>, Srv).
 
 attempt(Key, Srv) when is_pid(Srv) ->
@@ -252,7 +252,7 @@ send_amqp(Call, API, PubFun) when is_function(PubFun, 1) ->
 init([Call]) ->
     process_flag('trap_exit', 'true'),
     CallId = whapps_call:call_id(Call),
-    put('callid', CallId),
+    wh_util:put_callid(CallId),
     gen_listener:cast(self(), 'initialize'),
     {'ok', #state{call=Call}}.
 
@@ -363,7 +363,7 @@ handle_cast({'branch', NewFlow}, State) ->
     lager:info("callflow has been branched"),
     {'noreply', launch_cf_module(State#state{flow=NewFlow})};
 handle_cast({'callid_update', NewCallId}, #state{call=Call}=State) ->
-    put('callid', NewCallId),
+    wh_util:put_callid(NewCallId),
     PrevCallId = whapps_call:call_id_direct(Call),
     lager:info("updating callid to ~s (from ~s), catch you on the flip side", [NewCallId, PrevCallId]),
     lager:info("removing call event bindings for ~s", [PrevCallId]),
@@ -389,8 +389,8 @@ handle_cast('initialize', #state{call=Call}) ->
     log_call_information(Call),
     Flow = whapps_call:kvs_fetch('cf_flow', Call),
     Updaters = [fun(C) -> whapps_call:kvs_store('consumer_pid', self(), C) end
-                ,fun(C) -> whapps_call:call_id_helper(fun doodle_exe:callid/2, C) end
-                ,fun(C) -> whapps_call:control_queue_helper(fun doodle_exe:control_queue/2, C) end
+                ,fun(C) -> whapps_call:call_id_helper(fun ?MODULE:callid/2, C) end
+                ,fun(C) -> whapps_call:control_queue_helper(fun ?MODULE:control_queue/2, C) end
                ],
     CallWithHelpers = lists:foldr(fun(F, C) -> F(C) end, Call, Updaters),
     {'noreply', #state{call=CallWithHelpers
@@ -524,7 +524,7 @@ handle_event(JObj, #state{cf_module_pid=PidRef
             {'reply', [{'cf_event_pids', Others}]}
     end.
 
--spec get_pid({pid(), _}) -> pid().
+-spec get_pid({pid(), any()}) -> pid().
 get_pid({Pid, _}) when is_pid(Pid) -> Pid;
 get_pid(_) -> 'undefined'.
 

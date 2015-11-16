@@ -5,7 +5,7 @@ EBINS = $(shell find $(ROOT)/core/whistle-* -maxdepth 2 -name ebin -print) \
 	$(shell find $(ROOT)/deps/lager-* -maxdepth 2 -name ebin -print)
 PA = $(foreach EBIN,$(EBINS),-pa $(EBIN))
 
-ERLC_OPTS = -Werror +debug_info +warn_export_all $(PA)
+ERLC_OPTS += -Werror +debug_info +warn_export_all $(PA)
 
 .PHONY: all compile clean
 
@@ -13,12 +13,11 @@ all: compile
 
 MODULES = $(shell ls src/*.erl | sed 's/src\///;s/\.erl/,/' | sed '$$s/.$$//')
 
-compile: ebin/$(PROJECT).app json
+compile: ebin/$(PROJECT).app json priv/comp128.so
 	@cat src/$(PROJECT).app.src \
 		| sed 's/{modules, \[\]}/{modules, \[$(MODULES)\]}/' \
 		> ebin/$(PROJECT).app
 	-@$(MAKE) ebin/$(PROJECT).app
-	-@$(MAKE) priv/comp128.so
 
 ebin/$(PROJECT).app: src/*.erl
 	@mkdir -p ebin/
@@ -26,13 +25,15 @@ ebin/$(PROJECT).app: src/*.erl
 
 json: JSON = $(shell find priv/couchdb -name *.json -print)
 json:
-	@for jobj in $(JSON); do \
-		echo checking $$jobj; \
-		python2 -c 'import sys,json; json.encoder.FLOAT_REPR=str; data=json.load(open("'$$jobj'")); print json.dumps(data, sort_keys=True, indent=4, separators=(",", ": "))' >$$jobj~ && mv $$jobj~ $$jobj; \
-	done
+	@$(ROOT)/scripts/format-json.sh $(JSON)
+
+ERL_INCLUDES := $(wildcard $(shell dirname `which erl`)/../erts-*/include)
+ifeq ($(ERL_INCLUDES),)
+	ERL_INCLUDES = /usr/lib/erlang/usr/include
+endif
 
 priv/comp128.so: c_src/comp128.c
-	gcc -o priv/comp128.so -I/usr/lib/erlang/usr/include -fpic -shared c_src/comp128.c
+	gcc -I$(ERL_INCLUDES) -fpic -shared c_src/comp128.c -o priv/comp128.so
 
 compile-test: test/$(PROJECT).app
 	@cat src/$(PROJECT).app.src \

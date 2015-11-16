@@ -32,6 +32,7 @@
 -define(MOD_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".devices">>).
 
 -define(CB_LIST, <<"devices/crossbar_listing">>).
+-define(OWNER_LIST, <<"devices/listing_by_owner">>).
 -define(CB_LIST_MAC, <<"devices/listing_by_macaddress">>).
 
 -define(KEY_MAC_ADDRESS, <<"mac_address">>).
@@ -176,6 +177,7 @@ validate(Context, DeviceId, ?QUICKCALL_PATH_TOKEN, _) ->
 
 -spec post(cb_context:context(), path_token()) -> cb_context:context().
 post(Context, DeviceId) ->
+    _ = wh_util:spawn(fun() -> crossbar_util:flush_registration(Context) end),
     case changed_mac_address(Context) of
         'true' ->
             _ = crossbar_util:maybe_refresh_fs_xml('device', Context),
@@ -185,8 +187,7 @@ post(Context, DeviceId) ->
             _ = wh_util:spawn(
                   fun() ->
                           _ = provisioner_util:maybe_provision(Context2),
-                          _ = provisioner_util:maybe_sync_sip_data(Context1, 'device'),
-                          _ = crossbar_util:flush_registration(Context)
+                          _ = provisioner_util:maybe_sync_sip_data(Context1, 'device')
                   end),
             Context2;
         'false' ->
@@ -220,9 +221,29 @@ delete(Context, DeviceId) ->
 %% account summary.
 %% @end
 %%--------------------------------------------------------------------
--spec load_device_summary(cb_context:context()) -> cb_context:context().
+-spec load_device_summary(cb_context:context()) ->
+                                 cb_context:context().
+-spec load_device_summary(cb_context:context(), req_nouns()) ->
+                                 cb_context:context().
 load_device_summary(Context) ->
+    load_device_summary(Context, cb_context:req_nouns(Context)).
+
+load_device_summary(Context, [{<<"devices">>, []}
+                              ,{<<"users">>, [UserId]}
+                             |_]
+                   ) ->
+    load_users_device_summary(Context, UserId);
+load_device_summary(Context, _ReqNouns) ->
     crossbar_doc:load_view(?CB_LIST, [], Context, fun normalize_view_results/2).
+
+-spec load_users_device_summary(cb_context:context(), ne_binary()) ->
+                                       cb_context:context().
+load_users_device_summary(Context, UserId) ->
+    crossbar_doc:load_view(?OWNER_LIST
+                           ,[{'key', UserId}]
+                           ,Context
+                           ,fun normalize_view_results/2
+                          ).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -512,7 +533,7 @@ is_creds_locally_unique(AccountDb, Username, DeviceId) ->
     ViewOptions = [{<<"key">>, wh_util:to_lower_binary(Username)}],
     case couch_mgr:get_results(AccountDb, <<"devices/sip_credentials">>, ViewOptions) of
         {'ok', []} -> 'true';
-        {'ok', [JObj]} -> wh_json:get_value(<<"id">>, JObj) =:= DeviceId;
+        {'ok', [JObj]} -> wh_doc:id(JObj) =:= DeviceId;
         {'error', 'not_found'} -> 'true';
         _ -> 'false'
     end.
@@ -525,7 +546,7 @@ is_creds_global_unique(Realm, Username, DeviceId) ->
                    }],
     case couch_mgr:get_results(?WH_SIP_DB, <<"credentials/lookup">>, ViewOptions) of
         {'ok', []} -> 'true';
-        {'ok', [JObj]} -> wh_json:get_value(<<"id">>, JObj) =:= DeviceId;
+        {'ok', [JObj]} -> wh_doc:id(JObj) =:= DeviceId;
         {'error', 'not_found'} -> 'true';
         _ -> 'false'
     end.
@@ -548,7 +569,7 @@ maybe_aggregate_device(DeviceId, Context, 'success') ->
             maybe_remove_aggregate(DeviceId, Context);
         'true' ->
             lager:debug("adding device to the sip auth aggregate"),
-            {'ok', _} = couch_mgr:ensure_saved(?WH_SIP_DB, wh_json:delete_key(<<"_rev">>, cb_context:doc(Context))),
+            {'ok', _} = couch_mgr:ensure_saved(?WH_SIP_DB, wh_doc:delete_revision(cb_context:doc(Context))),
             whapps_util:amqp_pool_send([], fun(_) -> wapi_switch:publish_reload_acls() end),
             'true'
     end;

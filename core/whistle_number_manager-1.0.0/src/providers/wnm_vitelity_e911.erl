@@ -99,7 +99,7 @@ maybe_update_e911(#number{current_number_doc=CurrentJObj
 
 -spec remove_number(ne_binary()) ->
                            {'ok', _} |
-                           {'error', _}.
+                           {'error', any()}.
 remove_number(DID) ->
     case query_vitelity(wnm_vitelity_util:build_uri(remove_e911_options(DID))) of
         {'error', _}=E -> E;
@@ -118,7 +118,7 @@ remove_e911_options(DID) ->
 
 -spec get_location(ne_binary() | wnm_number()) ->
                           {'ok', wh_json:object()} |
-                          {'error', _}.
+                          {'error', any()}.
 get_location(#number{number=DID}) -> get_location(DID);
 get_location(DID) ->
     case query_vitelity(wnm_vitelity_util:build_uri(get_location_options(DID))) of
@@ -173,12 +173,11 @@ get_unit(ExtendedAddress) ->
 
 -spec get_account_name(ne_binary()) -> api_binary().
 get_account_name(AccountId) ->
-    AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
-    case couch_mgr:open_cache_doc(AccountDb, AccountId) of
+    case kz_account:fetch(AccountId) of
         {'error', _Error} ->
-            lager:error('error opening ~p in ~p', [AccountId, AccountDb]),
+            lager:error('error opening account doc ~s', [AccountId]),
             'undefined';
-        {'ok', JObj} -> wh_json:get_value(<<"name">>, JObj, 'undefined')
+        {'ok', JObj} -> kz_account:name(JObj)
     end.
 
 -spec is_valid_location(wh_json:object()) ->
@@ -216,7 +215,7 @@ query_vitelity(N, URI) ->
 
 -spec query_vitelity(ne_binary()) ->
                             {'ok', text()} |
-                            {'error', _}.
+                            {'error', any()}.
 query_vitelity(URI) ->
     lager:debug("querying ~s", [URI]),
     case ibrowse:send_req(wh_util:to_list(URI), [], 'post') of

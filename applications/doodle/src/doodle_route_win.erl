@@ -23,34 +23,23 @@
 -define(RESTRICTED_MSG, <<"endpoint is restricted from making this call">>).
 -define(SCHEDULED(Call), whapps_call:custom_channel_var(<<"Scheduled-Delivery">>, 0, Call)).
 
--export([handle_req/2
-         ,maybe_replay_sms/2
+-export([execute_text_flow/2
         ]).
 
--spec handle_req(wh_json:object(), wh_proplist()) -> any().
-handle_req(JObj, _Options) ->
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
-    put('callid', CallId),
-    lager:info("doodle has received a route win, taking control of the call"),
-    case whapps_call:retrieve(CallId) of
-        {'ok', Call} -> maybe_scheduled_delivery(JObj, Call);
-        {'error', R} ->
-            lager:info("unable to find callflow during second lookup (HUH?) ~p", [R])
-    end.
-
--spec maybe_scheduled_delivery(wh_json:object(), whapps_call:call()) -> 'ok' | {'ok', pid()}.
-maybe_scheduled_delivery(JObj, Call) ->
+-spec execute_text_flow(wh_json:object(), whapps_call:call()) -> 'ok' | {'ok', pid()}.
+execute_text_flow(JObj, Call) ->
     case should_restrict_call(Call) of
         'true' ->
-            lager:debug("endpoint is restricted from making this call, terminate", []),
+            lager:debug("endpoint is restricted from sending this text, terminate", []),
             _ = send_service_unavailable(JObj, Call),
             doodle_util:save_sms(doodle_util:set_flow_error(<<"error">>, ?RESTRICTED_MSG, Call)),
             'ok';
         'false' ->
             maybe_scheduled_delivery(JObj, Call, ?SCHEDULED(Call) , wh_util:current_tstamp())
-    end.        
+    end.
 
--spec maybe_scheduled_delivery(wh_json:object(), whapps_call:call(), integer(), integer() ) -> whapps_call:call() | {'ok', pid()}.
+-spec maybe_scheduled_delivery(wh_json:object(), whapps_call:call(), integer(), integer()) ->
+                                      whapps_call:call() | {'ok', pid()}.
 maybe_scheduled_delivery(_JObj, Call, DeliveryAt, Now)
   when DeliveryAt > Now ->
     lager:info("scheduling sms delivery"),
@@ -63,21 +52,8 @@ maybe_scheduled_delivery(_JObj, Call, DeliveryAt, Now)
     Call1 = whapps_call:kvs_store(<<"flow_schedule">>, wh_json:from_list(Schedule), Call),
     doodle_util:save_sms(doodle_util:set_flow_status(<<"pending">>, Call1));
 maybe_scheduled_delivery(JObj, Call, _, _) ->
-    lager:info("setting initial information about the call"),
+    lager:info("setting initial information about the text"),
     bootstrap_callflow_executer(JObj, Call).
-
--spec maybe_replay_sms(wh_json:object(), whapps_call:call()) -> 'ok' | {'ok', pid()}.
-maybe_replay_sms(JObj, Call) ->
-    case should_restrict_call(Call) of
-        'true' ->
-            lager:debug("endpoint is restricted from making this call, terminate", []),
-            _ = send_service_unavailable(JObj, Call),
-            doodle_util:save_sms(doodle_util:set_flow_error(<<"error">>, ?RESTRICTED_MSG, Call)),
-            'ok';
-        'false' ->
-            lager:info("setting initial information about the call"),
-            bootstrap_callflow_executer(JObj, Call)
-    end.
 
 -spec should_restrict_call(whapps_call:call()) -> boolean().
 should_restrict_call(Call) ->
@@ -90,7 +66,7 @@ should_restrict_call(Call) ->
 
 -spec maybe_service_unavailable(wh_json:object(), whapps_call:call()) -> boolean().
 maybe_service_unavailable(JObj, Call) ->
-    Id = wh_json:get_value(<<"_id">>, JObj),
+    Id = wh_doc:id(JObj),
     Services = wh_json:merge_recursive(
                  wh_json:get_value(<<"services">>, JObj, ?DEFAULT_SERVICES),
                  wh_json:get_value(<<"pvt_services">>, JObj, wh_json:new())),
@@ -105,8 +81,7 @@ maybe_service_unavailable(JObj, Call) ->
 -spec maybe_account_service_unavailable(wh_json:object(), whapps_call:call()) -> boolean().
 maybe_account_service_unavailable(JObj, Call) ->
     AccountId = whapps_call:account_id(Call),
-    AccountDb = whapps_call:account_db(Call),
-    {'ok', Doc} = couch_mgr:open_cache_doc(AccountDb, AccountId),
+    {'ok', Doc} = kz_account:fetch(AccountId),
     Services = wh_json:merge_recursive(
                  wh_json:get_value(<<"services">>, Doc, ?DEFAULT_SERVICES),
                  wh_json:get_value(<<"pvt_services">>, Doc, wh_json:new())),
@@ -187,7 +162,7 @@ get_group_associations(Id, Groups, Set) ->
                         case wh_json:get_value([<<"value">>, Id], Group) of
                             'undefined' -> S;
                             _Else ->
-                                GroupId = wh_json:get_value(<<"id">>, Group),
+                                GroupId = wh_doc:id(Group),
                                 sets:add_element(GroupId, S)
                         end
                 end, Set, Groups).

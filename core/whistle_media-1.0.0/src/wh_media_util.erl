@@ -184,6 +184,7 @@ convert_stream_type(_) -> <<"single">>.
 media_path(Path) -> media_path(Path, 'undefined').
 
 media_path('undefined', _AccountId) -> 'undefined';
+media_path(<<>>, _AccountId) -> 'undefined';
 media_path(<<"/system_media", _/binary>> = Path, _AccountId) -> Path;
 media_path(<<"system_media", _/binary>> = Path, _AccountId) -> Path;
 media_path(<<"local_stream://",_/binary>> = Path, _AccountId) -> Path;
@@ -411,6 +412,7 @@ default_prompt_language(Default) ->
      ).
 
 -spec prompt_language(api_binary()) -> ne_binary().
+prompt_language(?WH_MEDIA_DB) -> default_prompt_language();
 prompt_language(AccountId) ->
     prompt_language(AccountId, default_prompt_language()).
 

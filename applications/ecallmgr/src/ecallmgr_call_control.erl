@@ -219,7 +219,7 @@ handle_conference_command(JObj, Props) ->
 -spec handle_call_events(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_call_events(JObj, Props) ->
     Srv = props:get_value('server', Props),
-    put('callid', wh_json:get_value(<<"Call-ID">>, JObj)),
+    wh_util:put_callid(wh_json:get_value(<<"Call-ID">>, JObj)),
     case wh_json:get_value(<<"Event-Name">>, JObj) of
         <<"usurp_control">> ->
             case wh_json:get_value(<<"Fetch-ID">>, JObj)
@@ -253,7 +253,7 @@ handle_control_queue_req(JObj, Props) ->
 %% @end
 %%--------------------------------------------------------------------
 init([Node, CallId, FetchId, ControllerQ, CCVs]) ->
-    put('callid', CallId),
+    wh_util:put_callid(CallId),
     lager:debug("starting call control listener"),
     gen_listener:cast(self(), 'init'),
     {'ok', #state{node=Node
@@ -587,7 +587,7 @@ handle_channel_destroyed(_,  #state{sanity_check_tref=SCTRef
     %% channel_destory (the last event we will ever receive from freeswitch for this call)
     %% then create an error and force advance. This will happen with dialplan actions that
     %% have not been executed on freeswitch but were already queued (for example in xferext).
-    %% Commonly events like masquerade, noop, ect
+    %% Commonly events like masquerade, noop, etc
     _ = case CurrentApp =:= 'undefined'
             orelse is_post_hangup_command(CurrentApp)
         of
@@ -645,7 +645,7 @@ handle_execute_complete(<<"noop">>, JObj, #state{msg_id=CurrMsgId}=State) ->
     NoopId = wh_json:get_value(<<"Application-Response">>, JObj),
     case NoopId =:= CurrMsgId of
         'false' ->
-            lager:debug("recieved noop execute complete with incorrect id ~s (expecting ~s)"
+            lager:debug("received noop execute complete with incorrect id ~s (expecting ~s)"
                         ,[NoopId, CurrMsgId]
                        ),
             State;
@@ -735,7 +735,7 @@ handle_sofia_replaced(ReplacedBy, #state{call_id=CallId
     unreg_for_call_related_events(CallId),
     gen_listener:rm_binding(self(), 'call', [{'callid', CallId}]),
 
-    put('callid', ReplacedBy),
+    wh_util:put_callid(ReplacedBy),
     bind_to_events(Node, ReplacedBy),
     reg_for_call_related_events(ReplacedBy),
     gen_listener:add_binding(self(), 'call', [{'callid', ReplacedBy}]),
@@ -1103,7 +1103,7 @@ execute_control_request(Cmd, #state{node=Node
                                     ,call_id=CallId
                                     ,other_legs=OtherLegs
                                    }) ->
-    put('callid', CallId),
+    wh_util:put_callid(CallId),
     Srv = self(),
 
     lager:debug("executing call command '~s' ~s"
@@ -1199,7 +1199,7 @@ send_error_resp(CallId, Cmd, Msg) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_keep_alive_ref(state()) -> 'undefined' | reference().
+-spec get_keep_alive_ref(state()) -> api_reference().
 get_keep_alive_ref(#state{is_call_up='true'}) -> 'undefined';
 get_keep_alive_ref(#state{keep_alive_ref='undefined'
                           ,is_call_up='false'

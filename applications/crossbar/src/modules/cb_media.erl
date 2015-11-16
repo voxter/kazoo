@@ -463,7 +463,7 @@ maybe_update_tts(Context, Text, Voice, 'success') ->
             crossbar_doc:delete(Context),
             crossbar_util:response('error', wh_util:to_binary(Reason), Context);
         {'ok', ContentType, Content} ->
-            MediaId = wh_json:get_value(<<"_id">>, JObj),
+            MediaId = wh_doc:id(JObj),
             Headers = wh_json:from_list([{<<"content_type">>, ContentType}
                                          ,{<<"content_length">>, iolist_size(Content)}
                                         ]),
@@ -669,7 +669,7 @@ language_start_key(_Context, Language, _Key) ->
 
 -spec normalize_language_results(wh_json:object(), ne_binaries()) -> ne_binaries().
 normalize_language_results(JObj, Acc) ->
-    [wh_json:get_value(<<"id">>, JObj) | Acc].
+    [wh_doc:id(JObj) | Acc].
 
 %%--------------------------------------------------------------------
 %% @private
@@ -759,7 +759,7 @@ normalize_prompt_results(JObj, Acc) ->
             As -> not wh_json:is_empty(As)
         end,
     [wh_json:from_list(
-       [{<<"id">>, wh_json:get_value(<<"id">>, JObj)}
+       [{<<"id">>, wh_doc:id(JObj)}
         ,{<<"has_attachments">>, HasAttachments}
        ])
      | Acc
@@ -821,7 +821,7 @@ check_media_schema(MediaId, Context) ->
     cb_context:validate_request_data(<<"media">>, Context, OnSuccess).
 
 on_successful_validation('undefined', Context) ->
-    Props = [{<<"pvt_type">>, <<"media">>}
+    Props = [{<<"pvt_type">>, kzd_media:type()}
              ,{<<"media_source">>, <<"upload">>}
              | maybe_add_prompt_fields(Context)
             ],
@@ -848,14 +848,14 @@ validate_prompt(MediaId, Context, PromptId) ->
                        ,[PromptId, MediaId]
                       ),
             cb_context:add_validation_error(
-                <<"prompt_id">>
-                ,<<"invalid">>
-                ,wh_json:from_list([
-                    {<<"message">>, <<"Changing the prompt_id on an existing prompt is not allowed">>}
-                    ,{<<"cause">>, PromptId}
+              <<"prompt_id">>
+              ,<<"invalid">>
+              ,wh_json:from_list(
+                 [{<<"message">>, <<"Changing the prompt_id on an existing prompt is not allowed">>}
+                  ,{<<"cause">>, PromptId}
                  ])
-                ,Context
-            )
+              ,Context
+             )
     end.
 
 -spec maybe_add_prompt_fields(cb_context:context()) -> wh_proplist().
