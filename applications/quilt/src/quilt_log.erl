@@ -18,6 +18,7 @@
 
 handle_event(JObj) ->
     Event = {wh_json:get_value(<<"Event-Category">>, JObj), wh_json:get_value(<<"Event-Name">>, JObj)},
+    lager:debug("processing event: ~p", [Event]),
     handle_specific_event(Event, JObj).
 
 %%
@@ -36,6 +37,7 @@ handle_specific_event({<<"acdc_call_stat">>, <<"waiting">>}, JObj) ->
 handle_specific_event({<<"acdc_call_stat">>, <<"exited-position">>}, JObj) ->
     {AccountId, CallId, QueueId, QueueName, BridgedChannel} = get_common_props(JObj),
     Call = acdc_stats:find_call(CallId),
+    lager:debug("exited queue call lookup: ~p", [Call]),
     Ev = {wh_json:get_value(<<"Status">>, Call), wh_json:get_value(<<"Abandoned-Reason">>, Call)},
     case Ev of
         {<<"abandoned">>, <<"member_hangup">>} -> 
