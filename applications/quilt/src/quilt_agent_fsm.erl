@@ -30,6 +30,7 @@ start_link(Agent) ->
 %%
 
 init(Agent) ->
+    process_flag('trap_exit', 'true'),
     {'ok', 'started', Agent}.
 
 handle_event(Event, StateName, State) ->
@@ -65,6 +66,8 @@ handle_sync_event(Event, _From, StateName, State) ->
     {'reply', 'ok', StateName, State}.
 
 handle_info({'$gen_cast', _}, StateName, State) ->
+    {'next_state', StateName, State};
+handle_info({'EXIT', _Pid, _Reason}, StateName, State) ->
     {'next_state', StateName, State};
 handle_info(Info, StateName, State) ->
     lager:debug("unhandled info in state ~s: ~p", [StateName, Info]),
