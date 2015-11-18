@@ -878,7 +878,7 @@ ringing({'channel_answered', JObj}=Evt, #state{agent_call_id=ACallId
             case is_list(OutboundCallIds) andalso lists:member(OtherCallId, OutboundCallIds) of
                 'true' ->
                     lager:debug("agent picked up outbound call ~s instead of the queue call ~s", [OtherCallId, MemberCallId]),
-                    acdc_agent_listener:hangup_call(AgentListener),
+                    acdc_agent_listener:hangup_call(AgentListener, 'send_retry'),
                     {'next_state'
                      ,'outbound'
                      ,start_outbound_call_handling(OtherCallId
@@ -1373,8 +1373,14 @@ paused({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentLis
 paused({'member_connect_win', _, 'different_node'}, State) ->
     lager:debug("received member_connect_win for different node (paused)"),
     {'next_state', 'paused', State};
-paused({'originate_uuid', ACallId, ACtrlQ}, #state{ignored_agent_calls=IgnoredAgentCalls}=State) ->
+paused({'originate_uuid', ACallId, ACtrlQ}, #state{agent_listener=AgentListener
+                                                   ,ignored_agent_calls=IgnoredAgentCalls
+                                                  }=State) ->
     lager:debug("recv originate_uuid for agent call ~s(~s)", [ACallId, ACtrlQ]),
+    %% Register the originate_uuid from previous agent call, and hang it up right away
+    %% (the only way to get here was to try to enter pause while already in ringing state)
+    acdc_agent_listener:originate_uuid(AgentListener, ACallId, ACtrlQ),
+    acdc_agent_listener:hangup_call(AgentListener, 'no_retry'),
     IgnoredAgentCalls1 = [ACallId | IgnoredAgentCalls],
     {'next_state', 'paused', State#state{ignored_agent_calls=IgnoredAgentCalls1}};
 paused(?NEW_CHANNEL_FROM(CallId), State) ->
@@ -1586,7 +1592,7 @@ handle_event({'pause', Timeout}, 'ringing', #state{agent_listener=AgentListener
                                                    ,member_call_id=CallId
                                                   }=State) ->
     %% Give up the current ringing call
-    acdc_agent_listener:hangup_call(AgentListener),
+    acdc_agent_listener:hangup_call(AgentListener, 'send_retry'),
     lager:debug("stopping ringing agent in order to move to pause"),
     acdc_stats:call_missed(AccountId, QueueId, AgentId, CallId, <<"agent pausing">>),
     NewFSMState = clear_call(State, 'failed'),
@@ -1594,7 +1600,7 @@ handle_event({'pause', Timeout}, 'ringing', #state{agent_listener=AgentListener
     handle_event({'pause', Timeout}, 'ready', NewFSMState);
 handle_event({'pause', <<"infinity">>}, 'ready', State) ->
     lager:debug("recv status update:, pausing for up to infinity s"),
-    State1 = handle_pause(<<"infinity">>, State),
+    State1 = handle_pause('infinity', State),
     apply_state_updates(State1);
 handle_event({'pause', Timeout}, 'ready', State) ->
     lager:debug("recv status update: pausing for up to ~b s", [Timeout]),
