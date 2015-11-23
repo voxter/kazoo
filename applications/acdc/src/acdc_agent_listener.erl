@@ -27,7 +27,6 @@
          ,originate_execute/2
          ,originate_uuid/3
          ,outbound_call/2
-         ,outbound_invalid/2
          ,send_sync_req/1
          ,send_sync_resp/3, send_sync_resp/4
          ,config/1, refresh_config/2
@@ -282,10 +281,6 @@ originate_uuid(Srv, UUID, CtlQ) ->
 
 outbound_call(Srv, CallId) ->
     gen_listener:cast(Srv, {'outbound_call', CallId}).
-
--spec outbound_invalid(pid(), ne_binary()) -> 'ok'.
-outbound_invalid(Srv, CallId) ->
-    gen_listener:cast(Srv, {'outbound_invalid', CallId}).
 
 send_sync_req(Srv) -> gen_listener:cast(Srv, {'send_sync_req'}).
 
@@ -854,14 +849,6 @@ handle_cast({'outbound_call', CallId}, State) ->
 
     lager:debug("bound to agent's outbound call ~s", [CallId]),
     {'noreply', State#state{call=whapps_call:set_call_id(CallId, whapps_call:new())}, 'hibernate'};
-
-handle_cast({'outbound_invalid', CallId}, State) ->
-    _ = wh_util:put_callid(CallId),
-    lager:debug("unbinding from invalid outbound ~s caused by delayed originate", [CallId]),
-    acdc_util:unbind_from_call_events(CallId),
-    {'noreply', State#state{call='undefined'
-                            ,agent_call_ids=[]
-                           }};
 
 handle_cast({'send_sync_req'}, #state{my_id=MyId
                                       ,my_q=MyQ
