@@ -1673,7 +1673,7 @@ handle_event({'pause', Timeout}, 'ringing', #state{agent_listener=AgentListener
     handle_event({'pause', Timeout}, 'ready', NewFSMState);
 handle_event({'pause', <<"infinity">>}, 'ready', State) ->
     lager:debug("recv status update:, pausing for up to infinity s"),
-    State1 = handle_pause(<<"infinity">>, State),
+    State1 = handle_pause('infinity', State),
     apply_state_updates(State1);
 handle_event({'pause', Timeout}, 'ready', State) ->
     lager:debug("recv status update: pausing for up to ~b s", [Timeout]),
