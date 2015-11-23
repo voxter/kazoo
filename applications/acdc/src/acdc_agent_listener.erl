@@ -18,7 +18,7 @@
          ,agent_timeout/1
          ,redial_member/7
          ,bridge_to_member/6
-         ,hangup_call/2
+         ,hangup_call/1
          ,replace_call/2
          ,monitor_call/4
          ,channel_hungup/2
@@ -27,7 +27,6 @@
          ,originate_execute/2
          ,originate_uuid/3
          ,outbound_call/2
-         ,outbound_invalid/2
          ,send_sync_req/1
          ,send_sync_resp/3, send_sync_resp/4
          ,config/1, refresh_config/2
@@ -246,9 +245,9 @@ member_connect_accepted(Srv, ACallId, MemberCall) ->
 redial_member(Srv, Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number) ->
     gen_listener:cast(Srv, {'redial_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number}).
 
--spec hangup_call(pid(), 'send_retry' | 'no_retry') -> 'ok'.
-hangup_call(Srv, ShouldRetry) ->
-    gen_listener:cast(Srv, {'hangup_call', ShouldRetry}).
+-spec hangup_call(pid()) -> 'ok'.
+hangup_call(Srv) ->
+    gen_listener:cast(Srv, {'hangup_call'}).
 
 -spec bridge_to_member(pid(), whapps_call:call(), wh_json:object()
                        ,wh_json:objects(), api_binary(), api_binary()
@@ -282,10 +281,6 @@ originate_uuid(Srv, UUID, CtlQ) ->
 
 outbound_call(Srv, CallId) ->
     gen_listener:cast(Srv, {'outbound_call', CallId}).
-
--spec outbound_invalid(pid(), ne_binary()) -> 'ok'.
-outbound_invalid(Srv, CallId) ->
-    gen_listener:cast(Srv, {'outbound_invalid', CallId}).
 
 send_sync_req(Srv) -> gen_listener:cast(Srv, {'send_sync_req'}).
 
@@ -785,25 +780,20 @@ handle_cast({'member_connect_resp', ReqJObj}, #state{agent_id=AgentId
              ,'hibernate'}
     end;
 
-handle_cast({'hangup_call', ShouldRetry}, #state{my_id=MyId
-                                                 ,msg_queue_id=Server
-                                                 ,agent_call_ids=ACallIds
-                                                 ,call=Call
-                                                 ,agent_id=AgentId
-                                                }=State) ->
+handle_cast({'hangup_call'}, #state{my_id=MyId
+                                    ,msg_queue_id=Server
+                                    ,agent_call_ids=ACallIds
+                                    ,call=Call
+                                    ,agent_id=AgentId
+                                   }=State) ->
     %% Hangup this agent's calls
     lager:debug("agent FSM requested a hangup of the agent call, sending retry"),
     _ = filter_agent_calls(ACallIds, AgentId),
 
     %% Pass the call on to another agent
-    case ShouldRetry of
-        'send_retry' ->
-            CallId = whapps_call:call_id(Call),
-            send_member_connect_retry(Server, CallId, MyId, AgentId),
-            acdc_util:unbind_from_call_events(CallId),
-            lager:debug("sent retry for member call ~s", [CallId]);
-        'no_retry' -> 'ok'
-    end,
+    CallId = whapps_call:call_id(Call),
+    send_member_connect_retry(Server, CallId, MyId, AgentId),
+    acdc_util:unbind_from_call_events(CallId),
 
     put('callid', AgentId),
     {'noreply', State#state{call='undefined'
@@ -859,14 +849,6 @@ handle_cast({'outbound_call', CallId}, State) ->
 
     lager:debug("bound to agent's outbound call ~s", [CallId]),
     {'noreply', State#state{call=whapps_call:set_call_id(CallId, whapps_call:new())}, 'hibernate'};
-
-handle_cast({'outbound_invalid', CallId}, State) ->
-    _ = wh_util:put_callid(CallId),
-    lager:debug("unbinding from invalid outbound ~s caused by delayed originate", [CallId]),
-    acdc_util:unbind_from_call_events(CallId),
-    {'noreply', State#state{call='undefined'
-                            ,agent_call_ids=[]
-                           }};
 
 handle_cast({'send_sync_req'}, #state{my_id=MyId
                                       ,my_q=MyQ
