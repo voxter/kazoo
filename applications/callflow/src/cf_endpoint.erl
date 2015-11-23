@@ -1261,7 +1261,7 @@ generate_sip_headers(Endpoint, Acc, Call) ->
     Inception = whapps_call:inception(Call),
 
     HeaderFuns = [fun maybe_add_sip_headers/1
-                  ,fun(J) -> maybe_add_alert_info(J, Endpoint, Inception) end
+                  ,fun(J) -> maybe_add_alert_info(J, Endpoint, Call) end
                   ,fun(J) -> maybe_add_aor(J, Endpoint, Call) end
                   ,fun(J) -> maybe_add_diversion(J, Endpoint, Inception, Call) end
                  ],
@@ -1288,13 +1288,20 @@ maybe_add_sip_headers(JObj) ->
         CustomHeaders -> wh_json:merge_jobjs(CustomHeaders, JObj)
     end.
 
--spec maybe_add_alert_info(wh_json:object(), wh_json:object(), api_binary()) -> wh_json:object().
-maybe_add_alert_info(JObj, Endpoint, 'undefined') ->
+-spec maybe_add_alert_info(wh_json:object(), wh_json:object(), whapps_call:call()) -> wh_json:object().
+maybe_add_alert_info(JObj, Endpoint, Call) ->
+    case whapps_call:custom_sip_header(<<"Alert-Info">>, Call) of
+        'undefined' -> maybe_inception_alert_info(JObj, Endpoint, whapps_call:inception(Call));
+        Ringtone -> wh_json:set_value(<<"Alert-Info">>, Ringtone, JObj)
+    end.
+
+-spec maybe_inception_alert_info(wh_json:object(), wh_json:object(), api_binary()) -> wh_json:object().
+maybe_inception_alert_info(JObj, Endpoint, 'undefined') ->
     case wh_json:get_value([<<"ringtones">>, <<"internal">>], Endpoint) of
         'undefined' -> JObj;
         Ringtone -> wh_json:set_value(<<"Alert-Info">>, Ringtone, JObj)
     end;
-maybe_add_alert_info(JObj, Endpoint, _Inception) ->
+maybe_inception_alert_info(JObj, Endpoint, _Inception) ->
     case wh_json:get_value([<<"ringtones">>, <<"external">>], Endpoint) of
         'undefined' -> JObj;
         Ringtone -> wh_json:set_value(<<"Alert-Info">>, Ringtone, JObj)
