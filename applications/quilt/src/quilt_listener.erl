@@ -73,7 +73,7 @@ handle_info(Info, State) ->
     {'noreply', State}.
 
 handle_event(JObj, _State) ->
-    file:write_file(<<"/tmp/queue_log_raw">>, io_lib:fwrite("~p\n", [JObj]), ['append']), %% REMOVE/COMMENT OUT THIS LINE FOR PRODUCTION
+    %%file:write_file(<<"/tmp/queue_log_raw">>, io_lib:fwrite("~p\n", [JObj]), ['append']), %% REMOVE/COMMENT OUT THIS LINE FOR PRODUCTION
     handle_specific_event(wh_json:get_value(<<"Event-Name">>, JObj), JObj),
     {'noreply', []}.
 
@@ -136,12 +136,12 @@ handle_specific_event(<<"CHANNEL_BRIDGE">>, JObj) ->
         Call -> wh_json:get_value(<<"Agent-ID">>, Call)
     end,
     case AgentId of
-        'undefined' -> lager:debug("missing agent id");
+        'undefined' -> AgentId; %lager:debug("missing agent id");
         _ ->
-            lager:debug("detected channel bridge, checking for transfer (account: ~p, agent: ~p, call-id: ~p)", [AccountId, AgentId, CallId]),
+            %lager:debug("detected channel bridge, checking for transfer (account: ~p, agent: ~p, call-id: ~p)", [AccountId, AgentId, CallId]),
             StoredState = quilt_store:get(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
             case StoredState of
-                'undefined' -> lager:debug("unable to find any existing stored state for this call, ignoring...", []);
+                'undefined' -> StoredState; %lager:debug("unable to find any existing stored state for this call, ignoring...", []);
                 {"TRANSFERRED", CallId} -> % Call-ID matches a transferred call, log TRANSFER event
                     quilt_sup:stop_member_fsm(CallId),
                     quilt_log:handle_event(JObj);
@@ -179,11 +179,11 @@ handle_specific_event(<<"CHANNEL_BRIDGE">>, JObj) ->
 handle_specific_event(<<"CHANNEL_DESTROY">>, JObj) ->
     AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
     AgentId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Owner-ID">>], JObj),
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    _CallId = wh_json:get_value(<<"Call-ID">>, JObj),
     case AgentId of
-        'undefined' -> lager:debug("missing agent id");
+        'undefined' -> AgentId; %lager:debug("missing agent id");
         _ ->
-            lager:debug("detected channel destroy, checking for cancelled transfer (account: ~p, agent: ~p, call-id: ~p)", [AccountId, AgentId, CallId]),
+            %lager:debug("detected channel destroy, checking for cancelled transfer (account: ~p, agent: ~p, call-id: ~p)", [AccountId, AgentId, CallId]),
             StoredState = quilt_store:get(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
             case StoredState of
                 {"OUTBOUND", StoredCallId} ->
@@ -197,7 +197,7 @@ handle_specific_event(<<"CHANNEL_DESTROY">>, JObj) ->
                             quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]), NewState);
                         _ -> lager:debug("unable to find any transfer history for this call, ignoring...", [])
                     end;
-                _ -> lager:debug("unable to find any existing stored state for this call, ignoring...", [])
+                _ -> StoredState %lager:debug("unable to find any existing stored state for this call, ignoring...", [])
         end
     end;
 
@@ -208,7 +208,7 @@ handle_specific_event(<<"wrapup">>, JObj) ->
     lager:debug("agent wrapup, checking state for call transfer: ~p", [StoredState]),
     case StoredState of
         {"OUTBOUND", StoredCallId} ->
-            lager:debug("acdc call stats: ~p", [acdc_stats:find_call(StoredCallId)]),
+            %lager:debug("acdc call stats: ~p", [acdc_stats:find_call(StoredCallId)]),
             lager:debug("updating state to: ~p", [{"TRANSFERRED", StoredCallId}]),
             quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
             quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]), {"TRANSFERRED", StoredCallId});
@@ -286,6 +286,5 @@ handle_specific_event(<<"resume">>, JObj) ->
             lager:debug("unexpected return value when looking up FSM: ~p", [Else])
     end;
 
-
 handle_specific_event(_, JObj) ->
-    quilt_log:handle_event(JObj).
+      quilt_log:handle_event(JObj).
