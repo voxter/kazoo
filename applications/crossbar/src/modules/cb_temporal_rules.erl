@@ -180,7 +180,12 @@ summary(Context) ->
 on_successful_validation('undefined', Context) ->
     cb_context:set_doc(Context, wh_doc:set_type(cb_context:doc(Context), <<"temporal_rule">>));
 on_successful_validation(Id, Context) ->
-    crossbar_doc:load_merge(Id, Context).
+    Context1 = crossbar_doc:load_merge(Id, Context),
+    Doc = case wh_json:get_value(<<"enabled">>, cb_context:doc(Context)) of
+        'undefined' -> wh_json:delete_key(<<"enabled">>, cb_context:doc(Context1));
+        _ -> cb_context:doc(Context1)
+    end,
+    cb_context:set_doc(Context, Doc).
 
 %%--------------------------------------------------------------------
 %% @private
