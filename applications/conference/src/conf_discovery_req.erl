@@ -244,17 +244,35 @@ handle_search_resp(JObj, Conference, Call, Srv) ->
 maybe_play_name(Conference, Call, Srv) ->
     case whapps_conference:play_name_on_join(Conference) of
         'true' ->
-            PronouncedName = case conf_pronounced_name:lookup_name(Call) of
-                                 'undefined' ->
-                                     lager:debug("Recording pronunciation of the name"),
-                                     conf_pronounced_name:record(Call);
-                                 Value ->
-                                     lager:debug("has pronounced name: ~p", [Value]),
-                                     Value
-                             end,
+            PronouncedName = maybe_reuse_pronounced_name(whapps_conference:reuse_pronounced_name(Conference), Call),
             conf_participant:set_name_pronounced(PronouncedName, Srv);
         'false' -> 'ok'
     end.
+
+-spec maybe_reuse_pronounced_name(atom(), whapps_call:call()) -> conf_pronounced_name:name_pronounced().
+maybe_reuse_pronounced_name('undefined', Call) ->
+    case whapps_config:get_is_true(?CONFIG_CAT, <<"reuse_pronounced_name">>, 'false') of
+        'true' -> reuse_pronounced_name(Call);
+        'false' -> record_pronounced_name(Call)
+    end;
+maybe_reuse_pronounced_name('true', Call) ->
+    reuse_pronounced_name(Call);
+maybe_reuse_pronounced_name('false', Call) ->
+    record_pronounced_name(Call).
+
+-spec reuse_pronounced_name(whapps_call:call()) -> conf_pronounced_name:name_pronounced().
+reuse_pronounced_name(Call) ->
+    case conf_pronounced_name:lookup_name(Call) of
+        'undefined' -> record_pronounced_name(Call);
+        Value ->
+            lager:debug("has pronounced name: ~p", [Value]),
+            Value
+    end.
+
+-spec record_pronounced_name(whapps_call:call()) -> conf_pronounced_name:name_pronounced().
+record_pronounced_name(Call) ->
+    lager:debug("Recording pronunciation of the name"),
+    conf_pronounced_name:record(Call).
 
 -spec add_participant_to_conference(wh_json:object(), whapps_conference:conference(), whapps_call:call(), pid()) -> 'ok'.
 add_participant_to_conference(JObj, Conference, Call, Srv) ->

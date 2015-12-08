@@ -41,6 +41,7 @@
 -export([play_exit_tone/1, set_play_exit_tone/2]).
 -export([play_entry_tone/1, set_play_entry_tone/2]).
 -export([play_welcome/1, set_play_welcome/2]).
+-export([reuse_pronounced_name/1, set_reuse_pronounced_name/2]).
 -export([conference_doc/1, set_conference_doc/2]).
 -export([call/1, set_call/2]).
 
@@ -91,6 +92,7 @@
           ,play_exit_tone = 'true' :: tone()                  %% Play tone telling caller they have left the conference
           ,play_entry_tone = 'true' :: tone()                 %% Play tone telling caller they have entered the conference
           ,play_welcome = 'true' :: boolean()                 %% Play prompt welcoming caller to the conference
+          ,reuse_pronounced_name :: api_boolean()             %% whether we should use the previous name recording for the extension calling in
           ,conference_doc :: wh_json:object()                 %% the complete conference doc used to create the record (when and if)
           ,app_name = <<"whapps_conference">> :: ne_binary()  %% The application name used during whapps_conference_command
           ,app_version = <<"1.0.0">> :: ne_binary()           %% The application version used during whapps_conference_command
@@ -136,6 +138,7 @@ from_json(JObj, Conference) ->
       ,play_exit_tone = get_tone(wh_json:get_value(<<"Play-Exit-Tone">>, JObj, play_exit_tone(Conference)))
       ,play_entry_tone = get_tone(wh_json:get_value(<<"Play-Entry-Tone">>, JObj, play_entry_tone(Conference)))
       ,play_welcome = wh_json:is_true(<<"Play-Welcome">>, JObj, play_welcome(Conference))
+      ,reuse_pronounced_name = wh_json:is_true(<<"Reuse-Pronounced-Name">>, JObj, reuse_pronounced_name(Conference))
       ,conference_doc = wh_json:is_true(<<"Conference-Doc">>, JObj, conference_doc(Conference))
       ,kvs = orddict:merge(fun(_, _, V2) -> V2 end, Conference#whapps_conference.kvs, KVS)
       ,call = load_call(JObj, call(Conference))
@@ -188,6 +191,7 @@ to_proplist(#whapps_conference{}=Conference) ->
      ,{<<"Play-Exit-Tone">>, play_exit_tone(Conference)}
      ,{<<"Play-Entry-Tone">>, play_entry_tone(Conference)}
      ,{<<"Play-Welcome">>, play_welcome(Conference)}
+     ,{<<"Reuse-Pronounced-Name">>, reuse_pronounced_name(Conference)}
      ,{<<"Conference-Doc">>, conference_doc(Conference)}
      ,{<<"Key-Value-Store">>, kvs_to_proplist(Conference)}
      ,{<<"Call">>, whapps_call:to_json(call(Conference))}
@@ -221,6 +225,7 @@ from_conference_doc(JObj, Conference) ->
       ,play_exit_tone = get_tone(wh_json:get_value(<<"play_exit_tone">>, JObj, play_exit_tone(Conference)))
       ,play_entry_tone = get_tone(wh_json:get_value(<<"play_entry_tone">>, JObj, play_entry_tone(Conference)))
       ,play_welcome = wh_json:is_true(<<"play_welcome">>, JObj, play_welcome(Conference))
+      ,reuse_pronounced_name = wh_json:is_true(<<"reuse_pronounced_name">>, JObj, reuse_pronounced_name(Conference))
       ,moderator_join_muted = wh_json:is_true(<<"join_muted">>, Moderator, moderator_join_muted(Conference))
       ,moderator_join_deaf = wh_json:is_true(<<"join_deaf">>, Moderator, moderator_join_deaf(Conference))
       ,max_participants = wh_json:get_integer_value(<<"max_participants">>, JObj, max_participants(Conference))
@@ -431,6 +436,13 @@ play_welcome(#whapps_conference{play_welcome=ShouldPlay}) ->
 -spec set_play_welcome(boolean(), whapps_conference:conference()) -> whapps_conference:conference().
 set_play_welcome(ShouldPlay, Conference) when is_boolean(ShouldPlay) ->
     Conference#whapps_conference{play_welcome=ShouldPlay}.
+
+-spec reuse_pronounced_name(whapps_conference:conference()) -> api_boolean().
+reuse_pronounced_name(#whapps_conference{reuse_pronounced_name=ReusePronouncedName}) ->
+    ReusePronouncedName.
+-spec set_reuse_pronounced_name(api_boolean(), whapps_conference:conference()) -> whapps_conference:conference().
+set_reuse_pronounced_name(ReusePronouncedName, Conference) when is_atom(ReusePronouncedName) ->
+    Conference#whapps_conference{reuse_pronounced_name=ReusePronouncedName}.
 
 -spec conference_doc(whapps_conference:conference()) -> api_object().
 conference_doc(#whapps_conference{conference_doc=JObj}) -> JObj.
