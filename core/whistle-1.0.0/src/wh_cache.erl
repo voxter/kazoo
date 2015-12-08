@@ -70,6 +70,7 @@
 -type origin_tuple() :: {'db', ne_binary(), ne_binary()} | %% {db, Database, PvtType or Id}
                         {'type', ne_binary(), ne_binary()} | %% {type, PvtType, Id}
                         {'db', ne_binary()} | %% {db, Database}
+                        {'database', ne_binary()} | %% {database, Database} added for notify db create/delete
                         {'type', ne_binary()}. %% {type, PvtType}
 -type origin_tuples() :: [origin_tuple()].
 -record(cache_obj, {key :: any()| '_' | '$1'
@@ -472,14 +473,14 @@ handle_cast({'wh_amqp_channel', {'new_channel', 'true'}}, #state{name=Name
     ets:delete_all_objects(Tab),
     lager:debug("reconnected channel, flush everything from ~s", [Name]),
     {'noreply', State};
-handle_cast({'wh_nodes', {'expire', Node}}, #state{name=Name
+handle_cast({'wh_nodes', {'expire', #wh_node{node=Node}}}, #state{name=Name
                                                    ,tab=Tab
                                                    ,expire_node_flush='true'
                                                   }=State) ->
     ets:delete_all_objects(Tab),
     lager:debug("node ~s has expired, flush everything from ~s", [Node, Name]),
     {'noreply', State};
-handle_cast({'wh_nodes', {'new', Node}}, #state{name=Name
+handle_cast({'wh_nodes', {'new', #wh_node{node=Node}}}, #state{name=Name
                                                 ,tab=Tab
                                                 ,new_node_flush='true'
                                                }=State) ->
@@ -575,27 +576,22 @@ get_props_origin(Props) -> maybe_add_db_origin(props:get_value('origin', Props))
 
 -spec maybe_add_db_origin(wh_proplist()) -> 'undefined' | origin_tuple() | origin_tuples().
 maybe_add_db_origin(Props) when is_list(Props) -> maybe_add_db_origin(Props, []);
+maybe_add_db_origin({'db', Db}) ->
+    [{'db',Db}, {'type', <<"database">>, Db}];
 maybe_add_db_origin({'db', Db, Id}) ->
-    [{'db',Db,Id}, {'db', Db}];
+    [{'db',Db,Id}, {'type', <<"database">>, Db}];
 maybe_add_db_origin(Props) -> Props.
 
 -spec maybe_add_db_origin(wh_proplist(), wh_proplist()) -> 'undefined' | origin_tuple() | origin_tuples().
 maybe_add_db_origin([], Acc) -> lists:reverse(props:unique(Acc));
+maybe_add_db_origin([{'db', Db} | Props], Acc) ->
+    maybe_add_db_origin(Props, [{'type', <<"database">>, Db}, {'db',Db} |Acc]);
 maybe_add_db_origin([{'db', Db, Id} | Props], Acc) ->
-    maybe_add_db_origin(Props, [{'db',Db}, {'db',Db,Id} |Acc]);
+    maybe_add_db_origin(Props, [{'type', <<"database">>, Db}, {'db',Db,Id} |Acc]);
 maybe_add_db_origin([P | Props], Acc) ->
     maybe_add_db_origin(Props, [P |Acc]).
 
 -spec maybe_erase_changed(ne_binary(), ne_binary(), ne_binary(), atom()) -> 'ok'.
-maybe_erase_changed(Db, 'database', _Id, Tab) ->
-    MatchSpec = [{#cache_obj{origin = {'db', Db}, _ = '_'}
-                  ,[]
-                  ,['$_']
-                 }
-                ],
-    Objects = ets:select(Tab, MatchSpec),
-    erase_changed(Objects, [], Tab);
-
 maybe_erase_changed(Db, Type, Id, Tab) ->
     MatchSpec = [{#cache_obj{origin = {'db', Db}, _ = '_'}
                   ,[]

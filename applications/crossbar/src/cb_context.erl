@@ -613,7 +613,15 @@ validate_request_data(Schema, Context, OnSuccess, OnFailure) ->
 -spec failed(context(), jesse_error:error_reasons()) -> context().
 -spec failed_error(jesse_error:error_reason(), context()) -> context().
 failed(Context, Errors) ->
-    lists:foldl(fun failed_error/2, set_resp_status(Context, 'error'), Errors).
+    Context1 = setters(Context
+                      ,[{fun set_resp_error_code/2, 400}
+                       ,{fun set_resp_status/2, 'error'}
+                       ]
+                      ),
+    lists:foldl(fun failed_error/2
+                ,Context1
+                ,Errors
+               ).
 
 failed_error({'data_invalid'
               ,FailedSchemaJObj
@@ -1040,8 +1048,7 @@ add_system_error('invalid_method'=Error, JObj, Context) ->
     J = wh_json:set_value(<<"message">>, <<"invalid method">>, JObj),
     build_system_error(405, Error, J, Context);
 add_system_error('bad_gateway'=Error, JObj, Context) ->
-    J = wh_json:set_value(<<"message">>, <<"bad gateway">>, JObj),
-    build_system_error(502, Error, J, Context);
+    build_system_error(502, Error, JObj, Context);
 add_system_error('multiple_choice'=Error, JObj, Context) ->
     build_system_error(400, Error, JObj, Context);
 add_system_error(Error, JObj, Context) ->

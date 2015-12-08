@@ -66,6 +66,7 @@
 -define(ACCT_BY_NAME_CACHE(Name), {?MODULE, 'account_by_name', Name}).
 -define(ACCT_BY_REALM_CACHE(Name), {?MODULE, 'account_by_realm', Name}).
 -define(ACCT_BY_IP_CACHE(IP), {?MODULE, 'account_by_ip', IP}).
+-define(GET_BY_CACHE_ORIGIN, [{'origin', [ {'db', ?WH_ACCOUNTS_DB, <<"account">>}]}]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -418,10 +419,7 @@ do_get_accounts_by(What, CacheKey, View) ->
 
 -spec cache(tuple(), ne_binaries()) -> 'ok'.
 cache(Key, AccountDbs) ->
-    CacheProps = [{'origin', [ {'db', AccountDb, wh_util:format_account_id(AccountDb, 'raw')}
-                               || AccountDb <- AccountDbs
-                             ]}],
-    wh_cache:store_local(?WHAPPS_GETBY_CACHE, Key, AccountDbs, CacheProps).
+    wh_cache:store_local(?WHAPPS_GETBY_CACHE, Key, AccountDbs, ?GET_BY_CACHE_ORIGIN).
 
 %%--------------------------------------------------------------------
 %% @public
