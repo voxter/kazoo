@@ -1220,7 +1220,7 @@ answered({'channel_replaced', JObj}, #state{agent_listener=AgentListener
     ReplacedBy = kz_call_event:replaced_by(JObj),
     case CallId of
         MemberCallId ->
-            acdc_agent_listener:rebind_events(AgentListener, CallId, ReplacedBy),
+            acdc_agent_listener:member_transferred(AgentListener, CallId, ReplacedBy),
             wh_util:put_callid(ReplacedBy),
             lager:info("caller channel ~s replaced by ~s", [CallId, ReplacedBy]),
             {'next_state', 'answered', State#state{member_call_id=ReplacedBy}};
