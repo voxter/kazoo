@@ -522,23 +522,6 @@ handle_cast({'unbind_from_events', CallId}, State) ->
     acdc_util:unbind_from_call_events(CallId),
     {'noreply', State};
 
-
-handle_cast({'replace_call', NewCall}, #state{call=OldCall
-                                              ,acct_id=AccountId
-                                              ,acdc_queue_id=QueueId
-                                              ,msg_queue_id=AMQPQueue
-                                             }=State) ->
-    acdc_stats:call_id_change(AccountId, QueueId, call_id(OldCall), call_id(NewCall)),
-
-    Update = props:filter_undefined([{<<"Account-ID">>, AccountId}
-                                     ,{<<"Queue-ID">>, QueueId}
-                                     ,{<<"Call">>, whapps_call:to_json(NewCall)}
-                                     | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-                                    ]),
-    wapi_acdc_queue:publish_member_callback_update(AMQPQueue, Update),
-
-    {'noreply', State#state{call=NewCall,old_call=OldCall}, 'hibernate'};
-
 handle_cast({'member_transferred', OldCallId, NewCallId}, #state{call=OldCall
                                                                  ,acct_id=AccountId
                                                                  ,acdc_queue_id=QueueId
@@ -546,7 +529,7 @@ handle_cast({'member_transferred', OldCallId, NewCallId}, #state{call=OldCall
     acdc_util:unbind_from_call_events(OldCallId),
     acdc_util:bind_to_call_events(NewCallId),
     acdc_stats:call_id_change(AccountId, QueueId, OldCallId, NewCallId),
-    {'noreply', State#state{call=whapps_call:set_call_id(NewCallId, Call)}};
+    {'noreply', State#state{call=whapps_call:set_call_id(NewCallId, OldCall)}};
 
 handle_cast({'channel_hungup', CallId}, #state{call=Call
                                                ,is_thief=IsThief
@@ -584,15 +567,15 @@ handle_cast({'channel_hungup', CallId}, #state{call=Call
                     lager:debug("agent channel ~s hungup/needs hanging up", [CallId]),
                     acdc_util:unbind_from_call_events(CallId),
                     {'noreply', State#state{agent_call_ids=lists:delete(CallId, ACallIds)}, 'hibernate'};
+                'undefined' ->
+                    lager:debug("unknown call id ~s for channel_hungup, ignoring", [CallId]),
+                    lager:debug("listening for call id(~s) and agents (~p)", [CCallId, ACallIds]),
+                    {'noreply', State};
                 CtrlQ ->
                     lager:debug("agent channel ~s hungup, stop call on ctlq ~s", [CallId, CtrlQ]),
                     acdc_util:unbind_from_call_events(CallId),
                     stop_agent_leg(CallId, CtrlQ),
-                    {'noreply', State#state{agent_call_ids=props:delete(CallId, ACallIds)}};
-                'undefined' ->
-                    lager:debug("unknown call id ~s for channel_hungup, ignoring", [CallId]),
-                    lager:debug("listening for call id(~s) and agents (~p)", [CCallId, ACallIds]),
-                    {'noreply', State}
+                    {'noreply', State#state{agent_call_ids=props:delete(CallId, ACallIds)}}
             end
     end;
 
