@@ -563,7 +563,7 @@ handle_cast({'replace_call_id', QueueId, OldCallId, NewCallId}, State) ->
     end,
 
     AgentStats = ets:lookup(AgentCallTableId, OldId),
-    ets:delete(AgentCallTableId, OldId)
+    ets:delete(AgentCallTableId, OldId),
     lists:foreach(fun(AgentStat) ->
                     ets:insert(AgentCallTableId, AgentStat#agent_call_stat{id=NewId
                                                                            ,call_id=NewCallId
