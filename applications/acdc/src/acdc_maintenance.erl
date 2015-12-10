@@ -29,6 +29,7 @@
          ,agent_resume/2
          ,agent_queue_login/3
          ,agent_queue_logout/3
+         ,agent_restart/2
         ]).
 
 -include("acdc.hrl").
@@ -488,3 +489,10 @@ agent_queue_logout(AcctId, AgentId, QueueId) ->
                ]),
     whapps_util:amqp_pool_send(Update, fun wapi_acdc_agent:publish_logout_queue/1),
     lager:info("published logout update for agent").
+
+agent_restart(AcctId, AgentId) ->
+    wh_util:put_callid(?MODULE),
+    case acdc_agents_sup:restart_agent(AcctId, AgentId) of
+        {'ok', _} -> 'ok';
+        'not_running' -> {'error', 'not_running'}
+    end.

@@ -83,7 +83,9 @@ workers() -> [Pid || {_, Pid, 'supervisor', [_]} <- supervisor:which_children(?M
 restart_acct(AcctId) -> [acdc_agent_sup:restart(S) || S <- workers(), is_agent_in_acct(S, AcctId)].
 restart_agent(AcctId, AgentId) ->
     case find_agent_supervisor(AcctId, AgentId) of
-        'undefined' -> lager:info("no supervisor for agent ~s(~s) to restart", [AgentId, AcctId]);
+        'undefined' ->
+            lager:info("no supervisor for agent ~s(~s) to restart", [AgentId, AcctId]),
+            'not_running';
         S ->
             acdc_agent_sup:stop(S),
             new(AcctId, AgentId)
