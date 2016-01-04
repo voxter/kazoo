@@ -57,14 +57,15 @@ kill_channel(<<"outbound">>, _, CallId, Node) ->
 maybe_authorize_channel(Props, Node) ->
     CallId = kzd_freeswitch:call_id(Props),
 
+    Referred = is_referred(Props),
     case kzd_freeswitch:channel_authorized(Props) of
-        <<"true">> ->
+        <<"true">> when not Referred ->
             wh_cache:store_local(?ECALLMGR_UTIL_CACHE
                                  ,?AUTHZ_RESPONSE_KEY(CallId)
                                  ,{'true', wh_json:new()}
                                 ),
             'true';
-        <<"false">> ->
+        <<"false">> when not Referred ->
             wh_cache:store_local(?ECALLMGR_UTIL_CACHE
                                  ,?AUTHZ_RESPONSE_KEY(CallId)
                                  ,'false'
@@ -82,6 +83,11 @@ maybe_authorize_channel(Props, Node) ->
                     maybe_channel_recovering(Props, CallId, Node)
             end
     end.
+
+-spec is_referred(wh_proplist()) -> boolean().
+is_referred(Props) ->
+    kzd_freeswitch:ccv(Props, <<"Referred-By">>) =/= 'undefined'
+        orelse kzd_freeswitch:ccv(Props, <<"Referred-To">>) =/= 'undefined'.
 
 -spec maybe_channel_recovering(wh_proplist(), ne_binary(), atom()) -> boolean().
 maybe_channel_recovering(Props, CallId, Node) ->
@@ -177,7 +183,7 @@ authz_response(JObj, Props, CallId, Node) ->
 
 -spec set_ccv_trunk_usage(wh_json:object(), ne_binary(), atom()) -> 'ok'.
 set_ccv_trunk_usage(JObj, CallId, Node) ->
-    ecallmgr_util:set(Node
+    ecallmgr_fs_command:set(Node
                       ,CallId
                       ,[{Key, TrunkUsage}
                         || Key <- [<<"Account-Trunk-Usage">>
@@ -245,7 +251,7 @@ allow_call(Props, CallId, Node) ->
                          ,{'true', wh_json:from_list(Vars)}
                         ),
     _ = case props:is_true(<<"Call-Setup">>, Props, 'false') of
-            'false' -> ecallmgr_util:set(Node, CallId, Vars);
+            'false' -> ecallmgr_fs_command:set(Node, CallId, Vars);
             'true' -> 'ok'
         end,
     'true'.
@@ -316,7 +322,7 @@ maybe_set_rating_ccvs(Props, JObj, Node) ->
 -spec set_rating_ccvs(wh_json:object(), atom()) -> 'ok'.
 set_rating_ccvs(JObj, Node) ->
     lager:debug("setting rating information"),
-    ecallmgr_util:set(Node
+    ecallmgr_fs_command:set(Node
                       ,wh_json:get_value(<<"Call-ID">>, JObj)
                       ,get_rating_ccvs(JObj)
                      ).

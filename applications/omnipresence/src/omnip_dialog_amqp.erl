@@ -238,6 +238,9 @@ handle_update(_JObj, _State) -> 'ok'.
 handle_update(JObj, State, Expires) ->
     To = wh_json:get_first_defined([<<"To">>, <<"Presence-ID">>], JObj),
     From = wh_json:get_first_defined([<<"From">>, <<"Presence-ID">>], JObj),
+    CallId = wh_json:get_value(<<"Call-ID">>, JObj, ?FAKE_CALLID(From)),
+    TargetCallId = wh_json:get_value(<<"Target-Call-ID">>, JObj, CallId),
+    wh_util:put_callid(TargetCallId),
 
     case omnip_util:are_valid_uris([To, From]) of
         'true' -> handle_update(JObj, State, From, To, Expires);
@@ -331,6 +334,8 @@ to_uri(_State, _, From, _, _) ->
 
 -spec to_uri_cookie(ne_binary(), ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> ne_binary().
 to_uri_cookie(?PRESENCE_RINGING, _, _, Realm, Cookie) ->
+    <<"sip:kfp+", Cookie/binary, "@", Realm/binary>>;
+to_uri_cookie(?PRESENCE_ANSWERED, _, _, Realm, Cookie) ->
     <<"sip:kfp+", Cookie/binary, "@", Realm/binary>>;
 to_uri_cookie(_State, _, From, _, _) ->
     <<"sip:", From/binary>>.
