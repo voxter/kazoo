@@ -494,5 +494,6 @@ agent_restart(AcctId, AgentId) ->
     wh_util:put_callid(?MODULE),
     case acdc_agents_sup:restart_agent(AcctId, AgentId) of
         {'ok', _} -> 'ok';
-        'not_running' -> {'error', 'not_running'}
+        {'error', _}=E -> E;
+        E -> {'error', E}
     end.
