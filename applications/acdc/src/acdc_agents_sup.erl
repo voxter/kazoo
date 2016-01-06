@@ -85,7 +85,7 @@ restart_agent(AcctId, AgentId) ->
     case find_agent_supervisor(AcctId, AgentId) of
         'undefined' ->
             lager:info("no supervisor for agent ~s(~s) to restart", [AgentId, AcctId]),
-            'not_running';
+            new(AcctId, AgentId);
         S ->
             acdc_agent_sup:stop(S),
             new(AcctId, AgentId)
