@@ -189,8 +189,13 @@ handle_call(_Request, _From, State) ->
 %%--------------------------------------------------------------------
 -spec handle_cast(any(), state()) -> {'noreply', state()} |
                                      {'stop', 'normal', state()}.
-handle_cast('usurp', State) ->
+handle_cast('usurp', #state{call=Call
+                            ,requester_queue=RequesterQ
+                           }=State) ->
     lager:debug("terminating pivot call because of usurp"),
+    wapi_pivot:publish_succeeded(RequesterQ, [{<<"Call-ID">>, whapps_call:call_id(Call)}
+                                              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                             ]),
     {'stop', 'normal', State#state{call='undefined'}};
 handle_cast({'request', Uri, Method}, #state{call=Call
                                              ,request_format=ReqFormat
