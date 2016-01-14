@@ -14,7 +14,7 @@
          ,current_agents/1
          ,logout_agents/1, logout_agent/2
          ,agent_presence_id/2
-         ,migrate_to_acdc_db/0, migrate/0
+         ,migrate_to_acdc_db/0, migrate_to_acdc_db/1, migrate/0
          ,refresh/0, refresh_account/1
          ,flush_call_stat/1
          ,queues_summary/0, queues_summary/1, queue_summary/2
