@@ -481,6 +481,7 @@ send(Call, Uri, Method, ReqHdrs, ReqBody, Debug) ->
     maybe_debug_req(Call, Uri, Method, ReqHdrs, ReqBody, Debug),
 
     Opts = [{'stream_to', self()}
+            ,{'ssl_options', [{'versions', ['tlsv1.2','tlsv1.1',tlsv1,sslv3]}]}
             | ?DEFAULT_OPTS
            ],
 
