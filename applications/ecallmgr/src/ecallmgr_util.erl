@@ -1028,7 +1028,9 @@ media_url_cache_props(<<"/", _/binary>> = MediaName) ->
     end;
 media_url_cache_props(<<"tts://", Text/binary>>) ->
     Id = wh_util:binary_md5(Text),
-    [{'origin', {'db', <<"tts">>, Id}}];
+    [{'origin', {'db', <<"tts">>, Id}}
+     ,{'expires', 6048000000}
+    ];
 media_url_cache_props(_MediaName) -> [].
 
 -spec custom_sip_headers(wh_proplist()) -> wh_proplist().
