@@ -86,9 +86,7 @@ restart_agent(AcctId, AgentId) ->
         'undefined' ->
             lager:info("no supervisor for agent ~s(~s) to restart", [AgentId, AcctId]),
             new(AcctId, AgentId);
-        S ->
-            acdc_agent_sup:stop(S),
-            new(AcctId, AgentId)
+        S -> acdc_agent_sup:restart(S)
     end.
 
 -spec find_acct_supervisors(ne_binary()) -> pids().
