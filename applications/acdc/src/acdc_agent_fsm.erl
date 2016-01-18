@@ -644,6 +644,16 @@ ready({'originate_uuid', ACallId, ACtrlQ}, #state{agent_listener=AgentListener}=
     acdc_agent_listener:originate_uuid(AgentListener, ACallId, ACtrlQ),
     acdc_agent_listener:channel_hungup(AgentListener, ACallId),
     {'next_state', 'ready', State};
+ready({'channel_answered', JObj, #state{outbound_call_ids=OutboundCallIds}=State) ->
+    CallId = call_id(JObj),
+    case lists:member(CallId, OutboundCallIds) of
+        'true' ->
+            lager:debug("agent picked up outbound call ~s", [CallId]),
+            {'next_state', 'outbound', start_outbound_call_handling(CallId, clear_call(State, 'ready')), 'hibernate'};
+        'false' ->
+            lager:debug("unexpected answer of ~s while in ready", [CallId]),
+            {'next_state', 'ringing', State}
+    end;
 ready({'channel_hungup', CallId, _Cause}, #state{agent_listener=AgentListener}=State) ->
     lager:debug("unexpected channel ~s down", [CallId]),
     acdc_agent_listener:channel_hungup(AgentListener, CallId),
