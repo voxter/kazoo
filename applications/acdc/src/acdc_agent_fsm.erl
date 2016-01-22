@@ -399,9 +399,13 @@ init([AccountId, AgentId, Supervisor, Props, IsThief]) ->
     _P = wh_util:spawn(?MODULE, 'wait_for_listener', [Supervisor, Self, Props, IsThief]),
     lager:debug("waiting for listener in ~p", [_P]),
 
+    AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
+    {'ok', UserDoc} = couch_mgr:open_cache_doc(AccountDb, AgentId),
+
     {'ok', 'wait', #state{account_id = AccountId
-                          ,account_db = wh_util:format_account_id(AccountId, 'encoded')
+                          ,account_db = AccountDb
                           ,agent_id = AgentId
+                          ,agent_name = wh_json:get_value(<<"username">>, UserDoc)
                           ,fsm_call_id = FSMCallId
                           ,max_connect_failures = max_failures(AccountId)
                          }}.
@@ -640,6 +644,16 @@ ready({'originate_uuid', ACallId, ACtrlQ}, #state{agent_listener=AgentListener}=
     acdc_agent_listener:originate_uuid(AgentListener, ACallId, ACtrlQ),
     acdc_agent_listener:channel_hungup(AgentListener, ACallId),
     {'next_state', 'ready', State};
+ready({'channel_answered', JObj}, #state{outbound_call_ids=OutboundCallIds}=State) ->
+    CallId = call_id(JObj),
+    case lists:member(CallId, OutboundCallIds) of
+        'true' ->
+            lager:debug("agent picked up outbound call ~s", [CallId]),
+            {'next_state', 'outbound', start_outbound_call_handling(CallId, clear_call(State, 'ready')), 'hibernate'};
+        'false' ->
+            lager:debug("unexpected answer of ~s while in ready", [CallId]),
+            {'next_state', 'ringing', State}
+    end;
 ready({'channel_hungup', CallId, _Cause}, #state{agent_listener=AgentListener}=State) ->
     lager:debug("unexpected channel ~s down", [CallId]),
     acdc_agent_listener:channel_hungup(AgentListener, CallId),
@@ -1195,22 +1209,23 @@ answered({'dialplan_error', _App}, #state{agent_listener=AgentListener
     apply_state_updates(clear_call(State, 'ready'));
 answered({'playback_stop', _JObj}, State) ->
     {'next_state', 'answered', State};
-answered({'channel_bridged', CallId}, #state{member_call_id=CallId
-                                             ,agent_listener=AgentListener
-                                             ,queue_notifications=Ns
-                                            }=State) ->
-    lager:debug("agent has connected to member"),
-    acdc_agent_listener:member_connect_accepted(AgentListener),
-    maybe_notify(Ns, ?NOTIFY_PICKUP, State),
-    {'next_state', 'answered', State};
-answered({'channel_bridged', CallId}, #state{agent_call_id=CallId
-                                             ,agent_listener=AgentListener
-                                             ,queue_notifications=Ns
-                                            }=State) ->
-    lager:debug("agent has connected (~s) to caller", [CallId]),
-    acdc_agent_listener:member_connect_accepted(AgentListener, CallId),
-    maybe_notify(Ns, ?NOTIFY_PICKUP, State),
-    {'next_state', 'answered', State};
+%% Experimental removal of probably useless event handlers
+% answered({'channel_bridged', CallId}, #state{member_call_id=CallId
+%                                              ,agent_listener=AgentListener
+%                                              ,queue_notifications=Ns
+%                                             }=State) ->
+%     lager:debug("agent has connected to member"),
+%     acdc_agent_listener:member_connect_accepted(AgentListener),
+%     maybe_notify(Ns, ?NOTIFY_PICKUP, State),
+%     {'next_state', 'answered', State};
+% answered({'channel_bridged', CallId}, #state{agent_call_id=CallId
+%                                              ,agent_listener=AgentListener
+%                                              ,queue_notifications=Ns
+%                                             }=State) ->
+%     lager:debug("agent has connected (~s) to caller", [CallId]),
+%     acdc_agent_listener:member_connect_accepted(AgentListener, CallId),
+%     maybe_notify(Ns, ?NOTIFY_PICKUP, State),
+%     {'next_state', 'answered', State};
 answered({'channel_replaced', JObj}, #state{agent_listener=AgentListener
                                             ,member_call_id=MemberCallId
                                             ,agent_call_id=AgentCallId
@@ -2174,6 +2189,7 @@ standardize_method(_) -> 'get'.
 -spec notify(ne_binary(), 'get' | 'post', ne_binary(), fsm_state()) -> 'ok'.
 notify(Url, Method, Key, #state{account_id=AccountId
                                 ,agent_id=AgentId
+                                ,agent_name=AgentName
                                 ,member_call=MemberCall
                                 ,agent_call_id=AgentCallId
                                 ,member_call_queue_id=QueueId
@@ -2190,6 +2206,8 @@ notify(Url, Method, Key, #state{account_id=AccountId
                 ,{<<"caller_id_number">>, whapps_call:caller_id_number(MemberCall)}
                 ,{<<"call_state">>, Key}
                 ,{<<"now">>, wh_util:current_tstamp()}
+                ,{<<"Custom-KVs">>, whapps_call:custom_kvs(MemberCall)}
+                ,{<<"agent_username">>, AgentName}
                ])),
     notify(Url, Method, Data).
 
