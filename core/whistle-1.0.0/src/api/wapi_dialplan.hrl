@@ -501,6 +501,7 @@
 -define(OPTIONAL_PLAY_REQ_HEADERS, [<<"Terminators">>, <<"Insert-At">>, <<"Leg">>
                                     ,<<"Voice">>, <<"Language">>, <<"Format">>
                                     ,<<"Group-ID">> % group media together (one DTMF cancels all in group)
+                                    ,<<"Variables">>
                                    ]).
 -define(PLAY_REQ_VALUES, [{<<"Event-Category">>, <<"call">>}
                           ,{<<"Event-Name">>, <<"command">>}
