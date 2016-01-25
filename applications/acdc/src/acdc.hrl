@@ -37,7 +37,6 @@
 -type deliveries() :: [gen_listener:basic_deliver()].
 
 -type announce_pid_list() :: [{api_binary(), pid()},...] | [].
--type callback_list() :: [{api_binary(), binary()},...] | [].
 
 %% Check for cleanup every 5 minutes
 -define(CLEANUP_PERIOD, whapps_config:get_integer(?CONFIG_CAT, <<"cleanup_period_ms">>, 360000)).

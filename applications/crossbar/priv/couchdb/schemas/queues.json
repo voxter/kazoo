@@ -37,11 +37,11 @@
         "breakout": {
             "name": "Breakout Menu Config",
             "properties": {
-                "enabled": {
-                    "description": "Whether or not to allow user to press * to enter queue waiting breakout menu",
-                    "name": "Breakout Menu Enabled",
+                "dtmf": {
+                    "description": "Digit that puts caller into breakout menu",
+                    "name": "Breakout Menu DTMF",
                     "required": false,
-                    "type": "boolean"
+                    "type": "string"
                 }
             },
             "required": false,

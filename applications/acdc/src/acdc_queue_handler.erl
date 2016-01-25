@@ -14,7 +14,7 @@
          ,handle_member_accepted/2
          ,handle_member_retry/2
          ,handle_member_callback_reg/2
-         ,handle_member_callback_update/2
+         ,handle_member_callback_accepted/2
          ,handle_config_change/2
          ,handle_presence_probe/2
         ]).
@@ -75,13 +75,11 @@ handle_member_callback_reg(JObj, Props) ->
     Srv = props:get_value('server', Props),
     CallId = wh_json:get_value(<<"Call-ID">>, JObj),
     acdc_util:unbind_from_call_events(CallId, Srv),
+    acdc_queue_fsm:register_callback(props:get_value('fsm_pid', Props), JObj).
 
-    acdc_queue_listener:maybe_enter_callback_mode(Srv, CallId, wh_json:get_value(<<"Number">>, JObj)).
-
-handle_member_callback_update(JObj, Props) ->
-    lager:debug("Member callback update received by queue"),
-    Srv = props:get_value('server', Props),
-    acdc_queue_listener:callback_update(Srv, wh_json:get_value(<<"Call">>, JObj)).
+handle_member_callback_accepted(JObj, Props) ->
+    'true' = wapi_acdc_queue:member_callback_accepted_v(JObj),
+    acdc_queue_fsm:member_callback_accepted(props:get_value('fsm_pid', Props), JObj).
 
 -spec handle_config_change(wh_json:object(), wh_proplist()) -> any().
 handle_config_change(JObj, _Props) ->
