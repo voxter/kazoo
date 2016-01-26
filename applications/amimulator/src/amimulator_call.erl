@@ -555,12 +555,16 @@ parse_user_at_realm('user', Data) ->
 -spec maybe_cellphone_endpoint(call()) -> api_object().
 maybe_cellphone_endpoint(Call) ->
     AccountDb = account_db(Call),
-    {'ok', Results} = couch_mgr:get_results(AccountDb, <<"devices/call_forwards">>),
     E164 = case direction(Call) of
         <<"inbound">> -> wnm_util:to_e164(from_user(Call));
         <<"outbound">> -> wnm_util:to_e164(to_user(Call))
     end,
-    find_cellphone_endpoint_fold(AccountDb, E164, Results).
+
+    Results1 = case couch_mgr:get_results(AccountDb, <<"devices/call_forwards">>) of
+        {'ok', Results} -> Results;
+        {'error', _} -> []
+    end,
+    find_cellphone_endpoint_fold(AccountDb, E164, Results1).
 
 -spec find_cellphone_endpoint_fold(api_binary(), ne_binary(), wh_json:objects()) -> api_object().
 find_cellphone_endpoint_fold(_, _, []) ->
