@@ -2112,7 +2112,11 @@ maybe_remove_endpoint(EPId, EPs, AccountId, AgentListener) ->
 get_endpoints(OrigEPs, AgentListener, Call, AgentId, QueueId) ->
     case catch acdc_util:get_endpoints(Call, AgentId) of
         [] ->
-            {'error', 'no_endpoints'};
+            %% Survive couch connection issue by using last list of valid endpoints
+            case OrigEPs of
+                [] -> {'error', 'no_endpoints'};
+                _ -> {'ok', [wh_json:set_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], QueueId, EP) || EP <- OrigEPs]}
+            end;
         [_|_]=EPs ->
             AccountId = whapps_call:account_id(Call),
 
