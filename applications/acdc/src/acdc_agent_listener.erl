@@ -646,6 +646,7 @@ handle_cast({'redial_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number},
     lager:debug("originate sent, waiting on bridge of agent and callback call"),
     update_my_queues_of_change(AcctId, AgentId, Qs),
     {'noreply', State#state{call=Call
+                            ,acdc_queue_id=wh_json:get_value(<<"Queue-ID">>, WinJObj)
                             ,record_calls=ShouldRecord
                             ,msg_queue_id=wh_json:get_value(<<"Server-ID">>, WinJObj)
                             ,agent_call_ids=AgentCallIds
@@ -682,6 +683,7 @@ handle_cast({'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}, #sta
     lager:debug("originate sent, waiting on successful bridge now"),
     update_my_queues_of_change(AcctId, AgentId, Qs),
     {'noreply', State#state{call=Call
+                            ,acdc_queue_id=wh_json:get_value(<<"Queue-ID">>, WinJObj)
                             ,record_calls=ShouldRecord
                             ,msg_queue_id=wh_json:get_value(<<"Server-ID">>, WinJObj)
                             ,agent_call_ids=AgentCallIds
@@ -709,6 +711,7 @@ handle_cast({'bridge_to_member', Call, WinJObj, _, CDRUrl, RecordingUrl}, #state
     whapps_call_command:pickup(whapps_call:call_id(Agent), <<"now">>, Call),
 
     {'noreply', State#state{call=Call
+                            ,acdc_queue_id=wh_json:get_value(<<"Queue-ID">>, WinJObj)
                             ,msg_queue_id=wh_json:get_value(<<"Server-ID">>, WinJObj)
                             ,agent_call_ids=[AgentCallId]
                             ,cdr_urls=dict:store(whapps_call:call_id(Call), CDRUrl,
@@ -788,9 +791,7 @@ handle_cast({'member_connect_resp', ReqJObj}, #state{agent_id=AgentId
             lager:debug("responding to member_connect_req"),
 
             send_member_connect_resp(ReqJObj, MyQ, AgentId, MyId, LastConn),
-            {'noreply', State#state{acdc_queue_id = ACDcQueue
-                                    ,msg_queue_id = wh_json:get_value(<<"Server-ID">>, ReqJObj)
-                                   }
+            {'noreply', State#state{msg_queue_id = wh_json:get_value(<<"Server-ID">>, ReqJObj)}
              ,'hibernate'}
     end;
 
