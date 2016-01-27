@@ -131,7 +131,6 @@ maybe_enter_queue(#member_call{call=Call
         {'ok', _} ->
             lager:info("asking for an agent, waiting up to ~p ms", [MaxWait]),
 
-            % cf_exe:send_amqp(Call, MemberCall, fun wapi_acdc_queue:publish_member_call/1),
             NoopId = whapps_call_command:flush_dtmf(Call),
             wait_for_bridge(MC#member_call{call=whapps_call:kvs_store('queue_id', QueueId, Call)
                                            ,silence_noop=NoopId
