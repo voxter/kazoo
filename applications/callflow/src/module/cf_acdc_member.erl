@@ -26,6 +26,7 @@
                       ,queue_id         :: api_binary()
                       ,config_data = [] :: wh_proplist()
                       ,max_wait = 60 * ?MILLISECONDS_IN_SECOND :: max_wait()
+                      ,silence_noop     :: api_binary()
                      }).
 -type member_call() :: #member_call{}.
 
@@ -122,7 +123,6 @@ maybe_enter_queue(#member_call{call=Call}, 'true') ->
     lager:info("queue has reached max size"),
     cf_exe:continue(Call);
 maybe_enter_queue(#member_call{call=Call
-                               ,config_data=MemberCall
                                ,queue_id=QueueId
                                ,max_wait=MaxWait
                               }=MC
@@ -131,9 +131,11 @@ maybe_enter_queue(#member_call{call=Call
         {'ok', _} ->
             lager:info("asking for an agent, waiting up to ~p ms", [MaxWait]),
 
-            cf_exe:send_amqp(Call, MemberCall, fun wapi_acdc_queue:publish_member_call/1),
-            _ = whapps_call_command:flush_dtmf(Call),
-            wait_for_bridge(MC#member_call{call=whapps_call:kvs_store('queue_id', QueueId, Call)}
+            % cf_exe:send_amqp(Call, MemberCall, fun wapi_acdc_queue:publish_member_call/1),
+            NoopId = whapps_call_command:flush_dtmf(Call),
+            wait_for_bridge(MC#member_call{call=whapps_call:kvs_store('queue_id', QueueId, Call)
+                                           ,silence_noop=NoopId
+                                          }
                             ,MaxWait
                            );
         {'error', E} ->
@@ -177,6 +179,18 @@ process_message(#member_call{call=Call}, _, Start, _Wait, _JObj, {<<"call_event"
     lager:info("member hungup while waiting in the queue (was there ~b s)", [wh_util:elapsed_s(Start)]),
     cancel_member_call(Call, ?MEMBER_HANGUP),
     cf_exe:stop(Call);
+process_message(#member_call{call=Call
+                             ,config_data=MemberCall
+                             ,silence_noop=NoopId
+                            }=MC, Timeout, Start, Wait, JObj, {<<"call_event">>,<<"CHANNEL_EXECUTE_COMPLETE">>}) ->
+    case wh_json:get_first_defined([<<"Application-Name">>
+                                    ,[<<"Request">>, <<"Application-Name">>]
+                                   ], JObj) =:= <<"noop">> andalso
+           wh_json:get_value(<<"Application-Response">>, JObj) =:= NoopId of
+        'true' -> cf_exe:send_amqp(Call, MemberCall, fun wapi_acdc_queue:publish_member_call/1);
+        'false' -> 'ok'
+    end,
+    wait_for_bridge(MC, wh_util:decr_timeout(Timeout, Wait), Start);
 process_message(#member_call{call=Call
                              ,queue_id=QueueId
                             }=MC, Timeout, Start, Wait, JObj, {<<"member">>, <<"call_fail">>}) ->
