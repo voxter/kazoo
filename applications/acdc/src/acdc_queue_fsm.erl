@@ -342,7 +342,7 @@ connect_req({'timeout', Ref, ?COLLECT_RESP_MESSAGE}, #state{collect_ref=Ref
         'true' ->
             lager:debug("queue mgr said to ignore this call: ~s, not retrying agents", [whapps_call:call_id(Call)]),
             acdc_queue_listener:finish_member_call(Srv),
-            {'next_state', 'ready', State};
+            {'next_state', 'ready', clear_member_call(State)};
         'false' ->
             maybe_connect_re_req(MgrSrv, Srv, State)
     end;
@@ -898,7 +898,7 @@ handle_agent_responses(#state{collect_ref=Ref
         'true' ->
             lager:debug("queue mgr said to ignore this call: ~s, not connecting to agents", [whapps_call:call_id(Call)]),
             acdc_queue_listener:finish_member_call(Srv),
-            {'ready', State};
+            {'ready', clear_member_call(State)};
         'false' ->
             lager:debug("done waiting for agents to respond, picking a winner"),
             maybe_pick_winner(State)
