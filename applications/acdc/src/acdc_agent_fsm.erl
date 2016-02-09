@@ -121,7 +121,6 @@
                 ,queue_notifications :: api_object()
 
                 ,agent_call_id :: api_binary()
-                ,ambiguous_uuids = [] :: ne_binaries()
                 ,agent_callback_call = 'undefined'
                 ,originate_call_ids = []
                 ,control_q_map = []
@@ -706,19 +705,10 @@ ringing({'originate_ready', JObj}, #state{agent_listener=AgentListener}=State) -
     lager:debug("ringing agent's phone with call-id ~s", [CallId]),
     acdc_agent_listener:originate_execute(AgentListener, JObj),
     {'next_state', 'ringing', State};
-ringing({'originate_uuid', ACallId, ACtrlQ}, #state{agent_listener=AgentListener
-                                                    ,ambiguous_uuids=AmbiguousUUIDs
-                                                   }=State) ->
+ringing({'originate_uuid', ACallId, ACtrlQ}, #state{agent_listener=AgentListener}=State) ->
     lager:debug("recv originate_uuid for agent call ~s(~s)", [ACallId, ACtrlQ]),
     acdc_agent_listener:originate_uuid(AgentListener, ACallId, ACtrlQ),
-    case lists:member(ACallId, AmbiguousUUIDs) of
-        'true' ->
-            lager:debug("found a uuid ~s that was from a previous queue call", [ACallId]),
-            acdc_agent_listener:channel_hungup(AgentListener, ACallId),
-            {'next_state', 'ringing', State#state{ambiguous_uuids=lists:delete(ACallId, AmbiguousUUIDs)}};
-        'false' ->
-            {'next_state', 'ringing', State#state{ambiguous_uuids=[ACallId | lists:delete(ACallId, AmbiguousUUIDs)]}}
-    end;
+    {'next_state', 'ringing', State};
 ringing({'originate_started', ACallId}, #state{agent_listener=AgentListener
                                                ,member_call_id=MemberCallId
                                                ,member_call=MemberCall
@@ -739,7 +729,6 @@ ringing({'originate_started', ACallId}, #state{agent_listener=AgentListener
     acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNum),
 
     {'next_state', 'answered', State#state{agent_call_id=ACallId
-                                           ,ambiguous_uuids=[]
                                            ,connect_failures=0
                                           }};
 ringing({'originate_failed', E}, #state{agent_listener=AgentListener
@@ -804,9 +793,7 @@ ringing({'channel_bridged', MemberCallId}, #state{member_call_id=MemberCallId
 
     acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNum),
 
-    {'next_state', 'answered', State#state{ambiguous_uuids=[]
-                                           ,connect_failures=0
-                                          }};
+    {'next_state', 'answered', State#state{connect_failures=0}};
 ringing({'channel_bridged', _CallId}, State) ->
     {'next_state', 'ringing', State};
 ringing({'channel_hungup', AgentCallId, Cause}, #state{agent_listener=AgentListener
@@ -918,7 +905,6 @@ ringing({'originate_resp', ACallId}, #state{agent_listener=AgentListener
     acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNum),
 
     {'next_state', 'answered', State#state{agent_call_id=ACallId
-                                           ,ambiguous_uuids=[]
                                            ,connect_failures=0
                                           }};
 ringing(?NEW_CHANNEL_FROM(CallId), #state{agent_listener=AgentListener}=State) ->
@@ -934,17 +920,10 @@ ringing(?NEW_CHANNEL_TO(CallId, 'undefined'), #state{agent_listener=AgentListene
 ringing(?NEW_CHANNEL_TO(CallId, MemberCallId), #state{member_call_id=MemberCallId}=State) ->
     lager:debug("new channel ~s for agent", [CallId]),
     {'next_state', 'ringing', State};
-ringing(?NEW_CHANNEL_TO(CallId, _MemberCallId), #state{agent_listener=AgentListener
-                                                       ,ambiguous_uuids=AmbiguousUUIDs
-                                                      }=State) ->
-    case lists:member(CallId, AmbiguousUUIDs) of
-        'true' ->
-            lager:debug("found a uuid ~s that was from a previous queue call", [CallId]),
-            acdc_agent_listener:channel_hungup(AgentListener, CallId),
-            {'next_state', 'ringing', State#state{ambiguous_uuids=lists:delete(CallId, AmbiguousUUIDs)}};
-        'false' ->
-            {'next_state', 'ringing', State#state{ambiguous_uuids=[CallId | lists:delete(CallId, AmbiguousUUIDs)]}}
-    end;
+ringing(?NEW_CHANNEL_TO(CallId, _MemberCallId), #state{agent_listener=AgentListener}=State) ->
+    lager:debug("found a uuid ~s that was from a previous queue call", [CallId]),
+    acdc_agent_listener:channel_hungup(AgentListener, CallId),
+    {'next_state', 'ringing', State};
 ringing({'leg_created', _CallId}, State) ->
     {'next_state', 'ringing', State};
 ringing({'leg_destroyed', _CallId}, State) ->
@@ -1934,7 +1913,6 @@ clear_call(#state{fsm_call_id=FSMemberCallId
                 ,member_call_start = 'undefined'
                 ,member_call_queue_id = 'undefined'
                 ,agent_call_id = 'undefined'
-                ,ambiguous_uuids = []
                 ,caller_exit_key = <<"#">>
                }.
 
