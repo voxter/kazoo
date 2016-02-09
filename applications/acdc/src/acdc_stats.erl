@@ -509,7 +509,6 @@ handle_cast({'create_call', JObj}, State) ->
 handle_cast({'create_status', #status_stat{id=_Id
                                            ,agent_id=AgentId
                                            ,status=_Status
-                                           ,timestamp=Timestamp
                                           }=Stat}, State) ->
     lager:debug("creating new status stat ~s: ~s", [_Id, _Status]),
     case ets:insert_new(acdc_agent_stats:status_table_id(), Stat) of
@@ -522,11 +521,7 @@ handle_cast({'create_status', #status_stat{id=_Id
     %% stat is newer than the current one
     case ets:lookup(acdc_agent_stats:agent_cur_status_table_id(), AgentId) of
         [] -> ets:insert(acdc_agent_stats:agent_cur_status_table_id(), Stat);
-        [#status_stat{timestamp=Timestamp1}] ->
-            case Timestamp >= Timestamp1 of
-                'true' -> ets:insert(acdc_agent_stats:agent_cur_status_table_id(), Stat);
-                'false' -> 'ok'
-            end
+        [OldStat] -> maybe_insert_agent_cur_status(OldStat, Stat)
     end,
     {'noreply', State};
 handle_cast({'update_call', Id, Updates}, State) ->
@@ -1325,6 +1320,23 @@ add_agent_call_stat_miss(Stat, AgentId, Timestamp) ->
                                            ,timestamp=Timestamp
                                           },
     ets:insert(agent_call_table_id(), AgentStat1).
+
+-spec maybe_insert_agent_cur_status(status_stat(), status_stat()) -> boolean().
+maybe_insert_agent_cur_status(#status_stat{status='logged_out', timestamp=Timestamp}
+                              ,#status_stat{status='pending_logged_out', timestamp=Timestamp1}=Stat
+                             ) ->
+    %% Note the timestamp must be GREATER if new stat is pending (fix logout bug)
+    case Timestamp1 > Timestamp of
+        'true' -> ets:insert(acdc_agent_stats:agent_cur_status_table_id(), Stat);
+        'false' -> 'false'
+    end;
+maybe_insert_agent_cur_status(#status_stat{timestamp=Timestamp}
+                              ,#status_stat{timestamp=Timestamp1}=Stat
+                             ) ->
+    case Timestamp1 >= Timestamp of
+        'true' -> ets:insert(acdc_agent_stats:agent_cur_status_table_id(), Stat);
+        'false' -> 'false'
+    end.
 
 -spec call_stat_to_summary_stat(call_stat()) -> call_summary_stat().
 call_stat_to_summary_stat(#call_stat{id=Id
