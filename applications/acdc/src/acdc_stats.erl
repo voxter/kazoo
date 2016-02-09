@@ -506,7 +506,11 @@ handle_cast({'create_call', JObj}, State) ->
                      },
     ets:insert_new(call_table_id(), Stat),
     {'noreply', State};
-handle_cast({'create_status', #status_stat{id=_Id, status=_Status}=Stat}, State) ->
+handle_cast({'create_status', #status_stat{id=_Id
+                                           ,agent_id=AgentId
+                                           ,status=_Status
+                                           ,timestamp=Timestamp
+                                          }=Stat}, State) ->
     lager:debug("creating new status stat ~s: ~s", [_Id, _Status]),
     case ets:insert_new(acdc_agent_stats:status_table_id(), Stat) of
         'true' -> 'ok';
@@ -514,7 +518,16 @@ handle_cast({'create_status', #status_stat{id=_Id, status=_Status}=Stat}, State)
             lager:debug("stat ~s already exists, updating", [_Id]),
             ets:insert(acdc_agent_stats:status_table_id(), Stat)
     end,
-    ets:insert(acdc_agent_stats:agent_cur_status_table_id(), Stat),
+    %% Only set the agent's current status if the timestamp of this
+    %% stat is newer than the current one
+    case ets:lookup(acdc_agent_stats:agent_cur_status_table_id(), AgentId) of
+        [] -> ets:insert(acdc_agent_stats:agent_cur_status_table_id(), Stat);
+        [#status_stat{timestamp=Timestamp1}] ->
+            case Timestamp >= Timestamp1 of
+                'true' -> ets:insert(acdc_agent_stats:agent_cur_status_table_id(), Stat);
+                'false' -> 'ok'
+            end
+    end,
     {'noreply', State};
 handle_cast({'update_call', Id, Updates}, State) ->
     lager:debug("updating call stat ~s: ~p", [Id, Updates]),
