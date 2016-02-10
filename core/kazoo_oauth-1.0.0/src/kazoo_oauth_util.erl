@@ -18,6 +18,7 @@
         ]).
 -export([jwt/2, jwt/3]).
 -export([authorization_header/1]).
+-export([maybe_oauth_headers/3]).
 -export([oauth_header/6]).
 
 -spec authorization_header(oauth_token()) -> api_binary().
@@ -246,6 +247,44 @@ refresh_token(#oauth_app{name=ClientId
         Else ->
             lager:debug("unable to get new oauth token: ~p", [Else]),
             {'error', Else}
+    end.
+
+-spec maybe_oauth_headers(ne_binary(), ne_binary(), wh_proplist()) -> wh_proplist().
+maybe_oauth_headers(AccountId, URL, Params) ->
+    {'ok', AccountDoc} = couch_mgr:open_cache_doc(<<"accounts">>, AccountId),
+
+    case wh_json:get_value(<<"pvt_oauth">>, AccountDoc) of
+        'undefined' ->
+            ConsumerKey = wh_json:get_value(<<"pvt_oauth_consumer_key">>, AccountDoc),
+            ConsumerSecret = wh_json:get_value(<<"pvt_oauth_consumer_secret">>, AccountDoc),
+            AccessToken = wh_json:get_value(<<"pvt_oauth_access_token">>, AccountDoc),
+            AccessSecret = wh_json:get_value(<<"pvt_oauth_access_secret">>, AccountDoc),
+            Provider = wh_json:get_value(<<"pvt_oauth_provider">>, AccountDoc),
+
+            case ConsumerKey =/= 'undefined' andalso Provider =/= 'undefined' of
+                'true' -> [oauth_header(URL, Params, ConsumerKey, ConsumerSecret, AccessToken, AccessSecret)];
+                'false' -> []
+            end;
+        OAuthJObj -> get_oauth_for_url(OAuthJObj, URL, Params)
+    end.
+
+-spec get_oauth_for_url(wh_json:object(), ne_binary(), wh_proplist()) -> wh_proplist().
+get_oauth_for_url(OAuthJObj, URL, Params) ->
+    case re:run(URL, <<"^(?<SCHEME>https?|ftp)?(?<SEP>:\/\/)?(?<BASEURL>.+?)(?=[?\/]|$)">>, [{'capture', ['BASEURL'], 'binary'}]) of
+        'nomatch' -> [];
+        {'match', [BaseUrl]} -> baseurl_oauth(OAuthJObj, URL, BaseUrl, Params)
+    end.
+
+-spec baseurl_oauth(wh_json:object(), ne_binary(), ne_binary(), wh_proplist()) -> wh_proplist().
+baseurl_oauth(OAuthJObj, URL, BaseUrl, Params) ->
+    case wh_json:get_value(BaseUrl, OAuthJObj) of
+        'undefined' -> [];
+        JObj ->
+            ConsumerKey = wh_json:get_value(<<"consumer_key">>, JObj),
+            ConsumerSecret = wh_json:get_value(<<"consumer_secret">>, JObj),
+            AccessToken = wh_json:get_value(<<"access_token">>, JObj),
+            AccessSecret = wh_json:get_value(<<"access_secret">>, JObj),
+            [oauth_header(URL, Params, ConsumerKey, ConsumerSecret, AccessToken, AccessSecret)]
     end.
 
 oauth_header(URL, CustomParams, ConsumerKey, ConsumerSecret, AccessToken, AccessSecret) ->
