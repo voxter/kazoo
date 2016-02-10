@@ -2195,8 +2195,7 @@ notify(Url, Method, Key, #state{account_id=AccountId
                                 ,member_call_queue_id=QueueId
                                }) ->
     wh_util:put_callid(whapps_call:call_id(MemberCall)),
-    Data = wh_json:from_list(
-             props:filter_undefined(
+    Params = props:filter_undefined(
                [{<<"account_id">>, AccountId}
                 ,{<<"agent_id">>, AgentId}
                 ,{<<"agent_call_id">>, AgentCallId}
@@ -2208,17 +2207,23 @@ notify(Url, Method, Key, #state{account_id=AccountId
                 ,{<<"now">>, wh_util:current_tstamp()}
                 ,{<<"Custom-KVs">>, whapps_call:custom_kvs(MemberCall)}
                 ,{<<"agent_username">>, AgentName}
-               ])),
-    notify(Url, Method, Data).
+               ]),
+    Headers = case Method of
+        'get' -> kazoo_oauth_util:maybe_oauth_headers(AccountId, Url, Params);
+        'post' ->
+            %% No params when using application/json content type
+            kazoo_oauth_util:maybe_oauth_headers(AccountId, Url, [])
+    end,
+    notify_method(Url, Method, Headers, wh_json:from_list(Params)).
 
--spec notify(ne_binary(), 'get' | 'post', wh_json:object()) -> 'ok'.
-notify(Url, 'post', Data) ->
-    notify(Url, [], 'post', wh_json:encode(Data)
+-spec notify_method(ne_binary(), 'get' | 'post', wh_proplist(), wh_json:object()) -> 'ok'.
+notify_method(Url, 'post', Headers, Data) ->
+    notify(Url, Headers, 'post', wh_json:encode(Data)
            ,[{'content_type', "application/json"}]
           );
-notify(Url, 'get', Data) ->
+notify_method(Url, 'get', Headers, Data) ->
     notify(uri(Url, wh_json:to_querystring(Data))
-           ,[], 'get', <<>>, []
+           ,Headers, 'get', <<>>, []
           ).
 
 -spec notify(iolist(), [], 'get' | 'post', binary(), wh_proplist()) -> 'ok'.
@@ -2227,7 +2232,7 @@ notify(Uri, Headers, Method, Body, Opts) ->
                           ,Headers
                           ,Method
                           ,Body
-                          ,[{'connect_timeout', 200} % wait up to 200ms for connection
+                          ,[{'connect_timeout', 1000} % wait up to 1000ms for connection
                             | Opts
                            ]
                           ,1000
