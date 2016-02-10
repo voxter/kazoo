@@ -2232,7 +2232,7 @@ notify(Uri, Headers, Method, Body, Opts) ->
                           ,Headers
                           ,Method
                           ,Body
-                          ,[{'connect_timeout', 1000} % wait up to 200ms for connection
+                          ,[{'connect_timeout', 1000} % wait up to 1000ms for connection
                             | Opts
                            ]
                           ,1000
