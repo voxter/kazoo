@@ -85,8 +85,8 @@ from_json(JObj) ->
                                       wh_util:current_tstamp() - Sec;
                                   Timestamp -> Timestamp
                               end
-                 ,caller_id_name = wh_json:get_first_defined([<<"Caller-ID-Name">>, <<"caller_id">>], JObj)
-                 ,caller_id_number = wh_json:get_first_defined([<<"Caller-ID-Number">>, <<"caller_id">>], JObj)
+                 ,caller_id_name = wh_json:get_first_defined([<<"Caller-ID-Name">>, <<"caller_id">>], JObj, wh_util:anonymous_caller_id_name())
+                 ,caller_id_number = wh_json:get_first_defined([<<"Caller-ID-Number">>, <<"caller_id">>], JObj, wh_util:anonymous_caller_id_number())
 
                  ,callee_id_name = case wh_json:get_value(<<"Callee-ID-Name">>, JObj) of
                     'undefined' ->
