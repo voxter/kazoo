@@ -512,12 +512,14 @@ do_compose_voicemail(#mailbox{keys=#keys{login=Login
                                {'error', 'channel_hungup'}.
 do_hunt(Mailbox, Call, Digits) ->
     case try_match_digits(Digits, Mailbox, Call) of
-        'true' ->
-            lager:debug("performing transfer from voicemail menu"),
-            'ok';
         'false' ->
             whapps_call_command:prompt(<<"vm-invalid_hunt">>, Call),
-            compose_voicemail(Mailbox, 'false', Call)
+            compose_voicemail(Mailbox, 'false', Call);
+        {'branch', Flow} ->
+            lager:debug("performing transfer from voicemail menu"),
+            _ = whapps_call_command:flush_dtmf(Call),
+            _ = whapps_call_command:b_prompt(<<"menu-transferring_call">>, Call),
+            {'branch', Flow}
     end.
 
 %%--------------------------------------------------------------------
@@ -526,14 +528,16 @@ do_hunt(Mailbox, Call, Digits) ->
 %% The primary sequence logic to route the collected digits
 %% @end
 %%--------------------------------------------------------------------
--spec try_match_digits(ne_binary(), mailbox(), whapps_call:call()) -> boolean().
+-spec try_match_digits(ne_binary(), mailbox(), whapps_call:call()) -> 'false' | {'branch', wh_json:object()}.
 try_match_digits(Digits, Mailbox, Call) ->
     lager:info("trying to match digits ~s", [Digits]),
-    is_callflow_child(Digits, Mailbox, Call)
-        orelse (is_hunt_enabled(Digits, Mailbox, Call)
-                andalso is_hunt_allowed(Digits, Mailbox, Call)
-                andalso not is_hunt_denied(Digits, Mailbox, Call)
-                andalso hunt_for_callflow(Digits, Mailbox, Call)).
+    case is_callflow_child(Digits, Mailbox, Call)
+           orelse (is_hunt_enabled(Digits, Mailbox, Call)
+                   andalso is_hunt_allowed(Digits, Mailbox, Call)
+                   andalso not is_hunt_denied(Digits, Mailbox, Call)) of
+        'true' -> {'branch', hunt_for_callflow(Digits, Mailbox, Call)};
+        'false' -> 'false'
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -614,17 +618,14 @@ is_hunt_denied(Digits, #mailbox{hunt_deny=RegEx}, _) ->
 %% Hunt for a callflow with these numbers
 %% @end
 %%--------------------------------------------------------------------
--spec hunt_for_callflow(ne_binary(), mailbox(), whapps_call:call()) -> boolean().
+-spec hunt_for_callflow(ne_binary(), mailbox(), whapps_call:call()) -> 'false' | wh_json:object().
 hunt_for_callflow(Digits, _, Call) ->
     AccountId = whapps_call:account_id(Call),
     lager:info("hunting for ~s in account ~s", [Digits, AccountId]),
     case cf_util:lookup_callflow(Digits, AccountId) of
         {'ok', Flow, 'false'} ->
-            lager:info("callflow hunt succeeded, branching"),
-            _ = whapps_call_command:flush_dtmf(Call),
-            _ = whapps_call_command:b_prompt(<<"menu-transferring_call">>, Call),
-            cf_exe:branch(wh_json:get_value(<<"flow">>, Flow, wh_json:new()), Call),
-            'true';
+            lager:info("callflow hunt succeeded, will branch callflow"),
+            wh_json:get_value(<<"flow">>, Flow, wh_json:new());
         _ ->
             lager:info("callflow hunt failed"),
             'false'
