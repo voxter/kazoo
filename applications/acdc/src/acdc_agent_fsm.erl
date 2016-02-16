@@ -796,21 +796,16 @@ ringing({'channel_bridged', MemberCallId}, #state{member_call_id=MemberCallId
     {'next_state', 'answered', State#state{connect_failures=0}};
 ringing({'channel_bridged', _CallId}, State) ->
     {'next_state', 'ringing', State};
-ringing({'channel_hungup', AgentCallId, Cause}, #state{agent_listener=AgentListener
-                                                       ,agent_call_id=AgentCallId
-                                                       ,account_id=AccountId
-                                                       ,agent_id=AgentId
-                                                       ,member_call_queue_id=QueueId
-                                                       ,member_call_id=MemberCallId
-                                                       ,connect_failures=Fails
-                                                       ,max_connect_failures=MaxFails
-                                                      }=State) ->
-    lager:debug("ringing agent failed: timeout on ~s ~s", [AgentCallId, Cause]),
+ringing({'channel_hungup', AgentCallId, _Cause}, #state{agent_listener=AgentListener
+                                                        ,agent_call_id=AgentCallId
+                                                        ,account_id=AccountId
+                                                        ,agent_id=AgentId
+                                                        ,connect_failures=Fails
+                                                        ,max_connect_failures=MaxFails
+                                                       }=State) ->
+    lager:debug("agent's channel (~s) down", [AgentCallId]),
 
-    acdc_agent_listener:member_connect_retry(AgentListener, MemberCallId),
-    acdc_agent_listener:channel_hungup(AgentListener, MemberCallId),
-
-    acdc_stats:call_missed(AccountId, QueueId, AgentId, MemberCallId, Cause),
+    acdc_agent_listener:hangup_call(AgentListener),
 
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
 
@@ -878,7 +873,7 @@ ringing({'channel_answered', JObj}, #state{member_call_id=MemberCallId
                     {'next_state', 'outbound', start_outbound_call_handling(OtherCallId, clear_call(State, 'ready')), 'hibernate'};
                 'false' ->
                     lager:debug("recv answer for ~s, probably the agent's call", [OtherCallId]),
-                    {'next_state', 'ringing', State}
+                    {'next_state', 'ringing', State#state{agent_call_id=OtherCallId}}
             end
     end;
 ringing({'sync_req', JObj}, #state{agent_listener=AgentListener}=State) ->
