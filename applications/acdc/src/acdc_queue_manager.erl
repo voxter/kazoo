@@ -838,8 +838,13 @@ maybe_update_strategy('rr', StrategyState, AgentId) ->
 %% If A's idle time is greater, it should come before B
 -spec sort_agent(wh_json:object(), wh_json:object()) -> boolean().
 sort_agent(A, B) ->
-    wh_json:get_integer_value(<<"Idle-Time">>, A, 0) >
-        wh_json:get_integer_value(<<"Idle-Time">>, B, 0).
+    sort_agent2(wh_json:get_integer_value(<<"Idle-Time">>, A)
+                ,wh_json:get_integer_value(<<"Idle-Time">>, B)).
+
+-spec sort_agent2(api_integer(), api_integer()) -> boolean().
+sort_agent2('undefined', _) -> 'true';
+sort_agent2(_, 'undefined') -> 'false';
+sort_agent2(A, B) -> A > B.
 
 %% Handle when an agent process has responded to the connect_req
 %% but then the agent logs out of their phone (removing the agent
