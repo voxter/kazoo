@@ -90,6 +90,7 @@
           ,caller_exit_key :: ne_binary() % DTMF a caller can press to leave the queue
           ,record_caller = 'false' :: boolean() % record the caller
           ,recording_url :: api_binary() %% URL of where to POST recordings
+          ,preserve_metadata = 'false' :: boolean() % include call metadata in recordings
           ,cdr_url :: api_binary() % optional URL to request for extra CDR data
 
           ,notifications :: api_object()
@@ -230,6 +231,7 @@ init([MgrPid, ListenerPid, QueueJObj]) ->
              ,caller_exit_key = wh_json:get_value(<<"caller_exit_key">>, QueueJObj, <<"#">>)
              ,record_caller = wh_json:is_true(<<"record_caller">>, QueueJObj, 'false')
              ,recording_url = wh_json:get_ne_value(<<"call_recording_url">>, QueueJObj)
+             ,preserve_metadata = wh_json:is_true(<<"preserve_metadata">>, QueueJObj, 'false')
              ,cdr_url = wh_json:get_ne_value(<<"cdr_url">>, QueueJObj)
              ,member_call = 'undefined'
 
@@ -816,6 +818,7 @@ update_properties(QueueJObj, State) ->
       ,caller_exit_key = wh_json:get_value(<<"caller_exit_key">>, QueueJObj, <<"#">>)
       ,record_caller = wh_json:is_true(<<"record_caller">>, QueueJObj, 'false')
       ,recording_url = wh_json:get_ne_value(<<"call_recording_url">>, QueueJObj)
+      ,preserve_metadata = wh_json:is_true(<<"preserve_metadata">>, QueueJObj, 'false')
       ,cdr_url = wh_json:get_ne_value(<<"cdr_url">>, QueueJObj)
       ,notifications = wh_json:get_value(<<"notifications">>, QueueJObj)
 
@@ -914,6 +917,7 @@ maybe_pick_winner(#state{connect_resps=CRs
                          ,cdr_url=CDRUrl
                          ,record_caller=ShouldRecord
                          ,recording_url=RecordUrl
+                         ,preserve_metadata=PreserveMetadata
                          ,notifications=Notifications
                         }=State) ->
     case acdc_queue_manager:pick_winner(Mgr, CRs) of
@@ -924,6 +928,7 @@ maybe_pick_winner(#state{connect_resps=CRs
                          ,{<<"CDR-Url">>, CDRUrl}
                          ,{<<"Record-Caller">>, ShouldRecord}
                          ,{<<"Recording-URL">>, RecordUrl}
+                         ,{<<"Preserve-Metadata">>, PreserveMetadata}
                          ,{<<"Notifications">>, Notifications}
                         ],
 
