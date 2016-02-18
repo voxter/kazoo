@@ -448,6 +448,7 @@ user(Call) ->
 update_post_create(Call) ->
     Updaters = [fun unset_other_leg_self/1
                 ,fun set_quickcall_ccv/1
+                ,fun unset_offnet_authorizing_id/1
                 ,fun set_id/1
                 ,fun set_other_id/1
                 ,fun set_channel/1
@@ -481,6 +482,17 @@ set_quickcall_ccv(Call) ->
     case caller_id_name(Call) of
         <<"Device QuickCall">> -> set_ccv(<<"Device-QuickCall">>, <<"true">>, Call);
         _ -> Call
+    end.
+
+-spec unset_offnet_authorizing_id(call()) -> call().
+unset_offnet_authorizing_id(#call{custom_channel_vars=CCVs}=Call) ->
+    %% Use E164-Destination as indicator that this is an offnet leg
+    %% and therefore the authorizing id is not valid for the destination
+    case wh_json:get_value(<<"E164-Destination">>, CCVs) of
+        'undefined' -> Call;
+        _ -> Call#call{authorizing_id='undefined'
+                       ,custom_channel_vars=wh_json:delete_key(<<"Authorizing-ID">>, CCVs)
+                      }
     end.
 
 -spec set_id(call()) -> call().
