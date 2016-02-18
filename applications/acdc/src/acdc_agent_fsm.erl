@@ -651,7 +651,7 @@ ready({'channel_answered', JObj}, #state{outbound_call_ids=OutboundCallIds}=Stat
             {'next_state', 'outbound', start_outbound_call_handling(CallId, clear_call(State, 'ready')), 'hibernate'};
         'false' ->
             lager:debug("unexpected answer of ~s while in ready", [CallId]),
-            {'next_state', 'ringing', State}
+            {'next_state', 'ready', State}
     end;
 ready({'channel_hungup', CallId, _Cause}, #state{agent_listener=AgentListener}=State) ->
     lager:debug("unexpected channel ~s down", [CallId]),
