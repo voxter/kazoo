@@ -18,6 +18,7 @@
          ,member_connect_req/2
          ,member_connect_win/3
          ,agent_timeout/2
+         ,shared_call_id/2
          ,originate_ready/2
          ,originate_resp/2, originate_started/2, originate_uuid/2
          ,originate_failed/2
@@ -57,7 +58,6 @@
          ,wrapup/2
          ,paused/2
          ,outbound/2
-         ,monitoring/2
 
          ,wait/3
          ,sync/3
@@ -68,7 +68,6 @@
          ,wrapup/3
          ,paused/3
          ,outbound/3
-         ,monitoring/3
         ]).
 
 -ifdef(TEST).
@@ -131,6 +130,7 @@
                 ,max_connect_failures :: wh_timeout()
                 ,connect_failures = 0 :: non_neg_integer()
                 ,agent_state_updates = [] :: list()
+                ,monitoring = 'false' :: boolean()
                }).
 -type fsm_state() :: #state{}.
 
@@ -162,6 +162,10 @@ member_connect_win(FSM, JObj, Node) ->
 -spec agent_timeout(pid(), wh_json:object()) -> 'ok'.
 agent_timeout(FSM, JObj) ->
     gen_fsm:send_event(FSM, {'agent_timeout', JObj}).
+
+-spec shared_call_id(pid(), wh_json:object()) -> 'ok'.
+shared_call_id(FSM, JObj) ->
+    gen_fsm:send_event(FSM, {'shared_call_id', JObj}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -583,6 +587,8 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
             acdc_agent_listener:member_connect_retry(AgentListener, JObj),
             {'next_state', 'ready', State#state{connect_failures=CF+1}};
         {'ok', UpdatedEPs} ->
+            acdc_util:bind_to_call_events(Call, AgentListener),
+
             %% Need to check if a callback is required to the caller
             case wh_json:get_value(<<"Callback-Number">>, JObj) of
                 'undefined' ->
@@ -608,23 +614,46 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
                                                  }}
     end;
 ready({'member_connect_win', JObj, 'different_node'}, #state{agent_listener=AgentListener
+                                                             ,endpoints=OrigEPs
                                                              ,agent_id=AgentId
+                                                             ,connect_failures=CF
                                                             }=State) ->
     Call = whapps_call:from_json(wh_json:get_value(<<"Call">>, JObj)),
     CallId = whapps_call:call_id(Call),
 
-    put('callid', CallId),
+    wh_util:put_callid(CallId),
 
+    WrapupTimer = wh_json:get_integer_value(<<"Wrapup-Timeout">>, JObj, 0),
+    CallerExitKey = wh_json:get_value(<<"Caller-Exit-Key">>, JObj, <<"#">>),
     QueueId = wh_json:get_value(<<"Queue-ID">>, JObj),
-    CDRUrl = cdr_url(JObj),
-    RecordingUrl = recording_url(JObj),
-    lager:debug("monitoring agent ~s to connect to caller in queue ~s", [AgentId, QueueId]),
-    acdc_agent_listener:monitor_call(AgentListener, Call, CDRUrl, RecordingUrl),
 
-    %% Start a sync waiting for the next ready state
-    monitoring('send_sync_event', State#state{member_call=Call
-                                              ,member_call_id=CallId
-                                             });
+    RecordingUrl = recording_url(JObj),
+
+    %% Only start monitoring if the agent can actually take the call
+    case get_endpoints(OrigEPs, AgentListener, Call, AgentId, QueueId) of
+        {'error', 'no_endpoints'} ->
+            lager:info("agent ~s has no endpoints assigned; logging agent out", [AgentId]),
+            {'next_state', 'paused', State};
+        {'error', _E} ->
+            lager:debug("can't take the call, skip me: ~p", [_E]),
+            {'next_state', 'ready', State#state{connect_failures=CF+1}};
+        {'ok', UpdatedEPs} ->
+            acdc_util:bind_to_call_events(Call, AgentListener),
+
+            acdc_agent_listener:monitor_call(AgentListener, Call, JObj, RecordingUrl),
+
+            lager:debug("monitoring agent ~s to connect to caller in queue ~s", [AgentId, QueueId]),
+            {'next_state', 'ringing', State#state{wrapup_timeout=WrapupTimer
+                                                  ,member_call=Call
+                                                  ,member_call_id=CallId
+                                                  ,member_call_start=wh_util:now()
+                                                  ,member_call_queue_id=QueueId
+                                                  ,caller_exit_key=CallerExitKey
+                                                  ,endpoints=UpdatedEPs
+                                                  ,queue_notifications=wh_json:get_value(<<"Notifications">>, JObj)
+                                                  ,monitoring = 'true'
+                                                 }}
+    end;
 ready({'member_connect_req', _}, #state{max_connect_failures=Max
                                         ,connect_failures=Fails
                                         ,account_id=AccountId
@@ -887,17 +916,29 @@ ringing({'originate_resp', ACallId}, #state{agent_listener=AgentListener
                                             ,agent_id=AgentId
                                             ,queue_notifications=Ns
                                            }=State) ->
-    lager:debug("originate resp on ~s, connecting to caller", [ACallId]),
-    acdc_agent_listener:member_connect_accepted(AgentListener, ACallId),
+    lager:debug("originate resp on ~s, broadcasting", [ACallId]),
+    wapi_acdc_agent:publish_agent_call_id([{<<"Account-ID">>, AccountId}
+                                           ,{<<"Agent-ID">>, AgentId}
+                                           ,{<<"Agent-Call-ID">>, ACallId}
+                                           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                          ]),
 
     maybe_notify(Ns, ?NOTIFY_PICKUP, State),
 
     CIDName = whapps_call:caller_id_name(MemberCall),
     CIDNum = whapps_call:caller_id_number(MemberCall),
 
-    acdc_util:bind_to_call_events(ACallId, AgentListener),
-
+    acdc_agent_listener:member_connect_accepted(AgentListener, ACallId),
     acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNum),
+
+    {'next_state', 'ringing', State};
+ringing({'shared_call_id', JObj}, #state{agent_listener=AgentListener}=State) ->
+    ACallId = wh_json:get_value(<<"Agent-Call-ID">>, JObj),
+
+    lager:debug("shared call id ~s acquired, connecting to caller", [ACallId]),
+    
+    acdc_util:bind_to_call_events(ACallId, AgentListener),
+    acdc_agent_listener:monitor_connect_accepted(AgentListener, ACallId),
 
     {'next_state', 'answered', State#state{agent_call_id=ACallId
                                            ,connect_failures=0
@@ -1561,64 +1602,6 @@ outbound('current_call', _, State) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Become aware of activity on other node for the agent, preventing them from being
-%% in an inconsistent state on each node
-%%
-%% @end
-%%--------------------------------------------------------------------
-monitoring({'timeout', Ref, ?SYNC_RESPONSE_MESSAGE}, #state{sync_ref=Ref}=State) when is_reference(Ref) ->
-    lager:debug("monitoring - sync timed out"),
-    monitoring('send_sync_event', State);
-monitoring({'timeout', Ref, ?RESYNC_RESPONSE_MESSAGE}, #state{sync_ref=Ref}=State) when is_reference(Ref) ->
-    lager:debug("monitoring - resync timer expired, lets check with the others again"),
-    monitoring('send_sync_event', State);
-monitoring('send_sync_event', #state{agent_listener=AgentListener
-                                     ,agent_listener_id=_AProcId
-                                    }=State) ->
-    lager:debug("monitoring - sending sync_req event to other agent processes: ~s", [_AProcId]),
-    acdc_agent_listener:send_sync_req(AgentListener),
-    {'next_state', 'monitoring', State#state{sync_ref=start_sync_timer()}};
-monitoring({'sync_req', JObj}, #state{agent_listener=AgentListener
-                                      ,agent_listener_id=AProcId
-                                     }=State) ->
-    case wh_json:get_value(<<"Process-ID">>, JObj) of
-        AProcId ->
-            lager:debug("monitoring - recv sync req from ourself"),
-            {'next_state', 'monitoring', State};
-        _OtherProcId ->
-            lager:debug("monitoring - recv sync_req from ~s (we are ~s)", [_OtherProcId, AProcId]),
-            acdc_agent_listener:send_sync_resp(AgentListener, 'monitoring', JObj),
-            {'next_state', 'monitoring', State}
-    end;
-monitoring({'sync_resp', JObj}, #state{sync_ref=Ref}=State) ->
-    case catch wh_util:to_atom(wh_json:get_value(<<"Status">>, JObj)) of
-        'ready' ->
-            lager:debug("monitoring - other agent fsm is in ready state, joining back in"),
-            _ = erlang:cancel_timer(Ref),
-            apply_state_updates(clear_call(State, 'ready'));
-        {'EXIT', _} ->
-            lager:debug("monitoring - other agent fsm sent unusable state, ignoring"),
-            {'next_state', 'monitoring', State};
-        Status ->
-            lager:debug("monitoring - other agent fsm is in ~s, delaying", [Status]),
-            _ = erlang:cancel_timer(Ref),
-            {'next_state', 'monitoring', State#state{sync_ref=start_resync_timer()}}
-    end;
-monitoring({_Evt, _}, State) ->
-    lager:debug("monitoring - unhandled event: ~p", [_Evt]),
-    {'next_state', 'monitoring', State};
-monitoring(_Evt, State) ->
-    lager:debug("monitoring - unhandled event: ~p", [_Evt]),
-    {'next_state', 'monitoring', State}.
-
-monitoring('status', _, State) ->
-    {'reply', [{'state', <<"monitoring">>}], 'monitoring', State};
-monitoring('current_call', _, State) ->
-    {'reply', 'undefined', 'monitoring', State}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Whenever a gen_fsm receives an event sent using
 %% gen_fsm:send_all_state_event/2, this function is called to handle
 %% the event.
@@ -1909,6 +1892,7 @@ clear_call(#state{fsm_call_id=FSMemberCallId
                 ,member_call_queue_id = 'undefined'
                 ,agent_call_id = 'undefined'
                 ,caller_exit_key = <<"#">>
+                ,monitoring = 'false'
                }.
 
 -spec current_call(whapps_call:call() | 'undefined', atom(), ne_binary(), 'undefined' | wh_now()) ->
