@@ -514,20 +514,23 @@ store_recording_meta(Call, MediaName, Ext) ->
 
     MediaDoc = wh_doc:update_pvt_parameters(
                  wh_json:from_list(
-                   [{<<"name">>, MediaName}
-                    ,{<<"description">>, <<"recording ", MediaName/binary>>}
-                    ,{<<"content_type">>, ext_to_mime(Ext)}
-                    ,{<<"media_type">>, Ext}
-                    ,{<<"media_source">>, <<"recorded">>}
-                    ,{<<"source_type">>, wh_util:to_binary(?MODULE)}
-                    ,{<<"pvt_type">>, <<"private_media">>}
-                    ,{<<"from">>, whapps_call:from(Call)}
-                    ,{<<"to">>, whapps_call:to(Call)}
-                    ,{<<"caller_id_number">>, whapps_call:caller_id_number(Call)}
-                    ,{<<"caller_id_name">>, whapps_call:caller_id_name(Call)}
-                    ,{<<"call_id">>, CallId}
-                    ,{<<"_id">>, get_recording_doc_id(CallId)}
-                   ])
+                   props:filter_undefined(
+                     [{<<"name">>, MediaName}
+                      ,{<<"description">>, <<"recording ", MediaName/binary>>}
+                      ,{<<"content_type">>, ext_to_mime(Ext)}
+                      ,{<<"media_type">>, Ext}
+                      ,{<<"media_source">>, <<"recorded">>}
+                      ,{<<"source_type">>, wh_util:to_binary(?MODULE)}
+                      ,{<<"pvt_type">>, <<"private_media">>}
+                      ,{<<"from">>, whapps_call:from(Call)}
+                      ,{<<"to">>, whapps_call:to(Call)}
+                      ,{<<"caller_id_number">>, whapps_call:caller_id_number(Call)}
+                      ,{<<"caller_id_name">>, whapps_call:caller_id_name(Call)}
+                      ,{<<"call_id">>, CallId}
+                      ,{<<"queue_id">>, whapps_call:custom_channel_var(<<"Queue-ID">>, Call)}
+                      ,{<<"_id">>, get_recording_doc_id(CallId)}
+                     ])
+                  )
                  ,AcctDb
                 ),
     couch_mgr:save_doc(AcctDb, MediaDoc).
