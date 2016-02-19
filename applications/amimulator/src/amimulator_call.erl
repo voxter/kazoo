@@ -85,8 +85,8 @@ from_json(JObj) ->
                                       wh_util:current_tstamp() - Sec;
                                   Timestamp -> Timestamp
                               end
-                 ,caller_id_name = wh_json:get_first_defined([<<"Caller-ID-Name">>, <<"caller_id">>], JObj)
-                 ,caller_id_number = wh_json:get_first_defined([<<"Caller-ID-Number">>, <<"caller_id">>], JObj)
+                 ,caller_id_name = wh_json:get_first_defined([<<"Caller-ID-Name">>, <<"caller_id">>], JObj, wh_util:anonymous_caller_id_name())
+                 ,caller_id_number = wh_json:get_first_defined([<<"Caller-ID-Number">>, <<"caller_id">>], JObj, wh_util:anonymous_caller_id_number())
 
                  ,callee_id_name = case wh_json:get_value(<<"Callee-ID-Name">>, JObj) of
                     'undefined' ->
@@ -448,6 +448,7 @@ user(Call) ->
 update_post_create(Call) ->
     Updaters = [fun unset_other_leg_self/1
                 ,fun set_quickcall_ccv/1
+                ,fun unset_offnet_authorizing_id/1
                 ,fun set_id/1
                 ,fun set_other_id/1
                 ,fun set_channel/1
@@ -481,6 +482,17 @@ set_quickcall_ccv(Call) ->
     case caller_id_name(Call) of
         <<"Device QuickCall">> -> set_ccv(<<"Device-QuickCall">>, <<"true">>, Call);
         _ -> Call
+    end.
+
+-spec unset_offnet_authorizing_id(call()) -> call().
+unset_offnet_authorizing_id(#call{custom_channel_vars=CCVs}=Call) ->
+    %% Use E164-Destination as indicator that this is an offnet leg
+    %% and therefore the authorizing id is not valid for the destination
+    case wh_json:get_value(<<"E164-Destination">>, CCVs) of
+        'undefined' -> Call;
+        _ -> Call#call{authorizing_id='undefined'
+                       ,custom_channel_vars=wh_json:delete_key(<<"Authorizing-ID">>, CCVs)
+                      }
     end.
 
 -spec set_id(call()) -> call().
@@ -555,12 +567,16 @@ parse_user_at_realm('user', Data) ->
 -spec maybe_cellphone_endpoint(call()) -> api_object().
 maybe_cellphone_endpoint(Call) ->
     AccountDb = account_db(Call),
-    {'ok', Results} = couch_mgr:get_results(AccountDb, <<"devices/call_forwards">>),
     E164 = case direction(Call) of
         <<"inbound">> -> wnm_util:to_e164(from_user(Call));
         <<"outbound">> -> wnm_util:to_e164(to_user(Call))
     end,
-    find_cellphone_endpoint_fold(AccountDb, E164, Results).
+
+    Results1 = case couch_mgr:get_results(AccountDb, <<"devices/call_forwards">>) of
+        {'ok', Results} -> Results;
+        {'error', _} -> []
+    end,
+    find_cellphone_endpoint_fold(AccountDb, E164, Results1).
 
 -spec find_cellphone_endpoint_fold(api_binary(), ne_binary(), wh_json:objects()) -> api_object().
 find_cellphone_endpoint_fold(_, _, []) ->

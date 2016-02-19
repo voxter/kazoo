@@ -121,7 +121,6 @@
                 ,queue_notifications :: api_object()
 
                 ,agent_call_id :: api_binary()
-                ,ambiguous_uuids = [] :: ne_binaries()
                 ,agent_callback_call = 'undefined'
                 ,originate_call_ids = []
                 ,control_q_map = []
@@ -652,7 +651,7 @@ ready({'channel_answered', JObj}, #state{outbound_call_ids=OutboundCallIds}=Stat
             {'next_state', 'outbound', start_outbound_call_handling(CallId, clear_call(State, 'ready')), 'hibernate'};
         'false' ->
             lager:debug("unexpected answer of ~s while in ready", [CallId]),
-            {'next_state', 'ringing', State}
+            {'next_state', 'ready', State}
     end;
 ready({'channel_hungup', CallId, _Cause}, #state{agent_listener=AgentListener}=State) ->
     lager:debug("unexpected channel ~s down", [CallId]),
@@ -706,19 +705,10 @@ ringing({'originate_ready', JObj}, #state{agent_listener=AgentListener}=State) -
     lager:debug("ringing agent's phone with call-id ~s", [CallId]),
     acdc_agent_listener:originate_execute(AgentListener, JObj),
     {'next_state', 'ringing', State};
-ringing({'originate_uuid', ACallId, ACtrlQ}, #state{agent_listener=AgentListener
-                                                    ,ambiguous_uuids=AmbiguousUUIDs
-                                                   }=State) ->
+ringing({'originate_uuid', ACallId, ACtrlQ}, #state{agent_listener=AgentListener}=State) ->
     lager:debug("recv originate_uuid for agent call ~s(~s)", [ACallId, ACtrlQ]),
     acdc_agent_listener:originate_uuid(AgentListener, ACallId, ACtrlQ),
-    case lists:member(ACallId, AmbiguousUUIDs) of
-        'true' ->
-            lager:debug("found a uuid ~s that was from a previous queue call", [ACallId]),
-            acdc_agent_listener:channel_hungup(AgentListener, ACallId),
-            {'next_state', 'ringing', State#state{ambiguous_uuids=lists:delete(ACallId, AmbiguousUUIDs)}};
-        'false' ->
-            {'next_state', 'ringing', State#state{ambiguous_uuids=[ACallId | lists:delete(ACallId, AmbiguousUUIDs)]}}
-    end;
+    {'next_state', 'ringing', State};
 ringing({'originate_started', ACallId}, #state{agent_listener=AgentListener
                                                ,member_call_id=MemberCallId
                                                ,member_call=MemberCall
@@ -739,7 +729,6 @@ ringing({'originate_started', ACallId}, #state{agent_listener=AgentListener
     acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNum),
 
     {'next_state', 'answered', State#state{agent_call_id=ACallId
-                                           ,ambiguous_uuids=[]
                                            ,connect_failures=0
                                           }};
 ringing({'originate_failed', E}, #state{agent_listener=AgentListener
@@ -804,26 +793,19 @@ ringing({'channel_bridged', MemberCallId}, #state{member_call_id=MemberCallId
 
     acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNum),
 
-    {'next_state', 'answered', State#state{ambiguous_uuids=[]
-                                           ,connect_failures=0
-                                          }};
+    {'next_state', 'answered', State#state{connect_failures=0}};
 ringing({'channel_bridged', _CallId}, State) ->
     {'next_state', 'ringing', State};
-ringing({'channel_hungup', AgentCallId, Cause}, #state{agent_listener=AgentListener
-                                                       ,agent_call_id=AgentCallId
-                                                       ,account_id=AccountId
-                                                       ,agent_id=AgentId
-                                                       ,member_call_queue_id=QueueId
-                                                       ,member_call_id=MemberCallId
-                                                       ,connect_failures=Fails
-                                                       ,max_connect_failures=MaxFails
-                                                      }=State) ->
-    lager:debug("ringing agent failed: timeout on ~s ~s", [AgentCallId, Cause]),
+ringing({'channel_hungup', AgentCallId, _Cause}, #state{agent_listener=AgentListener
+                                                        ,agent_call_id=AgentCallId
+                                                        ,account_id=AccountId
+                                                        ,agent_id=AgentId
+                                                        ,connect_failures=Fails
+                                                        ,max_connect_failures=MaxFails
+                                                       }=State) ->
+    lager:debug("agent's channel (~s) down", [AgentCallId]),
 
-    acdc_agent_listener:member_connect_retry(AgentListener, MemberCallId),
-    acdc_agent_listener:channel_hungup(AgentListener, MemberCallId),
-
-    acdc_stats:call_missed(AccountId, QueueId, AgentId, MemberCallId, Cause),
+    acdc_agent_listener:hangup_call(AgentListener),
 
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
 
@@ -891,7 +873,7 @@ ringing({'channel_answered', JObj}, #state{member_call_id=MemberCallId
                     {'next_state', 'outbound', start_outbound_call_handling(OtherCallId, clear_call(State, 'ready')), 'hibernate'};
                 'false' ->
                     lager:debug("recv answer for ~s, probably the agent's call", [OtherCallId]),
-                    {'next_state', 'ringing', State}
+                    {'next_state', 'ringing', State#state{agent_call_id=OtherCallId}}
             end
     end;
 ringing({'sync_req', JObj}, #state{agent_listener=AgentListener}=State) ->
@@ -918,7 +900,6 @@ ringing({'originate_resp', ACallId}, #state{agent_listener=AgentListener
     acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNum),
 
     {'next_state', 'answered', State#state{agent_call_id=ACallId
-                                           ,ambiguous_uuids=[]
                                            ,connect_failures=0
                                           }};
 ringing(?NEW_CHANNEL_FROM(CallId), #state{agent_listener=AgentListener}=State) ->
@@ -934,17 +915,10 @@ ringing(?NEW_CHANNEL_TO(CallId, 'undefined'), #state{agent_listener=AgentListene
 ringing(?NEW_CHANNEL_TO(CallId, MemberCallId), #state{member_call_id=MemberCallId}=State) ->
     lager:debug("new channel ~s for agent", [CallId]),
     {'next_state', 'ringing', State};
-ringing(?NEW_CHANNEL_TO(CallId, _MemberCallId), #state{agent_listener=AgentListener
-                                                       ,ambiguous_uuids=AmbiguousUUIDs
-                                                      }=State) ->
-    case lists:member(CallId, AmbiguousUUIDs) of
-        'true' ->
-            lager:debug("found a uuid ~s that was from a previous queue call", [CallId]),
-            acdc_agent_listener:channel_hungup(AgentListener, CallId),
-            {'next_state', 'ringing', State#state{ambiguous_uuids=lists:delete(CallId, AmbiguousUUIDs)}};
-        'false' ->
-            {'next_state', 'ringing', State#state{ambiguous_uuids=[CallId | lists:delete(CallId, AmbiguousUUIDs)]}}
-    end;
+ringing(?NEW_CHANNEL_TO(CallId, _MemberCallId), #state{agent_listener=AgentListener}=State) ->
+    lager:debug("found a uuid ~s that was from a previous queue call", [CallId]),
+    acdc_agent_listener:channel_hungup(AgentListener, CallId),
+    {'next_state', 'ringing', State};
 ringing({'leg_created', _CallId}, State) ->
     {'next_state', 'ringing', State};
 ringing({'leg_destroyed', _CallId}, State) ->
@@ -1934,7 +1908,6 @@ clear_call(#state{fsm_call_id=FSMemberCallId
                 ,member_call_start = 'undefined'
                 ,member_call_queue_id = 'undefined'
                 ,agent_call_id = 'undefined'
-                ,ambiguous_uuids = []
                 ,caller_exit_key = <<"#">>
                }.
 
@@ -2112,7 +2085,11 @@ maybe_remove_endpoint(EPId, EPs, AccountId, AgentListener) ->
 get_endpoints(OrigEPs, AgentListener, Call, AgentId, QueueId) ->
     case catch acdc_util:get_endpoints(Call, AgentId) of
         [] ->
-            {'error', 'no_endpoints'};
+            %% Survive couch connection issue by using last list of valid endpoints
+            case OrigEPs of
+                [] -> {'error', 'no_endpoints'};
+                _ -> {'ok', [wh_json:set_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], QueueId, EP) || EP <- OrigEPs]}
+            end;
         [_|_]=EPs ->
             AccountId = whapps_call:account_id(Call),
 
