@@ -61,7 +61,7 @@ participants_cache_change(EventJObj) ->
     {ok, ConferenceNumber} = amimulator_util:find_id_number(ConferenceId, AccountDb),
     CachedParticipants = ami_sm:conf_parts(ConferenceId),
 
-    Current = wh_json:get_value(<<"Participants">>, EventJObj),
+    Current = wh_json:get_value(<<"Participants">>, EventJObj, []),
     Removed = removed(removed_participants(CachedParticipants, Current), ConferenceNumber),
     Added = added(added_participants(CachedParticipants, Current), ConferenceNumber),
     update_cache(Removed, Added, CachedParticipants, ConferenceId),
@@ -173,7 +173,7 @@ find_in_cached(First, [H|T]) ->
         H ->
             true;
         _ ->
-            find_in_current(First, T)
+            find_in_cached(First, T)
     end.
 
 
