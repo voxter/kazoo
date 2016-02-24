@@ -137,7 +137,7 @@ init([]) ->
     ets:new('ringing_channels', ['named_table']),
     ets:new('answered_channels', ['named_table']),
     ets:new('queue_calls', ['named_table', 'bag']),
-    ets:new('conference_participants', ['named_table', 'bag']),
+    ets:new('conference_participants', ['named_table']),
     ets:new('conference_cache_data', ['named_table']),
     ets:new('database', ['named_table', 'bag']),
     {'ok', #state{}}.
