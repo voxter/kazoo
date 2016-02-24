@@ -582,7 +582,12 @@ maybe_cellphone_endpoint(Call) ->
 find_cellphone_endpoint_fold(_, _, []) ->
     'undefined';
 find_cellphone_endpoint_fold(AccountDb, E164, [Result|Results]) ->
-    {'ok', Device} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, Result)),
+    find_cellphone_endpoint_fold(AccountDb, E164, couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, Result)), Results).
+
+-spec find_cellphone_endpoint_fold(api_binary(), ne_binary(), {'ok', wh_json:object()} | couch_mgr:couchbeam_error() | {'error', 'not_found'}, wh_json:objects()) -> api_object().
+find_cellphone_endpoint_fold(AccountDb, E164, {'error', 'req_timedout'}, Results) ->
+    find_cellphone_endpoint_fold(AccountDb, E164, Results);
+find_cellphone_endpoint_fold(AccountDb, E164, {'ok', Device}, Results) ->
     case {wnm_util:to_e164(wh_json:get_value([<<"call_forward">>, <<"number">>], Device)), wh_json:get_value(<<"owner_id">>, Device)} of
         {_, 'undefined'} -> find_cellphone_endpoint_fold(AccountDb, E164, Results);
         {E164, _} -> Device;
