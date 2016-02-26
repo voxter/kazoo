@@ -88,6 +88,7 @@
          ,supervisor :: pid()
          ,record_calls = 'false' :: boolean()
          ,recording_url :: api_binary() %% where to send recordings after the call
+         ,preserve_metadata = 'false' :: boolean()
          ,is_thief = 'false' :: boolean()
          ,agent :: agent()
          ,agent_call_ids = [] :: api_binaries() | wh_proplist()
@@ -648,6 +649,7 @@ handle_cast({'redial_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number},
     {'noreply', State#state{call=Call
                             ,acdc_queue_id=wh_json:get_value(<<"Queue-ID">>, WinJObj)
                             ,record_calls=ShouldRecord
+                            ,preserve_metadata=wh_json:is_true(<<"Preserve-Metadata">>, WinJObj, 'false')
                             ,msg_queue_id=wh_json:get_value(<<"Server-ID">>, WinJObj)
                             ,agent_call_ids=AgentCallIds
                             ,recording_url=RecordingUrl
@@ -685,6 +687,7 @@ handle_cast({'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}, #sta
     {'noreply', State#state{call=Call
                             ,acdc_queue_id=wh_json:get_value(<<"Queue-ID">>, WinJObj)
                             ,record_calls=ShouldRecord
+                            ,preserve_metadata=wh_json:is_true(<<"Preserve-Metadata">>, WinJObj, 'false')
                             ,msg_queue_id=wh_json:get_value(<<"Server-ID">>, WinJObj)
                             ,agent_call_ids=AgentCallIds
                             ,cdr_urls=dict:store(whapps_call:call_id(Call), CDRUrl,
@@ -718,6 +721,7 @@ handle_cast({'bridge_to_member', Call, WinJObj, _, CDRUrl, RecordingUrl}, #state
                                                  dict:store(AgentCallId, CDRUrl, Urls)
                                                 )
                             ,record_calls=ShouldRecord
+                            ,preserve_metadata=wh_json:is_true(<<"Preserve-Metadata">>, WinJObj, 'false')
                             ,recording_url=RecordingUrl
                            }
      ,'hibernate'};
@@ -729,9 +733,10 @@ handle_cast({'member_connect_accepted'}, #state{msg_queue_id=AmqpQueue
                                                 ,my_id=MyId
                                                 ,record_calls=ShouldRecord
                                                 ,recording_url=RecordingUrl
+                                                ,preserve_metadata=PreserveMetadata
                                                }=State) ->
     lager:debug("member bridged to agent! waiting on agent call id though"),
-    maybe_start_recording(Call, ShouldRecord, RecordingUrl),
+    maybe_start_recording(Call, ShouldRecord, PreserveMetadata, RecordingUrl),
 
     send_member_connect_accepted(AmqpQueue, call_id(Call), AcctId, AgentId, MyId),
     {'noreply', State};
@@ -743,10 +748,11 @@ handle_cast({'member_connect_accepted', ACallId}, #state{msg_queue_id=AmqpQueue
                                                          ,my_id=MyId
                                                          ,record_calls=ShouldRecord
                                                          ,recording_url=RecordingUrl
+                                                         ,preserve_metadata=PreserveMetadata
                                                          ,agent_call_ids=ACallIds
                                                         }=State) ->
     lager:debug("member bridged to agent!"),
-    maybe_start_recording(Call, ShouldRecord, RecordingUrl),
+    maybe_start_recording(Call, ShouldRecord, PreserveMetadata, RecordingUrl),
 
     ACallIds1 = filter_agent_calls(ACallIds, ACallId),
 
@@ -762,10 +768,11 @@ handle_cast({'member_connect_accepted', ACallId, NewCall}, #state{msg_queue_id=A
                                                          ,my_id=MyId
                                                          ,record_calls=ShouldRecord
                                                          ,recording_url=RecordingUrl
+                                                         ,preserve_metadata=PreserveMetadata
                                                          ,agent_call_ids=ACallIds
                                                         }=State) ->
     lager:debug("member's new call bridged to agent!"),
-    maybe_start_recording(NewCall, ShouldRecord, RecordingUrl),
+    maybe_start_recording(NewCall, ShouldRecord, PreserveMetadata, RecordingUrl),
 
     ACallIds1 = filter_agent_calls(ACallIds, ACallId),
 
@@ -1325,14 +1332,15 @@ should_record_endpoints(EPs, _, _) ->
                       wh_json:is_true(<<"record_calls">>, EP, 'false')
               end, EPs).
 
--spec maybe_start_recording(whapps_call:call(), boolean(), ne_binary()) -> 'ok'.
-maybe_start_recording(_Call, 'false', _) ->
+-spec maybe_start_recording(whapps_call:call(), boolean(), boolean(), ne_binary()) -> 'ok'.
+maybe_start_recording(_Call, 'false', _, _) ->
     lager:debug("not recording this call");
-maybe_start_recording(Call, 'true', Url) ->
+maybe_start_recording(Call, 'true', PreserveMetadata, Url) ->
     RecordingJObj =
         wh_json:from_list(
           [{<<"format">>, recording_format()}
            ,{<<"url">>, Url}
+           ,{<<"preserve_metadata">>, PreserveMetadata}
           ]),
     lager:debug("starting recording listener for ~s", [Url]),
     case acdc_recordings_sup:new(Call, RecordingJObj) of

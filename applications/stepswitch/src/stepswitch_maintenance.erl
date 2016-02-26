@@ -20,6 +20,7 @@
 -export([reload_resources/0, reload_resources/1]).
 -export([process_number/1
          ,process_number/2
+         ,process_number/3
         ]).
 
 -include("stepswitch.hrl").
@@ -207,19 +208,48 @@ process_number(Number) -> process_number(Number, 'undefined').
 
 -spec process_number(text(), text() | 'undefined') -> any().
 process_number(Number, 'undefined') ->
+    process_number(Number, 'undefined', []);
+process_number(Number, "undefined") ->
+    process_number(Number, 'undefined', []);
+process_number(Number, AccountId) ->
+    process_number(Number, AccountId, []).
+
+-spec process_number(text(), text() | 'undefined', text()) -> any().
+process_number(Number, "undefined", Flags) ->
+    process_number(Number, 'undefined', Flags);
+process_number(Number, AccountId, Flags) ->
+    Flags1 = parse_flags(Flags),
+    do_process_number(Number, AccountId, Flags1).
+
+-spec do_process_number(text(), text() | 'undefined', api_list()) -> any().
+do_process_number(Number, 'undefined', Flags) ->
+    JObj = wh_json:from_list(
+             props:filter_undefined([{<<"Flags">>, Flags}])
+            ),
     Endpoints = stepswitch_resources:endpoints(
                   wh_util:to_binary(Number)
-                  ,wapi_offnet_resource:jobj_to_req(wh_json:new())
+                  ,wapi_offnet_resource:jobj_to_req(JObj)
                  ),
     pretty_print_endpoints(Endpoints);
-process_number(Number, AccountId) ->
-    JObj = wh_json:from_list([{<<"Account-ID">>, wh_util:to_binary(AccountId)}
-                              ,{<<"Hunt-Account-ID">>, wh_util:to_binary(AccountId)}
-                             ]),
+do_process_number(Number, AccountId, Flags) ->
+    JObj = wh_json:from_list(
+             props:filter_undefined([{<<"Account-ID">>, wh_util:to_binary(AccountId)}
+                                     ,{<<"Hunt-Account-ID">>, wh_util:to_binary(AccountId)}
+                                     ,{<<"Flags">>, Flags}
+                                    ])
+            ),
     Endpoints = stepswitch_resources:endpoints(wh_util:to_binary(Number)
                                                ,wapi_offnet_resource:jobj_to_req(JObj)
                                               ),
     pretty_print_endpoints(Endpoints).
+
+-spec parse_flags(text()) -> api_list().
+parse_flags(Flags) ->
+    Flags1 = [wh_util:to_binary(string:strip(Flag)) || Flag <- string:tokens(wh_util:to_list(Flags), ",")],
+    case Flags1 of
+        [] -> 'undefined';
+        _ -> Flags1
+    end.
 
 -spec pretty_print_endpoints(wh_json:objects()) -> any().
 pretty_print_endpoints([]) -> 'ok';
