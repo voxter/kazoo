@@ -546,38 +546,7 @@ handle_cast({'add_miss', JObj}, State) ->
 
     {'noreply', State};
 handle_cast({'replace_call_id', QueueId, OldCallId, NewCallId}, State) ->
-    CallTableId = call_table_id(),
-    CallSummaryTableId = call_summary_table_id(),
-    AgentCallTableId = agent_call_table_id(),
-
-    OldId = call_stat_id(OldCallId, QueueId),
-    NewId = call_stat_id(NewCallId, QueueId),
-
-    lager:debug("replacing old stat id ~p with ~p", [OldId, NewId]),
-
-    Stat = find_call_stat(OldId),
-    ets:delete(CallTableId, OldId),
-    ets:insert(CallTableId, Stat#call_stat{id=NewId
-                                           ,call_id=NewCallId
-                                          }),
-
-    case ets:lookup(CallSummaryTableId, OldId) of
-        [] -> 'ok';
-        [Stat1] ->
-            ets:delete(CallSummaryTableId, OldId),
-            ets:insert(CallSummaryTableId, Stat1#call_summary_stat{id=NewId
-                                                                   ,call_id=NewCallId
-                                                                  })
-    end,
-
-    AgentStats = ets:lookup(AgentCallTableId, OldId),
-    ets:delete(AgentCallTableId, OldId),
-    lists:foreach(fun(AgentStat) ->
-                    ets:insert(AgentCallTableId, AgentStat#agent_call_stat{id=NewId
-                                                                           ,call_id=NewCallId
-                                                                          })
-                  end, AgentStats),
-
+    replace_call_id(QueueId, OldCallId, NewCallId, find_call_stat(OldCallId)),
     {'noreply', State};
 handle_cast({'flush_call', Id}, State) ->
     lager:debug("flushing call stat ~s", [Id]),
@@ -1275,6 +1244,41 @@ handle_id_change(JObj, Props) ->
                         ,wh_json:get_value(<<"Call-ID">>, JObj)
                        }
                      ).
+
+-spec replace_call_id(ne_binary(), ne_binary(), ne_binary(), call_stat() | 'undefined') -> 'ok'.
+replace_call_id(_QueueId, OldCallId, _NewCallId, 'undefined') ->
+    lager:debug("no ~s stat to replace", [OldCallId]);
+replace_call_id(QueueId, OldCallId, NewCallId, Stat) ->
+    CallTableId = call_table_id(),
+    CallSummaryTableId = call_summary_table_id(),
+    AgentCallTableId = agent_call_table_id(),
+
+    OldId = call_stat_id(OldCallId, QueueId),
+    NewId = call_stat_id(NewCallId, QueueId),
+
+    lager:debug("replacing old stat id ~p with ~p", [OldId, NewId]),
+
+    ets:delete(CallTableId, OldId),
+    ets:insert(CallTableId, Stat#call_stat{id=NewId
+                                           ,call_id=NewCallId
+                                          }),
+
+    case ets:lookup(CallSummaryTableId, OldId) of
+        [] -> 'ok';
+        [Stat1] ->
+            ets:delete(CallSummaryTableId, OldId),
+            ets:insert(CallSummaryTableId, Stat1#call_summary_stat{id=NewId
+                                                                   ,call_id=NewCallId
+                                                                  })
+    end,
+
+    AgentStats = ets:lookup(AgentCallTableId, OldId),
+    ets:delete(AgentCallTableId, OldId),
+    lists:foreach(fun(AgentStat) ->
+                    ets:insert(AgentCallTableId, AgentStat#agent_call_stat{id=NewId
+                                                                           ,call_id=NewCallId
+                                                                          })
+                  end, AgentStats).
 
 -spec flush_call_stat(wh_json:object(), wh_proplist()) -> 'ok'.
 flush_call_stat(JObj, Props) ->

@@ -15,12 +15,13 @@
          ,member_connect_resp/2
          ,member_connect_retry/2
          ,member_connect_accepted/1, member_connect_accepted/2, member_connect_accepted/3
+         ,monitor_connect_accepted/2
          ,agent_timeout/1
          ,redial_member/7
          ,bridge_to_member/6
+         ,monitor_call/4
          ,hangup_call/1
          ,replace_call/2
-         ,monitor_call/4
          ,channel_hungup/2
          ,rebind_events/3
          ,unbind_from_events/2
@@ -123,7 +124,7 @@
 -define(BINDINGS(AcctId, AgentId), [{'self', []}
                                     ,{'acdc_agent', [{'account_id', AcctId}
                                                      ,{'agent_id', AgentId}
-                                                     ,{'restrict_to', ['member_connect_win', 'member_connect_reset', 'sync']}
+                                                     ,{'restrict_to', ['member_connect_win', 'member_connect_reset', 'sync', 'call_id']}
                                                     ]}
                                     ,{'conf', [{'action', <<"*">>}
                                                ,{'db', wh_util:format_account_id(AcctId, 'encoded')}
@@ -241,6 +242,9 @@ member_connect_accepted(Srv, ACallId) ->
 member_connect_accepted(Srv, ACallId, MemberCall) ->
     gen_listener:cast(Srv, {'member_connect_accepted', ACallId, MemberCall}).
 
+monitor_connect_accepted(Srv, ACallId) ->
+    gen_listener:cast(Srv, {'monitor_connect_accepted', ACallId}).
+
 -spec redial_member(pid(), whapps_call:call(), wh_json:object()
                        ,wh_json:objects(), api_binary(), api_binary(), api_binary()
                       ) -> 'ok'.
@@ -257,11 +261,11 @@ hangup_call(Srv) ->
 bridge_to_member(Srv, Call, WinJObj, EPs, CDRUrl, RecordingUrl) ->
     gen_listener:cast(Srv, {'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}).
 
+monitor_call(Srv, Call, WinJObj, RecordingUrl) ->
+    gen_listener:cast(Srv, {'monitor_call', Call, WinJObj, RecordingUrl}).
+
 replace_call(Srv, Call) ->
     gen_listener:cast(Srv, {'replace_call', Call}).
-
-monitor_call(Srv, Call, CDRUrl, RecordingUrl) ->
-    gen_listener:cast(Srv, {'monitor_call', Call, CDRUrl, RecordingUrl}).
 
 -spec channel_hungup(pid(), ne_binary()) -> 'ok'.
 channel_hungup(Srv, CallId) ->
@@ -674,8 +678,6 @@ handle_cast({'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}, #sta
                                            ,wh_json:is_true(<<"Record-Caller">>, WinJObj, 'false')
                                           ),
 
-    acdc_util:bind_to_call_events(Call),
-
     AgentCallIds = maybe_connect_to_agent(MyQ, EPs, Call, RingTimeout, AgentId, CDRUrl),
 
     gen_listener:add_binding(self(), 'acdc_agent', [{'callid', call_id(Call)}
@@ -722,6 +724,19 @@ handle_cast({'bridge_to_member', Call, WinJObj, _, CDRUrl, RecordingUrl}, #state
                                                 )
                             ,record_calls=ShouldRecord
                             ,preserve_metadata=wh_json:is_true(<<"Preserve-Metadata">>, WinJObj, 'false')
+                            ,recording_url=RecordingUrl
+                           }
+     ,'hibernate'};
+
+handle_cast({'monitor_call', Call, WinJObj, RecordingUrl}, State) ->
+    _ = whapps_call:put_callid(Call),
+
+    lager:debug("monitoring member call ~s", [whapps_call:call_id(Call)]),
+
+    {'noreply', State#state{call=Call
+                            ,acdc_queue_id=wh_json:get_value(<<"Queue-ID">>, WinJObj)
+                            ,msg_queue_id=wh_json:get_value(<<"Server-ID">>, WinJObj)
+                            ,agent_call_ids=[]
                             ,recording_url=RecordingUrl
                            }
      ,'hibernate'};
@@ -783,6 +798,10 @@ handle_cast({'member_connect_accepted', ACallId, NewCall}, #state{msg_queue_id=A
                             ,call=NewCall
                            }, 'hibernate'};
 
+handle_cast({'monitor_connect_accepted', ACallId}, State) ->
+    lager:debug("monitoring ~s", [ACallId]),
+    {'noreply', State#state{agent_call_ids=[ACallId]}, 'hibernate'};
+
 handle_cast({'member_connect_resp', ReqJObj}, #state{agent_id=AgentId
                                                      ,last_connect=LastConn
                                                      ,agent_queues=Qs
@@ -842,19 +861,6 @@ handle_cast({'replace_call', NewCall}, #state{call=OldCall
     wapi_acdc_queue:publish_member_callback_update(AMQPQueue, Update),
 
     {'noreply', State#state{call=NewCall,old_call=OldCall}, 'hibernate'};
-
-handle_cast({'monitor_call', Call, _CDRUrl, RecordingUrl}, State) ->
-    _ = whapps_call:put_callid(Call),
-
-    acdc_util:bind_to_call_events(Call),
-
-    lager:debug("monitoring member call ~s", [whapps_call:call_id(Call)]),
-
-    {'noreply', State#state{call=Call
-                            ,agent_call_ids=[]
-                            ,recording_url=RecordingUrl
-                           }
-     ,'hibernate'};
 
 handle_cast({'originate_execute', JObj}, #state{my_q=Q}=State) ->
     lager:debug("execute the originate for agent: ~p", [JObj]),
