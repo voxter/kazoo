@@ -653,10 +653,19 @@ ready({'channel_answered', JObj}, #state{outbound_call_ids=OutboundCallIds}=Stat
             lager:debug("unexpected answer of ~s while in ready", [CallId]),
             {'next_state', 'ready', State}
     end;
-ready({'channel_hungup', CallId, _Cause}, #state{agent_listener=AgentListener}=State) ->
-    lager:debug("unexpected channel ~s down", [CallId]),
-    acdc_agent_listener:channel_hungup(AgentListener, CallId),
-    {'next_state', 'ready', State};
+ready({'channel_hungup', CallId, _Cause}, #state{agent_listener=AgentListener
+                                                 ,outbound_call_ids=OutboundCallIds
+                                                }=State) ->
+    case lists:member(CallId, OutboundCallIds) of
+        'true' ->
+            lager:debug("agent outbound channel ~s down", [CallId]),
+            acdc_util:unbind_from_call_events(CallId, AgentListener),
+            {'next_state', 'ready', State#state{outbound_call_ids=lists:delete(CallId, OutboundCallIds)}};
+        'false' ->
+            lager:debug("unexpected channel ~s down", [CallId]),
+            acdc_agent_listener:channel_hungup(AgentListener, CallId),
+            {'next_state', 'ready', State}
+    end;
 ready({'channel_unbridged', CallId}, #state{agent_listener=_AgentListener}=State) ->
     lager:debug("channel unbridged: ~s", [CallId]),
     {'next_state', 'ready', State};
