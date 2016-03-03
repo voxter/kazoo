@@ -18,6 +18,7 @@
          ,member_connect_req/2
          ,member_connect_win/3
          ,agent_timeout/2
+         ,shared_failure/2
          ,shared_call_id/2
          ,originate_ready/2
          ,originate_resp/2, originate_started/2, originate_uuid/2
@@ -162,6 +163,10 @@ member_connect_win(FSM, JObj, Node) ->
 -spec agent_timeout(pid(), wh_json:object()) -> 'ok'.
 agent_timeout(FSM, JObj) ->
     gen_fsm:send_event(FSM, {'agent_timeout', JObj}).
+
+-spec shared_failure(pid(), wh_json:object()) -> 'ok'.
+shared_failure(FSM, JObj) ->
+    gen_fsm:send_event(FSM, {'shared_failure', JObj}).
 
 -spec shared_call_id(pid(), wh_json:object()) -> 'ok'.
 shared_call_id(FSM, JObj) ->
@@ -765,25 +770,21 @@ ringing({'originate_failed', E}, #state{agent_listener=AgentListener
                                         ,agent_id=AgentId
                                         ,member_call_queue_id=QueueId
                                         ,member_call_id=CallId
-                                        ,connect_failures=Fails
-                                        ,max_connect_failures=MaxFails
                                        }=State) ->
-    acdc_agent_listener:member_connect_retry(AgentListener, CallId),
-
     ErrReason = missed_reason(wh_json:get_value(<<"Error-Message">>, E)),
+    lager:debug("originate failed (~s), broadcasting", [ErrReason]),
+    wapi_acdc_agent:publish_shared_originate_failure([{<<"Account-ID">>, AccountId}
+                                                      ,{<<"Agent-ID">>, AgentId}
+                                                      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                                     ]),
 
-    lager:debug("ringing agent failed: ~s", [ErrReason]),
+    acdc_agent_listener:member_connect_retry(AgentListener, CallId),
 
     acdc_stats:call_missed(AccountId, QueueId, AgentId, CallId, ErrReason),
 
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
 
-    NewFSMState = clear_call(State, 'failed'),
-    NextState = return_to_state(Fails+1, MaxFails, AccountId, AgentId),
-    case NextState of
-        'paused' -> {'next_state', 'paused', NewFSMState};
-        'ready' -> apply_state_updates(NewFSMState)
-    end;
+    {'next_state', 'ringing', State};
 ringing({'agent_timeout', _JObj}, #state{agent_listener=AgentListener
                                          ,account_id=AccountId
                                          ,agent_id=AgentId
@@ -932,6 +933,19 @@ ringing({'originate_resp', ACallId}, #state{agent_listener=AgentListener
     acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNum),
 
     {'next_state', 'ringing', State};
+ringing({'shared_failure', _JObj}, #state{account_id=AccountId
+                                          ,agent_id=AgentId
+                                          ,connect_failures=Fails
+                                          ,max_connect_failures=MaxFails
+                                         }=State) ->
+    lager:debug("shared originate failure"),
+
+    NewFSMState = clear_call(State, 'failed'),
+    NextState = return_to_state(Fails+1, MaxFails, AccountId, AgentId),
+    case NextState of
+        'paused' -> {'next_state', 'paused', NewFSMState};
+        'ready' -> apply_state_updates(NewFSMState)
+    end;
 ringing({'shared_call_id', JObj}, #state{agent_listener=AgentListener}=State) ->
     ACallId = wh_json:get_value(<<"Agent-Call-ID">>, JObj),
 

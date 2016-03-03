@@ -123,7 +123,7 @@
 -define(BINDINGS(AcctId, AgentId), [{'self', []}
                                     ,{'acdc_agent', [{'account_id', AcctId}
                                                      ,{'agent_id', AgentId}
-                                                     ,{'restrict_to', ['member_connect_win', 'member_connect_reset', 'sync', 'call_id']}
+                                                     ,{'restrict_to', ['member_connect_win', 'member_connect_reset', 'sync', 'fsm_shared']}
                                                     ]}
                                     ,{'conf', [{'action', <<"*">>}
                                                ,{'db', wh_util:format_account_id(AcctId, 'encoded')}
@@ -625,6 +625,30 @@ handle_cast({'member_connect_retry', WinJObj}, #state{my_id=MyId
     lager:debug("cannot process this win, sending a retry: ~s", [call_id(WinJObj)]),
     send_member_connect_retry(WinJObj, MyId, AgentId),
     {'noreply', State};
+handle_cast({'monitor_connect_retry', CallId}, #state{call=Call
+                                                      ,agent_id=AgentId
+                                                      ,agent_call_ids=ACallIds
+                                                     }=State) ->
+    case catch whapps_call:call_id(Call) of
+        CallId ->
+            lager:debug("retry while monitoring"),
+
+            _ = [acdc_util:unbind_from_call_events(ACallId) || ACallId <- ACallIds],
+            acdc_util:unbind_from_call_events(CallId),
+
+            wh_util:put_callid(AgentId),
+
+            {'noreply', State#state{msg_queue_id='undefined'
+                                    ,acdc_queue_id='undefined'
+                                    ,agent_call_ids=[]
+                                    ,call='undefined'
+                                   }
+             ,'hibernate'
+            };
+        _MCallId ->
+            lager:debug("retry call id(~s) is not our member call id ~p, ignoring", [CallId, _MCallId]),
+            {'noreply', State}
+    end;
 
 handle_cast({'redial_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number}, #state{fsm_pid=FSM
                                                                                 ,agent_queues=Qs
