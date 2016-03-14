@@ -24,6 +24,8 @@
          ,sync_req/1, sync_req_v/1
          ,sync_resp/1, sync_resp_v/1
          ,agent_change/1, agent_change_v/1
+         ,member_callback_reg/1, member_callback_reg_v/1
+         ,member_callback_update/1, member_callback_update_v/1
         ]).
 
 -export([agent_change_available/0
@@ -51,6 +53,8 @@
          ,publish_sync_req/1, publish_sync_req/2
          ,publish_sync_resp/2, publish_sync_resp/3
          ,publish_agent_change/1, publish_agent_change/2
+         ,publish_member_callback_reg/1, publish_member_callback_reg/2
+         ,publish_member_callback_update/2, publish_member_callback_update/3
         ]).
 
 -export([queue_size/2, shared_queue_name/2]).
@@ -253,12 +257,12 @@ member_connect_resp_v(JObj) ->
 %%------------------------------------------------------------------------------
 %% Member Connect Win
 %%------------------------------------------------------------------------------
--define(MEMBER_CONNECT_WIN_HEADERS, [<<"Queue-ID">>, <<"Call">>]).
+-define(MEMBER_CONNECT_WIN_HEADERS, [<<"Queue-ID">>, <<"Agent-ID">>, <<"Call">>, <<"Agent-Process-ID">>]).
 -define(OPTIONAL_MEMBER_CONNECT_WIN_HEADERS, [<<"Ring-Timeout">>, <<"Caller-Exit-Key">>
                                               ,<<"Wrapup-Timeout">>, <<"CDR-Url">>
-                                              ,<<"Process-ID">>, <<"Agent-Process-ID">>
-                                              ,<<"Record-Caller">>, <<"Recording-URL">>
-                                              ,<<"Notifications">>
+                                              ,<<"Process-ID">>
+                                              ,<<"Record-Caller">>, <<"Recording-URL">>, <<"Preserve-Metadata">>
+                                              ,<<"Notifications">>, <<"Callback-Number">>
                                              ]).
 -define(MEMBER_CONNECT_WIN_VALUES, [{<<"Event-Category">>, <<"member">>}
                                     ,{<<"Event-Name">>, <<"connect_win">>}
@@ -281,6 +285,16 @@ member_connect_win_v(Prop) when is_list(Prop) ->
     wh_api:validate(Prop, ?MEMBER_CONNECT_WIN_HEADERS, ?MEMBER_CONNECT_WIN_VALUES, ?MEMBER_CONNECT_WIN_TYPES);
 member_connect_win_v(JObj) ->
     member_connect_win_v(wh_json:to_proplist(JObj)).
+
+-spec member_connect_win_routing_key(api_terms() | ne_binary()) -> ne_binary().
+member_connect_win_routing_key(Props) when is_list(Props) ->
+    AgentId = props:get_value(<<"Agent-ID">>, Props),
+    member_connect_win_routing_key(AgentId);
+member_connect_win_routing_key(AgentId) when is_binary(AgentId) ->
+    <<"acdc.member.connect_win.", AgentId/binary>>;
+member_connect_win_routing_key(JObj) ->
+    AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
+    member_connect_win_routing_key(AgentId).
 
 %%------------------------------------------------------------------------------
 %% Agent Timeout
@@ -312,7 +326,7 @@ agent_timeout_v(JObj) ->
 %% Member Connect Accepted
 %%------------------------------------------------------------------------------
 -define(MEMBER_CONNECT_ACCEPTED_HEADERS, [<<"Call-ID">>]).
--define(OPTIONAL_MEMBER_CONNECT_ACCEPTED_HEADERS, [<<"Account-ID">>, <<"Agent-ID">>, <<"Process-ID">>]).
+-define(OPTIONAL_MEMBER_CONNECT_ACCEPTED_HEADERS, [<<"Account-ID">>, <<"Agent-ID">>, <<"Process-ID">>, <<"Old-Call-ID">>]).
 -define(MEMBER_CONNECT_ACCEPTED_VALUES, [{<<"Event-Category">>, <<"member">>}
                                          ,{<<"Event-Name">>, <<"connect_accepted">>}
                                         ]).
@@ -515,6 +529,78 @@ agent_change_v(Prop) when is_list(Prop) ->
 agent_change_v(JObj) -> agent_change_v(wh_json:to_proplist(JObj)).
 
 %%------------------------------------------------------------------------------
+
+%%------------------------------------------------------------------------------
+%% Member Call Back - let the caller leave the queue but be called back
+%%  when their turn comes up
+%%------------------------------------------------------------------------------
+-spec member_callback_reg_routing_key(api_terms()) -> ne_binary().
+-spec member_callback_reg_routing_key(ne_binary(), ne_binary()) -> ne_binary().
+member_callback_reg_routing_key(Props) when is_list(Props) ->
+    Id = props:get_value(<<"Queue-ID">>, Props, <<"*">>),
+    AcctId = props:get_value(<<"Account-ID">>, Props),
+    member_callback_reg_routing_key(AcctId, Id);
+member_callback_reg_routing_key(JObj) ->
+    Id = wh_json:get_value(<<"Queue-ID">>, JObj, <<"*">>),
+    AcctId = wh_json:get_value(<<"Account-ID">>, JObj),
+    member_callback_reg_routing_key(AcctId, Id).
+
+member_callback_reg_routing_key(AcctId, QID) ->
+    <<"acdc.member.callback_reg.", AcctId/binary, ".", QID/binary>>.
+
+-define(MEMBER_CALLBACK_HEADERS, [<<"Call-ID">>, <<"Account-ID">>, <<"Queue-ID">>, <<"Number">>]).
+-define(OPTIONAL_MEMBER_CALLBACK_HEADERS, []).
+-define(MEMBER_CALLBACK_VALUES, [{<<"Event-Category">>, <<"member">>}
+                                    ,{<<"Event-Name">>, <<"callback_reg">>}
+                                   ]).
+-define(MEMBER_CALLBACK_TYPES, []).
+
+-spec member_callback_reg(api_terms()) ->
+                                {'ok', iolist()} |
+                                {'error', string()}.
+member_callback_reg(Props) when is_list(Props) ->
+    case member_callback_reg_v(Props) of
+        'true' -> wh_api:build_message(Props, ?MEMBER_CALLBACK_HEADERS, ?OPTIONAL_MEMBER_CALLBACK_HEADERS);
+        'false' -> {'error', "Proplist failed validation for member_callback_reg"}
+    end;
+member_callback_reg(JObj) ->
+    member_callback_reg(wh_json:to_proplist(JObj)).
+
+-spec member_callback_reg_v(api_terms()) -> boolean().
+member_callback_reg_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?MEMBER_CALLBACK_HEADERS, ?MEMBER_CALLBACK_VALUES, ?MEMBER_CALLBACK_TYPES);
+member_callback_reg_v(JObj) ->
+    member_callback_reg_v(wh_json:to_proplist(JObj)).
+
+%%------------------------------------------------------------------------------
+%% Member Call Back Update - inform of new call id / call when calling
+%%  back to the member
+%%------------------------------------------------------------------------------
+-define(MEMBER_CALLBACK_UPDATE_HEADERS, [<<"Call">>, <<"Account-ID">>, <<"Queue-ID">>]).
+-define(OPTIONAL_MEMBER_CALLBACK_UPDATE_HEADERS, []).
+-define(MEMBER_CALLBACK_UPDATE_VALUES, [{<<"Event-Category">>, <<"member">>}
+                                        ,{<<"Event-Name">>, <<"callback_update">>}
+                                       ]).
+-define(MEMBER_CALLBACK_UPDATE_TYPES, []).
+
+-spec member_callback_update(api_terms()) ->
+                                {'ok', iolist()} |
+                                {'error', string()}.
+member_callback_update(Props) when is_list(Props) ->
+    case member_callback_update_v(Props) of
+        'true' -> wh_api:build_message(Props, ?MEMBER_CALLBACK_UPDATE_HEADERS, ?OPTIONAL_MEMBER_CALLBACK_UPDATE_HEADERS);
+        'false' -> {'error', "Proplist failed validation for member_callback_update"}
+    end;
+member_callback_update(JObj) ->
+    member_callback_update(wh_json:to_proplist(JObj)).
+
+-spec member_callback_update_v(api_terms()) -> boolean().
+member_callback_update_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?MEMBER_CALLBACK_UPDATE_HEADERS, ?MEMBER_CALLBACK_UPDATE_VALUES, ?MEMBER_CALLBACK_UPDATE_TYPES);
+member_callback_update_v(JObj) ->
+    member_callback_update_v(wh_json:to_proplist(JObj)).
+
+%%------------------------------------------------------------------------------
 %% Bind/Unbind the queue as appropriate
 %%------------------------------------------------------------------------------
 -spec shared_queue_name(ne_binary(), ne_binary()) -> ne_binary().
@@ -525,7 +611,11 @@ shared_queue_name(AcctId, QueueId) ->
 queue_size(AcctId, QueueId) ->
     Q = shared_queue_name(AcctId, QueueId),
     try amqp_util:new_queue(Q, [{'return_field', 'all'}
-                                ,{'passive', 'true'}
+                                ,{'exclusive', 'false'}
+                                ,{'arguments', [{<<"x-message-ttl">>, ?MILLISECONDS_IN_DAY}
+                                                ,{<<"x-max-length">>, 1000}
+                                               ]
+                                 }
                                ])
     of
         {'error', {'server_initiated_close', 404, _Msg}} ->
@@ -568,6 +658,9 @@ bind_q(Q, AcctId, QID, ['sync_req'|T]) ->
     bind_q(Q, AcctId, QID, T);
 bind_q(Q, AcctId, QID, ['agent_change'|T]) ->
     amqp_util:bind_q_to_whapps(Q, agent_change_routing_key(AcctId, QID)),
+    bind_q(Q, AcctId, QID, T);
+bind_q(Q, AcctId, QID, ['member_callback_reg'|T]) ->
+    amqp_util:bind_q_to_whapps(Q, member_callback_reg_routing_key(AcctId, QID)),
     bind_q(Q, AcctId, QID, T);
 bind_q(Q, AcctId, QID, [_|T]) -> bind_q(Q, AcctId, QID, T);
 bind_q(_, _, _, []) -> 'ok'.
@@ -691,7 +784,7 @@ publish_member_connect_win(Q, JObj) ->
     publish_member_connect_win(Q, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_member_connect_win(Q, API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?MEMBER_CONNECT_WIN_VALUES, fun member_connect_win/1),
-    amqp_util:targeted_publish(Q, Payload, ContentType).
+    amqp_util:callmgr_publish(Payload, ContentType, member_connect_win_routing_key(API)).
 
 -spec publish_agent_timeout(ne_binary(), api_terms()) -> 'ok'.
 -spec publish_agent_timeout(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
@@ -748,3 +841,19 @@ publish_agent_change(JObj) ->
 publish_agent_change(API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?AGENT_CHANGE_VALUES, fun agent_change/1),
     amqp_util:whapps_publish(agent_change_publish_key(API), Payload, ContentType).
+
+-spec publish_member_callback_reg(api_terms()) -> 'ok'.
+-spec publish_member_callback_reg(api_terms(), ne_binary()) -> 'ok'.
+publish_member_callback_reg(JObj) ->
+    publish_member_callback_reg(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_member_callback_reg(API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?MEMBER_CALLBACK_VALUES, fun member_callback_reg/1),
+    amqp_util:whapps_publish(member_callback_reg_routing_key(API), Payload, ContentType).
+
+-spec publish_member_callback_update(ne_binary(), api_terms()) -> 'ok'.
+-spec publish_member_callback_update(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+publish_member_callback_update(Q, JObj) ->
+    publish_member_callback_update(Q, JObj, ?DEFAULT_CONTENT_TYPE).
+publish_member_callback_update(Q, API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?MEMBER_CALLBACK_UPDATE_VALUES, fun member_callback_update/1),
+    amqp_util:targeted_publish(Q, Payload, ContentType).

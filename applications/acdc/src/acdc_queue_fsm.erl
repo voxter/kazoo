@@ -26,6 +26,8 @@
 
          %% Accessors
          ,cdr_url/1
+
+         ,replace_call/2
         ]).
 
 %% State handlers
@@ -88,6 +90,7 @@
           ,caller_exit_key :: ne_binary() % DTMF a caller can press to leave the queue
           ,record_caller = 'false' :: boolean() % record the caller
           ,recording_url :: api_binary() %% URL of where to POST recordings
+          ,preserve_metadata = 'false' :: boolean() % include call metadata in recordings
           ,cdr_url :: api_binary() % optional URL to request for extra CDR data
 
           ,notifications :: api_object()
@@ -183,6 +186,9 @@ status(FSM) ->
 cdr_url(FSM) ->
     gen_fsm:sync_send_all_state_event(FSM, 'cdr_url').
 
+replace_call(FSM, Call) ->
+    gen_fsm:send_all_state_event(FSM, {'replace_call', Call}).
+
 %%%===================================================================
 %%% gen_fsm callbacks
 %%%===================================================================
@@ -225,6 +231,7 @@ init([MgrPid, ListenerPid, QueueJObj]) ->
              ,caller_exit_key = wh_json:get_value(<<"caller_exit_key">>, QueueJObj, <<"#">>)
              ,record_caller = wh_json:is_true(<<"record_caller">>, QueueJObj, 'false')
              ,recording_url = wh_json:get_ne_value(<<"call_recording_url">>, QueueJObj)
+             ,preserve_metadata = wh_json:is_true(<<"preserve_metadata">>, QueueJObj, 'false')
              ,cdr_url = wh_json:get_ne_value(<<"cdr_url">>, QueueJObj)
              ,member_call = 'undefined'
 
@@ -337,7 +344,7 @@ connect_req({'timeout', Ref, ?COLLECT_RESP_MESSAGE}, #state{collect_ref=Ref
         'true' ->
             lager:debug("queue mgr said to ignore this call: ~s, not retrying agents", [whapps_call:call_id(Call)]),
             acdc_queue_listener:finish_member_call(Srv),
-            {'next_state', 'ready', State};
+            {'next_state', 'ready', clear_member_call(State)};
         'false' ->
             maybe_connect_re_req(MgrSrv, Srv, State)
     end;
@@ -371,7 +378,7 @@ connect_req({'member_hungup', JObj}, #state{queue_proc=Srv
 
             webseq:evt(?WSD_ID, self(), CallId, <<"member call finish - abandon">>),
 
-            acdc_queue_listener:finish_member_call(Srv, JObj),
+            acdc_queue_listener:cancel_member_call(Srv, JObj),
             acdc_stats:call_abandoned(AccountId, QueueId, CallId, ?ABANDON_HANGUP),
             {'next_state', 'ready', clear_member_call(State), 'hibernate'};
         'false' ->
@@ -398,12 +405,20 @@ connect_req({'dtmf_pressed', DTMF}, #state{caller_exit_key=DTMF
                                            ,member_call=Call
                                           }=State) when is_binary(DTMF) ->
     lager:debug("member pressed the exit key (~s)", [DTMF]),
-    CallId = whapps_call:call_id(Call),
-    webseq:evt(?WSD_ID, self(), CallId, <<"member call finish - DTMF">>),
 
-    acdc_queue_listener:exit_member_call(Srv),
-    acdc_stats:call_abandoned(AccountId, QueueId, CallId, ?ABANDON_EXIT),
-    {'next_state', 'ready', clear_member_call(State), 'hibernate'};
+    %% Do not exit if exit is suppressed
+    case wh_json:get_value(<<"No-Queue-Exit">>, whapps_call:ccvs(Call)) of
+        'undefined' ->
+            CallId = whapps_call:call_id(Call),
+            webseq:evt(?WSD_ID, self(), CallId, <<"member call finish - DTMF">>),
+
+            acdc_queue_listener:exit_member_call(Srv),
+            acdc_stats:call_abandoned(AccountId, QueueId, CallId, ?ABANDON_EXIT),
+            {'next_state', 'ready', clear_member_call(State), 'hibernate'};
+        <<"true">> ->
+            lager:debug("Exit key ignored for this call"),
+            {'next_state', 'connect_req', State, 'hibernate'}
+    end;
 
 connect_req({'timeout', ConnRef, ?CONNECTION_TIMEOUT_MESSAGE}, #state{queue_proc=Srv
                                                                       ,connection_timer_ref=ConnRef
@@ -471,8 +486,16 @@ connecting({'accepted', AcceptJObj}, #state{queue_proc=Srv
             CallId = whapps_call:call_id(Call),
             webseq:evt(?WSD_ID, self(), CallId, <<"member call - agent acceptance">>),
 
+            HandledCallId = case wh_json:get_value(<<"Old-Call-ID">>, AcceptJObj) of
+                undefined ->
+                    CallId;
+                %% If the old call id is set, it has been replaced with Call-ID
+                _ ->
+                    wh_json:get_value(<<"Call-ID">>, AcceptJObj)
+            end,
+
             acdc_queue_listener:finish_member_call(Srv, AcceptJObj),
-            acdc_stats:call_handled(AccountId, QueueId, CallId
+            acdc_stats:call_handled(AccountId, QueueId, HandledCallId
                                     ,wh_json:get_value(<<"Agent-ID">>, AcceptJObj)
                                    ),
             {'next_state', 'ready', clear_member_call(State), 'hibernate'};
@@ -529,6 +552,17 @@ connecting({'timeout', _OtherAgentRef, ?AGENT_RING_TIMEOUT_MESSAGE}, #state{agen
     {'next_state', 'connect_req', State};
 
 connecting({'member_hungup', CallEvt}, #state{queue_proc=Srv
+                                              ,connection_timer_ref='undefined'
+                                              ,agent_ring_timer_ref='undefined'
+                                             }=State) ->
+    lager:debug("caller did not answer a callback"),
+    acdc_queue_listener:finish_member_call(Srv),
+
+    webseq:evt(?WSD_ID, self(), wh_json:get_value(<<"Call-ID">>, CallEvt), <<"member call - hungup">>),
+
+    {'next_state', 'ready', clear_member_call(State), 'hibernate'};
+
+connecting({'member_hungup', CallEvt}, #state{queue_proc=Srv
                                               ,account_id=AccountId
                                               ,queue_id=QueueId
                                               ,member_call=Call
@@ -558,12 +592,19 @@ connecting({'dtmf_pressed', DTMF}, #state{caller_exit_key=DTMF
                                           ,member_call=Call
                                          }=State) when is_binary(DTMF) ->
     lager:debug("member pressed the exit key (~s)", [DTMF]),
-    acdc_queue_listener:exit_member_call(Srv),
-    CallId = whapps_call:call_id(Call),
-    webseq:evt(?WSD_ID, self(), CallId, <<"member call finish - DTMF">>),
-    acdc_stats:call_abandoned(AccountId, QueueId, CallId, ?ABANDON_EXIT),
-    {'next_state', 'ready', clear_member_call(State), 'hibernate'};
 
+    %% Do not exit if exit is suppressed
+    case wh_json:get_value(<<"No-Queue-Exit">>, whapps_call:ccvs(Call)) of
+        'undefined' ->
+            acdc_queue_listener:exit_member_call(Srv),
+            CallId = whapps_call:call_id(Call),
+            webseq:evt(?WSD_ID, self(), CallId, <<"member call finish - DTMF">>),
+            acdc_stats:call_abandoned(AccountId, QueueId, CallId, ?ABANDON_EXIT),
+            {'next_state', 'ready', clear_member_call(State), 'hibernate'};
+        <<"true">> ->
+            lager:debug("Exit key ignored for this call"),
+            {'next_state', 'connecting', State, 'hibernate'}
+    end;
 connecting({'dtmf_pressed', _DTMF}, State) ->
     lager:debug("caller pressed ~s, ignoring", [_DTMF]),
     {'next_state', 'connecting', State};
@@ -630,6 +671,17 @@ connecting('current_call', _, #state{member_call=Call
 handle_event({'refresh', QueueJObj}, StateName, State) ->
     lager:debug("refreshing queue configs"),
     {'next_state', StateName, update_properties(QueueJObj, State), 'hibernate'};
+handle_event({'replace_call', Call}, StateName, #state{connection_timer_ref=ConnRef
+                                                       ,agent_ring_timer_ref=AgentRef
+                                                      }=State) ->
+    maybe_stop_timer(ConnRef),
+    maybe_stop_timer(AgentRef),
+    lager:debug("Cancelled timeout timers - agent has answered, ignoring lack of bridge to callback for now"),
+    lager:debug("Replacing call in queue FSM"),
+    {'next_state', StateName, State#state{member_call=Call
+                                          ,connection_timer_ref='undefined'
+                                          ,agent_ring_timer_ref='undefined'
+                                         }};
 handle_event(_Event, StateName, State) ->
     lager:debug("unhandled event in state ~s: ~p", [StateName, _Event]),
     {'next_state', StateName, State}.
@@ -766,6 +818,7 @@ update_properties(QueueJObj, State) ->
       ,caller_exit_key = wh_json:get_value(<<"caller_exit_key">>, QueueJObj, <<"#">>)
       ,record_caller = wh_json:is_true(<<"record_caller">>, QueueJObj, 'false')
       ,recording_url = wh_json:get_ne_value(<<"call_recording_url">>, QueueJObj)
+      ,preserve_metadata = wh_json:is_true(<<"preserve_metadata">>, QueueJObj, 'false')
       ,cdr_url = wh_json:get_ne_value(<<"cdr_url">>, QueueJObj)
       ,notifications = wh_json:get_value(<<"notifications">>, QueueJObj)
 
@@ -828,7 +881,8 @@ maybe_connect_re_req(MgrSrv, ListenerSrv, #state{account_id=AccountId
 
 -spec accept_is_for_call(wh_json:object(), whapps_call:call()) -> boolean().
 accept_is_for_call(AcceptJObj, Call) ->
-    wh_json:get_value(<<"Call-ID">>, AcceptJObj) =:= whapps_call:call_id(Call).
+    (wh_json:get_value(<<"Call-ID">>, AcceptJObj) =:= whapps_call:call_id(Call)) or
+        (wh_json:get_value(<<"Old-Call-ID">>, AcceptJObj) =:= whapps_call:call_id(Call)).
 
 -spec update_agent(wh_json:object(), wh_json:object()) -> wh_json:object().
 update_agent(Agent, Winner) ->
@@ -847,7 +901,7 @@ handle_agent_responses(#state{collect_ref=Ref
         'true' ->
             lager:debug("queue mgr said to ignore this call: ~s, not connecting to agents", [whapps_call:call_id(Call)]),
             acdc_queue_listener:finish_member_call(Srv),
-            {'ready', State};
+            {'ready', clear_member_call(State)};
         'false' ->
             lager:debug("done waiting for agents to respond, picking a winner"),
             maybe_pick_winner(State)
@@ -863,22 +917,22 @@ maybe_pick_winner(#state{connect_resps=CRs
                          ,cdr_url=CDRUrl
                          ,record_caller=ShouldRecord
                          ,recording_url=RecordUrl
+                         ,preserve_metadata=PreserveMetadata
                          ,notifications=Notifications
                         }=State) ->
     case acdc_queue_manager:pick_winner(Mgr, CRs) of
-        {[Winner|_]=Agents, Rest} ->
+        {[Winner|_], Rest} ->
             QueueOpts = [{<<"Ring-Timeout">>, RingTimeout}
                          ,{<<"Wrapup-Timeout">>, AgentWrapup}
                          ,{<<"Caller-Exit-Key">>, CallerExitKey}
                          ,{<<"CDR-Url">>, CDRUrl}
                          ,{<<"Record-Caller">>, ShouldRecord}
                          ,{<<"Recording-URL">>, RecordUrl}
+                         ,{<<"Preserve-Metadata">>, PreserveMetadata}
                          ,{<<"Notifications">>, Notifications}
                         ],
 
-            _ = [acdc_queue_listener:member_connect_win(Srv, update_agent(Agent, Winner), QueueOpts)
-                 || Agent <- Agents
-                ],
+            acdc_queue_listener:member_connect_win(Srv, update_agent(Winner, Winner), QueueOpts),
 
             lager:debug("sending win to ~s(~s)", [wh_json:get_value(<<"Agent-ID">>, Winner)
                                                   ,wh_json:get_value(<<"Process-ID">>, Winner)

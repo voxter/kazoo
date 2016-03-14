@@ -15,6 +15,7 @@
          ,handle_call_event/2
          ,handle_new_channel/2
          ,handle_originate_resp/2
+         ,handle_member_connect_win/2
          ,handle_member_message/2
          ,handle_agent_message/2
          ,handle_config_change/2
@@ -108,7 +109,10 @@ maybe_start_agent(AccountId, AgentId, JObj) ->
             end;
         {'exists', Sup} ->
             FSM = acdc_agent_sup:fsm(Sup),
-            acdc_agent_fsm:update_presence(FSM, presence_id(JObj), presence_state(JObj, 'undefined')),
+            case presence_state(JObj, 'undefined') of
+                'undefined' -> 'ok';
+                PresenceState -> acdc_agent_fsm:update_presence(FSM, presence_id(JObj), PresenceState)
+            end,
             login_success(JObj);
         {'error', _E} ->
             acdc_agent_stats:agent_logged_out(AccountId, AgentId),
@@ -246,17 +250,22 @@ handle_new_channel(JObj, AccountId) ->
 -spec handle_new_channel_acct(wh_json:object(), api_binary()) -> 'ok'.
 handle_new_channel_acct(_, 'undefined') -> 'ok';
 handle_new_channel_acct(JObj, AccountId) ->
-    [FromUser, _FromHost] = binary:split(wh_json:get_value(<<"From">>, JObj), <<"@">>),
-    [ToUser, _ToHost] = binary:split(wh_json:get_value(<<"To">>, JObj), <<"@">>),
-    [ReqUser, _ReqHost] = binary:split(wh_json:get_value(<<"Request">>, JObj), <<"@">>),
+    FromUser = hd(binary:split(wh_json:get_value(<<"From">>, JObj), <<"@">>)),
+    ToUser = hd(binary:split(wh_json:get_value(<<"To">>, JObj), <<"@">>)),
+    ReqUser = hd(binary:split(wh_json:get_value(<<"Request">>, JObj), <<"@">>)),
 
     CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    MemberCallId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Member-Call-ID">>], JObj),
 
     lager:debug("new channel in acct ~s: from ~s to ~s(~s)", [AccountId, FromUser, ToUser, ReqUser]),
 
-    gproc:send(?NEW_CHANNEL_REG(AccountId, FromUser), ?NEW_CHANNEL_FROM(CallId)),
-    gproc:send(?NEW_CHANNEL_REG(AccountId, ToUser), ?NEW_CHANNEL_TO(CallId)),
-    gproc:send(?NEW_CHANNEL_REG(AccountId, ReqUser), ?NEW_CHANNEL_TO(CallId)).
+    case wh_json:get_value(<<"Call-Direction">>, JObj) of
+        <<"inbound">> -> gproc:send(?NEW_CHANNEL_REG(AccountId, FromUser), ?NEW_CHANNEL_FROM(CallId));
+        <<"outbound">> ->
+            gproc:send(?NEW_CHANNEL_REG(AccountId, ToUser), ?NEW_CHANNEL_TO(CallId, MemberCallId)),
+            gproc:send(?NEW_CHANNEL_REG(AccountId, ReqUser), ?NEW_CHANNEL_TO(CallId, MemberCallId));
+        _ -> lager:debug("invalid call direction for call ~s", [CallId])
+    end.
 
 handle_originate_resp(JObj, Props) ->
     case wh_json:get_value(<<"Event-Name">>, JObj) of
@@ -271,6 +280,15 @@ handle_originate_resp(JObj, Props) ->
             acdc_agent_fsm:originate_uuid(props:get_value('fsm_pid', Props), JObj)
     end.
 
+-spec handle_member_connect_win(wh_json:object(), wh_proplist()) -> 'ok'.
+handle_member_connect_win(JObj, Props) ->
+    'true' = wapi_acdc_queue:member_connect_win_v(JObj),
+    MyId = acdc_util:proc_id(props:get_value('fsm_pid', Props)),
+    case wh_json:get_value(<<"Agent-Process-ID">>, JObj) of
+        MyId -> acdc_agent_fsm:member_connect_win(props:get_value('fsm_pid', Props), JObj, 'same_node');
+        _ -> acdc_agent_fsm:member_connect_win(props:get_value('fsm_pid', Props), JObj, 'different_node')
+    end.
+
 -spec handle_member_message(wh_json:object(), wh_proplist()) -> 'ok'.
 -spec handle_member_message(wh_json:object(), wh_proplist(), ne_binary()) -> 'ok'.
 handle_member_message(JObj, Props) ->
@@ -279,9 +297,6 @@ handle_member_message(JObj, Props) ->
 handle_member_message(JObj, Props, <<"connect_req">>) ->
     'true' = wapi_acdc_queue:member_connect_req_v(JObj),
     acdc_agent_fsm:member_connect_req(props:get_value('fsm_pid', Props), JObj);
-handle_member_message(JObj, Props, <<"connect_win">>) ->
-    'true' = wapi_acdc_queue:member_connect_win_v(JObj),
-    acdc_agent_fsm:member_connect_win(props:get_value('fsm_pid', Props), JObj);
 handle_member_message(_, _, EvtName) ->
     lager:debug("not handling member event ~s", [EvtName]).
 
@@ -293,6 +308,12 @@ handle_agent_message(JObj, Props) ->
 handle_agent_message(JObj, Props, <<"connect_timeout">>) ->
     'true' = wapi_acdc_queue:agent_timeout_v(JObj),
     acdc_agent_fsm:agent_timeout(props:get_value('fsm_pid', Props), JObj);
+handle_agent_message(JObj, Props, <<"shared_failure">>) ->
+    'true' = wapi_acdc_agent:shared_originate_failure_v(JObj),
+    acdc_agent_fsm:shared_failure(props:get_value('fsm_pid', Props), JObj);
+handle_agent_message(JObj, Props, <<"agent_call_id">>) ->
+    'true' = wapi_acdc_agent:agent_call_id_v(JObj),
+    acdc_agent_fsm:shared_call_id(props:get_value('fsm_pid', Props), JObj);
 handle_agent_message(_, _, _EvtName) ->
     lager:debug("not handling agent event ~s", [_EvtName]).
 

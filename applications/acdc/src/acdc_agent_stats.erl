@@ -5,6 +5,7 @@
 %%% @end
 %%% @contributors
 %%%   James Aimonetti
+%%%   Daniel Finke
 %%%-------------------------------------------------------------------
 -module(acdc_agent_stats).
 
@@ -20,12 +21,17 @@
 
          ,handle_status_stat/2
          ,handle_status_query/2
+         ,handle_agent_cur_status_req/2
 
          ,status_stat_id/3
 
          ,status_table_id/0
          ,status_key_pos/0
          ,status_table_opts/0
+
+         ,agent_cur_status_table_id/0
+         ,agent_cur_status_key_pos/0
+         ,agent_cur_status_table_opts/0
 
          ,archive_status_data/2
         ]).
@@ -38,6 +44,13 @@ status_key_pos() -> #status_stat.id.
 status_table_opts() ->
     ['protected', 'named_table'
      ,{'keypos', status_key_pos()}
+    ].
+
+agent_cur_status_table_id() -> 'acdc_stats_agent_cur_status'.
+agent_cur_status_key_pos() -> #status_stat.agent_id.
+agent_cur_status_table_opts() ->
+    ['protected', 'named_table'
+     ,{'keypos', agent_cur_status_key_pos()}
     ].
 
 -spec agent_ready(ne_binary(), ne_binary()) -> 'ok'.
@@ -229,17 +242,34 @@ handle_status_query(JObj, _Prop) ->
 
     case status_build_match_spec(JObj) of
         {'ok', Match} -> query_statuses(RespQ, MsgId, Match, Limit);
-        {'error', Errors} -> publish_query_errors(RespQ, MsgId, Errors)
+        {'error', Errors} -> publish_status_query_errors(RespQ, MsgId, Errors)
     end.
 
--spec publish_query_errors(ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
-publish_query_errors(RespQ, MsgId, Errors) ->
+-spec handle_agent_cur_status_req(wh_json:object(), wh_proplist()) -> 'ok'.
+handle_agent_cur_status_req(JObj, _Prop) ->
+    'true' = wapi_acdc_stats:agent_cur_status_req_v(JObj),
+    RespQ = wh_json:get_value(<<"Server-ID">>, JObj),
+    MsgId = wh_json:get_value(<<"Msg-ID">>, JObj),
+
+    case cur_status_build_match_spec(JObj) of
+        {'ok', Match} -> query_cur_statuses(RespQ, MsgId, Match);
+        {'error', Errors} -> publish_agent_cur_status_query_errors(RespQ, MsgId, Errors)
+    end.
+
+publish_status_query_errors(RespQ, MsgId, Errors) ->
+    publish_query_errors(RespQ, MsgId, Errors, fun wapi_acdc_stats:publish_status_err/2).
+
+publish_agent_cur_status_query_errors(RespQ, MsgId, Errors) ->
+    publish_query_errors(RespQ, MsgId, Errors, fun wapi_acdc_stats:publish_agent_cur_status_err/2).
+
+-spec publish_query_errors(ne_binary(), ne_binary(), wh_json:object(), function()) -> 'ok'.
+publish_query_errors(RespQ, MsgId, Errors, PubFun) ->
     API = [{<<"Error-Reason">>, Errors}
            ,{<<"Msg-ID">>, MsgId}
            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     lager:debug("responding with errors to req ~s: ~p", [MsgId, Errors]),
-    wapi_acdc_stats:publish_status_err(RespQ, API).
+    PubFun(RespQ, API).
 
 status_build_match_spec(JObj) ->
     case wh_json:get_value(<<"Account-ID">>, JObj) of
@@ -318,6 +348,33 @@ status_match_builder_fold(<<"Status">>, Status, {StatusStat, Contstraints}) ->
     };
 status_match_builder_fold(_, _, Acc) -> Acc.
 
+cur_status_build_match_spec(JObj) ->
+    case wh_json:get_value(<<"Account-ID">>, JObj) of
+        'undefined' ->
+            {'error', wh_json:from_list([{<<"Account-ID">>, <<"missing but required">>}])};
+        AccountId ->
+            AcctMatch = {#status_stat{account_id='$1', _='_'}
+                         ,[{'=:=', '$1', {'const', AccountId}}]
+                        },
+            cur_status_build_match_spec(JObj, AcctMatch)
+    end.
+
+-spec cur_status_build_match_spec(wh_json:object(), {status_stat(), list()}) ->
+                                     {'ok', ets:match_spec()} |
+                                     {'error', wh_json:object()}.
+cur_status_build_match_spec(JObj, AcctMatch) ->
+    case wh_json:foldl(fun cur_status_match_builder_fold/3, AcctMatch, JObj) of
+        {'error', _Errs}=Errors -> Errors;
+        {StatusStat, Constraints} -> {'ok', [{StatusStat, Constraints, ['$_']}]}
+    end.
+
+cur_status_match_builder_fold(_, _, {'error', _Err}=E) -> E;
+cur_status_match_builder_fold(<<"Agent-ID">>, AgentId, {StatusStat, Contstraints}) ->
+    {StatusStat#status_stat{agent_id='$2'}
+     ,[{'=:=', '$2', {'const', AgentId}} | Contstraints]
+    };
+cur_status_match_builder_fold(_, _, Acc) -> Acc.
+
 -spec query_statuses(ne_binary(), ne_binary(), ets:match_spec(), pos_integer()) -> 'ok'.
 query_statuses(RespQ, MsgId, Match, Limit) ->
     case ets:select(status_table_id(), Match) of
@@ -340,6 +397,28 @@ query_statuses(RespQ, MsgId, Match, Limit) ->
                     | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
                    ],
             wapi_acdc_stats:publish_status_resp(RespQ, Resp)
+    end.
+
+-spec query_cur_statuses(ne_binary(), ne_binary(), ets:match_spec()) -> 'ok'.
+query_cur_statuses(RespQ, MsgId, Match) ->
+    case ets:select(agent_cur_status_table_id(), Match) of
+        [] ->
+            lager:debug("no stats found, sorry ~s", [RespQ]),
+            Resp = [{<<"Error-Reason">>, <<"No agents found">>}
+                    ,{<<"Msg-ID">>, MsgId}
+                    | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                   ],
+            wapi_acdc_stats:publish_agent_cur_status_err(RespQ, Resp);
+        Stats ->
+            QueryResults = lists:foldl(fun query_status_fold/2, wh_json:new(), Stats),
+            Results = wh_json:map(fun(AgentId, {[{_Timestamp, StatusJObj}]}) ->
+                                      {AgentId, StatusJObj}
+                                  end, QueryResults),
+            Resp = [{<<"Agents">>, Results}
+                    ,{<<"Msg-ID">>, MsgId}
+                    | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                   ],
+            wapi_acdc_stats:publish_agent_cur_status_resp(RespQ, Resp)
     end.
 
 trim_query_statuses(A, Statuses, Limit) ->

@@ -8,6 +8,8 @@
 %%%
 %%% /agents/stats
 %%%   GET: stats for all agents for the last hour
+%%% /agents/stats_summary
+%%%   GET: aggregate stats for agents
 %%% /agents/statuses
 %%%   GET: statuses for each agents
 %%% /agents/AID
@@ -22,6 +24,7 @@
 %%% @contributors:
 %%%   Karl Anderson
 %%%   James Aimonetti
+%%%   Daniel Finke
 %%%-------------------------------------------------------------------
 -module(cb_agents).
 
@@ -42,6 +45,7 @@
 
 -define(CB_LIST, <<"agents/crossbar_listing">>).
 -define(STATS_PATH_TOKEN, <<"stats">>).
+-define(STATS_SUMMARY_PATH_TOKEN, <<"stats_summary">>).
 -define(STATUS_PATH_TOKEN, <<"status">>).
 -define(QUEUE_STATUS_PATH_TOKEN, <<"queue_status">>).
 
@@ -77,6 +81,7 @@ allowed_methods() -> [?HTTP_GET].
 
 allowed_methods(?STATUS_PATH_TOKEN) -> [?HTTP_GET];
 allowed_methods(?STATS_PATH_TOKEN) -> [?HTTP_GET];
+allowed_methods(?STATS_SUMMARY_PATH_TOKEN) -> [?HTTP_GET];
 allowed_methods(_) -> [?HTTP_GET].
 
 allowed_methods(?STATUS_PATH_TOKEN, _) -> [?HTTP_GET, ?HTTP_POST];
@@ -123,7 +128,8 @@ content_types_provided(Context, ?STATS_PATH_TOKEN) ->
         ?FORMAT_COMPRESSED ->
             CTPs = [{'to_json', [{<<"application">>, <<"json">>}]}],
             cb_context:add_content_types_provided(Context, CTPs)
-    end.
+    end;
+content_types_provided(Context, ?STATS_SUMMARY_PATH_TOKEN) -> Context.
 content_types_provided(Context, ?STATUS_PATH_TOKEN, _) -> Context;
 content_types_provided(Context, _, ?STATUS_PATH_TOKEN) -> Context;
 content_types_provided(Context, _, ?QUEUE_STATUS_PATH_TOKEN) -> Context.
@@ -154,6 +160,8 @@ validate_agent(Context, ?STATUS_PATH_TOKEN, ?HTTP_GET) ->
     fetch_all_agent_statuses(Context);
 validate_agent(Context, ?STATS_PATH_TOKEN, ?HTTP_GET) ->
     fetch_all_agent_stats(Context);
+validate_agent(Context, ?STATS_SUMMARY_PATH_TOKEN, ?HTTP_GET) ->
+    fetch_stats_summary(Context);
 validate_agent(Context, Id, ?HTTP_GET) ->
     read(Id, Context).
 
@@ -263,17 +271,21 @@ read(Id, Context) -> crossbar_doc:load(Id, Context).
 -define(CB_AGENTS_LIST, <<"users/crossbar_listing">>).
 -spec fetch_all_agent_statuses(cb_context:context()) -> cb_context:context().
 fetch_all_agent_statuses(Context) ->
-    fetch_all_current_statuses(Context
-                               ,'undefined'
-                               ,cb_context:req_value(Context, <<"status">>)
-                              ).
+    case wh_util:is_true(cb_context:req_value(Context, <<"recent">>)) of
+        'false' ->
+            fetch_current_status(Context, 'undefined');
+        'true' ->
+            fetch_all_current_statuses(Context
+                                       ,'undefined'
+                                       ,cb_context:req_value(Context, <<"status">>)
+                                      )
+    end.
 
 -spec fetch_agent_status(api_binary(), cb_context:context()) -> cb_context:context().
 fetch_agent_status(AgentId, Context) ->
     case wh_util:is_true(cb_context:req_value(Context, <<"recent">>)) of
         'false' ->
-            {'ok', Resp} = acdc_agent_util:most_recent_status(cb_context:account_id(Context), AgentId),
-            crossbar_util:response(Resp, Context);
+            fetch_current_status(Context, AgentId);
         'true' ->
             fetch_all_current_statuses(Context
                                        ,AgentId
@@ -286,6 +298,26 @@ fetch_all_agent_stats(Context) ->
     case cb_context:req_value(Context, <<"start_range">>) of
         'undefined' -> fetch_all_current_agent_stats(Context);
         StartRange -> fetch_ranged_agent_stats(Context, StartRange)
+    end.
+
+-spec fetch_stats_summary(cb_context:context()) -> cb_context:context().
+fetch_stats_summary(Context) ->
+    Req = props:filter_undefined(
+            [{<<"Account-ID">>, cb_context:account_id(Context)}
+             ,{<<"Agent-ID">>, cb_context:req_value(Context, <<"agent_id">>)}
+             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+            ]),
+    case whapps_util:amqp_pool_request(Req
+                                       ,fun wapi_acdc_stats:publish_agent_calls_req/1
+                                       ,fun wapi_acdc_stats:agent_calls_resp_v/1
+                                      )
+    of
+        {'error', E} ->
+            crossbar_util:response('error', <<"stat request had errors">>, 400
+                                   ,wh_json:get_value(<<"Error-Reason">>, E)
+                                   ,Context
+                                  );
+        {'ok', Resp} -> crossbar_util:response(wh_json:get_value(<<"Data">>, Resp, []), Context)
     end.
 
 -spec fetch_all_current_agent_stats(cb_context:context()) -> cb_context:context().
@@ -307,6 +339,31 @@ fetch_all_current_stats(Context, AgentId) ->
              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
     fetch_stats_from_amqp(Context, Req).
+
+-spec fetch_current_status(cb_context:context(), api_binary()) -> cb_context:context().
+fetch_current_status(Context, AgentId) ->
+    Req = props:filter_undefined(
+            [{<<"Account-ID">>, cb_context:account_id(Context)}
+             ,{<<"Agent-ID">>, AgentId}
+             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+            ]),
+    case whapps_util:amqp_pool_request(Req
+                                       ,fun wapi_acdc_stats:publish_agent_cur_status_req/1
+                                       ,fun wapi_acdc_stats:agent_cur_status_resp_v/1
+                                      )
+    of
+        {'error', _}=E ->
+            crossbar_util:response('error', <<"status request had errors">>, 400
+                                   ,wh_json:get_value(<<"Error-Reason">>, E)
+                                   ,Context
+                                  );
+        {'ok', Resp} ->
+            Agents = wh_json:get_value(<<"Agents">>, Resp, wh_json:new()),
+            Results = wh_json:foldl(fun(K, V, Acc) ->
+                                      wh_json:set_value(K, wh_doc:public_fields(V), Acc)
+                                    end, wh_json:new(), Agents),
+            crossbar_util:response(Results, Context)
+    end.
 
 -spec fetch_all_current_statuses(cb_context:context(), api_binary(), api_binary()) ->
                                         cb_context:context().
@@ -594,17 +651,7 @@ validate_status_change_params(Context, <<"pause">>) ->
               ,Context
              )
     catch
-        _E:_R ->
-            lager:debug("bad int for pause: ~s: ~p", [_E, _R]),
-            cb_context:add_validation_error(
-              <<"timeout">>
-              ,<<"type">>
-              ,wh_json:from_list(
-                 [{<<"message">>, <<"value must be an integer greater than or equal to 0">>}
-                  ,{<<"cause">>, Value}
-                 ])
-              ,Context
-             )
+        _E:_R -> cb_context:set_resp_status(Context, 'success')
     end;
 validate_status_change_params(Context, _S) ->
     lager:debug("great success for ~s", [_S]),

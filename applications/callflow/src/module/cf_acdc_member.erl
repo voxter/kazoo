@@ -26,6 +26,7 @@
                       ,queue_id         :: api_binary()
                       ,config_data = [] :: wh_proplist()
                       ,max_wait = 60 * ?MILLISECONDS_IN_SECOND :: max_wait()
+                      ,silence_noop     :: api_binary()
                      }).
 -type member_call() :: #member_call{}.
 
@@ -44,7 +45,7 @@ handle(Data, Call) ->
     MemberCall = props:filter_undefined(
                    [{<<"Account-ID">>, whapps_call:account_id(Call)}
                     ,{<<"Queue-ID">>, QueueId}
-                    ,{<<"Call">>, whapps_call:to_json(Call)}
+                    ,{<<"Call">>, whapps_call:to_json(update_caller_id(Call))}
                     ,{<<"Member-Priority">>, Priority}
                     | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
                    ]),
@@ -55,7 +56,12 @@ handle(Data, Call) ->
     MaxWait = max_wait(wh_json:get_integer_value(<<"connection_timeout">>, QueueJObj, 3600)),
     MaxQueueSize = max_queue_size(wh_json:get_integer_value(<<"max_queue_size">>, QueueJObj, 0)),
 
-    Call1 = whapps_call:kvs_store('caller_exit_key', wh_json:get_value(<<"caller_exit_key">>, QueueJObj, <<"#">>), Call),
+    Call1 = case wh_json:get_value(<<"metaflows">>, QueueJObj) of
+        'undefined' ->
+            whapps_call:kvs_store('caller_exit_key', wh_json:get_value(<<"caller_exit_key">>, QueueJObj, <<"#">>), Call);
+        _Metaflows ->
+            Call
+    end,
 
     CurrQueueSize = wapi_acdc_queue:queue_size(whapps_call:account_id(Call1), QueueId),
 
@@ -79,23 +85,49 @@ lookup_priority(Data, Call) ->
         _ -> 'undefined'
     end.
 
+-spec update_caller_id(whapps_call:call()) -> whapps_call:call().
+update_caller_id(Call) ->
+    CallerIdType = case whapps_call:inception(Call) of
+                       'undefined' -> <<"internal">>;
+                       _Else -> <<"external">>
+                   end,
+    {CIDNumber, CIDName} = cf_attributes:caller_id(CallerIdType, Call),
+    lager:info("utilizing ~s caller ID in acdc: \"~s\" ~s"
+               ,[CallerIdType, CIDName, CIDNumber]
+              ),
+    Props = props:filter_undefined(
+              [{<<"Caller-ID-Name">>, CIDName}
+               ,{<<"Caller-ID-Number">>, CIDNumber}
+              ]),
+    Unsetters = [fun(Call2) -> whapps_call:kvs_erase('prepend_cid_name', Call2) end
+                 ,fun(Call2) -> whapps_call:kvs_erase('prepend_cid_number', Call2) end
+                ],
+    Call2 = lists:foldl(fun(Unsetter, Call2) -> Unsetter(Call2) end, Call, Unsetters),
+    whapps_call:set_custom_channel_vars(Props, Call2).
+
 -spec maybe_enter_queue(member_call(), boolean()) -> any().
 maybe_enter_queue(#member_call{call=Call}, 'true') ->
     lager:info("queue has reached max size"),
     cf_exe:continue(Call);
 maybe_enter_queue(#member_call{call=Call
-                               ,config_data=MemberCall
                                ,queue_id=QueueId
                                ,max_wait=MaxWait
                               }=MC
                   ,'false') ->
-    lager:info("asking for an agent, waiting up to ~p ms", [MaxWait]),
+    case whapps_call_command:b_channel_status(whapps_call:call_id(Call)) of
+        {'ok', _} ->
+            lager:info("asking for an agent, waiting up to ~p ms", [MaxWait]),
 
-    cf_exe:send_amqp(Call, MemberCall, fun wapi_acdc_queue:publish_member_call/1),
-    _ = whapps_call_command:flush_dtmf(Call),
-    wait_for_bridge(MC#member_call{call=whapps_call:kvs_store('queue_id', QueueId, Call)}
-                    ,MaxWait
-                   ).
+            NoopId = whapps_call_command:flush_dtmf(Call),
+            wait_for_bridge(MC#member_call{call=whapps_call:kvs_store('queue_id', QueueId, Call)
+                                           ,silence_noop=NoopId
+                                          }
+                            ,MaxWait
+                           );
+        {'error', E} ->
+            lager:info("not entering queue; call was destroyed already (~s)", [E]),
+            cf_exe:stop(Call)
+    end.
 
 -spec wait_for_bridge(member_call(), max_wait()) -> 'ok'.
 -spec wait_for_bridge(member_call(), max_wait(), wh_now()) -> 'ok'.
@@ -130,6 +162,18 @@ process_message(#member_call{call=Call}, _, Start, _Wait, _JObj, {<<"call_event"
     lager:info("member hungup while waiting in the queue (was there ~b s)", [wh_util:elapsed_s(Start)]),
     cancel_member_call(Call, ?MEMBER_HANGUP),
     cf_exe:stop(Call);
+process_message(#member_call{call=Call
+                             ,config_data=MemberCall
+                             ,silence_noop=NoopId
+                            }=MC, Timeout, Start, Wait, JObj, {<<"call_event">>,<<"CHANNEL_EXECUTE_COMPLETE">>}) ->
+    case wh_json:get_first_defined([<<"Application-Name">>
+                                    ,[<<"Request">>, <<"Application-Name">>]
+                                   ], JObj) =:= <<"noop">> andalso
+           wh_json:get_value(<<"Application-Response">>, JObj) =:= NoopId of
+        'true' -> cf_exe:send_amqp(Call, MemberCall, fun wapi_acdc_queue:publish_member_call/1);
+        'false' -> 'ok'
+    end,
+    wait_for_bridge(MC, wh_util:decr_timeout(Timeout, Wait), Start);
 process_message(#member_call{call=Call
                              ,queue_id=QueueId
                             }=MC, Timeout, Start, Wait, JObj, {<<"member">>, <<"call_fail">>}) ->

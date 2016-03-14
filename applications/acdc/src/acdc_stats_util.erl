@@ -15,6 +15,9 @@
 
          ,get_query_limit/1
          ,db_name/1
+
+         ,cleanup_old_stats/0
+         ,cleanup_old_calls/1, cleanup_old_statuses/1
         ]).
 
 -include("acdc.hrl").
@@ -50,3 +53,16 @@ get_query_limit(JObj) ->
 -spec db_name(ne_binary()) -> ne_binary().
 db_name(Account) ->
     wh_util:format_account_mod_id(Account).
+
+-spec cleanup_old_stats() -> 'ok'.
+cleanup_old_stats() ->
+    cleanup_old_calls(1200),
+    cleanup_old_statuses(14400).
+
+-spec cleanup_old_calls(pos_integer()) -> 'ok'.
+cleanup_old_calls(Window) ->
+    acdc_stats:manual_cleanup_calls(Window).
+
+-spec cleanup_old_statuses(pos_integer()) -> 'ok'.
+cleanup_old_statuses(Window) ->
+    acdc_stats:manual_cleanup_statuses(Window).

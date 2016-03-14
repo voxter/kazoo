@@ -18,6 +18,8 @@
 %%%
 %%% /queues/QID/stats
 %%%   GET: retrieve stats for this queue
+%%% /queues/QID/stats_summary
+%%%   GET: retrieve minimal current stats for queues
 %%% /queues/QID/stats/realtime
 %%%   GET: retrieve realtime stats for the queues
 %%%
@@ -57,6 +59,7 @@
 -define(CB_AGENTS_LIST, <<"queues/agents_listing">>). %{agent_id, queue_id}
 
 -define(STATS_PATH_TOKEN, <<"stats">>).
+-define(STATS_SUMMARY_PATH_TOKEN, <<"stats_summary">>).
 -define(ROSTER_PATH_TOKEN, <<"roster">>).
 -define(EAVESDROP_PATH_TOKEN, <<"eavesdrop">>).
 
@@ -122,6 +125,8 @@ allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
 allowed_methods(?STATS_PATH_TOKEN) ->
     [?HTTP_GET];
+allowed_methods(?STATS_SUMMARY_PATH_TOKEN) ->
+    [?HTTP_GET];
 allowed_methods(?EAVESDROP_PATH_TOKEN) ->
     [?HTTP_PUT];
 allowed_methods(_QID) ->
@@ -167,7 +172,8 @@ content_types_provided(Context, ?STATS_PATH_TOKEN) ->
     CTPs = [{'to_json', ?JSON_CONTENT_TYPES}
             ,{'to_csv', ?CSV_CONTENT_TYPES}
            ],
-    cb_context:add_content_types_provided(Context, CTPs).
+    cb_context:add_content_types_provided(Context, CTPs);
+content_types_provided(Context, ?STATS_SUMMARY_PATH_TOKEN) -> Context.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -196,6 +202,8 @@ validate(Context, PathToken) ->
 
 validate_queue(Context, ?STATS_PATH_TOKEN, ?HTTP_GET) ->
     fetch_all_queue_stats(Context);
+validate_queue(Context, ?STATS_SUMMARY_PATH_TOKEN, ?HTTP_GET) ->
+    fetch_stats_summary(Context);
 validate_queue(Context, ?EAVESDROP_PATH_TOKEN, ?HTTP_PUT) ->
     validate_eavesdrop_on_call(Context);
 validate_queue(Context, Id, ?HTTP_GET) ->
@@ -670,6 +678,33 @@ fetch_all_queue_stats(Context) ->
     case cb_context:req_value(Context, <<"start_range">>) of
         'undefined' -> fetch_all_current_queue_stats(Context);
         StartRange -> fetch_ranged_queue_stats(Context, StartRange)
+    end.
+
+-spec fetch_stats_summary(cb_context:context()) -> cb_context:context().
+fetch_stats_summary(Context) ->
+    Req = props:filter_undefined(
+            [{<<"Account-ID">>, cb_context:account_id(Context)}
+             ,{<<"Status">>, cb_context:req_value(Context, <<"status">>)}
+             ,{<<"Agent-ID">>, cb_context:req_value(Context, <<"agent_id">>)}
+             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+            ]),
+    case whapps_util:amqp_pool_request(Req
+                                       ,fun wapi_acdc_stats:publish_call_summary_req/1
+                                       ,fun wapi_acdc_stats:call_summary_resp_v/1
+                                      )
+    of
+        {'error', E} ->
+            crossbar_util:response('error', <<"stat request had errors">>, 400
+                                   ,wh_json:get_value(<<"Error-Reason">>, E)
+                                   ,Context
+                                  );
+        {'ok', Resp} ->
+            RespJObj = wh_json:set_values([{<<"current_timestamp">>, wh_util:current_tstamp()}
+                                           ,{<<"Summarized">>, wh_json:get_value(<<"Data">>, Resp, [])}
+                                           ,{<<"Waiting">>, wh_doc:public_fields(wh_json:get_value(<<"Waiting">>, Resp, []))}
+                                           ,{<<"Handled">>, wh_doc:public_fields(wh_json:get_value(<<"Handled">>, Resp, []))}
+                                          ], wh_json:new()),
+            crossbar_util:response(RespJObj, Context)
     end.
 
 -spec fetch_all_current_queue_stats(cb_context:context()) -> cb_context:context().

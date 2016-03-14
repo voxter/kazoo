@@ -16,15 +16,29 @@
          ,call_handled/1, call_handled_v/1
          ,call_processed/1, call_processed_v/1
 
+         ,call_id_change/1, call_id_change_v/1
+
          ,call_flush/1, call_flush_v/1
 
          ,current_calls_req/1, current_calls_req_v/1
          ,current_calls_err/1, current_calls_err_v/1
          ,current_calls_resp/1, current_calls_resp_v/1
 
+         ,call_summary_req/1, call_summary_req_v/1
+         ,call_summary_err/1, call_summary_err_v/1
+         ,call_summary_resp/1, call_summary_resp_v/1
+
+         ,agent_calls_req/1, agent_calls_req_v/1
+         ,agent_calls_err/1, agent_calls_err_v/1
+         ,agent_calls_resp/1, agent_calls_resp_v/1
+
          ,status_req/1, status_req_v/1
          ,status_err/1, status_err_v/1
          ,status_resp/1, status_resp_v/1
+
+         ,agent_cur_status_req/1, agent_cur_status_req_v/1
+         ,agent_cur_status_err/1, agent_cur_status_err_v/1
+         ,agent_cur_status_resp/1, agent_cur_status_resp_v/1
 
          ,status_ready/1, status_ready_v/1
          ,status_logged_in/1, status_logged_in_v/1
@@ -49,15 +63,29 @@
          ,publish_call_handled/1, publish_call_handled/2
          ,publish_call_processed/1, publish_call_processed/2
 
+         ,publish_call_id_change/1, publish_call_id_change/2
+
          ,publish_call_flush/1, publish_call_flush/2
 
          ,publish_current_calls_req/1, publish_current_calls_req/2
          ,publish_current_calls_err/2, publish_current_calls_err/3
          ,publish_current_calls_resp/2, publish_current_calls_resp/3
 
+         ,publish_call_summary_req/1, publish_call_summary_req/2
+         ,publish_call_summary_err/2, publish_call_summary_err/3
+         ,publish_call_summary_resp/2, publish_call_summary_resp/3
+
+         ,publish_agent_calls_req/1, publish_agent_calls_req/2
+         ,publish_agent_calls_err/2, publish_agent_calls_err/3
+         ,publish_agent_calls_resp/2, publish_agent_calls_resp/3
+
          ,publish_status_req/1, publish_status_req/2
          ,publish_status_err/2, publish_status_err/3
          ,publish_status_resp/2, publish_status_resp/3
+
+         ,publish_agent_cur_status_req/1, publish_agent_cur_status_req/2
+         ,publish_agent_cur_status_err/2, publish_agent_cur_status_err/3
+         ,publish_agent_cur_status_resp/2, publish_agent_cur_status_resp/3
 
          ,publish_status_ready/1, publish_status_ready/2
          ,publish_status_logged_in/1, publish_status_logged_in/2
@@ -99,6 +127,10 @@
 -define(PROCESS_HEADERS, [<<"Agent-ID">>, <<"Processed-Timestamp">>, <<"Hung-Up-By">>]).
 -define(PROCESS_VALUES, ?CALL_REQ_VALUES(<<"processed">>)).
 -define(PROCESS_TYPES, []).
+
+-define(ID_CHANGE_HEADERS, [<<"Old-Call-ID">>]).
+-define(ID_CHANGE_VALUES, ?CALL_REQ_VALUES(<<"id-change">>)).
+-define(ID_CHANGE_TYPES, []).
 
 -define(FLUSH_HEADERS, [<<"Call-ID">>]).
 -define(FLUSH_VALUES, ?CALL_REQ_VALUES(<<"flush">>)).
@@ -188,6 +220,23 @@ call_processed_v(Prop) when is_list(Prop) ->
     wh_api:validate(Prop, ?CALL_REQ_HEADERS, ?PROCESS_VALUES, ?PROCESS_TYPES);
 call_processed_v(JObj) ->
     call_processed_v(wh_json:to_proplist(JObj)).
+
+-spec call_id_change(api_terms()) ->
+                            {'ok', iolist()} |
+                            {'error', string()}.
+call_id_change(Props) when is_list(Props) ->
+    case call_id_change_v(Props) of
+        'true' -> wh_api:build_message(Props, ?CALL_REQ_HEADERS, ?ID_CHANGE_HEADERS);
+        'false' -> {'error', "Proplist failed validation for call_id_change"}
+    end;
+call_id_change(JObj) ->
+    call_id_change(wh_json:to_proplist(JObj)).
+
+-spec call_id_change_v(api_terms()) -> boolean().
+call_id_change_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?CALL_REQ_HEADERS, ?ID_CHANGE_VALUES, ?ID_CHANGE_TYPES);
+call_id_change_v(JObj) ->
+    call_id_change_v(wh_json:to_proplist(JObj)).
 
 -spec call_flush(api_terms()) ->
                             {'ok', iolist()} |
@@ -283,6 +332,160 @@ current_calls_resp_v(Prop) when is_list(Prop) ->
 current_calls_resp_v(JObj) ->
     current_calls_resp_v(wh_json:to_proplist(JObj)).
 
+-define(CALL_SUMMARY_REQ_HEADERS, [<<"Account-ID">>]).
+-define(OPTIONAL_CALL_SUMMARY_REQ_HEADERS, [<<"Queue-ID">>, <<"Agent-ID">>
+                                             ,<<"Status">>
+                                             ,<<"Start-Range">>, <<"End-Range">>
+                                            ]).
+-define(CALL_SUMMARY_REQ_VALUES, [{<<"Event-Category">>, <<"acdc_stat">>}
+                                   ,{<<"Event-Name">>, <<"call_summary_req">>}
+                                  ]).
+-define(CALL_SUMMARY_REQ_TYPES, []).
+
+-spec call_summary_req(api_terms()) ->
+                               {'ok', iolist()} |
+                               {'error', string()}.
+call_summary_req(Props) when is_list(Props) ->
+    case call_summary_req_v(Props) of
+        'true' -> wh_api:build_message(Props, ?CALL_SUMMARY_REQ_HEADERS, ?OPTIONAL_CALL_SUMMARY_REQ_HEADERS);
+        'false' -> {'error', "Proplist failed validation for call_summary_req"}
+    end;
+call_summary_req(JObj) ->
+    call_summary_req(wh_json:to_proplist(JObj)).
+
+-spec call_summary_req_v(api_terms()) -> boolean().
+call_summary_req_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?CALL_SUMMARY_REQ_HEADERS, ?CALL_SUMMARY_REQ_VALUES, ?CALL_SUMMARY_REQ_TYPES);
+call_summary_req_v(JObj) ->
+    call_summary_req_v(wh_json:to_proplist(JObj)).
+
+-define(CALL_SUMMARY_ERR_HEADERS, [<<"Error-Reason">>]).
+-define(OPTIONAL_CALL_SUMMARY_ERR_HEADERS, []).
+-define(CALL_SUMMARY_ERR_VALUES, [{<<"Event-Category">>, <<"acdc_stat">>}
+                                   ,{<<"Event-Name">>, <<"call_summary_err">>}
+                                  ]).
+-define(CALL_SUMMARY_ERR_TYPES, []).
+
+-spec call_summary_err(api_terms()) ->
+                               {'ok', iolist()} |
+                               {'error', string()}.
+call_summary_err(Props) when is_list(Props) ->
+    case call_summary_err_v(Props) of
+        'true' -> wh_api:build_message(Props, ?CALL_SUMMARY_ERR_HEADERS, ?OPTIONAL_CALL_SUMMARY_ERR_HEADERS);
+        'false' -> {'error', "Proplist failed validation for call_summary_err"}
+    end;
+call_summary_err(JObj) ->
+    call_summary_err(wh_json:to_proplist(JObj)).
+
+-spec call_summary_err_v(api_terms()) -> boolean().
+call_summary_err_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?CALL_SUMMARY_ERR_HEADERS, ?CALL_SUMMARY_ERR_VALUES, ?CALL_SUMMARY_ERR_TYPES);
+call_summary_err_v(JObj) ->
+    call_summary_err_v(wh_json:to_proplist(JObj)).
+
+-define(CALL_SUMMARY_RESP_HEADERS, [<<"Query-Time">>]).
+-define(OPTIONAL_CALL_SUMMARY_RESP_HEADERS, [<<"Data">>
+                                             ,<<"Waiting">>, <<"Handled">>
+                                             ,<<"Abandoned">>, <<"Processed">>
+                                             ,<<"Entered-Position">>, <<"Exited-Position">>
+                                            ]).
+-define(CALL_SUMMARY_RESP_VALUES, [{<<"Event-Category">>, <<"acdc_stat">>}
+                                    ,{<<"Event-Name">>, <<"call_summary_resp">>}
+                                   ]).
+-define(CALL_SUMMARY_RESP_TYPES, []).
+
+-spec call_summary_resp(api_terms()) ->
+                                {'ok', iolist()} |
+                                {'error', string()}.
+call_summary_resp(Props) when is_list(Props) ->
+    case call_summary_resp_v(Props) of
+        'true' -> wh_api:build_message(Props, ?CALL_SUMMARY_RESP_HEADERS, ?OPTIONAL_CALL_SUMMARY_RESP_HEADERS);
+        'false' -> {'error', "Proplist failed validation for call_summary_resp"}
+    end;
+call_summary_resp(JObj) ->
+    call_summary_resp(wh_json:to_proplist(JObj)).
+
+-spec call_summary_resp_v(api_terms()) -> boolean().
+call_summary_resp_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?CALL_SUMMARY_RESP_HEADERS, ?CALL_SUMMARY_RESP_VALUES, ?CALL_SUMMARY_RESP_TYPES);
+call_summary_resp_v(JObj) ->
+    call_summary_resp_v(wh_json:to_proplist(JObj)).
+
+-define(AGENT_CALLS_REQ_HEADERS, [<<"Account-ID">>]).
+-define(OPTIONAL_AGENT_CALLS_REQ_HEADERS, [<<"Queue-ID">>, <<"Agent-ID">>
+                                           ,<<"Status">>
+                                           ,<<"Start-Range">>, <<"End-Range">>
+                                          ]).
+-define(AGENT_CALLS_REQ_VALUES, [{<<"Event-Category">>, <<"acdc_stat">>}
+                                 ,{<<"Event-Name">>, <<"agent_calls_req">>}
+                                ]).
+-define(AGENT_CALLS_REQ_TYPES, []).
+
+-spec agent_calls_req(api_terms()) ->
+                               {'ok', iolist()} |
+                               {'error', string()}.
+agent_calls_req(Props) when is_list(Props) ->
+    case agent_calls_req_v(Props) of
+        'true' -> wh_api:build_message(Props, ?AGENT_CALLS_REQ_HEADERS, ?OPTIONAL_AGENT_CALLS_REQ_HEADERS);
+        'false' -> {'error', "Proplist failed validation for agent_calls_req"}
+    end;
+agent_calls_req(JObj) ->
+    agent_calls_req(wh_json:to_proplist(JObj)).
+
+-spec agent_calls_req_v(api_terms()) -> boolean().
+agent_calls_req_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?AGENT_CALLS_REQ_HEADERS, ?AGENT_CALLS_REQ_VALUES, ?AGENT_CALLS_REQ_TYPES);
+agent_calls_req_v(JObj) ->
+    agent_calls_req_v(wh_json:to_proplist(JObj)).
+
+-define(AGENT_CALLS_ERR_HEADERS, [<<"Error-Reason">>]).
+-define(OPTIONAL_AGENT_CALLS_ERR_HEADERS, []).
+-define(AGENT_CALLS_ERR_VALUES, [{<<"Event-Category">>, <<"acdc_stat">>}
+                                 ,{<<"Event-Name">>, <<"agent_calls_err">>}
+                                ]).
+-define(AGENT_CALLS_ERR_TYPES, []).
+
+-spec agent_calls_err(api_terms()) ->
+                               {'ok', iolist()} |
+                               {'error', string()}.
+agent_calls_err(Props) when is_list(Props) ->
+    case agent_calls_err_v(Props) of
+        'true' -> wh_api:build_message(Props, ?AGENT_CALLS_ERR_HEADERS, ?OPTIONAL_AGENT_CALLS_ERR_HEADERS);
+        'false' -> {'error', "Proplist failed validation for agent_calls_err"}
+    end;
+agent_calls_err(JObj) ->
+    agent_calls_err(wh_json:to_proplist(JObj)).
+
+-spec agent_calls_err_v(api_terms()) -> boolean().
+agent_calls_err_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?AGENT_CALLS_ERR_HEADERS, ?AGENT_CALLS_ERR_VALUES, ?AGENT_CALLS_ERR_TYPES);
+agent_calls_err_v(JObj) ->
+    agent_calls_err_v(wh_json:to_proplist(JObj)).
+
+-define(AGENT_CALLS_RESP_HEADERS, [<<"Query-Time">>]).
+-define(OPTIONAL_AGENT_CALLS_RESP_HEADERS, [<<"Data">>]).
+-define(AGENT_CALLS_RESP_VALUES, [{<<"Event-Category">>, <<"acdc_stat">>}
+                                  ,{<<"Event-Name">>, <<"agent_calls_resp">>}
+                                 ]).
+-define(AGENT_CALLS_RESP_TYPES, []).
+
+-spec agent_calls_resp(api_terms()) ->
+                                {'ok', iolist()} |
+                                {'error', string()}.
+agent_calls_resp(Props) when is_list(Props) ->
+    case agent_calls_resp_v(Props) of
+        'true' -> wh_api:build_message(Props, ?AGENT_CALLS_RESP_HEADERS, ?OPTIONAL_AGENT_CALLS_RESP_HEADERS);
+        'false' -> {'error', "Proplist failed validation for agent_calls_resp"}
+    end;
+agent_calls_resp(JObj) ->
+    agent_calls_resp(wh_json:to_proplist(JObj)).
+
+-spec agent_calls_resp_v(api_terms()) -> boolean().
+agent_calls_resp_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?AGENT_CALLS_RESP_HEADERS, ?AGENT_CALLS_RESP_VALUES, ?AGENT_CALLS_RESP_TYPES);
+agent_calls_resp_v(JObj) ->
+    agent_calls_resp_v(wh_json:to_proplist(JObj)).
+
 -define(STATUS_REQ_HEADERS, [<<"Account-ID">>]).
 -define(OPTIONAL_STATUS_REQ_HEADERS, [<<"Agent-ID">>, <<"Start-Range">>, <<"End-Range">>
                                       ,<<"Status">>
@@ -356,6 +559,78 @@ status_resp_v(Prop) when is_list(Prop) ->
     wh_api:validate(Prop, ?STATUS_RESP_HEADERS, ?STATUS_RESP_VALUES, ?STATUS_RESP_TYPES);
 status_resp_v(JObj) ->
     status_resp_v(wh_json:to_proplist(JObj)).
+
+-define(AGENT_CUR_STATUS_REQ_HEADERS, [<<"Account-ID">>]).
+-define(OPTIONAL_AGENT_CUR_STATUS_REQ_HEADERS, [<<"Agent-ID">>]).
+-define(AGENT_CUR_STATUS_REQ_VALUES, [{<<"Event-Category">>, <<"acdc_stat">>}
+                                      ,{<<"Event-Name">>, <<"agent_cur_status_req">>}
+                                     ]).
+-define(AGENT_CUR_STATUS_REQ_TYPES, []).
+
+-spec agent_cur_status_req(api_terms()) ->
+                        {'ok', iolist()} |
+                        {'error', string()}.
+agent_cur_status_req(Props) when is_list(Props) ->
+    case agent_cur_status_req_v(Props) of
+        'true' -> wh_api:build_message(Props, ?AGENT_CUR_STATUS_REQ_HEADERS, ?OPTIONAL_AGENT_CUR_STATUS_REQ_HEADERS);
+        'false' -> {'error', "Proplist failed validation for agent_cur_status_req"}
+    end;
+agent_cur_status_req(JObj) ->
+    agent_cur_status_req(wh_json:to_proplist(JObj)).
+
+-spec agent_cur_status_req_v(api_terms()) -> boolean().
+agent_cur_status_req_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?AGENT_CUR_STATUS_REQ_HEADERS, ?AGENT_CUR_STATUS_REQ_VALUES, ?AGENT_CUR_STATUS_REQ_TYPES);
+agent_cur_status_req_v(JObj) ->
+    agent_cur_status_req_v(wh_json:to_proplist(JObj)).
+
+-define(AGENT_CUR_STATUS_ERR_HEADERS, [<<"Error-Reason">>]).
+-define(OPTIONAL_AGENT_CUR_STATUS_ERR_HEADERS, []).
+-define(AGENT_CUR_STATUS_ERR_VALUES, [{<<"Event-Category">>, <<"acdc_stat">>}
+                                      ,{<<"Event-Name">>, <<"agent_cur_status_err">>}
+                                     ]).
+-define(AGENT_CUR_STATUS_ERR_TYPES, []).
+
+-spec agent_cur_status_err(api_terms()) ->
+                        {'ok', iolist()} |
+                        {'error', string()}.
+agent_cur_status_err(Props) when is_list(Props) ->
+    case agent_cur_status_err_v(Props) of
+        'true' -> wh_api:build_message(Props, ?AGENT_CUR_STATUS_ERR_HEADERS, ?OPTIONAL_AGENT_CUR_STATUS_ERR_HEADERS);
+        'false' -> {'error', "Proplist failed validation for agent_cur_status_err"}
+    end;
+agent_cur_status_err(JObj) ->
+    agent_cur_status_err(wh_json:to_proplist(JObj)).
+
+-spec agent_cur_status_err_v(api_terms()) -> boolean().
+agent_cur_status_err_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?AGENT_CUR_STATUS_ERR_HEADERS, ?AGENT_CUR_STATUS_ERR_VALUES, ?AGENT_CUR_STATUS_ERR_TYPES);
+agent_cur_status_err_v(JObj) ->
+    agent_cur_status_err_v(wh_json:to_proplist(JObj)).
+
+-define(AGENT_CUR_STATUS_RESP_HEADERS, [<<"Agents">>]).
+-define(OPTIONAL_AGENT_CUR_STATUS_RESP_HEADERS, []).
+-define(AGENT_CUR_STATUS_RESP_VALUES, [{<<"Event-Category">>, <<"acdc_stat">>}
+                                       ,{<<"Event-Name">>, <<"agent_cur_status_resp">>}
+                                      ]).
+-define(AGENT_CUR_STATUS_RESP_TYPES, []).
+
+-spec agent_cur_status_resp(api_terms()) ->
+                         {'ok', iolist()} |
+                         {'error', string()}.
+agent_cur_status_resp(Props) when is_list(Props) ->
+    case agent_cur_status_resp_v(Props) of
+        'true' -> wh_api:build_message(Props, ?AGENT_CUR_STATUS_RESP_HEADERS, ?OPTIONAL_AGENT_CUR_STATUS_RESP_HEADERS);
+        'false' -> {'error', "Proplist failed validation for agent_cur_status_resp"}
+    end;
+agent_cur_status_resp(JObj) ->
+    agent_cur_status_resp(wh_json:to_proplist(JObj)).
+
+-spec agent_cur_status_resp_v(api_terms()) -> boolean().
+agent_cur_status_resp_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?AGENT_CUR_STATUS_RESP_HEADERS, ?AGENT_CUR_STATUS_RESP_VALUES, ?AGENT_CUR_STATUS_RESP_TYPES);
+agent_cur_status_resp_v(JObj) ->
+    agent_cur_status_resp_v(wh_json:to_proplist(JObj)).
 
 -define(STATUS_HEADERS, [<<"Account-ID">>, <<"Agent-ID">>, <<"Timestamp">>]).
 -define(STATUS_OPTIONAL_HEADERS, [<<"Wait-Time">>, <<"Pause-Time">>, <<"Call-ID">>
@@ -547,7 +822,8 @@ bind_q(Q, AcctId, QID, AID, 'undefined') ->
     amqp_util:bind_q_to_whapps(Q, call_stat_routing_key(AcctId, QID)),
     amqp_util:bind_q_to_whapps(Q, status_stat_routing_key(AcctId, AID)),
     amqp_util:bind_q_to_whapps(Q, query_call_stat_routing_key(AcctId, QID)),
-    amqp_util:bind_q_to_whapps(Q, query_status_stat_routing_key(AcctId, AID));
+    amqp_util:bind_q_to_whapps(Q, query_status_stat_routing_key(AcctId, AID)),
+    amqp_util:bind_q_to_whapps(Q, call_id_change_routing_key(AcctId, QID));
 bind_q(Q, AcctId, QID, AID, ['call_stat'|L]) ->
     amqp_util:bind_q_to_whapps(Q, call_stat_routing_key(AcctId, QID)),
     bind_q(Q, AcctId, QID, AID, L);
@@ -559,6 +835,9 @@ bind_q(Q, AcctId, QID, AID, ['query_call_stat'|L]) ->
     bind_q(Q, AcctId, QID, AID, L);
 bind_q(Q, AcctId, QID, AID, ['query_status_stat'|L]) ->
     amqp_util:bind_q_to_whapps(Q, query_status_stat_routing_key(AcctId, AID)),
+    bind_q(Q, AcctId, QID, AID, L);
+bind_q(Q, AcctId, QID, AID, ['id_change'|L]) ->
+    amqp_util:bind_q_to_whapps(Q, call_id_change_routing_key(AcctId, QID)),
     bind_q(Q, AcctId, QID, AID, L);
 bind_q(Q, AcctId, QID, AID, [_|L]) ->
     bind_q(Q, AcctId, QID, AID, L);
@@ -587,6 +866,9 @@ unbind_q(Q, AcctId, QID, AID, ['query_call_stat'|L]) ->
     unbind_q(Q, AcctId, QID, AID, L);
 unbind_q(Q, AcctId, QID, AID, ['query_status_stat'|L]) ->
     amqp_util:unbind_q_from_whapps(Q, query_status_stat_routing_key(AcctId, AID)),
+    unbind_q(Q, AcctId, QID, AID, L);
+unbind_q(Q, AcctId, QID, AID, ['id_change'|L]) ->
+    amqp_util:unbind_q_from_whapps(Q, call_id_change_routing_key(AcctId, QID)),
     unbind_q(Q, AcctId, QID, AID, L);
 unbind_q(Q, AcctId, QID, AID, [_|L]) ->
     unbind_q(Q, AcctId, QID, AID, L);
@@ -630,6 +912,12 @@ publish_call_processed(JObj) ->
 publish_call_processed(API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?PROCESS_VALUES, fun call_processed/1),
     amqp_util:whapps_publish(call_stat_routing_key(API), Payload, ContentType).
+
+publish_call_id_change(JObj) ->
+    publish_call_id_change(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_call_id_change(API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?ID_CHANGE_VALUES, fun call_id_change/1),
+    amqp_util:whapps_publish(call_id_change_routing_key(API), Payload, ContentType).
 
 publish_call_flush(JObj) ->
     publish_call_flush(JObj, ?DEFAULT_CONTENT_TYPE).
@@ -719,6 +1007,42 @@ publish_current_calls_resp(RespQ, API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?CURRENT_CALLS_RESP_VALUES, fun current_calls_resp/1),
     amqp_util:targeted_publish(RespQ, Payload, ContentType).
 
+publish_call_summary_req(JObj) ->
+    publish_call_summary_req(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_call_summary_req(API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?CALL_SUMMARY_REQ_VALUES, fun call_summary_req/1),
+    amqp_util:whapps_publish(query_call_stat_routing_key(API), Payload, ContentType).
+
+publish_call_summary_err(RespQ, JObj) ->
+    publish_call_summary_err(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
+publish_call_summary_err(RespQ, API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?CALL_SUMMARY_ERR_VALUES, fun call_summary_err/1),
+    amqp_util:targeted_publish(RespQ, Payload, ContentType).
+
+publish_call_summary_resp(RespQ, JObj) ->
+    publish_call_summary_resp(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
+publish_call_summary_resp(RespQ, API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?CALL_SUMMARY_RESP_VALUES, fun call_summary_resp/1),
+    amqp_util:targeted_publish(RespQ, Payload, ContentType).
+
+publish_agent_calls_req(JObj) ->
+    publish_agent_calls_req(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_agent_calls_req(API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?AGENT_CALLS_REQ_VALUES, fun agent_calls_req/1),
+    amqp_util:whapps_publish(query_call_stat_routing_key(API), Payload, ContentType).
+
+publish_agent_calls_err(RespQ, JObj) ->
+    publish_agent_calls_err(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
+publish_agent_calls_err(RespQ, API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?AGENT_CALLS_ERR_VALUES, fun agent_calls_err/1),
+    amqp_util:targeted_publish(RespQ, Payload, ContentType).
+
+publish_agent_calls_resp(RespQ, JObj) ->
+    publish_agent_calls_resp(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
+publish_agent_calls_resp(RespQ, API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?AGENT_CALLS_RESP_VALUES, fun agent_calls_resp/1),
+    amqp_util:targeted_publish(RespQ, Payload, ContentType).
+
 publish_status_req(JObj) ->
     publish_status_req(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_status_req(API, ContentType) ->
@@ -735,6 +1059,24 @@ publish_status_resp(RespQ, JObj) ->
     publish_status_resp(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_status_resp(RespQ, API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?STATUS_RESP_VALUES, fun status_resp/1),
+    amqp_util:targeted_publish(RespQ, Payload, ContentType).
+
+publish_agent_cur_status_req(JObj) ->
+    publish_agent_cur_status_req(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_agent_cur_status_req(API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?AGENT_CUR_STATUS_REQ_VALUES, fun agent_cur_status_req/1),
+    amqp_util:whapps_publish(query_status_stat_routing_key(API), Payload, ContentType).
+
+publish_agent_cur_status_err(RespQ, JObj) ->
+    publish_agent_cur_status_err(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
+publish_agent_cur_status_err(RespQ, API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?AGENT_CUR_STATUS_ERR_VALUES, fun agent_cur_status_err/1),
+    amqp_util:targeted_publish(RespQ, Payload, ContentType).
+
+publish_agent_cur_status_resp(RespQ, JObj) ->
+    publish_agent_cur_status_resp(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
+publish_agent_cur_status_resp(RespQ, API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?AGENT_CUR_STATUS_RESP_VALUES, fun agent_cur_status_resp/1),
     amqp_util:targeted_publish(RespQ, Payload, ContentType).
 
 call_stat_routing_key(Prop) when is_list(Prop) ->
@@ -786,6 +1128,18 @@ query_status_stat_routing_key(AcctId, 'undefined') ->
     <<"acdc_stats.query_status.", AcctId/binary, ".all">>;
 query_status_stat_routing_key(AcctId, QID) ->
     <<"acdc_stats.query_status.", AcctId/binary, ".", QID/binary>>.
+
+call_id_change_routing_key(Prop) when is_list(Prop) ->
+    call_id_change_routing_key(props:get_value(<<"Account-ID">>, Prop)
+                                  ,props:get_value(<<"Queue-ID">>, Prop)
+                                 );
+call_id_change_routing_key(JObj) ->
+    call_id_change_routing_key(wh_json:get_value(<<"Account-ID">>, JObj)
+                                  ,wh_json:get_value(<<"Queue-ID">>, JObj)
+                                 ).
+
+call_id_change_routing_key(AcctId, QID) ->
+    <<"acdc_stats.id_change.", AcctId/binary, ".", QID/binary>>.
 
 
 status_value(API) when is_list(API) -> props:get_value(<<"Status">>, API);

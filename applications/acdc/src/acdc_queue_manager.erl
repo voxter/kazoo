@@ -405,9 +405,14 @@ handle_cast({'member_call_cancel', K, JObj}, #state{ignored_member_calls=Dict}=S
     Reason = wh_json:get_value(<<"Reason">>, JObj),
 
     acdc_stats:call_abandoned(AccountId, QueueId, CallId, Reason),
-    {'noreply', State#state{
-                  ignored_member_calls=dict:store(K, 'true', Dict)
-                 }};
+    case Reason of
+        %% Don't add to ignored_member_calls because an FSM has already dealt with this call
+        <<"No agents left in queue">> ->
+            {'noreply', State};
+        _ ->
+            {'noreply', State#state{ignored_member_calls=dict:store(K, 'true', Dict)}}
+    end;
+    
 handle_cast({'monitor_call', Call}, State) ->
     CallId = whapps_call:call_id(Call),
     gen_listener:add_binding(self(), 'call', [{'callid', CallId}
@@ -426,6 +431,9 @@ handle_cast({'start_workers'}, #state{account_id=AccountId
                                  ,'include_docs'
                                 ])
     of
+        {'ok', []} ->
+            lager:debug("no agents yet, but create a worker anyway"),
+            acdc_queue_workers_sup:new_worker(WorkersSup, AccountId, QueueId);
         {'ok', Agents} ->
             _ = [start_agent_and_worker(WorkersSup, AccountId, QueueId
                                         ,wh_json:get_value(<<"doc">>, A)
@@ -453,9 +461,11 @@ handle_cast({'start_worker', N}, #state{account_id=AccountId
 handle_cast({'agent_available', AgentId}, #state{strategy=Strategy
                                                  ,strategy_state=StrategyState
                                                  ,known_agents=As
+                                                 ,supervisor=QueueSup
                                                 }=State) when is_binary(AgentId) ->
     lager:info("adding agent ~s to strategy ~s", [AgentId, Strategy]),
     {StrategyState1, As1} = update_strategy_with_agent(Strategy, StrategyState, As, AgentId, 'add'),
+    maybe_start_queue_workers(QueueSup, dict:size(As1)),
     {'noreply', State#state{strategy_state=StrategyState1
                             ,known_agents=As1
                            }
@@ -476,14 +486,10 @@ handle_cast({'agent_ringing', JObj}, State) ->
 handle_cast({'agent_unavailable', AgentId}, #state{strategy=Strategy
                                                    ,strategy_state=StrategyState
                                                    ,known_agents=As
-                                                   ,supervisor=QueueSup
                                                   }=State) when is_binary(AgentId) ->
     lager:info("agent ~s unavailable, maybe updating strategy ~s", [AgentId, Strategy]),
 
     {StrategyState1, As1} = update_strategy_with_agent(Strategy, StrategyState, As, AgentId, 'remove'),
-
-    maybe_start_queue_workers(QueueSup, dict:size(As1)),
-
     {'noreply', State#state{strategy_state=StrategyState1
                             ,known_agents=As1
                            }
@@ -506,7 +512,7 @@ handle_cast({'reject_member_call', Call, JObj}, #state{account_id=AccountId
 
 handle_cast({'sync_with_agent', A}, #state{account_id=AccountId}=State) ->
     case acdc_agent_util:most_recent_status(AccountId, A) of
-        {'ok', <<"logout">>} -> gen_listener:cast(self(), {'agent_unavailable', A});
+        {'ok', <<"logged_out">>} -> gen_listener:cast(self(), {'agent_unavailable', A});
         _ -> gen_listener:cast(self(), {'agent_available', A})
     end,
     {'noreply', State};
@@ -690,8 +696,13 @@ maybe_update_strategy('rr', StrategyState, AgentId) ->
 %% If A's idle time is greater, it should come before B
 -spec sort_agent(wh_json:object(), wh_json:object()) -> boolean().
 sort_agent(A, B) ->
-    wh_json:get_integer_value(<<"Idle-Time">>, A, 0) >
-        wh_json:get_integer_value(<<"Idle-Time">>, B, 0).
+    sort_agent2(wh_json:get_integer_value(<<"Idle-Time">>, A)
+                ,wh_json:get_integer_value(<<"Idle-Time">>, B)).
+
+-spec sort_agent2(api_integer(), api_integer()) -> boolean().
+sort_agent2('undefined', _) -> 'true';
+sort_agent2(_, 'undefined') -> 'false';
+sort_agent2(A, B) -> A > B.
 
 %% Handle when an agent process has responded to the connect_req
 %% but then the agent logs out of their phone (removing the agent

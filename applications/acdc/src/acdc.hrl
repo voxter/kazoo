@@ -29,12 +29,15 @@
 
 -define(NEW_CHANNEL_REG(AcctId, User), {'p', 'l', {'new_channel', AcctId, User}}).
 -define(NEW_CHANNEL_FROM(CallId), {'call_from', CallId}).
--define(NEW_CHANNEL_TO(CallId), {'call_to', CallId}).
+-define(NEW_CHANNEL_TO(CallId, MemberCallId), {'call_to', CallId, MemberCallId}).
 
 -type abandon_reason() :: ?ABANDON_TIMEOUT | ?ABANDON_EXIT |
                           ?ABANDON_HANGUP.
 
 -type deliveries() :: [gen_listener:basic_deliver()].
+
+-type announce_pid_list() :: [{api_binary(), pid()},...] | [].
+-type callback_list() :: [{api_binary(), binary()},...] | [].
 
 %% Check for cleanup every 5 minutes
 -define(CLEANUP_PERIOD, whapps_config:get_integer(?CONFIG_CAT, <<"cleanup_period_ms">>, 360000)).

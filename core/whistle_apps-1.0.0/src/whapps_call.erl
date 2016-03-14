@@ -63,6 +63,7 @@
 -export([set_fetch_id/2, fetch_id/1]).
 -export([set_bridge_id/2, bridge_id/1]).
 -export([set_language/2, language/1]).
+-export([ccvs/1]).
 -export([set_to_tag/2, to_tag/1]).
 -export([set_from_tag/2, from_tag/1]).
 
@@ -109,6 +110,11 @@
          ,kvs_update/3
          ,kvs_update/4
          ,kvs_update_counter/3
+        ]).
+
+-export([custom_kv/2, set_custom_kv/3
+         ,custom_kvs/1
+         ,custom_kvs_mode/1, set_custom_kvs_mode/2
         ]).
 
 -export([flush/0
@@ -875,9 +881,9 @@ bridge_id(#whapps_call{bridge_id=BridgeId}) -> BridgeId.
 set_language(Language, #whapps_call{}=Call) when is_binary(Language) ->
     Call#whapps_call{language=Language}.
 
--ifdef(TEST).
-language(#whapps_call{language=Lang}) -> Lang.
--else.
+ccvs(#whapps_call{ccvs=CCVs}) ->
+	CCVs.
+
 -spec language(call()) -> api_binary().
 language(#whapps_call{language='undefined', account_id=AccountId}) ->
     wh_media_util:prompt_language(AccountId);
@@ -1082,6 +1088,49 @@ kvs_update(Key, Fun, Initial, #whapps_call{kvs=Dict}=Call) ->
 -spec kvs_update_counter(any(), number(), call()) -> call().
 kvs_update_counter(Key, Number, #whapps_call{kvs=Dict}=Call) ->
     Call#whapps_call{kvs=orddict:update_counter(wh_util:to_binary(Key), Number, Dict)}.
+
+-define(KVS_DB, <<"kvs_collections">>).
+-define(COLLECTION_KVS, <<"Custom-KVS">>).
+-define(COLLECTION_MODE, <<"KVS-Mode">>).
+
+-spec custom_kv(binary(), call()) -> wh_json:json_term() | 'undefined'.
+custom_kv(Key, Call) ->
+    wh_json:get_value(Key, custom_kvs_collection(?COLLECTION_KVS, Call)).
+
+-spec set_custom_kv(binary(), wh_json:json_term(), call()) -> call().
+set_custom_kv(Key, Value, Call) ->
+    set_custom_kvs_collection(?COLLECTION_KVS, Key, Value, Call).
+
+-spec set_custom_kvs_collection(binary(), binary(), wh_json:json_term(), call()) -> call().
+set_custom_kvs_collection(Collection, Key, Value, Call) ->
+    Collections = custom_kvs_collections(Call),
+    OldCollection = custom_kvs_collection(Collection, Call),
+    NewCollection = wh_json:set_value(Key, Value, OldCollection),
+    whapps_call:kvs_store(
+        ?KVS_DB,
+        wh_json:set_value(Collection, NewCollection, Collections),
+        Call
+    ).
+
+-spec custom_kvs(call()) -> wh_proplist() | text().
+custom_kvs(Call) ->
+    custom_kvs_collection(?COLLECTION_KVS, Call).
+
+-spec custom_kvs_mode(call()) -> wh_json:json_term().
+custom_kvs_mode(Call) ->
+    wh_json:get_value(<<"kvs_mode">>, custom_kvs_collection(?COLLECTION_MODE, Call), <<"props">>).
+
+-spec custom_kvs_collection(binary(), call()) -> wh_json:json_term() | 'undefined'.
+custom_kvs_collection(Collection, Call) ->
+    wh_json:get_value(Collection, custom_kvs_collections(Call), wh_json:new()).
+
+-spec custom_kvs_collections(call()) -> any().
+custom_kvs_collections(Call) ->
+    whapps_call:kvs_fetch(?KVS_DB, wh_json:new(), Call).
+
+-spec set_custom_kvs_mode(binary(), call()) -> call().
+set_custom_kvs_mode(Mode, Call) ->
+    set_custom_kvs_collection(?COLLECTION_MODE, <<"kvs_mode">>, Mode, Call).
 
 -spec set_dtmf_collection(api_binary(), call()) -> call().
 -spec set_dtmf_collection(api_binary(), ne_binary(), call()) -> call().

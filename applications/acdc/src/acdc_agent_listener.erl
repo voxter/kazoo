@@ -14,13 +14,18 @@
 -export([start_link/2, start_link/3, start_link/5
          ,member_connect_resp/2
          ,member_connect_retry/2
-         ,member_connect_accepted/1, member_connect_accepted/2
+         ,member_connect_accepted/1, member_connect_accepted/2, member_connect_accepted/3
+         ,monitor_connect_accepted/2
          ,agent_timeout/1
+         ,redial_member/7
          ,bridge_to_member/6
          ,monitor_call/4
+         ,hangup_call/1
+         ,replace_call/2
          ,channel_hungup/2
          ,rebind_events/3
          ,unbind_from_events/2
+         ,member_transferred/3
          ,originate_execute/2
          ,originate_uuid/3
          ,outbound_call/2
@@ -67,6 +72,7 @@
 
 -record(state, {
          call :: whapps_call:call()
+         ,old_call :: whapps_call:call()
          ,acdc_queue_id :: ne_binary() % the ACDc Queue ID
          ,msg_queue_id :: ne_binary() % the AMQP Queue ID of the ACDc Queue process
          ,agent_id :: ne_binary()
@@ -83,6 +89,7 @@
          ,supervisor :: pid()
          ,record_calls = 'false' :: boolean()
          ,recording_url :: api_binary() %% where to send recordings after the call
+         ,preserve_metadata = 'false' :: boolean()
          ,is_thief = 'false' :: boolean()
          ,agent :: agent()
          ,agent_call_ids = [] :: api_binaries() | wh_proplist()
@@ -117,7 +124,7 @@
 -define(BINDINGS(AcctId, AgentId), [{'self', []}
                                     ,{'acdc_agent', [{'account_id', AcctId}
                                                      ,{'agent_id', AgentId}
-                                                     ,{'restrict_to', ['sync', 'stats_req']}
+                                                     ,{'restrict_to', ['member_connect_win', 'member_connect_reset', 'sync', 'fsm_shared']}
                                                     ]}
                                     ,{'conf', [{'action', <<"*">>}
                                                ,{'db', wh_util:format_account_id(AcctId, 'encoded')}
@@ -143,6 +150,12 @@
                       }
                      ,{{'acdc_agent_handler', 'handle_call_event'}
                        ,[{<<"error">>, <<"*">>}]
+                      }
+                     ,{{'acdc_agent_handler', 'handle_member_connect_win'}
+                       ,[{<<"member">>, <<"connect_win">>}]
+                      }
+                     ,{{'acdc_agent_handler', 'handle_member_connect_reset'}
+                       ,[{<<"member">>, <<"connect_reset">>}]
                       }
                      ,{{'acdc_agent_handler', 'handle_member_message'}
                        ,[{<<"member">>, <<"*">>}]
@@ -226,6 +239,21 @@ member_connect_accepted(Srv) ->
     gen_listener:cast(Srv, {'member_connect_accepted'}).
 member_connect_accepted(Srv, ACallId) ->
     gen_listener:cast(Srv, {'member_connect_accepted', ACallId}).
+member_connect_accepted(Srv, ACallId, MemberCall) ->
+    gen_listener:cast(Srv, {'member_connect_accepted', ACallId, MemberCall}).
+
+monitor_connect_accepted(Srv, ACallId) ->
+    gen_listener:cast(Srv, {'monitor_connect_accepted', ACallId}).
+
+-spec redial_member(pid(), whapps_call:call(), wh_json:object()
+                       ,wh_json:objects(), api_binary(), api_binary(), api_binary()
+                      ) -> 'ok'.
+redial_member(Srv, Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number) ->
+    gen_listener:cast(Srv, {'redial_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number}).
+
+-spec hangup_call(pid()) -> 'ok'.
+hangup_call(Srv) ->
+    gen_listener:cast(Srv, {'hangup_call'}).
 
 -spec bridge_to_member(pid(), whapps_call:call(), wh_json:object()
                        ,wh_json:objects(), api_binary(), api_binary()
@@ -233,8 +261,11 @@ member_connect_accepted(Srv, ACallId) ->
 bridge_to_member(Srv, Call, WinJObj, EPs, CDRUrl, RecordingUrl) ->
     gen_listener:cast(Srv, {'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}).
 
-monitor_call(Srv, Call, CDRUrl, RecordingUrl) ->
-    gen_listener:cast(Srv, {'monitor_call', Call, CDRUrl, RecordingUrl}).
+monitor_call(Srv, Call, WinJObj, RecordingUrl) ->
+    gen_listener:cast(Srv, {'monitor_call', Call, WinJObj, RecordingUrl}).
+
+replace_call(Srv, Call) ->
+    gen_listener:cast(Srv, {'replace_call', Call}).
 
 -spec channel_hungup(pid(), ne_binary()) -> 'ok'.
 channel_hungup(Srv, CallId) ->
@@ -247,6 +278,10 @@ unbind_from_events(Srv, CallId) ->
 -spec rebind_events(pid(), ne_binary(), ne_binary()) -> 'ok'.
 rebind_events(Srv, OldCallId, NewCallId) ->
     gen_listener:cast(Srv, {'rebind_events', OldCallId, NewCallId}).
+
+-spec member_transferred(pid(), ne_binary(), ne_binary()) -> 'ok'.
+member_transferred(Srv, OldCallId, NewCallId) ->
+    gen_listener:cast(Srv, {'member_transferred', OldCallId, NewCallId}).
 
 originate_execute(Srv, JObj) ->
     gen_listener:cast(Srv, {'originate_execute', JObj}).
@@ -485,6 +520,15 @@ handle_cast({'unbind_from_events', CallId}, State) ->
     acdc_util:unbind_from_call_events(CallId),
     {'noreply', State};
 
+handle_cast({'member_transferred', OldCallId, NewCallId}, #state{call=OldCall
+                                                                 ,acct_id=AccountId
+                                                                 ,acdc_queue_id=QueueId
+                                                                }=State) ->
+    acdc_util:unbind_from_call_events(OldCallId),
+    acdc_util:bind_to_call_events(NewCallId),
+    acdc_stats:call_id_change(AccountId, QueueId, OldCallId, NewCallId),
+    {'noreply', State#state{call=whapps_call:set_call_id(NewCallId, OldCall)}};
+
 handle_cast({'channel_hungup', CallId}, #state{call=Call
                                                ,is_thief=IsThief
                                                ,agent_call_ids=ACallIds
@@ -502,10 +546,12 @@ handle_cast({'channel_hungup', CallId}, #state{call=Call
             case IsThief of
                 'false' ->
                     {'noreply', State#state{call='undefined'
+                                            ,old_call='undefined'
                                             ,msg_queue_id='undefined'
                                             ,acdc_queue_id='undefined'
                                             ,agent_call_ids=[]
                                             ,recording_url='undefined'
+                                            ,last_connect=os:timestamp()
                                            }
                      ,'hibernate'};
                 'true' ->
@@ -519,18 +565,15 @@ handle_cast({'channel_hungup', CallId}, #state{call=Call
                     lager:debug("agent channel ~s hungup/needs hanging up", [CallId]),
                     acdc_util:unbind_from_call_events(CallId),
                     {'noreply', State#state{agent_call_ids=lists:delete(CallId, ACallIds)}, 'hibernate'};
-                {ACallId, ACtrlQ} ->
-                    lager:debug("agent channel ~s hungup, stop call on ctlq ~s", [ACallId, ACtrlQ]),
-                    acdc_util:unbind_from_call_events(ACallId),
-                    stop_agent_leg(ACallId, ACtrlQ),
-                    {'noreply', State#state{agent_call_ids=props:delete(ACallId, ACallIds)}};
                 'undefined' ->
                     lager:debug("unknown call id ~s for channel_hungup, ignoring", [CallId]),
                     lager:debug("listening for call id(~s) and agents (~p)", [CCallId, ACallIds]),
                     {'noreply', State};
-		_ ->
-		    lager:debug("listening for call id(~s) and agents (~p)", [CallId, ACallIds]),
-		    {'noreply', State}
+                CtrlQ ->
+                    lager:debug("agent channel ~s hungup, stop call on ctlq ~s", [CallId, CtrlQ]),
+                    acdc_util:unbind_from_call_events(CallId),
+                    stop_agent_leg(CallId, CtrlQ),
+                    {'noreply', State#state{agent_call_ids=props:delete(CallId, ACallIds)}}
             end
     end;
 
@@ -581,6 +624,63 @@ handle_cast({'member_connect_retry', WinJObj}, #state{my_id=MyId
     lager:debug("cannot process this win, sending a retry: ~s", [call_id(WinJObj)]),
     send_member_connect_retry(WinJObj, MyId, AgentId),
     {'noreply', State};
+handle_cast({'monitor_connect_retry', CallId}, #state{call=Call
+                                                      ,agent_id=AgentId
+                                                      ,agent_call_ids=ACallIds
+                                                     }=State) ->
+    case catch whapps_call:call_id(Call) of
+        CallId ->
+            lager:debug("retry while monitoring"),
+
+            _ = [acdc_util:unbind_from_call_events(ACallId) || ACallId <- ACallIds],
+            acdc_util:unbind_from_call_events(CallId),
+
+            wh_util:put_callid(AgentId),
+
+            {'noreply', State#state{msg_queue_id='undefined'
+                                    ,acdc_queue_id='undefined'
+                                    ,agent_call_ids=[]
+                                    ,call='undefined'
+                                   }
+             ,'hibernate'
+            };
+        _MCallId ->
+            lager:debug("retry call id(~s) is not our member call id ~p, ignoring", [CallId, _MCallId]),
+            {'noreply', State}
+    end;
+
+handle_cast({'redial_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number}, #state{fsm_pid=FSM
+                                                                                ,agent_queues=Qs
+                                                                                ,acct_id=AcctId
+                                                                                ,agent_id=AgentId
+                                                                                ,my_q=MyQ
+                                                                                ,agent=Agent
+                                                                               }=State) ->
+    _ = whapps_call:put_callid(Call),
+    lager:debug("Performing transfer back to member #"),
+
+    RingTimeout = wh_json:get_value(<<"Ring-Timeout">>, WinJObj),
+    lager:debug("ring agent for ~ps", [RingTimeout]),
+
+    ShouldRecord = should_record_endpoints(EPs, record_calls(Agent)
+                                           ,wh_json:is_true(<<"Record-Caller">>, WinJObj, 'false')
+                                          ),
+
+    acdc_agent_fsm:awaiting_callback(FSM),
+
+    AgentCallIds = maybe_originate_callback(MyQ, EPs, Call, RingTimeout, AgentId, CDRUrl, Number),
+
+    lager:debug("originate sent, waiting on bridge of agent and callback call"),
+    update_my_queues_of_change(AcctId, AgentId, Qs),
+    {'noreply', State#state{call=Call
+                            ,acdc_queue_id=wh_json:get_value(<<"Queue-ID">>, WinJObj)
+                            ,record_calls=ShouldRecord
+                            ,preserve_metadata=wh_json:is_true(<<"Preserve-Metadata">>, WinJObj, 'false')
+                            ,msg_queue_id=wh_json:get_value(<<"Server-ID">>, WinJObj)
+                            ,agent_call_ids=AgentCallIds
+                            ,recording_url=RecordingUrl
+                           }
+     ,'hibernate'};
 
 handle_cast({'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}, #state{is_thief='false'
                                                                                    ,agent_queues=Qs
@@ -600,14 +700,14 @@ handle_cast({'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}, #sta
                                            ,wh_json:is_true(<<"Record-Caller">>, WinJObj, 'false')
                                           ),
 
-    acdc_util:bind_to_call_events(Call),
-
     AgentCallIds = maybe_connect_to_agent(MyQ, EPs, Call, RingTimeout, AgentId, CDRUrl),
 
     lager:debug("originate sent, waiting on successful bridge now"),
     update_my_queues_of_change(AcctId, AgentId, Qs),
     {'noreply', State#state{call=Call
+                            ,acdc_queue_id=wh_json:get_value(<<"Queue-ID">>, WinJObj)
                             ,record_calls=ShouldRecord
+                            ,preserve_metadata=wh_json:is_true(<<"Preserve-Metadata">>, WinJObj, 'false')
                             ,msg_queue_id=wh_json:get_value(<<"Server-ID">>, WinJObj)
                             ,agent_call_ids=AgentCallIds
                             ,cdr_urls=dict:store(whapps_call:call_id(Call), CDRUrl,
@@ -634,12 +734,27 @@ handle_cast({'bridge_to_member', Call, WinJObj, _, CDRUrl, RecordingUrl}, #state
     whapps_call_command:pickup(whapps_call:call_id(Agent), <<"now">>, Call),
 
     {'noreply', State#state{call=Call
+                            ,acdc_queue_id=wh_json:get_value(<<"Queue-ID">>, WinJObj)
                             ,msg_queue_id=wh_json:get_value(<<"Server-ID">>, WinJObj)
                             ,agent_call_ids=[AgentCallId]
                             ,cdr_urls=dict:store(whapps_call:call_id(Call), CDRUrl,
                                                  dict:store(AgentCallId, CDRUrl, Urls)
                                                 )
                             ,record_calls=ShouldRecord
+                            ,preserve_metadata=wh_json:is_true(<<"Preserve-Metadata">>, WinJObj, 'false')
+                            ,recording_url=RecordingUrl
+                           }
+     ,'hibernate'};
+
+handle_cast({'monitor_call', Call, WinJObj, RecordingUrl}, State) ->
+    _ = whapps_call:put_callid(Call),
+
+    lager:debug("monitoring member call ~s", [whapps_call:call_id(Call)]),
+
+    {'noreply', State#state{call=Call
+                            ,acdc_queue_id=wh_json:get_value(<<"Queue-ID">>, WinJObj)
+                            ,msg_queue_id=wh_json:get_value(<<"Server-ID">>, WinJObj)
+                            ,agent_call_ids=[]
                             ,recording_url=RecordingUrl
                            }
      ,'hibernate'};
@@ -651,9 +766,10 @@ handle_cast({'member_connect_accepted'}, #state{msg_queue_id=AmqpQueue
                                                 ,my_id=MyId
                                                 ,record_calls=ShouldRecord
                                                 ,recording_url=RecordingUrl
+                                                ,preserve_metadata=PreserveMetadata
                                                }=State) ->
     lager:debug("member bridged to agent! waiting on agent call id though"),
-    maybe_start_recording(Call, ShouldRecord, RecordingUrl),
+    maybe_start_recording(Call, ShouldRecord, PreserveMetadata, RecordingUrl),
 
     send_member_connect_accepted(AmqpQueue, call_id(Call), AcctId, AgentId, MyId),
     {'noreply', State};
@@ -665,10 +781,11 @@ handle_cast({'member_connect_accepted', ACallId}, #state{msg_queue_id=AmqpQueue
                                                          ,my_id=MyId
                                                          ,record_calls=ShouldRecord
                                                          ,recording_url=RecordingUrl
+                                                         ,preserve_metadata=PreserveMetadata
                                                          ,agent_call_ids=ACallIds
                                                         }=State) ->
     lager:debug("member bridged to agent!"),
-    maybe_start_recording(Call, ShouldRecord, RecordingUrl),
+    maybe_start_recording(Call, ShouldRecord, PreserveMetadata, RecordingUrl),
 
     ACallIds1 = filter_agent_calls(ACallIds, ACallId),
 
@@ -676,6 +793,32 @@ handle_cast({'member_connect_accepted', ACallId}, #state{msg_queue_id=AmqpQueue
 
     send_member_connect_accepted(AmqpQueue, call_id(Call), AcctId, AgentId, MyId),
     {'noreply', State#state{agent_call_ids=ACallIds1}, 'hibernate'};
+
+handle_cast({'member_connect_accepted', ACallId, NewCall}, #state{msg_queue_id=AmqpQueue
+                                                         ,old_call=OldCall
+                                                         ,acct_id=AcctId
+                                                         ,agent_id=AgentId
+                                                         ,my_id=MyId
+                                                         ,record_calls=ShouldRecord
+                                                         ,recording_url=RecordingUrl
+                                                         ,preserve_metadata=PreserveMetadata
+                                                         ,agent_call_ids=ACallIds
+                                                        }=State) ->
+    lager:debug("member's new call bridged to agent!"),
+    maybe_start_recording(NewCall, ShouldRecord, PreserveMetadata, RecordingUrl),
+
+    ACallIds1 = filter_agent_calls(ACallIds, ACallId),
+
+    lager:debug("new agent call ids: ~p", [ACallIds1]),
+
+    send_member_connect_accepted(AmqpQueue, call_id(NewCall), AcctId, AgentId, MyId, call_id(OldCall)),
+    {'noreply', State#state{agent_call_ids=ACallIds1
+                            ,call=NewCall
+                           }, 'hibernate'};
+
+handle_cast({'monitor_connect_accepted', ACallId}, State) ->
+    lager:debug("monitoring ~s", [ACallId]),
+    {'noreply', State#state{agent_call_ids=[ACallId]}, 'hibernate'};
 
 handle_cast({'member_connect_resp', ReqJObj}, #state{agent_id=AgentId
                                                      ,last_connect=LastConn
@@ -692,24 +835,50 @@ handle_cast({'member_connect_resp', ReqJObj}, #state{agent_id=AgentId
             lager:debug("responding to member_connect_req"),
 
             send_member_connect_resp(ReqJObj, MyQ, AgentId, MyId, LastConn),
-            {'noreply', State#state{acdc_queue_id = ACDcQueue
-                                    ,msg_queue_id = wh_json:get_value(<<"Server-ID">>, ReqJObj)
-                                   }
+            {'noreply', State#state{msg_queue_id = wh_json:get_value(<<"Server-ID">>, ReqJObj)}
              ,'hibernate'}
     end;
 
-handle_cast({'monitor_call', Call, _CDRUrl, RecordingUrl}, State) ->
-    _ = whapps_call:put_callid(Call),
+handle_cast({'hangup_call'}, #state{my_id=MyId
+                                    ,msg_queue_id=Server
+                                    ,agent_call_ids=ACallIds
+                                    ,call=Call
+                                    ,agent_id=AgentId
+                                   }=State) ->
+    %% Hangup this agent's calls
+    lager:debug("agent FSM requested a hangup of the agent call, sending retry"),
+    _ = filter_agent_calls(ACallIds, AgentId),
 
-    acdc_util:bind_to_call_events(Call),
+    %% Pass the call on to another agent
+    CallId = whapps_call:call_id(Call),
+    send_member_connect_retry(Server, CallId, MyId, AgentId),
+    acdc_util:unbind_from_call_events(CallId),
 
-    lager:debug("monitoring member call ~s", [whapps_call:call_id(Call)]),
-
-    {'noreply', State#state{call=Call
+    put('callid', AgentId),
+    {'noreply', State#state{call='undefined'
+                            ,old_call='undefined'
+                            ,msg_queue_id='undefined'
+                            ,acdc_queue_id='undefined'
                             ,agent_call_ids=[]
-                            ,recording_url=RecordingUrl
+                            ,recording_url='undefined'
                            }
      ,'hibernate'};
+
+handle_cast({'replace_call', NewCall}, #state{call=OldCall
+                                              ,acct_id=AccountId
+                                              ,acdc_queue_id=QueueId
+                                              ,msg_queue_id=AMQPQueue
+                                             }=State) ->
+    acdc_stats:call_id_change(AccountId, QueueId, call_id(OldCall), call_id(NewCall)),
+
+    Update = props:filter_undefined([{<<"Account-ID">>, AccountId}
+                                     ,{<<"Queue-ID">>, QueueId}
+                                     ,{<<"Call">>, whapps_call:to_json(NewCall)}
+                                     | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                    ]),
+    wapi_acdc_queue:publish_member_callback_update(AMQPQueue, Update),
+
+    {'noreply', State#state{call=NewCall,old_call=OldCall}, 'hibernate'};
 
 handle_cast({'originate_execute', JObj}, #state{my_q=Q}=State) ->
     lager:debug("execute the originate for agent: ~p", [JObj]),
@@ -950,6 +1119,17 @@ send_member_connect_accepted(Queue, CallId, AcctId, AgentId, MyId) ->
                                   ]),
     wapi_acdc_queue:publish_member_connect_accepted(Queue, Resp).
 
+-spec send_member_connect_accepted(ne_binary(), ne_binary(), ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+send_member_connect_accepted(Queue, CallId, AcctId, AgentId, MyId, OldCallId) ->
+    Resp = props:filter_undefined([{<<"Call-ID">>, CallId}
+                                   ,{<<"Account-ID">>, AcctId}
+                                   ,{<<"Agent-ID">>, AgentId}
+                                   ,{<<"Process-ID">>, MyId}
+                                   ,{<<"Old-Call-ID">>, OldCallId}
+                                   | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                  ]),
+    wapi_acdc_queue:publish_member_connect_accepted(Queue, Resp).
+
 -spec send_originate_execute(wh_json:object(), ne_binary()) -> 'ok'.
 send_originate_execute(JObj, Q) ->
     Prop = [{<<"Call-ID">>, wh_json:get_value(<<"Call-ID">>, JObj)}
@@ -1022,6 +1202,7 @@ maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
                                    ,{<<"Request-ID">>, ReqId}
                                    ,{<<"Retain-CID">>, <<"true">>}
                                    ,{<<"Agent-ID">>, AgentId}
+                                   ,{<<"Member-Call-ID">>, MCallId}
                                   ]),
 
     {ACallIds, Endpoints} = lists:foldl(fun(EP, {Cs, Es}) ->
@@ -1056,8 +1237,68 @@ maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
               ,{<<"Outbound-Caller-ID-Number">>, whapps_call:caller_id_number(Call)}
               ,{<<"Existing-Call-ID">>, whapps_call:call_id(Call)}
               ,{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
+              ,{<<"Ignore-Early-Media">>, <<"true">>}
               | wh_api:default_headers(MyQ, ?APP_NAME, ?APP_VERSION)
              ]),
+
+    lager:debug("sending originate request with agent call-ids ~p", [ACallIds]),
+
+    wapi_resource:publish_originate_req(Prop),
+    ACallIds.
+
+-spec maybe_originate_callback(ne_binary(), wh_json:objects(), whapps_call:call(), api_integer(), ne_binary(), api_binary()
+    ,api_binary()) ->
+                                    ne_binaries().
+maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Number) ->
+    MCallId = whapps_call:call_id(Call),
+    put('callid', MCallId),
+
+    ReqId = wh_util:rand_hex_binary(6),
+    AcctId = whapps_call:account_id(Call),
+
+    CCVs = props:filter_undefined([{<<"Account-ID">>, AcctId}
+                                   ,{<<"Authorizing-ID">>, whapps_call:authorizing_id(Call)}
+                                   ,{<<"Request-ID">>, ReqId}
+                                   ,{<<"Retain-CID">>, <<"true">>}
+                                   ,{<<"Agent-ID">>, AgentId}
+                                   ,{<<"Callback-Number">>, Number}
+                                  ]),
+
+    {ACallIds, Endpoints} = lists:foldl(fun(EP, {Cs, Es}) ->
+                                                ACallId = outbound_call_id(Call, AgentId),
+                                                acdc_util:bind_to_call_events(ACallId),
+
+                                                {[ACallId | Cs]
+                                                 ,[wh_json:set_values([{<<"Endpoint-Timeout">>, Timeout}
+                                                                       ,{<<"Outbound-Call-ID">>, ACallId}
+                                                                      ], EP)
+                                                   | Es
+                                                  ]}
+                                        end, {[], []}, EPs),
+
+    Prop = props:filter_undefined([{<<"Application-Name">>, <<"park">>}
+                                   ,{<<"Resource-Type">>, <<"originate">>}
+                                   ,{<<"Account-ID">>, AcctId}
+                                   ,{<<"Endpoints">>, Endpoints}
+                                   ,{<<"Msg-ID">>, wh_util:rand_hex_binary(6)}
+                                   ,{<<"Timeout">>, Timeout}
+                                   ,{<<"Ignore-Early-Media">>, <<"true">>}
+                                   ,{<<"Caller-ID-Name">>, whapps_call:caller_id_name(Call)}
+                                   ,{<<"Caller-ID-Number">>, whapps_call:caller_id_number(Call)}
+                                   ,{<<"Outbound-Caller-ID-Name">>, whapps_call:caller_id_name(Call)}
+                                   ,{<<"Outbound-Caller-ID-Number">>, whapps_call:caller_id_number(Call)}
+                                   ,{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
+                                   ,{<<"Continue-On-Fail">>, 'false'}
+                                   ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
+                                   ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>
+                                                                        ,<<"Retain-CID">>
+                                                                        ,<<"Authorizing-ID">>
+                                                                        ,<<"Authorizing-Type">>
+                                                                        ,<<"Callback-Number">>
+                                                                       ]}
+                                   ,{<<"Originate-Immediate">>, <<"true">>}
+                                   | wh_api:default_headers(MyQ, ?APP_NAME, ?APP_VERSION)
+                                  ]),
 
     lager:debug("sending originate request with agent call-ids ~p", [ACallIds]),
 
@@ -1120,14 +1361,15 @@ should_record_endpoints(EPs, _, _) ->
                       wh_json:is_true(<<"record_calls">>, EP, 'false')
               end, EPs).
 
--spec maybe_start_recording(whapps_call:call(), boolean(), ne_binary()) -> 'ok'.
-maybe_start_recording(_Call, 'false', _) ->
+-spec maybe_start_recording(whapps_call:call(), boolean(), boolean(), ne_binary()) -> 'ok'.
+maybe_start_recording(_Call, 'false', _, _) ->
     lager:debug("not recording this call");
-maybe_start_recording(Call, 'true', Url) ->
+maybe_start_recording(Call, 'true', PreserveMetadata, Url) ->
     RecordingJObj =
         wh_json:from_list(
           [{<<"format">>, recording_format()}
            ,{<<"url">>, Url}
+           ,{<<"preserve_metadata">>, PreserveMetadata}
           ]),
     lager:debug("starting recording listener for ~s", [Url]),
     case acdc_recordings_sup:new(Call, RecordingJObj) of

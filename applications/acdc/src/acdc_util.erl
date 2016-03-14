@@ -30,6 +30,7 @@
                                   ,'CHANNEL_DESTROY'
                                   ,'DTMF'
                                   ,'CHANNEL_EXECUTE_COMPLETE'
+                                  ,'PLAYBACK_STOP'
                                   ,'usurp_control'
                                  ]).
 
@@ -101,7 +102,8 @@ agent_devices(AcctDb, AgentId) ->
 -spec get_endpoints(whapps_call:call(), ne_binary() | couch_mgr:get_results_return()) ->
                            wh_json:objects().
 get_endpoints(Call, ?NE_BINARY = AgentId) ->
-    cf_user:get_endpoints(AgentId, [], Call).
+    %% can_call_self allows attended transfer to successfully ring the transferring agent
+    cf_user:get_endpoints(AgentId, wh_json:set_value(<<"can_call_self">>, 'true', wh_json:new()), Call).
 
 %% Handles subscribing/unsubscribing from call events
 -spec bind_to_call_events(api_binary() | {api_binary(), any()} | whapps_call:call()) -> 'ok'.

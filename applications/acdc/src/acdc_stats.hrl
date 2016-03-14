@@ -28,7 +28,10 @@
           ,handled_timestamp :: api_integer() | '_'
           ,processed_timestamp :: api_integer() | '_'
 
-          ,hung_up_by :: api_binary() | '_'
+       	  ,hung_up_by :: api_binary() | '_'
+
+          ,entered_position :: api_integer()
+          ,exited_position :: api_integer()
 
           ,abandoned_reason :: api_binary() | '_'
 
@@ -42,6 +45,27 @@
          }).
 -type call_stat() :: #call_stat{}.
 
+-record(call_summary_stat, {
+          id :: api_binary() | '_'
+          ,account_id :: api_binary() | '$1'
+          ,queue_id :: api_binary() | '_'
+          ,call_id :: api_binary() | '_'
+          ,status :: api_binary() | '_'
+          ,wait_time :: api_integer() | '_'
+          ,timestamp :: api_integer() | '_'
+         }).
+-type call_summary_stat() :: #call_summary_stat{}.
+
+-record(agent_call_stat, {
+          id :: api_binary() | '_'
+          ,account_id :: api_binary() | '$1'
+          ,queue_id :: api_binary() | '_'
+          ,agent_id :: api_binary() | '_'
+          ,call_id :: api_binary() | '_'
+          ,status :: api_binary() | '_'
+          ,timestamp :: api_integer() | '_'
+         }).
+-type agent_call_stat() :: #agent_call_stat{}.
 
 -define(STATUS_STATUSES, [<<"logged_in">>, <<"logged_out">>, <<"ready">>
                           ,<<"connecting">>, <<"connected">>
