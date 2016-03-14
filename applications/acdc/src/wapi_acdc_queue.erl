@@ -45,7 +45,7 @@
          ,publish_member_call_cancel/1, publish_member_call_cancel/2
          ,publish_member_connect_req/1, publish_member_connect_req/2
          ,publish_member_connect_resp/2, publish_member_connect_resp/3
-         ,publish_member_connect_win/2, publish_member_connect_win/3
+         ,publish_member_connect_win/1, publish_member_connect_win/2
          ,publish_agent_timeout/2, publish_agent_timeout/3
          ,publish_member_connect_retry/2, publish_member_connect_retry/3
          ,publish_member_connect_accepted/2, publish_member_connect_accepted/3
@@ -778,11 +778,11 @@ publish_member_connect_resp(Q, API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?MEMBER_CONNECT_RESP_VALUES, fun member_connect_resp/1),
     amqp_util:targeted_publish(Q, Payload, ContentType).
 
--spec publish_member_connect_win(ne_binary(), api_terms()) -> 'ok'.
--spec publish_member_connect_win(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
-publish_member_connect_win(Q, JObj) ->
-    publish_member_connect_win(Q, JObj, ?DEFAULT_CONTENT_TYPE).
-publish_member_connect_win(Q, API, ContentType) ->
+-spec publish_member_connect_win(api_terms()) -> 'ok'.
+-spec publish_member_connect_win(api_terms(), ne_binary()) -> 'ok'.
+publish_member_connect_win(JObj) ->
+    publish_member_connect_win(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_member_connect_win(API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?MEMBER_CONNECT_WIN_VALUES, fun member_connect_win/1),
     amqp_util:callmgr_publish(Payload, ContentType, member_connect_win_routing_key(API)).
 

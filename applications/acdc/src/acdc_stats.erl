@@ -1326,8 +1326,8 @@ add_agent_call_stat_miss(Stat, AgentId, Timestamp) ->
     ets:insert(agent_call_table_id(), AgentStat1).
 
 -spec maybe_insert_agent_cur_status(status_stat(), status_stat()) -> boolean().
-maybe_insert_agent_cur_status(#status_stat{status='logged_out', timestamp=Timestamp}
-                              ,#status_stat{status='pending_logged_out', timestamp=Timestamp1}=Stat
+maybe_insert_agent_cur_status(#status_stat{status= <<"logged_out">>, timestamp=Timestamp}
+                              ,#status_stat{status= <<"pending_logged_out">>, timestamp=Timestamp1}=Stat
                              ) ->
     %% Note the timestamp must be GREATER if new stat is pending (fix logout bug)
     case Timestamp1 > Timestamp of
