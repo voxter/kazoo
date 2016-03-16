@@ -45,7 +45,7 @@ handle_sync_event({'connected', JObj}, _From, 'waiting', State) ->
     quilt_log:handle_event(JObj),
     {'reply', 'ok', 'incall', State};
 handle_sync_event({'exitqueue', JObj}, _From, 'waiting', State) ->
-    quilt_log:handle_event(JObj),
+    _ = wh_util:spawn('quilt_log', 'handle_event', [JObj]),
     {'reply', 'ok', 'hangup', State};
 handle_sync_event({'abandon', JObj}, _From, 'waiting', State) ->
     quilt_log:handle_event(JObj),
