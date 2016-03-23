@@ -2902,12 +2902,24 @@ send_display(CallerIdName, Call) ->
     send_display(CallerIdName, 'undefined', Call).
 
 send_display(CallerIdName, CallerIdNumber, Call) ->
-    Command = props:filter_undefined(
-                [{<<"Application-Name">>, <<"send_display">>}
-                 ,{<<"Call-ID">>, whapps_call:call_id(Call)}
-                 ,{<<"Caller-ID-Name">>, CallerIdName}
-                 ,{<<"Caller-ID-Number">>, CallerIdNumber}
-                ]),
+    Commands = [wh_json:from_list(
+                  props:filter_undefined(
+                    [{<<"Application-Name">>, <<"send_display">>}
+                     ,{<<"Call-ID">>, whapps_call:call_id(Call)}
+                     ,{<<"Insert-At">>, <<"now">>}
+                     ,{<<"Caller-ID-Name">>, CallerIdName}
+                     ,{<<"Caller-ID-Number">>, CallerIdNumber}
+                    ]))
+                ,wh_json:from_list(
+                   [{<<"Application-Name">>, <<"set">>}
+                    ,{<<"Insert-At">>, <<"now">>}
+                    ,{<<"Custom-Channel-Vars">>, wh_json:set_value(<<"Ignore-Display-Updates">>, 'false', wh_json:new())}
+                    ,{<<"Custom-Call-Vars">>, wh_json:new()}
+                   ])
+               ],
+    Command = [{<<"Application-Name">>, <<"queue">>}
+               ,{<<"Commands">>, Commands}
+              ],
     send_command(Command, Call).
 
 send_display(CallerIdName, CallerIdNumber, CallId, CtrlQ) ->

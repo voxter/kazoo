@@ -591,10 +591,9 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
                     acdc_agent_listener:redial_member(AgentListener, Call, JObj, UpdatedEPs, CDRUrl, RecordingUrl, Number)
             end,
 
-            CIDName = whapps_call:caller_id_name(Call),
-            CIDNum = whapps_call:caller_id_number(Call),
+            {CIDNumber, CIDName} = acdc_util:caller_id(Call),
 
-            acdc_agent_stats:agent_connecting(AccountId, AgentId, CallId, CIDName, CIDNum),
+            acdc_agent_stats:agent_connecting(AccountId, AgentId, CallId, CIDName, CIDNumber),
             lager:info("trying to ring agent endpoints(~p)", [length(UpdatedEPs)]),
             lager:debug("notifications for the queue: ~p", [wh_json:get_value(<<"Notifications">>, JObj)]),
             {'next_state', 'ringing', State#state{wrapup_timeout=WrapupTimer
@@ -721,12 +720,11 @@ ringing({'originate_started', ACallId}, #state{agent_listener=AgentListener
 
     maybe_notify(Ns, ?NOTIFY_PICKUP, State),
 
-    CIDName = whapps_call:caller_id_name(MemberCall),
-    CIDNum = whapps_call:caller_id_number(MemberCall),
+    {CIDNumber, CIDName} = acdc_util:caller_id(MemberCall),
 
     acdc_util:bind_to_call_events(ACallId, AgentListener),
 
-    acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNum),
+    acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNumber),
 
     {'next_state', 'answered', State#state{agent_call_id=ACallId
                                            ,connect_failures=0
@@ -788,10 +786,9 @@ ringing({'channel_bridged', MemberCallId}, #state{member_call_id=MemberCallId
 
     maybe_notify(Ns, ?NOTIFY_PICKUP, State),
 
-    CIDName = whapps_call:caller_id_name(MemberCall),
-    CIDNum = whapps_call:caller_id_number(MemberCall),
+    {CIDNumber, CIDName} = acdc_util:caller_id(MemberCall),
 
-    acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNum),
+    acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNumber),
 
     {'next_state', 'answered', State#state{connect_failures=0}};
 ringing({'channel_bridged', _CallId}, State) ->
@@ -892,12 +889,11 @@ ringing({'originate_resp', ACallId}, #state{agent_listener=AgentListener
 
     maybe_notify(Ns, ?NOTIFY_PICKUP, State),
 
-    CIDName = whapps_call:caller_id_name(MemberCall),
-    CIDNum = whapps_call:caller_id_number(MemberCall),
+    {CIDNumber, CIDName} = acdc_util:caller_id(MemberCall),
 
     acdc_util:bind_to_call_events(ACallId, AgentListener),
 
-    acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNum),
+    acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNumber),
 
     {'next_state', 'answered', State#state{agent_call_id=ACallId
                                            ,connect_failures=0
@@ -1098,10 +1094,9 @@ awaiting_callback({'channel_bridged', MemberCallId}, #state{agent_listener=Agent
 
     maybe_notify(Ns, ?NOTIFY_PICKUP, State),
 
-    CIDName = whapps_call:caller_id_name(MemberCall),
-    CIDNum = whapps_call:caller_id_number(MemberCall),
+    {CIDNumber, CIDName} = acdc_util:caller_id(MemberCall),
 
-    acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNum),
+    acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNumber),
 
     {'next_state', 'answered', State#state{connect_failures=0}};
 awaiting_callback({'channel_hungup', MemberCallId, Reason}, #state{account_id=AccountId
@@ -2172,14 +2167,15 @@ notify(Url, Method, Key, #state{account_id=AccountId
                                 ,member_call_queue_id=QueueId
                                }) ->
     wh_util:put_callid(whapps_call:call_id(MemberCall)),
+    {CIDNumber, CIDName} = acdc_util:caller_id(MemberCall),
     Params = props:filter_undefined(
                [{<<"account_id">>, AccountId}
                 ,{<<"agent_id">>, AgentId}
                 ,{<<"agent_call_id">>, AgentCallId}
                 ,{<<"queue_id">>, QueueId}
                 ,{<<"member_call_id">>, whapps_call:call_id(MemberCall)}
-                ,{<<"caller_id_name">>, whapps_call:caller_id_name(MemberCall)}
-                ,{<<"caller_id_number">>, whapps_call:caller_id_number(MemberCall)}
+                ,{<<"caller_id_name">>, CIDName}
+                ,{<<"caller_id_number">>, CIDNumber}
                 ,{<<"call_state">>, Key}
                 ,{<<"now">>, wh_util:current_tstamp()}
                 ,{<<"Custom-KVs">>, whapps_call:custom_kvs(MemberCall)}
