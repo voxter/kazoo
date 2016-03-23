@@ -531,6 +531,16 @@ get_fs_app(_Node, _UUID, JObj, <<"fax_detection">>) ->
             end
     end;
 
+get_fs_app(_Node, _UUID, JObj, <<"send_display">>) ->
+    case wapi_dialplan:send_display_v(JObj) of
+        'false' -> {'error', <<"send display failed to execute as JObj did not validate">>};
+        'true' ->
+            Message = <<(wh_json:get_value(<<"Caller-ID-Name">>, JObj, <<>>))/binary, "|"
+                        ,(wh_json:get_value(<<"Caller-ID-Number">>, JObj, <<>>))/binary
+                      >>,
+            {<<"send_display">>, Message}
+    end;
+
 get_fs_app(_Node, _UUID, _JObj, _App) ->
     lager:debug("unknown application ~s", [_App]),
     {'error', <<"application unknown">>}.

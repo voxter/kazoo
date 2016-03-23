@@ -759,6 +759,10 @@ handle_cast({'member_connect_accepted', ACallId}, #state{msg_queue_id=AmqpQueue
     lager:debug("new agent call ids: ~p", [ACallIds1]),
 
     send_member_connect_accepted(AmqpQueue, call_id(Call), AcctId, AgentId, MyId),
+    whapps_call_command:send_display(whapps_call:caller_id_name(Call)
+                                     ,whapps_call:caller_id_number(Call)
+                                     ,ACallId, props:get_value(ACallId, ACallIds)
+                                    ),
     {'noreply', State#state{agent_call_ids=ACallIds1}, 'hibernate'};
 
 handle_cast({'member_connect_accepted', ACallId, NewCall}, #state{msg_queue_id=AmqpQueue
@@ -779,6 +783,10 @@ handle_cast({'member_connect_accepted', ACallId, NewCall}, #state{msg_queue_id=A
     lager:debug("new agent call ids: ~p", [ACallIds1]),
 
     send_member_connect_accepted(AmqpQueue, call_id(NewCall), AcctId, AgentId, MyId, call_id(OldCall)),
+    whapps_call_command:send_display(whapps_call:caller_id_name(OldCall)
+                                     ,whapps_call:caller_id_number(OldCall)
+                                     ,ACallId, props:get_value(ACallId, ACallIds)
+                                    ),
     {'noreply', State#state{agent_call_ids=ACallIds1
                             ,call=NewCall
                            }, 'hibernate'};

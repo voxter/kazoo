@@ -186,6 +186,8 @@
          ,wait_for_fax_detection/2
         ]).
 
+-export([send_display/2, send_display/3, send_display/4]).
+
 -export([wait_for_unparked_call/1, wait_for_unparked_call/2]).
 
 -export([get_outbound_t38_settings/1, get_outbound_t38_settings/2]).
@@ -2886,6 +2888,34 @@ wait_for_fax_detection(Timeout, Call) ->
                 _ -> wait_for_fax_detection(wh_util:decr_timeout(Timeout, Start), Call)
             end
     end.
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Update the display of a phone by sending a SIP UPDATE or SIP INFO
+%% @end
+%%--------------------------------------------------------------------
+-spec send_display(binary(), whapps_call:call()) -> 'ok'.
+-spec send_display(binary(), api_binary(), whapps_call:call()) -> 'ok'.
+-spec send_display(binary(), api_binary(), ne_binary(), ne_binary()) -> 'ok'.
+send_display(CallerIdName, Call) ->
+    send_display(CallerIdName, 'undefined', Call).
+
+send_display(CallerIdName, CallerIdNumber, Call) ->
+    Command = props:filter_undefined(
+                [{<<"Application-Name">>, <<"send_display">>}
+                 ,{<<"Call-ID">>, whapps_call:call_id(Call)}
+                 ,{<<"Caller-ID-Name">>, CallerIdName}
+                 ,{<<"Caller-ID-Number">>, CallerIdNumber}
+                ]),
+    send_command(Command, Call).
+
+send_display(CallerIdName, CallerIdNumber, CallId, CtrlQ) ->
+    JObj = wh_json:from_list([{<<"Call-ID">>, CallId}
+                              ,{<<"Control-Queue">>, CtrlQ}
+                             ]),
+    Call = whapps_call:from_json(JObj),
+    send_display(CallerIdName, CallerIdNumber, Call).
 
 %%--------------------------------------------------------------------
 %% @public

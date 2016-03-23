@@ -58,6 +58,7 @@
          ,originate_execute/1, originate_execute_v/1
          ,metaflow/1, metaflow_v/1
          ,fax_detection/1, fax_detection_v/1
+         ,send_display/1, send_display_v/1
          ,store_vm/1, store_vm_v/1
          ,b_leg_events_v/1
         ]).
@@ -1197,6 +1198,24 @@ fax_detection(JObj) -> fax_detection(wh_json:to_proplist(JObj)).
 fax_detection_v(Prop) when is_list(Prop) ->
     wh_api:validate(Prop, ?FAX_DETECTION_REQ_HEADERS, ?FAX_DETECTION_REQ_VALUES, ?FAX_DETECTION_REQ_TYPES);
 fax_detection_v(JObj) -> fax_detection_v(wh_json:to_proplist(JObj)).
+
+%%--------------------------------------------------------------------
+%% @doc Update display of phone by sending UPDATE/INFO
+%% Takes proplist, creates JSON string or error
+%% @end
+%%--------------------------------------------------------------------
+-spec send_display(api_terms()) -> api_formatter_return().
+send_display(Prop) when is_list(Prop) ->
+    case send_display_v(Prop) of
+        'true' -> wh_api:build_message(Prop, ?SEND_DISPLAY_REQ_HEADERS, ?OPTIONAL_SEND_DISPLAY_REQ_HEADERS);
+        'false' -> {'error', "Proplist failed validation for send_display"}
+    end;
+send_display(JObj) -> send_display(wh_json:to_proplist(JObj)).
+
+-spec send_display_v(api_terms()) -> boolean().
+send_display_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?SEND_DISPLAY_REQ_HEADERS, ?SEND_DISPLAY_REQ_VALUES, ?SEND_DISPLAY_REQ_TYPES);
+send_display_v(JObj) -> send_display_v(wh_json:to_proplist(JObj)).
 
 -spec store_vm(api_terms()) ->
                    {'ok', wh_proplist()} |
