@@ -759,6 +759,11 @@ handle_cast({'member_connect_accepted', ACallId}, #state{msg_queue_id=AmqpQueue
     lager:debug("new agent call ids: ~p", [ACallIds1]),
 
     send_member_connect_accepted(AmqpQueue, call_id(Call), AcctId, AgentId, MyId),
+    {CIDNumber, CIDName} = acdc_util:caller_id(Call),
+    whapps_call_command:send_display(CIDName
+                                     ,CIDNumber
+                                     ,ACallId, props:get_value(ACallId, ACallIds)
+                                    ),
     {'noreply', State#state{agent_call_ids=ACallIds1}, 'hibernate'};
 
 handle_cast({'member_connect_accepted', ACallId, NewCall}, #state{msg_queue_id=AmqpQueue
@@ -779,6 +784,11 @@ handle_cast({'member_connect_accepted', ACallId, NewCall}, #state{msg_queue_id=A
     lager:debug("new agent call ids: ~p", [ACallIds1]),
 
     send_member_connect_accepted(AmqpQueue, call_id(NewCall), AcctId, AgentId, MyId, call_id(OldCall)),
+    {CIDNumber, CIDName} = acdc_util:caller_id(OldCall),
+    whapps_call_command:send_display(CIDName
+                                     ,CIDNumber
+                                     ,ACallId, props:get_value(ACallId, ACallIds)
+                                    ),
     {'noreply', State#state{agent_call_ids=ACallIds1
                             ,call=NewCall
                            }, 'hibernate'};
@@ -1189,6 +1199,8 @@ maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
                                                   ]}
                                         end, {[], []}, EPs),
 
+    {CIDNumber, CIDName} = acdc_util:caller_id(Call),
+
     Prop = props:filter_undefined(
              [{<<"Msg-ID">>, wh_util:rand_hex_binary(6)}
               ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
@@ -1202,12 +1214,13 @@ maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
               ,{<<"Account-ID">>, AcctId}
               ,{<<"Resource-Type">>, <<"originate">>}
               ,{<<"Application-Name">>, <<"bridge">>}
-              ,{<<"Caller-ID-Name">>, whapps_call:caller_id_name(Call)}
-              ,{<<"Caller-ID-Number">>, whapps_call:caller_id_number(Call)}
-              ,{<<"Outbound-Caller-ID-Name">>, whapps_call:caller_id_name(Call)}
-              ,{<<"Outbound-Caller-ID-Number">>, whapps_call:caller_id_number(Call)}
+              ,{<<"Caller-ID-Name">>, CIDName}
+              ,{<<"Caller-ID-Number">>, CIDNumber}
+              ,{<<"Outbound-Caller-ID-Name">>, CIDName}
+              ,{<<"Outbound-Caller-ID-Number">>, CIDNumber}
               ,{<<"Existing-Call-ID">>, whapps_call:call_id(Call)}
               ,{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
+              ,{<<"Ignore-Display-Updates">>, <<"true">>}
               ,{<<"Ignore-Early-Media">>, <<"true">>}
               | wh_api:default_headers(MyQ, ?APP_NAME, ?APP_VERSION)
              ]),
@@ -1247,17 +1260,20 @@ maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Number) ->
                                                   ]}
                                         end, {[], []}, EPs),
 
+    {CIDNumber, CIDName} = acdc_util:caller_id(Call),
+
     Prop = props:filter_undefined([{<<"Application-Name">>, <<"park">>}
                                    ,{<<"Resource-Type">>, <<"originate">>}
                                    ,{<<"Account-ID">>, AcctId}
                                    ,{<<"Endpoints">>, Endpoints}
                                    ,{<<"Msg-ID">>, wh_util:rand_hex_binary(6)}
                                    ,{<<"Timeout">>, Timeout}
+                                   ,{<<"Ignore-Display-Updates">>, <<"true">>}
                                    ,{<<"Ignore-Early-Media">>, <<"true">>}
-                                   ,{<<"Caller-ID-Name">>, whapps_call:caller_id_name(Call)}
-                                   ,{<<"Caller-ID-Number">>, whapps_call:caller_id_number(Call)}
-                                   ,{<<"Outbound-Caller-ID-Name">>, whapps_call:caller_id_name(Call)}
-                                   ,{<<"Outbound-Caller-ID-Number">>, whapps_call:caller_id_number(Call)}
+                                   ,{<<"Caller-ID-Name">>, CIDName}
+                                   ,{<<"Caller-ID-Number">>, CIDNumber}
+                                   ,{<<"Outbound-Caller-ID-Name">>, CIDName}
+                                   ,{<<"Outbound-Caller-ID-Number">>, CIDNumber}
                                    ,{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
                                    ,{<<"Continue-On-Fail">>, 'false'}
                                    ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}

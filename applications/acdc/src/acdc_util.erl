@@ -19,6 +19,7 @@
          ,agent_presence_update/2
          ,presence_update/3, presence_update/4
          ,send_cdr/2
+         ,caller_id/1
         ]).
 
 -include("acdc.hrl").
@@ -137,3 +138,11 @@ unbind_from_call_events(Call, Pid) -> unbind_from_call_events(whapps_call:call_i
 proc_id() -> proc_id(self()).
 proc_id(Pid) -> proc_id(Pid, node()).
 proc_id(Pid, Node) -> list_to_binary([wh_util:to_binary(Node), "-", pid_to_list(Pid)]).
+
+-spec caller_id(whapps_call:call()) -> {api_binary(), api_binary()}.
+caller_id(Call) ->
+    CallerIdType = case whapps_call:inception(Call) of
+                       'undefined' -> <<"internal">>;
+                       _Else -> <<"external">>
+                   end,
+    cf_attributes:caller_id(CallerIdType, Call).
