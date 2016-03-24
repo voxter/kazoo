@@ -654,7 +654,12 @@ slots_configuration(Data) ->
 
 -spec slot_configuration(wh_json:object(), ne_binary()) -> wh_json:object().
 slot_configuration(Data, SlotNumber) ->
-    wh_json:get_value(SlotNumber, slots_configuration(Data), wh_json:new()).
+    Slot = wh_json:get_value(SlotNumber, slots_configuration(Data), wh_json:new()),
+    slot_configuration_overrides(Data, Slot).
+
+-spec slot_configuration_overrides(wh_json:object(), wh_json:object()) -> wh_json:object().
+slot_configuration_overrides(Data, Slot) ->
+    wh_json:set_value(<<"ringback_timeout">>, wh_json:get_value(<<"ringback_timeout">>, Data), Slot).
 
 %%--------------------------------------------------------------------
 %% @private
