@@ -45,7 +45,7 @@ handle(Data, Call) ->
     MemberCall = props:filter_undefined(
                    [{<<"Account-ID">>, whapps_call:account_id(Call)}
                     ,{<<"Queue-ID">>, QueueId}
-                    ,{<<"Call">>, whapps_call:to_json(update_caller_id(Call))}
+                    ,{<<"Call">>, whapps_call:to_json(Call)}
                     ,{<<"Member-Priority">>, Priority}
                     | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
                    ]),
@@ -97,26 +97,6 @@ lookup_priority(Data, Call) ->
         {_, FromCall} when is_binary(FromCall) -> wh_util:to_integer(FromCall);
         _ -> 'undefined'
     end.
-
--spec update_caller_id(whapps_call:call()) -> whapps_call:call().
-update_caller_id(Call) ->
-    CallerIdType = case whapps_call:inception(Call) of
-                       'undefined' -> <<"internal">>;
-                       _Else -> <<"external">>
-                   end,
-    {CIDNumber, CIDName} = cf_attributes:caller_id(CallerIdType, Call),
-    lager:info("utilizing ~s caller ID in acdc: \"~s\" ~s"
-               ,[CallerIdType, CIDName, CIDNumber]
-              ),
-    Props = props:filter_undefined(
-              [{<<"Caller-ID-Name">>, CIDName}
-               ,{<<"Caller-ID-Number">>, CIDNumber}
-              ]),
-    Unsetters = [fun(Call2) -> whapps_call:kvs_erase('prepend_cid_name', Call2) end
-                 ,fun(Call2) -> whapps_call:kvs_erase('prepend_cid_number', Call2) end
-                ],
-    Call2 = lists:foldl(fun(Unsetter, Call2) -> Unsetter(Call2) end, Call, Unsetters),
-    whapps_call:set_custom_channel_vars(Props, Call2).
 
 -spec maybe_enter_queue(member_call(), boolean()) -> any().
 maybe_enter_queue(#member_call{call=Call}, 'true') ->

@@ -9,7 +9,9 @@
 -module(quilt_listener).
 -behaviour(gen_listener).
 
--export([start_link/0]).
+-export([start_link/0
+         ,handle_quilt_event/2
+        ]).
 -export([init/1
     ,handle_call/3
     ,handle_cast/2
@@ -35,9 +37,17 @@
 ]).
 
 -define(RESPONDERS, [{
-    {?MODULE, 'handle_event'}, [
-        {<<"acdc_call_stat">>, <<"*">>}
-        ,{<<"acdc_status_stat">>, <<"*">>}
+    {?MODULE, 'handle_quilt_event'}, [
+        {<<"acdc_call_stat">>, <<"waiting">>}
+        ,{<<"acdc_call_stat">>, <<"abandoned">>}
+        ,{<<"acdc_call_stat">>, <<"missed">>}
+        ,{<<"acdc_call_stat">>, <<"handled">>}
+        ,{<<"acdc_call_stat">>, <<"exited-position">>}
+        ,{<<"acdc_call_stat">>, <<"processed">>}
+        ,{<<"acdc_status_stat">>, <<"wrapup">>}
+        ,{<<"acdc_status_stat">>, <<"logged_in">>}
+        ,{<<"acdc_status_stat">>, <<"logged_out">>}
+        ,{<<"acdc_status_stat">>, <<"paused">>}
         ,{<<"agent">>, <<"login_queue">>}
         ,{<<"agent">>, <<"logout_queue">>}
         ,{<<"call_event">>, <<"CHANNEL_BRIDGE">>}
@@ -50,6 +60,10 @@ start_link() ->
         {'bindings', ?BINDINGS},
         {'responders', ?RESPONDERS}
     ], []).
+
+-spec handle_quilt_event(wh_json:object(), wh_proplist()) -> 'ok'.
+handle_quilt_event(JObj, _Props) ->
+    handle_specific_event(wh_json:get_value(<<"Event-Name">>, JObj), JObj).
 
 init([]) -> 
     {'ok', #state{}}.
@@ -72,10 +86,8 @@ handle_info(Info, State) ->
     end,
     {'noreply', State}.
 
-handle_event(JObj, _State) ->
-    %%file:write_file(<<"/tmp/queue_log_raw">>, io_lib:fwrite("~p\n", [JObj]), ['append']), %% REMOVE/COMMENT OUT THIS LINE FOR PRODUCTION
-    handle_specific_event(wh_json:get_value(<<"Event-Name">>, JObj), JObj),
-    {'noreply', []}.
+handle_event(_JObj, _State) ->
+    {'reply', []}.
 
 terminate(Reason, _State) ->
     lager:debug("~p listener on pid ~p terminating: ~p", [?MODULE, self(), Reason]),
@@ -109,6 +121,9 @@ handle_specific_event(<<"abandoned">>, JObj) ->
         {'error', 'not_found'} ->
             lager:debug("unable to find a running FSM for call id: ~p", [CallId])
     end;
+
+handle_specific_event(<<"missed">>, JObj) ->
+      quilt_log:handle_event(JObj);
 
 handle_specific_event(<<"handled">>, JObj) ->
     CallId = wh_json:get_value(<<"Call-ID">>, JObj),
@@ -284,7 +299,4 @@ handle_specific_event(<<"resume">>, JObj) ->
             gen_fsm:sync_send_all_state_event(FSM, {'unpauseall', JObj});
         Else ->
             lager:debug("unexpected return value when looking up FSM: ~p", [Else])
-    end;
-
-handle_specific_event(_, JObj) ->
-      quilt_log:handle_event(JObj).
+    end.

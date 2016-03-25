@@ -60,6 +60,7 @@
           ,<<"Force-Fax">>
           ,<<"Hold-Media">>
           ,<<"Ignore-Completed-Elsewhere">>
+          ,<<"Ignore-Display-Updates">>
           ,<<"Ignore-Early-Media">>
           ,<<"Ignore-Forward">>
           ,<<"Insert-At">>
@@ -733,6 +734,16 @@
                                  ,?INSERT_AT_TUPLE
                                 ]).
 -define(FAX_DETECTION_REQ_TYPES, []).
+
+%% Send Display (SIP UPDATE/INFO with new message for phone display)
+-define(SEND_DISPLAY_REQ_HEADERS, [<<"Application-Name">>, <<"Call-ID">>, <<"Caller-ID-Name">>]).
+-define(OPTIONAL_SEND_DISPLAY_REQ_HEADERS, [<<"Insert-At">>, <<"Caller-ID-Number">>]).
+-define(SEND_DISPLAY_REQ_VALUES, [{<<"Event-Category">>, <<"call">>}
+                                 ,{<<"Event-Name">>, <<"command">>}
+                                 ,{<<"Application-Name">>, <<"send_display">>}
+                                 ,?INSERT_AT_TUPLE
+                                ]).
+-define(SEND_DISPLAY_REQ_TYPES, []).
 
 %% Store VM Request
 -define(STORE_VM_REQ_HEADERS, [<<"Application-Name">>, <<"Call-ID">>

@@ -606,10 +606,11 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
 
     Call = whapps_call:set_custom_channel_var(<<"Queue-Position">>, Position, whapps_call:from_json(wh_json:get_value(<<"Call">>, JObj))),
 
+    {CIDNumber, CIDName} = acdc_util:caller_id(Call),
     acdc_stats:call_waiting(AccountId, QueueId, Position
                             ,whapps_call:call_id(Call)
-                            ,whapps_call:caller_id_name(Call)
-                            ,whapps_call:caller_id_number(Call)
+                            ,CIDName
+                            ,CIDNumber
                             ,wh_json:get_integer_value(<<"Member-Priority">>, JObj)
                            ),
     
