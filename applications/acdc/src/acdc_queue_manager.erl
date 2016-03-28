@@ -25,6 +25,7 @@
          ,are_agents_available/1
          ,handle_config_change/2
          ,should_ignore_member_call/3, should_ignore_member_call/4
+         ,up_next/2
          ,config/1
          ,status/1
          ,current_agents/1
@@ -287,6 +288,10 @@ should_ignore_member_call(Srv, Call, AccountId, QueueId) ->
     K = make_ignore_key(AccountId, QueueId, whapps_call:call_id(Call)),
     gen_listener:call(Srv, {'should_ignore_member_call', K}).
 
+-spec up_next(pid(), ne_binary()) -> boolean().
+up_next(Srv, CallId) ->
+    gen_listener:call(Srv, {'up_next', CallId}).
+
 -spec config(pid()) -> {ne_binary(), ne_binary()}.
 config(Srv) -> gen_listener:call(Srv, 'config').
 
@@ -379,6 +384,13 @@ handle_call({'should_ignore_member_call', K}, _, #state{ignored_member_calls=Dic
         {'EXIT', _} -> {'reply', 'false', State};
         _Res -> {'reply', 'true', State#state{ignored_member_calls=dict:erase(K, Dict)}}
     end;
+
+handle_call({'up_next', CallId}, _, #state{strategy_state=SS
+                                           ,current_member_calls=CurrentCalls
+                                          }=State) ->
+    Available = ss_size(SS),
+    Reply = up_next_fold(lists:reverse(CurrentCalls), CallId, Available),
+    {'reply', Reply, State};
 
 handle_call('config', _, #state{account_id=AccountId
                                 ,queue_id=QueueId
@@ -593,7 +605,8 @@ handle_cast({'refresh', QueueJObj}, State) ->
 handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
     {'noreply', State};
 
-handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
+handle_cast({'add_queue_member', JObj}, #state{ignored_member_calls=IgnoredMemberCalls
+                                               ,account_id=AccountId
                                                ,queue_id=QueueId
                                                ,pos_announce_enabled=PosAnnounceEnabled
                                                ,wait_announce_enabled=WaitAnnounceEnabled
@@ -601,10 +614,11 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
                                                ,current_member_calls=CurrentCalls
                                                ,pos_announce_pids=Pids
                                               }=State) ->
-    %% Add call to my own list, won't be added in the handler
     Position = length(CurrentCalls)+1,
-
-    Call = whapps_call:set_custom_channel_var(<<"Queue-Position">>, Position, whapps_call:from_json(wh_json:get_value(<<"Call">>, JObj))),
+    Call = whapps_call:set_custom_channel_var(<<"Queue-Position">>, Position
+                                              ,whapps_call:from_json(wh_json:get_value(<<"Call">>, JObj))),
+    CallId = whapps_call:call_id(Call),
+    K = make_ignore_key(AccountId, QueueId, CallId),
 
     {CIDNumber, CIDName} = acdc_util:caller_id(Call),
     acdc_stats:call_waiting(AccountId, QueueId, Position
@@ -614,24 +628,22 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
                             ,wh_json:get_integer_value(<<"Member-Priority">>, JObj)
                            ),
     
-    UpdatedMemberCalls = [Call | CurrentCalls],
+    %% cancel_member_call can arrive before add_queue_member. In that case do
+    %% not update the list of ignored calls because that woudl lead to an
+    %% orphan entry
+    UpdatedMemberCalls = case dict:find(K, IgnoredMemberCalls) of
+        {'ok', _} -> CurrentCalls;
+        'error' -> [Call | CurrentCalls]
+    end,
 
     %% Add call to shared queue
     wapi_acdc_queue:publish_shared_member_call(AccountId, QueueId, JObj),
     lager:debug("put call into shared messaging queue"),
+    publish_queue_member_add(AccountId, QueueId, JObj),
 
     gen_listener:cast(self(), {'monitor_call', Call}),
 
     acdc_util:presence_update(AccountId, QueueId, ?PRESENCE_RED_FLASH),
-
-    %% Notify other queue manager of added call
-    lager:debug("publishing add of new queue member ~s", [whapps_call:call_id(Call)]),
-    Prop2 = [{<<"Account-ID">>, AccountId}
-            ,{<<"Queue-ID">>, QueueId}
-            ,{<<"JObj">>, JObj}
-            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-           ],
-    wapi_acdc_queue:publish_queue_member_add(Prop2),
 
     %% Schedule position announcements
     UpdatedAnnouncePids = maybe_schedule_position_announcements(
@@ -746,6 +758,15 @@ lookup_priority_levels(AccountDB, QueueId) ->
 make_ignore_key(AccountId, QueueId, CallId) ->
     {AccountId, QueueId, CallId}.
 
+-spec publish_queue_member_add(ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
+publish_queue_member_add(AccountId, QueueId, JObj) ->
+    Prop = [{<<"Account-ID">>, AccountId}
+            ,{<<"Queue-ID">>, QueueId}
+            ,{<<"JObj">>, JObj}
+            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+    wapi_acdc_queue:publish_queue_member_add(Prop).
+
 -spec start_agent_and_worker(pid(), ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
 start_agent_and_worker(WorkersSup, AccountId, QueueId, AgentJObj) ->
     acdc_queue_workers_sup:new_worker(WorkersSup, AccountId, QueueId),
@@ -791,7 +812,7 @@ update_strategy_with_agent('rr', 'undefined', As, AgentId, 'add') ->
     {queue:in(AgentId, queue:new()), dict:update_counter(AgentId, 1, As)};
 update_strategy_with_agent('rr', AgentQueue, As, AgentId, 'add') ->
     case queue:member(AgentId, AgentQueue) of
-        'true' -> {AgentQueue, dict:update_counter(AgentId, 1, As)};
+        'true' -> {AgentQueue, As};
         'false' -> {queue:in(AgentId, AgentQueue), dict:update_counter(AgentId, 1, As)}
     end;
 update_strategy_with_agent('rr', AgentQueue, As, AgentId, 'remove') ->
@@ -915,6 +936,29 @@ update_strategy_state(Srv, 'mi', StrategyState) ->
     update_strategy_state(Srv, StrategyState).
 update_strategy_state(Srv, L) ->
     [gen_listener:cast(Srv, {'sync_with_agent', A}) || A <- L].
+
+-spec ss_size(queue_strategy_state()) -> integer().
+ss_size(StrategyState) ->
+    case queue:is_queue(StrategyState) of
+        'true' -> queue:len(StrategyState);
+        'false' -> length(StrategyState)
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns true if CallId is within the first Max elements of Calls
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec up_next_fold([whapps_call:call()], ne_binary(), integer()) -> boolean().
+up_next_fold(Calls, _, Max) when Max >= length(Calls) -> 'true';
+up_next_fold(_, _, 0) -> 'false';
+up_next_fold([Call|Calls], CallId, Max) ->
+    case whapps_call:call_id(Call) of
+        CallId -> 'true';
+        _ -> up_next_fold(Calls, CallId, Max-1)
+    end.
 
 maybe_start_queue_workers(QueueSup, AgentCount) ->
     WSup = acdc_queue_sup:workers_sup(QueueSup),
