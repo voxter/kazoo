@@ -844,7 +844,7 @@ ringing({'dtmf_pressed', DTMF}, #state{caller_exit_key=DTMF
                                        ,member_call_id=CallId
                                       }=State) when is_binary(DTMF) ->
     lager:debug("caller exit key pressed: ~s", [DTMF]),
-    acdc_agent_listener:channel_hungup(AgentListener, AgentCallId),
+    acdc_agent_listener:channel_hungup(AgentListener, CallId),
 
     acdc_stats:call_abandoned(AccountId, QueueId, CallId, ?ABANDON_EXIT),
 
