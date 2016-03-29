@@ -838,7 +838,6 @@ ringing({'channel_hungup', CallId, _Cause}, #state{agent_listener=AgentListener
     end;
 ringing({'dtmf_pressed', DTMF}, #state{caller_exit_key=DTMF
                                        ,agent_listener=AgentListener
-                                       ,agent_call_id=AgentCallId
                                        ,account_id=AccountId
                                        ,member_call_queue_id=QueueId
                                        ,member_call_id=CallId
