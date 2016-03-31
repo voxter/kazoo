@@ -29,6 +29,8 @@
          ,originate_execute/2
          ,originate_uuid/3
          ,outbound_call/2
+         ,send_agent_available/1
+         ,send_agent_unavailable/1
          ,send_sync_req/1
          ,send_sync_resp/3, send_sync_resp/4
          ,config/1, refresh_config/2
@@ -291,6 +293,14 @@ originate_uuid(Srv, UUID, CtlQ) ->
 
 outbound_call(Srv, CallId) ->
     gen_listener:cast(Srv, {'outbound_call', CallId}).
+
+-spec send_agent_available(pid()) -> 'ok'.
+send_agent_available(Srv) ->
+    gen_listener:cast(Srv, 'send_agent_available').
+
+-spec send_agent_unavailable(pid()) -> 'ok'.
+send_agent_unavailable(Srv) ->
+    gen_listener:cast(Srv, 'send_agent_unavailable').
 
 send_sync_req(Srv) -> gen_listener:cast(Srv, {'send_sync_req'}).
 
@@ -769,6 +779,7 @@ handle_cast({'member_connect_accepted'}, #state{msg_queue_id=AmqpQueue
                                                 ,call=Call
                                                 ,acct_id=AcctId
                                                 ,agent_id=AgentId
+                                                ,agent_queues=Qs
                                                 ,my_id=MyId
                                                 ,record_calls=ShouldRecord
                                                 ,recording_url=RecordingUrl
@@ -778,12 +789,14 @@ handle_cast({'member_connect_accepted'}, #state{msg_queue_id=AmqpQueue
     maybe_start_recording(Call, ShouldRecord, PreserveMetadata, RecordingUrl),
 
     send_member_connect_accepted(AmqpQueue, call_id(Call), AcctId, AgentId, MyId),
+    [send_agent_unavailable(AcctId, AgentId, QueueId) || QueueId <- Qs],
     {'noreply', State};
 
 handle_cast({'member_connect_accepted', ACallId}, #state{msg_queue_id=AmqpQueue
                                                          ,call=Call
                                                          ,acct_id=AcctId
                                                          ,agent_id=AgentId
+                                                         ,agent_queues=Qs
                                                          ,my_id=MyId
                                                          ,record_calls=ShouldRecord
                                                          ,recording_url=RecordingUrl
@@ -798,6 +811,7 @@ handle_cast({'member_connect_accepted', ACallId}, #state{msg_queue_id=AmqpQueue
     lager:debug("new agent call ids: ~p", [ACallIds1]),
 
     send_member_connect_accepted(AmqpQueue, call_id(Call), AcctId, AgentId, MyId),
+    [send_agent_unavailable(AcctId, AgentId, QueueId) || QueueId <- Qs],
     {CIDNumber, CIDName} = acdc_util:caller_id(Call),
     whapps_call_command:send_display(CIDName
                                      ,CIDNumber
@@ -809,6 +823,7 @@ handle_cast({'member_connect_accepted', ACallId, NewCall}, #state{msg_queue_id=A
                                                          ,old_call=OldCall
                                                          ,acct_id=AcctId
                                                          ,agent_id=AgentId
+                                                         ,agent_queues=Qs
                                                          ,my_id=MyId
                                                          ,record_calls=ShouldRecord
                                                          ,recording_url=RecordingUrl
@@ -823,6 +838,7 @@ handle_cast({'member_connect_accepted', ACallId, NewCall}, #state{msg_queue_id=A
     lager:debug("new agent call ids: ~p", [ACallIds1]),
 
     send_member_connect_accepted(AmqpQueue, call_id(NewCall), AcctId, AgentId, MyId, call_id(OldCall)),
+    [send_agent_unavailable(AcctId, AgentId, QueueId) || QueueId <- Qs],
     {CIDNumber, CIDName} = acdc_util:caller_id(OldCall),
     whapps_call_command:send_display(CIDName
                                      ,CIDNumber
@@ -905,12 +921,30 @@ handle_cast({'originate_uuid', UUID, CtlQ}, #state{agent_call_ids=ACallIds}=Stat
     lager:debug("updating ~s with ~s in ~p", [UUID, CtlQ, ACallIds]),
     {'noreply', State#state{agent_call_ids=[{UUID, CtlQ} | props:delete(UUID, ACallIds)]}};
 
-handle_cast({'outbound_call', CallId}, State) ->
+handle_cast({'outbound_call', CallId}, #state{agent_id=AgentId
+                                              ,acct_id=AcctId
+                                              ,agent_queues=Qs
+                                             }=State) ->
     _ = wh_util:put_callid(CallId),
     acdc_util:bind_to_call_events(CallId),
+    [send_agent_unavailable(AcctId, AgentId, QueueId) || QueueId <- Qs],
 
     lager:debug("bound to agent's outbound call ~s", [CallId]),
     {'noreply', State#state{call=whapps_call:set_call_id(CallId, whapps_call:new())}, 'hibernate'};
+
+handle_cast('send_agent_available', #state{agent_id=AgentId
+                                           ,acct_id=AcctId
+                                           ,agent_queues=Qs
+                                          }=State) ->
+    [send_agent_available(AcctId, AgentId, QueueId) || QueueId <- Qs],
+    {'noreply', State};
+
+handle_cast('send_agent_unavailable', #state{agent_id=AgentId
+                                             ,acct_id=AcctId
+                                             ,agent_queues=Qs
+                                            }=State) ->
+    [send_agent_unavailable(AcctId, AgentId, QueueId) || QueueId <- Qs],
+    {'noreply', State};
 
 handle_cast({'send_sync_req'}, #state{my_id=MyId
                                       ,my_q=MyQ
@@ -1335,13 +1369,7 @@ login_to_queue(AcctId, AgentId, QueueId) ->
                                ,{'queue_id', QueueId}
                                ,{'account_id', AcctId}
                               ]),
-    Prop = [{<<"Account-ID">>, AcctId}
-            ,{<<"Agent-ID">>, AgentId}
-            ,{<<"Queue-ID">>, QueueId}
-            ,{<<"Change">>, <<"available">>}
-            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-           ],
-    wapi_acdc_queue:publish_agent_change(Prop).
+    send_agent_available(AcctId, AgentId, QueueId).
 
 -spec logout_from_queue(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
 logout_from_queue(AcctId, AgentId, QueueId) ->
@@ -1351,6 +1379,20 @@ logout_from_queue(AcctId, AgentId, QueueId) ->
                               ,{'queue_id', QueueId}
                               ,{'account_id', AcctId}
                              ]),
+    send_agent_unavailable(AcctId, AgentId, QueueId).
+
+-spec send_agent_available(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+send_agent_available(AcctId, AgentId, QueueId) ->
+    Prop = [{<<"Account-ID">>, AcctId}
+            ,{<<"Agent-ID">>, AgentId}
+            ,{<<"Queue-ID">>, QueueId}
+            ,{<<"Change">>, <<"available">>}
+            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+    wapi_acdc_queue:publish_agent_change(Prop).
+
+-spec send_agent_unavailable(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+send_agent_unavailable(AcctId, AgentId, QueueId) ->
     Prop = [{<<"Account-ID">>, AcctId}
             ,{<<"Agent-ID">>, AgentId}
             ,{<<"Queue-ID">>, QueueId}

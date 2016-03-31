@@ -877,13 +877,12 @@ ringing({'channel_hungup', CallId, _Cause}, #state{agent_listener=AgentListener
     end;
 ringing({'dtmf_pressed', DTMF}, #state{caller_exit_key=DTMF
                                        ,agent_listener=AgentListener
-                                       ,agent_call_id=AgentCallId
                                        ,account_id=AccountId
                                        ,member_call_queue_id=QueueId
                                        ,member_call_id=CallId
                                       }=State) when is_binary(DTMF) ->
     lager:debug("caller exit key pressed: ~s", [DTMF]),
-    acdc_agent_listener:channel_hungup(AgentListener, AgentCallId),
+    acdc_agent_listener:channel_hungup(AgentListener, CallId),
 
     acdc_stats:call_abandoned(AccountId, QueueId, CallId, ?ABANDON_EXIT),
 
@@ -1066,7 +1065,7 @@ awaiting_callback({'originate_failed', E}, #state{agent_listener=AgentListener
 
     {'next_state'
      ,return_to_state(Fails+1, MaxFails, AccountId, AgentId)
-     ,clear_call(State, 'failed')
+     ,apply_state_updates(clear_call(State, 'failed'))
     };
 awaiting_callback({'call_from', MemberCallId}, #state{account_id=AccountId
                                                       ,agent_listener=AgentListener
@@ -1191,7 +1190,7 @@ awaiting_callback({'agent_timeout', _JObj}, #state{agent_listener=AgentListener
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
     {'next_state'
      ,return_to_state(Fails+1, MaxFails, AccountId, AgentId)
-     ,clear_call(State, 'failed')
+     ,apply_state_updates(clear_call(State, 'failed'))
     };
 awaiting_callback(_Evt, State) ->
     lager:debug("unhandled event while awaiting callback: ~p", [_Evt]),
@@ -2252,6 +2251,7 @@ uri(URI, QueryString) ->
 -spec apply_state_updates(fsm_state()) -> {'next_state', atom(), fsm_state()}.
 apply_state_updates(#state{account_id=AccountId
                            ,agent_id=AgentId
+                           ,agent_listener=AgentListener
                            ,agent_state_updates=Q
                            ,wrapup_ref=WRef
                            ,pause_ref=PRef
@@ -2271,9 +2271,13 @@ apply_state_updates(#state{account_id=AccountId
                  }=ModState} = lists:foldl(fun state_step/2, {FoldDefaultState, State}, lists:reverse(Q)),
     lager:debug("resulting agent state ~s", [Atom]),
     case Atom of
-        'ready' -> acdc_agent_stats:agent_ready(AccountId, AgentId);
+        'ready' ->
+            acdc_agent_listener:send_agent_available(AgentListener),
+            acdc_agent_stats:agent_ready(AccountId, AgentId);
         'wrapup' -> acdc_agent_stats:agent_wrapup(AccountId, AgentId, time_left(WRef1));
-        'paused' -> acdc_agent_stats:agent_paused(AccountId, AgentId, time_left(PRef1));
+        'paused' ->
+            acdc_agent_listener:send_agent_unavailable(AgentListener),
+            acdc_agent_stats:agent_paused(AccountId, AgentId, time_left(PRef1));
         _ -> 'ok'
     end,
     {'next_state', Atom, ModState#state{agent_state_updates = []}}.

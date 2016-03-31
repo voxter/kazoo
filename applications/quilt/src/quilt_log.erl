@@ -151,16 +151,24 @@ handle_specific_event({<<"agent">>, <<"logout_queue">>}, JObj) ->
     write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
 
 handle_specific_event({<<"acdc_status_stat">>, <<"paused">>}, JObj) ->
-    EventName = "PAUSEALL", 
-    {AccountId, CallId, _, QueueName, BridgedChannel} = get_common_props(JObj),
-    lager:debug("writing event to queue_log: ~s", [EventName]),
-    write_log(AccountId, CallId, QueueName, BridgedChannel, EventName);
+    EventName = "PAUSE",
+    {AccountId, CallId, _, _, BridgedChannel} = get_common_props(JObj),
+    AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
+    lists:foreach(fun(Q) ->
+        QueueName = lookup_queue_name(AccountId, Q),
+        lager:debug("writing event to queue_log: ~s", [EventName]),
+        write_log(AccountId, CallId, QueueName, BridgedChannel, EventName)
+    end, get_queue_list_by_agent_id(AccountId, AgentId));
 
 handle_specific_event({<<"acdc_status_stat">>, <<"resume">>}, JObj) ->
-    EventName = "UNPAUSEALL", 
-    {AccountId, CallId, _, QueueName, BridgedChannel} = get_common_props(JObj),
-    lager:debug("writing event to queue_log: ~s", [EventName]),
-    write_log(AccountId, CallId, QueueName, BridgedChannel, EventName);
+    EventName = "UNPAUSE",
+    {AccountId, CallId, _, _, BridgedChannel} = get_common_props(JObj),
+    AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
+    lists:foreach(fun(Q) ->
+        QueueName = lookup_queue_name(AccountId, Q),
+        lager:debug("writing event to queue_log: ~s", [EventName]),
+        write_log(AccountId, CallId, QueueName, BridgedChannel, EventName)
+    end, get_queue_list_by_agent_id(AccountId, AgentId));
 
 handle_specific_event({<<"acdc_status_stat">>, <<"logged_in">>}, JObj) ->
     EventName = "AGENTLOGIN", % AGENTLOGIN(channel)
