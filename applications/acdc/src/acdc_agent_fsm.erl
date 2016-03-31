@@ -934,7 +934,7 @@ ringing({'originate_resp', ACallId}, #state{agent_listener=AgentListener
     {CIDNumber, CIDName} = acdc_util:caller_id(MemberCall),
 
     acdc_agent_listener:member_connect_accepted(AgentListener, ACallId),
-    acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNum),
+    acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNumber),
 
     {'next_state', 'ringing', State};
 ringing({'shared_failure', _JObj}, #state{account_id=AccountId
