@@ -8,6 +8,7 @@ EBINS = $(shell find $(ROOT)/core/whistle-* -maxdepth 2 -name ebin -print) \
 PA = $(foreach EBIN,$(EBINS),-pa $(EBIN))
 
 ERLC_OPTS += -Werror +debug_info +warn_export_all $(PA)
+ERLC_TEST_OPTS += -Werror +debug_info $(PA)
 
 .PHONY: all compile clean
 
@@ -38,7 +39,7 @@ compile-test: test/$(PROJECT).app
 
 test/$(PROJECT).app: src/*.erl test/*.erl
 	@mkdir -p test/
-	ERL_LIBS=$(ERL_LIBS) erlc -v $(ERLC_OPTS) -DTEST -o test/ -pa test/ $?
+	ERL_LIBS=$(ERL_LIBS) erlc -v $(ERLC_TEST_OPTS) -DTEST -o test/ -pa test/ $?
 
 clean:
 	rm -f ebin/*
@@ -49,5 +50,8 @@ clean-test:
 
 test: clean-test compile-test eunit
 
+TEST_EBINS = $(shell find $(ROOT) -maxdepth 4 -name ebin -print)
+TEST_PA = $(foreach EBIN,$(TEST_EBINS),-pa $(EBIN))
+
 eunit: compile-test
-	erl -noshell $(PA) -pa test -eval "case eunit:test([$(TEST_MODULES),$(MODULES)], [verbose]) of 'ok' -> init:stop(); _ -> init:stop(1) end."
+	erl -noshell $(PA) $(TEST_PA) -pa test -config test/test.config -sasl sasl_error_logger false -eval "case eunit:test([$(TEST_MODULES),$(MODULES)], [verbose]) of 'ok' -> init:stop(); _ -> init:stop(1) end."
