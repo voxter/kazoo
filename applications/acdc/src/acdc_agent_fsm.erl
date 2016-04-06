@@ -2269,7 +2269,7 @@ apply_state_updates(#state{account_id=AccountId
             acdc_agent_stats:agent_ready(AccountId, AgentId);
         'wrapup' -> acdc_agent_stats:agent_wrapup(AccountId, AgentId, time_left(WRef1));
         'paused' ->
-            acdc_agent_listener:send_agent_unavailable(AgentListener),
+            acdc_agent_listener:send_agent_busy(AgentListener),
             acdc_agent_stats:agent_paused(AccountId, AgentId, time_left(PRef1));
         _ -> 'ok'
     end,
