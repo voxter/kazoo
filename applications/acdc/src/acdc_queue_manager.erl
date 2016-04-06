@@ -633,13 +633,14 @@ handle_cast({'add_queue_member', JObj}, #state{ignored_member_calls=IgnoredMembe
     %% orphan entry
     UpdatedMemberCalls = case dict:find(K, IgnoredMemberCalls) of
         {'ok', _} -> CurrentCalls;
-        'error' -> [Call | CurrentCalls]
+        'error' ->
+            publish_queue_member_add(AccountId, QueueId, JObj),
+            [Call | CurrentCalls]
     end,
 
     %% Add call to shared queue
     wapi_acdc_queue:publish_shared_member_call(AccountId, QueueId, JObj),
     lager:debug("put call into shared messaging queue"),
-    publish_queue_member_add(AccountId, QueueId, JObj),
 
     gen_listener:cast(self(), {'monitor_call', Call}),
 
