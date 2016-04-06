@@ -330,13 +330,6 @@ status(FSM) -> gen_fsm:sync_send_event(FSM, 'status').
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @end
-%%--------------------------------------------------------------------
--spec wait_for_callback(pid()) -> 'ok'.
-wait_for_callback(FSM) -> gen_fsm:send_event(FSM, 'wait_for_callback').
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Creates a gen_fsm process which calls Module:init/1 to
 %% initialize. To ensure a synchronized start-up procedure, this
 %% function does not return until Module:init/1 has returned.
@@ -995,8 +988,6 @@ ringing({'leg_destroyed', _CallId}, State) ->
     {'next_state', 'ringing', State};
 ringing({'usurp_control', _CallId}, State) ->
     {'next_state', 'ringing', State};
-ringing('wait_for_callback', State) ->
-    {'next_state', 'awaiting_callback', State};
 ringing(_Evt, State) ->
     lager:debug("unhandled event while ringing: ~p", [_Evt]),
     {'next_state', 'ringing', State}.
