@@ -75,6 +75,7 @@
                                                        ,'CHANNEL_DESTROY'
                                                        ,'CHANNEL_EXECUTE_COMPLETE'
                                                        ,'CHANNEL_REPLACED'
+                                                       ,'CHANNEL_TRANSFEREE'
                                                        ,'RECORD_START'
                                                        ,'RECORD_STOP'
                                                       ]}
@@ -131,6 +132,8 @@ handle_call_event(JObj, Props) ->
             gen_listener:cast(Pid, 'maybe_start_recording_on_answer');
         {<<"call_event">>, <<"CHANNEL_REPLACED">>} ->
             gen_listener:cast(Pid, {'channel_replaced', kz_call_event:replaced_by(JObj)});
+        {<<"call_event">>, <<"CHANNEL_TRANSFEREE">>} ->
+            gen_listener:cast(Pid, {'update_control_queue', JObj});
         {<<"call_event">>, <<"RECORD_START">>} ->
             lager:debug("record_start event received"),
             gen_listener:cast(Pid, {'record_start', get_response_media(JObj)});
@@ -378,9 +381,24 @@ handle_cast('store_failed', #state{retries=Retries
     save_recording(Call, MediaName, Format, PreserveMetadata, Store),
     {'noreply', State#state{retries=Retries - 1}};
 
-handle_cast({'update_control_queue', CtrlQ}, #state{call=Call}=State) ->
+handle_cast({'update_control_queue', CtrlQ}, #state{call=Call}=State) when is_binary(CtrlQ) ->
     Call1 = whapps_call:set_control_queue(CtrlQ, Call),
     {'noreply', State#state{call=Call1}};
+handle_cast({'update_control_queue', JObj}, #state{call=Call}=State) ->
+    Req = props:filter_undefined([{<<"Call-ID">>, wh_json:get_value(<<"Call-ID">>, JObj)}
+                                  | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                 ]),
+    case whapps_util:amqp_pool_request(Req
+                                       ,fun wapi_amimulator:publish_control_queue_req/1
+                                       ,fun wapi_amimulator:control_queue_resp_v/1
+                                      ) of
+        {'error', 'timeout'} ->
+            lager:debug("timed out acquiring new control queue - this recording will probably be lost"),
+            {'noreply', State};
+        {'ok', Resp} ->
+            Call1 = whapps_call:set_control_queue(wh_json:get_value(<<"Control-Queue">>, Resp), Call),
+            {'noreply', State#state{call=Call1}}
+    end;
 
 handle_cast({'gen_listener',{'created_queue',Queue}}, #state{call=Call}=State) ->
     Call1 = whapps_call:kvs_store('consumer_pid', wh_amqp_channel:consumer_pid(), Call),

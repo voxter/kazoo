@@ -734,11 +734,13 @@ handle_sofia_replaced(ReplacedBy, #state{call_id=CallId
     unbind_from_events(Node, CallId),
     unreg_for_call_related_events(CallId),
     gen_listener:rm_binding(self(), 'call', [{'callid', CallId}]),
+    gen_listener:rm_binding(self(), {'amimulator', [{'callid', CallId}]}),
 
     wh_util:put_callid(ReplacedBy),
     bind_to_events(Node, ReplacedBy),
     reg_for_call_related_events(ReplacedBy),
     gen_listener:add_binding(self(), 'call', [{'callid', ReplacedBy}]),
+    gen_listener:add_binding(self(), {'amimulator', [{'callid', ReplacedBy}]}),
 
     lager:debug("ensuring event listener exists"),
     _ = ecallmgr_call_sup:start_event_process(Node, ReplacedBy),
