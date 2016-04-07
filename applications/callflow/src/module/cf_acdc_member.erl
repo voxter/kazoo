@@ -221,7 +221,7 @@ is_queue_full(MaxQueueSize, CurrQueueSize) -> CurrQueueSize >= MaxQueueSize.
 cancel_member_call(Call, <<"timeout">>) ->
     lager:info("update reason from `timeout` to `member_timeout`"),
     cancel_member_call(Call, ?MEMBER_TIMEOUT);
-cancel_member_call(Call, <<"no agents">>) ->
+cancel_member_call(_, <<"no agents">>) ->
     'ok';
 cancel_member_call(Call, Reason) ->
     AcctId = whapps_call:account_id(Call),
