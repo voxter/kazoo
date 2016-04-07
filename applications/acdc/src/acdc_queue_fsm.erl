@@ -923,6 +923,7 @@ maybe_delay_connect_req(Call, CallJObj, Delivery, #state{queue_proc=QueueSrv
 maybe_connect_re_req(MgrSrv, ListenerSrv, #state{account_id=AccountId
                                                  ,queue_id=QueueId
                                                  ,member_call=Call
+                                                 ,callback_number='undefined'
                                                 }=State) ->
     case acdc_queue_manager:are_agents_available(MgrSrv) of
         'true' ->
@@ -933,7 +934,10 @@ maybe_connect_re_req(MgrSrv, ListenerSrv, #state{account_id=AccountId
             acdc_queue_listener:exit_member_call_empty(ListenerSrv),
             acdc_stats:call_abandoned(AccountId, QueueId, whapps_call:call_id(Call), ?ABANDON_EMPTY),
             {'next_state', 'ready', clear_member_call(State), 'hibernate'}
-    end.
+    end;
+maybe_connect_re_req(MgrSrv, ListenerSrv, State) ->
+    %% Don't cancel calls when they are a callback - save them for a long time
+    maybe_delay_connect_re_req(MgrSrv, ListenerSrv, State).
 
 -spec maybe_delay_connect_re_req(pid(), pid(), queue_fsm_state()) ->
                                    {'next_state', 'connect_req', queue_fsm_state()}.
