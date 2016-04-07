@@ -164,7 +164,7 @@ process_message(#member_call{call=Call}, _, _, Start, _Wait, _JObj, {<<"call_eve
 process_message(#member_call{call=Call
                              ,config_data=MemberCall
                              ,silence_noop=NoopId
-                            }=MC, Timeout, Start, Wait, JObj, {<<"call_event">>,<<"CHANNEL_EXECUTE_COMPLETE">>}) ->
+                            }=MC, BreakoutState, Timeout, Start, Wait, JObj, {<<"call_event">>,<<"CHANNEL_EXECUTE_COMPLETE">>}) ->
     case wh_json:get_first_defined([<<"Application-Name">>
                                     ,[<<"Request">>, <<"Application-Name">>]
                                    ], JObj) =:= <<"noop">> andalso
@@ -172,7 +172,7 @@ process_message(#member_call{call=Call
         'true' -> cf_exe:send_amqp(Call, MemberCall, fun wapi_acdc_queue:publish_member_call/1);
         'false' -> 'ok'
     end,
-    wait_for_bridge(MC, wh_util:decr_timeout(Timeout, Wait), Start);
+    wait_for_bridge(MC, BreakoutState, wh_util:decr_timeout(Timeout, Wait), Start);
 process_message(#member_call{call=Call
                              ,queue_id=QueueId
                             }=MC, BreakoutState, Timeout, Start, Wait, JObj, {<<"member">>, <<"call_fail">>}) ->

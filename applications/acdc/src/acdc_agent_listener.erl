@@ -871,9 +871,9 @@ handle_cast({'member_connect_accepted', ACallId, NewCall}, #state{msg_queue_id=A
 
     lager:debug("new agent call ids: ~p", [ACallIds1]),
 
-    send_member_connect_accepted(AmqpQueue, call_id(NewCall), AcctId, AgentId, MyId, call_id(OldCall)),
+    send_member_connect_accepted(AmqpQueue, call_id(Call), call_id(NewCall), AcctId, AgentId, MyId),
     [send_agent_busy(AcctId, AgentId, QueueId) || QueueId <- Qs],
-    {CIDNumber, CIDName} = acdc_util:caller_id(OldCall),
+    {CIDNumber, CIDName} = acdc_util:caller_id(Call),
     whapps_call_command:send_display(CIDName
                                      ,CIDNumber
                                      ,ACallId, props:get_value(ACallId, ACallIds)

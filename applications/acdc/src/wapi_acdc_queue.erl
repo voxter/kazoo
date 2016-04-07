@@ -678,18 +678,20 @@ call_position_resp_v(JObj) ->
 %%  when their turn comes up
 %%------------------------------------------------------------------------------
 -spec member_callback_reg_routing_key(api_terms()) -> ne_binary().
--spec member_callback_reg_routing_key(ne_binary(), ne_binary()) -> ne_binary().
+-spec member_callback_reg_routing_key(ne_binary(), ne_binary(), ne_binary()) -> ne_binary().
 member_callback_reg_routing_key(Props) when is_list(Props) ->
-    Id = props:get_value(<<"Queue-ID">>, Props, <<"*">>),
     AcctId = props:get_value(<<"Account-ID">>, Props),
-    member_callback_reg_routing_key(AcctId, Id);
+    QueueId = props:get_value(<<"Queue-ID">>, Props, <<"*">>),
+    CallId = props:get_value(<<"Call-ID">>, Props, <<"*">>),
+    member_callback_reg_routing_key(AcctId, QueueId, CallId);
 member_callback_reg_routing_key(JObj) ->
-    Id = wh_json:get_value(<<"Queue-ID">>, JObj, <<"*">>),
     AcctId = wh_json:get_value(<<"Account-ID">>, JObj),
-    member_callback_reg_routing_key(AcctId, Id).
+    QueueId = wh_json:get_value(<<"Queue-ID">>, JObj, <<"*">>),
+    CallId = wh_json:get_value(<<"Call-ID">>, JObj, <<"*">>),
+    member_callback_reg_routing_key(AcctId, QueueId, CallId).
 
-member_callback_reg_routing_key(AcctId, QID) ->
-    <<"acdc.member.callback_reg.", AcctId/binary, ".", QID/binary>>.
+member_callback_reg_routing_key(AcctId, QueueId, CallId) ->
+    <<"acdc.member.callback_reg.", AcctId/binary, ".", QueueId/binary, ".", CallId/binary>>.
 
 -define(MEMBER_CALLBACK_HEADERS, [<<"Call-ID">>, <<"Account-ID">>, <<"Queue-ID">>, <<"Number">>]).
 -define(OPTIONAL_MEMBER_CALLBACK_HEADERS, []).
@@ -763,7 +765,7 @@ bind_q(Q, AcctId, QID, CallId, 'undefined') ->
     amqp_util:bind_q_to_whapps(Q, agent_change_routing_key(AcctId, QID)),
     amqp_util:bind_q_to_callmgr(Q, member_call_routing_key(AcctId, QID)),
     amqp_util:bind_q_to_callmgr(Q, member_connect_req_routing_key(AcctId, QID)),
-    amqp_util:bind_q_to_callmgr(Q, member_callback_reg_routing_key(AcctId, QID));
+    amqp_util:bind_q_to_callmgr(Q, member_callback_reg_routing_key(AcctId, QID, CallId));
 bind_q(Q, AcctId, QID, CallId, ['member_call'|T]) ->
     amqp_util:bind_q_to_callmgr(Q, member_call_routing_key(AcctId, QID)),
     bind_q(Q, AcctId, QID, CallId, T);
@@ -786,7 +788,7 @@ bind_q(Q, AcctId, QID, CallId, ['member_position'|T]) ->
 	amqp_util:bind_q_to_whapps(Q, queue_member_routing_key(AcctId, QID)),
 	bind_q(Q, AcctId, QID, CallId, T);
 bind_q(Q, AcctId, QID, CallId, ['member_callback_reg'|T]) ->
-    amqp_util:bind_q_to_callmgr(Q, member_callback_reg_routing_key(AcctId, QID)),
+    amqp_util:bind_q_to_callmgr(Q, member_callback_reg_routing_key(AcctId, QID, CallId)),
     bind_q(Q, AcctId, QID, CallId, T);
 bind_q(Q, AcctId, QID, CallId, [_|T]) -> bind_q(Q, AcctId, QID, CallId, T);
 bind_q(_, _, _, _, []) -> 'ok'.
@@ -804,7 +806,7 @@ unbind_q(Q, AcctId, QID, CallId, 'undefined') ->
     _ = amqp_util:unbind_q_from_whapps(Q, agent_change_routing_key(AcctId, QID)),
     _ = amqp_util:unbind_q_from_callmgr(Q, member_call_routing_key(AcctId, QID)),
     _ = amqp_util:unbind_q_from_callmgr(Q, member_connect_req_routing_key(AcctId, QID)),
-    _ = amqp_util:unbind_q_from_callmgr(Q, member_callback_reg_routing_key(AcctId, QID));
+    _ = amqp_util:unbind_q_from_callmgr(Q, member_callback_reg_routing_key(AcctId, QID, CallId));
 unbind_q(Q, AcctId, QID, CallId, ['member_call'|T]) ->
     _ = amqp_util:unbind_q_from_callmgr(Q, member_call_routing_key(AcctId, QID)),
     unbind_q(Q, AcctId, QID, CallId, T);
@@ -821,7 +823,7 @@ unbind_q(Q, AcctId, QID, CallId, ['agent_change'|T]) ->
     _ = amqp_util:unbind_q_from_whapps(Q, agent_change_routing_key(AcctId, QID)),
     unbind_q(Q, AcctId, QID, CallId, T);
 unbind_q(Q, AcctId, QID, CallId, ['member_callback_reg'|T]) ->
-    _ = amqp_util:unbind_q_from_callmgr(Q, member_callback_reg_routing_key(AcctId, QID)),
+    _ = amqp_util:unbind_q_from_callmgr(Q, member_callback_reg_routing_key(AcctId, QID, CallId)),
     unbind_q(Q, AcctId, QID, CallId, T);
 unbind_q(Q, AcctId, QID, CallId, [_|T]) ->
     unbind_q(Q, AcctId, QID, CallId, T);
