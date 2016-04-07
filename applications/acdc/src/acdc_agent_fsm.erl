@@ -1039,10 +1039,9 @@ ringing_callback({'originate_resp', ACallId}, #state{account_id=AccountId
 
     % maybe_notify(Ns, ?NOTIFY_PICKUP, State),
 
-    CIDName = whapps_call:caller_id_name(MemberCall),
-    CIDNum = whapps_call:caller_id_number(MemberCall),
+    {CIDNumber, CIDName} = acdc_util:caller_id(MemberCall),
 
-    acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNum),
+    acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNumber),
 
     {'next_state', 'ringing_callback', State#state{connect_failures=0}};
 ringing_callback({'originate_failed', JObj}, #state{agent_listener=AgentListener
