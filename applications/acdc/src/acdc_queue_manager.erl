@@ -1203,8 +1203,6 @@ maybe_queue_has_metaflows(AccountDb, QueueId, Call) ->
     end.
 
 -spec maybe_remove_queue_member(api_binary(), api_binary(), mgr_state()) -> mgr_state().
-maybe_remove_queue_member(_, <<"no agents">>, State) ->
-    State;
 maybe_remove_queue_member(CallId, _Reason, #state{account_id=AccountId
                                                  ,queue_id=QueueId
                                                  ,current_member_calls=CurrentCalls
