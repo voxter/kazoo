@@ -682,12 +682,12 @@ call_position_resp_v(JObj) ->
 member_callback_reg_routing_key(Props) when is_list(Props) ->
     AcctId = props:get_value(<<"Account-ID">>, Props),
     QueueId = props:get_value(<<"Queue-ID">>, Props, <<"*">>),
-    CallId = props:get_value(<<"Call-ID">>, Props, <<"*">>),
+    CallId = props:get_value(<<"Call-ID">>, Props, <<"#">>),
     member_callback_reg_routing_key(AcctId, QueueId, CallId);
 member_callback_reg_routing_key(JObj) ->
     AcctId = wh_json:get_value(<<"Account-ID">>, JObj),
     QueueId = wh_json:get_value(<<"Queue-ID">>, JObj, <<"*">>),
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj, <<"*">>),
+    CallId = wh_json:get_value(<<"Call-ID">>, JObj, <<"#">>),
     member_callback_reg_routing_key(AcctId, QueueId, CallId).
 
 member_callback_reg_routing_key(AcctId, QueueId, CallId) ->
@@ -757,7 +757,7 @@ queue_size(AcctId, QueueId) ->
 bind_q(Q, Props) ->
     QID = props:get_value('queue_id', Props, <<"*">>),
     AcctId = props:get_value('account_id', Props),
-    CallId = props:get_value('callid', Props, <<"*">>),
+    CallId = props:get_value('callid', Props, <<"#">>),
     bind_q(Q, AcctId, QID, CallId, props:get_value('restrict_to', Props)).
 
 bind_q(Q, AcctId, QID, CallId, 'undefined') ->
@@ -797,7 +797,7 @@ bind_q(_, _, _, _, []) -> 'ok'.
 unbind_q(Q, Props) ->
     QID = props:get_value('queue_id', Props, <<"*">>),
     AcctId = props:get_value('account_id', Props),
-    CallId = props:get_value('callid', Props, <<"*">>),
+    CallId = props:get_value('callid', Props, <<"#">>),
 
     unbind_q(Q, AcctId, QID, CallId, props:get_value('restrict_to', Props)).
 
