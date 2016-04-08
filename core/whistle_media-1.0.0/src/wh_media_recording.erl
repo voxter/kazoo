@@ -133,7 +133,10 @@ handle_call_event(JObj, Props) ->
         {<<"call_event">>, <<"CHANNEL_REPLACED">>} ->
             gen_listener:cast(Pid, {'channel_replaced', kz_call_event:replaced_by(JObj)});
         {<<"call_event">>, <<"CHANNEL_TRANSFEREE">>} ->
-            gen_listener:cast(Pid, {'update_control_queue', JObj});
+            wh_util:spawn(fun() ->
+                                  timer:sleep(2000),
+                                  gen_listener:cast(Pid, {'update_control_queue', JObj})
+                          end);
         {<<"call_event">>, <<"RECORD_START">>} ->
             lager:debug("record_start event received"),
             gen_listener:cast(Pid, {'record_start', get_response_media(JObj)});
