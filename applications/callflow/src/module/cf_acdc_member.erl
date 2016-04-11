@@ -26,6 +26,7 @@
 -record(member_call, {call              :: whapps_call:call()
                       ,queue_id         :: api_binary()
                       ,config_data = [] :: wh_proplist()
+                      ,breakout_media   :: api_object()
                       ,max_wait = 60 * ?MILLISECONDS_IN_SECOND :: max_wait()
                       ,silence_noop     :: api_binary()
                      }).
@@ -74,6 +75,7 @@ handle(Data, Call) ->
 
     maybe_enter_queue(#member_call{call=Call1
                                    ,config_data=MemberCall
+                                   ,breakout_media=wh_json:get_value([<<"breakout">>, <<"media">>], QueueJObj, wh_json:new())
                                    ,queue_id=QueueId
                                    ,max_wait=MaxWait
                                   }
@@ -200,7 +202,10 @@ process_message(MC, BreakoutState, Timeout, Start, Wait, _JObj, _Type) ->
     wait_for_bridge(MC, BreakoutState, wh_util:decr_timeout(Timeout, Wait), Start).
 
 -spec process_dtmf(binary(), member_call(), breakout_state(), max_wait(), wh_now(), wh_now()) -> 'ok'.
-process_dtmf(DTMF, #member_call{call=Call}=MC, #breakout_state{active='false'}=BreakoutState, Timeout, Start, Wait) ->
+process_dtmf(DTMF, #member_call{call=Call
+                                ,breakout_media=BreakoutMedia
+                               }=MC
+             ,#breakout_state{active='false'}=BreakoutState, Timeout, Start, Wait) ->
     CallerExitKey = whapps_call:kvs_fetch('caller_exit_key', Call),
     BreakoutKey = whapps_call:kvs_fetch('breakout_key', Call),
     case DTMF of
@@ -214,7 +219,7 @@ process_dtmf(DTMF, #member_call{call=Call}=MC, #breakout_state{active='false'}=B
             lager:info("caller pressed the breakout menu key(~s)", [DTMF]),
             whapps_call_command:flush(Call),
             whapps_call_command:hold(<<"silence_stream://0">>, Call),
-            whapps_call_command:prompt(<<"breakout-prompt">>, whapps_call:language(Call), Call),
+            whapps_call_command:prompt(breakout_prompt(BreakoutMedia), whapps_call:language(Call), Call),
             wait_for_bridge(MC, BreakoutState#breakout_state{active='true'}, wh_util:decr_timeout(Timeout, Wait), Start);
         _ ->
             lager:info("caller pressed ~s, ignoring", [DTMF]),
@@ -240,16 +245,20 @@ breakout_loop(DTMF, #member_call{call=Call}=MC, State) ->
     process_breakout_message(DTMF, MC, State).
 
 -spec process_breakout_message(binary(), member_call(), breakout_state()) -> breakout_state() | 'callback_registered'.
-process_breakout_message(DTMF, #member_call{call=Call}, #breakout_state{callback_number='undefined'}=State) ->
+process_breakout_message(DTMF, #member_call{call=Call
+                                            ,breakout_media=BreakoutMedia
+                                           }
+                         ,#breakout_state{callback_number='undefined'}=State) ->
     case DTMF of
         <<"1">> ->
             From = whapps_call:from_user(Call),
-            breakout_number_correct(Call, State#breakout_state{callback_number=From});
+            breakout_number_correct(Call, BreakoutMedia, State#breakout_state{callback_number=From});
         DTMF -> breakout_invalid_selection(Call, State, DTMF)
     end;
 process_breakout_message(DTMF
                          ,#member_call{call=Call
                                        ,queue_id=QueueId
+                                       ,breakout_media=BreakoutMedia
                                       }
                          ,#breakout_state{callback_number=Number
                                           ,callback_entering='false'
@@ -267,33 +276,35 @@ process_breakout_message(DTMF
             wapi_acdc_queue:publish_member_callback_reg(Payload),
 
             PromptVars = wh_json:from_list([{<<"var1">>, <<"breakout-callback_registered">>}]),
-            whapps_call_command:prompt(<<"breakout-callback_registered">>, whapps_call:language(Call), PromptVars, Call),
+            whapps_call_command:prompt(callback_registered(BreakoutMedia), whapps_call:language(Call), PromptVars, Call),
             whapps_call_command:queued_hangup(Call),
 
             'callback_registered';
         <<"2">> ->
-            whapps_call_command:prompt(<<"breakout-enter_callback_number">>, Call),
+            whapps_call_command:prompt(enter_callback_number(BreakoutMedia), Call),
             State#breakout_state{callback_number= <<>>
                                  ,callback_entering='true'
                                 };
         DTMF -> breakout_invalid_selection(Call, State, DTMF)
     end;
 process_breakout_message(DTMF
-                         ,#member_call{call=Call}
+                         ,#member_call{call=Call
+                                       ,breakout_media=BreakoutMedia
+                                      }
                          ,#breakout_state{callback_number=Number
                                           ,callback_entering='true'
                                          }=State
                         ) ->
     case DTMF of
-        <<"#">> -> breakout_number_correct(Call, State#breakout_state{callback_entering='false'});
+        <<"#">> -> breakout_number_correct(Call, BreakoutMedia, State#breakout_state{callback_entering='false'});
         _ -> State#breakout_state{callback_number= <<Number/binary, DTMF/binary>>}
     end.
 
--spec breakout_number_correct(whapps_call:call(), breakout_state()) -> breakout_state().
-breakout_number_correct(Call, #breakout_state{callback_number=Number}=State) ->
-    Prompt = [{'prompt', <<"breakout-call_back_at">>}
+-spec breakout_number_correct(whapps_call:call(), ne_binary(), breakout_state()) -> breakout_state().
+breakout_number_correct(Call, BreakoutMedia, #breakout_state{callback_number=Number}=State) ->
+    Prompt = [{'prompt', call_back_at(BreakoutMedia)}
               ,{'say', Number}
-              ,{'prompt', <<"breakout-number_correct">>}
+              ,{'prompt', number_correct(BreakoutMedia)}
              ],
     whapps_call_command:audio_macro(Prompt, Call),
     State.
@@ -303,6 +314,26 @@ breakout_invalid_selection(Call, #breakout_state{retries=Retries}=State, DTMF) -
     lager:debug("invalid selection ~s", [DTMF]),
     whapps_call_command:prompt(<<"menu-invalid_entry">>, Call),
     State#breakout_state{retries=Retries-1}.
+
+-spec breakout_prompt(wh_json:object()) -> ne_binary().
+breakout_prompt(JObj) ->
+    wh_json:get_ne_value(<<"prompt">>, JObj, <<"breakout-prompt">>).
+
+-spec callback_registered(wh_json:object()) -> ne_binary().
+callback_registered(JObj) ->
+    wh_json:get_ne_value(<<"callback_registered">>, JObj, <<"breakout-callback_registered">>).
+
+-spec enter_callback_number(wh_json:object()) -> ne_binary().
+enter_callback_number(JObj) ->
+    wh_json:get_ne_value(<<"enter_callback_number">>, JObj, <<"breakout-enter_callback_number">>).
+
+-spec call_back_at(wh_json:object()) -> ne_binary().
+call_back_at(JObj) ->
+    wh_json:get_ne_value(<<"call_back_at">>, JObj, <<"breakout-call_back_at">>).
+
+-spec number_correct(wh_json:object()) -> ne_binary().
+number_correct(JObj) ->
+    wh_json:get_ne_value(<<"number_correct">>, JObj, <<"breakout-number_correct">>).
 
 %% convert from seconds to milliseconds, or infinity
 -spec max_wait(integer()) -> max_wait().

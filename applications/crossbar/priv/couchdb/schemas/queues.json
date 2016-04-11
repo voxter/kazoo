@@ -42,6 +42,39 @@
                     "name": "Breakout Menu DTMF",
                     "required": false,
                     "type": "string"
+                },
+                "media": {
+                    "description": "Media overrides for breakout menu prompts",
+                    "name": "Breakout Menu Media",
+                    "properties": {
+                        "callback_registered": {
+                            "description": "Your callback has been registered. Goodbye!",
+                            "required": false,
+                            "type": "string"
+                        },
+                        "call_back_at": {
+                            "description": "You will be called back at:",
+                            "required": false,
+                            "type": "string"
+                        },
+                        "enter_callback_number": {
+                            "description": "Enter a callback number, followed by the pound sign.",
+                            "required": false,
+                            "type": "string"
+                        },
+                        "number_correct": {
+                            "description": "If this is correct, press 1. Otherwise, press 2.",
+                            "required": false,
+                            "type": "string"
+                        },
+                        "prompt": {
+                            "description": "Press 1 to receive a callback.",
+                            "required": false,
+                            "type": "string"
+                        },
+                    },
+                    "required": false,
+                    "type": "object"
                 }
             },
             "required": false,
