@@ -740,9 +740,6 @@ specific_call_event_props(<<"CHANNEL_DESTROY">>, _, Props) ->
      ,{<<"Fax-Info">>, maybe_fax_specific(Props)}
     ];
 specific_call_event_props(<<"PLAYBACK_STOP">>, Application, Props) ->
-    lists:foreach(fun({K, V}) ->
-                      lager:debug("~p : ~p", [K, V])
-                  end, Props),
     [{<<"Application-Name">>, props:get_value(Application, ?FS_APPLICATION_NAMES)}
      ,{<<"Application-Response">>, props:get_value(<<"Application-Response">>, Props)}
     ];
