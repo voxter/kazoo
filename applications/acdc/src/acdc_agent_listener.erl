@@ -1359,6 +1359,7 @@ maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Number) ->
 
     CCVs = props:filter_undefined([{<<"Account-ID">>, AcctId}
                                    ,{<<"Authorizing-ID">>, whapps_call:authorizing_id(Call)}
+                                   ,{<<"Authorizing-Type">>, <<"user">>}
                                    ,{<<"Request-ID">>, ReqId}
                                    ,{<<"Retain-CID">>, <<"true">>}
                                    ,{<<"Agent-ID">>, AgentId}
@@ -1430,6 +1431,7 @@ do_originate_callback_return(MyQ, Call) ->
     CCVs = props:filter_undefined(
              [{<<"Account-ID">>, whapps_call:account_id(Call)}
               ,{<<"Authorizing-ID">>, whapps_call:authorizing_id(Call)}
+              ,{<<"Authorizing-Type">>, whapps_call:authorizing_type(Call)}
               ,{<<"Channel-Authorized">>, 'true'}
               ,{<<"From-URI">>, <<FromUser/binary, "@", (whapps_call:account_realm(Call))/binary>>}
               ,{<<"Ignore-Early-Media">>, 'true'}

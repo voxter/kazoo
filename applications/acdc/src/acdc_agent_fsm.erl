@@ -1145,7 +1145,10 @@ awaiting_callback({'channel_answered', JObj}, #state{member_callback_candidates=
     CallbackCall = case props:get_value(CallId, Candidates) of
         'undefined' -> whapps_call:from_json(JObj);
         CtrlQ when is_binary(CtrlQ) ->
-            whapps_call:set_control_queue(CtrlQ, whapps_call:from_json(JObj));
+            AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
+            whapps_call:exec([fun(Call) -> whapps_call:set_account_id(AccountId, Call) end,
+                              fun(Call) -> whapps_call:set_control_queue(CtrlQ, Call) end
+                             ], whapps_call:from_json(JObj));
         Call ->
             lager:debug("extra answers for ~s", [CallId]),
             Call
