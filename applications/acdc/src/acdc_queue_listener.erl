@@ -317,6 +317,7 @@ handle_cast({'member_connect_req', MemberCallJObj, Delivery, _Url}
             ,#state{my_q=MyQ
                     ,my_id=MyId
                     ,account_id=AccountId
+                    ,mgr_pid=MgrPid
                     ,queue_id=QueueId
                    }=State) ->
     Call = whapps_call:from_json(wh_json:get_value(<<"Call">>, MemberCallJObj)),
@@ -324,8 +325,15 @@ handle_cast({'member_connect_req', MemberCallJObj, Delivery, _Url}
 
     wh_util:put_callid(whapps_call:call_id(Call)),
 
-    acdc_util:bind_to_call_events(Call),
-    lager:debug("bound to call events for ~s", [CallId]),
+    %% If a callback is registered before queue_fsm gets the call,
+    %% do not bind to events (as we don't care about hangups)
+    case acdc_queue_manager:callback_number(MgrPid, CallId) of
+        'undefined' ->
+            acdc_util:bind_to_call_events(Call),
+            lager:debug("bound to call events for ~s", [CallId]);
+        _ ->
+            'ok'
+    end,
     send_member_connect_req(CallId, AccountId, QueueId, MyQ, MyId),
 
     %% Be ready in case a callback reg comes in while queue_listener is handling call
