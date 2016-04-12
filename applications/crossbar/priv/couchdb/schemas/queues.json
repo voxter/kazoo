@@ -47,13 +47,13 @@
                     "description": "Media overrides for breakout menu prompts",
                     "name": "Breakout Menu Media",
                     "properties": {
-                        "callback_registered": {
-                            "description": "Your callback has been registered. Goodbye!",
+                        "call_back_at": {
+                            "description": "You will be called back at:",
                             "required": false,
                             "type": "string"
                         },
-                        "call_back_at": {
-                            "description": "You will be called back at:",
+                        "callback_registered": {
+                            "description": "Your callback has been registered. Goodbye!",
                             "required": false,
                             "type": "string"
                         },
@@ -71,7 +71,7 @@
                             "description": "Press 1 to receive a callback.",
                             "required": false,
                             "type": "string"
-                        },
+                        }
                     },
                     "required": false,
                     "type": "object"
