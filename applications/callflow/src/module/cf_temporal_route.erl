@@ -10,6 +10,7 @@
 %%% @end
 %%% @contributors
 %%%   Karl Anderson
+%%%   Daniel Finke
 %%%-------------------------------------------------------------------
 -module(cf_temporal_route).
 
@@ -56,7 +57,7 @@ handle(Data, Call) ->
             _ = reset_temporal_rules(Temporal, Rules, Call),
             cf_exe:stop(Call);
         _ ->
-            Rules = get_temporal_rules(Temporal, Call),
+            Rules = sort_by_occurrence_rate(get_temporal_rules(Temporal, Call)),
             case process_rules(Temporal, Rules, Call, []) of
                 'default' ->
                     cf_exe:continue(Call);
@@ -69,7 +70,7 @@ handle(Data, Call) ->
 %% @private
 %% @doc
 %% Test all rules in reference to the current temporal routes, and
-%% extracts potential valid routes. If none, returns default route.
+%% returns the first valid callflow, or the default.
 %% @end
 %%--------------------------------------------------------------------
 -spec process_rules(temporal(), rules(), whapps_call:call(), rules()) ->
@@ -77,29 +78,78 @@ handle(Data, Call) ->
 process_rules(Temporal, [#rule{enabled='false'
                                ,id=Id
                                ,name=Name
-                              }|Rs], Call, ApplicableRules) ->
+                              }|Rs], Call, Candidates) ->
     lager:info("time based rule ~s (~s) disabled", [Id, Name]),
-    process_rules(Temporal, Rs, Call, ApplicableRules);
+    process_rules(Temporal, Rs, Call, Candidates);
 process_rules(Temporal, [#rule{enabled='true'
                                ,id=Id
                                ,name=Name
                                ,rule_set=RuleSet
-                              }=R|Rs], Call, ApplicableRules) ->
+                              }=R|Rs], Call, Candidates) ->
     lager:info("time based rule ~s (~s) is forced active part of rule set? ~p", [Id, Name, RuleSet]),
-    process_rules(Temporal, Rs, Call, [R | ApplicableRules]);
-process_rules(#temporal{local_sec=LSec
-                        ,local_date={Y, M, D}
-                       }=T
-              ,[#rule{id=Id
-                      ,name=Name
-                      ,wtime_start=TStart
-                      ,wtime_stop=TStop
-                      ,rule_set=RuleSet
-                     }=Rule
-                |Rules
-               ]
-              ,Call
-              ,ApplicableRules) ->
+    process_rules(Temporal, Rs, Call, [R|Candidates]);
+process_rules(Temporal, [_|_]=Rules, Call, Candidates) ->
+    update_candidates(Temporal, Rules, Call, Candidates);
+process_rules(_, [], _, []) ->
+    lager:info("continuing with default callflow"),
+    'default';
+%% The first candidate rule is chosen because it is the most
+%% specific, meeting the criteria of being applicable at this time/date
+process_rules(_, [], _, [#rule{id=Id
+                               ,rule_set=RuleSet
+                              }|_]) ->
+    case RuleSet of
+        'true' -> <<"rule_set">>;
+        'false' -> Id
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% If a time of day object of a lower occurrence rate matches the same
+%% day as a candidate, it checks for intersection with the
+%% candidates. Overlapping candidates are replaced, and the new rule
+%% is added to the candidates.
+%% @end
+%%--------------------------------------------------------------------
+-spec update_candidates(temporal(), rules(), whapps_call:call(), rules()) ->
+                               'default' | binary().
+update_candidates(T, Rules, Call, []) ->
+    replace_candidates(T, Rules, Call, []);
+update_candidates(#temporal{local_date={Y, M, D}}=T
+                  ,[#rule{name=Name}=Rule|Rules]
+                  ,Call
+                  ,[Candidate|_]=Candidates) ->
+    PrevDay = normalize_date({Y, M, D - 1}),
+    CandidateDay = next_rule_date(Candidate, PrevDay),
+    case next_rule_date(Rule, PrevDay) of
+        CandidateDay ->
+            lager:info("including rule ~s in candidates", [Name]),
+            replace_candidates(T, [Rule|Rules], Call, Candidates);
+        _ ->
+            lager:info("excluding rule ~s in candidates", [Name]),
+            process_rules(T, Rules, Call, Candidates)
+    end.
+
+-spec replace_candidates(temporal(), rules(), whapps_call:call(), rules()) ->
+                                'default' | binary().
+replace_candidates(#temporal{local_sec=LSec
+                             ,local_date={Y, M, D}
+                            }=T
+                   ,[#rule{id=Id
+                           ,name=Name
+                           ,wtime_start=TStart
+                           ,wtime_stop=TStop
+                           ,rule_set=RuleSet
+                          }=Rule
+                     |Rules
+                    ]
+                   ,Call
+                   ,Candidates) ->
+    lager:debug("beforehand ~p", [Candidates]),
+    Candidates1 = lists:filter(fun(Candidate) -> not overlaps(Rule, Candidate) end, Candidates),
+    lager:debug("compared ~p", [Rule]),
+    lager:debug("candidates ~p", [Candidates1]),
     lager:info("processing temporal rule ~s (~s) part of rule set? ~p", [Id, Name, RuleSet]),
     PrevDay = normalize_date({Y, M, D - 1}),
     BaseDate = next_rule_date(Rule, PrevDay),
@@ -107,106 +157,63 @@ process_rules(#temporal{local_sec=LSec
     case {BaseTime + TStart, BaseTime + TStop} of
         {Start, _} when LSec < Start ->
             lager:info("rule applies in the future ~w", [calendar:gregorian_seconds_to_datetime(Start)]),
-            process_rules(T, Rules, Call, ApplicableRules);
+            process_rules(T, Rules, Call, Candidates1);
         {_, End} when LSec > End ->
             lager:info("rule was valid today but expired ~w", [calendar:gregorian_seconds_to_datetime(End)]),
-            process_rules(T, Rules, Call, ApplicableRules);
+            process_rules(T, Rules, Call, Candidates1);
         {_, End} ->
             lager:info("within active time window until ~w", [calendar:gregorian_seconds_to_datetime(End)]),
-            process_rules(T, Rules, Call, [Rule | ApplicableRules])
-    end;
-process_rules(_, [], _, []) ->
-    lager:info("continuing with default callflow"),
-    'default';
-process_rules(Temporal, [], _, ApplicableRules) ->
-    process_most_specific_rule(Temporal, ApplicableRules).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns the route that is most specific (occurs the fewest times)
-%% in the calendar year
-%% @end
-%%--------------------------------------------------------------------
--spec process_most_specific_rule(temporal(), rules()) -> binary() | 'default'.
-process_most_specific_rule(Temporal, ApplicableRules) ->
-    process_most_specific_rule(Temporal, ApplicableRules, 'default').
-
--spec process_most_specific_rule(temporal(), rules(), rule() | 'default') -> binary() | 'default'.
-process_most_specific_rule(_Temporal, [], 'default') ->
-    'default';
-process_most_specific_rule(_Temporal, [], #rule{id=Id
-                                                ,rule_set=RuleSet
-                                               }) ->
-    case RuleSet of
-        'true' -> <<"rule_set">>;
-        'false' -> Id
-    end;
-process_most_specific_rule(#temporal{local_date=Date}=Temporal, [R|Rs], Candidate) ->
-    process_most_specific_rule(Temporal, Rs, most_specific_rule(Date, R, Candidate)).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
--spec most_specific_rule(wh_date(), rule(), rule() | 'default') -> rule().
-most_specific_rule(_Date, #rule{name=Name}=Rule, 'default') ->
-    lager:debug("rule ~s is initial candidate", [Name]),
-    Rule;
-most_specific_rule(Date, #rule{name=Name}=Rule, #rule{name=OldName}=OldRule) ->
-    Rate1 = occurrence_rate(Date, Rule),
-    Rate2 = occurrence_rate(Date, OldRule),
-    if Rate1 < Rate2 ->
-        lager:debug("rule ~s is more specific than ~s", [Name, OldName]),
-        Rule;
-    'true' ->
-        OldRule
+            process_rules(T, Rules, Call, [Rule|Candidates1])
     end.
+
+-spec overlaps(rule(), rule()) -> boolean().
+overlaps(#rule{wtime_start=TStart
+               ,wtime_stop=TStop
+              }
+         ,#rule{wtime_start=TStart1
+                ,wtime_stop=TStop1
+               }) ->
+    TStart > TStart1 andalso TStart < TStop1 orelse
+      TStop > TStart1 andalso TStop < TStop1 orelse
+      TStart =< TStart1 andalso TStop >= TStop1.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Number of seconds per year that a rule is applicable
+%% The lower this value the more "specific" a time of day object is
 %% @end
 %%--------------------------------------------------------------------
--spec occurrence_rate(wh_date(), rule()) -> pos_integer().
-occurrence_rate(_Date, #rule{cycle = <<"date">>
-                             ,wtime_start=Start
-                             ,wtime_stop=Stop
-                            }) ->
+-spec occurrence_rate(rule()) -> pos_integer().
+occurrence_rate(#rule{cycle = <<"date">>
+                      ,wtime_start=Start
+                      ,wtime_stop=Stop
+                     }) ->
     (Stop - Start);
-% occurrence_rate({Y, _M, _D}, #rule{cycle = <<"daily">>
-%                                  ,interval=I0
-%                                  ,start_date={Y, M0, D0}
-%                                 }) ->
-%     (calendar:datetime_to_gregorian_seconds({{Y+1, 1, 1}, {0, 0, 0}}) -
-%       calendar:datetime_to_gregorian_seconds({{Y, M0, D0}, {0, 0, 0}})) /
-%       I0;
-occurrence_rate(_Date, #rule{cycle = <<"daily">>
-                             ,interval=I0
-                             ,wtime_start=Start
-                             ,wtime_stop=Stop
-                            }) ->
+occurrence_rate(#rule{cycle = <<"daily">>
+                      ,interval=I0
+                      ,wtime_start=Start
+                      ,wtime_stop=Stop
+                     }) ->
     (Stop - Start) * 365 / I0;
-occurrence_rate(_Date, #rule{cycle = <<"weekly">>
-                             ,interval=I0
-                             ,wdays=Weekdays
-                             ,wtime_start=Start
-                             ,wtime_stop=Stop
-                            }) ->
-    %% Estimating number of weeks in a year
+occurrence_rate(#rule{cycle = <<"weekly">>
+                      ,interval=I0
+                      ,wdays=Weekdays
+                      ,wtime_start=Start
+                      ,wtime_stop=Stop
+                     }) ->
+    %% TODO: stop estimating number of weeks in a year
     (Stop - Start) * (365 / 7) * length(Weekdays) / I0;
-occurrence_rate(_Date, #rule{cycle = <<"monthly">>
-                             ,interval=I0
-                             ,wtime_start=Start
-                             ,wtime_stop=Stop
-                            }) ->
+occurrence_rate(#rule{cycle = <<"monthly">>
+                      ,interval=I0
+                      ,wtime_start=Start
+                      ,wtime_stop=Stop
+                     }) ->
     (Stop - Start) * 12 / I0;
-occurrence_rate(_Date, #rule{cycle = <<"yearly">>
-                             ,wtime_start=Start
-                             ,wtime_stop=Stop
-                            }) ->
+occurrence_rate(#rule{cycle = <<"yearly">>
+                      ,wtime_start=Start
+                      ,wtime_stop=Stop
+                     }) ->
     (Stop - Start).
 
 %%--------------------------------------------------------------------
@@ -283,6 +290,18 @@ get_temporal_rules([Route|Routes], LSec, AccountDb, RuleSet, TZ, Now, Rules) ->
                     get_temporal_rules(Routes, LSec, AccountDb, RuleSet, TZ, Now, [Rule | Rules])
             end
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sorts rules in order from most specific to least specific
+%% @end
+%%--------------------------------------------------------------------
+-spec sort_by_occurrence_rate(rules()) -> rules().
+sort_by_occurrence_rate(Rules) ->
+    lists:sort(fun(R1, R2) ->
+                       occurrence_rate(R1) > occurrence_rate(R2)
+               end, Rules).
 
 %%--------------------------------------------------------------------
 %% @private
