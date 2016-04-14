@@ -10,6 +10,7 @@
 
 -export([get_endpoints/2
          ,bind_to_call_events/1, bind_to_call_events/2
+         ,b_bind_to_call_events/2
          ,unbind_from_call_events/1
          ,unbind_from_call_events/2
          ,agents_in_queue/2
@@ -117,6 +118,11 @@ bind_to_call_events(?NE_BINARY = CallId, Pid) ->
     gen_listener:add_binding(Pid, 'call', [{'callid', CallId}]);
 bind_to_call_events({CallId, _}, Pid) -> bind_to_call_events(CallId, Pid);
 bind_to_call_events(Call, Pid) -> bind_to_call_events(whapps_call:call_id(Call), Pid).
+
+-spec b_bind_to_call_events(api_binary(), pid()) -> 'ok'.
+b_bind_to_call_events('undefined', _) -> 'ok';
+b_bind_to_call_events(CallId, Pid) ->
+    gen_listener:b_add_binding(Pid, 'call', [{'callid', CallId}]).
 
 -spec unbind_from_call_events(api_binary() | {api_binary(), any()} | whapps_call:call()) -> 'ok'.
 unbind_from_call_events(Call) ->

@@ -1035,7 +1035,7 @@ ringing_callback({'originate_resp', ACallId}, #state{account_id=AccountId
     lager:debug("originate resp on ~s, connecting to caller", [ACallId]),
     acdc_agent_listener:member_callback_accepted(AgentListener, ACall),
 
-    acdc_util:bind_to_call_events(ACallId, AgentListener),
+    acdc_util:b_bind_to_call_events(ACallId, AgentListener),
 
     % maybe_notify(Ns, ?NOTIFY_PICKUP, State),
 
@@ -1087,7 +1087,6 @@ ringing_callback({'playback_stop', _JObj}, #state{agent_listener=AgentListener
                                                   ,member_call_id=MemberCallId
                                                   ,agent_callback_call=AgentCallbackCall
                                                  }=State) ->
-    % lager:debug("jobj ~p", [JObj]),
     NewMemberCallId = acdc_agent_listener:originate_callback_return(AgentListener, AgentCallbackCall),
     wh_util:put_callid(NewMemberCallId),
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_RED_SOLID),
@@ -1208,41 +1207,9 @@ awaiting_callback({'channel_hungup', ACallId, _Cause}, #state{account_id=Account
     acdc_stats:call_handled(AccountId, QueueId, OriginalMemberCallId, AgentId),
 
     {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'agent')}};
-awaiting_callback({'channel_hungup', ACallId, Cause}, #state{account_id=AccountId
-                                                             ,agent_id=AgentId
-                                                             ,agent_listener=AgentListener
-                                                             ,member_call_id=MemberCallId
-                                                             ,member_callback_candidates=Candidates
-                                                             ,member_original_call_id=OriginalMemberCallId
-                                                             ,member_call_queue_id=QueueId
-                                                             ,agent_call_id=ACallId
-                                                             ,connect_failures=Fails
-                                                             ,max_connect_failures=MaxFails
-                                                            }=State) ->
-    lager:info("agent hungup ~s while they were supposed to wait for a callback, what a douche!", [ACallId]),
+awaiting_callback({'channel_hungup', ACallId, Cause}, State) ->
+    maybe_delay_agent_hungup(ACallId, Cause, State);
 
-    %% 1. Hangup originate to member (assuming originate_uuid has already happened)
-    %% 2. Send retry to queue_fsm
-    TempMemberCall = case props:get_value(MemberCallId, Candidates) of
-        CtrlQ when is_binary(CtrlQ) ->
-            whapps_call:exec([fun(Call) -> whapps_call:set_call_id(MemberCallId, Call) end,
-                              fun(Call) -> whapps_call:set_control_queue(CtrlQ, Call) end
-                             ], whapps_call:new());
-        Call -> Call
-    end,
-    acdc_agent_listener:hangup_call(AgentListener, TempMemberCall),
-    acdc_agent_listener:member_connect_retry(AgentListener, OriginalMemberCallId),
-
-    acdc_stats:call_missed(AccountId, QueueId, AgentId, OriginalMemberCallId, Cause),
-
-    acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
-
-    NewFSMState = clear_call(State, 'failed'),
-    NextState = return_to_state(Fails+1, MaxFails, AccountId, AgentId),
-    case NextState of
-        'paused' -> {'next_state', 'paused', NewFSMState};
-        'ready' -> apply_state_updates(NewFSMState)
-    end;
 awaiting_callback(_Evt, State) ->
     lager:debug("unhandled event while awaiting callback: ~p", [_Evt]),
     {'next_state', 'awaiting_callback', State}.
@@ -1259,6 +1226,55 @@ awaiting_callback('current_call', _, #state{member_call=Call
                                             ,member_call_queue_id=QueueId
                                            }=State) ->
     {'reply', current_call(Call, 'awaiting_callback', QueueId, 'undefined'), 'awaiting_callback', State}.
+
+-spec maybe_delay_agent_hungup(ne_binary(), ne_binary(), fsm_state()) -> {'next_state', atom(), fsm_state()}.
+maybe_delay_agent_hungup(ACallId, Cause, #state{member_call_id=MemberCallId
+                                                ,member_callback_candidates=Candidates
+                                               }=State) ->
+    case props:get_value(MemberCallId, Candidates) of
+        'undefined' ->
+            FSM = self(),
+            wh_util:spawn(fun() ->
+                                  timer:sleep(1000),
+                                  gen_fsm:send_event(FSM, {'channel_hungup', ACallId, Cause})
+                          end),
+            {'next_state', 'awaiting_callback', State};
+        CtrlQ when is_binary(CtrlQ) ->
+            TempMemberCall = whapps_call:exec([fun(Call) -> whapps_call:set_call_id(MemberCallId, Call) end
+                                               ,fun(Call) -> whapps_call:set_control_queue(CtrlQ, Call) end
+                                              ], whapps_call:new()),
+            agent_hungup_awaiting(ACallId, Cause, TempMemberCall, State);
+        Call -> agent_hungup_awaiting(ACallId, Cause, Call, State)
+    end.
+
+-spec agent_hungup_awaiting(ne_binary(), ne_binary(), whapps_call:call(), fsm_state()) ->
+                                {'next_state', atom(), fsm_state()}.
+agent_hungup_awaiting(ACallId, Cause, TempMemberCall, #state{account_id=AccountId
+                                                             ,agent_id=AgentId
+                                                             ,agent_listener=AgentListener
+                                                             ,member_original_call_id=OriginalMemberCallId
+                                                             ,member_call_queue_id=QueueId
+                                                             ,agent_call_id=ACallId
+                                                             ,connect_failures=Fails
+                                                             ,max_connect_failures=MaxFails
+                                                            }=State) ->
+    lager:info("agent hungup ~s while they were supposed to wait for a callback, what a douche!", [ACallId]),
+
+    acdc_agent_listener:hangup_call(AgentListener, TempMemberCall),
+    acdc_agent_listener:member_connect_retry(AgentListener, OriginalMemberCallId),
+
+    acdc_stats:call_missed(AccountId, QueueId, AgentId, OriginalMemberCallId, Cause),
+
+    acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
+
+    NewFSMState = clear_call(State, 'failed'),
+    NextState = return_to_state(Fails+1, MaxFails, AccountId, AgentId),
+    case NextState of
+        'paused' -> {'next_state', 'paused', NewFSMState};
+        'ready' -> apply_state_updates(NewFSMState)
+    end;
+agent_hungup_awaiting(_, _, _, State) ->
+    {'next_state', 'awaiting_callback', State}.
 
 %%--------------------------------------------------------------------
 %% @private
