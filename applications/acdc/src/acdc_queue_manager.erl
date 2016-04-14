@@ -977,13 +977,15 @@ ss_size(#strategy_state{agents=Agents}, 'logged_in') ->
     end;
 ss_size(#strategy_state{agents=Agents
                         ,details=Details
-                       }, 'free') ->
+                       }, 'free') when is_list(Agents) ->
     lists:foldl(fun(AgentId, Count) ->
                         case dict:find(AgentId, Details) of
                             {'ok', {ProcCount, 'undefined'}} when ProcCount > 0 -> Count + 1;
                             _ -> Count
                         end
-                end, 0, Agents).
+                end, 0, Agents);
+ss_size(#strategy_state{agents=Agents}=SS, 'free') ->
+    ss_size(SS#strategy_state{agents=queue:to_list(Agents)}, 'free').
 
 %%--------------------------------------------------------------------
 %% @private
