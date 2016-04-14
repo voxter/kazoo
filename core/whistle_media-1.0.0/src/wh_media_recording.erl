@@ -559,6 +559,8 @@ store_recording_meta(Call, MediaName, Ext) ->
                       ,{<<"caller_id_name">>, whapps_call:caller_id_name(Call)}
                       ,{<<"call_id">>, CallId}
                       ,{<<"queue_id">>, whapps_call:custom_channel_var(<<"Queue-ID">>, Call)}
+                      ,{<<"language">>, whapps_call:language(Call)}
+                      ,{<<"custom_kvs">>, whapps_call:custom_kvs(Call)}
                       ,{<<"_id">>, get_recording_doc_id(CallId)}
                      ])
                   )
@@ -666,6 +668,9 @@ store_recording_to_third_party_bigcouch(Call, MediaName, Format, BCHost) ->
                     ,{<<"caller_id_number">>, whapps_call:caller_id_number(Call)}
                     ,{<<"caller_id_name">>, whapps_call:caller_id_name(Call)}
                     ,{<<"call_id">>, CallId}
+                    ,{<<"queue_id">>, whapps_call:custom_channel_var(<<"Queue-ID">>, Call)}
+                    ,{<<"language">>, whapps_call:language(Call)}
+                    ,{<<"custom_kvs">>, whapps_call:custom_kvs(Call)}
                     ,{<<"_id">>, MediaDocId}
                    ])
                  ,AcctMODb
