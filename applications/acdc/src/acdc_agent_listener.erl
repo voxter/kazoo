@@ -777,6 +777,7 @@ handle_cast({'monitor_call', Call, WinJObj, RecordingUrl}, State) ->
 
 handle_cast({'member_connect_accepted'}, #state{msg_queue_id=AmqpQueue
                                                 ,call=Call
+                                                ,acdc_queue_id=CallQueueId
                                                 ,acct_id=AcctId
                                                 ,agent_id=AgentId
                                                 ,agent_queues=Qs
@@ -786,7 +787,7 @@ handle_cast({'member_connect_accepted'}, #state{msg_queue_id=AmqpQueue
                                                 ,preserve_metadata=PreserveMetadata
                                                }=State) ->
     lager:debug("member bridged to agent! waiting on agent call id though"),
-    maybe_start_recording(Call, ShouldRecord, PreserveMetadata, RecordingUrl),
+    maybe_start_recording(Call, CallQueueId, AgentId, ShouldRecord, PreserveMetadata, RecordingUrl),
 
     send_member_connect_accepted(AmqpQueue, call_id(Call), AcctId, AgentId, MyId),
     [send_agent_busy(AcctId, AgentId, QueueId) || QueueId <- Qs],
@@ -794,6 +795,7 @@ handle_cast({'member_connect_accepted'}, #state{msg_queue_id=AmqpQueue
 
 handle_cast({'member_connect_accepted', ACallId}, #state{msg_queue_id=AmqpQueue
                                                          ,call=Call
+                                                         ,acdc_queue_id=CallQueueId
                                                          ,acct_id=AcctId
                                                          ,agent_id=AgentId
                                                          ,agent_queues=Qs
@@ -804,7 +806,7 @@ handle_cast({'member_connect_accepted', ACallId}, #state{msg_queue_id=AmqpQueue
                                                          ,agent_call_ids=ACallIds
                                                         }=State) ->
     lager:debug("member bridged to agent!"),
-    maybe_start_recording(Call, ShouldRecord, PreserveMetadata, RecordingUrl),
+    maybe_start_recording(Call, CallQueueId, AgentId, ShouldRecord, PreserveMetadata, RecordingUrl),
 
     ACallIds1 = filter_agent_calls(ACallIds, ACallId),
 
@@ -821,6 +823,7 @@ handle_cast({'member_connect_accepted', ACallId}, #state{msg_queue_id=AmqpQueue
 
 handle_cast({'member_connect_accepted', ACallId, NewCall}, #state{msg_queue_id=AmqpQueue
                                                          ,old_call=OldCall
+                                                         ,acdc_queue_id=CallQueueId
                                                          ,acct_id=AcctId
                                                          ,agent_id=AgentId
                                                          ,agent_queues=Qs
@@ -831,7 +834,7 @@ handle_cast({'member_connect_accepted', ACallId, NewCall}, #state{msg_queue_id=A
                                                          ,agent_call_ids=ACallIds
                                                         }=State) ->
     lager:debug("member's new call bridged to agent!"),
-    maybe_start_recording(NewCall, ShouldRecord, PreserveMetadata, RecordingUrl),
+    maybe_start_recording(NewCall, CallQueueId, AgentId, ShouldRecord, PreserveMetadata, RecordingUrl),
 
     ACallIds1 = filter_agent_calls(ACallIds, ACallId),
 
@@ -1430,15 +1433,23 @@ should_record_endpoints(EPs, _, _) ->
                       wh_json:is_true(<<"record_calls">>, EP, 'false')
               end, EPs).
 
--spec maybe_start_recording(whapps_call:call(), boolean(), boolean(), ne_binary()) -> 'ok'.
-maybe_start_recording(_Call, 'false', _, _) ->
+-spec maybe_start_recording(whapps_call:call(), ne_binary(), ne_binary(), boolean(), boolean(), ne_binary()) -> 'ok'.
+maybe_start_recording(_Call, _, _, 'false', _, _) ->
     lager:debug("not recording this call");
-maybe_start_recording(Call, 'true', PreserveMetadata, Url) ->
+maybe_start_recording(Call, QueueId, AgentId, 'true', PreserveMetadata, Url) ->
+    AccountDb = whapps_call:account_db(Call),
+    {'ok', QueueJObj} = couch_mgr:open_cache_doc(AccountDb, QueueId),
+    {'ok', AgentJObj} = couch_mgr:open_cache_doc(AccountDb, AgentId),
+    QueueName = wh_json:get_value(<<"name">>, QueueJObj),
+    AgentName = wh_json:get_value(<<"username">>, AgentJObj),
     RecordingJObj =
         wh_json:from_list(
           [{<<"format">>, recording_format()}
            ,{<<"url">>, Url}
            ,{<<"preserve_metadata">>, PreserveMetadata}
+           ,{<<"extra_metadata">>, [{<<"queue_name">>, QueueName}
+                                    ,{<<"agent_username">>, AgentName}
+                                   ]}
           ]),
     lager:debug("starting recording listener for ~s", [Url]),
     try acdc_recordings_map_srv:register(Call, RecordingJObj) of
