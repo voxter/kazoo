@@ -853,17 +853,17 @@ handle_cast({'member_connect_accepted', ACallId}, #state{msg_queue_id=AmqpQueue
     {'noreply', State#state{agent_call_ids=ACallIds1}, 'hibernate'};
 
 handle_cast({'member_connect_accepted', ACallId, NewCall}, #state{msg_queue_id=AmqpQueue
-                                                         ,old_call=OldCall
-                                                         ,acdc_queue_id=CallQueueId
-                                                         ,acct_id=AcctId
-                                                         ,agent_id=AgentId
-                                                         ,agent_queues=Qs
-                                                         ,my_id=MyId
-                                                         ,record_calls=ShouldRecord
-                                                         ,recording_url=RecordingUrl
-                                                         ,preserve_metadata=PreserveMetadata
-                                                         ,agent_call_ids=ACallIds
-                                                        }=State) ->
+                                                                  ,call=Call
+                                                                  ,acdc_queue_id=CallQueueId
+                                                                  ,acct_id=AcctId
+                                                                  ,agent_id=AgentId
+                                                                  ,agent_queues=Qs
+                                                                  ,my_id=MyId
+                                                                  ,record_calls=ShouldRecord
+                                                                  ,recording_url=RecordingUrl
+                                                                  ,preserve_metadata=PreserveMetadata
+                                                                  ,agent_call_ids=ACallIds
+                                                                 }=State) ->
     lager:debug("member's new call bridged to agent!"),
     maybe_start_recording(NewCall, CallQueueId, AgentId, ShouldRecord, PreserveMetadata, RecordingUrl),
 
