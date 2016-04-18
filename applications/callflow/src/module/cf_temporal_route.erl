@@ -146,10 +146,7 @@ replace_candidates(#temporal{local_sec=LSec
                     ]
                    ,Call
                    ,Candidates) ->
-    lager:debug("beforehand ~p", [Candidates]),
     Candidates1 = lists:filter(fun(Candidate) -> not overlaps(Rule, Candidate) end, Candidates),
-    lager:debug("compared ~p", [Rule]),
-    lager:debug("candidates ~p", [Candidates1]),
     lager:info("processing temporal rule ~s (~s) part of rule set? ~p", [Id, Name, RuleSet]),
     PrevDay = normalize_date({Y, M, D - 1}),
     BaseDate = next_rule_date(Rule, PrevDay),
