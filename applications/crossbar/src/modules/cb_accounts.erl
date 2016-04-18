@@ -13,6 +13,7 @@
 -module(cb_accounts).
 
 -export([init/0
+         ,authorize/1
          ,allowed_methods/0, allowed_methods/1, allowed_methods/2
          ,resource_exists/0, resource_exists/1, resource_exists/2
          ,validate_resource/1, validate_resource/2, validate_resource/3
@@ -57,6 +58,7 @@ init() ->
                 ,{<<"*.resource_exists.accounts">>, 'resource_exists'}
                 ,{<<"*.validate_resource.accounts">>, 'validate_resource'}
                 ,{<<"*.validate.accounts">>, 'validate'}
+                ,{<<"*.authorize">>, 'authorize'}
                 ,{<<"*.execute.put.accounts">>, 'put'}
                 ,{<<"*.execute.post.accounts">>, 'post'}
                 ,{<<"*.execute.patch.accounts">>, 'patch'}
@@ -130,6 +132,19 @@ resource_exists(_, Path) ->
               ,?PARENTS
              ],
     lists:member(Path, Paths).
+
+-spec authorize(cb_context:context()) -> boolean() | {'halt' | cb_context:context()}.
+authorize(Context) ->
+    authorize(Context, cb_context:req_verb(Context), cb_context:req_nouns(Context)).
+
+authorize(Context, ?HTTP_GET, [{_, [AccountId, ?SIBLINGS]}|_]) ->
+    IsAdmin = cb_modules_util:is_admin(Context),
+    IsParent = cb_modules_util:is_parent_account(Context, AccountId),
+    case IsAdmin andalso IsParent of
+        'true' -> 'true';
+        'false' -> 'halt'
+    end;
+authorize(_, _, _) -> 'false'.
 
 %%--------------------------------------------------------------------
 %% @public
