@@ -13,6 +13,8 @@
          ,get_devices_owned_by/2
          ,maybe_originate_quickcall/1
          ,is_superduper_admin/1
+         ,is_admin/1, is_admin/2
+         ,is_parent_account/2
 
          ,attachment_name/2
          ,content_type_to_extension/1
@@ -430,6 +432,35 @@ is_superduper_admin(<<_/binary>> = AccountId) ->
     end;
 is_superduper_admin(Context) ->
     is_superduper_admin(cb_context:auth_account_id(Context)).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns true if the user is an admin of their account
+%% @end
+%%--------------------------------------------------------------------
+-spec is_admin(cb_context:context()) -> boolean().
+is_admin(Context) ->
+    AccountDb = wh_util:format_account_id(cb_context:auth_account_id(Context), 'encoded'),
+    is_admin(AccountDb, cb_context:auth_user_id(Context)).
+
+-spec is_admin(ne_binary(), ne_binary()) -> boolean().
+is_admin(AccountDb, UserId) ->
+    {'ok', JObj} = couch_mgr:open_cache_doc(AccountDb, UserId),
+    kzd_user:is_admin(JObj).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns true if Account1 is a parent account of Account2
+%% @end
+%%--------------------------------------------------------------------
+-spec is_parent_account(ne_binary() | cb_context:context(), ne_binary()) -> boolean().
+is_parent_account(<<_/binary>> = Account1, Account2) ->
+    {'ok', JObj} = kz_account:fetch(Account2),
+    lists:member(Account1, kz_account:tree(JObj));
+is_parent_account(Context, Account2) ->
+    is_parent_account(cb_context:auth_account_id(Context), Account2).
 
 %%--------------------------------------------------------------------
 %% @private

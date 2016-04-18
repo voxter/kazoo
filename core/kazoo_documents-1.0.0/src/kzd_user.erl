@@ -5,6 +5,7 @@
 %%% @end
 %%% @contributors
 %%%   James Aimonetti
+%%%   Daniel Finke
 %%%-------------------------------------------------------------------
 -module(kzd_user).
 
@@ -17,6 +18,7 @@
          ,enable/1, disable/1
          ,type/0
          ,devices/1
+         ,is_admin/1
         ]).
 
 -include("kz_documents.hrl").
@@ -254,3 +256,7 @@ devices(UserJObj) ->
             lager:warning("unable to find documents owned by ~s: ~p", [UserId, _R]),
             []
     end.
+
+-spec is_admin(doc()) -> boolean().
+is_admin(UserJObj) ->
+    wh_json:get_binary_value(<<"priv_level">>, UserJObj) =:= <<"admin">>.
