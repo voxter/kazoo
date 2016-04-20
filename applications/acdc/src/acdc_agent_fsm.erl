@@ -718,6 +718,8 @@ ready(?NEW_CHANNEL_TO(CallId, 'undefined'), State) ->
     {'next_state', 'outbound', start_outbound_call_handling(CallId, State), 'hibernate'};
 ready(?NEW_CHANNEL_TO(_CallId, _MemberCallId), State) ->
     {'next_state', 'ready', State};
+ready({'playback_stop', _JObj}, State) ->
+    {'next_state', 'ready', State};
 ready(_Evt, State) ->
     lager:debug("unhandled event while ready: ~p", [_Evt]),
     {'next_state', 'ready', State}.
