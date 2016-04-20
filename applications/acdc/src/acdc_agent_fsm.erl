@@ -646,9 +646,14 @@ ready({'member_connect_win', JObj, 'different_node'}, #state{agent_listener=Agen
             acdc_util:bind_to_call_events(Call, AgentListener),
 
             acdc_agent_listener:monitor_call(AgentListener, Call, JObj, RecordingUrl),
+            %% Need to check if a callback is required to the caller
+            NextState = case wh_json:get_value(<<"Callback-Number">>, JObj) of
+                'undefined' -> 'ringing';
+                _Number -> 'ringing_callback'
+            end,
 
             lager:debug("monitoring agent ~s to connect to caller in queue ~s", [AgentId, QueueId]),
-            {'next_state', 'ringing', State#state{wrapup_timeout=WrapupTimer
+            {'next_state', NextState, State#state{wrapup_timeout=WrapupTimer
                                                   ,member_call=Call
                                                   ,member_call_id=CallId
                                                   ,member_call_start=wh_util:now()
@@ -1014,15 +1019,18 @@ ringing_callback({'originate_resp', ACallId}, #state{account_id=AccountId
                                                      ,agent_call_id=ACallId
                                                      ,agent_callback_call=ACall
                                                     }=State) ->
-    lager:debug("originate resp on ~s, connecting to caller", [ACallId]),
-    acdc_agent_listener:member_callback_accepted(AgentListener, ACall),
-
-    acdc_util:b_bind_to_call_events(ACallId, AgentListener),
+    lager:debug("originate resp on ~s, broadcasting", [ACallId]),
+    wapi_acdc_agent:publish_agent_call_id([{<<"Account-ID">>, AccountId}
+                                           ,{<<"Agent-ID">>, AgentId}
+                                           ,{<<"Agent-Call-ID">>, ACallId}
+                                           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                          ]),
 
     maybe_notify(Ns, ?NOTIFY_PICKUP, State),
 
     {CIDNumber, CIDName} = acdc_util:caller_id(MemberCall),
 
+    acdc_agent_listener:member_callback_accepted(AgentListener, ACall),
     acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNumber),
 
     {'next_state', 'ringing_callback', State#state{connect_failures=0}};
@@ -1032,29 +1040,54 @@ ringing_callback({'originate_failed', JObj}, #state{agent_listener=AgentListener
                                                     ,member_call_queue_id=QueueId
                                                     ,member_call_id=CallId
                                                     ,ambiguous_uuids=AmbiguousUUIDs
-                                                    ,connect_failures=Fails
-                                                    ,max_connect_failures=MaxFails
                                                    }=State) ->
     case originate_failed_for_this_call(wh_json:get_value([<<"Request">>, <<"Endpoints">>], JObj), AmbiguousUUIDs) of
         'true' ->
-            acdc_agent_listener:member_connect_retry(AgentListener, CallId),
-
             ErrReason = missed_reason(wh_json:get_value(<<"Error-Message">>, JObj)),
+            lager:debug("originate failed (~s), broadcasting", [ErrReason]),
+            wapi_acdc_agent:publish_shared_originate_failure([{<<"Account-ID">>, AccountId}
+                                                              ,{<<"Agent-ID">>, AgentId}
+                                                              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                                             ]),
 
-            lager:debug("ringing agent failed: ~s", [ErrReason]),
+            acdc_agent_listener:member_connect_retry(AgentListener, CallId),
 
             acdc_stats:call_missed(AccountId, QueueId, AgentId, CallId, ErrReason),
 
             acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
 
-            NewFSMState = clear_call(State, 'failed'),
-            NextState = return_to_state(Fails+1, MaxFails, AccountId, AgentId),
-            case NextState of
-                'paused' -> {'next_state', 'paused', NewFSMState};
-                'ready' -> apply_state_updates(NewFSMState)
-            end;
+            {'next_state', 'ringing_callback', State};
         'false' -> {'next_state', 'ringing_callback', State}
     end;
+ringing_callback({'shared_failure', _JObj}, #state{account_id=AccountId
+                                                   ,agent_id=AgentId
+                                                   ,connect_failures=Fails
+                                                   ,max_connect_failures=MaxFails
+                                                  }=State) ->
+    lager:debug("shared originate failure"),
+
+    NewFSMState = clear_call(State, 'failed'),
+    NextState = return_to_state(Fails+1, MaxFails, AccountId, AgentId),
+    case NextState of
+        'paused' -> {'next_state', 'paused', NewFSMState};
+        'ready' -> apply_state_updates(NewFSMState)
+    end;
+%% For the monitoring processes, fake the agent_callback_call so playback_stop isn't ignored
+ringing_callback({'shared_call_id', JObj}, #state{agent_callback_call='undefined'}=State) ->
+    ACallId = wh_json:get_value(<<"Agent-Call-ID">>, JObj),
+    ACall = whapps_call:set_call_id(ACallId, whapps_call:new()),
+    ringing_callback({'shared_call_id', JObj}, State#state{agent_callback_call=ACall});
+ringing_callback({'shared_call_id', JObj}, #state{agent_listener=AgentListener}=State) ->
+    ACallId = wh_json:get_value(<<"Agent-Call-ID">>, JObj),
+
+    lager:debug("shared call id ~s acquired, connecting to caller", [ACallId]),
+    
+    acdc_util:b_bind_to_call_events(ACallId, AgentListener),
+    acdc_agent_listener:monitor_connect_accepted(AgentListener, ACallId),
+
+    {'next_state', 'ringing_callback', State#state{agent_call_id=ACallId
+                                                   ,connect_failures=0
+                                                  }};
 ringing_callback({'channel_answered', JObj}, State) ->
     CallId = call_id(JObj),
     lager:debug("agent answered phone on ~s", [CallId]),
@@ -1064,6 +1097,8 @@ ringing_callback({'channel_answered', JObj}, State) ->
                                                   }};
 ringing_callback({'playback_stop', _}, #state{agent_callback_call='undefined'}=State) ->
     {'next_state', 'ringing_callback', State};
+ringing_callback({'playback_stop', _JObj}, #state{monitoring='true'}=State) ->
+    {'next_state', 'awaiting_callback', State};
 ringing_callback({'playback_stop', _JObj}, #state{agent_listener=AgentListener
                                                   ,member_call=Call
                                                   ,member_call_id=MemberCallId
