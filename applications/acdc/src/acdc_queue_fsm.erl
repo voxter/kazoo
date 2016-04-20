@@ -15,6 +15,7 @@
 
 %% Event injectors
 -export([member_call/3
+         ,member_call_cancel/2
          ,member_connect_resp/2
          ,member_accepted/2
          ,member_callback_accepted/2
@@ -128,6 +129,14 @@ refresh(FSM, QueueJObj) ->
 -spec member_call(pid(), wh_json:object(), gen_listener:basic_deliver()) -> 'ok'.
 member_call(FSM, CallJObj, Delivery) ->
     gen_fsm:send_event(FSM, {'member_call', CallJObj, Delivery}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec member_call_cancel(pid(), wh_json:object()) -> 'ok'.
+member_call_cancel(FSM, JObj) ->
+    gen_fsm:send_event(FSM, {'member_call_cancel', JObj}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -306,6 +315,26 @@ connect_req({'member_call', CallJObj, Delivery}, #state{queue_proc=Srv}=State) -
     acdc_queue_listener:cancel_member_call(Srv, CallJObj, Delivery),
     {'next_state', 'connect_req', State};
 
+connect_req({'member_call_cancel', JObj}, #state{queue_proc=Srv
+                                                 ,account_id=AccountId
+                                                 ,queue_id=QueueId
+                                                 ,member_call=Call
+                                                 ,caller_exit_key=DTMF
+                                                }=State) ->
+    CallId = whapps_call:call_id(Call),
+    case wh_json:get_value(<<"Reason">>, JObj) =:= <<"dtmf_exit">> andalso
+            wh_json:get_value(<<"Call-ID">>, JObj) =:= CallId of
+        'true' ->
+            lager:debug("member pressed the exit key (~s)", [DTMF]),
+
+            webseq:evt(?WSD_ID, self(), CallId, <<"member call finish - DTMF">>),
+
+            acdc_queue_listener:exit_member_call(Srv),
+            acdc_stats:call_abandoned(AccountId, QueueId, CallId, ?ABANDON_EXIT),
+            {'next_state', 'ready', clear_member_call(State), 'hibernate'};
+        'false' -> {'next_state', 'connect_req', State}
+    end;
+
 connect_req({'agent_resp', Resp}, #state{connect_resps=CRs
                                          ,manager_proc=MgrSrv
                                         }=State) ->
@@ -375,43 +404,6 @@ connect_req({'member_hungup', JObj}, #state{queue_proc=Srv
             {'next_state', 'connect_req', State}
     end;
 
-% <<<<<<< HEAD
-% connect_req({'dtmf_pressed', DTMF}, #state{caller_exit_key=DTMF
-%                                            ,queue_proc=Srv
-%                                            ,account_id=AccountId
-%                                            ,queue_id=QueueId
-%                                            ,member_call=Call
-%                                           }=State) when is_binary(DTMF) ->
-%     lager:debug("member pressed the exit key (~s)", [DTMF]),
-
-%     %% Do not exit if exit is suppressed
-%     case wh_json:get_value(<<"No-Queue-Exit">>, whapps_call:ccvs(Call)) of
-%         'undefined' ->
-%             CallId = whapps_call:call_id(Call),
-%             webseq:evt(?WSD_ID, self(), CallId, <<"member call finish - DTMF">>),
-
-%             acdc_queue_listener:exit_member_call(Srv),
-%             acdc_stats:call_abandoned(AccountId, QueueId, CallId, ?ABANDON_EXIT),
-%             {'next_state', 'ready', clear_member_call(State), 'hibernate'};
-%         <<"true">> ->
-%             lager:debug("Exit key ignored for this call"),
-%             {'next_state', 'connect_req', State, 'hibernate'}
-%     end;
-% =======
-% connect_req({'member_finished'}, #state{member_call=Call}=State) ->
-%     case catch whapps_call:call_id(Call) of
-%         CallId when is_binary(CallId) ->
-%             lager:debug("member finished while in connect_req: ~s", [CallId]),
-%             webseq:evt(?WSD_ID, self(), CallId, <<"member call finished - forced">>);
-%         _E->
-%             lager:debug("member finished, but callid became ~p", [_E])
-%     end,
-%     {'next_state', 'ready', clear_member_call(State), 'hibernate'};
-
-% connect_req({'dtmf_pressed', _}, State) ->
-%     {'next_state', 'connect_req', State};
-% >>>>>>> PISTON-179: working core implementation of callbacks
-
 connect_req({'timeout', ConnRef, ?CONNECTION_TIMEOUT_MESSAGE}, #state{queue_proc=Srv
                                                                       ,connection_timer_ref=ConnRef
                                                                       ,account_id=AccountId
@@ -468,6 +460,28 @@ connecting({'member_call', CallJObj, Delivery}, #state{queue_proc=Srv}=State) ->
     lager:debug("recv a member_call while connecting"),
     acdc_queue_listener:cancel_member_call(Srv, CallJObj, Delivery),
     {'next_state', 'connecting', State};
+
+connecting({'member_call_cancel', JObj}, #state{queue_proc=Srv
+                                                ,account_id=AccountId
+                                                ,queue_id=QueueId
+                                                ,member_call=Call
+                                                ,member_call_winner=Winner
+                                                ,caller_exit_key=DTMF
+                                               }=State) ->
+    CallId = whapps_call:call_id(Call),
+    case wh_json:get_value(<<"Reason">>, JObj) =:= <<"dtmf_exit">> andalso
+            wh_json:get_value(<<"Call-ID">>, JObj) =:= CallId of
+        'true' ->
+            lager:debug("member pressed the exit key (~s)", [DTMF]),
+
+            webseq:evt(?WSD_ID, self(), CallId, <<"member call finish - DTMF">>),
+
+            acdc_queue_listener:timeout_agent(Srv, Winner),
+            acdc_queue_listener:exit_member_call(Srv),
+            acdc_stats:call_abandoned(AccountId, QueueId, CallId, ?ABANDON_EXIT),
+            {'next_state', 'ready', clear_member_call(State), 'hibernate'};
+        'false' -> {'next_state', 'connecting', State}
+    end;
 
 connecting({'agent_resp', _Resp}, State) ->
     lager:debug("agent resp must have just missed cutoff"),
@@ -586,44 +600,6 @@ connecting({'member_hungup', CallEvt}, #state{queue_proc=Srv
     webseq:evt(?WSD_ID, self(), CallId, <<"member call - hungup">>),
 
     {'next_state', 'ready', clear_member_call(State), 'hibernate'};
-
-% <<<<<<< HEAD
-% connecting({'dtmf_pressed', DTMF}, #state{caller_exit_key=DTMF
-%                                           ,queue_proc=Srv
-%                                           ,account_id=AccountId
-%                                           ,queue_id=QueueId
-%                                           ,member_call=Call
-%                                          }=State) when is_binary(DTMF) ->
-%     lager:debug("member pressed the exit key (~s)", [DTMF]),
-
-%     %% Do not exit if exit is suppressed
-%     case wh_json:get_value(<<"No-Queue-Exit">>, whapps_call:ccvs(Call)) of
-%         'undefined' ->
-%             acdc_queue_listener:exit_member_call(Srv),
-%             CallId = whapps_call:call_id(Call),
-%             webseq:evt(?WSD_ID, self(), CallId, <<"member call finish - DTMF">>),
-%             acdc_stats:call_abandoned(AccountId, QueueId, CallId, ?ABANDON_EXIT),
-%             {'next_state', 'ready', clear_member_call(State), 'hibernate'};
-%         <<"true">> ->
-%             lager:debug("Exit key ignored for this call"),
-%             {'next_state', 'connecting', State, 'hibernate'}
-%     end;
-% connecting({'dtmf_pressed', _DTMF}, State) ->
-%     lager:debug("caller pressed ~s, ignoring", [_DTMF]),
-% =======
-% connecting({'member_finished'}, #state{member_call=Call}=State) ->
-%     case catch whapps_call:call_id(Call) of
-%         CallId when is_binary(CallId) ->
-%             lager:debug("member finished while in connecting: ~s", [CallId]),
-%             webseq:evt(?WSD_ID, self(), CallId, <<"member call finished - forced">>);
-%         _E->
-%             lager:debug("member finished, but callid became ~p", [_E])
-%     end,
-%     {'next_state', 'ready', clear_member_call(State), 'hibernate'};
-
-% connecting({'dtmf_pressed', _}, State) ->
-% >>>>>>> PISTON-179: working core implementation of callbacks
-%     {'next_state', 'connecting', State};
 
 connecting({'timeout', ConnRef, ?CONNECTION_TIMEOUT_MESSAGE}, #state{queue_proc=Srv
                                                                      ,connection_timer_ref=ConnRef

@@ -876,26 +876,6 @@ ringing({'channel_hungup', CallId, _Cause}, #state{agent_listener=AgentListener
             lager:debug("unexpected channel ~s down", [CallId]),
             {'next_state', 'ringing', State}
     end;
-% <<<<<<< HEAD
-% ringing({'dtmf_pressed', DTMF}, #state{caller_exit_key=DTMF
-%                                        ,agent_listener=AgentListener
-%                                        ,account_id=AccountId
-%                                        ,member_call_queue_id=QueueId
-%                                        ,member_call_id=CallId
-%                                       }=State) when is_binary(DTMF) ->
-%     lager:debug("caller exit key pressed: ~s", [DTMF]),
-%     acdc_agent_listener:channel_hungup(AgentListener, CallId),
-
-%     acdc_stats:call_abandoned(AccountId, QueueId, CallId, ?ABANDON_EXIT),
-
-%     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
-
-%     apply_state_updates(clear_call(State, 'ready'));
-% ringing({'dtmf_pressed', DTMF}, #state{caller_exit_key=_ExitKey}=State) ->
-%     lager:debug("caller pressed ~s, exit key is ~s", [DTMF, _ExitKey]),
-%     {'next_state', 'ringing', State};
-% =======
-% >>>>>>> PISTON-179: working core implementation of callbacks
 ringing({'channel_answered', JObj}, #state{member_call_id=MemberCallId
                                            ,agent_listener=AgentListener
                                            ,outbound_call_ids=OutboundCallIds

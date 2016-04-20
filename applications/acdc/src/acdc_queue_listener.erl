@@ -81,6 +81,9 @@
                      ,{{'acdc_queue_handler', 'handle_call_event'}
                        ,[{<<"error">>, <<"*">>}]
                       }
+                     ,{{'acdc_queue_handler', 'handle_member_call_cancel'}
+                       ,[{<<"member">>, <<"call_cancel">>}]
+                      }
                      ,{{'acdc_queue_handler', 'handle_member_resp'}
                        ,[{<<"member">>, <<"connect_resp">>}]
                       }
@@ -336,8 +339,8 @@ handle_cast({'member_connect_req', MemberCallJObj, Delivery, _Url}
     end,
     send_member_connect_req(CallId, AccountId, QueueId, MyQ, MyId),
 
-    %% Be ready in case a callback reg comes in while queue_listener is handling call
-    gen_listener:add_binding(self(), 'acdc_queue', [{'restrict_to', ['member_callback_reg']}
+    %% Be ready in case a callback or cancel comes in while queue_listener is handling call
+    gen_listener:add_binding(self(), 'acdc_queue', [{'restrict_to', ['member_callback_reg', 'member_call_result']}
                                                     ,{'account_id', AccountId}
                                                     ,{'queue_id', QueueId}
                                                     ,{'callid', CallId}
@@ -691,7 +694,7 @@ clear_call_state(#state{call=Call
     _ = acdc_util:queue_presence_update(AccountId, QueueId),
 
     CallId = whapps_call:call_id(Call),
-    gen_listener:rm_binding(self(), 'acdc_queue', [{'restrict_to', ['member_callback_reg']}
+    gen_listener:rm_binding(self(), 'acdc_queue', [{'restrict_to', ['member_callback_reg', 'member_call_result']}
                                                    ,{'account_id', AccountId}
                                                    ,{'queue_id', QueueId}
                                                    ,{'callid', CallId}

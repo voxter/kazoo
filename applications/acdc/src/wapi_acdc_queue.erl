@@ -195,18 +195,20 @@ member_call_cancel_v(JObj) ->
     member_call_cancel_v(wh_json:to_proplist(JObj)).
 
 -spec member_call_result_routing_key(api_terms()) -> ne_binary().
--spec member_call_result_routing_key(ne_binary(), ne_binary()) -> ne_binary().
+-spec member_call_result_routing_key(ne_binary(), ne_binary(), ne_binary()) -> ne_binary().
 member_call_result_routing_key(Props) when is_list(Props) ->
-    Id = props:get_value(<<"Queue-ID">>, Props, <<"*">>),
     AcctId = props:get_value(<<"Account-ID">>, Props),
-    member_call_result_routing_key(AcctId, Id);
+    QueueId = props:get_value(<<"Queue-ID">>, Props, <<"*">>),
+    CallId = props:get_value(<<"Call-ID">>, Props, <<"#">>),
+    member_call_result_routing_key(AcctId, QueueId, CallId);
 member_call_result_routing_key(JObj) ->
-    Id = wh_json:get_value(<<"Queue-ID">>, JObj, <<"*">>),
     AcctId = wh_json:get_value(<<"Account-ID">>, JObj),
-    member_call_result_routing_key(AcctId, Id).
+    QueueId = wh_json:get_value(<<"Queue-ID">>, JObj, <<"*">>),
+    CallId = props:get_value(<<"Call-ID">>, JObj, <<"#">>),
+    member_call_result_routing_key(AcctId, QueueId, CallId).
 
-member_call_result_routing_key(AcctId, QueueId) ->
-    <<"acdc.member.call_result.", AcctId/binary, ".", QueueId/binary>>.
+member_call_result_routing_key(AcctId, QueueId, CallId) ->
+    <<"acdc.member.call_result.", AcctId/binary, ".", QueueId/binary, ".", CallId/binary>>.
 
 %%------------------------------------------------------------------------------
 %% Member Connect Request
@@ -770,7 +772,7 @@ bind_q(Q, AcctId, QID, CallId, ['member_call'|T]) ->
     amqp_util:bind_q_to_callmgr(Q, member_call_routing_key(AcctId, QID)),
     bind_q(Q, AcctId, QID, CallId, T);
 bind_q(Q, AcctId, QID, CallId, ['member_call_result'|T]) ->
-    amqp_util:bind_q_to_callmgr(Q, member_call_result_routing_key(AcctId, QID)),
+    amqp_util:bind_q_to_callmgr(Q, member_call_result_routing_key(AcctId, QID, CallId)),
     bind_q(Q, AcctId, QID, CallId, T);
 bind_q(Q, AcctId, QID, CallId, ['member_connect_req'|T]) ->
     amqp_util:bind_q_to_callmgr(Q, member_connect_req_routing_key(AcctId, QID)),
@@ -811,7 +813,7 @@ unbind_q(Q, AcctId, QID, CallId, ['member_call'|T]) ->
     _ = amqp_util:unbind_q_from_callmgr(Q, member_call_routing_key(AcctId, QID)),
     unbind_q(Q, AcctId, QID, CallId, T);
 unbind_q(Q, AcctId, QID, CallId, ['member_call_result'|T]) ->
-    _ = amqp_util:unbind_q_from_callmgr(Q, member_call_result_routing_key(AcctId, QID)),
+    _ = amqp_util:unbind_q_from_callmgr(Q, member_call_result_routing_key(AcctId, QID, CallId)),
     unbind_q(Q, AcctId, QID, CallId, T);
 unbind_q(Q, AcctId, QID, CallId, ['member_connect_req'|T]) ->
     _ = amqp_util:unbind_q_from_callmgr(Q, member_connect_req_routing_key(AcctId, QID)),
