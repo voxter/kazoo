@@ -1037,13 +1037,20 @@ message_menu(Prompt, #mailbox{keys=#keys{replay=Replay
 config_menu(Box, Call) ->
     config_menu(Box, Call, 1).
 
-config_menu(#mailbox{interdigit_timeout=Interdigit}=Box
-            ,Call
-            ,Loop
-           ) when Loop < 4 ->
+config_menu(Box, Call, Loop) when Loop < 4 ->
     lager:info("playing mailbox configuration menu"),
-    {'ok', _} = whapps_call_command:b_flush(Call),
+    case whapps_call_command:b_flush(Call) of
+        {'ok', _} -> config_menu_collect_digits(Box, Call, Loop);
+        {'error', 'channel_hungup'}=E -> E
+    end.
 
+-spec config_menu_collect_digits(mailbox(), whapps_call:call(), pos_integer()) ->
+                                        'ok' | mailbox() |
+                                        {'error', 'channel_hungup'}.
+config_menu_collect_digits(#mailbox{interdigit_timeout=Interdigit}=Box
+                           ,Call
+                           ,Loop
+                          ) ->
     NoopId = whapps_call_command:prompt(<<"vm-settings_menu">>, Call),
 
     case whapps_call_command:collect_digits(?KEY_LENGTH
