@@ -95,7 +95,7 @@
          }).
 -type directory() :: #directory{}.
 
--type dtmf_action() :: 'route' | 'next' | 'start_over' | 'invalid' | 'continue'.
+-type dtmf_action() :: 'route' | 'next' | 'start_over' | 'invalid' | 'continue' | 'stop'.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -203,7 +203,8 @@ maybe_match_users(Call, State, [U|Us], MatchNum) ->
         'invalid' ->
             lager:info("invalid key press"),
             _ = play_invalid(Call),
-            maybe_match_users(Call, State, [U|Us], MatchNum)
+            maybe_match_users(Call, State, [U|Us], MatchNum);
+        'stop' -> cf_exe:stop(Call)
     end.
 
 -spec maybe_match_user(whapps_call:call(), directory_user(), pos_integer()) -> dtmf_action().
@@ -218,7 +219,8 @@ maybe_match_user(Call, U, MatchNum) ->
                 {'ok', <<>>} -> maybe_match_user(Call, U, MatchNum);
                 {'ok', DTMF} -> interpret_user_match_dtmf(DTMF)
             end;
-        {'ok', DTMF} -> interpret_user_match_dtmf(DTMF)
+        {'ok', DTMF} -> interpret_user_match_dtmf(DTMF);
+        {'error', 'channel_hungup'} -> 'stop'
     end.
 
 -spec interpret_user_match_dtmf(ne_binary()) -> dtmf_action().
