@@ -20,6 +20,7 @@
          ,agent_timeout/1, agent_timeout_v/1
          ,member_connect_retry/1, member_connect_retry_v/1
          ,member_connect_accepted/1, member_connect_accepted_v/1
+         ,member_callback_accepted/1, member_callback_accepted_v/1
          ,member_hungup/1, member_hungup_v/1
          ,sync_req/1, sync_req_v/1
          ,sync_resp/1, sync_resp_v/1
@@ -28,7 +29,6 @@
          ,call_position_req/1, call_position_req_v/1
          ,call_position_resp/1, call_position_resp_v/1
          ,member_callback_reg/1, member_callback_reg_v/1
-         ,member_callback_update/1, member_callback_update_v/1
         ]).
 
 -export([agent_change_available/0
@@ -53,6 +53,7 @@
          ,publish_agent_timeout/2, publish_agent_timeout/3
          ,publish_member_connect_retry/2, publish_member_connect_retry/3
          ,publish_member_connect_accepted/2, publish_member_connect_accepted/3
+         ,publish_member_callback_accepted/2, publish_member_callback_accepted/3
          ,publish_member_hungup/2, publish_member_hungup/3
          ,publish_sync_req/1, publish_sync_req/2
          ,publish_sync_resp/2, publish_sync_resp/3
@@ -61,7 +62,6 @@
          ,publish_call_position_req/1, publish_call_position_req/2
          ,publish_call_position_resp/2, publish_call_position_resp/3
          ,publish_member_callback_reg/1, publish_member_callback_reg/2
-         ,publish_member_callback_update/2, publish_member_callback_update/3
         ]).
 
 -export([queue_size/2, shared_queue_name/2]).
@@ -195,18 +195,20 @@ member_call_cancel_v(JObj) ->
     member_call_cancel_v(wh_json:to_proplist(JObj)).
 
 -spec member_call_result_routing_key(api_terms()) -> ne_binary().
--spec member_call_result_routing_key(ne_binary(), ne_binary()) -> ne_binary().
+-spec member_call_result_routing_key(ne_binary(), ne_binary(), ne_binary()) -> ne_binary().
 member_call_result_routing_key(Props) when is_list(Props) ->
-    Id = props:get_value(<<"Queue-ID">>, Props, <<"*">>),
     AcctId = props:get_value(<<"Account-ID">>, Props),
-    member_call_result_routing_key(AcctId, Id);
+    QueueId = props:get_value(<<"Queue-ID">>, Props, <<"*">>),
+    CallId = props:get_value(<<"Call-ID">>, Props, <<"#">>),
+    member_call_result_routing_key(AcctId, QueueId, CallId);
 member_call_result_routing_key(JObj) ->
-    Id = wh_json:get_value(<<"Queue-ID">>, JObj, <<"*">>),
     AcctId = wh_json:get_value(<<"Account-ID">>, JObj),
-    member_call_result_routing_key(AcctId, Id).
+    QueueId = wh_json:get_value(<<"Queue-ID">>, JObj, <<"*">>),
+    CallId = props:get_value(<<"Call-ID">>, JObj, <<"#">>),
+    member_call_result_routing_key(AcctId, QueueId, CallId).
 
-member_call_result_routing_key(AcctId, QueueId) ->
-    <<"acdc.member.call_result.", AcctId/binary, ".", QueueId/binary>>.
+member_call_result_routing_key(AcctId, QueueId, CallId) ->
+    <<"acdc.member.call_result.", AcctId/binary, ".", QueueId/binary, ".", CallId/binary>>.
 
 %%------------------------------------------------------------------------------
 %% Member Connect Request
@@ -369,6 +371,33 @@ member_connect_accepted_v(Prop) when is_list(Prop) ->
     wh_api:validate(Prop, ?MEMBER_CONNECT_ACCEPTED_HEADERS, ?MEMBER_CONNECT_ACCEPTED_VALUES, ?MEMBER_CONNECT_ACCEPTED_TYPES);
 member_connect_accepted_v(JObj) ->
     member_connect_accepted_v(wh_json:to_proplist(JObj)).
+
+%%------------------------------------------------------------------------------
+%% Member Call Back Accepted
+%%------------------------------------------------------------------------------
+-define(MEMBER_CALLBACK_ACCEPTED_HEADERS, [<<"Call-ID">>]).
+-define(OPTIONAL_MEMBER_CALLBACK_ACCEPTED_HEADERS, []).
+-define(MEMBER_CALLBACK_ACCEPTED_VALUES, [{<<"Event-Category">>, <<"member">>}
+                                          ,{<<"Event-Name">>, <<"callback_accepted">>}
+                                         ]).
+-define(MEMBER_CALLBACK_ACCEPTED_TYPES, []).
+
+-spec member_callback_accepted(api_terms()) ->
+                                {'ok', iolist()} |
+                                {'error', string()}.
+member_callback_accepted(Props) when is_list(Props) ->
+    case member_callback_accepted_v(Props) of
+        'true' -> wh_api:build_message(Props, ?MEMBER_CALLBACK_ACCEPTED_HEADERS, ?OPTIONAL_MEMBER_CALLBACK_ACCEPTED_HEADERS);
+        'false' -> {'error', "Proplist failed validation for member_callback_accepted"}
+    end;
+member_callback_accepted(JObj) ->
+    member_callback_accepted(wh_json:to_proplist(JObj)).
+
+-spec member_callback_accepted_v(api_terms()) -> boolean().
+member_callback_accepted_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?MEMBER_CALLBACK_ACCEPTED_HEADERS, ?MEMBER_CALLBACK_ACCEPTED_VALUES, ?MEMBER_CALLBACK_ACCEPTED_TYPES);
+member_callback_accepted_v(JObj) ->
+    member_callback_accepted_v(wh_json:to_proplist(JObj)).
 
 %%------------------------------------------------------------------------------
 %% Member Connect Retry
@@ -651,24 +680,26 @@ call_position_resp_v(JObj) ->
 %%  when their turn comes up
 %%------------------------------------------------------------------------------
 -spec member_callback_reg_routing_key(api_terms()) -> ne_binary().
--spec member_callback_reg_routing_key(ne_binary(), ne_binary()) -> ne_binary().
+-spec member_callback_reg_routing_key(ne_binary(), ne_binary(), ne_binary()) -> ne_binary().
 member_callback_reg_routing_key(Props) when is_list(Props) ->
-    Id = props:get_value(<<"Queue-ID">>, Props, <<"*">>),
     AcctId = props:get_value(<<"Account-ID">>, Props),
-    member_callback_reg_routing_key(AcctId, Id);
+    QueueId = props:get_value(<<"Queue-ID">>, Props, <<"*">>),
+    CallId = props:get_value(<<"Call-ID">>, Props, <<"#">>),
+    member_callback_reg_routing_key(AcctId, QueueId, CallId);
 member_callback_reg_routing_key(JObj) ->
-    Id = wh_json:get_value(<<"Queue-ID">>, JObj, <<"*">>),
     AcctId = wh_json:get_value(<<"Account-ID">>, JObj),
-    member_callback_reg_routing_key(AcctId, Id).
+    QueueId = wh_json:get_value(<<"Queue-ID">>, JObj, <<"*">>),
+    CallId = wh_json:get_value(<<"Call-ID">>, JObj, <<"#">>),
+    member_callback_reg_routing_key(AcctId, QueueId, CallId).
 
-member_callback_reg_routing_key(AcctId, QID) ->
-    <<"acdc.member.callback_reg.", AcctId/binary, ".", QID/binary>>.
+member_callback_reg_routing_key(AcctId, QueueId, CallId) ->
+    <<"acdc.member.callback_reg.", AcctId/binary, ".", QueueId/binary, ".", CallId/binary>>.
 
 -define(MEMBER_CALLBACK_HEADERS, [<<"Call-ID">>, <<"Account-ID">>, <<"Queue-ID">>, <<"Number">>]).
 -define(OPTIONAL_MEMBER_CALLBACK_HEADERS, []).
 -define(MEMBER_CALLBACK_VALUES, [{<<"Event-Category">>, <<"member">>}
-                                    ,{<<"Event-Name">>, <<"callback_reg">>}
-                                   ]).
+                                 ,{<<"Event-Name">>, <<"callback_reg">>}
+                                ]).
 -define(MEMBER_CALLBACK_TYPES, []).
 
 -spec member_callback_reg(api_terms()) ->
@@ -687,34 +718,6 @@ member_callback_reg_v(Prop) when is_list(Prop) ->
     wh_api:validate(Prop, ?MEMBER_CALLBACK_HEADERS, ?MEMBER_CALLBACK_VALUES, ?MEMBER_CALLBACK_TYPES);
 member_callback_reg_v(JObj) ->
     member_callback_reg_v(wh_json:to_proplist(JObj)).
-
-%%------------------------------------------------------------------------------
-%% Member Call Back Update - inform of new call id / call when calling
-%%  back to the member
-%%------------------------------------------------------------------------------
--define(MEMBER_CALLBACK_UPDATE_HEADERS, [<<"Call">>, <<"Account-ID">>, <<"Queue-ID">>]).
--define(OPTIONAL_MEMBER_CALLBACK_UPDATE_HEADERS, []).
--define(MEMBER_CALLBACK_UPDATE_VALUES, [{<<"Event-Category">>, <<"member">>}
-                                        ,{<<"Event-Name">>, <<"callback_update">>}
-                                       ]).
--define(MEMBER_CALLBACK_UPDATE_TYPES, []).
-
--spec member_callback_update(api_terms()) ->
-                                {'ok', iolist()} |
-                                {'error', string()}.
-member_callback_update(Props) when is_list(Props) ->
-    case member_callback_update_v(Props) of
-        'true' -> wh_api:build_message(Props, ?MEMBER_CALLBACK_UPDATE_HEADERS, ?OPTIONAL_MEMBER_CALLBACK_UPDATE_HEADERS);
-        'false' -> {'error', "Proplist failed validation for member_callback_update"}
-    end;
-member_callback_update(JObj) ->
-    member_callback_update(wh_json:to_proplist(JObj)).
-
--spec member_callback_update_v(api_terms()) -> boolean().
-member_callback_update_v(Prop) when is_list(Prop) ->
-    wh_api:validate(Prop, ?MEMBER_CALLBACK_UPDATE_HEADERS, ?MEMBER_CALLBACK_UPDATE_VALUES, ?MEMBER_CALLBACK_UPDATE_TYPES);
-member_callback_update_v(JObj) ->
-    member_callback_update_v(wh_json:to_proplist(JObj)).
 
 %%------------------------------------------------------------------------------
 %% Bind/Unbind the queue as appropriate
@@ -756,70 +759,77 @@ queue_size(AcctId, QueueId) ->
 bind_q(Q, Props) ->
     QID = props:get_value('queue_id', Props, <<"*">>),
     AcctId = props:get_value('account_id', Props),
-    bind_q(Q, AcctId, QID, props:get_value('restrict_to', Props)).
+    CallId = props:get_value('callid', Props, <<"#">>),
+    bind_q(Q, AcctId, QID, CallId, props:get_value('restrict_to', Props)).
 
-bind_q(Q, AcctId, QID, 'undefined') ->
+bind_q(Q, AcctId, QID, CallId, 'undefined') ->
     amqp_util:bind_q_to_whapps(Q, sync_req_routing_key(AcctId, QID)),
     amqp_util:bind_q_to_whapps(Q, agent_change_routing_key(AcctId, QID)),
     amqp_util:bind_q_to_callmgr(Q, member_call_routing_key(AcctId, QID)),
-    amqp_util:bind_q_to_callmgr(Q, member_connect_req_routing_key(AcctId, QID));
-bind_q(Q, AcctId, QID, ['member_call'|T]) ->
-    amqp_util:bind_q_to_callmgr(Q, member_call_routing_key(AcctId, QID)),
-    bind_q(Q, AcctId, QID, T);
-bind_q(Q, AcctId, QID, ['member_call_result'|T]) ->
-    amqp_util:bind_q_to_callmgr(Q, member_call_result_routing_key(AcctId, QID)),
-    bind_q(Q, AcctId, QID, T);
-bind_q(Q, AcctId, QID, ['member_connect_req'|T]) ->
     amqp_util:bind_q_to_callmgr(Q, member_connect_req_routing_key(AcctId, QID)),
-    bind_q(Q, AcctId, QID, T);
-bind_q(Q, AcctId, QID, ['sync_req'|T]) ->
+    amqp_util:bind_q_to_callmgr(Q, member_callback_reg_routing_key(AcctId, QID, CallId));
+bind_q(Q, AcctId, QID, CallId, ['member_call'|T]) ->
+    amqp_util:bind_q_to_callmgr(Q, member_call_routing_key(AcctId, QID)),
+    bind_q(Q, AcctId, QID, CallId, T);
+bind_q(Q, AcctId, QID, CallId, ['member_call_result'|T]) ->
+    amqp_util:bind_q_to_callmgr(Q, member_call_result_routing_key(AcctId, QID, CallId)),
+    bind_q(Q, AcctId, QID, CallId, T);
+bind_q(Q, AcctId, QID, CallId, ['member_connect_req'|T]) ->
+    amqp_util:bind_q_to_callmgr(Q, member_connect_req_routing_key(AcctId, QID)),
+    bind_q(Q, AcctId, QID, CallId, T);
+bind_q(Q, AcctId, QID, CallId, ['sync_req'|T]) ->
     amqp_util:bind_q_to_whapps(Q, sync_req_routing_key(AcctId, QID)),
-    bind_q(Q, AcctId, QID, T);
-bind_q(Q, AcctId, QID, ['agent_change'|T]) ->
+    bind_q(Q, AcctId, QID, CallId, T);
+bind_q(Q, AcctId, QID, CallId, ['agent_change'|T]) ->
     amqp_util:bind_q_to_whapps(Q, agent_change_routing_key(AcctId, QID)),
-    bind_q(Q, AcctId, QID, T);
-bind_q(Q, AcctId, QID, ['member_addremove'|T]) ->
+    bind_q(Q, AcctId, QID, CallId, T);
+bind_q(Q, AcctId, QID, CallId, ['member_addremove'|T]) ->
     amqp_util:bind_q_to_whapps(Q, queue_member_routing_key(AcctId, QID)),
-    bind_q(Q, AcctId, QID, T);
-bind_q(Q, AcctId, QID, ['member_position'|T]) ->
+    bind_q(Q, AcctId, QID, CallId, T);
+bind_q(Q, AcctId, QID, CallId, ['member_position'|T]) ->
 	amqp_util:bind_q_to_whapps(Q, queue_member_routing_key(AcctId, QID)),
-	bind_q(Q, AcctId, QID, T);
-bind_q(Q, AcctId, QID, ['member_callback_reg'|T]) ->
-    amqp_util:bind_q_to_whapps(Q, member_callback_reg_routing_key(AcctId, QID)),
-    bind_q(Q, AcctId, QID, T);
-bind_q(Q, AcctId, QID, [_|T]) -> bind_q(Q, AcctId, QID, T);
-bind_q(_, _, _, []) -> 'ok'.
+	bind_q(Q, AcctId, QID, CallId, T);
+bind_q(Q, AcctId, QID, CallId, ['member_callback_reg'|T]) ->
+    amqp_util:bind_q_to_callmgr(Q, member_callback_reg_routing_key(AcctId, QID, CallId)),
+    bind_q(Q, AcctId, QID, CallId, T);
+bind_q(Q, AcctId, QID, CallId, [_|T]) -> bind_q(Q, AcctId, QID, CallId, T);
+bind_q(_, _, _, _, []) -> 'ok'.
 
 -spec unbind_q(ne_binary(), wh_proplist()) -> 'ok'.
 unbind_q(Q, Props) ->
     QID = props:get_value('queue_id', Props, <<"*">>),
     AcctId = props:get_value('account_id', Props),
+    CallId = props:get_value('callid', Props, <<"#">>),
 
-    unbind_q(Q, AcctId, QID, props:get_value('restrict_to', Props)).
+    unbind_q(Q, AcctId, QID, CallId, props:get_value('restrict_to', Props)).
 
-unbind_q(Q, AcctId, QID, 'undefined') ->
+unbind_q(Q, AcctId, QID, CallId, 'undefined') ->
     _ = amqp_util:unbind_q_from_whapps(Q, sync_req_routing_key(AcctId, QID)),
     _ = amqp_util:unbind_q_from_whapps(Q, agent_change_routing_key(AcctId, QID)),
     _ = amqp_util:unbind_q_from_callmgr(Q, member_call_routing_key(AcctId, QID)),
-    _ = amqp_util:unbind_q_from_callmgr(Q, member_connect_req_routing_key(AcctId, QID));
-unbind_q(Q, AcctId, QID, ['member_call'|T]) ->
-    _ = amqp_util:unbind_q_from_callmgr(Q, member_call_routing_key(AcctId, QID)),
-    unbind_q(Q, AcctId, QID, T);
-unbind_q(Q, AcctId, QID, ['member_call_result'|T]) ->
-    _ = amqp_util:unbind_q_from_callmgr(Q, member_call_result_routing_key(AcctId, QID)),
-    unbind_q(Q, AcctId, QID, T);
-unbind_q(Q, AcctId, QID, ['member_connect_req'|T]) ->
     _ = amqp_util:unbind_q_from_callmgr(Q, member_connect_req_routing_key(AcctId, QID)),
-    unbind_q(Q, AcctId, QID, T);
-unbind_q(Q, AcctId, QID, ['sync_req'|T]) ->
+    _ = amqp_util:unbind_q_from_callmgr(Q, member_callback_reg_routing_key(AcctId, QID, CallId));
+unbind_q(Q, AcctId, QID, CallId, ['member_call'|T]) ->
+    _ = amqp_util:unbind_q_from_callmgr(Q, member_call_routing_key(AcctId, QID)),
+    unbind_q(Q, AcctId, QID, CallId, T);
+unbind_q(Q, AcctId, QID, CallId, ['member_call_result'|T]) ->
+    _ = amqp_util:unbind_q_from_callmgr(Q, member_call_result_routing_key(AcctId, QID, CallId)),
+    unbind_q(Q, AcctId, QID, CallId, T);
+unbind_q(Q, AcctId, QID, CallId, ['member_connect_req'|T]) ->
+    _ = amqp_util:unbind_q_from_callmgr(Q, member_connect_req_routing_key(AcctId, QID)),
+    unbind_q(Q, AcctId, QID, CallId, T);
+unbind_q(Q, AcctId, QID, CallId, ['sync_req'|T]) ->
     _ = amqp_util:unbind_q_from_whapps(Q, sync_req_routing_key(AcctId, QID)),
-    unbind_q(Q, AcctId, QID, T);
-unbind_q(Q, AcctId, QID, ['agent_change'|T]) ->
+    unbind_q(Q, AcctId, QID, CallId, T);
+unbind_q(Q, AcctId, QID, CallId, ['agent_change'|T]) ->
     _ = amqp_util:unbind_q_from_whapps(Q, agent_change_routing_key(AcctId, QID)),
-    unbind_q(Q, AcctId, QID, T);
-unbind_q(Q, AcctId, QID, [_|T]) ->
-    unbind_q(Q, AcctId, QID, T);
-unbind_q(_, _, _, []) -> 'ok'.
+    unbind_q(Q, AcctId, QID, CallId, T);
+unbind_q(Q, AcctId, QID, CallId, ['member_callback_reg'|T]) ->
+    _ = amqp_util:unbind_q_from_callmgr(Q, member_callback_reg_routing_key(AcctId, QID, CallId)),
+    unbind_q(Q, AcctId, QID, CallId, T);
+unbind_q(Q, AcctId, QID, CallId, [_|T]) ->
+    unbind_q(Q, AcctId, QID, CallId, T);
+unbind_q(_, _, _, _, []) -> 'ok'.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -932,6 +942,14 @@ publish_member_connect_accepted(Q, API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?MEMBER_CONNECT_ACCEPTED_VALUES, fun member_connect_accepted/1),
     amqp_util:targeted_publish(Q, Payload, ContentType).
 
+-spec publish_member_callback_accepted(ne_binary(), api_terms()) -> 'ok'.
+-spec publish_member_callback_accepted(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+publish_member_callback_accepted(Q, JObj) ->
+    publish_member_callback_accepted(Q, JObj, ?DEFAULT_CONTENT_TYPE).
+publish_member_callback_accepted(Q, API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?MEMBER_CALLBACK_ACCEPTED_VALUES, fun member_callback_accepted/1),
+    amqp_util:targeted_publish(Q, Payload, ContentType).
+
 -spec publish_member_connect_retry(ne_binary(), api_terms()) -> 'ok'.
 -spec publish_member_connect_retry(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
 publish_member_connect_retry(Q, JObj) ->
@@ -1002,12 +1020,4 @@ publish_member_callback_reg(JObj) ->
     publish_member_callback_reg(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_member_callback_reg(API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?MEMBER_CALLBACK_VALUES, fun member_callback_reg/1),
-    amqp_util:whapps_publish(member_callback_reg_routing_key(API), Payload, ContentType).
-
--spec publish_member_callback_update(ne_binary(), api_terms()) -> 'ok'.
--spec publish_member_callback_update(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
-publish_member_callback_update(Q, JObj) ->
-    publish_member_callback_update(Q, JObj, ?DEFAULT_CONTENT_TYPE).
-publish_member_callback_update(Q, API, ContentType) ->
-    {'ok', Payload} = wh_api:prepare_api_payload(API, ?MEMBER_CALLBACK_UPDATE_VALUES, fun member_callback_update/1),
-    amqp_util:targeted_publish(Q, Payload, ContentType).
+    amqp_util:callmgr_publish(Payload, ContentType, member_callback_reg_routing_key(API)).

@@ -67,11 +67,11 @@
 -export([soft_hold/1, soft_hold/2
          ,soft_hold_command/2, soft_hold_command/4, soft_hold_command/5
         ]).
--export([play/2, play/3, play/4
+-export([play/2, play/3, play/4, play/5
          ,play_command/2, play_command/3, play_command/4
          ,b_play/2, b_play/3, b_play/4
         ]).
--export([prompt/2, prompt/3]).
+-export([prompt/2, prompt/3, prompt/4]).
 
 -export([tts/2, tts/3, tts/4, tts/5, tts/6
          ,b_tts/2, b_tts/3, b_tts/4, b_tts/5, b_tts/6
@@ -1156,6 +1156,7 @@ park_command(Call) ->
 %%--------------------------------------------------------------------
 -spec prompt(ne_binary(), whapps_call:call()) -> ne_binary().
 -spec prompt(ne_binary(), ne_binary(), whapps_call:call()) -> ne_binary().
+-spec prompt(ne_binary(), ne_binary(), api_object(), whapps_call:call()) -> ne_binary().
 
 -spec b_prompt(ne_binary(), whapps_call:call()) -> whapps_api_std_return().
 -spec b_prompt(ne_binary(), ne_binary(), whapps_call:call()) -> whapps_api_std_return().
@@ -1164,6 +1165,8 @@ prompt(Prompt, Call) ->
     play(wh_media_util:get_prompt(Prompt, Call), Call).
 prompt(Prompt, Lang, Call) ->
     play(wh_media_util:get_prompt(Prompt, Lang, Call), Call).
+prompt(Prompt, Lang, Variables, Call) ->
+    play(wh_media_util:get_prompt(Prompt, Lang, Call), ?ANY_DIGIT, 'undefined', Variables, Call).
 
 b_prompt(Prompt, Call) ->
     b_play(wh_media_util:get_prompt(Prompt, Call), Call).
@@ -1184,12 +1187,16 @@ b_prompt(Prompt, Lang, Call) ->
                   ne_binary().
 -spec play(ne_binary(), api_binaries(), api_binary(), whapps_call:call()) ->
                   ne_binary().
+-spec play(ne_binary(), api_binaries(), api_binary(), api_object(), whapps_call:call()) ->
+                  ne_binary().
 
 -spec play_command(ne_binary(), whapps_call:call() | ne_binary()) ->
                           wh_json:object().
 -spec play_command(ne_binary(), api_binaries(), whapps_call:call() | ne_binary()) ->
                           wh_json:object().
 -spec play_command(ne_binary(), api_binaries(), api_binary(), whapps_call:call() | ne_binary()) ->
+                          wh_json:object().
+-spec play_command(ne_binary(), api_binaries(), api_binary(), api_object(), whapps_call:call() | ne_binary()) ->
                           wh_json:object().
 
 -spec b_play(ne_binary(), whapps_call:call()) ->
@@ -1203,17 +1210,20 @@ play_command(Media, Call) ->
     play_command(Media, ?ANY_DIGIT, Call).
 play_command(Media, Terminators, Call) ->
     play_command(Media, Terminators, 'undefined', Call).
-play_command(Media, Terminators, Leg, <<_/binary>> = CallId) ->
+play_command(Media, Terminators, Leg, Call) ->
+    play_command(Media, Terminators, Leg, 'undefined', Call).
+play_command(Media, Terminators, Leg, Variables, <<_/binary>> = CallId) ->
     wh_json:from_list(
       props:filter_undefined(
         [{<<"Application-Name">>, <<"play">>}
          ,{<<"Media-Name">>, Media}
          ,{<<"Terminators">>, play_terminators(Terminators)}
          ,{<<"Leg">>, play_leg(Leg)}
+         ,{<<"Variables">>, Variables}
          ,{<<"Call-ID">>, CallId}
         ]));
-play_command(Media, Terminators, Leg, Call) ->
-    play_command(Media, Terminators, Leg, whapps_call:call_id(Call)).
+play_command(Media, Terminators, Leg, Variables, Call) ->
+    play_command(Media, Terminators, Leg, Variables, whapps_call:call_id(Call)).
 
 -spec play_terminators(api_binaries()) -> ne_binaries().
 play_terminators('undefined') -> ?ANY_DIGIT;
@@ -1227,12 +1237,14 @@ play(Media, Call) -> play(Media, ?ANY_DIGIT, Call).
 play(Media, Terminators, Call) ->
     play(Media, Terminators, 'undefined', Call).
 play(Media, Terminators, Leg, Call) ->
+    play(Media, Terminators, Leg, 'undefined', Call).
+play(Media, Terminators, Leg, Variables, Call) ->
     NoopId = couch_mgr:get_uuid(),
     Commands = [wh_json:from_list([{<<"Application-Name">>, <<"noop">>}
                                    ,{<<"Call-ID">>, whapps_call:call_id(Call)}
                                    ,{<<"Msg-ID">>, NoopId}
                                   ])
-                ,play_command(Media, Terminators, Leg, Call)
+                ,play_command(Media, Terminators, Leg, Variables, Call)
                ],
     Command = [{<<"Application-Name">>, <<"queue">>}
                ,{<<"Commands">>, Commands}

@@ -31,7 +31,6 @@
          ,refresh/2
          ,current_call/1
          ,status/1
-         ,awaiting_callback/1
 
          ,new_endpoint/2
          ,edited_endpoint/2
@@ -54,6 +53,7 @@
          ,sync/2
          ,ready/2
          ,ringing/2
+         ,ringing_callback/2
          ,awaiting_callback/2
          ,answered/2
          ,wrapup/2
@@ -64,6 +64,7 @@
          ,sync/3
          ,ready/3
          ,ringing/3
+         ,ringing_callback/3
          ,awaiting_callback/3
          ,answered/3
          ,wrapup/3
@@ -115,15 +116,19 @@
 
                 ,member_call :: whapps_call:call()
                 ,member_call_id :: api_binary()
+                ,member_callback_candidates = [] :: wh_proplist()
+                ,member_callback_flag = 'false' :: boolean()
+                ,member_original_call :: whapps_call:call()
+                ,member_original_call_id :: api_binary()
                 ,member_call_queue_id :: api_binary()
                 ,member_call_start :: wh_now()
                 ,caller_exit_key = <<"#">> :: ne_binary()
                 ,queue_notifications :: api_object()
 
                 ,agent_call_id :: api_binary()
-                ,agent_callback_call = 'undefined'
-                ,originate_call_ids = []
-                ,control_q_map = []
+                ,agent_callback_call = 'undefined' :: whapps_call:call() | 'undefined'
+                %% TODO replace with newer approach
+                ,ambiguous_uuids = [] :: ne_binaries()
                 ,next_status :: api_binary()
                 ,fsm_call_id :: api_binary() % used when no call-ids are available
                 ,endpoints = [] :: wh_json:objects()
@@ -322,13 +327,6 @@ current_call(FSM) -> gen_fsm:sync_send_event(FSM, 'current_call').
 
 -spec status(pid()) -> wh_proplist().
 status(FSM) -> gen_fsm:sync_send_event(FSM, 'status').
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
--spec awaiting_callback(pid()) -> 'ok'.
-awaiting_callback(FSM) -> gen_fsm:send_event(FSM, 'wait_for_callback').
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -595,11 +593,13 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
             acdc_util:bind_to_call_events(Call, AgentListener),
 
             %% Need to check if a callback is required to the caller
-            case wh_json:get_value(<<"Callback-Number">>, JObj) of
+            NextState = case wh_json:get_value(<<"Callback-Number">>, JObj) of
                 'undefined' ->
-                    acdc_agent_listener:bridge_to_member(AgentListener, Call, JObj, UpdatedEPs, CDRUrl, RecordingUrl);
+                    acdc_agent_listener:bridge_to_member(AgentListener, Call, JObj, UpdatedEPs, CDRUrl, RecordingUrl),
+                    'ringing';
                 Number ->
-                    acdc_agent_listener:redial_member(AgentListener, Call, JObj, UpdatedEPs, CDRUrl, RecordingUrl, Number)
+                    acdc_agent_listener:originate_callback_to_agent(AgentListener, Call, JObj, UpdatedEPs, CDRUrl, RecordingUrl, Number),
+                    'ringing_callback'
             end,
 
             {CIDNumber, CIDName} = acdc_util:caller_id(Call),
@@ -607,7 +607,8 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
             acdc_agent_stats:agent_connecting(AccountId, AgentId, CallId, CIDName, CIDNumber),
             lager:info("trying to ring agent endpoints(~p)", [length(UpdatedEPs)]),
             lager:debug("notifications for the queue: ~p", [wh_json:get_value(<<"Notifications">>, JObj)]),
-            {'next_state', 'ringing', State#state{wrapup_timeout=WrapupTimer
+            
+            {'next_state', NextState, State#state{wrapup_timeout=WrapupTimer
                                                   ,member_call=Call
                                                   ,member_call_id=CallId
                                                   ,member_call_start=wh_util:now()
@@ -645,9 +646,14 @@ ready({'member_connect_win', JObj, 'different_node'}, #state{agent_listener=Agen
             acdc_util:bind_to_call_events(Call, AgentListener),
 
             acdc_agent_listener:monitor_call(AgentListener, Call, JObj, RecordingUrl),
+            %% Need to check if a callback is required to the caller
+            NextState = case wh_json:get_value(<<"Callback-Number">>, JObj) of
+                'undefined' -> 'ringing';
+                _Number -> 'ringing_callback'
+            end,
 
             lager:debug("monitoring agent ~s to connect to caller in queue ~s", [AgentId, QueueId]),
-            {'next_state', 'ringing', State#state{wrapup_timeout=WrapupTimer
+            {'next_state', NextState, State#state{wrapup_timeout=WrapupTimer
                                                   ,member_call=Call
                                                   ,member_call_id=CallId
                                                   ,member_call_start=wh_util:now()
@@ -716,6 +722,8 @@ ready(?NEW_CHANNEL_TO(CallId, 'undefined'), State) ->
     lager:debug("ready call_to outbound: ~s", [CallId]),
     {'next_state', 'outbound', start_outbound_call_handling(CallId, State), 'hibernate'};
 ready(?NEW_CHANNEL_TO(_CallId, _MemberCallId), State) ->
+    {'next_state', 'ready', State};
+ready({'playback_stop', _JObj}, State) ->
     {'next_state', 'ready', State};
 ready(_Evt, State) ->
     lager:debug("unhandled event while ready: ~p", [_Evt]),
@@ -875,23 +883,6 @@ ringing({'channel_hungup', CallId, _Cause}, #state{agent_listener=AgentListener
             lager:debug("unexpected channel ~s down", [CallId]),
             {'next_state', 'ringing', State}
     end;
-ringing({'dtmf_pressed', DTMF}, #state{caller_exit_key=DTMF
-                                       ,agent_listener=AgentListener
-                                       ,account_id=AccountId
-                                       ,member_call_queue_id=QueueId
-                                       ,member_call_id=CallId
-                                      }=State) when is_binary(DTMF) ->
-    lager:debug("caller exit key pressed: ~s", [DTMF]),
-    acdc_agent_listener:channel_hungup(AgentListener, CallId),
-
-    acdc_stats:call_abandoned(AccountId, QueueId, CallId, ?ABANDON_EXIT),
-
-    acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
-
-    apply_state_updates(clear_call(State, 'ready'));
-ringing({'dtmf_pressed', DTMF}, #state{caller_exit_key=_ExitKey}=State) ->
-    lager:debug("caller pressed ~s, exit key is ~s", [DTMF, _ExitKey]),
-    {'next_state', 'ringing', State};
 ringing({'channel_answered', JObj}, #state{member_call_id=MemberCallId
                                            ,agent_listener=AgentListener
                                            ,outbound_call_ids=OutboundCallIds
@@ -923,11 +914,11 @@ ringing({'originate_resp', ACallId}, #state{agent_listener=AgentListener
                                             ,queue_notifications=Ns
                                            }=State) ->
     lager:debug("originate resp on ~s, broadcasting", [ACallId]),
-    wapi_acdc_agent:publish_agent_call_id([{<<"Account-ID">>, AccountId}
-                                           ,{<<"Agent-ID">>, AgentId}
-                                           ,{<<"Agent-Call-ID">>, ACallId}
-                                           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-                                          ]),
+    wapi_acdc_agent:publish_shared_call_id([{<<"Account-ID">>, AccountId}
+                                            ,{<<"Agent-ID">>, AgentId}
+                                            ,{<<"Agent-Call-ID">>, ACallId}
+                                            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                           ]),
 
     maybe_notify(Ns, ?NOTIFY_PICKUP, State),
 
@@ -984,8 +975,6 @@ ringing({'leg_destroyed', _CallId}, State) ->
     {'next_state', 'ringing', State};
 ringing({'usurp_control', _CallId}, State) ->
     {'next_state', 'ringing', State};
-ringing('wait_for_callback', State) ->
-    {'next_state', 'awaiting_callback', State};
 ringing(_Evt, State) ->
     lager:debug("unhandled event while ringing: ~p", [_Evt]),
     {'next_state', 'ringing', State}.
@@ -1008,190 +997,282 @@ ringing('current_call', _, #state{member_call=Call
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
-awaiting_callback({'originate_started', ACallId}, #state{queue_notifications=Ns
-                                                        }=State) ->
-    lager:debug("originate started on ~s, connecting to caller", [ACallId]),
-
-    maybe_notify(Ns, ?NOTIFY_PICKUP, State),
-
-    {'next_state', 'awaiting_callback', State#state{agent_call_id=ACallId
-                                                   ,connect_failures=0
-                                                   }};
-awaiting_callback({'originate_uuid', ACallId, ACtrlQ}, #state{agent_listener=AgentListener
-                                                              ,originate_call_ids=OriginateCallIds
-                                                              ,control_q_map=ControlQMap
-                                                             }=State) ->
+ringing_callback({'originate_uuid', ACallId, ACtrlQ}, #state{agent_listener=AgentListener
+                                                             ,ambiguous_uuids=AmbiguousUUIDs
+                                                            }=State) ->
     lager:debug("recv originate_uuid for agent call ~s(~s)", [ACallId, ACtrlQ]),
     acdc_agent_listener:originate_uuid(AgentListener, ACallId, ACtrlQ),
-    acdc_util:bind_to_call_events(ACallId, AgentListener),
-    {'next_state', 'awaiting_callback', State#state{originate_call_ids=[ACallId | lists:delete(ACallId, OriginateCallIds)]
-                                                    ,control_q_map=[{ACallId, ACtrlQ} | lists:keydelete(ACallId, 1, ControlQMap)]
-                                                   }};
-awaiting_callback({'originate_resp', ACallId}, #state{agent_listener=AgentListener
-                                                      ,queue_notifications=Ns
-                                                      ,originate_call_ids=OriginateCallIds
-                                                     }=State) ->
-    lager:debug("originate resp on ~s, connecting to caller", [ACallId]),
-
-    maybe_notify(Ns, ?NOTIFY_PICKUP, State),
-
-    %% Unbind from the other legs of the agent's call
-    lists:foreach(fun(OtherCallId) ->
-        acdc_util:unbind_from_call_events(OtherCallId, AgentListener)
-    end, lists:delete(ACallId, OriginateCallIds)),
-
-    {'next_state', 'awaiting_callback', State#state{agent_call_id=ACallId
-                                                    ,connect_failures=0
-                                                    ,originate_call_ids=[]
-                                                    ,control_q_map=[]
-                                                   }};
-awaiting_callback({'originate_failed', E}, #state{agent_listener=AgentListener
-                                                  ,account_id=AccountId
-                                                  ,agent_id=AgentId
-                                                  ,member_call_queue_id=QueueId
-                                                  ,member_call_id=CallId
-                                                  ,connect_failures=Fails
-                                                  ,max_connect_failures=MaxFails
-                                                 }=State) ->
-    acdc_agent_listener:member_connect_retry(AgentListener, CallId),
-
-    ErrReason = missed_reason(wh_json:get_value(<<"Error-Message">>, E)),
-
-    lager:debug("ringing agent failed: ~s", [ErrReason]),
-
-    acdc_stats:call_missed(AccountId, QueueId, AgentId, CallId, ErrReason),
-
-    acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
-
-    {'next_state'
-     ,return_to_state(Fails+1, MaxFails, AccountId, AgentId)
-     ,apply_state_updates(clear_call(State, 'failed'))
-    };
-awaiting_callback({'call_from', MemberCallId}, #state{account_id=AccountId
-                                                      ,agent_listener=AgentListener
-                                                      ,member_call=Call
-                                                     }=State) ->
-    lager:debug("Event call_from for callback (call id ~p)", [MemberCallId]),
-    acdc_util:bind_to_call_events(MemberCallId, AgentListener),
-
-    %% Update others on new call
-    acdc_agent_listener:replace_call(AgentListener, whapps_call:set_call_id(MemberCallId, whapps_call:new())),
-
-    %% Need to hook the bridge channel
-    BLegUser = <<(whapps_call:from_user(Call))/binary, "-b">>,
-    lager:debug("Registering for call_from event for user ~p", [BLegUser]),
-    catch gproc:reg(?NEW_CHANNEL_REG(AccountId, BLegUser)),
-
-    {'next_state', 'awaiting_callback', State#state{member_call_id=MemberCallId
-                                                   }};
-awaiting_callback({'channel_answered', JObj}=Evt, #state{agent_call_id=ACallId
-                                                         ,member_call_id=MemberCallId
-                                                         ,agent_listener=AgentListener
-                                                         ,originate_call_ids=OriginateCallIds
-                                                         ,control_q_map=ControlQMap
-                                                        }=State) ->
-    CallId = call_id(JObj),
-
-    case {CallId, lists:member(CallId, OriginateCallIds)} of
-        {ACallId, _} ->
-            NewAgentCall = whapps_call:from_json(JObj),
-            Updaters = [fun(Call) -> whapps_call:set_account_id(whapps_call:custom_channel_var(<<"Account-ID">>, Call), Call) end
-                        ,fun(Call) -> whapps_call:set_control_queue(element(2, lists:keyfind(CallId, 1, ControlQMap)), Call) end
-                        ,fun(Call) -> whapps_call:set_call_id(CallId, Call) end
-                       ],
-            NewAgentCall2 = lists:foldl(fun(F, Call) -> F(Call) end, NewAgentCall, Updaters),
-
-            lager:debug("agent answered phone on ~s, now calling back to the member", [CallId]),
-            whapps_call_command:prompt(<<"queue-now_calling_back">>, NewAgentCall2),
-
-            acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_RED_SOLID),
-            {'next_state', 'awaiting_callback', State#state{connect_failures=0
-                                                            ,agent_callback_call=NewAgentCall2
-                                                           }};
-        {_, 'true'} ->
-            NewAgentCall = whapps_call:from_json(JObj),
-            Updaters = [fun(Call) -> whapps_call:set_account_id(whapps_call:custom_channel_var(<<"Account-ID">>, Call), Call) end
-                        ,fun(Call) -> whapps_call:set_control_queue(element(2, lists:keyfind(CallId, 1, ControlQMap)), Call) end
-                        ,fun(Call) -> whapps_call:set_to(wh_json:get_value(<<"To">>, JObj), Call) end
-                        ,fun(Call) -> whapps_call:set_call_id(CallId, Call) end
-                       ],
-            NewAgentCall2 = lists:foldl(fun(F, Call) -> F(Call) end, NewAgentCall, Updaters),
-
-            lager:debug("agent answered phone on ~p, now calling back to the member", [CallId]),
-            whapps_call_command:prompt(<<"queue-now_calling_back">>, NewAgentCall2),
-
-            acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_RED_SOLID),
-            {'next_state', 'awaiting_callback', State#state{connect_failures=0
-                                                            ,agent_callback_call=NewAgentCall2
-                                                           }};
-        {MemberCallId, _} ->
-            NewMemberCall = whapps_call:from_json(JObj),
-            lager:debug("Member answered their callback"),
-            acdc_agent_listener:replace_call(AgentListener, NewMemberCall),
-            {'next_state', 'awaiting_callback', State#state{member_call=NewMemberCall
-                                                           }};
-        _ ->
-            lager:debug("unhandled event while awaiting callback: ~p", [Evt]),
-            {'next_state', 'awaiting_callback', State}
+    case lists:member(ACallId, AmbiguousUUIDs) of
+        'true' ->
+            lager:debug("found a uuid ~s that was from a previous queue call", [ACallId]),
+            acdc_agent_listener:channel_hungup(AgentListener, ACallId),
+            {'next_state', 'ringing_callback', State#state{ambiguous_uuids=lists:delete(ACallId, AmbiguousUUIDs)}};
+        'false' ->
+            {'next_state', 'ringing_callback', State#state{ambiguous_uuids=[ACallId | lists:delete(ACallId, AmbiguousUUIDs)]}}
     end;
-awaiting_callback({'playback_stop', _JObj}, #state{agent_callback_call=AgentCallbackCall
-                                                   ,agent_listener=AgentListener
-                                                  }=State) ->
-    NewMemberCallId = originate_to_extension(whapps_call:custom_channel_var(<<"Callback-Number">>, AgentCallbackCall),
-        whapps_call:call_id(AgentCallbackCall), AgentCallbackCall,
-        AgentListener),
-    {'next_state', 'awaiting_callback', State#state{agent_callback_call='undefined'
-                                                    ,member_call_id=NewMemberCallId
-                                                   }};
-awaiting_callback({'channel_bridged', MemberCallId}, #state{agent_listener=AgentListener
-                                                    ,agent_call_id=ACallId
-                                                    ,member_call=MemberCall
-                                                    ,member_call_id=MemberCallId
-                                                    ,account_id=AccountId
-                                                    ,agent_id=AgentId
-                                                    ,queue_notifications=Ns
-                                                   }=State) ->
-    lager:debug("Channel bridge event for member call"),
-
-    acdc_agent_listener:member_connect_accepted(AgentListener, ACallId, MemberCall),
+ringing_callback({'originate_resp', ACallId}, #state{account_id=AccountId
+                                                     ,agent_id=AgentId
+                                                     ,agent_listener=AgentListener
+                                                     ,member_call_id=MemberCallId
+                                                     ,member_call=MemberCall
+                                                     ,queue_notifications=Ns
+                                                     ,agent_call_id=ACallId
+                                                     ,agent_callback_call=ACall
+                                                    }=State) ->
+    lager:debug("originate resp on ~s, broadcasting", [ACallId]),
+    wapi_acdc_agent:publish_shared_call_id([{<<"Account-ID">>, AccountId}
+                                            ,{<<"Agent-ID">>, AgentId}
+                                            ,{<<"Agent-Call-ID">>, ACallId}
+                                            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                           ]),
 
     maybe_notify(Ns, ?NOTIFY_PICKUP, State),
 
     {CIDNumber, CIDName} = acdc_util:caller_id(MemberCall),
 
+    %% TODO: remove if unnecessary
+    % acdc_util:b_bind_to_call_events(ACallId, AgentListener),
+    acdc_agent_listener:member_callback_accepted(AgentListener, ACall),
     acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNumber),
 
-    {'next_state', 'answered', State#state{connect_failures=0}};
-awaiting_callback({'channel_hungup', MemberCallId, Reason}, #state{account_id=AccountId
-                                                                   ,member_call_queue_id=QueueId
-                                                                   ,member_call_id=MemberCallId
-                                                                   ,agent_listener=AgentListener
-                                                                   ,agent_id=AgentId
-                                                                  }=State) ->
-    lager:debug("caller did not pick up callback on ~p (~p)", [MemberCallId, Reason]),
-    acdc_agent_listener:channel_hungup(AgentListener, MemberCallId),
+    {'next_state', 'ringing_callback', State#state{connect_failures=0}};
+ringing_callback({'originate_failed', JObj}, #state{agent_listener=AgentListener
+                                                    ,account_id=AccountId
+                                                    ,agent_id=AgentId
+                                                    ,member_call_queue_id=QueueId
+                                                    ,member_call_id=CallId
+                                                    ,ambiguous_uuids=AmbiguousUUIDs
+                                                   }=State) ->
+    case originate_failed_for_this_call(wh_json:get_value([<<"Request">>, <<"Endpoints">>], JObj), AmbiguousUUIDs) of
+        'true' ->
+            ErrReason = missed_reason(wh_json:get_value(<<"Error-Message">>, JObj)),
+            lager:debug("originate failed (~s), broadcasting", [ErrReason]),
+            wapi_acdc_agent:publish_shared_originate_failure([{<<"Account-ID">>, AccountId}
+                                                              ,{<<"Agent-ID">>, AgentId}
+                                                              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                                             ]),
 
-    acdc_stats:call_processed(AccountId, QueueId, AgentId, MemberCallId, 'agent'),
+            acdc_agent_listener:member_connect_retry(AgentListener, CallId),
 
-    acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
-    apply_state_updates(clear_call(State, 'ready'));
-awaiting_callback({'agent_timeout', _JObj}, #state{agent_listener=AgentListener
-                                                   ,account_id=AccountId
+            acdc_stats:call_missed(AccountId, QueueId, AgentId, CallId, ErrReason),
+
+            acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
+
+            {'next_state', 'ringing_callback', State};
+        'false' -> {'next_state', 'ringing_callback', State}
+    end;
+ringing_callback({'shared_failure', _JObj}, #state{account_id=AccountId
                                                    ,agent_id=AgentId
-                                                   ,member_call_queue_id=QueueId
-                                                   ,member_call_id=CallId
                                                    ,connect_failures=Fails
                                                    ,max_connect_failures=MaxFails
                                                   }=State) ->
-    acdc_agent_listener:agent_timeout(AgentListener),
-    lager:debug("recv timeout from queue process"),
-    acdc_stats:call_missed(AccountId, QueueId, AgentId, CallId, <<"timeout">>),
+    lager:debug("shared originate failure"),
+
+    NewFSMState = clear_call(State, 'failed'),
+    NextState = return_to_state(Fails+1, MaxFails, AccountId, AgentId),
+    case NextState of
+        'paused' -> {'next_state', 'paused', NewFSMState};
+        'ready' -> apply_state_updates(NewFSMState)
+    end;
+%% For the monitoring processes, fake the agent_callback_call so playback_stop isn't ignored
+ringing_callback({'shared_call_id', JObj}, #state{agent_callback_call='undefined'}=State) ->
+    ACallId = wh_json:get_value(<<"Agent-Call-ID">>, JObj),
+    ACall = whapps_call:set_call_id(ACallId, whapps_call:new()),
+    ringing_callback({'shared_call_id', JObj}, State#state{agent_callback_call=ACall});
+ringing_callback({'shared_call_id', JObj}, #state{agent_listener=AgentListener}=State) ->
+    ACallId = wh_json:get_value(<<"Agent-Call-ID">>, JObj),
+
+    lager:debug("shared call id ~s acquired, connecting to caller", [ACallId]),
+    
+    acdc_util:b_bind_to_call_events(ACallId, AgentListener),
+    acdc_agent_listener:monitor_connect_accepted(AgentListener, ACallId),
+
+    {'next_state', 'ringing_callback', State#state{agent_call_id=ACallId
+                                                   ,connect_failures=0
+                                                  }};
+ringing_callback({'channel_answered', JObj}, State) ->
+    CallId = call_id(JObj),
+    lager:debug("agent answered phone on ~s", [CallId]),
+    ACall = whapps_call:set_account_id(wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj), whapps_call:from_json(JObj)),
+    {'next_state', 'ringing_callback', State#state{agent_call_id=CallId
+                                                   ,agent_callback_call=ACall
+                                                  }};
+ringing_callback({'playback_stop', _}, #state{agent_callback_call='undefined'}=State) ->
+    {'next_state', 'ringing_callback', State};
+ringing_callback({'playback_stop', _JObj}, #state{monitoring='true'}=State) ->
+    {'next_state', 'awaiting_callback', State};
+ringing_callback({'playback_stop', _JObj}, #state{agent_listener=AgentListener
+                                                  ,member_call=Call
+                                                  ,member_call_id=MemberCallId
+                                                  ,agent_callback_call=AgentCallbackCall
+                                                 }=State) ->
+    NewMemberCallId = acdc_agent_listener:originate_callback_return(AgentListener, AgentCallbackCall),
+    wh_util:put_callid(NewMemberCallId),
+    acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_RED_SOLID),
+
+    %% Preserve old call information for sake of stats
+    {'next_state', 'awaiting_callback', State#state{member_call_id=NewMemberCallId
+                                                    ,member_original_call=Call
+                                                    ,member_original_call_id=MemberCallId
+                                                   }};
+ringing_callback({'usurp_control', _}, State) ->
+    {'next_state', 'ringing_callback', State};
+ringing_callback(_Evt, State) ->
+    lager:debug("unhandled event: ~p", [_Evt]),
+    {'next_state', 'ringing_callback', State}.
+
+ringing_callback('status', _, State) ->
+    {'reply', [{'state', <<"ringing_callback">>}]
+     ,'ringing', State};
+ringing_callback('current_call', _, #state{member_call=Call
+                                           ,member_call_queue_id=QueueId
+                                          }=State) ->
+    {'reply', current_call(Call, 'ringing_callback', QueueId, 'undefined'), 'ringing_callback', State}.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+awaiting_callback({'originate_uuid', MemberCallbackCallId, CtrlQ}, #state{member_callback_candidates=Candidates}=State) ->
+    lager:debug("recv originate_uuid for member callback call ~s(~s)", [MemberCallbackCallId, CtrlQ]),
+    {'next_state', 'awaiting_callback', State#state{member_callback_candidates=props:set_value(MemberCallbackCallId, CtrlQ, Candidates)}};
+awaiting_callback({'originate_failed', JObj}, #state{account_id=AccountId
+                                                     ,agent_id=AgentId
+                                                     ,agent_listener=AgentListener
+                                                     ,member_call=Call
+                                                     ,member_original_call_id=OriginalMemberCallId
+                                                     ,member_call_queue_id=QueueId
+                                                     ,agent_call_id=ACallId
+                                                    }=State) ->
+    ErrReason = missed_reason(wh_json:get_value(<<"Error-Message">>, JObj)),
+    lager:debug("originate failed (~s), broadcasting", [ErrReason]),
+    wapi_acdc_agent:publish_shared_originate_failure([{<<"Account-ID">>, AccountId}
+                                                      ,{<<"Agent-ID">>, AgentId}
+                                                      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                                     ]),
+
+    acdc_agent_listener:member_connect_accepted(AgentListener, ACallId, Call),
+
+    acdc_stats:call_handled(AccountId, QueueId, OriginalMemberCallId, AgentId),
 
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
-    {'next_state'
-     ,return_to_state(Fails+1, MaxFails, AccountId, AgentId)
-     ,apply_state_updates(clear_call(State, 'failed'))
-    };
+
+    {'next_state', 'awaiting_callback', State#state{wrapup_ref=hangup_call(State, 'member')}};
+awaiting_callback({'shared_failure', _JObj}, #state{agent_listener=AgentListener
+                                                    ,agent_call_id=ACallId
+                                                   }=State) ->
+    lager:debug("shared originate failure"),
+    acdc_agent_listener:channel_hungup(AgentListener, ACallId),
+
+    {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'member')}};
+awaiting_callback({'shared_call_id', _JObj}, #state{monitoring='false'}=State) ->
+    {'next_state', 'answered', State};
+awaiting_callback({'shared_call_id', JObj}, #state{agent_listener=AgentListener
+                                                   ,member_call=MemberCall
+                                                   ,member_call_id=MemberCallId
+                                                   ,member_callback_candidates=Candidates
+                                                  }=State) ->
+    NewMemberCallId = wh_json:get_value(<<"Member-Call-ID">>, JObj),
+    acdc_util:bind_to_call_events(NewMemberCallId, AgentListener),
+    NewMemberCall = whapps_call:exec([fun(Call) -> whapps_call:set_account_id(whapps_call:account_id(MemberCall), Call) end
+                                      ,fun(Call) -> whapps_call:set_call_id(NewMemberCallId, Call) end
+                                     ], whapps_call:new()),
+
+    {'next_state', 'answered', State#state{member_call=NewMemberCall
+                                           ,member_call_id=NewMemberCallId
+                                           ,member_callback_flag='true'
+                                           ,member_callback_candidates=props:set_value(NewMemberCallId, NewMemberCall, Candidates)
+                                           ,member_original_call=MemberCall
+                                           ,member_original_call_id=MemberCallId
+                                          }};
+awaiting_callback({'channel_answered', JObj}, #state{member_callback_candidates=Candidates}=State) ->
+    CallId = call_id(JObj),
+    lager:debug("member answered phone on ~s", [CallId]),
+    CallbackCall = case props:get_value(CallId, Candidates) of
+        'undefined' -> whapps_call:from_json(JObj);
+        CtrlQ when is_binary(CtrlQ) ->
+            AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
+            whapps_call:exec([fun(Call) -> whapps_call:set_account_id(AccountId, Call) end
+                              ,fun(Call) -> whapps_call:set_control_queue(CtrlQ, Call) end
+                             ], whapps_call:from_json(JObj));
+        Call ->
+            lager:debug("extra answers for ~s", [CallId]),
+            Call
+    end,
+    {'next_state', 'awaiting_callback', State#state{member_callback_flag='true'
+                                                    ,member_callback_candidates=props:set_value(CallId, CallbackCall, Candidates)
+                                                   }};
+awaiting_callback({'channel_replaced', JObj}, #state{account_id=AccountId
+                                                     ,agent_id=AgentId
+                                                     ,agent_listener=AgentListener
+                                                     ,member_call_id=MemberCallId
+                                                     ,member_callback_candidates=Candidates
+                                                     ,member_original_call=OriginalCall
+                                                     ,member_original_call_id=OriginalMemberCallId
+                                                     ,member_call_queue_id=QueueId
+                                                     ,agent_call_id=ACallId
+                                                    }=State) ->
+    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    ReplacedBy = wh_json:get_value(<<"Replaced-By">>, JObj),
+    case CallId of
+        MemberCallId ->
+            acdc_agent_listener:rebind_events(AgentListener, CallId, ReplacedBy),
+            wh_util:put_callid(ReplacedBy),
+            lager:info("member channel ~s replaced by ~s", [CallId, ReplacedBy]),
+            wapi_acdc_agent:publish_shared_call_id([{<<"Account-ID">>, AccountId}
+                                                    ,{<<"Agent-ID">>, AgentId}
+                                                    ,{<<"Member-Call-ID">>, ReplacedBy}
+                                                    | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                                   ]),
+
+            %% Notify the queue_fsm that the call is now fully accepted
+            Call1 = whapps_call:set_call_id(ReplacedBy, props:get_value(CallId, Candidates)),
+            acdc_agent_listener:member_connect_accepted(AgentListener, ACallId, Call1),
+
+            {CIDNumber, CIDName} = acdc_util:caller_id(OriginalCall),
+
+            acdc_agent_stats:agent_connected(AccountId, AgentId, OriginalMemberCallId, CIDName, CIDNumber),
+            acdc_stats:call_handled(AccountId, QueueId, OriginalMemberCallId, AgentId),
+
+            {'next_state', 'awaiting_callback', State#state{member_call=Call1
+                                                            ,member_call_id=ReplacedBy
+                                                            ,connect_failures=0
+                                                           }}
+    end;
+awaiting_callback({'channel_hungup', ACallId, _Cause}, #state{account_id=AccountId
+                                                             ,agent_id=AgentId
+                                                             ,agent_listener=AgentListener
+                                                             ,member_call=Call
+                                                             ,member_callback_flag='true'
+                                                             ,member_original_call_id=OriginalMemberCallId
+                                                             ,member_call_queue_id=QueueId
+                                                             ,agent_call_id=ACallId
+                                                            }=State) ->
+    lager:debug("agent hungup ~s while they were probably in a voicemail (or other non-endpoint destination)", [ACallId]),
+
+    acdc_agent_listener:member_connect_accepted(AgentListener, ACallId, Call),
+
+    acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
+
+    acdc_stats:call_handled(AccountId, QueueId, OriginalMemberCallId, AgentId),
+
+    {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'agent')}};
+awaiting_callback({'channel_hungup', _ACallId, _Cause}, #state{account_id=AccountId
+                                                               ,agent_id=AgentId
+                                                               ,connect_failures=Fails
+                                                               ,max_connect_failures=MaxFails
+                                                               ,monitoring='true'
+                                                              }=State) ->
+    NewFSMState = clear_call(State, 'failed'),
+    NextState = return_to_state(Fails+1, MaxFails, AccountId, AgentId),
+    case NextState of
+        'paused' -> {'next_state', 'paused', NewFSMState};
+        'ready' -> apply_state_updates(NewFSMState)
+    end;
+awaiting_callback({'channel_hungup', ACallId, Cause}, State) ->
+    maybe_delay_agent_hungup(ACallId, Cause, State);
+
 awaiting_callback(_Evt, State) ->
     lager:debug("unhandled event while awaiting callback: ~p", [_Evt]),
     {'next_state', 'awaiting_callback', State}.
@@ -1208,6 +1289,55 @@ awaiting_callback('current_call', _, #state{member_call=Call
                                             ,member_call_queue_id=QueueId
                                            }=State) ->
     {'reply', current_call(Call, 'awaiting_callback', QueueId, 'undefined'), 'awaiting_callback', State}.
+
+-spec maybe_delay_agent_hungup(ne_binary(), ne_binary(), fsm_state()) -> {'next_state', atom(), fsm_state()}.
+maybe_delay_agent_hungup(ACallId, Cause, #state{member_call_id=MemberCallId
+                                                ,member_callback_candidates=Candidates
+                                               }=State) ->
+    case props:get_value(MemberCallId, Candidates) of
+        'undefined' ->
+            FSM = self(),
+            wh_util:spawn(fun() ->
+                                  timer:sleep(1000),
+                                  gen_fsm:send_event(FSM, {'channel_hungup', ACallId, Cause})
+                          end),
+            {'next_state', 'awaiting_callback', State};
+        CtrlQ when is_binary(CtrlQ) ->
+            TempMemberCall = whapps_call:exec([fun(Call) -> whapps_call:set_call_id(MemberCallId, Call) end
+                                               ,fun(Call) -> whapps_call:set_control_queue(CtrlQ, Call) end
+                                              ], whapps_call:new()),
+            agent_hungup_awaiting(ACallId, Cause, TempMemberCall, State);
+        Call -> agent_hungup_awaiting(ACallId, Cause, Call, State)
+    end.
+
+-spec agent_hungup_awaiting(ne_binary(), ne_binary(), whapps_call:call(), fsm_state()) ->
+                                {'next_state', atom(), fsm_state()}.
+agent_hungup_awaiting(ACallId, Cause, TempMemberCall, #state{account_id=AccountId
+                                                             ,agent_id=AgentId
+                                                             ,agent_listener=AgentListener
+                                                             ,member_original_call_id=OriginalMemberCallId
+                                                             ,member_call_queue_id=QueueId
+                                                             ,agent_call_id=ACallId
+                                                             ,connect_failures=Fails
+                                                             ,max_connect_failures=MaxFails
+                                                            }=State) ->
+    lager:info("agent hungup ~s while they were supposed to wait for a callback, what a douche!", [ACallId]),
+
+    acdc_agent_listener:hangup_call(AgentListener, TempMemberCall),
+    acdc_agent_listener:member_connect_retry(AgentListener, OriginalMemberCallId),
+
+    acdc_stats:call_missed(AccountId, QueueId, AgentId, OriginalMemberCallId, Cause),
+
+    acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
+
+    NewFSMState = clear_call(State, 'failed'),
+    NextState = return_to_state(Fails+1, MaxFails, AccountId, AgentId),
+    case NextState of
+        'paused' -> {'next_state', 'paused', NewFSMState};
+        'ready' -> apply_state_updates(NewFSMState)
+    end;
+agent_hungup_awaiting(_, _, _, State) ->
+    {'next_state', 'awaiting_callback', State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1235,7 +1365,7 @@ answered({'dialplan_error', _App}, #state{agent_listener=AgentListener
     acdc_agent_listener:channel_hungup(AgentListener, ACallId),
     acdc_agent_listener:member_connect_retry(AgentListener, CallId),
 
-    acdc_stats:call_missed(AccountId, QueueId, AgentId, CallId, <<"dialplan_error">>),
+    acdc_stats:call_missed(AccountId, QueueId, AgentId, original_call_id(State), <<"dialplan_error">>),
 
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
     apply_state_updates(clear_call(State, 'ready'));
@@ -1270,7 +1400,11 @@ answered({'channel_replaced', JObj}, #state{agent_listener=AgentListener
             acdc_agent_listener:member_transferred(AgentListener, CallId, ReplacedBy),
             wh_util:put_callid(ReplacedBy),
             lager:info("caller channel ~s replaced by ~s", [CallId, ReplacedBy]),
-            {'next_state', 'answered', State#state{member_call_id=ReplacedBy}};
+            {'next_state', 'answered', State#state{member_call_id=ReplacedBy
+                                                   %% Reset these just like in acdc_agent_listener:member_transferred
+                                                   ,member_original_call='undefined'
+                                                   ,member_original_call_id='undefined'
+                                                  }};
         AgentCallId ->
             acdc_agent_listener:rebind_events(AgentListener, CallId, ReplacedBy),
             lager:info("agent channel ~s replaced by ~s", [CallId, ReplacedBy]),
@@ -1309,7 +1443,7 @@ answered({'channel_hungup', CallId, _Cause}, #state{account_id=AccountId
                                                     ,outbound_call_ids=[OutboundCallId|_]
                                                    }=State) ->
     lager:debug("caller's channel hung up, but there are still some outbounds"),
-    acdc_stats:call_processed(AccountId, QueueId, AgentId, CallId, 'member'),
+    acdc_stats:call_processed(AccountId, QueueId, AgentId, original_call_id(State), 'member'),
     acdc_agent_listener:channel_hungup(AgentListener, CallId),
     maybe_notify(Ns, ?NOTIFY_HANGUP, State),
     {'next_state', 'outbound', start_outbound_call_handling(OutboundCallId, clear_call(State, 'ready')), 'hibernate'};
@@ -1328,7 +1462,7 @@ answered({'channel_hungup', CallId, _Cause}, #state{account_id=AccountId
                                                     ,outbound_call_ids=[OutboundCallId|_]
                                                    }=State) ->
     lager:debug("agent's channel hung up, but there are still some outbounds"),
-    acdc_stats:call_processed(AccountId, QueueId, AgentId, MemberCallId, 'agent'),
+    acdc_stats:call_processed(AccountId, QueueId, AgentId, original_call_id(State), 'agent'),
     acdc_agent_listener:channel_hungup(AgentListener, MemberCallId),
     maybe_notify(Ns, ?NOTIFY_HANGUP, State),
     {'next_state', 'outbound', start_outbound_call_handling(OutboundCallId, clear_call(State, 'ready')), 'hibernate'};
@@ -1647,16 +1781,17 @@ handle_event({'resume'} = Event, StateName, #state{agent_state_updates = Queue} 
     lager:debug("recv resume during ~p, delaying", [StateName]),
     NewQueue = [Event | Queue],
     {'next_state', StateName, State#state{agent_state_updates = NewQueue}};
+handle_event({'pause', Timeout}, 'ringing_callback', State) ->
+    handle_event({'pause', Timeout}, 'ringing', State);
 handle_event({'pause', Timeout}, 'ringing', #state{agent_listener=AgentListener
                                                    ,account_id=AccountId
                                                    ,agent_id=AgentId
                                                    ,member_call_queue_id=QueueId
-                                                   ,member_call_id=CallId
                                                   }=State) ->
     %% Give up the current ringing call
     acdc_agent_listener:hangup_call(AgentListener),
     lager:debug("stopping ringing agent in order to move to pause"),
-    acdc_stats:call_missed(AccountId, QueueId, AgentId, CallId, <<"agent pausing">>),
+    acdc_stats:call_missed(AccountId, QueueId, AgentId, original_call_id(State), <<"agent pausing">>),
     NewFSMState = clear_call(State, 'failed'),
     %% After clearing we are basically 'ready' state, pause from that state
     handle_event({'pause', Timeout}, 'ready', NewFSMState);
@@ -1905,9 +2040,15 @@ clear_call(#state{fsm_call_id=FSMemberCallId
                 ,pause_ref = case ReadyForAction of 'true' -> 'undefined'; 'false' -> PRef end
                 ,member_call = 'undefined'
                 ,member_call_id = 'undefined'
+                ,member_callback_candidates = []
+                ,member_callback_flag = 'false'
+                ,member_original_call = 'undefined'
+                ,member_original_call_id = 'undefined'
                 ,member_call_start = 'undefined'
                 ,member_call_queue_id = 'undefined'
                 ,agent_call_id = 'undefined'
+                ,agent_callback_call = 'undefined'
+                ,ambiguous_uuids = []
                 ,caller_exit_key = <<"#">>
                 ,monitoring = 'false'
                }.
@@ -1952,7 +2093,7 @@ hangup_call(#state{agent_listener=AgentListener
                    ,agent_id=AgentId
                    ,queue_notifications=Ns
                   }=State, Initiator) ->
-    acdc_stats:call_processed(AccountId, QueueId, AgentId, CallId, Initiator),
+    acdc_stats:call_processed(AccountId, QueueId, AgentId, original_call_id(State), Initiator),
 
     acdc_agent_listener:channel_hungup(AgentListener, CallId),
     maybe_notify(Ns, ?NOTIFY_HANGUP, State),
@@ -2346,71 +2487,19 @@ handle_pause(Timeout, #state{agent_listener=AgentListener}=State) ->
             State#state{pause_ref=Ref}
     end.
 
-%%--------------------------------------------------------------------
-%% @doc Complete a callback to the extension specified
-%% Returns a target call id that has been hooked for events
-%% @end
-%%--------------------------------------------------------------------
--spec originate_to_extension(ne_binary(), ne_binary(), whapps_call:call(), pid()) -> ne_binary().
-originate_to_extension(Extension, TransferorLeg, Call, AgentListener) ->
-    MsgId = wh_util:rand_hex_binary(4),
+-spec original_call_id(fsm_state()) -> ne_binary().
+original_call_id(#state{member_call_id=MemberCallId
+                        ,member_original_call_id='undefined'
+                       }) ->
+    MemberCallId;
+original_call_id(#state{member_original_call_id=OriginalCallId}) ->
+    OriginalCallId.
 
-    FromUser = whapps_call:to_user(Call),
-
-    CCVs = props:filter_undefined(
-             [{<<"Account-ID">>, whapps_call:account_id(Call)}
-              ,{<<"Authorizing-ID">>, whapps_call:authorizing_id(Call)}
-              ,{<<"Channel-Authorized">>, 'true'}
-              ,{<<"From-URI">>, <<FromUser/binary, "@", (whapps_call:account_realm(Call))/binary>>}
-              ,{<<"Ignore-Early-Media">>, 'true'}
-             ]),
-
-    TargetCallId = create_call_id(AgentListener),
-
-    Endpoint = wh_json:from_list(
-                 props:filter_undefined(
-                   [{<<"Invite-Format">>, <<"loopback">>}
-                    ,{<<"Route">>,  Extension}
-                    ,{<<"To-DID">>, Extension}
-                    ,{<<"To-Realm">>, whapps_call:account_realm(Call)}
-                    ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
-                    ,{<<"Outbound-Call-ID">>, TargetCallId}
-                    ,{<<"Ignore-Early-Media">>, 'true'}
-                    ,{<<"Existing-Call-ID">>, TransferorLeg}
-                   ])),
-
-    Request = props:filter_undefined(
-                [{<<"Endpoints">>, [Endpoint]}
-                 ,{<<"Outbound-Call-ID">>, TargetCallId}
-                 ,{<<"Dial-Endpoint-Method">>, <<"single">>}
-                 ,{<<"Msg-ID">>, MsgId}
-                 ,{<<"Continue-On-Fail">>, 'true'}
-                 ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
-                 ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>, <<"Retain-CID">>
-                                                      ,<<"Authorizing-Type">>, <<"Authorizing-ID">>
-                                                      ,<<"Channel-Authorized">>
-                                                     ]}
-                 ,{<<"Application-Name">>, <<"bridge">>}
-                 ,{<<"Timeout">>, 30}
-
-                 ,{<<"Outbound-Caller-ID-Name">>, whapps_call:callee_id_name(Call)}
-                 ,{<<"Outbound-Caller-ID-Number">>, whapps_call:callee_id_number(Call)}
-                 ,{<<"Caller-ID-Name">>, whapps_call:callee_id_name(Call)}
-                 ,{<<"Caller-ID-Number">>, whapps_call:callee_id_number(Call)}
-
-                 ,{<<"Existing-Call-ID">>, TransferorLeg}
-                 ,{<<"Resource-Type">>, <<"originate">>}
-                 ,{<<"Originate-Immediate">>, 'true'}
-                 ,{<<"Simplify-Loopback">>, 'true'}
-                 ,{<<"Ignore-Early-Media">>, 'true'}
-                 | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-                ]),
-
-    wapi_resource:publish_originate_req(Request),
-    TargetCallId.
-
--spec create_call_id(pid()) -> ne_binary().
-create_call_id(AgentListener) ->
-    TargetCallId = <<"callback-", (wh_util:rand_hex_binary(4))/binary>>,
-    acdc_util:bind_to_call_events(TargetCallId, AgentListener),
-    TargetCallId.
+-spec originate_failed_for_this_call(wh_json:objects(), ne_binaries()) -> boolean().
+originate_failed_for_this_call([], _) -> 'false';
+originate_failed_for_this_call([EP|EPs], AmbiguousUUIDs) ->
+    OutboundCallId = wh_json:get_value(<<"Outbound-Call-ID">>, EP),
+    case lists:member(OutboundCallId, AmbiguousUUIDs) of
+        'true' -> 'true';
+        'false' -> originate_failed_for_this_call(EPs, AmbiguousUUIDs)
+    end.

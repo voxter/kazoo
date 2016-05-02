@@ -1313,8 +1313,26 @@ play(Node, UUID, JObj) ->
 
     %% if Leg is set, use uuid_broadcast; otherwise use playback
     case ecallmgr_fs_channel:is_bridged(UUID) of
-        'false' -> {<<"playback">>, F};
+        'false' ->
+            {<<"playback">>, <<(playback_vars(JObj))/binary, F/binary>>};
         'true' -> play_bridged(UUID, JObj, F)
+    end.
+
+-spec playback_vars(api_object()) -> binary().
+playback_vars('undefined') -> <<>>;
+playback_vars(JObj) ->
+    case wh_json:get_value(<<"Variables">>, JObj) of
+        'undefined' -> <<>>;
+        Vars ->
+            PlaybackVars = wh_json:foldl(fun(K, V, <<>>) ->
+                                                 <<K/binary, "=", V/binary>>;
+                                            (K, V, VarStr) ->
+                                                 <<VarStr/binary, ",", K/binary, "=", V/binary>>
+                                         end, <<>>, Vars),
+            case PlaybackVars of
+                <<>> -> <<>>;
+                _ -> <<"{", PlaybackVars/binary, "}">>
+            end
     end.
 
 -spec play_bridged(ne_binary(), wh_json:object(), ne_binary()) ->

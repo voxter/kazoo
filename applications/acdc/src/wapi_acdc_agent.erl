@@ -25,7 +25,7 @@
          ,login_resp/1, login_resp_v/1
 
          ,shared_originate_failure/1, shared_originate_failure_v/1
-         ,agent_call_id/1, agent_call_id_v/1
+         ,shared_call_id/1, shared_call_id_v/1
         ]).
 
 -export([bind_q/2
@@ -47,7 +47,7 @@
          ,publish_login_resp/2, publish_login_resp/3
 
          ,publish_shared_originate_failure/1, publish_shared_originate_failure/2
-         ,publish_agent_call_id/1, publish_agent_call_id/2
+         ,publish_shared_call_id/1, publish_shared_call_id/2
         ]).
 
 -include_lib("whistle/include/wh_api.hrl").
@@ -424,29 +424,29 @@ shared_originate_failure_v(Prop) when is_list(Prop) ->
 shared_originate_failure_v(JObj) -> shared_originate_failure_v(wh_json:to_proplist(JObj)).
 
 %%------------------------------------------------------------------------------
-%% Sharing of agent's answered call id to all agent FSMs
+%% Sharing of answered call id to all agent FSMs
 %%------------------------------------------------------------------------------
--define(AGENT_CALL_ID_HEADERS, [<<"Account-ID">>, <<"Agent-ID">>, <<"Agent-Call-ID">>]).
--define(OPTIONAL_AGENT_CALL_ID_HEADERS, []).
--define(AGENT_CALL_ID_VALUES, [{<<"Event-Category">>, <<"agent">>}
-                               ,{<<"Event-Name">>, <<"agent_call_id">>}
-                              ]).
--define(AGENT_CALL_ID_TYPES, []).
+-define(SHARED_CALL_ID_HEADERS, [<<"Account-ID">>, <<"Agent-ID">>]).
+-define(OPTIONAL_SHARED_CALL_ID_HEADERS, [<<"Agent-Call-ID">>, <<"Member-Call-ID">>]).
+-define(SHARED_CALL_ID_VALUES, [{<<"Event-Category">>, <<"agent">>}
+                                ,{<<"Event-Name">>, <<"shared_call_id">>}
+                               ]).
+-define(SHARED_CALL_ID_TYPES, []).
 
--spec agent_call_id(api_terms()) ->
+-spec shared_call_id(api_terms()) ->
                           {'ok', iolist()} |
                           {'error', string()}.
-agent_call_id(Props) when is_list(Props) ->
-    case agent_call_id_v(Props) of
-        'true' -> wh_api:build_message(Props, ?AGENT_CALL_ID_HEADERS, ?OPTIONAL_AGENT_CALL_ID_HEADERS);
-        'false' -> {'error', "Proplist failed validation for agent_call_id"}
+shared_call_id(Props) when is_list(Props) ->
+    case shared_call_id_v(Props) of
+        'true' -> wh_api:build_message(Props, ?SHARED_CALL_ID_HEADERS, ?OPTIONAL_SHARED_CALL_ID_HEADERS);
+        'false' -> {'error', "Proplist failed validation for shared_call_id"}
     end;
-agent_call_id(JObj) -> agent_call_id(wh_json:to_proplist(JObj)).
+shared_call_id(JObj) -> shared_call_id(wh_json:to_proplist(JObj)).
 
--spec agent_call_id_v(api_terms()) -> boolean().
-agent_call_id_v(Prop) when is_list(Prop) ->
-    wh_api:validate(Prop, ?AGENT_CALL_ID_HEADERS, ?AGENT_CALL_ID_VALUES, ?AGENT_CALL_ID_TYPES);
-agent_call_id_v(JObj) -> agent_call_id_v(wh_json:to_proplist(JObj)).
+-spec shared_call_id_v(api_terms()) -> boolean().
+shared_call_id_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?SHARED_CALL_ID_HEADERS, ?SHARED_CALL_ID_VALUES, ?SHARED_CALL_ID_TYPES);
+shared_call_id_v(JObj) -> shared_call_id_v(wh_json:to_proplist(JObj)).
 
 %%------------------------------------------------------------------------------
 %% Shared routing key for member_connect_win
@@ -652,10 +652,10 @@ publish_shared_originate_failure(API, ContentType) ->
     {'ok', Payload} = shared_originate_failure((API1 = wh_api:prepare_api_payload(API, ?SHARED_FAILURE_VALUES))),
     amqp_util:whapps_publish(fsm_shared_routing_key(API1), Payload, ContentType).
 
--spec publish_agent_call_id(api_terms()) -> 'ok'.
--spec publish_agent_call_id(api_terms(), ne_binary()) -> 'ok'.
-publish_agent_call_id(JObj) ->
-    publish_agent_call_id(JObj, ?DEFAULT_CONTENT_TYPE).
-publish_agent_call_id(API, ContentType) ->
-    {'ok', Payload} = agent_call_id((API1 = wh_api:prepare_api_payload(API, ?AGENT_CALL_ID_VALUES))),
+-spec publish_shared_call_id(api_terms()) -> 'ok'.
+-spec publish_shared_call_id(api_terms(), ne_binary()) -> 'ok'.
+publish_shared_call_id(JObj) ->
+    publish_shared_call_id(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_shared_call_id(API, ContentType) ->
+    {'ok', Payload} = shared_call_id((API1 = wh_api:prepare_api_payload(API, ?SHARED_CALL_ID_VALUES))),
     amqp_util:whapps_publish(fsm_shared_routing_key(API1), Payload, ContentType).
