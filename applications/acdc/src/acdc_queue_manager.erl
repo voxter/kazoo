@@ -1110,7 +1110,7 @@ time_prompts({Hour, Min, Sec}=Time, {Hour2, Min2, Sec2}, Media, Language) when (
             | time_prompts2(Time, Language)
            ]};
 time_prompts(Time, _, Media, Language) ->
-    {Time, [{'prompt', props:get_value(<<"estimated_wait_time_media">>, Media, Language), <<"A">>}
+    {Time, [{'prompt', props:get_value(<<"estimated_wait_time_media">>, Media), Language, <<"A">>}
             | time_prompts2(Time, Language)
            ]}.
     
