@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2015, 2600Hz INC
+%%% @copyright (C) 2010-2016, 2600Hz INC
 %%% @doc
 %%% Various utilities - a veritable cornicopia
 %%% @end
@@ -15,6 +15,7 @@
          ,format_account_db/1
          ,format_account_modb/1, format_account_modb/2
          ,normalize_account_name/1
+         ,account_update/1, account_update/2
         ]).
 -export([is_in_account_hierarchy/2, is_in_account_hierarchy/3]).
 -export([is_system_admin/1
@@ -129,6 +130,7 @@
 -include_lib("whistle/include/wh_types.hrl").
 -include_lib("whistle/include/wh_log.hrl").
 -include_lib("whistle/include/wh_databases.hrl").
+-include_lib("whistle/include/wh_api.hrl").
 
 -define(WHISTLE_VERSION_CACHE_KEY, {?MODULE, 'whistle_version'}).
 
@@ -471,11 +473,11 @@ set_allow_number_additions(Account, IsAllowed) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec account_update(wh_json:object()) -> 'ok' | {'error', any()}.
+-spec account_update(kz_account:doc()) -> 'ok' | {'error', any()}.
 -spec account_update(ne_binary(), function()) -> 'ok' | {'error', any()}.
-account_update(JObj) ->
-    AccountDb = wh_doc:account_db(JObj),
-    case couch_mgr:ensure_saved(AccountDb, JObj) of
+account_update(AccountJObj) ->
+    AccountDb = wh_doc:account_db(AccountJObj),
+    case couch_mgr:ensure_saved(AccountDb, AccountJObj) of
         {'error', _R}=E -> E;
         {'ok', SavedJObj} ->
             couch_mgr:ensure_saved(?WH_ACCOUNTS_DB, SavedJObj)
@@ -521,7 +523,7 @@ get_account_realm(Db, AccountId) ->
 -spec try_load_module(string() | binary()) -> atom() | 'false'.
 try_load_module(Name) ->
     Module = ?MODULE:to_atom(Name, 'true'),
-    try Module:module_info('imports') of
+    try Module:module_info('exports') of
         _ when Module =:= 'undefined' -> 'false';
         _ ->
             {'module', Module} = code:ensure_loaded(Module),
@@ -611,9 +613,9 @@ put_callid(JObj) -> erlang:put('callid', callid(JObj)).
 get_callid() -> erlang:get('callid').
 
 callid(Prop) when is_list(Prop) ->
-    props:get_first_defined([<<"Call-ID">>, <<"Msg-ID">>], Prop, ?LOG_SYSTEM_ID);
+    props:get_first_defined([?KEY_LOG_ID, <<"Call-ID">>, ?KEY_MSG_ID], Prop, ?LOG_SYSTEM_ID);
 callid(JObj) ->
-    wh_json:get_first_defined([<<"Call-ID">>, <<"Msg-ID">>], JObj, ?LOG_SYSTEM_ID).
+    wh_json:get_first_defined([?KEY_LOG_ID, <<"Call-ID">>, ?KEY_MSG_ID], JObj, ?LOG_SYSTEM_ID).
 
 %% @public
 -spec spawn(fun(() -> any())) -> pid().

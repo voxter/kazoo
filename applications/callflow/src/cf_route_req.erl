@@ -24,14 +24,18 @@
 
 -spec handle_req(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_req(JObj, Props) ->
+    _ = wh_util:put_callid(JObj),
     'true' = wapi_route:req_v(JObj),
-    Call = maybe_call_rerouted(whapps_call:from_route_req(JObj)),
+    Routines = [fun maybe_referred_call/1
+                ,fun maybe_device_redirected/1
+               ],
+    Call = whapps_call:exec(Routines, whapps_call:from_route_req(JObj)),
     case is_binary(whapps_call:account_id(Call))
         andalso callflow_should_respond(Call)
         andalso callflow_resource_allowed(Call)
     of
         'true' ->
-            lager:info("received a request asking if callflows can route this call"),
+            lager:info("received request ~s asking if callflows can route this call", [wapi_route:fetch_id(JObj)]),
             AllowNoMatch = allow_no_match(Call),
             case cf_util:lookup_callflow(Call) of
                 %% if NoMatch is false then allow the callflow or if it is true and we are able allowed
@@ -44,13 +48,13 @@ handle_req(JObj, Props) ->
                     lager:info("unable to find callflow ~p", [R])
             end;
         'false' ->
-            'ok'
+            lager:debug("callflow not handling fetch-id ~s", [wapi_route:fetch_id(JObj)])
     end.
 
 -spec maybe_prepend_preflow(wh_json:object(), wh_proplist()
                             ,whapps_call:call(), wh_json:object()
                             ,boolean()
-                           ) -> whapps_call:call().
+                           ) -> 'ok'.
 maybe_prepend_preflow(JObj, Props, Call, Flow, NoMatch) ->
     AccountId = whapps_call:account_id(Call),
     case kz_account:fetch(AccountId) of
@@ -86,19 +90,33 @@ prepend_preflow(AccountId, PreflowId, Flow) ->
     end.
 
 -spec maybe_reply_to_req(wh_json:object(), wh_proplist()
-                         ,whapps_call:call(), wh_json:object(), boolean()) -> whapps_call:call().
+                         ,whapps_call:call(), wh_json:object(), boolean()) -> 'ok'.
 maybe_reply_to_req(JObj, Props, Call, Flow, NoMatch) ->
     lager:info("callflow ~s in ~s satisfies request", [wh_doc:id(Flow)
                                                        ,whapps_call:account_id(Call)
                                                       ]),
-    {Name, Cost} = bucket_info(Call, Flow),
-    case kz_buckets:consume_tokens(?APP_NAME, Name, Cost) of
-        'false' ->
-            lager:debug("bucket ~s doesn't have enough tokens(~b needed) for this call", [Name, Cost]);
+    case maybe_consume_token(Call, Flow) of
+        'false' -> 'ok';
         'true' ->
             ControllerQ = props:get_value('queue', Props),
             NewCall = update_call(Flow, NoMatch, ControllerQ, Call),
             send_route_response(Flow, JObj, NewCall)
+    end.
+
+-spec maybe_consume_token(whapps_call:call(), wh_json:object()) -> boolean().
+maybe_consume_token(Call, Flow) ->
+    case whapps_config:get_is_true(?CF_CONFIG_CAT, <<"calls_consume_tokens">>, 'true') of
+        'false' ->
+            %% If configured to not consume tokens then don't block the call
+            'true';
+        'true' ->
+            {Name, Cost} = bucket_info(Call, Flow),
+            case kz_buckets:consume_tokens(?APP_NAME, Name, Cost) of
+                'true' -> 'true';
+                'false' ->
+                    lager:debug("bucket ~s doesn't have enough tokens(~b needed) for this call", [Name, Cost]),
+                    'false'
+            end
     end.
 
 -spec bucket_info(whapps_call:call(), wh_json:object()) ->
@@ -132,7 +150,7 @@ bucket_cost(Flow) ->
 %%-----------------------------------------------------------------------------
 -spec allow_no_match(whapps_call:call()) -> boolean().
 allow_no_match(Call) ->
-    whapps_call:custom_channel_var(<<"Referred-By">>, Call) =/= 'undefined'
+    is_valid_endpoint(whapps_call:custom_channel_var(<<"Referred-By">>, Call), Call)
         orelse allow_no_match_type(Call).
 
 -spec allow_no_match_type(whapps_call:call()) -> boolean().
@@ -277,33 +295,55 @@ update_call(Flow, NoMatch, ControllerQ, Call) ->
 %% process
 %% @end
 %%-----------------------------------------------------------------------------
--spec maybe_call_rerouted(whapps_call:call()) -> whapps_call:call().
-maybe_call_rerouted(Call) ->
-    case get_rerouted_by(Call) of
-        'undefined' -> Call;
-        ReroutedBy ->
-            ReOptions = [{'capture', [1], 'binary'}],
-            case catch(re:run(ReroutedBy, <<".*sip:(.*)@.*">>, ReOptions)) of
-                {'match', [Match]} -> fix_rerouted_call(Match, Call);
-                _ -> Call
-            end
-    end.
+-spec maybe_referred_call(whapps_call:call()) -> whapps_call:call().
+maybe_referred_call(Call) ->
+    maybe_fix_referred_call(get_referred_by(Call), Call).
 
--spec fix_rerouted_call(api_binary(), whapps_call:call()) -> whapps_call:call().
-fix_rerouted_call(ReroutedBy, Call) ->
-    [Username|_] = binary:split(ReroutedBy, <<"@">>),
-    case cf_util:endpoint_id_by_sip_username(whapps_call:account_db(Call), Username) of
-        {'ok', EndpointId} ->
-            maybe_set_reroute_owner(
-              whapps_call:set_authorization(<<"device">>, EndpointId, Call)
-             );
+-spec maybe_fix_referred_call(api_binary(), whapps_call:call()) -> whapps_call:call().
+maybe_fix_referred_call('undefined', Call) -> Call;
+maybe_fix_referred_call(ReferredBy, Call) ->
+    case cf_util:endpoint_id_by_sip_username(whapps_call:account_db(Call), ReferredBy) of
+        {'ok', EndpointId} -> whapps_call:kvs_store(?RESTRICTED_ENDPOINT_KEY, EndpointId, Call);
         {'error', 'not_found'} ->
-            Keys = [<<"Account-ID">>
-                    ,<<"Owner-ID">>
+            Keys = [<<"Owner-ID">>
                     ,<<"Authorizing-Type">>
                     ,<<"Authorizing-ID">>
                    ],
             whapps_call:remove_custom_channel_vars(Keys, Call)
+    end.
+
+-spec get_referred_by(whapps_call:call()) -> api_binary().
+get_referred_by(Call) ->
+    ReferredBy = whapps_call:custom_channel_var(<<"Referred-By">>, Call),
+    extract_sip_username(ReferredBy).
+
+-spec is_valid_endpoint(api_binary(), whapps_call:call()) -> boolean().
+is_valid_endpoint('undefined', _) -> 'false';
+is_valid_endpoint(Contact, Call) ->
+    ReOptions = [{'capture', [1], 'binary'}],
+    case catch(re:run(Contact, <<".*sip:(.*)@.*">>, ReOptions)) of
+        {'match', [Match]} ->
+            case cf_util:endpoint_id_by_sip_username(whapps_call:account_db(Call), Match) of
+                {'ok', _EndpointId} -> 'true';
+                {'error', 'not_found'} -> 'false'
+            end;
+        _ -> 'false'
+    end.
+
+-spec maybe_device_redirected(whapps_call:call()) -> whapps_call:call().
+maybe_device_redirected(Call) ->
+    RedirectedBy = whapps_call:custom_channel_var(<<"Redirected-By">>, Call),
+    case extract_sip_username(RedirectedBy) of
+        'undefined' -> Call;
+        Device -> maybe_set_redirected_authz(Device, Call)
+    end.
+
+-spec maybe_set_redirected_authz(ne_binary(), whapps_call:call()) -> whapps_call:call().
+maybe_set_redirected_authz(Device, Call) ->
+    case cf_util:endpoint_id_by_sip_username(whapps_call:account_db(Call), Device) of
+        {'ok', EndpointId } ->
+            maybe_set_reroute_owner(whapps_call:set_authorization(<<"device">>, EndpointId, Call));
+        {'error', 'not_found'} -> Call
     end.
 
 -spec maybe_set_reroute_owner(whapps_call:call()) -> whapps_call:call().
@@ -315,9 +355,11 @@ maybe_set_reroute_owner(Call) ->
             whapps_call:set_owner_id(OwnerId, Call)
     end.
 
--spec get_rerouted_by(whapps_call:call()) -> api_binary().
-get_rerouted_by(Call) ->
-    case whapps_call:custom_channel_var(<<"Redirected-By">>, Call) of
-        'undefined' -> whapps_call:custom_channel_var(<<"Referred-By">>, Call);
-        RedirectedBy -> RedirectedBy
+-spec extract_sip_username(api_binary()) -> api_binary().
+extract_sip_username('undefined') -> 'undefined';
+extract_sip_username(Contact) ->
+    ReOptions = [{'capture', [1], 'binary'}],
+    case catch(re:run(Contact, <<".*sip:(.*)@.*">>, ReOptions)) of
+        {'match', [Match]} -> Match;
+        _ -> 'undefined'
     end.

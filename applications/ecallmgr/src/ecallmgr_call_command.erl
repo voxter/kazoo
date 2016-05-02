@@ -21,6 +21,8 @@
 
 -include("ecallmgr.hrl").
 
+-define(RECORD_SOFTWARE, ecallmgr_config:get(<<"recording_software_name">>, <<"2600Hz, Inc.'s Kazoo">>)).
+
 -spec exec_cmd(atom(), ne_binary(), wh_json:object(), api_pid()) ->
                       'ok' |
                       'error' |
@@ -1200,8 +1202,12 @@ execute_exten_handle_ccvs(DP, _Node, UUID, JObj) ->
         'false' ->
             ChannelVars = wh_json:to_proplist(CCVs),
             [{"application", <<"set ", (ecallmgr_util:get_fs_kv(K, V, UUID))/binary>>}
-             || {K, V} <- ChannelVars] ++ DP
+             || {K, V} <- ChannelVars, not execute_exten_is_original_ccv(K)] ++ DP
     end.
+
+-spec execute_exten_is_original_ccv(ne_binary()) -> boolean().
+execute_exten_is_original_ccv(<<?CHANNEL_VARS_EXT, _/binary>>) -> 'true';
+execute_exten_is_original_ccv(_) -> 'false'.
 
 execute_exten_pre_exec(DP, _Node, _UUID, _JObj) ->
     [{"application", <<"set ", ?CHANNEL_VAR_PREFIX, "Executing-Extension=true">>}
@@ -1235,7 +1241,15 @@ create_dialplan_move_ccvs(Node, UUID, DP) ->
 -spec create_dialplan_move_ccvs(wh_proplist(), wh_proplist()) -> wh_proplist().
 create_dialplan_move_ccvs(DP, Props) ->
     lists:foldr(
-      fun({<<"variable_", ?CHANNEL_VAR_PREFIX, Key/binary>>, Val}, Acc) ->
+      fun({<<"variable_", ?CHANNEL_VAR_PREFIX, ?CHANNEL_VARS_EXT, _Key/binary>>, _Val}, Acc) ->
+              Acc;
+         ({<<?CHANNEL_VAR_PREFIX, ?CHANNEL_VARS_EXT, _Key/binary>>, _Val}, Acc) ->
+              Acc;
+         ({<<"variable_sip_h_X-", ?CHANNEL_VARS_EXT, _Key/binary>>, _Val}, Acc) ->
+              Acc;
+         ({<<"sip_h_X-", ?CHANNEL_VARS_EXT, _Key/binary>>, _Val}, Acc) ->
+              Acc;
+         ({<<"variable_", ?CHANNEL_VAR_PREFIX, Key/binary>>, Val}, Acc) ->
               [{"application", <<"unset ", ?CHANNEL_VAR_PREFIX, Key/binary>>}
                ,{"application", <<"set ", ?CHANNEL_VAR_PREFIX, ?CHANNEL_VARS_EXT ,Key/binary, "=", Val/binary>>}
                |Acc
@@ -1423,7 +1437,7 @@ set_record_call_vars(Node, UUID, JObj) ->
                        ,[{<<"RECORD_APPEND">>, <<"true">>}
                          ,{<<"enable_file_write_buffering">>, <<"false">>}
                          ,{<<"RECORD_STEREO">>, should_record_stereo(JObj)}
-                         ,{<<"RECORD_SOFTWARE">>, <<"2600Hz, Inc.'s Kazoo">>}
+                         ,{<<"RECORD_SOFTWARE">>, ?RECORD_SOFTWARE}
                         ]
                        ,Routines
                       ),

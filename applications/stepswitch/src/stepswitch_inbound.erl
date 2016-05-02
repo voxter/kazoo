@@ -18,11 +18,12 @@
 %%--------------------------------------------------------------------
 -spec handle_req(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_req(JObj, _Props) ->
-    'true' = wapi_route:req_v(JObj),
     _ = wh_util:put_callid(JObj),
+    'true' = wapi_route:req_v(JObj),
     case wh_json:get_ne_value(?CCV(<<"Account-ID">>), JObj) of
         'undefined' -> maybe_relay_request(JObj);
-        _AcctID -> 'ok'
+        AccountId -> lager:debug("fetch-id ~s already has account-id ~s, skipping.",
+                                 [wapi_route:fetch_id(JObj), AccountId])
     end.
 
 %%--------------------------------------------------------------------
@@ -36,8 +37,9 @@ maybe_relay_request(JObj) ->
     Number = stepswitch_util:get_inbound_destination(JObj),
     case stepswitch_util:lookup_number(Number) of
         {'error', _R} ->
-            lager:info("unable to determine account for ~s: ~p", [Number, _R]);
+            lager:info("unable to determine account for fetch-id ~s, ~s: ~p", [wapi_route:fetch_id(JObj), Number, _R]);
         {'ok', _, NumberProps} ->
+            lager:debug("running routines for number ~s, fetch-id : ~s", [Number, wapi_route:fetch_id(JObj)]),
             Routines = [fun set_account_id/2
                         ,fun set_ignore_display_updates/2
                         ,fun set_inception/2
@@ -239,7 +241,7 @@ maybe_blacklisted(_NumberProps, JObj) ->
 -spec relay_request(wh_json:object()) -> wh_json:object().
 relay_request(JObj) ->
     wapi_route:publish_req(JObj),
-    lager:debug("relaying route request").
+    lager:debug("relaying route request ~s", [wapi_route:fetch_id(JObj)]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -282,15 +284,19 @@ is_blacklisted(JObj) ->
             'false';
         {'ok', Blacklists} ->
             Blacklist = get_blacklist(AccountId, Blacklists),
-            Number = wh_json:get_value(<<"Caller-ID-Number">>, JObj),
-            case wh_json:get_value(Number, Blacklist) of
-                'undefined' ->
-                    lager:debug("~p not blacklisted, did not match any rule", [Number]),
-                    'false';
-                _Rule ->
-                    lager:info("~p is blacklisted", [Number]),
-                    'true'
-            end
+            is_number_blacklisted(Blacklist, wh_json:get_value(<<"Caller-ID-Number">>, JObj))
+    end.
+
+-spec is_number_blacklisted(wh_json:object(), ne_binary()) -> boolean().
+is_number_blacklisted(Blacklist, Number) ->
+    Normalized = wnm_util:normalize_number(Number),
+    case wh_json:get_value(Normalized, Blacklist) of
+        'undefined' ->
+            lager:debug("~s(~s) not blacklisted, did not match any rule", [Number, Normalized]),
+            'false';
+        _Rule ->
+            lager:info("~s(~s) is blacklisted", [Number, Normalized]),
+            'true'
     end.
 
 -spec get_blacklists(ne_binary()) ->

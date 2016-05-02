@@ -309,7 +309,7 @@ add_rendered_templates_to_email([{ContentType, Content}|Rs], Acc) ->
 
 -spec default_content_transfer_encoding(binary()) -> binary().
 default_content_transfer_encoding(<<"text/html">>) -> <<"base64">>;
-default_content_transfer_encoding(_) -> <<>>.
+default_content_transfer_encoding(_) -> <<"7BIT">>.
 
 -spec system_params() -> wh_proplist().
 system_params() ->
@@ -787,4 +787,4 @@ public_proplist(Key, JObj) ->
 -spec stop_processing(string(), list()) -> no_return().
 stop_processing(Format, Args) ->
     lager:debug(Format, Args),
-    throw('stop').
+    exit('normal').

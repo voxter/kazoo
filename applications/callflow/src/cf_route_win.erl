@@ -40,7 +40,14 @@ execute_callflow(JObj, Call) ->
 
 -spec should_restrict_call(whapps_call:call()) -> boolean().
 should_restrict_call(Call) ->
-    case cf_endpoint:get(Call) of
+	DefaultEndpointId = whapps_call:authorizing_id(Call),
+	EndpointId = whapps_call:kvs_fetch(?RESTRICTED_ENDPOINT_KEY, DefaultEndpointId, Call),
+	should_restrict_call(EndpointId, Call).
+
+-spec should_restrict_call(api_binary(), whapps_call:call()) -> boolean().
+should_restrict_call('undefined', _Call) -> 'false';
+should_restrict_call(EndpointId, Call) ->
+    case cf_endpoint:get(EndpointId, Call) of
         {'error', _R} -> 'false';
         {'ok', JObj} -> maybe_service_unavailable(JObj, Call)
     end.
@@ -280,10 +287,7 @@ maybe_start_metaflow(Call, App) ->
     Call.
 
 -spec maybe_start_endpoint_metaflow(whapps_call:call(), api_binary()) -> 'ok'.
-maybe_start_endpoint_metaflow(Call, 'undefined') ->
-    Account = whapps_call:account_id(Call),
-    HackedCall = whapps_call:set_authorizing_id(Account, Call),
-    maybe_start_endpoint_metaflow(HackedCall, Account);
+maybe_start_endpoint_metaflow(_Call, 'undefined') -> 'ok';
 maybe_start_endpoint_metaflow(Call, EndpointId) ->
     lager:debug("looking up endpoint for ~s", [EndpointId]),
     case cf_endpoint:get(EndpointId, Call) of

@@ -357,10 +357,19 @@ handle_cast('count_pages', #state{file=File
     Values = [{<<"pvt_pages">>, NumberOfPages}
               ,{<<"pvt_size">>, FileSize}
              ],
+    NewState = case NumberOfPages of
+                   Num when Num == 0 ->
+                       State#state{job = wh_json:set_values(Values, JObj)
+                                   ,pages = Num
+                                   ,status = <<"unknown">>
+                                  };
+                   _ ->
+                       State#state{job=wh_json:set_values(Values, JObj)
+                                   ,pages=NumberOfPages
+                                  }
+               end,
     gen_server:cast(self(), 'send'),
-    {'noreply',State#state{job=wh_json:set_values(Values, JObj)
-                           ,pages=NumberOfPages
-                          }};
+    {'noreply', NewState};
 handle_cast('send', #state{job_id=JobId
                            ,job=JObj
                            ,queue_name=Q
@@ -820,11 +829,12 @@ prepare_contents(JobId, RespHeaders, RespContent) ->
                                                  ),
             Cmd = io_lib:format(ConvertCmd, [OutputFile, InputFile]),
             lager:debug("attempting to convert pdf: ~s", [Cmd]),
-            case os:cmd(Cmd) of
+            try "success" = os:cmd(Cmd) of
                 "success" ->
-                    {'ok', OutputFile};
-                _Else ->
-                    lager:debug("could not covert file: ~s", [_Else]),
+                    {'ok', OutputFile}
+            catch
+                Type:Exception ->
+                    lager:debug("could not covert file: ~p:~p", [Type, Exception]),
                     {'error', <<"can not convert file, try uploading a tiff">>}
             end;
         <<"image/", SubType/binary>> ->
@@ -834,11 +844,12 @@ prepare_contents(JobId, RespHeaders, RespContent) ->
             ConvertCmd = whapps_config:get_binary(?CONFIG_CAT, <<"conversion_image_command">>, ?CONVERT_IMAGE_CMD),
             Cmd = io_lib:format(ConvertCmd, [InputFile, OutputFile]),
             lager:debug("attempting to convert ~s: ~s", [SubType, Cmd]),
-            case os:cmd(Cmd) of
+            try "success" = os:cmd(Cmd) of
                 "success" ->
-                    {'ok', OutputFile};
-                _Else ->
-                    lager:debug("could not convert file: ~s", [_Else]),
+                    {'ok', OutputFile}
+            catch
+                Type:Exception ->
+                    lager:debug("could not covert file: ~p:~p", [Type, Exception]),
                     {'error', <<"can not convert file, try uploading a tiff">>}
             end;
         <<?OPENXML_MIME_PREFIX, _/binary>> = CT ->
@@ -864,11 +875,12 @@ convert_openoffice_document(CT, TmpDir, JobId, RespContent) ->
     OpenOfficeServer = whapps_config:get_binary(?CONFIG_CAT, <<"openoffice_server">>, <<"'socket,host=localhost,port=2002;urp;StarOffice.ComponentContext'">>),
     Cmd = io_lib:format(ConvertCmd, [OpenOfficeServer, InputFile, OutputFile]),
     lager:debug("attemting to convert openoffice document: ~s", [Cmd]),
-    case os:cmd(Cmd) of
+    try "success" = os:cmd(Cmd) of
         "success" ->
-            {'ok', OutputFile};
-        _Else ->
-            lager:debug("could not convert file: ~s", [_Else]),
+            {'ok', OutputFile}
+    catch
+        Type:Exception ->
+            lager:debug("could not covert file: ~p:~p", [Type, Exception]),
             {'error', <<"can not convert file, try uploading a tiff">>}
     end.
 
@@ -876,8 +888,13 @@ convert_openoffice_document(CT, TmpDir, JobId, RespContent) ->
 get_sizes(OutputFile) when is_binary(OutputFile) ->
     CmdCount = whapps_config:get_binary(?CONFIG_CAT, <<"count_pages_command">>, ?COUNT_PAGES_CMD),
     Cmd = io_lib:format(CmdCount, [OutputFile]),
-    Result = os:cmd(wh_util:to_list(Cmd)),
-    NumberOfPages = wh_util:to_integer(Result),
+    NumberOfPages = try Result = os:cmd(wh_util:to_list(Cmd)),
+                        wh_util:to_integer(Result)
+                    of
+                        Count -> Count
+                    catch
+                        _:_ -> 0
+                    end,
     FileSize = filelib:file_size(wh_util:to_list(OutputFile)),
     {NumberOfPages, FileSize}.
 

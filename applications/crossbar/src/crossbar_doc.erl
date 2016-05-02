@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz
+%%% @copyright (C) 2011-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -28,6 +28,7 @@
          ,pagination_page_size/0, pagination_page_size/1
          ,has_qs_filter/1
          ,filtered_doc_by_qs/3
+         ,filter_prop/3
         ]).
 
 -export([handle_json_success/2]).
@@ -660,11 +661,7 @@ delete(Context, 'soft') ->
         {'error', _E} -> soft_delete(Context, wh_doc:revision(Doc))
     end;
 delete(Context, 'permanent') ->
-    JObj = cb_context:doc(Context),
-    Del = wh_json:from_list([{<<"_id">>, wh_doc:id(JObj)}
-                             ,{<<"_rev">>, wh_doc:revision(JObj)}
-                            ]),
-    do_delete(Context, Del, fun couch_mgr:del_doc/2).
+    do_delete(Context, cb_context:doc(Context), fun couch_mgr:del_doc/2).
 
 -spec soft_delete(cb_context:context(), api_binary()) -> cb_context:context().
 soft_delete(Context, Rev) ->
@@ -693,8 +690,8 @@ do_delete(Context, JObj, CouchFun) ->
             DocId = wh_doc:id(JObj),
             handle_couch_mgr_errors(Error, DocId, Context);
         {'ok', _} ->
-            lager:debug("'deleted' ~s from ~s"
-                        ,[wh_doc:id(JObj), cb_context:account_db(Context)]
+            lager:debug("'deleted' ~s from ~s using ~p"
+                        ,[wh_doc:id(JObj), cb_context:account_db(Context), CouchFun]
                        ),
             Context1 = handle_couch_mgr_success(JObj, Context),
             _ = wh_util:spawn('provisioner_util', 'maybe_send_contact_list', [Context1]),
@@ -1263,10 +1260,26 @@ upperbound(DocTimestamp, QSTimestamp) ->
 lowerbound(DocTimestamp, QSTimestamp) ->
     QSTimestamp =< DocTimestamp.
 
+-spec should_filter(binary(), ne_binary()) -> boolean().
 -spec should_filter(wh_json:object(), ne_binary(), wh_json:json_term()) -> boolean().
+should_filter(Val, Val) -> 'true';
+should_filter(Val, FilterVal) ->
+    try wh_json:decode(FilterVal) of
+        List when is_list(List) ->
+            lists:member(Val, List);
+        _Data ->
+            lager:debug("data is not a list: ~p", [_Data]),
+            'false'
+    catch
+        _Error -> 'false'
+    end.
+
 should_filter(Doc, Key, Val) ->
     Keys = binary_key_to_json_key(Key),
-    wh_json:get_binary_value(Keys, Doc, <<>>) =:= wh_util:to_binary(Val).
+    should_filter(
+        wh_json:get_binary_value(Keys, Doc, <<>>)
+        ,wh_util:to_binary(Val)
+    ).
 
 -spec has_key(wh_json:object(), ne_binary()) -> boolean().
 has_key(Doc, Key) ->

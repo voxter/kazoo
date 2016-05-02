@@ -41,6 +41,7 @@
 -export([fix_contact/3]).
 
 -include_lib("whistle/src/api/wapi_dialplan.hrl").
+-include_lib("whistle/include/wh_databases.hrl").
 -include("ecallmgr.hrl").
 -include_lib("nksip/include/nksip.hrl").
 
@@ -185,7 +186,10 @@ get_sip_from(Props, <<"outbound">>) ->
 get_sip_from(Props, _) ->
     Default = <<(props:get_value(<<"sip_from_user">>, Props, <<"nouser">>))/binary
                 ,"@"
-                ,(props:get_value(<<"sip_from_host">>, Props, ?DEFAULT_REALM))/binary
+                ,(props:get_first_defined([?GET_CCV(<<"Realm">>)
+                                           ,<<"variable_sip_from_host">>
+                                           ,<<"sip_from_host">>
+                                          ], Props, ?DEFAULT_REALM))/binary
               >>,
     props:get_first_defined([<<"Channel-Presence-ID">>
                              ,<<"variable_sip_from_uri">>
@@ -194,16 +198,22 @@ get_sip_from(Props, _) ->
 %% retrieves the sip address for the 'request' field
 -spec get_sip_request(wh_proplist()) -> ne_binary().
 get_sip_request(Props) ->
-    User = props:get_first_defined([<<"Hunt-Destination-Number">>
-                                    ,<<"Caller-Destination-Number">>
-                                    ,<<"sip_to_user">>
-                                   ], Props, <<"nouser">>),
+    [User | _] = binary:split(
+                   props:get_first_defined(
+                     [<<"Hunt-Destination-Number">>
+                      ,<<"Caller-Destination-Number">>
+                      ,<<"variable_sip_req_uri">>
+                      ,<<"variable_sip_to_user">>
+                      ,<<"sip_req_uri">>
+                      ,<<"sip_to_user">>
+                     ], Props, <<"nouser">>), <<"@">>, ['global']),
     Realm = props:get_first_defined([?GET_CCV(<<"Realm">>)
                                      ,<<"variable_sip_auth_realm">>
                                      ,<<"variable_sip_to_host">>
                                      ,<<"sip_auth_realm">>
                                      ,<<"sip_to_host">>
                                      ,<<"variable_sip_req_host">>
+                                     ,<<"sip_req_host">>
                                     ], Props, ?DEFAULT_REALM),
     <<User/binary, "@", Realm/binary>>.
 
@@ -1000,6 +1010,7 @@ request_media_url(MediaName, CallId, JObj, Type) ->
         {'ok', MediaResp} ->
             MediaUrl = wh_json:find(<<"Stream-URL">>, MediaResp, <<>>),
             CacheProps = media_url_cache_props(MediaName),
+
             _ = wh_cache:store_local(?ECALLMGR_UTIL_CACHE
                                      ,?ECALLMGR_PLAYBACK_MEDIA_KEY(MediaName)
                                      ,MediaUrl
@@ -1025,6 +1036,15 @@ media_url_cache_props(<<"/", _/binary>> = MediaName) ->
             AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
             [{'origin', {'db', AccountDb, MediaId}}];
         _Parts -> []
+    end;
+media_url_cache_props(<<"prompt://", Prompt/binary>>) ->
+    case binary:split(Prompt, <<"/">>) of
+        [?WH_MEDIA_DB, _MediaId] ->
+            [{'origin', {'db', ?WH_MEDIA_DB, <<"media">>}}];
+        [AccountId, _MediaId] ->
+            AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
+            [{'origin', {'db', AccountDb, <<"media">>}}];
+        _ -> []
     end;
 media_url_cache_props(<<"tts://", Text/binary>>) ->
     Id = wh_util:binary_md5(Text),

@@ -16,6 +16,8 @@
 
 -include("./crossbar.hrl").
 
+-define(USE_COMPRESSION, whapps_config:get_is_true(?CONFIG_CAT, <<"compress_response_body">>, 'true')).
+
 -spec crossbar_routes() -> cowboy_router:routes().
 crossbar_routes() -> [{'_', paths_list()}].
 
@@ -114,19 +116,23 @@ stop_mod(CBMod) ->
 -spec start_deps() -> 'ok'.
 start_deps() ->
     whistle_apps_deps:ensure(?MODULE), % if started by the whistle_controller, this will exist
-    _ = [wh_util:ensure_started(App) || App <- ['crypto'
-                                                ,'public_key'
-                                                ,'ssl'
-                                                ,'inets'
-                                                ,'lager'
-                                                ,'whistle_amqp'
-                                                ,'whistle_couch'
-                                                ,'kazoo_bindings'
-                                                ,'ranch'
-                                                ,'cowlib'
-                                                ,'cowboy'
-                                               ]],
-    'ok'.
+    _Started =
+        [{App, wh_util:ensure_started(App)}
+         || App <- ['crypto'
+                   ,'asn1'
+                   ,'public_key'
+                   ,'ssl'
+                   ,'inets'
+                   ,'lager'
+                   ,'whistle_amqp'
+                   ,'whistle_couch'
+                   ,'kazoo_bindings'
+                   ,'ranch'
+                   ,'cowlib'
+                   ,'cowboy'
+                   ]
+        ],
+    lager:debug("deps result: ~p", [_Started]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -189,6 +195,7 @@ maybe_start_plaintext(Dispatch) ->
                                             ]}
                                     ,{'onrequest', fun on_request/1}
                                     ,{'onresponse', fun on_response/4}
+                                    ,{'compress', ?USE_COMPRESSION}
                                    ]
                                  ) of
                 {'ok', _} ->
@@ -225,6 +232,7 @@ start_ssl(Dispatch) ->
                                              ]}
                                      ,{'onrequest', fun on_request/1}
                                      ,{'onresponse', fun on_response/4}
+                                     ,{'compress', ?USE_COMPRESSION}
                                     ]
                                   )
             of

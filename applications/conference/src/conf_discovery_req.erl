@@ -1,4 +1,3 @@
-
 %%%-------------------------------------------------------------------
 %%% @copyright (C) 2011-2014, 2600Hz INC
 %%% @doc
@@ -242,7 +241,9 @@ handle_search_resp(JObj, Conference, Call, Srv) ->
 
 -spec maybe_play_name(whapps_conference:conference(), whapps_call:call(), pid()) -> 'ok'.
 maybe_play_name(Conference, Call, Srv) ->
-    case whapps_conference:play_name_on_join(Conference) of
+    case whapps_conference:play_name_on_join(Conference)
+        andalso ?SUPPORT_NAME_ANNOUNCEMENT
+    of
         'true' ->
             PronouncedName = maybe_reuse_pronounced_name(whapps_conference:reuse_pronounced_name(Conference), Call),
             conf_participant:set_name_pronounced(PronouncedName, Srv);

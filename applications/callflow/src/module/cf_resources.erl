@@ -30,6 +30,7 @@
 -export([handle/2]).
 
 -define(DEFAULT_EVENT_WAIT, 10000).
+-define(RES_CONFIG_CAT, <<?CF_CONFIG_CAT/binary, ".resources">>).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -104,7 +105,11 @@ build_offnet_request(Data, Call) ->
 -spec get_channel_vars(whapps_call:call()) -> wh_json:object().
 get_channel_vars(Call) ->
     wh_json:from_list(
-      [{<<"Authorizing-ID">>, whapps_call:authorizing_id(Call)}]
+      props:filter_undefined(
+        [{<<"Authorizing-ID">>, whapps_call:authorizing_id(Call)}
+         ,{<<"Require-Ignore-Early-Media">>, whapps_call:custom_channel_var(<<"Require-Ignore-Early-Media">>, Call)}
+        ]
+       )
      ).
 
 -spec get_bypass_e164(wh_json:object()) -> boolean().
@@ -221,14 +226,22 @@ get_original_request_user(Call) ->
 -spec get_sip_headers(wh_json:object(), whapps_call:call()) -> api_object().
 get_sip_headers(Data, Call) ->
     Routines = [fun(J) ->
-                        case wh_json:is_true(<<"emit_account_id">>, Data) of
+                        Default = whapps_config:get_is_true(?RES_CONFIG_CAT, <<"default_emit_account_id">>, 'false'),
+                        case wh_json:is_true(<<"emit_account_id">>, Data, Default) of
                             'false' -> J;
                             'true' ->
                                 wh_json:set_value(<<"X-Account-ID">>, whapps_call:account_id(Call), J)
                         end
                 end
                ],
-    CustomHeaders = wh_json:get_value(<<"custom_sip_headers">>, Data, wh_json:new()),
+    AuthEndCSH = case cf_endpoint:get(Call) of
+                     {'ok', AuthorizingEndpoint} ->
+                         kz_device:custom_sip_headers_outbound(AuthorizingEndpoint, wh_json:new());
+                     _ -> wh_json:new()
+                 end,
+    CSH = wh_json:get_value(<<"custom_sip_headers">>, Data, wh_json:new()),
+    CustomHeaders = wh_json:merge_jobjs(AuthEndCSH, CSH),
+
 
     Diversions = whapps_call:custom_sip_header(<<"Diversions">>, Call),
 
@@ -341,6 +354,10 @@ get_account_dynamic_flags(_, Call, Flags) ->
 -spec process_dynamic_flags(ne_binaries(), ne_binaries(), whapps_call:call()) ->
                                    ne_binaries().
 process_dynamic_flags([], Flags, _) -> Flags;
+process_dynamic_flags([<<"zone">>|DynamicFlags], Flags, Call) ->
+    Zone = wh_util:to_binary(wh_nodes:local_zone()),
+    lager:debug("adding dynamic flag ~s", [Zone]),
+    process_dynamic_flags(DynamicFlags, [Zone|Flags], Call);
 process_dynamic_flags([DynamicFlag|DynamicFlags], Flags, Call) ->
     case is_flag_exported(DynamicFlag) of
         'false' -> process_dynamic_flags(DynamicFlags, Flags, Call);
@@ -380,9 +397,6 @@ wait_for_stepswitch(Call) ->
                     {kz_call_event:response_message(JObj)
                      ,kz_call_event:response_code(JObj)
                     };
-                {<<"call_event">>, <<"CHANNEL_BRIDGE">>} ->
-                    maybe_start_offnet_metaflow(Call, kz_call_event:other_leg_call_id(JObj)),
-                    wait_for_stepswitch(Call);
                 {<<"call_event">>, <<"CHANNEL_DESTROY">>} ->
                     lager:info("recv channel destroy"),
                     {kz_call_event:hangup_cause(JObj)
@@ -392,32 +406,3 @@ wait_for_stepswitch(Call) ->
             end;
         _ -> wait_for_stepswitch(Call)
     end.
-
--spec maybe_start_offnet_metaflow(whapps_call:call(), ne_binary()) -> 'ok'.
-maybe_start_offnet_metaflow(Call, BridgedTo) ->
-    HackedCall = hack_call(Call, BridgedTo),
-    case cf_endpoint:get(HackedCall) of
-        {'ok', EP} -> cf_util:maybe_start_metaflow(HackedCall, EP);
-        _Else -> lager:debug("can't get endpoint for ~s", whapps_call:authorizing_id(HackedCall))
-    end.
-
--spec hack_call(whapps_call:call(), ne_binary()) -> whapps_call:call().
-hack_call(Call, BridgedTo) ->
-    {AuthorizingType, AuthorizingId} = hack_authz(Call),
-    Funs = [{fun whapps_call:set_call_id/2, BridgedTo}
-            ,{fun whapps_call:set_other_leg_call_id/2, whapps_call:call_id(Call)}
-            ,{fun whapps_call:set_authorizing_type/2, AuthorizingType}
-            ,{fun whapps_call:set_authorizing_id/2, AuthorizingId}
-           ],
-    whapps_call:exec(Funs, Call).
-
--spec hack_authz(whapps_call:call()) -> {ne_binary(), ne_binary()}.
--spec hack_authz(whapps_call:call(), api_binary()) -> {ne_binary(), ne_binary()}.
-
-hack_authz(Call) ->
-    hack_authz(Call, whapps_call:authorizing_id(Call)).
-
-hack_authz(Call, 'undefined') ->
-    {<<"account">>, whapps_call:account_id(Call)};
-hack_authz(Call, _) ->
-    {whapps_call:authorizing_type(Call), whapps_call:authorizing_id(Call)}.
