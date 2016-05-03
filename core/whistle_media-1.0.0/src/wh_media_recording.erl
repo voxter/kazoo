@@ -59,6 +59,7 @@
                 ,time_limit_ref            :: reference() | 'undefined'
                 ,retries = 0               :: integer()
                 ,preserve_metadata = 'false' :: boolean()
+                ,extra_metadata            :: wh_proplist() | 'undefined'
                }).
 -type state() :: #state{}.
 
@@ -183,6 +184,7 @@ init([Call, Data]) ->
     SampleRate = wh_json:get_integer_value(<<"record_sample_rate">>, Data),
     RecordMinSec = wh_json:get_integer_value(<<"record_min_sec">>, Data,  whapps_config:get_integer(?WHM_CONFIG_CAT, <<"record_min_sec">>, 0)),
     PreserveMetadata = wh_json:is_true(<<"preserve_metadata">>, Data, 'false'),
+    ExtraMetadata = wh_json:get_list_value(<<"extra_metadata">>, Data, []),
 
     Url = get_url(Data),
 
@@ -197,6 +199,7 @@ init([Call, Data]) ->
                   ,record_min_sec = RecordMinSec
                   ,retries = ?STORAGE_RETRY_TIMES(whapps_call:account_id(Call))
                   ,preserve_metadata = PreserveMetadata
+                  ,extra_metadata = ExtraMetadata
                  }}.
 
 -spec update_control_queue(pid(), api_binary()) -> 'ok'.
@@ -321,9 +324,10 @@ handle_cast('stop_call', #state{is_recording='true'
                                 ,call=Call
                                 ,should_store=Store
                                 ,preserve_metadata=PreserveMetadata
+                                ,extra_metadata=ExtraMetadata
                                }=State) ->
     lager:debug("recv stop_call event"),
-    save_recording(Call, MediaName, Format, PreserveMetadata, Store),
+    save_recording(Call, MediaName, Format, PreserveMetadata, ExtraMetadata, Store),
     case Store of
         'false' -> {'stop', 'normal', State};
         _ -> 
@@ -339,9 +343,10 @@ handle_cast({'store_recording', MediaName}, #state{media_name=MediaName
                                                    ,is_recording='true'
                                                    ,store_attempted='false'
                                                    ,preserve_metadata=PreserveMetadata
+                                                   ,extra_metadata=ExtraMetadata
                                                   }=State) ->
     lager:debug("recv store_recording event"),
-    save_recording(Call, MediaName, Format, PreserveMetadata, Store),
+    save_recording(Call, MediaName, Format, PreserveMetadata, ExtraMetadata, Store),
     case Store of
         'false' -> {'stop', 'normal', State};
         _ -> {'noreply', State#state{store_attempted='true'
@@ -379,9 +384,10 @@ handle_cast('store_failed', #state{retries=Retries
                                    ,call=Call
                                    ,should_store=Store
                                    ,preserve_metadata=PreserveMetadata
+                                   ,extra_metadata=ExtraMetadata
                                   }=State) ->
     lager:debug("store failed, retrying ~p times", [Retries]),
-    save_recording(Call, MediaName, Format, PreserveMetadata, Store),
+    save_recording(Call, MediaName, Format, PreserveMetadata, ExtraMetadata, Store),
     {'noreply', State#state{retries=Retries - 1}};
 
 handle_cast({'update_control_queue', CtrlQ}, #state{call=Call}=State) when is_binary(CtrlQ) ->
@@ -536,10 +542,10 @@ get_format(<<"mp3">> = MP3) -> MP3;
 get_format(<<"wav">> = WAV) -> WAV;
 get_format(_) -> get_format('undefined').
 
--spec store_recording_meta(whapps_call:call(), ne_binary(), api_binary()) ->
+-spec store_recording_meta(whapps_call:call(), ne_binary(), api_binary(), wh_proplist()) ->
                                   {'ok', wh_json:object()} |
                                   {'error', any()}.
-store_recording_meta(Call, MediaName, Ext) ->
+store_recording_meta(Call, MediaName, Ext, ExtraMetadata) ->
     AcctDb = whapps_call:account_db(Call),
     CallId = whapps_call:call_id(Call),
 
@@ -559,22 +565,25 @@ store_recording_meta(Call, MediaName, Ext) ->
                       ,{<<"caller_id_name">>, whapps_call:caller_id_name(Call)}
                       ,{<<"call_id">>, CallId}
                       ,{<<"queue_id">>, whapps_call:custom_channel_var(<<"Queue-ID">>, Call)}
+                      ,{<<"language">>, whapps_call:language(Call)}
+                      ,{<<"custom_kvs">>, whapps_call:custom_kvs(Call)}
                       ,{<<"_id">>, get_recording_doc_id(CallId)}
+                      | ExtraMetadata
                      ])
                   )
                  ,AcctDb
                 ),
     couch_mgr:save_doc(AcctDb, MediaDoc).
 
--spec maybe_store_recording_meta(whapps_call:call(), ne_binary(), api_binary()) ->
+-spec maybe_store_recording_meta(whapps_call:call(), ne_binary(), api_binary(), wh_proplist()) ->
                                   {'ok', wh_json:object()} |
                                   {'error', any()}.
-maybe_store_recording_meta(Call, MediaName, Ext) ->
+maybe_store_recording_meta(Call, MediaName, Ext, ExtraMetadata) ->
     AcctDb = whapps_call:account_db(Call),
     CallId = whapps_call:call_id(Call),
     case couch_mgr:open_doc(AcctDb, get_recording_doc_id(CallId)) of
         {'ok', _JObj}=JObjOK -> JObjOK;
-        _ -> store_recording_meta(Call, MediaName, Ext)
+        _ -> store_recording_meta(Call, MediaName, Ext, ExtraMetadata)
     end.
 
 
@@ -622,31 +631,31 @@ should_store_recording() ->
         'false' -> 'false'
     end.
 
--spec save_recording(whapps_call:call(), ne_binary(), ne_binary(), boolean(), store_url()) -> 'ok'.
-save_recording(_Call, MediaName, _Format, _, 'false') ->
+-spec save_recording(whapps_call:call(), ne_binary(), ne_binary(), boolean(), wh_proplist(), store_url()) -> 'ok'.
+save_recording(_Call, MediaName, _Format, _, _, 'false') ->
     lager:info("not configured to store recording ~s", [MediaName]);
-save_recording(Call, MediaName, Format, _, {'true', 'third_party'}) ->
+save_recording(Call, MediaName, Format, _, ExtraMetadata, {'true', 'third_party'}) ->
     case whapps_config:get_ne_binary(?CONFIG_CAT, <<"third_party_bigcouch_host">>) of
         'undefined' ->
             lager:error("no URL for call recording provided, third_party_bigcouch_host undefined");
-        BCHost -> store_recording_to_third_party_bigcouch(Call, MediaName, Format, BCHost)
+        BCHost -> store_recording_to_third_party_bigcouch(Call, MediaName, Format, ExtraMetadata, BCHost)
     end;
-save_recording(Call, MediaName, Format, _, {'true', 'local'}) ->
-    {'ok', MediaJObj} = maybe_store_recording_meta(Call, MediaName, Format),
+save_recording(Call, MediaName, Format, _, ExtraMetadata, {'true', 'local'}) ->
+    {'ok', MediaJObj} = maybe_store_recording_meta(Call, MediaName, Format, ExtraMetadata),
     lager:info("stored meta: ~p", [MediaJObj]),
     StoreUrl = store_url(Call, MediaJObj),
     lager:info("store local url: ~s", [StoreUrl]),
     store_recording(MediaName, StoreUrl, Call, 'local');
-save_recording(Call, MediaName, Format, 'true', {'true', 'other', Url}) ->
-    {'ok', MediaJObj} = maybe_store_recording_meta(Call, MediaName, Format),
+save_recording(Call, MediaName, Format, 'true', ExtraMetadata, {'true', 'other', Url}) ->
+    {'ok', MediaJObj} = maybe_store_recording_meta(Call, MediaName, Format, ExtraMetadata),
     lager:debug("store at remote url ~s with metadata in doc id ~s", [Url, wh_json:get_value(<<"_id">>, MediaJObj)]),
     store_recording(MediaName, Url, Call, 'other');
-save_recording(Call, MediaName, _Format, 'false', {'true', 'other', Url}) ->
+save_recording(Call, MediaName, _Format, 'false', _, {'true', 'other', Url}) ->
     lager:info("store remote url: ~s", [Url]),
     store_recording(MediaName, Url, Call, 'other').
 
--spec store_recording_to_third_party_bigcouch(whapps_call:call(), ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
-store_recording_to_third_party_bigcouch(Call, MediaName, Format, BCHost) ->
+-spec store_recording_to_third_party_bigcouch(whapps_call:call(), ne_binary(), ne_binary(), wh_proplist(), ne_binary()) -> 'ok'.
+store_recording_to_third_party_bigcouch(Call, MediaName, Format, ExtraMetadata, BCHost) ->
     BCPort = whapps_config:get_binary(?CONFIG_CAT, <<"third_party_bigcouch_port">>, <<"5984">>),
     lager:info("storing to third-party bigcouch ~s:~p", [BCHost, BCPort]),
     AcctMODb = wh_util:format_account_modb(kazoo_modb:get_modb(whapps_call:account_db(Call)),'encoded'),
@@ -654,20 +663,26 @@ store_recording_to_third_party_bigcouch(Call, MediaName, Format, BCHost) ->
     MediaDocId = get_recording_doc_id(CallId),
     MediaDoc = wh_doc:update_pvt_parameters(
                  wh_json:from_list(
-                   [{<<"name">>, MediaName}
-                    ,{<<"description">>, <<"recording ", MediaName/binary>>}
-                    ,{<<"content_type">>, ext_to_mime(Format)}
-                    ,{<<"media_type">>, Format}
-                    ,{<<"media_source">>, <<"recorded">>}
-                    ,{<<"source_type">>, wh_util:to_binary(?MODULE)}
-                    ,{<<"pvt_type">>, <<"call_recording">>}
-                    ,{<<"from">>, whapps_call:from(Call)}
-                    ,{<<"to">>, whapps_call:to(Call)}
-                    ,{<<"caller_id_number">>, whapps_call:caller_id_number(Call)}
-                    ,{<<"caller_id_name">>, whapps_call:caller_id_name(Call)}
-                    ,{<<"call_id">>, CallId}
-                    ,{<<"_id">>, MediaDocId}
-                   ])
+                   props:filter_undefined(
+                     [{<<"name">>, MediaName}
+                      ,{<<"description">>, <<"recording ", MediaName/binary>>}
+                      ,{<<"content_type">>, ext_to_mime(Format)}
+                      ,{<<"media_type">>, Format}
+                      ,{<<"media_source">>, <<"recorded">>}
+                      ,{<<"source_type">>, wh_util:to_binary(?MODULE)}
+                      ,{<<"pvt_type">>, <<"call_recording">>}
+                      ,{<<"from">>, whapps_call:from(Call)}
+                      ,{<<"to">>, whapps_call:to(Call)}
+                      ,{<<"caller_id_number">>, whapps_call:caller_id_number(Call)}
+                      ,{<<"caller_id_name">>, whapps_call:caller_id_name(Call)}
+                      ,{<<"call_id">>, CallId}
+                      ,{<<"queue_id">>, whapps_call:custom_channel_var(<<"Queue-ID">>, Call)}
+                      ,{<<"language">>, whapps_call:language(Call)}
+                      ,{<<"custom_kvs">>, whapps_call:custom_kvs(Call)}
+                      ,{<<"_id">>, MediaDocId}
+                      | ExtraMetadata
+                     ])
+                  )
                  ,AcctMODb
                 ),
     Options = [],

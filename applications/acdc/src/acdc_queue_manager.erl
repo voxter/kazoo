@@ -23,6 +23,7 @@
          ,handle_queue_member_add/2
          ,handle_queue_member_position/2
          ,handle_manager_success_notify/2
+         ,handle_member_callback_reg/2
          ,are_agents_available/1
          ,handle_config_change/2
          ,should_ignore_member_call/3, should_ignore_member_call/4
@@ -31,8 +32,7 @@
          ,status/1
          ,current_agents/1
          ,refresh/2
-
-         ,replace_call/3
+         ,callback_number/2
         ]).
 
 %% FSM helpers
@@ -64,7 +64,8 @@
                                    ,{'id', Q}
                                    ,'federate'
                                   ]}
-                         ,{'acdc_queue', [{'restrict_to', ['member_call_result', 'stats_req', 'agent_change', 'member_addremove', 'member_position']}
+                         ,{'acdc_queue', [{'restrict_to', ['member_call_result', 'stats_req', 'agent_change'
+                                                           ,'member_addremove', 'member_position', 'member_callback_reg']}
                                           ,{'account_id', A}
                                           ,{'queue_id', Q}
                                          ]}
@@ -105,6 +106,9 @@
                       }
                      ,{{'acdc_queue_manager', 'handle_manager_success_notify'}
                        ,[{<<"member">>, <<"call_success">>}]
+                      }
+                     ,{{'acdc_queue_manager', 'handle_member_callback_reg'}
+                       ,[{<<"member">>, <<"callback_reg">>}]
                       }
                     ]).
 
@@ -195,15 +199,7 @@ start_queue_call(JObj, Props, Call) ->
             whapps_call_command:hold(MOH, Call)
     end,
 
-    Updaters = [fun(JObj2) ->
-                    case maybe_konami_queue(whapps_call:account_db(Call), QueueId, Call) of
-                        'false' -> JObj2;
-                        'true' -> wh_json:set_value([<<"Call">>, <<"Custom-Channel-Vars">>, <<"No-Queue-Exit">>], <<"true">>, JObj2)
-                    end
-                end
-                ,fun(JObj2) -> wh_json:set_value([<<"Call">>, <<"Custom-Channel-Vars">>, <<"Queue-ID">>], QueueId, JObj2) end
-               ],
-    JObj2 = lists:foldl(fun(Updater, JObj2) -> Updater(JObj2) end, JObj, Updaters),
+    JObj2 = wh_json:set_value([<<"Call">>, <<"Custom-Channel-Vars">>, <<"Queue-ID">>], QueueId, JObj),
 
     _ = whapps_call_command:set('undefined'
                                 ,wh_json:from_list([{<<"Eavesdrop-Group-ID">>, QueueId}
@@ -253,6 +249,10 @@ handle_queue_member_position(JObj, Prop) ->
 handle_manager_success_notify(JObj, Prop) ->
     gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_remove', JObj}).
 
+-spec handle_member_callback_reg(wh_json:object(), wh_proplist()) -> 'ok'.
+handle_member_callback_reg(JObj, Prop) ->
+    gen_listener:cast(props:get_value('server', Prop), {'handle_member_callback_reg', JObj}).
+
 -spec handle_config_change(server_ref(), wh_json:object()) -> 'ok'.
 handle_config_change(Srv, JObj) ->
     gen_listener:cast(Srv, {'update_queue_config', JObj}).
@@ -290,8 +290,9 @@ agents_available(Srv) -> gen_listener:call(Srv, 'agents_available').
 
 pick_winner(Srv, Resps) -> pick_winner(Srv, Resps, strategy(Srv), next_winner(Srv)).
 
-replace_call(Srv, OldCall, NewCall) ->
-    gen_listener:cast(Srv, {'replace_call', OldCall, NewCall}).
+-spec callback_number(pid(), ne_binary()) -> api_binary().
+callback_number(Srv, CallId) ->
+    gen_listener:call(Srv, {'callback_number', CallId}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -429,6 +430,9 @@ handle_call({'queue_position', CallId}, _, #state{current_member_calls=CurrentCa
     end,
 
     {'reply', Index, State};
+
+handle_call({'callback_number', CallId}, _, #state{registered_callbacks=Callbacks}=State) ->
+    {'reply', props:get_value(CallId, Callbacks), State};
 
 handle_call(_Request, _From, State) ->
     {'reply', 'ok', State}.
@@ -649,18 +653,24 @@ handle_cast({'handle_queue_member_add', JObj, _Queue}, #state{current_member_cal
 
 handle_cast({'handle_queue_member_remove', JObj}, State) ->
     State1 = maybe_remove_queue_member(wh_json:get_value(<<"Call-ID">>, JObj), wh_json:get_value(<<"Reason">>, JObj), State),
-    {'noreply', State1};
+    State2 = maybe_remove_callback_reg(wh_json:get_value(<<"Call-ID">>, JObj), State1),
+    {'noreply', State2};
 
-handle_cast({'replace_call', OldCall, NewCall}, #state{current_member_calls=CurrentCalls
-                                                       ,pos_announce_pids=Pids
-                                                      }=State) ->
-    OldCallId = whapps_call:call_id(OldCall),
-    OldCall2 = lists:keyfind(OldCallId, 2, CurrentCalls),
-    UpdatedMemberCalls = [NewCall | lists:delete(OldCall2, CurrentCalls)],
-
-    {'noreply', State#state{current_member_calls=UpdatedMemberCalls
-                            ,pos_announce_pids = maybe_cancel_position_announcements(OldCall, Pids)
-                           }};
+handle_cast({'handle_member_callback_reg', JObj}, #state{current_member_calls=CurrentCalls
+                                                         ,pos_announce_pids=Pids
+                                                         ,registered_callbacks=RegCallbacks}=State) ->
+    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    case lists:keyfind(CallId, 2, CurrentCalls) of
+        'false' ->
+            lager:debug("not accepting callback reg for ~s (call not in my list of calls)", [CallId]),
+            {'noreply', State};
+        Call ->
+            lager:debug("call ~s marked as callback", [CallId]),
+            Number = wh_json:get_value(<<"Number">>, JObj),
+            {'noreply', State#state{pos_announce_pids=maybe_cancel_position_announcements(Call, Pids)
+                                    ,registered_callbacks=[{CallId, Number} | RegCallbacks]
+                                   }}
+    end;
 
 handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p", [_Msg]),
@@ -1100,7 +1110,7 @@ time_prompts({Hour, Min, Sec}=Time, {Hour2, Min2, Sec2}, Media, Language) when (
             | time_prompts2(Time, Language)
            ]};
 time_prompts(Time, _, Media, Language) ->
-    {Time, [{'prompt', props:get_value(<<"estimated_wait_time_media">>, Media, Language), <<"A">>}
+    {Time, [{'prompt', props:get_value(<<"estimated_wait_time_media">>, Media), Language, <<"A">>}
             | time_prompts2(Time, Language)
            ]}.
     
@@ -1176,34 +1186,6 @@ maybe_cancel_position_announcements(Call, Pids) ->
     end,
     lists:keydelete(whapps_call:call_id(Call), 1, Pids).
 
-maybe_konami_queue(AccountDb, QueueId, Call) ->
-    case whapps_controller:app_running('konami') of
-        'true' ->
-            maybe_queue_has_metaflows(AccountDb, QueueId, Call);
-        'false' ->
-            'false'
-    end.
-
-maybe_queue_has_metaflows(AccountDb, QueueId, Call) ->
-    {'ok', Queue} = couch_mgr:open_cache_doc(AccountDb, QueueId),
-    case wh_json:is_true([<<"breakout">>, <<"enabled">>], Queue, 'false') of
-        'true' ->
-            lager:debug("breakout is enabled for queue ~s", [QueueId]),
-            CVs = wh_json:set_value(<<"Queue-ID">>, QueueId, wh_json:new()),
-            Module = wh_json:set_values([{<<"module">>, <<"menu">>}
-                                         ,{<<"data">>, wh_json:get_value(<<"breakout">>, Queue)}
-                                        ], wh_json:new()),
-            Numbers = wh_json:set_value(<<"">>, Module, wh_json:new()),
-            Metaflows = wh_json:set_values([{<<"numbers">>, Numbers}
-                                            ,{<<"binding_key">>, <<"*">>}
-                                            ,{<<"listen_on">>, <<"a">>}
-                                           ], wh_json:new()),
-            apply_new_metaflows(whapps_call:call_id(Call), CVs, whapps_call:controller_queue(Call), Metaflows),
-            'true';
-        'false' ->
-            'false'
-    end.
-
 -spec maybe_remove_queue_member(api_binary(), api_binary(), mgr_state()) -> mgr_state().
 maybe_remove_queue_member(CallId, _Reason, #state{account_id=AccountId
                                                  ,queue_id=QueueId
@@ -1249,22 +1231,6 @@ maybe_remove_queue_member(CallId, _Reason, #state{account_id=AccountId
                 ,pos_announce_pids=UpdatedAnnouncePids
                }.
 
-apply_new_metaflows(CallId, CVs, ControllerQueue, Metaflows) ->
-    Numbers = update_with_cq(update_with_cvs(wh_json:get_value(<<"numbers">>, Metaflows), CVs), ControllerQueue),
-    Prop = [{<<"Call-ID">>, CallId}
-            ,{<<"Data">>, Numbers}
-            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-           ],
-    timer:apply_after(500, 'wapi_metaflow', 'publish_update', [Prop]).
-
-update_with_cvs(NumbersJObj, CVs) ->
-    Numbers = wh_json:get_keys(NumbersJObj),
-    lists:foldl(fun(Number, Updated) ->
-        wh_json:set_value([Number, <<"data">>, <<"custom_vars">>], CVs, Updated)
-    end, NumbersJObj, Numbers).
-
-update_with_cq(NumbersJObj, ControllerQueue) ->
-    Numbers = wh_json:get_keys(NumbersJObj),
-    lists:foldl(fun(Number, Updated) ->
-        wh_json:set_value([Number, <<"data">>, <<"controller_queue">>], ControllerQueue, Updated)
-    end, NumbersJObj, Numbers).
+-spec maybe_remove_callback_reg(ne_binary(), mgr_state()) -> mgr_state().
+maybe_remove_callback_reg(CallId, #state{registered_callbacks=RegCallbacks}=State) ->
+    State#state{registered_callbacks=lists:keydelete(CallId, 1, RegCallbacks)}.

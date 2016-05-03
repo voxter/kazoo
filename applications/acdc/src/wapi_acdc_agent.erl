@@ -7,6 +7,7 @@
 %%% @end
 %%% @contributors
 %%%   James Aimonetti
+%%%   Daniel Finke
 %%%-------------------------------------------------------------------
 -module(wapi_acdc_agent).
 
@@ -22,6 +23,9 @@
          ,logout_queue/1, logout_queue_v/1
 
          ,login_resp/1, login_resp_v/1
+
+         ,shared_originate_failure/1, shared_originate_failure_v/1
+         ,shared_call_id/1, shared_call_id_v/1
         ]).
 
 -export([bind_q/2
@@ -41,6 +45,9 @@
          ,publish_logout_queue/1, publish_logout_queue/2
 
          ,publish_login_resp/2, publish_login_resp/3
+
+         ,publish_shared_originate_failure/1, publish_shared_originate_failure/2
+         ,publish_shared_call_id/1, publish_shared_call_id/2
         ]).
 
 -include_lib("whistle/include/wh_api.hrl").
@@ -380,6 +387,68 @@ login_resp_v(JObj) ->
     login_resp_v(wh_json:to_proplist(JObj)).
 
 %%------------------------------------------------------------------------------
+%% Sharing of originate_failure to all agent FSMs
+%%------------------------------------------------------------------------------
+-define(FSM_SHARED_KEY, "acdc.agent.fsm_shared.").
+
+-spec fsm_shared_routing_key(wh_proplist()) -> ne_binary().
+-spec fsm_shared_routing_key(ne_binary(), ne_binary()) -> ne_binary().
+fsm_shared_routing_key(Props) when is_list(Props) ->
+    Id = props:get_value(<<"Agent-ID">>, Props, <<"*">>),
+    AcctId = props:get_value(<<"Account-ID">>, Props, <<"*">>),
+    fsm_shared_routing_key(AcctId, Id).
+
+fsm_shared_routing_key(AcctId, AgentId) ->
+    <<?FSM_SHARED_KEY, AcctId/binary, ".", AgentId/binary>>.
+
+-define(SHARED_FAILURE_HEADERS, [<<"Account-ID">>, <<"Agent-ID">>]).
+-define(OPTIONAL_SHARED_FAILURE_HEADERS, []).
+-define(SHARED_FAILURE_VALUES, [{<<"Event-Category">>, <<"agent">>}
+                               ,{<<"Event-Name">>, <<"shared_failure">>}
+                              ]).
+-define(SHARED_FAILURE_TYPES, []).
+
+-spec shared_originate_failure(api_terms()) ->
+                          {'ok', iolist()} |
+                          {'error', string()}.
+shared_originate_failure(Props) when is_list(Props) ->
+    case shared_originate_failure_v(Props) of
+        'true' -> wh_api:build_message(Props, ?SHARED_FAILURE_HEADERS, ?OPTIONAL_SHARED_FAILURE_HEADERS);
+        'false' -> {'error', "Proplist failed validation for shared_originate_failure"}
+    end;
+shared_originate_failure(JObj) -> shared_originate_failure(wh_json:to_proplist(JObj)).
+
+-spec shared_originate_failure_v(api_terms()) -> boolean().
+shared_originate_failure_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?SHARED_FAILURE_HEADERS, ?SHARED_FAILURE_VALUES, ?SHARED_FAILURE_TYPES);
+shared_originate_failure_v(JObj) -> shared_originate_failure_v(wh_json:to_proplist(JObj)).
+
+%%------------------------------------------------------------------------------
+%% Sharing of answered call id to all agent FSMs
+%%------------------------------------------------------------------------------
+-define(SHARED_CALL_ID_HEADERS, [<<"Account-ID">>, <<"Agent-ID">>]).
+-define(OPTIONAL_SHARED_CALL_ID_HEADERS, [<<"Agent-Call-ID">>, <<"Member-Call-ID">>]).
+-define(SHARED_CALL_ID_VALUES, [{<<"Event-Category">>, <<"agent">>}
+                                ,{<<"Event-Name">>, <<"shared_call_id">>}
+                               ]).
+-define(SHARED_CALL_ID_TYPES, []).
+
+-spec shared_call_id(api_terms()) ->
+                          {'ok', iolist()} |
+                          {'error', string()}.
+shared_call_id(Props) when is_list(Props) ->
+    case shared_call_id_v(Props) of
+        'true' -> wh_api:build_message(Props, ?SHARED_CALL_ID_HEADERS, ?OPTIONAL_SHARED_CALL_ID_HEADERS);
+        'false' -> {'error', "Proplist failed validation for shared_call_id"}
+    end;
+shared_call_id(JObj) -> shared_call_id(wh_json:to_proplist(JObj)).
+
+-spec shared_call_id_v(api_terms()) -> boolean().
+shared_call_id_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?SHARED_CALL_ID_HEADERS, ?SHARED_CALL_ID_VALUES, ?SHARED_CALL_ID_TYPES);
+shared_call_id_v(JObj) -> shared_call_id_v(wh_json:to_proplist(JObj)).
+
+%%------------------------------------------------------------------------------
 %% Shared routing key for member_connect_win
 %%------------------------------------------------------------------------------
 -spec member_connect_win_routing_key(api_terms() | ne_binary()) -> ne_binary().
@@ -407,6 +476,7 @@ bind_q(Q, Props) ->
 
 bind_q(Q, {AcctId, AgentId, _, Status}, 'undefined') ->
     amqp_util:bind_q_to_whapps(Q, agent_status_routing_key(AcctId, AgentId, Status)),
+    amqp_util:bind_q_to_whapps(Q, fsm_shared_routing_key(AcctId, AgentId)),
     amqp_util:bind_q_to_whapps(Q, sync_req_routing_key(AcctId, AgentId)),
     amqp_util:bind_q_to_whapps(Q, stats_req_routing_key(AcctId)),
     amqp_util:bind_q_to_whapps(Q, stats_req_routing_key(AcctId, AgentId));
@@ -415,6 +485,9 @@ bind_q(Q, {_, AgentId, _, _}=Ids, ['member_connect_win'|T]) ->
     bind_q(Q, Ids, T);
 bind_q(Q, {AcctId, AgentId, _, Status}=Ids, ['status'|T]) ->
     amqp_util:bind_q_to_whapps(Q, agent_status_routing_key(AcctId, AgentId, Status)),
+    bind_q(Q, Ids, T);
+bind_q(Q, {AcctId, AgentId, _, _}=Ids, ['fsm_shared'|T]) ->
+    amqp_util:bind_q_to_whapps(Q, fsm_shared_routing_key(AcctId, AgentId)),
     bind_q(Q, Ids, T);
 bind_q(Q, {AcctId, AgentId, _, _}=Ids, ['sync'|T]) ->
     amqp_util:bind_q_to_whapps(Q, sync_req_routing_key(AcctId, AgentId)),
@@ -443,6 +516,7 @@ unbind_q(Q, Props) ->
 
 unbind_q(Q, {AcctId, AgentId, _, Status}, 'undefined') ->
     _ = amqp_util:unbind_q_from_whapps(Q, agent_status_routing_key(AcctId, AgentId, Status)),
+    _ = amqp_util:unbind_q_from_whapps(Q, fsm_shared_routing_key(AcctId, AgentId)),
     _ = amqp_util:unbind_q_from_whapps(Q, sync_req_routing_key(AcctId, AgentId)),
     amqp_util:unbind_q_from_whapps(Q, stats_req_routing_key(AcctId));
 unbind_q(Q, {_, AgentId, _, _}=Ids, ['member_connect_win'|T]) ->
@@ -450,6 +524,9 @@ unbind_q(Q, {_, AgentId, _, _}=Ids, ['member_connect_win'|T]) ->
     unbind_q(Q, Ids, T);
 unbind_q(Q, {AcctId, AgentId, _, Status}=Ids, ['status'|T]) ->
     _ = amqp_util:unbind_q_from_whapps(Q, agent_status_routing_key(AcctId, AgentId, Status)),
+    unbind_q(Q, Ids, T);
+unbind_q(Q, {AcctId, AgentId, _, _}=Ids, ['fsm_shared'|T]) ->
+    _ = amqp_util:unbind_q_from_whapps(Q, fsm_shared_routing_key(AcctId, AgentId)),
     unbind_q(Q, Ids, T);
 unbind_q(Q, {AcctId, AgentId, _, _}=Ids, ['sync'|T]) ->
     _ = amqp_util:unbind_q_from_whapps(Q, sync_req_routing_key(AcctId, AgentId)),
@@ -566,3 +643,19 @@ publish_login_resp(RespQ, JObj) ->
 publish_login_resp(RespQ, API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?LOGIN_RESP_VALUES, fun login_resp/1),
     amqp_util:targeted_publish(RespQ, Payload, ContentType).
+
+-spec publish_shared_originate_failure(api_terms()) -> 'ok'.
+-spec publish_shared_originate_failure(api_terms(), ne_binary()) -> 'ok'.
+publish_shared_originate_failure(JObj) ->
+    publish_shared_originate_failure(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_shared_originate_failure(API, ContentType) ->
+    {'ok', Payload} = shared_originate_failure((API1 = wh_api:prepare_api_payload(API, ?SHARED_FAILURE_VALUES))),
+    amqp_util:whapps_publish(fsm_shared_routing_key(API1), Payload, ContentType).
+
+-spec publish_shared_call_id(api_terms()) -> 'ok'.
+-spec publish_shared_call_id(api_terms(), ne_binary()) -> 'ok'.
+publish_shared_call_id(JObj) ->
+    publish_shared_call_id(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_shared_call_id(API, ContentType) ->
+    {'ok', Payload} = shared_call_id((API1 = wh_api:prepare_api_payload(API, ?SHARED_CALL_ID_VALUES))),
+    amqp_util:whapps_publish(fsm_shared_routing_key(API1), Payload, ContentType).

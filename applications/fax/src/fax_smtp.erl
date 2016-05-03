@@ -403,14 +403,13 @@ check_number(#state{}=State) ->
                                {'ok', state()} |
                                {'error', string(), state()}.
 check_permissions(#state{from=_From
-                         ,owner_email=OwnerEmail
                          ,faxbox=FaxBoxDoc
                         }=State) ->
     lager:debug("checking if ~s can send to ~p."
                 ,[_From, wh_json:get_value(<<"name">>, FaxBoxDoc)]
                ),
     case wh_json:get_value(<<"smtp_permission_list">>, FaxBoxDoc, []) of
-        [] when OwnerEmail =:= 'undefined' ->
+        [] ->
             check_empty_permissions(State);
         Permissions ->
             check_permissions(State, Permissions)

@@ -162,7 +162,7 @@ maybe_prefix_cid_name(Number, Name, Validate, Attribute, Call) ->
 -spec maybe_rewrite_cid_number(ne_binary(), ne_binary(), boolean(), ne_binary(), whapps_call:call()) ->
                                      {api_binary(), api_binary()}.
 maybe_rewrite_cid_number(Number, Name, Validate, Attribute, Call) ->
-    case whapps_call:kvs_fetch('rewrite_cid_number', Call) of
+    case rewrite_cid_number(Call) of
         'undefined' -> maybe_rewrite_cid_name(Number, Name, Validate, Attribute, Call);
         NewNumber ->
             lager:debug("reformating caller id number from ~s to ~s", [Number, NewNumber]),
@@ -172,11 +172,25 @@ maybe_rewrite_cid_number(Number, Name, Validate, Attribute, Call) ->
 -spec maybe_rewrite_cid_name(ne_binary(), ne_binary(), boolean(), ne_binary(), whapps_call:call()) ->
                                    {api_binary(), api_binary()}.
 maybe_rewrite_cid_name(Number, Name, Validate, Attribute, Call) ->
-    case whapps_call:kvs_fetch('rewrite_cid_name', Call) of
+    case rewrite_cid_name(Call) of
         'undefined' -> maybe_ensure_cid_valid(Number, Name, Validate, Attribute, Call);
         NewName ->
             lager:debug("reformating caller id name from ~s to ~s", [Name, NewName]),
             maybe_ensure_cid_valid(Number, NewName, Validate, Attribute, Call)
+    end.
+
+-spec rewrite_cid_number(whapps_call:call()) -> api_binary().
+rewrite_cid_number(Call) ->
+    case whapps_call:kvs_fetch('rewrite_cid_number', Call) of
+        'undefined' -> whapps_call:custom_channel_var(<<"Rewrite-CID-Number">>, Call);
+        NewNumber -> NewNumber
+    end.
+
+-spec rewrite_cid_name(whapps_call:call()) -> api_binary().
+rewrite_cid_name(Call) ->
+    case whapps_call:kvs_fetch('rewrite_cid_name', Call) of
+        'undefined' -> whapps_call:custom_channel_var(<<"Rewrite-CID-Name">>, Call);
+        NewName -> NewName
     end.
 
 -spec maybe_ensure_cid_valid(ne_binary(), ne_binary(), boolean(), ne_binary(), whapps_call:call()) ->

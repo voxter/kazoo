@@ -22,6 +22,8 @@
                 ,in_the_queue_media = <<"queue-in_the_queue">> :: binary()
                 ,increase_call_volume_media = <<"queue-increase_in_call_volume">> :: binary()
                 ,estimated_wait_time_media = <<"queue-the_estimated_wait_time_is">> :: binary()
+
+                ,registered_callbacks = [] :: list()
                }).
 -type mgr_state() :: #state{}.
 
