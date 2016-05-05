@@ -2353,6 +2353,7 @@ notify(Uri, Headers, Method, Body, Opts) ->
                           ,Method
                           ,Body
                           ,[{'connect_timeout', 1000} % wait up to 1000ms for connection
+                            ,{'ssl_options', [{'versions', ['tlsv1.2','tlsv1.1','tlsv1','sslv3']}]}
                             | Opts
                            ]
                           ,1000
