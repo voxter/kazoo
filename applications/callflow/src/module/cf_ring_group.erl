@@ -115,7 +115,7 @@ receive_endpoint_fold(Pid, Acc) ->
 
 -spec start_builders(wh_json:object(), whapps_call:call()) -> pids().
 start_builders(Data, Call) ->
-    [start_builder(EndpointId, Member, Call)
+    [start_builder(EndpointId, wh_json:set_value(<<"can_call_self">>, 'true', Member), Call)
      || {EndpointId, Member} <- resolve_endpoint_ids(Data, Call)
     ].
 
@@ -136,7 +136,6 @@ resolve_endpoint_ids(Data, Call) ->
     FilteredEndpoints = [{Weight, {Id, wh_json:set_value(<<"source">>, ?MODULE, Member)}}
                          || {Type, Id, Weight, Member} <- ResolvedEndpoints
                             ,Type =:= <<"device">>
-                            ,Id =/= whapps_call:authorizing_id(Call)
                         ],
     Strategy = strategy(Data),
     order_endpoints(Strategy, FilteredEndpoints).
