@@ -592,7 +592,7 @@ ext_to_mime(<<"wav">>) -> <<"audio/x-wav">>;
 ext_to_mime(_) -> <<"audio/mp3">>.
 
 -spec get_recording_doc_id(ne_binary()) -> ne_binary().
-get_recording_doc_id(CallId) -> <<"call_recording_", CallId/binary>>.
+get_recording_doc_id(CallId) -> <<"call_recording_", (cow_qs:urlencode(CallId))/binary>>.
 
 -spec get_media_name(ne_binary(), api_binary()) -> ne_binary().
 get_media_name(CallId, Ext) ->
