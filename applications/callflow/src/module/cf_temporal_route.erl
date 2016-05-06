@@ -22,8 +22,11 @@
         ]).
 
 -ifdef(TEST).
--export([next_rule_date/2
+-export([process_rules/4
+         ,sort_by_occurrence_rate/1
+         ,next_rule_date/2
          ,sort_wdays/1
+         ,get_date/2
         ]).
 -endif.
 

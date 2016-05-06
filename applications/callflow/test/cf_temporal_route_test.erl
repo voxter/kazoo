@@ -11,10 +11,76 @@
 -include("../src/module/cf_temporal_route.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+-define(ROUTES, [<<"6a7bf6405e15d69827f27eba905f54da">>
+                 ,<<"549b60e65d6ef3910fd8c9d3f861ca5b">>
+                ]).
+-define(ROUTE_NO(No), lists:nth(No, ?ROUTES)).
+-define(TIMEZONE, <<"America/Los_Angeles">>).
+-define(DATETIME, {{2016, 5, 6}, {10, 0, 0}}).
+-define(YEAR_2000, 63113904000).
+-define(NINE_AM_START, 32400).
+-define(ELEVEN_AM_START, 39600).
+-define(FIVE_PM_STOP, 61200).
+
 sort_wdays_test() ->
     Sorted = [<<"monday">>, <<"tuesday">>, <<"wednesday">>, <<"thursday">>, <<"friday">>, <<"saturday">>, <<"sunday">>],
     Shuffled = wh_util:shuffle_list(Sorted),
     ?assertEqual(Sorted, cf_temporal_route:sort_wdays(Shuffled)).
+
+date_range_test() ->
+    Temporal = get_temporal_route(),
+    Rules = cf_temporal_route:sort_by_occurrence_rate(get_temporal_rules()),
+    ?assertEqual(?ROUTE_NO(1), cf_temporal_route:process_rules(Temporal, Rules, 'undefined', [])).
+
+%%% =====
+%%% MOCKS
+%%% =====
+
+get_temporal_route() ->
+    Timezone = ?TIMEZONE,
+    {LocalDate, LocalTime} = localtime:utc_to_local(
+                               ?DATETIME
+                               ,wh_util:to_list(Timezone)
+                              ),
+    #temporal{local_sec=calendar:datetime_to_gregorian_seconds({LocalDate, LocalTime})
+              ,local_date=LocalDate
+              ,local_time=LocalTime
+              ,timezone=?TIMEZONE
+              ,routes=?ROUTES
+              ,interdigit_timeout=20000
+              ,rule_set='false'
+             }.
+
+get_temporal_rules() ->
+    [#rule{id=?ROUTE_NO(1)
+           ,enabled='true'
+           ,name= <<"Date Range">>
+           ,cycle= <<"yearly">>
+           ,interval=?RULE_DEFAULT_INTERVAL
+           ,days=[4, 5, 6, 7, 8, 9, 10]
+           ,wdays=?RULE_DEFAULT_WDAYS
+           ,ordinal= <<"range">>
+           ,month=?RULE_DEFAULT_MONTH
+           ,start_date=cf_temporal_route:get_date(?YEAR_2000, ?TIMEZONE)
+           ,wtime_start=?ELEVEN_AM_START
+           ,wtime_stop=?FIVE_PM_STOP
+           ,rule_set='false'
+          }
+     ,#rule{id=?ROUTE_NO(2)
+            ,enabled='true'
+            ,name= <<"Open Hours">>
+            ,cycle= <<"weekly">>
+            ,interval=?RULE_DEFAULT_INTERVAL
+            ,days=?RULE_DEFAULT_DAYS
+            ,wdays=[<<"monday">>, <<"tuesday">>, <<"wensday">>, <<"thursday">>, <<"friday">>]
+            ,ordinal=?RULE_DEFAULT_ORDINAL
+            ,month=?RULE_DEFAULT_MONTH
+            ,start_date=cf_temporal_route:get_date(?YEAR_2000, ?TIMEZONE)
+            ,wtime_start=?NINE_AM_START
+            ,wtime_stop=?FIVE_PM_STOP
+            ,rule_set='false'
+           }
+    ].
 
 daily_recurrence_test() ->
     %% basic increment
