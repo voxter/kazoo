@@ -51,5 +51,8 @@ clean-test:
 
 test: clean-test compile-test eunit
 
+TEST_EBINS = $(shell find $(ROOT)/deps/erlang_localtime-* -maxdepth 2 -name ebin -print)
+TEST_PA = $(foreach EBIN,$(TEST_EBINS),-pa $(EBIN))
+
 eunit: compile-test
-	erl -noshell $(PA) -pa test -eval "case eunit:test([$(TEST_MODULES),$(MODULES),$(CF_MODULES)], [verbose]) of 'ok' -> init:stop(); _ -> init:stop(1) end."
+	erl -noshell $(PA) $(TEST_PA) -pa test -eval "case eunit:test([$(TEST_MODULES),$(MODULES),$(CF_MODULES)], [verbose]) of 'ok' -> init:stop(); _ -> init:stop(1) end."
