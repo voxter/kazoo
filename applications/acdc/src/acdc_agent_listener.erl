@@ -797,6 +797,7 @@ handle_cast({'originate_callback_to_agent', Call, WinJObj, EPs, CDRUrl, Recordin
     update_my_queues_of_change(AcctId, AgentId, Qs),
     {'noreply', State#state{call=Call
                             ,record_calls=ShouldRecord
+                            ,acdc_queue_id=wh_json:get_value(<<"Queue-ID">>, WinJObj)
                             ,msg_queue_id=wh_json:get_value(<<"Server-ID">>, WinJObj)
                             ,agent_call_ids=AgentCallIds
                             ,cdr_urls=dict:store(whapps_call:call_id(Call), CDRUrl,
