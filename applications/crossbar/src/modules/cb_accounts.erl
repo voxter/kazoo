@@ -477,6 +477,7 @@ validate_request(AccountId, Context) ->
                     ,fun validate_account_name_is_unique/2
                     ,fun validate_account_schema/2
                     ,fun disallow_direct_clients/2
+                    ,fun validate_wnm_allow_additions/2
                    ],
     lists:foldl(fun(F, C) -> F(AccountId, C) end
                 ,Context
@@ -521,8 +522,7 @@ remove_spaces_fold(Key, Acc) ->
 
 -spec cleanup_leaky_keys(api_binary(), cb_context:context()) -> cb_context:context().
 cleanup_leaky_keys(_AccountId, Context) ->
-    RemoveKeys = [<<"wnm_allow_additions">>
-                  ,<<"superduper_admin">>
+    RemoveKeys = [<<"superduper_admin">>
                   ,<<"billing_mode">>
                  ],
     ReqData = wh_json:delete_keys(RemoveKeys, cb_context:req_data(Context)),
@@ -639,6 +639,26 @@ maybe_disallow_direct_clients('false', _AccountId, Context) ->
                  ])
               ,Context
              )
+    end.
+
+-spec validate_wnm_allow_additions(api_binary(), cb_context:context()) -> cb_context:context().
+validate_wnm_allow_additions(_, Context) ->
+    case cb_context:req_value(Context, <<"wnm_allow_additions">>) of
+        'undefined' -> Context;
+        _ -> validate_wnm_allow_additions(Context)
+    end.
+
+-spec validate_wnm_allow_additions(cb_context:context()) -> cb_context:context().
+validate_wnm_allow_additions(Context) ->
+    case cb_modules_util:is_superduper_admin(Context) of
+        'false' -> cb_context:add_system_error('forbidden', Context);
+        'true' ->
+            JObj = cb_context:doc(Context),
+            UpdatedJObj = wh_json:set_value(<<"pvt_wnm_allow_additions">>
+                            ,wh_json:get_value(<<"wnm_allow_additions">>, JObj)
+                            ,JObj
+                           ),
+            cb_context:set_doc(Context, wh_json:delete_key(<<"wnm_allow_additions">>, UpdatedJObj))
     end.
 
 %%--------------------------------------------------------------------
