@@ -25,6 +25,8 @@
          ,sync_req/1, sync_req_v/1
          ,sync_resp/1, sync_resp_v/1
          ,agent_change/1, agent_change_v/1
+         ,agents_available_req/1, agents_available_req_v/1
+         ,agents_available_resp/1, agents_available_resp_v/1
          ,queue_member_add/1, queue_member_add_v/1
          ,call_position_req/1, call_position_req_v/1
          ,call_position_resp/1, call_position_resp_v/1
@@ -58,6 +60,8 @@
          ,publish_sync_req/1, publish_sync_req/2
          ,publish_sync_resp/2, publish_sync_resp/3
          ,publish_agent_change/1, publish_agent_change/2
+         ,publish_agents_available_req/1, publish_agents_available_req/2
+         ,publish_agents_available_resp/2, publish_agents_available_resp/3
          ,publish_queue_member_add/1, publish_queue_member_add/2
          ,publish_call_position_req/1, publish_call_position_req/2
          ,publish_call_position_resp/2, publish_call_position_resp/3
@@ -582,6 +586,67 @@ agent_change_v(Prop) when is_list(Prop) ->
 agent_change_v(JObj) -> agent_change_v(wh_json:to_proplist(JObj)).
 
 %%------------------------------------------------------------------------------
+%% Querying for availability of agents to take queue calls
+%%------------------------------------------------------------------------------
+-spec agents_availability_routing_key(api_terms()) -> ne_binary().
+-spec agents_availability_routing_key(ne_binary(), ne_binary()) -> ne_binary().
+agents_availability_routing_key(Props) when is_list(Props) ->
+    AccountId = props:get_value(<<"Account-ID">>, Props),
+    QueueId = props:get_value(<<"Queue-ID">>, Props, <<"*">>),
+    agents_availability_routing_key(AccountId, QueueId);
+agents_availability_routing_key(JObj) ->
+    AccountId = wh_json:get_value(<<"Account-ID">>, JObj),
+    QueueId = wh_json:get_value(<<"Queue-ID">>, JObj, <<"*">>),
+    agents_availability_routing_key(AccountId, QueueId).
+
+agents_availability_routing_key(AccountId, QueueId) ->
+    <<"acdc.queue.agents_availability.", AccountId/binary, ".", QueueId/binary>>.
+
+-define(AGENTS_AVAILABLE_REQ_HEADERS, [<<"Account-ID">>, <<"Queue-ID">>]).
+-define(OPTIONAL_AGENTS_AVAILABLE_REQ_HEADERS, []).
+-define(AGENTS_AVAILABLE_REQ_VALUES, [{<<"Event-Category">>, <<"queue">>}
+                                      ,{<<"Event-Name">>, <<"agents_available_req">>}
+                                     ]).
+-define(AGENTS_AVAILABLE_REQ_TYPES, []).
+
+-spec agents_available_req(api_terms()) ->
+                                  {'ok', iolist()} |
+                                  {'error', string()}.
+agents_available_req(Prop) when is_list(Prop) ->
+    case agents_available_req_v(Prop) of
+        'true' -> wh_api:build_message(Prop, ?AGENTS_AVAILABLE_REQ_HEADERS, ?OPTIONAL_AGENTS_AVAILABLE_REQ_HEADERS);
+        'false' -> {'error', "proplist failed validation for agents_available_req"}
+    end;
+agents_available_req(JObj) -> agents_available_req(wh_json:to_proplist(JObj)).
+
+-spec agents_available_req_v(api_terms()) -> boolean().
+agents_available_req_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?AGENTS_AVAILABLE_REQ_HEADERS, ?AGENTS_AVAILABLE_REQ_VALUES, ?AGENTS_AVAILABLE_REQ_TYPES);
+agents_available_req_v(JObj) -> agents_available_req_v(wh_json:to_proplist(JObj)).
+
+-define(AGENTS_AVAILABLE_RESP_HEADERS, [<<"Account-ID">>, <<"Queue-ID">>, <<"Agent-Count">>]).
+-define(OPTIONAL_AGENTS_AVAILABLE_RESP_HEADERS, []).
+-define(AGENTS_AVAILABLE_RESP_VALUES, [{<<"Event-Category">>, <<"queue">>}
+                                       ,{<<"Event-Name">>, <<"agents_available_resp">>}
+                                      ]).
+-define(AGENTS_AVAILABLE_RESP_TYPES, []).
+
+-spec agents_available_resp(api_terms()) ->
+                                   {'ok', iolist()} |
+                                   {'error', string()}.
+agents_available_resp(Prop) when is_list(Prop) ->
+    case agents_available_resp_v(Prop) of
+        'true' -> wh_api:build_message(Prop, ?AGENTS_AVAILABLE_RESP_HEADERS, ?OPTIONAL_AGENTS_AVAILABLE_RESP_HEADERS);
+        'false' -> {'error', "proplist failed validation for agents_available_resp"}
+    end;
+agents_available_resp(JObj) -> agents_available_resp(wh_json:to_proplist(JObj)).
+
+-spec agents_available_resp_v(api_terms()) -> boolean().
+agents_available_resp_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?AGENTS_AVAILABLE_RESP_HEADERS, ?AGENTS_AVAILABLE_RESP_VALUES, ?AGENTS_AVAILABLE_RESP_TYPES);
+agents_available_resp_v(JObj) -> agents_available_resp_v(wh_json:to_proplist(JObj)).
+
+%%------------------------------------------------------------------------------
 %% Queue Position tracking
 %%------------------------------------------------------------------------------
 -spec queue_member_routing_key(api_terms()) -> ne_binary().
@@ -765,6 +830,7 @@ bind_q(Q, Props) ->
 bind_q(Q, AcctId, QID, CallId, 'undefined') ->
     amqp_util:bind_q_to_whapps(Q, sync_req_routing_key(AcctId, QID)),
     amqp_util:bind_q_to_whapps(Q, agent_change_routing_key(AcctId, QID)),
+    amqp_util:bind_q_to_whapps(Q, agents_availability_routing_key(AcctId, QID)),
     amqp_util:bind_q_to_callmgr(Q, member_call_routing_key(AcctId, QID)),
     amqp_util:bind_q_to_callmgr(Q, member_connect_req_routing_key(AcctId, QID)),
     amqp_util:bind_q_to_callmgr(Q, member_callback_reg_routing_key(AcctId, QID, CallId));
@@ -782,6 +848,9 @@ bind_q(Q, AcctId, QID, CallId, ['sync_req'|T]) ->
     bind_q(Q, AcctId, QID, CallId, T);
 bind_q(Q, AcctId, QID, CallId, ['agent_change'|T]) ->
     amqp_util:bind_q_to_whapps(Q, agent_change_routing_key(AcctId, QID)),
+    bind_q(Q, AcctId, QID, CallId, T);
+bind_q(Q, AcctId, QID, CallId, ['agents_availability'|T]) ->
+    amqp_util:bind_q_to_whapps(Q, agents_availability_routing_key(AcctId, QID)),
     bind_q(Q, AcctId, QID, CallId, T);
 bind_q(Q, AcctId, QID, CallId, ['member_addremove'|T]) ->
     amqp_util:bind_q_to_whapps(Q, queue_member_routing_key(AcctId, QID)),
@@ -806,6 +875,7 @@ unbind_q(Q, Props) ->
 unbind_q(Q, AcctId, QID, CallId, 'undefined') ->
     _ = amqp_util:unbind_q_from_whapps(Q, sync_req_routing_key(AcctId, QID)),
     _ = amqp_util:unbind_q_from_whapps(Q, agent_change_routing_key(AcctId, QID)),
+    _ = amqp_util:unbind_q_from_whapps(Q, agents_availability_routing_key(AcctId, QID)),
     _ = amqp_util:unbind_q_from_callmgr(Q, member_call_routing_key(AcctId, QID)),
     _ = amqp_util:unbind_q_from_callmgr(Q, member_connect_req_routing_key(AcctId, QID)),
     _ = amqp_util:unbind_q_from_callmgr(Q, member_callback_reg_routing_key(AcctId, QID, CallId));
@@ -823,6 +893,9 @@ unbind_q(Q, AcctId, QID, CallId, ['sync_req'|T]) ->
     unbind_q(Q, AcctId, QID, CallId, T);
 unbind_q(Q, AcctId, QID, CallId, ['agent_change'|T]) ->
     _ = amqp_util:unbind_q_from_whapps(Q, agent_change_routing_key(AcctId, QID)),
+    unbind_q(Q, AcctId, QID, CallId, T);
+unbind_q(Q, AcctId, QID, CallId, ['agents_availability'|T]) ->
+    _ = amqp_util:unbind_q_from_whapps(Q, agents_availability_routing_key(AcctId, QID)),
     unbind_q(Q, AcctId, QID, CallId, T);
 unbind_q(Q, AcctId, QID, CallId, ['member_callback_reg'|T]) ->
     _ = amqp_util:unbind_q_from_callmgr(Q, member_callback_reg_routing_key(AcctId, QID, CallId)),
@@ -989,6 +1062,22 @@ publish_agent_change(JObj) ->
 publish_agent_change(API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?AGENT_CHANGE_VALUES, fun agent_change/1),
     amqp_util:whapps_publish(agent_change_publish_key(API), Payload, ContentType).
+
+-spec publish_agents_available_req(api_terms()) -> 'ok'.
+-spec publish_agents_available_req(api_terms(), ne_binary()) -> 'ok'.
+publish_agents_available_req(JObj) ->
+    publish_agents_available_req(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_agents_available_req(API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?AGENTS_AVAILABLE_REQ_VALUES, fun agents_available_req/1),
+    amqp_util:whapps_publish(agents_availability_routing_key(API), Payload, ContentType).
+
+-spec publish_agents_available_resp(ne_binary(), api_terms()) -> 'ok'.
+-spec publish_agents_available_resp(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+publish_agents_available_resp(RespQ, JObj) ->
+    publish_agents_available_resp(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
+publish_agents_available_resp(RespQ, API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?AGENTS_AVAILABLE_RESP_VALUES, fun agents_available_resp/1),
+    amqp_util:targeted_publish(RespQ, Payload, ContentType).
 
 -spec publish_queue_member_add(api_terms()) -> 'ok'.
 -spec publish_queue_member_add(api_terms(), ne_binary()) -> 'ok'.

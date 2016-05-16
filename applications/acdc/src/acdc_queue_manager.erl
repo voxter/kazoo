@@ -20,6 +20,7 @@
          ,handle_member_call/2
          ,handle_member_call_cancel/2
          ,handle_agent_change/2
+         ,handle_agents_available_req/2
          ,handle_queue_member_add/2
          ,handle_queue_member_position/2
          ,handle_manager_success_notify/2
@@ -64,7 +65,7 @@
                                    ,{'id', Q}
                                    ,'federate'
                                   ]}
-                         ,{'acdc_queue', [{'restrict_to', ['member_call_result', 'stats_req', 'agent_change'
+                         ,{'acdc_queue', [{'restrict_to', ['member_call_result', 'stats_req', 'agent_change', 'agents_availability'
                                                            ,'member_addremove', 'member_position', 'member_callback_reg']}
                                           ,{'account_id', A}
                                           ,{'queue_id', Q}
@@ -94,6 +95,9 @@
                       }
                      ,{{'acdc_queue_manager', 'handle_agent_change'}
                        ,[{<<"queue">>, <<"agent_change">>}]
+                      }
+                     ,{{'acdc_queue_manager', 'handle_agents_available_req'}
+                       ,[{<<"queue">>, <<"agents_available_req">>}]
                       }
                      ,{{'acdc_queue_manager', 'handle_queue_member_add'}
                        ,[{<<"queue">>, <<"member_add">>}]
@@ -236,6 +240,10 @@ handle_agent_change(JObj, Prop) ->
         <<"unavailable">> ->
             gen_listener:cast(Server, {'agent_unavailable', JObj})
     end.
+
+-spec handle_agents_available_req(wh_json:object(), wh_proplist()) -> 'ok'.
+handle_agents_available_req(JObj, Prop) ->
+    gen_listener:cast(props:get_value('server', Prop), {'agents_available_req', JObj}).
 
 -spec handle_queue_member_add(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_queue_member_add(JObj, Prop) ->
@@ -558,6 +566,20 @@ handle_cast({'agent_unavailable', AgentId}, #state{strategy=Strategy
      ,'hibernate'};
 handle_cast({'agent_unavailable', JObj}, State) ->
     handle_cast({'agent_unavailable', wh_json:get_value(<<"Agent-ID">>, JObj)}, State);
+
+handle_cast({'agents_available_req', JObj}, #state{account_id=AccountId
+                                                   ,queue_id=QueueId
+                                                   ,strategy_state=StrategyState
+                                                  }=State) ->
+    Resp = [{<<"Account-ID">>, AccountId}
+            ,{<<"Queue-ID">>, QueueId}
+            ,{<<"Agent-Count">>, ss_size(StrategyState, 'logged_in')}
+            ,{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, JObj)}
+            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+    Q = wh_json:get_value(<<"Server-ID">>, JObj),
+    wapi_acdc_queue:publish_agents_available_resp(Q, Resp),
+    {'noreply', State};
 
 handle_cast({'reject_member_call', Call, JObj}, #state{account_id=AccountId
                                                        ,queue_id=QueueId
