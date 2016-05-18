@@ -21,7 +21,9 @@
 %%--------------------------------------------------------------------
 -spec handle(wh_json:object(), whapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
-    Call2 = set_kvs(Data, Call),
+    Call2 = set_kvs(wh_json:delete_key(<<"kvs_mode">>, Data)
+                    ,set_kvs_mode(wh_json:get_value(<<"kvs_mode">>, Data), Call)
+                   ),
     cf_exe:set_call(Call2),
     cf_exe:continue(Call2).
 
@@ -30,32 +32,37 @@ get_kv(Key, Call) ->
 
 get_kv(Collection, Key, Call) ->
     wh_json:get_value(Key, get_collection(Collection, Call)).
-    
+
 set_kvs(Data, Call) ->
-    Call2 = set_kvs_mode(wh_json:get_value(<<"kvs_mode">>, Data, undefined), Call),
-    Data2 = wh_json:delete_key(<<"kvs_mode">>, Data),
-    Keys = wh_json:get_keys(Data2),
-    lists:foldl(fun(Key, Call3) ->
-        set_kvs_collection(Key, evaluate(wh_json:get_value(Key, Data2), Call3), Call3) end,
-        Call2,
-        Keys
-    ).
-    
-set_kvs_mode('undefined', Call) -> set_collection(?COLLECTION_MODE, <<"kvs_mode">>, 'undefined', Call);
+    %% Accumulating CCVs so that a single whapps_call_command:set will be executed to set them
+    {Call1, CCVs} = lists:foldl(fun(Key, {Call1, CCVs}) ->
+                                        Value = evaluate(wh_json:get_value(Key, Data), Call1),
+                                        {set_kvs_collection(Key, Value, Call1)
+                                         ,props:set_value(<<?COLLECTION_KVS/binary, "-", Key/binary>>, evaluate_ui(Value), CCVs)}
+                                end
+                                ,{Call, []}
+                                ,wh_json:get_keys(Data)
+                               ),
+    whapps_call:set_custom_channel_vars(CCVs, Call1).
+
 set_kvs_mode(Mode, Call) -> set_collection(?COLLECTION_MODE, <<"kvs_mode">>, Mode, Call).
 
 evaluate(<<"$", Key/binary>>, Call) ->
     get_kv(Key, Call);
-evaluate(Value, Call) ->
+evaluate(Value, _) ->
+    Value.
+
+-spec evaluate_ui(wh_json:json_term() | 'undefined') -> wh_json:json_term() | 'undefined'.
+evaluate_ui(Value) ->
     case wh_json:is_json_object(Value) of
-        'true' -> evaluate_ui(wh_json:get_keys(Value), Value, Call);
+        'true' -> evaluate_ui(wh_json:get_keys(Value), Value);
         'false' -> Value
     end.
 
-evaluate_ui([<<"type">>, <<"value">>], Value, _Call) ->
-    %evaluate(wh_json:get_value(<<"value">>, Value), Call);
-    Value;
-evaluate_ui(_, Value, _) ->
+-spec evaluate_ui(wh_json:keys(), wh_json:object()) -> wh_json:json_term() | 'undefined'.
+evaluate_ui([<<"type">>, <<"value">>], Value) ->
+    wh_json:get_value(<<"value">>, Value);
+evaluate_ui(_, Value) ->
     Value.
 
 -spec get_kvs_collection(whapps_call:call()) -> api_binary().
