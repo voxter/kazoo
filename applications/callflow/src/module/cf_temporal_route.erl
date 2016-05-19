@@ -87,7 +87,8 @@ process_rules(Temporal, [#rule{enabled='true'
                                ,rule_set=RuleSet
                               }=R|Rs], Call, Candidates) ->
     lager:info("time based rule ~s (~s) is forced active part of rule set? ~p", [Id, Name, RuleSet]),
-    process_rules(Temporal, Rs, Call, [R|Candidates]);
+    %% Unforced rules cannot be more specific than forced, remove them all
+    process_rules(Temporal, remove_unforced_rules(Rs), Call, [R|Candidates]);
 process_rules(Temporal, [_|_]=Rules, Call, Candidates) ->
     update_candidates(Temporal, Rules, Call, Candidates);
 process_rules(_, [], _, []) ->
@@ -102,6 +103,18 @@ process_rules(_, [], _, [#rule{id=Id
         'true' -> <<"rule_set">>;
         'false' -> Id
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Removes all rules that are not forced on
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_unforced_rules(rules()) -> rules().
+remove_unforced_rules(Rules) ->
+    lists:filter(fun(#rule{enabled='true'}) -> 'true';
+                    (_) -> 'false'
+                 end, Rules).
 
 %%--------------------------------------------------------------------
 %% @private
