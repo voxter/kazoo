@@ -159,7 +159,6 @@ replace_candidates(#temporal{local_sec=LSec
                     ]
                    ,Call
                    ,Candidates) ->
-    Candidates1 = lists:filter(fun(Candidate) -> not overlaps(Rule, Candidate) end, Candidates),
     lager:info("processing temporal rule ~s (~s) part of rule set? ~p", [Id, Name, RuleSet]),
     PrevDay = normalize_date({Y, M, D - 1}),
     BaseDate = next_rule_date(Rule, PrevDay),
@@ -167,25 +166,14 @@ replace_candidates(#temporal{local_sec=LSec
     case {BaseTime + TStart, BaseTime + TStop} of
         {Start, _} when LSec < Start ->
             lager:info("rule applies in the future ~w", [calendar:gregorian_seconds_to_datetime(Start)]),
-            process_rules(T, Rules, Call, Candidates1);
+            process_rules(T, Rules, Call, Candidates);
         {_, End} when LSec > End ->
             lager:info("rule was valid today but expired ~w", [calendar:gregorian_seconds_to_datetime(End)]),
-            process_rules(T, Rules, Call, Candidates1);
+            process_rules(T, Rules, Call, Candidates);
         {_, End} ->
             lager:info("within active time window until ~w", [calendar:gregorian_seconds_to_datetime(End)]),
-            process_rules(T, Rules, Call, [Rule|Candidates1])
+            process_rules(T, Rules, Call, [Rule|Candidates])
     end.
-
--spec overlaps(rule(), rule()) -> boolean().
-overlaps(#rule{wtime_start=TStart
-               ,wtime_stop=TStop
-              }
-         ,#rule{wtime_start=TStart1
-                ,wtime_stop=TStop1
-               }) ->
-    TStart > TStart1 andalso TStart < TStop1 orelse
-      TStop > TStart1 andalso TStop < TStop1 orelse
-      TStart =< TStart1 andalso TStop >= TStop1.
 
 %%--------------------------------------------------------------------
 %% @private
