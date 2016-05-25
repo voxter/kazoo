@@ -520,9 +520,9 @@ sync({'sync_resp', JObj}, #state{sync_ref=Ref
             lager:debug("other agent is in ready state, joining"),
             _ = erlang:cancel_timer(Ref),
             acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
-            {Next, SwitchTo, State} =
+            {Next, SwitchTo, State1} =
                 apply_state_updates(State#state{sync_ref='undefined'}),
-            {Next, SwitchTo, State, 'hibernate'};
+            {Next, SwitchTo, State1, 'hibernate'};
         {'EXIT', _} ->
             lager:debug("other agent sent unusable state, ignoring"),
             {'next_state', 'sync', State};
