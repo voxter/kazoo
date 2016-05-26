@@ -465,6 +465,7 @@ to_proplist(#whapps_call{}=Call) ->
      ,{<<"Custom-Channel-Vars">>, custom_channel_vars(Call)}
      ,{<<"Custom-SIP-Headers">>, custom_sip_headers(Call)}
      ,{<<"Key-Value-Store">>, kvs_to_proplist(Call)}
+     ,{<<"Custom-KVs">>, wh_json:to_proplist(custom_kvs(Call))}
      ,{<<"Other-Leg-Call-ID">>, other_leg_call_id(Call)}
      ,{<<"Resource-Type">>, resource_type(Call)}
      ,{<<"Language">>, language(Call)}
@@ -1071,7 +1072,7 @@ set_custom_kvs_collection(Collection, Key, Value, Call) ->
         Call
     ).
 
--spec custom_kvs(call()) -> wh_proplist() | text().
+-spec custom_kvs(call()) -> wh_json:object().
 custom_kvs(Call) ->
     custom_kvs_collection(?COLLECTION_KVS, Call).
 
@@ -1079,7 +1080,7 @@ custom_kvs(Call) ->
 custom_kvs_mode(Call) ->
     wh_json:get_value(<<"kvs_mode">>, custom_kvs_collection(?COLLECTION_MODE, Call), <<"props">>).
 
--spec custom_kvs_collection(binary(), call()) -> wh_json:json_term() | 'undefined'.
+-spec custom_kvs_collection(binary(), call()) -> wh_json:object().
 custom_kvs_collection(Collection, Call) ->
     wh_json:get_value(Collection, custom_kvs_collections(Call), wh_json:new()).
 
