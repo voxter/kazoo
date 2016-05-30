@@ -424,8 +424,15 @@ to_json(#whapps_call{}=Call) ->
                   ,V =/= 'undefined'
                   ,wh_json:is_json_term(V)
           ],
+
+    CustomKVs = [KV
+                 || {_, V}=KV <- props:get_value(<<"Custom-KVs">>, Props, [])
+                        ,V =/= 'undefined'
+                        ,wh_json:is_json_term(V)
+                ],
     wh_json:from_list([KV
-                       || {_, V}=KV <- [{<<"Key-Value-Store">>, wh_json:from_list(KVS)} |
+                       || {_, V}=KV <- [{<<"Key-Value-Store">>, wh_json:from_list(KVS)},
+                                        {<<"Custom-KVs">>, wh_json:from_list(CustomKVs)} |
                                         proplists:delete(<<"Key-Value-Store">>, Props)
                                        ]
                               ,V =/= 'undefined'
