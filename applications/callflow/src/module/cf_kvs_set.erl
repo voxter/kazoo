@@ -43,23 +43,51 @@ set_kvs(Data, Call) ->
 
 set_kvs_mode(Mode, Call) -> set_collection(?COLLECTION_MODE, <<"kvs_mode">>, Mode, Call).
 
-evaluate(<<"$", Key/binary>>, Call) ->
+evaluate(Key, Call) ->
+    case digits_key(Key) of
+        {'error', JObj} -> JObj;
+        'false' -> evaluate2(Key, Call);
+        CollectionName -> whapps_call:get_dtmf_collection(CollectionName, Call)
+    end.
+
+evaluate2(<<"$", Key/binary>>, Call) ->
     get_kv(Key, Call);
-evaluate(Value, _) ->
+evaluate2(Value, Call) ->
+    evaluate_ui(Value, Call).
+
+-spec digits_key(ne_binary()) -> ne_binary() | {'error', wh_json:object()} | 'false'.
+digits_key(<<"$_digits">>) ->
+    <<"default">>;
+digits_key(<<"$_digits[", CollectionName/binary>> = Key) when byte_size(CollectionName) > 0 ->
+    case binary:part(CollectionName, byte_size(CollectionName), -1) of
+        <<"]">> -> binary:part(CollectionName, 0, byte_size(CollectionName) - 1);
+        _ -> digit_evaluation_error(Key)
+    end;
+digits_key(<<"$_digits[">> = Key) ->
+    digit_evaluation_error(Key);
+digits_key(_) -> 'false'.
+
+-spec digit_evaluation_error(ne_binary()) -> {'error', wh_json:json_term()}.
+digit_evaluation_error(Key) ->
+    Msg = "invalid kv lookup key used",
+    lager:info(Msg ++ ": ~s", [Key]),
+    {'error', wh_json:from_list([{<<"error">>, wh_util:to_binary(Msg)}
+                                 ,{<<"key">>, Key}
+                                ])}.
+
+-spec evaluate_ui(wh_json:json_term() | 'undefined', whapps_call:call()) -> wh_json:json_term() | 'undefined'.
+evaluate_ui(Value, Call) ->
+    case wh_json:is_json_object(Value) of
+        'true' -> evaluate_ui(wh_json:get_keys(Value), Value, Call);
+        'false' -> Value
+    end.
+
+-spec evaluate_ui(wh_json:keys(), wh_json:object(), whapps_call:call()) -> wh_json:json_term() | 'undefined'.
+evaluate_ui([<<"type">>, <<"value">>], Value, Call) ->
+    KeyToCheck = wh_json:get_value(<<"value">>, Value),
+    wh_json:set_value(<<"value">>, evaluate(KeyToCheck, Call), Value);
+evaluate_ui(_, Value, _) ->
     Value.
-
-% -spec evaluate_ui(wh_json:json_term() | 'undefined') -> wh_json:json_term() | 'undefined'.
-% evaluate_ui(Value) ->
-%     case wh_json:is_json_object(Value) of
-%         'true' -> evaluate_ui(wh_json:get_keys(Value), Value);
-%         'false' -> Value
-%     end.
-
-% -spec evaluate_ui(wh_json:keys(), wh_json:object()) -> wh_json:json_term() | 'undefined'.
-% evaluate_ui([<<"type">>, <<"value">>], Value) ->
-%     wh_json:get_value(<<"value">>, Value);
-% evaluate_ui(_, Value) ->
-%     Value.
 
 -spec get_kvs_collection(whapps_call:call()) -> api_binary().
 get_kvs_collection(Call) ->
