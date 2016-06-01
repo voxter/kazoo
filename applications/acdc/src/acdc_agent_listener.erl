@@ -189,31 +189,17 @@
 start_link(Supervisor, AgentJObj) ->
     AgentId = wh_doc:id(AgentJObj),
     AcctId = account_id(AgentJObj),
-
-    Queues = case wh_json:get_value(<<"queues">>, AgentJObj) of
-                 'undefined' -> [];
-                 Qs -> Qs
-             end,
+    Queues = wh_json:get_value(<<"queues">>, AgentJObj, []),
     start_link(Supervisor, AgentJObj, AcctId, AgentId, Queues).
-start_link(Supervisor, _, _AcctId, _AgentId, []) ->
-    lager:debug("agent ~s has no queues, not starting", [_AgentId]),
-    _ = wh_util:spawn('acdc_agent_sup', 'stop', [Supervisor]),
-    'ignore';
+
 start_link(Supervisor, AgentJObj, AcctId, AgentId, Queues) ->
-    case acdc_agent_util:most_recent_status(AcctId, AgentId) of
-        {'ok', <<"logged_out">>} ->
-            lager:debug("agent ~s in ~s is logged out, not starting", [AgentId, AcctId]),
-            _ = wh_util:spawn('acdc_agent_sup', 'stop', [Supervisor]),
-            'ignore';
-        {'ok', _S} ->
-            lager:debug("start bindings for ~s(~s) in ~s", [AcctId, AgentId, _S]),
-            gen_listener:start_link(?MODULE
-                                    ,[{'bindings', ?BINDINGS(AcctId, AgentId)}
-                                      ,{'responders', ?RESPONDERS}
-                                     ]
-                                    ,[Supervisor, AgentJObj, Queues]
-                                   )
-    end.
+    lager:debug("start bindings for ~s(~s) in ready", [AcctId, AgentId]),
+    gen_listener:start_link(?MODULE
+                            ,[{'bindings', ?BINDINGS(AcctId, AgentId)}
+                              ,{'responders', ?RESPONDERS}
+                             ]
+                            ,[Supervisor, AgentJObj, Queues]
+                           ).
 
 start_link(Supervisor, ThiefCall, QueueId) ->
     AgentId = whapps_call:owner_id(ThiefCall),

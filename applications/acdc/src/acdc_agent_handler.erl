@@ -150,7 +150,6 @@ maybe_start_agent(AccountId, AgentId) ->
     case acdc_agents_sup:find_agent_supervisor(AccountId, AgentId) of
         'undefined' ->
             lager:debug("agent ~s (~s) not found, starting", [AgentId, AccountId]),
-            acdc_agent_stats:agent_ready(AccountId, AgentId),
             case couch_mgr:open_doc(wh_util:format_account_id(AccountId, 'encoded'), AgentId) of
                 {'ok', AgentJObj} -> acdc_agents_sup:new(AgentJObj);
                 {'error', _E}=E ->
@@ -170,8 +169,6 @@ maybe_stop_agent(AccountId, AgentId, JObj) ->
             acdc_agent_stats:agent_logged_out(AccountId, AgentId);
         Sup when is_pid(Sup) ->
             lager:debug("agent ~s(~s) is logging out, stopping ~p", [AgentId, AgentId, Sup]),
-            acdc_agent_stats:agent_pending_logged_out(AccountId, AgentId),
-
             case catch acdc_agent_sup:fsm(Sup) of
                 APid when is_pid(APid) ->
                     acdc_agent_fsm:update_presence(APid, presence_id(JObj), presence_state(JObj, ?PRESENCE_RED_SOLID)),
