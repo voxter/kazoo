@@ -581,8 +581,8 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
     case get_endpoints(OrigEPs, AgentListener, Call, AgentId, QueueId) of
         {'error', 'no_endpoints'} ->
             lager:info("agent ~s has no endpoints assigned; logging agent out", [AgentId]),
-            acdc_agent_listener:logout_agent(AgentListener),
             acdc_agent_stats:agent_logged_out(AccountId, AgentId),
+            ?MODULE:agent_logout(self()),
             acdc_agent_listener:member_connect_retry(AgentListener, JObj),
             {'next_state', 'paused', State};
         {'error', _E} ->
@@ -668,11 +668,10 @@ ready({'member_connect_req', _}, #state{max_connect_failures=Max
                                         ,connect_failures=Fails
                                         ,account_id=AccountId
                                         ,agent_id=AgentId
-                                        ,agent_listener=AgentListener
                                        }=State) when is_integer(Max), Fails >= Max ->
     lager:info("agent has failed to connect ~b times, logging out", [Fails]),
-    acdc_agent_listener:logout_agent(AgentListener),
     acdc_agent_stats:agent_logged_out(AccountId, AgentId),
+    ?MODULE:agent_logout(self()),
     {'next_state', 'paused', State};
 ready({'member_connect_req', JObj}, #state{agent_listener=AgentListener}=State) ->
     acdc_agent_listener:member_connect_resp(AgentListener, JObj),
@@ -2010,10 +2009,9 @@ clear_call(#state{connect_failures=Fails
                   ,max_connect_failures=Max
                   ,account_id=AccountId
                   ,agent_id=AgentId
-                  ,agent_listener=AgentListener
                  }=State, 'failed') when is_integer(Max), (Max - Fails) =< 1 ->
-    acdc_agent_listener:logout_agent(AgentListener),
     acdc_agent_stats:agent_logged_out(AccountId, AgentId),
+    ?MODULE:agent_logout(self()),
     lager:debug("agent has failed to connect ~b times, logging out", [Fails+1]),
     clear_call(State#state{connect_failures=Fails+1}, 'paused');
 clear_call(#state{connect_failures=Fails
