@@ -2233,7 +2233,6 @@ get_endpoints(OrigEPs, AgentListener, Call, AgentId, QueueId) ->
             {'ok', [wh_json:set_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], QueueId, EP) || EP <- EPs]};
         {'EXIT', E} ->
             lager:debug("failed to load endpoints: ~p", [E]),
-            acdc_agent_listener:stop(AgentListener),
             {'error', E}
     end.
 
