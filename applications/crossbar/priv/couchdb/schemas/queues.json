@@ -81,7 +81,6 @@
             "type": "object"
         },
         "caller_exit_key": {
-            "default": "#",
             "description": "Key caller can press while on hold to exit the queue and continue in the callflow",
             "enum": [
                 "1",
