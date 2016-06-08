@@ -30,6 +30,7 @@
 
 -define(STATUS_PATH_TOKEN, <<"status">>).
 -define(CHECK_SYNC_PATH_TOKEN, <<"sync">>).
+-define(OWNED_BY_PATH_TOKEN, <<"owned_by">>).
 
 -define(MOD_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".devices">>).
 
@@ -90,7 +91,9 @@ allowed_methods(_) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE].
 
 allowed_methods(_DeviceId, ?CHECK_SYNC_PATH_TOKEN) ->
-    [?HTTP_POST].
+    [?HTTP_POST];
+allowed_methods(?OWNED_BY_PATH_TOKEN, _) ->
+    [?HTTP_GET].
 
 allowed_methods(_, ?QUICKCALL_PATH_TOKEN, _) ->
     [?HTTP_GET].
@@ -112,7 +115,8 @@ resource_exists() -> 'true'.
 
 resource_exists(_) -> 'true'.
 
-resource_exists(_DeviceId, ?CHECK_SYNC_PATH_TOKEN) -> 'true'.
+resource_exists(_DeviceId, ?CHECK_SYNC_PATH_TOKEN) -> 'true';
+resource_exists(?OWNED_BY_PATH_TOKEN, _) -> 'true'.
 
 resource_exists(_, ?QUICKCALL_PATH_TOKEN, _) -> 'true'.
 
@@ -233,7 +237,9 @@ validate_device(Context, DeviceId, ?HTTP_DELETE) ->
     load_device(DeviceId, Context).
 
 validate(Context, DeviceId, ?CHECK_SYNC_PATH_TOKEN) ->
-    load_device(DeviceId, Context).
+    load_device(DeviceId, Context);
+validate(Context, ?OWNED_BY_PATH_TOKEN, UserId) ->
+    load_users_device_summary(Context, UserId).
 
 validate(Context, DeviceId, ?QUICKCALL_PATH_TOKEN, _ToDial) ->
     Context1 = crossbar_util:maybe_validate_quickcall(load_device(DeviceId, Context)),
