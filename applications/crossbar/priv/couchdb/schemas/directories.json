@@ -34,6 +34,18 @@
             "required": true,
             "type": "string"
         },
+        "search_fields": {
+            "default": "both",
+            "description": "Which fields to search in when a caller enters characters",
+            "enum": [
+                "first_name",
+                "last_name",
+                "both"
+            ],
+            "name": "Search Fields",
+            "required": false,
+            "type": "string"
+        },
         "sort_by": {
             "default": "last_name",
             "description": "What field to sort on in matching documents when a caller enters characters",

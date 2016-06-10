@@ -431,7 +431,7 @@ create_number(Number, AssignTo, AuthBy, PublicFields, DryRun, ModuleName) ->
                                      ]};
                     (#number{number_doc=JObj}) ->
                          lager:debug("create number successfully completed"),
-                         {'ok', wh_json:public_fields(JObj)}
+                         {'ok', leaks_private_fields_safely(JObj)}
                  end
                ],
     lists:foldl(fun(F, J) -> catch F(J) end, 'ok', Routines).
@@ -902,7 +902,7 @@ get_public_fields(Number, AuthBy) ->
                          {E, Reason};
                     (#number{number_doc=JObj}) ->
                          lager:debug("fetch public fields successfully completed"),
-                         {'ok', wh_json:public_fields(JObj)}
+                         {'ok', leaks_private_fields_safely(JObj)}
                  end
                ],
     lists:foldl(fun(F, J) -> catch F(J) end, 'ok', Routines).
@@ -943,7 +943,7 @@ set_public_fields(Number, PublicFields, AuthBy, DryRun) ->
                                      ]};
                     (#number{number_doc=JObj}) ->
                          lager:debug("set public fields successfully completed"),
-                         {'ok', wh_json:public_fields(JObj)}
+                         {'ok', leaks_private_fields_safely(JObj)}
                  end
                ],
     lists:foldl(fun(F, J) -> catch F(J) end, wnm_number:get(Number, PublicFields), Routines).
@@ -958,6 +958,29 @@ track_assignment(Account, Props) ->
       end
       ,Props
      ).
+
+-spec leaks_private_fields_safely(wh_json:object()) -> wh_json:object().
+leaks_private_fields_safely(JObj) ->
+    State = {<<"state">>, wh_json:get_value(?PVT_NUMBER_STATE, JObj)},
+    UsedBy = {<<"used_by">>, wh_json:get_value(<<"used_by">>, JObj)},
+    ReadOnly =
+        wh_json:from_list(
+          props:filter_empty(
+            [{<<"created">>, wh_doc:created(JObj)}
+            ,{<<"modified">>, wh_doc:modified(JObj)}
+            ,State
+            ,UsedBy
+            ])
+         ),
+    Root =
+        wh_json:from_list(
+          props:filter_empty(
+            [ State
+            , UsedBy
+              | wh_json:to_proplist(wh_json:public_fields(JObj))
+            ])
+         ),
+    wh_json:set_value(<<"_read_only">>, ReadOnly, Root).
 
 %%--------------------------------------------------------------------
 %% @private

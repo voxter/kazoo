@@ -216,8 +216,10 @@ build_filter_fun(Name, Number) ->
 format_endpoints(Endpoints, Name, Number, OffnetReq, FilterFun) ->
     DefaultRealm = default_realm(OffnetReq),
     SIPHeaders = stepswitch_util:get_sip_headers(OffnetReq),
-    AccountId = wapi_offnet_resource:account_id(OffnetReq),
-
+    AccountId = wapi_offnet_resource:hunt_account_id(
+                  OffnetReq
+                  ,wapi_offnet_resource:account_id(OffnetReq)
+                 ),
     [format_endpoint(set_endpoint_caller_id(Endpoint, Name, Number)
                      ,Number, FilterFun, DefaultRealm, SIPHeaders, AccountId
                     )
@@ -301,9 +303,10 @@ maybe_endpoint_format_from(Endpoint, Number, DefaultRealm) ->
 -spec endpoint_format_from(wh_json:object(), ne_binary(), api_binary(), wh_json:object()) ->
                                   wh_json:object().
 endpoint_format_from(Endpoint, Number, DefaultRealm, CCVs) ->
+    FromNumber = wh_json:get_ne_value(?KEY_OUTBOUND_CALLER_ID_NUMBER, Endpoint, Number),
     case wh_json:get_value(<<"From-URI-Realm">>, CCVs, DefaultRealm) of
         <<_/binary>> = Realm ->
-            FromURI = <<"sip:", Number/binary, "@", Realm/binary>>,
+            FromURI = <<"sip:", FromNumber/binary, "@", Realm/binary>>,
             lager:debug("setting resource ~s from-uri to ~s"
                         ,[wh_json:get_value(<<"Resource-ID">>, CCVs)
                           ,FromURI
