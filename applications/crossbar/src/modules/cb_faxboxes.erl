@@ -25,6 +25,8 @@
 
 -define(CB_LIST, <<"faxbox/crossbar_listing">>).
 
+-define(DEFAULT_FAX_SMTP_DOMAIN_PATH_TOKEN, <<"default_fax_smtp_domain">>).
+
 -define(GPC_URL, "https://www.google.com/cloudprint/").
 -define(GPC_URL_REGISTER, <<?GPC_URL,"register">>).
 -define(GPC_PROXY, <<"kazoo-cloud-fax-printer-proxy">>).
@@ -92,6 +94,8 @@ init() ->
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
 
+allowed_methods(?DEFAULT_FAX_SMTP_DOMAIN_PATH_TOKEN) ->
+    [?HTTP_GET];
 allowed_methods(_BoxId) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_PATCH, ?HTTP_DELETE].
 
@@ -108,6 +112,7 @@ allowed_methods(_BoxId) ->
 -spec resource_exists(path_token()) -> 'true'.
 
 resource_exists() -> 'true'.
+resource_exists(?DEFAULT_FAX_SMTP_DOMAIN_PATH_TOKEN) -> 'true';
 resource_exists(_BoxId) -> 'true'.
 
 %%--------------------------------------------------------------------
@@ -131,6 +136,10 @@ validate_faxboxes(Context, ?HTTP_PUT) ->
 validate_faxboxes(Context, ?HTTP_GET) ->
     faxbox_listing(Context).
 
+validate(Context, ?DEFAULT_FAX_SMTP_DOMAIN_PATH_TOKEN) ->
+    ResellerId = cb_context:reseller_id(Context),
+    Domain = whapps_account_config:get_global(ResellerId, <<"fax">>, <<"default_smtp_domain">>, ?DEFAULT_FAX_SMTP_DOMAIN),
+    crossbar_util:response(wh_json:set_value(<<"default_smtp_domain">>, Domain, wh_json:new()), Context);
 validate(Context, Id) ->
     validate_faxbox(Context, Id, cb_context:req_verb(Context)).
 

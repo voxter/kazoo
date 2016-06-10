@@ -22,8 +22,11 @@
         ]).
 
 -ifdef(TEST).
--export([next_rule_date/2
+-export([process_rules/4
+         ,sort_by_occurrence_rate/1
+         ,next_rule_date/2
          ,sort_wdays/1
+         ,get_date/2
         ]).
 -endif.
 
@@ -204,15 +207,30 @@ occurrence_rate(#rule{cycle = <<"weekly">>
     (Stop - Start) * (365 / 7) * length(Weekdays) / I0;
 occurrence_rate(#rule{cycle = <<"monthly">>
                       ,interval=I0
+                      ,wdays=Weekdays
                       ,wtime_start=Start
                       ,wtime_stop=Stop
-                     }) ->
+                     }) when length(Weekdays) > 0 ->
     (Stop - Start) * 12 / I0;
-occurrence_rate(#rule{cycle = <<"yearly">>
+occurrence_rate(#rule{cycle = <<"monthly">>
+                      ,interval=I0
+                      ,days=Days
                       ,wtime_start=Start
                       ,wtime_stop=Stop
                      }) ->
-    (Stop - Start).
+    (Stop - Start) * 12 / I0 * length(Days);
+occurrence_rate(#rule{cycle = <<"yearly">>
+                      ,wdays=Weekdays
+                      ,wtime_start=Start
+                      ,wtime_stop=Stop
+                     }) when length(Weekdays) > 0 ->
+    (Stop - Start);
+occurrence_rate(#rule{cycle = <<"yearly">>
+                      ,days=Days
+                      ,wtime_start=Start
+                      ,wtime_stop=Stop
+                     }) ->
+    (Stop - Start) * length(Days).
 
 %%--------------------------------------------------------------------
 %% @private

@@ -49,9 +49,6 @@
 
 %% API
 -export([start_link/5, stop/1]).
--export([handle_call_command/2]).
--export([handle_conference_command/2]).
--export([handle_call_events/2]).
 -export([handle_control_queue_req/2]).
 -export([queue_name/1]).
 -export([callid/1]).
@@ -104,19 +101,9 @@
          }).
 -type state() :: #state{}.
 
--define(RESPONDERS, [{{?MODULE, 'handle_call_command'}
-                      ,[{<<"call">>, <<"command">>}]
-                     }
-                     ,{{?MODULE, 'handle_conference_command'}
-                       ,[{<<"conference">>, <<"command">>}]
-                      }
-                     ,{{?MODULE, 'handle_call_events'}
-                       ,[{<<"call_event">>, <<"*">>}]
-                      }
-                     ,{{?MODULE, 'handle_control_queue_req'}
-                       ,[{<<"amimulator">>, <<"control_queue_req">>}]
-                      }
-                    ]).
+-define(RESPONDERS, [{{?MODULE, 'handle_control_queue_req'}
+                      ,[{<<"amimulator">>, <<"control_queue_req">>}]
+                     }]).
 -define(QUEUE_NAME, <<>>).
 -define(QUEUE_OPTIONS, []).
 -define(CONSUME_OPTIONS, []).
@@ -205,31 +192,6 @@ fs_nodeup(Srv, Node) ->
 -spec fs_nodedown(pid(), atom()) -> 'ok'.
 fs_nodedown(Srv, Node) ->
     gen_server:cast(Srv, {'fs_nodedown', Node}).
-
--spec handle_call_command(wh_json:object(), wh_proplist()) -> 'ok'.
-handle_call_command(JObj, Props) ->
-    Srv = props:get_value('server', Props),
-    gen_listener:cast(Srv, {'dialplan', JObj}).
-
--spec handle_conference_command(wh_json:object(), wh_proplist()) -> 'ok'.
-handle_conference_command(JObj, Props) ->
-    Srv = props:get_value('server', Props),
-    gen_listener:cast(Srv, {'dialplan', JObj}).
-
--spec handle_call_events(wh_json:object(), wh_proplist()) -> 'ok'.
-handle_call_events(JObj, Props) ->
-    Srv = props:get_value('server', Props),
-    wh_util:put_callid(wh_json:get_value(<<"Call-ID">>, JObj)),
-    case wh_json:get_value(<<"Event-Name">>, JObj) of
-        <<"usurp_control">> ->
-            case wh_json:get_value(<<"Fetch-ID">>, JObj)
-                =:= props:get_value('fetch_id', Props)
-            of
-                'false' -> gen_listener:cast(Srv, {'usurp_control', JObj});
-                'true' -> 'ok'
-            end;
-        _Else -> 'ok'
-    end.
 
 -spec handle_control_queue_req(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_control_queue_req(JObj, Props) ->
@@ -498,8 +460,33 @@ handle_info(_Msg, State) ->
 %% @spec handle_event(JObj, State) -> {reply, Options}
 %% @end
 %%--------------------------------------------------------------------
-handle_event(_JObj, #state{fetch_id=FetchId}) ->
-    {'reply', [{'fetch_id', FetchId}]}.
+handle_event(JObj, #state{fetch_id=FetchId}) ->
+    _ = case wh_util:get_event_type(JObj) of
+            {<<"call">>, <<"command">>} -> handle_call_command(JObj);
+            {<<"conference">>, <<"command">>} -> handle_conference_command(JObj);
+            {<<"call_event">>, _} -> handle_call_events(JObj, FetchId)
+        end,
+    'ignore'.
+
+-spec handle_call_command(wh_json:object()) -> 'ok'.
+handle_call_command(JObj) ->
+    gen_listener:cast(self(), {'dialplan', JObj}).
+
+-spec handle_conference_command(wh_json:object()) -> 'ok'.
+handle_conference_command(JObj) ->
+    gen_listener:cast(self(), {'dialplan', JObj}).
+
+-spec handle_call_events(wh_json:object(), ne_binary()) -> 'ok'.
+handle_call_events(JObj, FetchId) ->
+    wh_util:put_callid(wh_json:get_value(<<"Call-ID">>, JObj)),
+    case wh_json:get_value(<<"Event-Name">>, JObj) of
+        <<"usurp_control">> ->
+            case wh_json:get_value(<<"Fetch-ID">>, JObj) =:= FetchId of
+                'false' -> gen_listener:cast(self(), {'usurp_control', JObj});
+                'true' -> 'ok'
+            end;
+        _Else -> 'ok'
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
