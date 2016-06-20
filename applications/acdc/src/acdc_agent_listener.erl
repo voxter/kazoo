@@ -27,7 +27,6 @@
          ,channel_hungup/2
          ,rebind_events/3
          ,unbind_from_events/2
-         ,member_transferred/3
          ,originate_execute/2
          ,originate_uuid/3
          ,outbound_call/2
@@ -278,10 +277,6 @@ unbind_from_events(Srv, CallId) ->
 rebind_events(Srv, OldCallId, NewCallId) ->
     gen_listener:cast(Srv, {'rebind_events', OldCallId, NewCallId}).
 
--spec member_transferred(pid(), ne_binary(), ne_binary()) -> 'ok'.
-member_transferred(Srv, OldCallId, NewCallId) ->
-    gen_listener:cast(Srv, {'member_transferred', OldCallId, NewCallId}).
-
 originate_execute(Srv, JObj) ->
     gen_listener:cast(Srv, {'originate_execute', JObj}).
 
@@ -526,32 +521,6 @@ handle_cast({'rebind_events', OldCallId, NewCallId}, State) ->
 handle_cast({'unbind_from_events', CallId}, State) ->
     acdc_util:unbind_from_call_events(CallId),
     {'noreply', State};
-
-handle_cast({'member_transferred', OldCallId, NewCallId}, #state{call=OldCall
-                                                                 ,original_call='undefined'
-                                                                 ,acct_id=AccountId
-                                                                 ,acdc_queue_id=QueueId
-                                                                }=State) ->
-    acdc_util:unbind_from_call_events(OldCallId),
-    acdc_util:bind_to_call_events(NewCallId),
-    acdc_stats:call_id_change(AccountId, QueueId, OldCallId, NewCallId),
-    {'noreply', State#state{call=whapps_call:set_call_id(NewCallId, OldCall)}};
-
-handle_cast({'member_transferred', OldCallId, NewCallId}, #state{call=Call
-                                                                 ,original_call=OrigCall
-                                                                 ,acct_id=AccountId
-                                                                 ,acdc_queue_id=QueueId
-                                                                }=State) ->
-    acdc_util:unbind_from_call_events(OldCallId),
-    acdc_util:bind_to_call_events(NewCallId),
-    acdc_stats:call_id_change(AccountId, QueueId, whapps_call:call_id(OrigCall), NewCallId),
-
-    %% Once we do a call id change from the original call id to a new one,
-    %% we no longer want to do id changes from the original id on subsequent
-    %% transfers -- clear the original call field
-    {'noreply', State#state{call=whapps_call:set_call_id(NewCallId, Call)
-                            ,original_call='undefined'
-                           }};
 
 handle_cast({'channel_hungup', CallId}, #state{call=Call
                                                ,is_thief=IsThief
