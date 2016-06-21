@@ -748,6 +748,19 @@ call_summary_build_match_spec(JObj, AccountMatch) ->
     end.
 
 call_summary_match_builder_fold(_, _, {'error', _Err}=E) -> E;
+call_summary_match_builder_fold(<<"Queue-ID">>, QueueId, {CallStat, Contstraints}) ->
+    {CallStat#call_summary_stat{queue_id='$2'}
+     ,[{'=:=', '$2', {'const', QueueId}} | Contstraints]
+    };
+call_summary_match_builder_fold(<<"Status">>, Status, {CallStat, Contstraints}) ->
+    case is_valid_call_status(Status) of
+        {'true', Normalized} ->
+            {CallStat#call_summary_stat{status='$3'}
+             ,[{'=:=', '$3', {'const', Normalized}} | Contstraints]
+            };
+        'false' ->
+            {'error', wh_json:from_list([{<<"Status">>, <<"unknown status supplied">>}])}
+    end;
 call_summary_match_builder_fold(_, _, Acc) -> Acc.
 
 agent_call_build_match_spec(JObj) ->
