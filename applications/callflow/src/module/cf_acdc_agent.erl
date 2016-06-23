@@ -151,11 +151,11 @@ pause_agent(Call, AgentId, Data, Timeout) ->
     _ = play_agent_pause(Call),
     update_agent_status(Call, AgentId, Data, fun wapi_acdc_agent:publish_pause/1, Timeout).
 pause_agent(Call, AgentId, Data) ->
-    Timeout = wh_json:get_integer_value(<<"timeout">>
-                                        ,Data
-                                        ,whapps_config:get(<<"acdc">>, <<"default_agent_pause_timeout">>, 600)
-                                       ),
-    lager:info("agent ~s is pausing work for ~s s", [AgentId, Timeout]),
+    Timeout = wh_json:get_value(<<"timeout">>
+                                ,Data
+                                ,whapps_config:get(<<"acdc">>, <<"default_agent_pause_timeout">>, 600)
+                               ),
+    lager:info("agent ~s is pausing work for ~p s", [AgentId, Timeout]),
     pause_agent(Call, AgentId, Data, Timeout).
 
 resume_agent(Call, AgentId, Data) ->

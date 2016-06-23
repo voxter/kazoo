@@ -80,6 +80,7 @@
 
           ,wait_time :: api_integer() | '_'
           ,pause_time :: api_integer() | '_'
+          ,pause_alias :: api_binary() | '_'
           ,callid :: api_binary() | '_'
           ,caller_id_name :: api_binary() | '_'
           ,caller_id_number :: api_binary() | '_'
