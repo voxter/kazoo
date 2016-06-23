@@ -28,6 +28,7 @@
          ,agents_available_req/1, agents_available_req_v/1
          ,agents_available_resp/1, agents_available_resp_v/1
          ,queue_member_add/1, queue_member_add_v/1
+         ,queue_member_remove/1, queue_member_remove_v/1
          ,call_position_req/1, call_position_req_v/1
          ,call_position_resp/1, call_position_resp_v/1
          ,member_callback_reg/1, member_callback_reg_v/1
@@ -63,6 +64,7 @@
          ,publish_agents_available_req/1, publish_agents_available_req/2
          ,publish_agents_available_resp/2, publish_agents_available_resp/3
          ,publish_queue_member_add/1, publish_queue_member_add/2
+         ,publish_queue_member_remove/1, publish_queue_member_remove/2
          ,publish_call_position_req/1, publish_call_position_req/2
          ,publish_call_position_resp/2, publish_call_position_resp/3
          ,publish_member_callback_reg/1, publish_member_callback_reg/2
@@ -685,6 +687,28 @@ queue_member_add_v(Prop) when is_list(Prop) ->
     wh_api:validate(Prop, ?QUEUE_MEMBER_ADD_HEADERS, ?QUEUE_MEMBER_ADD_VALUES, ?QUEUE_MEMBER_ADD_TYPES);
 queue_member_add_v(JObj) -> queue_member_add_v(wh_json:to_proplist(JObj)).
 
+-define(QUEUE_MEMBER_REMOVE_HEADERS, [<<"Account-ID">>, <<"Queue-ID">>, <<"JObj">>]).
+-define(OPTIONAL_QUEUE_MEMBER_REMOVE_HEADERS, []).
+-define(QUEUE_MEMBER_REMOVE_VALUES, [{<<"Event-Category">>, <<"queue">>}
+                                     ,{<<"Event-Name">>, <<"member_remove">>}
+                                    ]).
+-define(QUEUE_MEMBER_REMOVE_TYPES, []).
+
+-spec queue_member_remove(api_terms()) ->
+                                 {'ok', iolist()} |
+                                 {'error', string()}.
+queue_member_remove(Prop) when is_list(Prop) ->
+    case queue_member_remove_v(Prop) of
+        'true' -> wh_api:build_message(Prop, ?QUEUE_MEMBER_REMOVE_HEADERS, ?OPTIONAL_QUEUE_MEMBER_REMOVE_HEADERS);
+        'false' -> {'error', "proplist failed validation for queue_member_remove"}
+    end;
+queue_member_remove(JObj) -> queue_member_remove(wh_json:to_proplist(JObj)).
+
+-spec queue_member_remove_v(api_terms()) -> boolean().
+queue_member_remove_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?QUEUE_MEMBER_REMOVE_HEADERS, ?QUEUE_MEMBER_REMOVE_VALUES, ?QUEUE_MEMBER_REMOVE_TYPES);
+queue_member_remove_v(JObj) -> queue_member_remove_v(wh_json:to_proplist(JObj)).
+
 -define(CALL_POSITION_REQ_HEADERS, [<<"Account-ID">>
 									,<<"Queue-ID">>
 									,<<"Call-ID">>
@@ -1085,6 +1109,14 @@ publish_queue_member_add(JObj) ->
     publish_queue_member_add(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_queue_member_add(API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?QUEUE_MEMBER_ADD_VALUES, fun queue_member_add/1),
+    amqp_util:whapps_publish(queue_member_routing_key(API), Payload, ContentType).
+
+-spec publish_queue_member_remove(api_terms()) -> 'ok'.
+-spec publish_queue_member_remove(api_terms(), ne_binary()) -> 'ok'.
+publish_queue_member_remove(JObj) ->
+    publish_queue_member_remove(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_queue_member_remove(API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?QUEUE_MEMBER_REMOVE_VALUES, fun queue_member_remove/1),
     amqp_util:whapps_publish(queue_member_routing_key(API), Payload, ContentType).
 
 -spec publish_call_position_req(api_terms()) -> 'ok'.
