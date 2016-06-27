@@ -643,8 +643,14 @@ maybe_disallow_direct_clients('false', _AccountId, Context) ->
 
 -spec validate_wnm_allow_additions(api_binary(), cb_context:context()) -> cb_context:context().
 validate_wnm_allow_additions(_, Context) ->
+    AllowAdditions = wh_json:get_value(<<"pvt_wnm_allow_additions">>
+                                       ,cb_context:doc(Context)
+                                       ,'false'
+                                      ),
     case cb_context:req_value(Context, <<"wnm_allow_additions">>) of
         'undefined' -> Context;
+        %% No change - do not validate
+        AllowAdditions -> unset_wnm_allow_additions(Context);
         _ -> validate_wnm_allow_additions(Context)
     end.
 
@@ -658,8 +664,14 @@ validate_wnm_allow_additions(Context) ->
                             ,wh_json:get_value(<<"wnm_allow_additions">>, JObj)
                             ,JObj
                            ),
-            cb_context:set_doc(Context, wh_json:delete_key(<<"wnm_allow_additions">>, UpdatedJObj))
+            unset_wnm_allow_additions(cb_context:set_doc(Context, UpdatedJObj))
     end.
+
+-spec unset_wnm_allow_additions(cb_context:context()) -> cb_context:context().
+unset_wnm_allow_additions(Context) ->
+    cb_context:set_doc(Context, wh_json:delete_key(<<"wnm_allow_additions">>
+                                                   ,cb_context:doc(Context)
+                                                  )).
 
 %%--------------------------------------------------------------------
 %% @private
