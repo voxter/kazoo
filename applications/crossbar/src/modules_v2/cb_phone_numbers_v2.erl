@@ -40,6 +40,7 @@
 -define(IDENTIFY, <<"identify">>).
 -define(COLLECTION, <<"collection">>).
 -define(FIX, <<"fix">>).
+-define(CHANGE_CARRIER, <<"change_carrier">>).
 -define(MIME_TYPES, [{<<"application">>, <<"pdf">>}
                      ,{<<"application">>, <<"x-gzip">>}
                      ,{<<"application">>, <<"zip">>}
@@ -211,7 +212,9 @@ allowed_methods(_, ?PORT) ->
 allowed_methods(_, ?PORT_DOCS) ->
     [?HTTP_GET];
 allowed_methods(_, ?IDENTIFY) ->
-    [?HTTP_GET].
+    [?HTTP_GET];
+allowed_methods(_, ?CHANGE_CARRIER) ->
+    [?HTTP_PUT].
 
 allowed_methods(_, ?PORT_DOCS, _) ->
     [?HTTP_PUT, ?HTTP_POST, ?HTTP_DELETE].
@@ -242,6 +245,7 @@ resource_exists(_, ?RESERVE) -> 'true';
 resource_exists(_, ?PORT) -> 'true';
 resource_exists(_, ?PORT_DOCS) -> 'true';
 resource_exists(_, ?IDENTIFY) -> 'true';
+resource_exists(_, ?CHANGE_CARRIER) -> 'true';
 resource_exists(?CLASSIFIERS, _) -> 'true';
 resource_exists(_, _) -> 'false'.
 
@@ -367,7 +371,12 @@ validate(Context, _Number, ?PORT) ->
 validate(Context, Number, ?PORT_DOCS) ->
     list_attachments(Number, Context);
 validate(Context, Number, ?IDENTIFY) ->
-    identify(Context, Number).
+    identify(Context, Number);
+validate(Context, _Number, ?CHANGE_CARRIER) ->
+    case cb_context:req_value(Context, <<"module_name">>) =/= 'undefined' of
+        'true' -> cb_context:validate_request_data('undefined', Context);
+        'false' -> cb_context:add_system_error('invalid_request', Context)
+    end.
 
 -spec classify_number(cb_context:context(), path_token()) -> cb_context:context().
 classify_number(Context, Number) ->
@@ -509,6 +518,7 @@ put_number(Context, Number, ReqJObj) ->
                                              ,cb_context:auth_account_id(Context)
                                              ,cb_context:doc(Context)
                                              ,(not wh_json:is_true(<<"accept_charges">>, ReqJObj))
+                                             ,cb_context:req_value(Context, <<"module_name">>)
                                             ),
     Fun = fun() ->
                   NewReqJObj = wh_json:set_value(<<"accept_charges">>, <<"true">>, ReqJObj),
@@ -525,7 +535,13 @@ put(Context, Number, ?PORT) ->
 put(Context, Number, ?RESERVE) ->
     reserve_number(Context, Number, cb_context:req_json(Context));
 put(Context, Number, ?PORT_DOCS) ->
-    put_attachments(Number, Context, cb_context:req_files(Context)).
+    put_attachments(Number, Context, cb_context:req_files(Context));
+put(Context, Number, ?CHANGE_CARRIER) ->
+    Result = wh_number_manager:set_carrier_module(Number
+                                                  ,cb_context:auth_account_id(Context)
+                                                  ,cb_context:req_value(Context, <<"module_name">>)
+                                                 ),
+    set_response(Result, Number, Context, 'undefined').
 
 -spec activate_collection(cb_context:context(), wh_json:object()) -> cb_context:context().
 activate_collection(Context, ReqJObj) ->

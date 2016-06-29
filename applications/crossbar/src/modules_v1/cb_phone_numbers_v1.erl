@@ -38,6 +38,7 @@
 -define(CLASSIFIERS, <<"classifiers">>).
 -define(IDENTIFY, <<"identify">>).
 -define(COLLECTION, <<"collection">>).
+-define(CHANGE_CARRIER, <<"change_carrier">>).
 -define(MIME_TYPES, [{<<"application">>, <<"pdf">>}
                      ,{<<"application">>, <<"x-gzip">>}
                      ,{<<"application">>, <<"zip">>}
@@ -125,6 +126,8 @@ allowed_methods(_, ?PORT_DOCS) ->
     [?HTTP_GET];
 allowed_methods(_, ?IDENTIFY) ->
     [?HTTP_GET];
+allowed_methods(_, ?CHANGE_CARRIER) ->
+    [?HTTP_PUT];
 allowed_methods(?COLLECTION, ?ACTIVATE) ->
     [?HTTP_PUT].
 
@@ -152,6 +155,7 @@ resource_exists(_, ?RESERVE) -> 'true';
 resource_exists(_, ?PORT) -> 'true';
 resource_exists(_, ?PORT_DOCS) -> 'true';
 resource_exists(_, ?IDENTIFY) -> 'true';
+resource_exists(_, ?CHANGE_CARRIER) -> 'true';
 resource_exists(_, _) -> 'false'.
 
 resource_exists(_, ?PORT_DOCS, _) -> 'true';
@@ -288,7 +292,12 @@ validate_3(Context, ?HTTP_PUT, _Number, ?PORT) ->
 validate_3(Context, ?HTTP_GET, Number, ?PORT_DOCS) ->
     list_attachments(Number, Context);
 validate_3(Context, ?HTTP_GET, Number, ?IDENTIFY) ->
-    identify(Context, Number).
+    identify(Context, Number);
+validate_3(Context, ?HTTP_PUT, _Number, ?CHANGE_CARRIER) ->
+    case cb_context:req_value(Context, <<"module_name">>) =/= 'undefined' of
+        'true' -> cb_context:validate_request_data('undefined', Context);
+        'false' -> cb_context:add_system_error('invalid_request', Context)
+    end.
 
 validate(Context, PathToken1, PathToken2, PathToken3) ->
     validate_4(Context, cb_context:req_verb(Context), PathToken1, PathToken2, PathToken3).
@@ -347,6 +356,8 @@ put(Context, Number) ->
                                              ,cb_context:account_id(Context)
                                              ,cb_context:auth_account_id(Context)
                                              ,cb_context:doc(Context)
+                                             ,'false'
+                                             ,cb_context:req_value(Context, <<"module_name">>)
                                             ),
     set_response(Result, Number, Context).
 
@@ -375,7 +386,13 @@ put(Context, Number, ?RESERVE) ->
                                              ),
     set_response(Result, Number, Context);
 put(Context, Number, ?PORT_DOCS) ->
-    put_attachments(Number, Context, cb_context:req_files(Context)).
+    put_attachments(Number, Context, cb_context:req_files(Context));
+put(Context, Number, ?CHANGE_CARRIER) ->
+    Result = wh_number_manager:set_carrier_module(Number
+                                                  ,cb_context:auth_account_id(Context)
+                                                  ,cb_context:req_value(Context, <<"module_name">>)
+                                                 ),
+    set_response(Result, Number, Context).
 
 put(Context, Number, ?PORT_DOCS, _) ->
     put_attachments(Number, Context, cb_context:req_files(Context)).

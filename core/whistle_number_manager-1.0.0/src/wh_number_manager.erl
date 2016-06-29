@@ -29,6 +29,7 @@
 -export([put_attachment/5]).
 -export([delete_attachment/3]).
 -export([get_public_fields/2, set_public_fields/3, set_public_fields/4]).
+-export([set_carrier_module/3]).
 -export([track_assignment/2]).
 
 -include("wnm.hrl").
@@ -948,6 +949,28 @@ set_public_fields(Number, PublicFields, AuthBy, DryRun) ->
                ],
     lists:foldl(fun(F, J) -> catch F(J) end, wnm_number:get(Number, PublicFields), Routines).
 
+-spec set_carrier_module(ne_binary(), ne_binary(), ne_binary()) ->
+                                operation_return().
+set_carrier_module(Number, AuthBy, ModuleName) ->
+    Routines = [fun({_, #number{}}=E) -> E;
+                   (#number{assigned_to=AssignedTo}=N) ->
+                        case wh_util:is_in_account_hierarchy(AuthBy, AssignedTo, 'true') of
+                            'false' -> wnm_number:error_unauthorized(N);
+                            'true' -> N#number{module_name=ModuleName}
+                        end
+                end
+                ,fun({_, #number{}}=E) -> E;
+                    (#number{}=N) -> wnm_number:save(N)
+                 end
+                ,fun({E, #number{error_jobj=Reason}}) ->
+                         lager:debug("save number prematurely ended: ~p", [E]),
+                         {E, Reason};
+                    (#number{}) ->
+                         lager:debug("set carrier module successfuly completed"),
+                         {'ok', wh_json:set_value(<<"success">>, 'true', wh_json:new())}
+                 end
+               ],
+    lists:foldl(fun(F, J) -> catch F(J) end, wnm_number:get(Number), Routines).
 
 -spec track_assignment(ne_binary(), wh_proplist()) -> 'ok'.
 track_assignment(Account, Props) ->
