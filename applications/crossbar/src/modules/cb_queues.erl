@@ -686,7 +686,7 @@ fetch_stats_summary(Context) ->
     Req = props:filter_undefined(
             [{<<"Account-ID">>, cb_context:account_id(Context)}
              ,{<<"Status">>, cb_context:req_value(Context, <<"status">>)}
-             ,{<<"Agent-ID">>, cb_context:req_value(Context, <<"agent_id">>)}
+             ,{<<"Queue-ID">>, cb_context:req_value(Context, <<"queue_id">>)}
              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
     case whapps_util:amqp_pool_request(Req

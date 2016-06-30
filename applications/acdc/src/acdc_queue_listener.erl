@@ -485,12 +485,15 @@ handle_cast({'cancel_member_call'}, #state{delivery=Delivery
 handle_cast({'cancel_member_call', _RejectJObj}, #state{delivery='undefined'}=State) ->
     lager:debug("cancel a member_call that I don't have delivery info for"),
     {'noreply', State};
-handle_cast({'cancel_member_call', _RejectJObj}, #state{delivery=Delivery
-                                                        ,call=Call
-                                                        ,shared_pid=Pid
-                                                       }=State) ->
+handle_cast({'cancel_member_call', RejectJObj}, #state{queue_id=QueueId
+                                                       ,account_id=AccountId
+                                                       ,delivery=Delivery
+                                                       ,call=Call
+                                                       ,shared_pid=Pid
+                                                      }=State) ->
     lager:debug("agent failed to handle the call, nack"),
 
+    publish_queue_member_remove(AccountId, QueueId, RejectJObj),
     _ = maybe_nack(Call, Delivery, Pid),
     {'noreply', clear_call_state(State), 'hibernate'};
 handle_cast({'cancel_member_call', _MemberCallJObj, Delivery}, #state{shared_pid=Pid}=State) ->
@@ -634,6 +637,15 @@ send_member_call_failure(Q, AccountId, QueueId, CallId, MyId, AgentId, Reason) -
               | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     publish(Q, Resp, fun wapi_acdc_queue:publish_member_call_failure/2).
+
+-spec publish_queue_member_remove(ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
+publish_queue_member_remove(AccountId, QueueId, JObj) ->
+    Prop = [{<<"Account-ID">>, AccountId}
+            ,{<<"Queue-ID">>, QueueId}
+            ,{<<"JObj">>, JObj}
+            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+    wapi_acdc_queue:publish_queue_member_remove(Prop).
 
 send_sync_req(MyQ, MyId, AccountId, QueueId, Type) ->
     Resp = props:filter_undefined(

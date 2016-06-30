@@ -48,8 +48,9 @@ handle_status_update(JObj, _Props) ->
             'true' = wapi_acdc_agent:pause_v(JObj),
 
             Timeout = wh_json:get_integer_value(<<"Time-Limit">>, JObj, ?DEFAULT_PAUSE),
+            Alias = wh_json:get_value(<<"Alias">>, JObj),
 
-            maybe_pause_agent(AccountId, AgentId, Timeout, JObj);
+            maybe_pause_agent(AccountId, AgentId, Timeout, Alias, JObj);
         <<"resume">> ->
             'true' = wapi_acdc_agent:resume_v(JObj),
             maybe_resume_agent(AccountId, AgentId, JObj);
@@ -172,14 +173,14 @@ maybe_stop_agent(AccountId, AgentId, JObj) ->
 
     end.
 
-maybe_pause_agent(AccountId, AgentId, Timeout, JObj) ->
+maybe_pause_agent(AccountId, AgentId, Timeout, Alias, JObj) ->
     case acdc_agents_sup:find_agent_supervisor(AccountId, AgentId) of
         'undefined' -> lager:debug("agent ~s (~s) not found, nothing to do", [AgentId, AccountId]);
         Sup when is_pid(Sup) ->
-            lager:debug("agent ~s(~s) is pausing for ~p", [AccountId, AgentId, Timeout]),
+            lager:debug("agent ~s(~s) is pausing (~p) for ~p", [AccountId, AgentId, Alias, Timeout]),
             FSM = acdc_agent_sup:fsm(Sup),
             acdc_agent_fsm:update_presence(FSM,  presence_id(JObj), presence_state(JObj, 'undefined')),
-            acdc_agent_fsm:pause(FSM, Timeout)
+            acdc_agent_fsm:pause(FSM, Timeout, Alias)
     end.
 
 maybe_resume_agent(AccountId, AgentId, JObj) ->
