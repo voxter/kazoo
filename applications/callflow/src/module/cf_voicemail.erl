@@ -2232,12 +2232,14 @@ get_new_attachment_url(AttachmentName, MediaId, Call) ->
 
 -spec maybe_remove_attachments(ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
 maybe_remove_attachments(AccountDb, MediaId, JObj) ->
-    case wh_doc:maybe_remove_attachments(JObj) of
-        {'false', _} -> 'ok';
-        {'true', Removed} ->
-            couch_mgr:save_doc(AccountDb, Removed),
-            lager:debug("doc ~s has existing attachments, removing", [MediaId])
-    end.
+    JObj1 = case wh_doc:maybe_remove_attachments(JObj) of
+                {'false', _} -> JObj;
+                {'true', Removed} ->
+                    lager:debug("doc ~s has existing attachments, removing", [MediaId]),
+                    Removed
+            end,
+    %% Undelete a possibly deleted media file
+    couch_mgr:save_doc(AccountDb, wh_doc:set_soft_deleted(JObj1, 'false')).
 
 %%--------------------------------------------------------------------
 %% @private
