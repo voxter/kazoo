@@ -178,7 +178,8 @@ refresh(?WH_CONFIG_DB) ->
     couch_mgr:db_create(?WH_CONFIG_DB),
     couch_mgr:revise_doc_from_file(?WH_CONFIG_DB, 'teletype', <<"views/notifications.json">>),
     cleanup_invalid_notify_docs(),
-    delete_system_media_references();
+    delete_system_media_references(),
+    accounts_config_deprecate_timezone_for_default_timezone();
 refresh(?KZ_OAUTH_DB) ->
     couch_mgr:db_create(?KZ_OAUTH_DB),
     kazoo_oauth_maintenance:register_common_providers();
@@ -291,6 +292,51 @@ maybe_remove_invalid_notify_doc(<<"notification">>, _, JObj) ->
     _ = couch_mgr:del_doc(?WH_CONFIG_DB, JObj),
     'ok';
 maybe_remove_invalid_notify_doc(_Type, _Id, _Doc) -> 'ok'.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Remove system_config/accounts timezone key and use only
+%% default_timezone
+%% @end
+%%--------------------------------------------------------------------
+-spec accounts_config_deprecate_timezone_for_default_timezone() -> 'ok'.
+accounts_config_deprecate_timezone_for_default_timezone() ->
+    case couch_mgr:open_cache_doc(?WH_CONFIG_DB, <<"accounts">>) of
+        {'ok', Doc} ->
+            PublicFields = wh_doc:public_fields(Doc),
+            Keys = wh_json:get_keys(PublicFields),
+            %% No update if no keys
+            case Keys =:= [] of
+                'true' -> 'ok';
+                'false' ->
+                    %% Remove timezone key
+                    Doc1 = deprecate_timezone_for_default_timezone(
+                             wh_json:get_keys(PublicFields)
+                             ,PublicFields),
+                    %% Overwrite doc with new keys
+                    couch_mgr:save_doc(?WH_CONFIG_DB
+                      ,wh_json:set_values(wh_json:to_proplist(Doc1)
+                                          ,Doc))
+            end;
+        {'error', E} ->
+            lager:warning("unable to fetch system_config/accounts: ~p", [E])
+    end.
+
+-spec deprecate_timezone_for_default_timezone(wh_json:keys(), wh_json:object()) -> 'ok'.
+deprecate_timezone_for_default_timezone([], Doc) -> Doc;
+deprecate_timezone_for_default_timezone([Node|Nodes], Doc) ->
+    Timezone = wh_json:get_value([Node, <<"timezone">>], Doc),
+    DefaultTimezone = wh_json:get_value([Node, <<"default_timezone">>], Doc),
+    %% If timezone has been set, but not default_timezone, use the former's value
+    Doc1 = case Timezone =/= 'undefined'
+               andalso DefaultTimezone =:= 'undefined'
+           of
+               'true' -> wh_json:set_value(<<"default_timezone">>, Timezone, Doc);
+               'false' -> Doc
+           end,
+    deprecate_timezone_for_default_timezone(Nodes
+      ,wh_json:delete_key([Node, <<"timezone">>], Doc1)).
 
 %%--------------------------------------------------------------------
 %% @public
