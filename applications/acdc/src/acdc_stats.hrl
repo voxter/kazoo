@@ -48,9 +48,9 @@
 -record(call_summary_stat, {
           id :: api_binary() | '_'
           ,account_id :: api_binary() | '$1'
-          ,queue_id :: api_binary() | '_'
+          ,queue_id :: api_binary() | '$2' | '_'
           ,call_id :: api_binary() | '_'
-          ,status :: api_binary() | '_'
+          ,status :: api_binary() | '$3' | '_'
           ,wait_time :: api_integer() | '_'
           ,timestamp :: api_integer() | '_'
          }).
@@ -80,6 +80,7 @@
 
           ,wait_time :: api_integer() | '_'
           ,pause_time :: api_integer() | '_'
+          ,pause_alias :: api_binary() | '_'
           ,callid :: api_binary() | '_'
           ,caller_id_name :: api_binary() | '_'
           ,caller_id_number :: api_binary() | '_'

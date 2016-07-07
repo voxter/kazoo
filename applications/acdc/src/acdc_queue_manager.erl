@@ -22,6 +22,7 @@
          ,handle_agent_change/2
          ,handle_agents_available_req/2
          ,handle_queue_member_add/2
+         ,handle_queue_member_remove/2
          ,handle_queue_member_position/2
          ,handle_manager_success_notify/2
          ,handle_member_callback_reg/2
@@ -224,8 +225,7 @@ handle_member_call_cancel(JObj, Props) ->
                         ,wh_json:get_value(<<"Call-ID">>, JObj)
                        ),
 
-    gen_listener:cast(props:get_value('server', Props), {'member_call_cancel', K, JObj}),
-    gen_listener:cast(props:get_value('server', Props), {'handle_queue_member_remove', JObj}).
+    gen_listener:cast(props:get_value('server', Props), {'member_call_cancel', K, JObj}).
 
 handle_agent_change(JObj, Prop) ->
     'true' = wapi_acdc_queue:agent_change_v(JObj),
@@ -248,6 +248,10 @@ handle_agents_available_req(JObj, Prop) ->
 -spec handle_queue_member_add(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_queue_member_add(JObj, Prop) ->
     gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_add', JObj, props:get_value('queue', Prop)}).
+
+-spec handle_queue_member_remove(wh_json:object(), wh_proplist()) -> 'ok'.
+handle_queue_member_remove(JObj, Prop) ->
+    gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_remove', wh_json:get_value(<<"JObj">>, JObj)}).
 
 -spec handle_queue_member_position(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_queue_member_position(JObj, Prop) ->
@@ -369,10 +373,16 @@ init(Super, AccountId, QueueId, QueueJObj) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call({'should_ignore_member_call', K}, _, #state{ignored_member_calls=Dict}=State) ->
+handle_call({'should_ignore_member_call', {AccountId, QueueId, CallId}=K}, _, #state{ignored_member_calls=Dict
+                                                                                    ,account_id=AccountId
+                                                                                    ,queue_id=QueueId
+                                                                                   }=State) ->
     case catch dict:fetch(K, Dict) of
         {'EXIT', _} -> {'reply', 'false', State};
-        _Res -> {'reply', 'true', State#state{ignored_member_calls=dict:erase(K, Dict)}}
+        _Res ->
+            publish_queue_member_remove(AccountId, QueueId
+                                        ,wh_json:set_value(<<"Call-ID">>, CallId, wh_json:new())),
+            {'reply', 'true', State#state{ignored_member_calls=dict:erase(K, Dict)}}
     end;
 
 handle_call({'up_next', CallId}, _, #state{strategy_state=SS
@@ -611,8 +621,7 @@ handle_cast({'refresh', QueueJObj}, State) ->
 handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
     {'noreply', State};
 
-handle_cast({'add_queue_member', JObj}, #state{ignored_member_calls=IgnoredMemberCalls
-                                               ,account_id=AccountId
+handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
                                                ,queue_id=QueueId
                                                ,pos_announce_enabled=PosAnnounceEnabled
                                                ,wait_announce_enabled=WaitAnnounceEnabled
@@ -623,8 +632,6 @@ handle_cast({'add_queue_member', JObj}, #state{ignored_member_calls=IgnoredMembe
     Position = length(CurrentCalls)+1,
     Call = whapps_call:set_custom_channel_var(<<"Queue-Position">>, Position
                                               ,whapps_call:from_json(wh_json:get_value(<<"Call">>, JObj))),
-    CallId = whapps_call:call_id(Call),
-    K = make_ignore_key(AccountId, QueueId, CallId),
 
     {CIDNumber, CIDName} = acdc_util:caller_id(Call),
     acdc_stats:call_waiting(AccountId, QueueId, Position
@@ -633,16 +640,8 @@ handle_cast({'add_queue_member', JObj}, #state{ignored_member_calls=IgnoredMembe
                             ,CIDNumber
                             ,wh_json:get_integer_value(<<"Member-Priority">>, JObj)
                            ),
-    
-    %% cancel_member_call can arrive before add_queue_member. In that case do
-    %% not update the list of ignored calls because that woudl lead to an
-    %% orphan entry
-    UpdatedMemberCalls = case dict:find(K, IgnoredMemberCalls) of
-        {'ok', _} -> CurrentCalls;
-        'error' ->
-            publish_queue_member_add(AccountId, QueueId, JObj),
-            [Call | CurrentCalls]
-    end,
+
+    publish_queue_member_add(AccountId, QueueId, JObj),
 
     %% Add call to shared queue
     wapi_acdc_queue:publish_shared_member_call(AccountId, QueueId, JObj),
@@ -661,7 +660,7 @@ handle_cast({'add_queue_member', JObj}, #state{ignored_member_calls=IgnoredMembe
                             ,queue_media_list(State)
                             ,Pids),
 
-    {'noreply', State#state{current_member_calls=UpdatedMemberCalls
+    {'noreply', State#state{current_member_calls=[Call | CurrentCalls]
                             ,pos_announce_pids=UpdatedAnnouncePids
                            }};
 
@@ -674,7 +673,7 @@ handle_cast({'handle_queue_member_add', JObj, _Queue}, #state{current_member_cal
     {'noreply', State#state{current_member_calls = [Call | lists:keydelete(CallId, 2, CurrentCalls)]}};
 
 handle_cast({'handle_queue_member_remove', JObj}, State) ->
-    State1 = maybe_remove_queue_member(wh_json:get_value(<<"Call-ID">>, JObj), wh_json:get_value(<<"Reason">>, JObj), State),
+    State1 = maybe_remove_queue_member(wh_json:get_value(<<"Call-ID">>, JObj), State),
     State2 = maybe_remove_callback_reg(wh_json:get_value(<<"Call-ID">>, JObj), State1),
     {'noreply', State2};
 
@@ -779,6 +778,15 @@ publish_queue_member_add(AccountId, QueueId, JObj) ->
             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
     wapi_acdc_queue:publish_queue_member_add(Prop).
+
+-spec publish_queue_member_remove(ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
+publish_queue_member_remove(AccountId, QueueId, JObj) ->
+    Prop = [{<<"Account-ID">>, AccountId}
+            ,{<<"Queue-ID">>, QueueId}
+            ,{<<"JObj">>, JObj}
+            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+    wapi_acdc_queue:publish_queue_member_remove(Prop).
 
 -spec start_agent_and_worker(pid(), ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
 start_agent_and_worker(WorkersSup, AccountId, QueueId, AgentJObj) ->
@@ -1208,12 +1216,12 @@ maybe_cancel_position_announcements(Call, Pids) ->
     end,
     lists:keydelete(whapps_call:call_id(Call), 1, Pids).
 
--spec maybe_remove_queue_member(api_binary(), api_binary(), mgr_state()) -> mgr_state().
-maybe_remove_queue_member(CallId, _Reason, #state{account_id=AccountId
-                                                 ,queue_id=QueueId
-                                                 ,current_member_calls=CurrentCalls
-                                                 ,pos_announce_pids=Pids
-                                                }=State) ->
+-spec maybe_remove_queue_member(api_binary(), mgr_state()) -> mgr_state().
+maybe_remove_queue_member(CallId, #state{account_id=AccountId
+                                         ,queue_id=QueueId
+                                         ,current_member_calls=CurrentCalls
+                                         ,pos_announce_pids=Pids
+                                        }=State) ->
     Call = lists:keyfind(CallId, 2, CurrentCalls),
 
     {Map, _} = lists:mapfoldr(fun(X, I) -> {{X, I}, I + 1} end, 1, CurrentCalls),
