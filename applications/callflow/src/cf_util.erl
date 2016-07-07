@@ -1002,8 +1002,7 @@ get_timezone(JObj, Call) ->
 -spec account_timezone(whapps_call:call()) -> ne_binary().
 account_timezone(Call) ->
     case kz_account:fetch(whapps_call:account_id(Call)) of
-        {'ok', AccountJObj} ->
-            kz_account:timezone(AccountJObj, ?DEFAULT_TIMEZONE);
+        {'ok', AccountJObj} -> kz_account:timezone(AccountJObj);
         {'error', _E} -> ?DEFAULT_TIMEZONE
     end.
 
