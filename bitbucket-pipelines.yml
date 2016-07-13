@@ -1,0 +1,15 @@
+image: centos:6.8
+pipelines:
+  default:
+    - step:
+        script:
+          - echo "This script runs on all branches that don't have any specific pipeline assigned in 'branches'."
+  branches:
+    3.22-fasttelecom:
+      - step:
+          script:
+            - echo "Compiling Kazoo...."
+            - make clean && make
+            - echo "Making RPM..."
+            - yum install -y fpm
+            - fpm whatever
