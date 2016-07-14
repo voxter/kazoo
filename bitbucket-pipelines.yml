@@ -1,5 +1,9 @@
 image: 
-  name: 103.11.55.231:5000/kazoo:latest
+  name: dank123/kazoo
+  username: dank123
+  password: 123Password123
+  email: dank@voxter.ca
+
 pipelines:
   default:
     - step:
