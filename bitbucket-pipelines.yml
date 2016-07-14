@@ -1,4 +1,5 @@
-image: 103.11.55.231:5000/kazoo:latest
+image: 
+  name: 103.11.55.231:5000/kazoo:latest
 pipelines:
   default:
     - step:
