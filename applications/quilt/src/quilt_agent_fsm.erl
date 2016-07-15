@@ -61,6 +61,13 @@ handle_sync_event({'pauseall', JObj}, _From, 'started', State) ->
 handle_sync_event({'pauseall', JObj}, _From, 'ready', State) ->
     quilt_log:handle_event(JObj),
     {'reply', 'ok', 'paused', State};
+handle_sync_event({'answer', _JObj}, _From, 'started', State) ->
+    {'reply', 'ok', 'incall', State};
+handle_sync_event({'answer', _JObj}, _From, 'ready', State) ->
+    {'reply', 'ok', 'incall', State};
+handle_sync_event({'hangup', JObj}, _From, 'incall', State) ->
+    quilt_log:handle_event(JObj),
+    {'reply', 'ok', 'ready', State};
 handle_sync_event(Event, _From, StateName, State) ->
     lager:debug("unhandled sync event in state ~s: ~p", [StateName, Event]),
     {'reply', 'ok', StateName, State}.

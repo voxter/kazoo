@@ -124,9 +124,22 @@ handle_specific_event(<<"abandoned">>, JObj) ->
     end;
 
 handle_specific_event(<<"missed">>, JObj) ->
-      quilt_log:handle_event(JObj);
+    quilt_log:handle_event(JObj);
 
 handle_specific_event(<<"handled">>, JObj) ->
+    AccountId = wh_json:get_value(<<"Account-ID">>, JObj),
+    AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
+    case quilt_sup:retrieve_agent_fsm(AccountId, AgentId) of
+        {'error', 'not_found'} ->
+            {'ok', FSM} = quilt_sup:start_agent_fsm(AccountId, AgentId),
+            lager:debug("started FSM: ~p for account/agent: ~p, ~p", [FSM, AccountId, AgentId]),
+            gen_fsm:sync_send_all_state_event(FSM, {'answer', JObj});
+        {'ok', FSM} ->
+            lager:debug("found FSM: ~p this account/agent: ~p, ~p", [FSM, AccountId, AgentId]),
+            gen_fsm:sync_send_all_state_event(FSM, {'answer', JObj});
+        Else ->
+            lager:debug("unexpected return value when looking up FSM: ~p", [Else])
+    end,
     CallId = wh_json:get_value(<<"Call-ID">>, JObj),
     case quilt_sup:retrieve_member_fsm(CallId) of
         {'ok', FSM} ->
@@ -136,6 +149,7 @@ handle_specific_event(<<"handled">>, JObj) ->
     end;
 
 handle_specific_event(<<"exited-position">>, JObj) ->
+    lager:debug("exited queue at position: ~p", [JObj]),
     CallId = wh_json:get_value(<<"Call-ID">>, JObj),
     case quilt_sup:retrieve_member_fsm(CallId) of
         {'ok', FSM} ->
@@ -243,7 +257,13 @@ handle_specific_event(<<"processed">>, JObj) ->
         _ ->
             quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
             quilt_sup:stop_member_fsm(CallId),
-            quilt_log:handle_event(JObj)
+            case quilt_sup:retrieve_agent_fsm(AccountId, AgentId) of
+                {'ok', FSM} ->
+                    lager:debug("found FSM: ~p this account/agent: ~p, ~p", [FSM, AccountId, AgentId]),
+                    gen_fsm:sync_send_all_state_event(FSM, {'hangup', JObj});
+                Else ->
+                    lager:debug("unable to find FSM to record processed call: ~p", [Else])
+            end
     end;
 
 handle_specific_event(<<"logged_in">>, JObj) ->

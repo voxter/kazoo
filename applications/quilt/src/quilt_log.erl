@@ -266,11 +266,14 @@ lookup_agent_name(AccountId, AgentId) ->
 lookup_queue_name(AccountId, QueueId) ->
     case couch_mgr:get_results(wh_util:format_account_id(AccountId, 'encoded'), <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
         {'error', E} ->
-            lager:debug("could not find queue number for queue ~p (~p)", [QueueId, E]),
+            lager:debug("could not find queue number for queue ~p (~p), account ~p", [QueueId, E, AccountId]),
+            "NONE";
+        {'ok', []} ->
+            lager:debug("could not find queue number for queue ~p (ok), account ~p", [QueueId, AccountId]),
             "NONE";
         {'ok', Results} when length(Results) =:= 1 ->
             Value = wh_json:get_value(<<"value">>, hd(Results)),
-            lager:debug("found queue number ~p for queue id ~p", [Value, QueueId]),
+            lager:debug("found queue number ~p for queue id ~p, account ~p", [Value, QueueId, AccountId]),
             hd(Value)
     end.
 
