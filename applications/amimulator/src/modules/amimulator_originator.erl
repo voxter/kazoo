@@ -96,7 +96,7 @@ dial(Props) ->
                									   ]}
                | wh_api:default_headers(<<"resource">>, <<"originate_req">>, ?APP_NAME, ?APP_VERSION)
               ],
-              
+
     wapi_resource:publish_originate_req(props:filter_undefined(Request)).
 
 %% Using the props computed from Originate action, establish a whapps_call
@@ -359,7 +359,7 @@ pickup_channel(Props) ->
                									   ]}
                | wh_api:default_headers(<<"resource">>, <<"originate_req">>, ?APP_NAME, ?APP_VERSION)
               ],
-              
+
     wapi_resource:publish_originate_req(props:filter_undefined(Request)).
 
 eavesdrop_req(Props) ->
@@ -405,7 +405,7 @@ eavesdrop_req(Props) ->
 	         ,{<<"Eavesdrop-Mode">>, EavesdropMode}
 	         | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
 	    	]), wh_json:new()),
-              
+
     lager:debug("Eavesdropping on call id ~p", [EavesdropCallId]),
     case whapps_util:amqp_pool_collect(Prop
                                        ,fun wapi_resource:publish_originate_req/1
