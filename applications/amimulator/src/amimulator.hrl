@@ -10,10 +10,7 @@
 -define(APP_NAME, <<"amimulator">>).
 -define(APP_VERSION, <<"1.0.0">>).
 -define(AMIMULATOR_CONFIG_CAT, <<"amimulator">>).
-
--define(DEFAULT_MODULES, ['bh_token_auth']).
-
--define(VERSION_SUPPORTED, [<<"v1">>]).
+-define(AMIMULATOR_CACHE, 'amimulator_cache').
 
 -define(AMIMULATOR_HRL, 'true').
 

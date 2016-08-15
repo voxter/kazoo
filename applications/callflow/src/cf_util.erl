@@ -549,6 +549,8 @@ handle_bridge_failure({'fail', Reason}, Call) ->
     handle_bridge_failure(Cause, Code, Call);
 handle_bridge_failure('undefined', _) ->
     'not_found';
+handle_bridge_failure(<<"PICKED_OFF">>, _Call) ->
+    'ok';
 handle_bridge_failure(Failure, Call) ->
     case cf_exe:attempt(Failure, Call) of
         {'attempt_resp', 'ok'} ->
