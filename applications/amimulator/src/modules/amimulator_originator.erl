@@ -96,7 +96,7 @@ dial(Props) ->
                									   ]}
                | wh_api:default_headers(<<"resource">>, <<"originate_req">>, ?APP_NAME, ?APP_VERSION)
               ],
-              
+
     wapi_resource:publish_originate_req(props:filter_undefined(Request)).
 
 %% Using the props computed from Originate action, establish a whapps_call
@@ -326,20 +326,19 @@ vm_transfer(Props, Call) ->
     wapi_resource:publish_originate_req(Request).
 
 pickup_channel(Props) ->
-	NewCall = create_call_from_props(Props),
-	Call = ami_sm:call_by_channel(props:get_value(<<"Data">>, Props)),
-
+    NewCall = create_call_from_props(Props),
+    Call = ami_sm:call_by_channel(props:get_value(<<"Data">>, Props)),
     DestExten = amimulator_call:id_number(Call),
 
     CCVs = [{<<"Account-ID">>, proplists:get_value(<<"AccountId">>, Props)}
-	        ,{<<"Retain-CID">>, <<"true">>}
-	        ,{<<"Inherit-Codec">>, <<"false">>}
-	        ,{<<"Authorizing-Type">>, amimulator_call:authorizing_type(Call)}
-	        ,{<<"Authorizing-ID">>, amimulator_call:authorizing_id(Call)}
-	       ],
+            ,{<<"Retain-CID">>, <<"true">>}
+            ,{<<"Inherit-Codec">>, <<"false">>}
+            ,{<<"Authorizing-Type">>, amimulator_call:authorizing_type(Call)}
+            ,{<<"Authorizing-ID">>, amimulator_call:authorizing_id(Call)}
+           ],
 
-    Request = [{<<"Application-Name">>, <<"transfer">>}
-               ,{<<"Application-Data">>, wh_json:from_list([{<<"Route">>, <<"*2", DestExten/binary>>}])}
+    Request = [{<<"Application-Name">>, <<"bridge">>}
+               ,{<<"Existing-Call-ID">>, amimulator_call:other_leg_call_id(Call)}
                ,{<<"Msg-ID">>, wh_util:rand_hex_binary(16)}
                ,{<<"Endpoints">>, get_endpoints(Props, NewCall)}
                ,{<<"Timeout">>, <<"30">>}
@@ -347,19 +346,17 @@ pickup_channel(Props) ->
                ,{<<"Media">>, <<"process">>}
                ,{<<"Outbound-Caller-ID-Name">>, <<"Web Pickup ", DestExten/binary>>}
                ,{<<"Outbound-Caller-ID-Number">>, DestExten}
-               % ,{<<"Outbound-Callee-ID-Name">>, <<"Outbound Call">>}
-               % ,{<<"Outbound-Callee-ID-Number">>, <<"context_2">>}
                ,{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
                ,{<<"Continue-On-Fail">>, 'false'}
                ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
                ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>
-               										,<<"Retain-CID">>
-               										,<<"Authorizing-ID">>
-               										,<<"Authorizing-Type">>
-               									   ]}
+                                                    ,<<"Retain-CID">>
+                                                    ,<<"Authorizing-ID">>
+                                                    ,<<"Authorizing-Type">>
+                                                   ]}
                | wh_api:default_headers(<<"resource">>, <<"originate_req">>, ?APP_NAME, ?APP_VERSION)
               ],
-              
+
     wapi_resource:publish_originate_req(props:filter_undefined(Request)).
 
 eavesdrop_req(Props) ->
@@ -405,7 +402,7 @@ eavesdrop_req(Props) ->
 	         ,{<<"Eavesdrop-Mode">>, EavesdropMode}
 	         | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
 	    	]), wh_json:new()),
-              
+
     lager:debug("Eavesdropping on call id ~p", [EavesdropCallId]),
     case whapps_util:amqp_pool_collect(Prop
                                        ,fun wapi_resource:publish_originate_req/1

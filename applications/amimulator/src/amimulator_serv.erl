@@ -29,10 +29,10 @@ init([]) ->
     lager:debug("listening on port ~p", [AMIPort]),
     gen_server:cast(?MODULE, 'start_listeners'),
     {'ok', #state{listen_socket = ListenSocket}}.
-    
+
 handle_call(_Request, _From, State) ->
     {'noreply', State}.
-    
+
 handle_cast('start_listeners', #state{listen_socket=ListenSocket}=State) ->
 	amimulator_supersup:start_listener_sup(),
 	amimulator_sup:start_listeners(ListenSocket),
@@ -43,13 +43,13 @@ handle_cast('close_listen_socket', #state{listen_socket=ListenSocket}=State) ->
 	{'noreply', State};
 handle_cast(_Request, State) ->
     {'noreply', State}.
-    
+
 handle_info(_Info, State) ->
     {'noreply', State}.
-    
+
 terminate(Reason, _State) ->
     lager:debug("terminating (~p)", [Reason]),
     'ok'.
-    
+
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.

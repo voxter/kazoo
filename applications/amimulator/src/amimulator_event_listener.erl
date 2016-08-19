@@ -11,6 +11,13 @@
 
 -include("amimulator.hrl").
 
+-define(BINDINGS(AccountId), [{'self', []}
+                             ]).
+-define(RESPONDERS, [{{?MODULE, 'handle_amqp_event'}
+                      ,[{<<"amimulator">>, <<"*">>}]
+                     }
+                    ]).
+-define(QUEUE_NAME(AccountId), <<"amimulator-queue", AccountId/binary>>).
 -define(QUEUE_OPTIONS, []).
 -define(CONSUME_OPTIONS, [{'exclusive', 'false'}]).
 
@@ -41,12 +48,9 @@ start_link(AccountId) ->
     {Bindings, Responders} = load_bindings(Props),
 
     gen_listener:start_link(?MODULE
-                            ,[{'bindings', [{'self', []} | Bindings]}
-                              ,{'responders', [{{?MODULE, 'handle_amqp_event'}, [{<<"amimulator">>, <<"*">>}]}
-                                               | Responders
-                                              ]
-                               }
-                              ,{'queue_name', <<"amimulator-queue", AccountId/binary>>}       % optional to include
+                            ,[{'bindings', ?BINDINGS(AccountId) ++ Bindings}
+                              ,{'responders', ?RESPONDERS ++ Responders}
+                              ,{'queue_name', ?QUEUE_NAME(AccountId)}
                               ,{'queue_options', ?QUEUE_OPTIONS} % optional to include
                               ,{'consume_options', ?CONSUME_OPTIONS} % optional to include
                              ]
@@ -83,7 +87,7 @@ handle_amqp_event(EventJObj, Props) ->
         _ ->
             'ok'
     end.
-    
+
 publish_amqp_event({_, []}, _) ->
     lager:debug("not publishing empty payload"),
     'ok';
@@ -94,7 +98,7 @@ publish_amqp_event({'publish', Events}=_Req, AccountId) ->
          wh_api:default_headers(<<"amimulator">>, <<"events">>, ?APP_NAME, ?APP_VERSION)],
          [], fun amqp_event/1),
     amqp_util:basic_publish(?EXCHANGE_AMI, <<"amimulator.events.", AccountId/binary>>, Payload).
-    
+
 -define(OPTIONAL_HEADERS, [<<"RequestType">>, <<"Events">>]).
 amqp_event(Prop) when is_list(Prop) ->
     wh_api:build_message(Prop, [], ?OPTIONAL_HEADERS).
@@ -106,17 +110,7 @@ amqp_event(Prop) when is_list(Prop) ->
 init([AccountId]) ->
     lager:debug("event listener started with pid ~p", [self()]),
     amqp_util:new_exchange(?EXCHANGE_AMI, ?TYPE_AMI),
-    amqp_util:new_queue(<<"amimulator-queue", AccountId/binary>>),
-    amqp_util:bind_q_to_exchange(<<"amimulator-queue", AccountId/binary>>, <<"amimulator.events.", AccountId/binary>>, ?EXCHANGE_AMI),
     ami_sm:init_state(AccountId),
-
-    %% Send fully booted event to client
-    Payload = [
-        {<<"Event">>, <<"FullyBooted">>},
-        {<<"Privilege">>, <<"system,all">>},
-        {<<"Status">>, <<"Fully Booted">>}
-    ],
-    publish_amqp_event({'publish', Payload}, AccountId),
 
     gen_listener:cast(self(), {'get_module_extra_props', AccountId}),
     gen_listener:cast(self(), {'init_modules', AccountId}),
@@ -156,7 +150,17 @@ handle_cast({'unregister', Pid}, #state{account_id=AccountId
     NewPids = lists:delete(Pid, Pids),
     NewPrunePid = maybe_start_prune_timer(length(NewPids), AccountId),
     {'noreply', State#state{pids=NewPids, prune_timer_pid=NewPrunePid}};
-handle_cast({'gen_listener', {'created_queue', _QueueName}}, State) ->
+handle_cast({'gen_listener', {'created_queue', _QueueName}}, #state{account_id=AccountId}=State) ->
+    amqp_util:bind_q_to_exchange(?QUEUE_NAME(AccountId), <<"amimulator.events.", AccountId/binary>>, ?EXCHANGE_AMI),
+
+    %% Send fully booted event to client
+    Payload = [
+        {<<"Event">>, <<"FullyBooted">>},
+        {<<"Privilege">>, <<"system,all">>},
+        {<<"Status">>, <<"Fully Booted">>}
+    ],
+    publish_amqp_event({'publish', Payload}, AccountId),
+
     {'noreply', State};
 handle_cast({'gen_listener', {'is_consuming', _IsConsuming}}, State) ->
     {'noreply', State};
@@ -169,7 +173,7 @@ handle_info(?HOOK_EVT(_AccountId, _EventType, JObj), State) ->
     {'noreply', State};
 handle_info(_Info, State) ->
     {'noreply', State}.
-    
+
 handle_event(_JObj, #state{account_id=AccountId
                            ,pids=Pids
                            ,extra_props=ExtraProps

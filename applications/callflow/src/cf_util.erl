@@ -549,6 +549,8 @@ handle_bridge_failure({'fail', Reason}, Call) ->
     handle_bridge_failure(Cause, Code, Call);
 handle_bridge_failure('undefined', _) ->
     'not_found';
+handle_bridge_failure(<<"PICKED_OFF">>, _Call) ->
+    'ok';
 handle_bridge_failure(Failure, Call) ->
     case cf_exe:attempt(Failure, Call) of
         {'attempt_resp', 'ok'} ->
@@ -1002,10 +1004,8 @@ get_timezone(JObj, Call) ->
 -spec account_timezone(whapps_call:call()) -> ne_binary().
 account_timezone(Call) ->
     case kz_account:fetch(whapps_call:account_id(Call)) of
-        {'ok', AccountJObj} ->
-            kz_account:timezone(AccountJObj, ?DEFAULT_TIMEZONE);
-        {'error', _E} ->
-            whapps_config:get(<<"accounts">>, <<"timezone">>, ?DEFAULT_TIMEZONE)
+        {'ok', AccountJObj} -> kz_account:timezone(AccountJObj);
+        {'error', _E} -> ?DEFAULT_TIMEZONE
     end.
 
 -spec start_task(fun(), list(), whapps_call:call()) -> 'ok'.
