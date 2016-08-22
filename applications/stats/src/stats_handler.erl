@@ -8,7 +8,7 @@
 %%%-------------------------------------------------------------------
 -module(stats_handler).
 
--define(STATS_CACHE, 'stats_cache').
+-include("stats.hrl").
 
 -export([get_db/1
          ,handle_event/2
@@ -20,14 +20,14 @@
 -include("stats.hrl").
 
 handle_req(JObj, _Props) ->
-    Items = wh_json:recursive_to_proplist(JObj),
+    Items = kz_json:recursive_to_proplist(JObj),
     store_items(props:get_value(<<"nodename">>,Items), table_def(), Items).
 
 handle_event(JObj, Props) ->
     lager:debug("event occurred ~p ~p",[JObj, Props]).
 
 get_db(Table) ->
-    case wh_cache:peek_local(?STATS_CACHE, Table) of
+    case kz_cache:peek_local(?CACHE_NAME, Table) of
         {'ok', Records} -> Records;
         _ -> []
     end.
@@ -35,7 +35,7 @@ get_db(Table) ->
 save_db(_, []) -> 'ok';
 save_db(Table, Values) ->
     lager:debug("trying to store in ~s: ~p", [Table, Values]),
-    wh_cache:store_local(?STATS_CACHE, Table, Values).
+    kz_cache:store_local(?CACHE_NAME, Table, Values).
 
 store_items('undefined', _, Vals) ->
     lager:debug("cannot find the node name ~p~n",[Vals]),
@@ -94,27 +94,29 @@ collect_items([{Domain, Items} | Rest], Db) ->
            ],
     collect_items(Rest, lists:keystore(Domain, 1, Db, {Domain, NewData})).
 
-send(Payload) when is_list(Payload) -> send(wh_json:encode(Payload));
+send(Payload) when is_list(Payload) -> send(kz_json:encode(Payload));
 send(Payload) -> amqp_util:targeted_publish(<<"statistics">>, Payload).
 
 get_next(Table,Row,Col) when is_list(Col), is_list(Row), is_binary(Table) ->
-    get_next2(Row,Col, get_db(Table), table_order(Table)).
+    get_next2(Row, Col, get_db(Table), table_order(Table)).
 
 get_next2(_, Cols, [], _) -> ['endOfTable' || _ <- Cols];
 get_next2([], _, Table, Order) ->
     [{[1, 1], value(1, 1, Table, Order)}];
 get_next2([Row], Cols, Table, Order) ->
     MaxRow = length(Table),
-    MaxCol = length(Order),
-    if Row < MaxRow ->
-            [{[C, Row + 1], value(Row + 1, C, Table, Order)}
-             || C <- Cols
+    case Row < MaxRow of
+        'true' ->
+            [ {[Col, Row + 1], value(Row + 1, Col, Table, Order)}
+              || Col <- Cols
             ];
-       'true' ->
-            [if C < MaxCol ->
-                     {[C + 1, 1], value(1, C + 1, Table, Order)};
-                'true' -> 'endOfTable'
-             end || C <- Cols
+        'false' ->
+            MaxCol = length(Order),
+            [ case Col < MaxCol of
+                  'true' -> {[Col + 1, 1], value(1, Col + 1, Table, Order)};
+                  'false' -> 'endOfTable'
+              end
+              || Col <- Cols
             ]
     end.
 
@@ -124,8 +126,9 @@ value(_, _, Table, []) ->
 value(Row, Col, Table, Order) ->
     {Key, Default} = lists:nth(Col, Order),
     Val = props:get_value(Key, lists:nth(Row, Table), Default),
-    if is_binary(Val) -> binary_to_list(Val);
-       'true' -> Val
+    case is_binary(Val) of
+        'true' -> binary_to_list(Val);
+        'false' -> Val
     end.
 
 %%% Map the OID order of the items in tables in KAZOO-MIB.mib to the tuples

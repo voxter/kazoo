@@ -28,6 +28,8 @@
 -include("hangups.hrl").
 -include_lib("folsom/include/folsom.hrl").
 
+-define(SERVER, ?MODULE).
+
 -define(RESPONDERS, [{{?MODULE, 'handle_query'}
                       ,[{<<"hangups">>, <<"query_req">>}]
                      }
@@ -42,83 +44,81 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
-%%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
-%% @end
+%% @doc Starts the server
 %%--------------------------------------------------------------------
 -spec start_link() -> startlink_ret().
 start_link() ->
-    gen_listener:start_link(?MODULE, [{'responders', ?RESPONDERS}
+    gen_listener:start_link(?SERVER, [{'responders', ?RESPONDERS}
                                       ,{'bindings', ?BINDINGS}
                                       ,{'queue_name', ?QUEUE_NAME}
                                       ,{'queue_options', ?QUEUE_OPTIONS}
                                       ,{'consume_options', ?CONSUME_OPTIONS}
                                      ], []).
 
--spec handle_query(wh_json:object(), wh_proplist()) -> any().
--spec handle_query(wh_json:object(), ne_binary(), boolean()) -> any().
+-spec handle_query(kz_json:object(), kz_proplist()) -> any().
+-spec handle_query(kz_json:object(), ne_binary(), boolean()) -> any().
 handle_query(JObj, _Props) ->
-    'true' = wapi_hangups:query_req_v(JObj),
-    AccountId = wh_json:get_value(<<"Account-ID">>, JObj),
-    HangupCause = wh_json:get_value(<<"Hangup-Cause">>, JObj),
+    'true' = kapi_hangups:query_req_v(JObj),
+    AccountId = kz_json:get_value(<<"Account-ID">>, JObj),
+    HangupCause = kz_json:get_value(<<"Hangup-Cause">>, JObj),
     N = hangups_util:meter_name(HangupCause, AccountId),
 
-    handle_query(JObj, N, wh_json:is_true(<<"Raw-Data">>, JObj)).
+    handle_query(JObj, N, kz_json:is_true(<<"Raw-Data">>, JObj)).
 
-handle_query(JObj, N, 'true') ->
-    lager:debug("finding raw stats for ~s", [N]),
-    publish_resp(JObj, raw_resp(N));
+%% handle_query(JObj, N, 'true') ->
+%%     lager:debug("finding raw stats for ~s", [N]),
+%%     publish_resp(JObj, raw_resp(N));
+handle_query(_JObj, _N, 'true') ->
+    lager:error("who is using this ?");
 handle_query(JObj, N, 'false') ->
     lager:debug("finding meter stats for '~p'", [N]),
     publish_resp(JObj, meter_resp(N)).
 
--spec raw_resp(#meter{} | ne_binary()) -> wh_proplist().
-raw_resp(#meter{one = OneMin
-                ,five = FiveMin
-                ,fifteen = FifteenMin
-                ,day = OneDay
-                ,count = Count
-                ,start_time = StartTime
-               }) ->
-    [{<<"one">>, ewma_to_json(OneMin)}
-     ,{<<"five">>, ewma_to_json(FiveMin)}
-     ,{<<"fifteen">>, ewma_to_json(FifteenMin)}
-     ,{<<"day">>, ewma_to_json(OneDay)}
-     ,{<<"count">>, Count}
-     ,{<<"start_time">>, StartTime}
-    ];
-raw_resp(Name) ->
-    raw_resp(folsom_metrics_meter:get_value(Name)).
+%% -spec raw_resp(#meter{} | ne_binary()) -> kz_proplist().
+%% raw_resp(#meter{one = OneMin
+%%                 ,five = FiveMin
+%%                 ,fifteen = FifteenMin
+%%                 ,day = OneDay
+%%                 ,count = Count
+%%                 ,start_time = StartTime
+%%                }) ->
+%%     [{<<"one">>, ewma_to_json(OneMin)}
+%%      ,{<<"five">>, ewma_to_json(FiveMin)}
+%%      ,{<<"fifteen">>, ewma_to_json(FifteenMin)}
+%%      ,{<<"day">>, ewma_to_json(OneDay)}
+%%      ,{<<"count">>, Count}
+%%      ,{<<"start_time">>, StartTime}
+%%     ];
+%% raw_resp(Name) ->
+%%     raw_resp(folsom_metrics_meter:get_value(Name)).
+%%
+%% -spec ewma_to_json(#ewma{}) -> kz_json:object().
+%% ewma_to_json(#ewma{alpha=Alpha
+%%                    ,interval=Interval
+%%                    ,initialized=Init
+%%                    ,rate=Rate
+%%                    ,total=Total
+%%                   }) ->
+%%     kz_json:from_list(
+%%       props:filter_undefined(
+%%         [{<<"alpha">>, Alpha}
+%%          ,{<<"interval">>, Interval}
+%%          ,{<<"initialized">>, Init}
+%%          ,{<<"rate">>, Rate}
+%%          ,{<<"total">>, Total}
+%%         ])).
 
--spec ewma_to_json(#ewma{}) -> wh_json:object().
-ewma_to_json(#ewma{alpha=Alpha
-                   ,interval=Interval
-                   ,initialized=Init
-                   ,rate=Rate
-                   ,total=Total
-                  }) ->
-    wh_json:from_list(
-      props:filter_undefined(
-        [{<<"alpha">>, Alpha}
-         ,{<<"interval">>, Interval}
-         ,{<<"initialized">>, Init}
-         ,{<<"rate">>, Rate}
-         ,{<<"total">>, Total}
-        ])).
-
--spec meter_resp(ne_binary()) -> wh_proplist().
--spec meter_resp(ne_binary(), wh_proplist()) -> wh_proplist().
+-spec meter_resp(ne_binary()) -> kz_proplist().
+-spec meter_resp(ne_binary(), kz_proplist()) -> kz_proplist().
 meter_resp(<<"*">>) ->
-    [{<<"meters">>, [wh_json:from_list(meter_resp(Name))
+    [{<<"meters">>, [kz_json:from_list(meter_resp(Name))
                      || {Name, _Info} <- folsom_metrics:get_metrics_info()
                     ]}];
 meter_resp(N) ->
     meter_resp(N, folsom_metrics_meter:get_values(N)).
 
 meter_resp(N, [_|_]=Values) ->
-    Vs = [{wh_util:to_binary(K), V}
+    Vs = [{kz_util:to_binary(K), V}
           || {K, V} <- Values,
              K =/= 'acceleration'
          ],
@@ -129,27 +129,27 @@ meter_resp(N, [_|_]=Values) ->
       ] ++ Vs);
 meter_resp(_, []) -> [].
 
--spec publish_resp(wh_json:object(), wh_proplist()) -> 'ok'.
+-spec publish_resp(kz_json:object(), kz_proplist()) -> 'ok'.
 publish_resp(JObj, Resp) ->
-    Queue = wh_json:get_value(<<"Server-ID">>, JObj),
-    MsgId = wh_json:get_value(<<"Msg-ID">>, JObj),
+    Queue = kz_json:get_value(<<"Server-ID">>, JObj),
+    MsgId = kz_json:get_value(<<"Msg-ID">>, JObj),
 
     PublishFun = fun(API) ->
                          publish_to(Queue, API)
                  end,
-    whapps_util:amqp_pool_send([{<<"Msg-ID">>, MsgId} | Resp]
+    kapps_util:amqp_pool_send([{<<"Msg-ID">>, MsgId} | Resp]
                                ,PublishFun
                               ).
 
--spec publish_to(ne_binary(), wh_proplist()) -> 'ok'.
+-spec publish_to(ne_binary(), kz_proplist()) -> 'ok'.
 publish_to(Queue, API) ->
-    wapi_hangups:publish_query_resp(Queue
-                                    ,wh_api:default_headers(?APP_NAME, ?APP_VERSION) ++ API
+    kapi_hangups:publish_query_resp(Queue
+                                    ,kz_api:default_headers(?APP_NAME, ?APP_VERSION) ++ API
                                    ).
 
--spec get_accel(wh_proplist()) -> wh_proplist().
+-spec get_accel(kz_proplist()) -> kz_proplist().
 get_accel(AccelVs) ->
-    [{wh_util:to_binary(K), V}
+    [{kz_util:to_binary(K), V}
      || {K, V} <- AccelVs
     ].
 

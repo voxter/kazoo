@@ -10,7 +10,6 @@
 
 -export([new/0, new/2
          ,from_json/1, from_json/2
-         ,subscribe/2 ,unsubscribe/2
          ,to_json/1
          ,is_context/1
         ]).
@@ -19,7 +18,8 @@
          ,auth_token/1, set_auth_token/2
          ,auth_account_id/1, set_auth_account_id/2
          ,account_id/1, set_account_id/2
-         ,bindings/1, add_binding/2, remove_binding/2
+         ,bindings/1, set_bindings/2
+         ,bindings_from_json/1, add_binding/2, remove_binding/2, is_bound/2
          ,websocket_session_id/1, set_websocket_session_id/2
          ,websocket_pid/1, set_websocket_pid/2
          ,timestamp/1, set_timestamp/2
@@ -54,7 +54,7 @@
 new()->
     Setters = [
         fun put_reqid/1
-        ,{fun set_timestamp/2, wh_util:current_tstamp()}
+        ,{fun set_timestamp/2, kz_util:current_tstamp()}
     ],
     setters(#bh_context{}, Setters).
 
@@ -70,44 +70,17 @@ new(SessionPid, SessionId) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec subscribe(context(), wh_json:object()) -> context().
-subscribe(Context, JObj) ->
-    Setters = [
-        {fun from_json/2, JObj}
-        ,{fun add_binding/2, wh_json:get_value(<<"binding">>, JObj)}
-    ],
-    setters(Context, Setters).
-
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
--spec unsubscribe(context(), wh_json:object()) -> context().
-unsubscribe(Context, JObj) ->
-    Setters = [
-        {fun from_json/2, JObj}
-        ,{fun remove_binding/2, wh_json:get_value(<<"binding">>, JObj)}
-    ],
-    setters(Context, Setters).
-
-
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
--spec from_json(wh_json:object()) -> context().
--spec from_json(context(), wh_json:object()) -> context().
+-spec from_json(kz_json:object()) -> context().
+-spec from_json(context(), kz_json:object()) -> context().
 from_json(JObj) ->
     from_json(new(), JObj).
 
 from_json(Context, JObj) ->
     Setters = [
-        {fun set_account_id/2, wh_json:get_value(<<"account_id">>, JObj)}
-        ,{fun set_auth_token/2,wh_json:get_value(<<"auth_token">>, JObj)}
-        ,{fun set_name/2, wh_json:get_value(<<"name">>, JObj)}
-        ,{fun set_metadata/2, wh_json:get_value(<<"metadata">>, JObj)}
+        {fun set_account_id/2, kz_json:get_value(<<"account_id">>, JObj)}
+        ,{fun set_auth_token/2,kz_json:get_value(<<"auth_token">>, JObj)}
+        ,{fun set_name/2, kz_json:get_value(<<"name">>, JObj)}
+        ,{fun set_metadata/2, kz_json:get_value(<<"metadata">>, JObj)}
     ],
     setters(Context, Setters).
 
@@ -116,9 +89,9 @@ from_json(Context, JObj) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec to_json(context()) -> wh_json:object().
+-spec to_json(context()) -> kz_json:object().
 to_json(Context) ->
-    wh_json:from_list(
+    kz_json:from_list(
         props:filter_undefined([
             {<<"account_id">>, account_id(Context)}
             ,{<<"auth_token">>, auth_token(Context)}
@@ -197,16 +170,42 @@ set_account_id(#bh_context{}=Context, AcctId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec bindings(context()) -> ne_binaries().
-bindings(#bh_context{bindings=Bindings}) ->
-    Bindings.
+bindings(#bh_context{bindings=Bds}) ->
+    Bds.
+
+-spec bindings_from_json(kz_json:object()) -> ne_binaries().
+bindings_from_json(JObj) ->
+    case kz_json:get_value(<<"binding">>, JObj) of
+        'undefined' ->
+             kz_json:get_value(<<"bindings">>, JObj, []);
+        Binding -> [Binding]
+    end.
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec set_bindings(context(), ne_binaries()) -> context().
+set_bindings(Context, Bindings) ->
+    Context#bh_context{bindings=Bindings}.
 
 -spec add_binding(context(), ne_binary()) -> context().
-add_binding(#bh_context{bindings=Bindings}=Context, Binding) ->
-    Context#bh_context{bindings=[Binding|Bindings]}.
+add_binding(#bh_context{bindings=Bds}=Context, Binding) ->
+    Context#bh_context{bindings=[Binding|Bds]}.
 
 -spec remove_binding(context(), ne_binary()) -> context().
-remove_binding(#bh_context{bindings=Bindings}=Context, Binding) ->
-    Context#bh_context{bindings=lists:delete(Binding, Bindings)}.
+remove_binding(#bh_context{bindings=Bds}=Context, Binding) ->
+    Context#bh_context{bindings=lists:delete(Binding, Bds)}.
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec is_bound(context(), ne_binary()) -> boolean().
+is_bound(#bh_context{bindings=Bds}, Binding) ->
+    lists:member(Binding, Bds).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -318,7 +317,7 @@ req_id(#bh_context{req_id=Id}) ->
 %%--------------------------------------------------------------------
 -spec put_reqid(context()) -> context().
 put_reqid(#bh_context{req_id = ReqId} = Context) ->
-    wh_util:put_callid(ReqId),
+    kz_util:put_callid(ReqId),
     Context.
 
 %%--------------------------------------------------------------------

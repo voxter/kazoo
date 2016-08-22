@@ -17,7 +17,7 @@
 -spec receipts() -> 'ok'.
 receipts() ->
     io:format(?RECEIPT_FORMAT, [<<>>, <<"Call or Msg ID">>, <<"Receipt">>, <<"To">>, <<"From">>, <<"Time">>]),
-    Receipts = wh_cache:filter_local(?CACHE_NAME, fun filter_receipts/2),
+    Receipts = kz_cache:filter_local(?CACHE_NAME, fun filter_receipts/2),
     Sorted = lists:usort(fun sort_receipts/2, Receipts),
     lists:foldl(fun print_receipt/2, 1, Sorted),
     'ok'.
@@ -39,18 +39,18 @@ print_receipt({{'receipt', Receipt}
                               }}
               ,Count
              ) ->
-    io:format(?RECEIPT_FORMAT, [wh_util:to_binary(Count)
+    io:format(?RECEIPT_FORMAT, [kz_util:to_binary(Count)
                                 ,CallId
                                 ,receipt_for_printing(Receipt)
                                 ,convert_for_printing(To)
                                 ,convert_for_printing(From)
-                                ,wh_util:pretty_print_datetime(GregSecs)
+                                ,kz_util:pretty_print_datetime(GregSecs)
                                ]),
     Count+1.
 
 -spec convert_for_printing(ne_binary() | ne_binaries()) -> ne_binary().
 convert_for_printing(<<_/binary>>=V) -> V;
-convert_for_printing([_|_]=Vs) -> wh_util:join_binary(Vs, <<",">>).
+convert_for_printing([_|_]=Vs) -> kz_util:join_binary(Vs, <<",">>).
 
 -spec receipt_for_printing(ne_binary()) -> ne_binary().
 receipt_for_printing(Receipt) ->
@@ -65,4 +65,4 @@ receipt_for_printing(Receipt) ->
     end.
 
 default_receipt_printing(Receipt) ->
-    wh_util:strip_binary(Receipt, [$\n, $\r]).
+    kz_util:strip_binary(Receipt, [$\n, $\r]).

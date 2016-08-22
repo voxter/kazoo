@@ -39,17 +39,22 @@
          ,system_replace_state/2
         ]).
 
--include("../crossbar.hrl").
+-include("crossbar.hrl").
+
+-define(SERVER, ?MODULE).
+
+-define(CHILDREN, []). %% FIXME: why is this not a supervisor?
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+-spec start_link() -> startlink_ret().
 start_link() ->
-    proc_lib:start_link(?MODULE, 'init_io', [self()]).
+    proc_lib:start_link(?SERVER, 'init_io', [self()]).
 
 init_io(Parent) ->
-    wh_util:put_callid(<<"cb_sup_io_server">>),
-    register(?MODULE, self()),
+    kz_util:put_callid(<<"cb_sup_io_server">>),
+    register(?SERVER, self()),
     lager:debug("Acking to ~p", [Parent]),
     Debug = sys:debug_options([]),
     proc_lib:init_ack(Parent, {'ok', self()}),
@@ -108,17 +113,16 @@ format_path_tokens([Module, Function | Args]) -> [Module, Function, Args].
 
 %%--------------------------------------------------------------------
 %% @public
-%% @doc
-%% Initializes the bindings this module will respond to.
-%% @end
+%% @doc Initializes the bindings this module will respond to.
 %%--------------------------------------------------------------------
--spec init() -> 'ok'.
+-spec init() -> sup_init_ret().
 init() ->
-    crossbar_module_sup:start_child(?MODULE),
+    Ret = crossbar_module_sup:start_child(?SERVER),
     _ = crossbar_bindings:bind(<<"*.allowed_methods.sup">>, ?MODULE, 'allowed_methods'),
     _ = crossbar_bindings:bind(<<"*.resource_exists.sup">>, ?MODULE, 'resource_exists'),
     _ = crossbar_bindings:bind(<<"*.validate.sup">>, ?MODULE, 'validate'),
-    _ = crossbar_bindings:bind(<<"*.authorize">>, ?MODULE, 'authorize').
+    _ = crossbar_bindings:bind(<<"*.authorize">>, ?MODULE, 'authorize'),
+    Ret.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -195,7 +199,7 @@ does_resource_exist(ModuleBin, FunctionBin, Args) ->
     Arity = erlang:length(Args),
 
     try {module_name(ModuleBin)
-         ,wh_util:to_atom(FunctionBin)
+         ,kz_util:to_atom(FunctionBin)
         }
     of
         {Module, Function} ->
@@ -211,7 +215,7 @@ module_name(ModuleBin) ->
     %% NOTE: the unsafe convertion to an atom is not an issue
     %%   in this module, despite coming from a user, because
     %%   only the system admin has access...
-    Module = wh_util:to_atom(<<ModuleBin/binary, "_maintenance">>, 'true'),
+    Module = kz_util:to_atom(<<ModuleBin/binary, "_maintenance">>, 'true'),
     try Module:module_info() of
         _ -> Module
     catch
@@ -237,14 +241,14 @@ validate(Context) -> Context.
 validate(Context, ModuleBin) ->
     validate_sup(Context, module_name(ModuleBin), 'status', []).
 validate(Context, ModuleBin, FunctionBin) ->
-    validate_sup(Context, module_name(ModuleBin), wh_util:to_atom(FunctionBin), []).
+    validate_sup(Context, module_name(ModuleBin), kz_util:to_atom(FunctionBin), []).
 validate(Context, ModuleBin, FunctionBin, Args) ->
-    validate_sup(Context, module_name(ModuleBin), wh_util:to_atom(FunctionBin), Args).
+    validate_sup(Context, module_name(ModuleBin), kz_util:to_atom(FunctionBin), Args).
 
 validate_sup(Context, Module, Function, Args) ->
     OldGroupLeader = group_leader(),
     group_leader(whereis(?MODULE), self()),
-    lager:debug("attempting ~s_maintenance:~s/~p"
+    lager:debug("attempting ~s:~s/~p"
                 ,[Module, Function, length(Args)]),
     try apply(Module, Function, Args) of
         'no_return' ->
@@ -264,7 +268,7 @@ validate_sup(Context, Module, Function, Args) ->
     catch
         _E:_R ->
             group_leader(OldGroupLeader, self()),
-            lager:debug("failed to run ~p_maintenance:~p/~p: ~s: ~p", [Module, Function, length(Args), _E, _R]),
+            lager:debug("failed to run ~p:~p/~p: ~s: ~p", [Module, Function, length(Args), _E, _R]),
             Context
     end.
 
@@ -279,7 +283,7 @@ receive_io_results() ->
 receive_io_results(Acc) ->
     receive
         {'io_result', Result} -> receive_io_results([Result|Acc])
-    after 50 -> iolist_to_binary(Acc)
+    after 50 -> iolist_to_binary(lists:reverse(Acc))
     end.
 
 -spec aggregate_results(cb_context:context()) -> cb_context:context().

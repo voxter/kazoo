@@ -26,6 +26,8 @@
 
 -include("konami.hrl").
 
+-define(SERVER, ?MODULE).
+
 -record(state, {}).
 
 %% By convention, we put the options here in macros, but not required.
@@ -51,55 +53,51 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
-%%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
-%% @end
+%% @doc Starts the server
 %%--------------------------------------------------------------------
 -spec start_link() -> startlink_ret().
 start_link() ->
-    gen_listener:start_link(?MODULE, [{'bindings', ?BINDINGS}
+    gen_listener:start_link(?SERVER, [{'bindings', ?BINDINGS}
                                       ,{'responders', ?RESPONDERS}
                                       ,{'queue_name', ?QUEUE_NAME}       % optional to include
                                       ,{'queue_options', ?QUEUE_OPTIONS} % optional to include
                                       ,{'consume_options', ?CONSUME_OPTIONS} % optional to include
                                      ], []).
 
--spec handle_metaflow(wh_json:object(), wh_proplist()) -> no_return().
+-spec handle_metaflow(kz_json:object(), kz_proplist()) -> no_return().
 handle_metaflow(JObj, Props) ->
-    'true' = wapi_dialplan:metaflow_v(JObj),
-    Call = whapps_call:from_json(wh_json:get_value(<<"Call">>, JObj)),
-    whapps_call:put_callid(Call),
+    'true' = kapi_dialplan:metaflow_v(JObj),
+    Call = kapps_call:from_json(kz_json:get_value(<<"Call">>, JObj)),
+    kapps_call:put_callid(Call),
 
     konami_call_sup:handle_metaflow(JObj, Props).
 
 handle_route_req(JObj, _Props) ->
-    'true' = wapi_route:req_v(JObj),
-    wh_util:put_callid(JObj),
-    Call = whapps_call:from_route_req(JObj),
+    'true' = kapi_route:req_v(JObj),
+    kz_util:put_callid(JObj),
+    Call = kapps_call:from_route_req(JObj),
 
-    maybe_start_metaflows(whapps_call:account_id(Call)
-                          ,whapps_call:authorizing_type(Call)
-                          ,whapps_call:authorizing_id(Call)
-                          ,whapps_call:owner_id(Call)
+    maybe_start_metaflows(kapps_call:account_id(Call)
+                          ,kapps_call:authorizing_type(Call)
+                          ,kapps_call:authorizing_id(Call)
+                          ,kapps_call:owner_id(Call)
                           ,Call
                          ).
 
--spec handle_channel_create(wh_json:object(), wh_proplist()) -> 'ok'.
+-spec handle_channel_create(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_channel_create(JObj, _Props) ->
-    'true' = wapi_call:event_v(JObj),
-    wh_util:put_callid(JObj),
-    Call = whapps_call:from_json(JObj),
+    'true' = kapi_call:event_v(JObj),
+    kz_util:put_callid(JObj),
+    Call = kapps_call:from_json(JObj),
 
-    maybe_start_metaflows(whapps_call:account_id(Call)
-                          ,whapps_call:authorizing_type(Call)
-                          ,whapps_call:authorizing_id(Call)
-                          ,whapps_call:owner_id(Call)
+    maybe_start_metaflows(kapps_call:account_id(Call)
+                          ,kapps_call:authorizing_type(Call)
+                          ,kapps_call:authorizing_id(Call)
+                          ,kapps_call:owner_id(Call)
                           ,Call
                          ).
 
--spec maybe_start_metaflows(api_binary(), api_binary(), api_binary(), api_binary(), whapps_call:call()) -> 'ok'.
+-spec maybe_start_metaflows(api_binary(), api_binary(), api_binary(), api_binary(), kapps_call:call()) -> 'ok'.
 maybe_start_metaflows('undefined', _AuthorizingType, _AuthorizingId, _OwnerId, _CallId) ->
     lager:debug("no account id for ~s(~s) owned by ~s", [_AuthorizingId, _AuthorizingType, _OwnerId]);
 maybe_start_metaflows(AccountId, <<"device">>, DeviceId, OwnerId, CallId) ->
@@ -113,23 +111,23 @@ maybe_start_metaflows(_AccountId, _AuthorizingType, _AuthorizingId, _OwnerId, _C
                 ,[_AccountId, _AuthorizingId, _AuthorizingType, _OwnerId]
                ).
 
--spec maybe_start_device_metaflows(ne_binary(), api_binary(), whapps_call:call()) -> 'ok'.
+-spec maybe_start_device_metaflows(ne_binary(), api_binary(), kapps_call:call()) -> 'ok'.
 maybe_start_device_metaflows(_AccountId, 'undefined', _Call) -> 'ok';
 maybe_start_device_metaflows(AccountId, DeviceId, Call) ->
-    {'ok', Endpoint} = couch_mgr:open_cache_doc(whapps_call:account_db(Call)
+    {'ok', Endpoint} = kz_datamgr:open_cache_doc(kapps_call:account_db(Call)
                                                 ,DeviceId
                                                ),
-    maybe_start_metaflows(AccountId, Call, wh_json:get_value(<<"metaflows">>, Endpoint)).
+    maybe_start_metaflows(AccountId, Call, kz_json:get_value(<<"metaflows">>, Endpoint)).
 
--spec maybe_start_user_metaflows(ne_binary(), api_binary(), whapps_call:call()) -> 'ok'.
+-spec maybe_start_user_metaflows(ne_binary(), api_binary(), kapps_call:call()) -> 'ok'.
 maybe_start_user_metaflows(_AccountId, 'undefined', _Call) -> 'ok';
 maybe_start_user_metaflows(AccountId, UserId, Call) ->
-    {'ok', User} = couch_mgr:open_cache_doc(whapps_call:account_db(Call)
+    {'ok', User} = kz_datamgr:open_cache_doc(kapps_call:account_db(Call)
                                             ,UserId
                                            ),
-    maybe_start_metaflows(AccountId, Call, wh_json:get_value(<<"metaflows">>, User)).
+    maybe_start_metaflows(AccountId, Call, kz_json:get_value(<<"metaflows">>, User)).
 
--spec maybe_start_metaflows(ne_binary(), whapps_call:call(), api_object()) -> 'ok'.
+-spec maybe_start_metaflows(ne_binary(), kapps_call:call(), api_object()) -> 'ok'.
 maybe_start_metaflows(_AccountId, _Call, 'undefined') -> 'ok';
 maybe_start_metaflows(_AccountId, _Call, Metaflows) ->
     lager:debug("starting ~p", [Metaflows]).

@@ -11,7 +11,9 @@
 -behaviour(supervisor).
 
 -include("ecallmgr.hrl").
--include_lib("whistle/include/wh_databases.hrl").
+-include_lib("kazoo/include/kz_databases.hrl").
+
+-define(SERVER, ?MODULE).
 
 -export([start_link/0]).
 -export([cache_proc/0]).
@@ -23,7 +25,7 @@
                                                 ]
                             }
                            ]).
--define(CACHE_UTIL_PROPS, [{'origin_bindings', [[{'db', ?WH_CONFIG_DB}]
+-define(CACHE_UTIL_PROPS, [{'origin_bindings', [[{'db', ?KZ_CONFIG_DB}]
                                                 ,[{'type', <<"media">>}]
                                                ]
                            }
@@ -32,8 +34,10 @@
 -define(CHILDREN, [?CACHE_ARGS(?ECALLMGR_UTIL_CACHE, ?CACHE_UTIL_PROPS)
                    ,?CACHE_ARGS(?ECALLMGR_AUTH_CACHE, ?CACHE_AUTHN_PROPS)
                    ,?CACHE(?ECALLMGR_CALL_CACHE)
+                   ,?CACHE(?ECALLMGR_INTERACTION_CACHE)
                    ,?SUPER('ecallmgr_originate_sup')
                    ,?WORKER('ecallmgr_registrar')
+                   ,?WORKER('ecallmgr_balance_crawler_fsm')
                   ]).
 
 %% ===================================================================
@@ -42,12 +46,11 @@
 
 %%--------------------------------------------------------------------
 %% @public
-%% @doc
-%% Starts the supervisor
-%% @end
+%% @doc Starts the supervisor
 %%--------------------------------------------------------------------
 -spec start_link() -> startlink_ret().
-start_link() -> supervisor:start_link({'local', ?MODULE}, ?MODULE, []).
+start_link() ->
+    supervisor:start_link({'local', ?SERVER}, ?MODULE, []).
 
 cache_proc() -> ?ECALLMGR_UTIL_CACHE.
 
@@ -64,7 +67,7 @@ cache_proc() -> ?ECALLMGR_UTIL_CACHE.
 %% specifications.
 %% @end
 %%--------------------------------------------------------------------
--spec init([]) -> sup_init_ret().
+-spec init(any()) -> sup_init_ret().
 init([]) ->
     RestartStrategy = 'one_for_one',
     MaxRestarts = 5,

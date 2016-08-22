@@ -1,13 +1,14 @@
 -ifndef(ECALLMGR_HRL).
 
--include_lib("whistle/include/wh_types.hrl").
--include_lib("whistle/include/wh_log.hrl").
--include_lib("whistle/include/wh_api.hrl").
+-include_lib("kazoo/include/kz_types.hrl").
+-include_lib("kazoo/include/kz_log.hrl").
+-include_lib("kazoo/include/kz_api.hrl").
 -include_lib("kazoo_documents/include/kazoo_documents.hrl").
 
 -define(ECALLMGR_UTIL_CACHE, 'ecallmgr_util_cache').
 -define(ECALLMGR_AUTH_CACHE, 'ecallmgr_auth_cache').
 -define(ECALLMGR_CALL_CACHE, 'ecallmgr_call_cache').
+-define(ECALLMGR_INTERACTION_CACHE, 'ecallmgr_interaction_cache').
 
 -define(CHANNELS_TBL, 'ecallmgr_channels').
 
@@ -25,6 +26,7 @@
 -define(LOCAL_MEDIA_PATH, "/tmp/").
 
 -define(DEFAULT_SAMPLE_RATE, ecallmgr_config:get_integer(<<"record_sample_rate">>, 8000)).
+-define(DEFAULT_STEREO_SAMPLE_RATE, ecallmgr_config:get_integer(<<"record_stereo_sample_rate">>, 16000)).
 
 -type fs_api_ret()       :: {'ok', binary()} |
                             {'error', 'badarg'} |
@@ -47,7 +49,7 @@
                            ,from :: api_binary() | '$2' | '_'
                            ,node :: atom() | '$1' | '_'
                            ,expires = 300 :: pos_integer() | '$1' | '_'
-                           ,timestamp = wh_util:current_tstamp() :: pos_integer() | '$2' | '_'
+                           ,timestamp = kz_util:current_tstamp() :: pos_integer() | '$2' | '_'
                           }).
 
 -record(channel, {uuid :: api_binary() | '$1' | '_'
@@ -79,6 +81,9 @@
                   ,handling_locally = 'false' :: boolean() | '_' %% is this ecallmgr handling the call control?
                   ,to_tag :: api_binary() | '_'
                   ,from_tag :: api_binary() | '_'
+                  ,interaction_id :: api_binary() | '$5' | '_'
+                  ,callee_number :: api_binary() | '$5' | '_'
+                  ,callee_name :: api_binary() | '$5' | '_'
                   ,caller_id :: api_binary() | '_'
                  }).
 
@@ -98,7 +103,7 @@
                      ,dynamic = 'true' :: boolean() | '_'
                      ,exit_sound = 'true' :: boolean() | '_'
                      ,enter_sound = 'true' :: boolean() | '_'
-                     ,start_time = wh_util:current_tstamp() :: non_neg_integer() | '_'
+                     ,start_time = kz_util:current_tstamp() :: non_neg_integer() | '_'
                      ,switch_hostname :: api_binary() | '_'
                      ,switch_url :: api_binary() | '_'
                      ,switch_external_ip :: api_binary() | '_'
@@ -141,7 +146,7 @@
 -define(SANITY_CHECK_PERIOD, 300 * ?MILLISECONDS_IN_SECOND).
 
 -define(APP_NAME, <<"ecallmgr">>).
--define(APP_VERSION, <<"0.8.0">>).
+-define(APP_VERSION, <<"4.0.0">>).
 
 -define(STARTUP_FILE, [code:lib_dir('ecallmgr', 'priv'), "/startup.config"]).
 -define(SETTINGS_FILE, [code:lib_dir('ecallmgr', 'priv'), "/settings.config"]).
@@ -157,8 +162,11 @@
 %% When an event occurs, we include all prefixed vars in the API message
 -define(CHANNEL_VAR_PREFIX, "ecallmgr_").
 
+-define(CCV(Key), <<?CHANNEL_VAR_PREFIX, Key/binary>>).
 -define(GET_CCV(Key), <<"variable_", ?CHANNEL_VAR_PREFIX, Key/binary>>).
 -define(SET_CCV(Key, Value), <<?CHANNEL_VAR_PREFIX, Key/binary, "=", Value/binary>>).
+-define(GET_CCV_HEADER(Key), <<"variable_sip_h_X-", ?CHANNEL_VAR_PREFIX, Key/binary>>).
+-define(GET_CUSTOM_HEADER(Key), <<"variable_sip_h_X-", Key/binary>>).
 
 -define(CREDS_KEY(Realm, Username), {'authn', Username, Realm}).
 
@@ -166,7 +174,7 @@
 %% [{AMQP-Header, FS-var-name}]
 %% so FS-var-name of "foo_var" would become "foo_var=foo_val" in the channel/call string
 -define(SPECIAL_CHANNEL_VARS, [{<<"Auto-Answer">>, <<"sip_auto_answer">>}
-                               ,{<<"Auto-Answer-Notify">>, <<"sip_auto_answer_notify">>}
+                               ,{<<"Auto-Answer-Suppress-Notify">>, <<"sip_auto_answer_suppress_notify">>}
                                ,{<<"Eavesdrop-Group">>, <<"eavesdrop_group">>}
                                ,{<<"Outbound-Caller-ID-Name">>, <<"origination_caller_id_name">>}
                                ,{<<"Outbound-Caller-ID-Number">>,<<"origination_caller_id_number">>}
@@ -179,9 +187,11 @@
                                ,{<<"Caller-ID-Number">>, <<"effective_caller_id_number">>}
                                ,{<<"Callee-ID-Name">>, <<"effective_callee_id_name">>}
                                ,{<<"Callee-ID-Number">>, <<"effective_callee_id_number">>}
+
                                ,{<<"Progress-Timeout">>, <<"progress_timeout">>}
                                ,{<<"Ignore-Early-Media">>, <<"ignore_early_media">>}
                                ,{<<"Continue-On-Fail">>, <<"continue_on_fail">>}
+                               ,{<<"Fail-On-Single-Reject">>, <<"fail_on_single_reject">>}
                                ,{<<"failure_causes">>, <<"failure_causes">>}
                                ,{<<"Endpoint-Timeout">>, <<"leg_timeout">>}
                                ,{<<"Endpoint-Progress-Timeout">>, <<"leg_progress_timeout">>}
@@ -195,13 +205,14 @@
                                ,{<<"Fax-Enabled">>, <<"t38_passthrough">>}
                                ,{<<"Presence-ID">>, <<"presence_id">>}
                                ,{<<"Inherit-Codec">>, <<"inherit_codec">>}
-                               ,{<<"From-URI">>, <<"sip_from_uri">>}
                                ,{<<"Bypass-Media">>, <<"bypass_media_after_bridge">>}
                                ,{<<"Bridge-Generate-Comfort-Noise">>,<<"bridge_generate_comfort_noise">>}
                                ,{<<"Origination-UUID">>, <<"origination_uuid">>}
                                ,{<<"Ignore-Display-Updates">>, <<"ignore_display_updates">>}
                                ,{<<"Eavesdrop-Group-ID">>, <<"eavesdrop_group">>}
-                               ,{<<"Loopback-Bowout">>, <<"loopback_bowout_on_execute">>}
+
+                               ,{<<"Loopback-Bowout">>, <<"loopback_bowout">>}
+                               ,{<<"Simplify-Loopback">>, <<"loopback_bowout_on_execute">>}
 
                                ,{<<"SIP-Invite-Domain">>, <<"sip_invite_domain">>}
                                ,{<<"Media-Encryption-Enforce-Security">>,<<"sdp_secure_savp_only">>}
@@ -229,6 +240,8 @@
                                ,{<<"recording_follow_transfer">>, <<"recording_follow_transfer">>}
                                ,{<<"recording_follow_attxfer">>, <<"recording_follow_attxfer">>}
                                ,{<<"Record-Min-Sec">>, <<"record_min_sec">>}
+                               ,{<<"record_min_sec">>, <<"record_min_sec">>}
+
                                ,{<<"enable_file_write_buffering">>, <<"enable_file_write_buffering">>}
                                ,{<<"RECORD_APPEND">>, <<"RECORD_APPEND">>}
                                ,{<<"fax_enable_t38_request">>, <<"fax_enable_t38_request">>}
@@ -259,6 +272,14 @@
                                ,{<<"Fax-Doc-DB">>, <<"fax_doc_database">>}
                                ,{<<"default_language">>, <<"default_language">>}
                                ,{<<"Default-Language">>, <<"default_language">>}
+                               ,{<<"RECORD_STEREO">>, <<"RECORD_STEREO">>}
+                               ,{<<"RECORD_SOFTWARE">>, <<"RECORD_SOFTWARE">>}
+                               ,{<<"From-URI">>, <<"sip_from_uri">>}
+                               ,{<<"To-URI">>, <<"sip_to_uri">>}
+                               ,{<<"Request-URI">>, <<"sip_req_uri">>}
+                               ,{<<"Loopback-Request-URI">>, <<"sip_loopback_req_uri">>}
+                               ,{<<"Hold-Media">>, <<"hold_music">>}
+                               ,{<<"Diversions">>, <<"sip_h_Diversion">>}
                               ]).
 
 %% [{FreeSWITCH-App-Name, Kazoo-App-Name}]
@@ -311,10 +332,17 @@
                     ,'CHANNEL_DATA', 'CALL_SECURE', 'PLAYBACK_START', 'PLAYBACK_STOP'
                    ]).
 
--define(FS_CUSTOM_EVENTS, ['whistle::noop', 'whistle::masquerade'
+-define(FS_SOFIA_TRANSFER_EVENTS, ['sofia::transferor'
+                                   ,'sofia::transferee'
+                                   ,'sofia::replaced'
+                                   ,'sofia::intercepted'
+                                  ]).
+-define(IS_SOFIA_TRANSFER(N), lists:member(kz_util:to_atom(N, 'true'), ?FS_SOFIA_TRANSFER_EVENTS)).
+
+-define(FS_CUSTOM_EVENTS, ['kazoo::noop', 'kazoo::masquerade'
                            ,'sofia::transferor', 'sofia::transferee'
-                           ,'sofia::replaced', 'sofia::register'
-                           ,'sofia::intercepted'
+                           ,'sofia::replaced','sofia::intercepted'
+                           ,'sofia::register'
                            ,'conference::maintenance'
                            ,'spandsp::txfaxresult'
                            ,'spandsp::rxfaxresult'
@@ -423,7 +451,13 @@
 -define(SEPARATOR_SIMULTANEOUS, <<",">>).
 -define(SEPARATOR_SINGLE, <<"|">>).
 
+
 -define(CHANNEL_VARS_EXT, "Execute-Extension-Original-").
+
+-define(CALL_INTERACTION_DEFAULT
+        ,<<(kz_util:to_binary(kz_util:current_tstamp()))/binary
+           ,"-", (kz_util:rand_hex_binary(4))/binary
+         >>).
 
 -define(ECALLMGR_HRL, 'true').
 -endif.

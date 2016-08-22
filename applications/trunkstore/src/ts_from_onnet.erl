@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%% Calls coming from known clients, getting settings for caller-id and
 %%% what not, and sending the calls offnet.
@@ -17,8 +17,11 @@
 
 -include("ts.hrl").
 
+-define(SERVER, ?MODULE).
+
+-spec start_link(kz_json:object()) -> startlink_ret().
 start_link(RouteReqJObj) ->
-    proc_lib:start_link(?MODULE, 'init', [self(), RouteReqJObj]).
+    proc_lib:start_link(?SERVER, 'init', [self(), RouteReqJObj]).
 
 init(Parent, RouteReqJObj) ->
     proc_lib:init_ack(Parent, {'ok', self()}),
@@ -30,30 +33,30 @@ start_amqp(State) ->
 
 maybe_onnet_data(State) ->
     JObj = ts_callflow:get_request_data(State),
-    {ToUser, _} = whapps_util:get_destination(JObj, ?APP_NAME, <<"outbound_user_field">>),
-    ToDID = wnm_util:to_e164(ToUser),
     CallID = ts_callflow:get_aleg_id(State),
     AccountId = ts_callflow:get_account_id(State),
-    FromUser = wh_json:get_value(<<"Caller-ID-Name">>, JObj),
+    {ToUser, _} = kapps_util:get_destination(JObj, ?APP_NAME, <<"outbound_user_field">>),
+    ToDID = knm_converters:normalize(ToUser, AccountId),
+    FromUser = kz_json:get_value(<<"Caller-ID-Name">>, JObj),
 
     lager:info("on-net request from ~s(~s) to ~s", [FromUser, AccountId, ToDID]),
     Options =
         case ts_util:lookup_did(FromUser, AccountId) of
             {'ok', Opts} -> Opts;
             _ ->
-                Username = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Username">>], JObj, <<>>),
-                Realm = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Realm">>], JObj, <<>>),
+                Username = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Username">>], JObj, <<>>),
+                Realm = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Realm">>], JObj, <<>>),
 
                 case ts_util:lookup_user_flags(Username, Realm, AccountId) of
                     {'ok', Opts} -> Opts;
-                    _ -> wh_json:new()
+                    _ -> kz_json:new()
                 end
         end,
-    SrvOptions = wh_json:get_value([<<"server">>, <<"options">>], Options, wh_json:new()),
-    case wnm_util:is_reconcilable(ToDID)
-        orelse wnm_util:classify_number(ToDID) =:= <<"emergency">>
-        orelse wh_json:is_true(<<"hunt_non_reconcilable">>, SrvOptions, 'false')
-        orelse whapps_config:get_is_true(?TS_CONFIG_CAT, <<"default_hunt_non_reconcilable">>, 'false')
+    SrvOptions = kz_json:get_value([<<"server">>, <<"options">>], Options, kz_json:new()),
+    case knm_converters:is_reconcilable(ToDID)
+        orelse knm_converters:classify(ToDID) =:= <<"emergency">>
+        orelse kz_json:is_true(<<"hunt_non_reconcilable">>, SrvOptions, 'false')
+        orelse kapps_config:get_is_true(?TS_CONFIG_CAT, <<"default_hunt_non_reconcilable">>, 'false')
     of
         'false' ->
             lager:debug("number ~p is non_reconcilable and the server does not allow it", [ToDID]);
@@ -62,22 +65,22 @@ maybe_onnet_data(State) ->
     end.
 
 onnet_data(CallID, AccountId, FromUser, ToDID, Options, State) ->
-    DIDOptions = wh_json:get_value(<<"DID_Opts">>, Options, wh_json:new()),
-    AccountOptions = wh_json:get_value(<<"account">>, Options, wh_json:new()),
-    SrvOptions = wh_json:get_value([<<"server">>, <<"options">>], Options, wh_json:new()),
-    MediaHandling = ts_util:get_media_handling([wh_json:get_value(<<"media_handling">>, DIDOptions)
-                                                ,wh_json:get_value(<<"media_handling">>, SrvOptions)
-                                                ,wh_json:get_value(<<"media_handling">>, AccountOptions)
+    DIDOptions = kz_json:get_value(<<"DID_Opts">>, Options, kz_json:new()),
+    AccountOptions = kz_json:get_value(<<"account">>, Options, kz_json:new()),
+    SrvOptions = kz_json:get_value([<<"server">>, <<"options">>], Options, kz_json:new()),
+    MediaHandling = ts_util:get_media_handling([kz_json:get_value(<<"media_handling">>, DIDOptions)
+                                                ,kz_json:get_value(<<"media_handling">>, SrvOptions)
+                                                ,kz_json:get_value(<<"media_handling">>, AccountOptions)
                                                ]),
-    SIPHeaders = ts_util:sip_headers([wh_json:get_value(<<"sip_headers">>, DIDOptions)
-                                      ,wh_json:get_value(<<"sip_headers">>, SrvOptions)
-                                      ,wh_json:get_value(<<"sip_headers">>, AccountOptions)
+    SIPHeaders = ts_util:sip_headers([kz_json:get_value(<<"sip_headers">>, DIDOptions)
+                                      ,kz_json:get_value(<<"sip_headers">>, SrvOptions)
+                                      ,kz_json:get_value(<<"sip_headers">>, AccountOptions)
                                      ]),
 
     EmergencyCallerID =
-        case ts_util:caller_id([wh_json:get_value(<<"emergency_caller_id">>, DIDOptions)
-                                ,wh_json:get_value(<<"emergency_caller_id">>, SrvOptions)
-                                ,wh_json:get_value(<<"emergency_caller_id">>, AccountOptions)
+        case ts_util:caller_id([kz_json:get_value(<<"emergency_caller_id">>, DIDOptions)
+                                ,kz_json:get_value(<<"emergency_caller_id">>, SrvOptions)
+                                ,kz_json:get_value(<<"emergency_caller_id">>, AccountOptions)
                                ])
         of
             {'undefined', 'undefined'} -> [];
@@ -88,16 +91,16 @@ onnet_data(CallID, AccountId, FromUser, ToDID, Options, State) ->
                 ]
         end,
     RouteReq = ts_callflow:get_request_data(State),
-    OriginalCIdNumber = wh_json:get_value(<<"Caller-ID-Number">>, RouteReq),
-    OriginalCIdName = wh_json:get_value(<<"Caller-ID-Name">>, RouteReq),
+    OriginalCIdNumber = kz_json:get_value(<<"Caller-ID-Number">>, RouteReq),
+    OriginalCIdName = kz_json:get_value(<<"Caller-ID-Name">>, RouteReq),
     CallerID =
-        case ts_util:caller_id([wh_json:get_value(<<"caller_id">>, DIDOptions)
-                                ,wh_json:get_value(<<"caller_id">>, SrvOptions)
-                                ,wh_json:get_value(<<"caller_id">>, AccountOptions)
+        case ts_util:caller_id([kz_json:get_value(<<"caller_id">>, DIDOptions)
+                                ,kz_json:get_value(<<"caller_id">>, SrvOptions)
+                                ,kz_json:get_value(<<"caller_id">>, AccountOptions)
                                ])
         of
             {'undefined', 'undefined'} ->
-                case whapps_config:get_is_true(<<"trunkstore">>, <<"ensure_valid_caller_id">>, 'false') of
+                case kapps_config:get_is_true(<<"trunkstore">>, <<"ensure_valid_caller_id">>, 'false') of
                     'true' ->
                         ValidCID = ts_util:maybe_ensure_cid_valid('external', OriginalCIdNumber, FromUser, AccountId),
                         [{<<"Outbound-Caller-ID-Number">>, ValidCID}
@@ -117,9 +120,9 @@ onnet_data(CallID, AccountId, FromUser, ToDID, Options, State) ->
                  | EmergencyCallerID
                 ]
                end,
-    DIDFlags = ts_util:offnet_flags([wh_json:get_value(<<"DID_Opts">>, DIDOptions)
-                                     ,wh_json:get_value(<<"flags">>, SrvOptions)
-                                     ,wh_json:get_value(<<"flags">>, AccountOptions)
+    DIDFlags = ts_util:offnet_flags([kz_json:get_value(<<"DID_Opts">>, DIDOptions)
+                                     ,kz_json:get_value(<<"flags">>, SrvOptions)
+                                     ,kz_json:get_value(<<"flags">>, AccountOptions)
                                     ]),
     Q = ts_callflow:get_my_queue(State),
     Command = [ KV
@@ -131,13 +134,13 @@ onnet_data(CallID, AccountId, FromUser, ToDID, Options, State) ->
                         ,{<<"Application-Name">>, <<"bridge">>}
                         ,{<<"Flags">>, DIDFlags}
                         ,{<<"Media">>, MediaHandling}
-                        ,{<<"Timeout">>, wh_json:get_value(<<"timeout">>, DIDOptions)}
-                        ,{<<"Ignore-Early-Media">>, wh_json:get_value(<<"ignore_early_media">>, DIDOptions)}
-                        ,{<<"Ringback">>, wh_json:get_value(<<"ringback">>, DIDOptions)}
+                        ,{<<"Timeout">>, kz_json:get_value(<<"timeout">>, DIDOptions)}
+                        ,{<<"Ignore-Early-Media">>, kz_json:get_value(<<"ignore_early_media">>, DIDOptions)}
+                        ,{<<"Ringback">>, kz_json:get_value(<<"ringback">>, DIDOptions)}
                         ,{<<"Custom-SIP-Headers">>, SIPHeaders}
-                        ,{<<"Hunt-Account-ID">>, wh_json:get_value(<<"hunt_account_id">>, SrvOptions)}
-                        ,{<<"Custom-Channel-Vars">>, wh_json:from_list([{<<"Account-ID">>, AccountId}])}
-                        | wh_api:default_headers(Q, ?APP_NAME, ?APP_VERSION)
+                        ,{<<"Hunt-Account-ID">>, kz_json:get_value(<<"hunt_account_id">>, SrvOptions)}
+                        ,{<<"Custom-Channel-Vars">>, kz_json:from_list([{<<"Account-ID">>, AccountId}])}
+                        | kz_api:default_headers(Q, ?APP_NAME, ?APP_VERSION)
                        ],
                    V =/= 'undefined',
                    V =/= <<>>
@@ -149,7 +152,7 @@ onnet_data(CallID, AccountId, FromUser, ToDID, Options, State) ->
         _A:_B ->
             ST = erlang:get_stacktrace(),
             lager:info("exception ~p:~p", [_A, _B]),
-            wh_util:log_stacktrace(ST),
+            kz_util:log_stacktrace(ST),
             ts_callflow:send_hangup(State)
     end.
 
@@ -171,7 +174,7 @@ wait_for_win(State, Command) ->
 
 send_offnet(State, Command) ->
     CtlQ = ts_callflow:get_control_queue(State),
-    _ = wapi_offnet_resource:publish_req([{<<"Control-Queue">>, CtlQ}
+    _ = kapi_offnet_resource:publish_req([{<<"Control-Queue">>, CtlQ}
                                           |Command
                                          ]),
     wait_for_bridge(CtlQ, State).
@@ -182,6 +185,6 @@ wait_for_bridge(CtlQ, State1) ->
         {'error', #ts_callflow_state{aleg_callid='undefined'}} -> 'ok';
         {'error', #ts_callflow_state{aleg_callid=CallId}=State2} ->
             lager:info("responding to aleg ~s with 686", [CallId]),
-            wh_call_response:send(CallId, CtlQ, <<"686">>),
+            kz_call_response:send(CallId, CtlQ, <<"686">>),
             ts_callflow:send_hangup(State2, <<"686">>)
     end.

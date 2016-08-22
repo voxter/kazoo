@@ -31,7 +31,9 @@
         ]).
 
 -include("webhooks.hrl").
--include_lib("whistle/include/wapi_conf.hrl").
+-include_lib("kazoo/include/kapi_conf.hrl").
+
+-define(SERVER, ?MODULE).
 
 -record(state, {}).
 -type state() :: #state{}.
@@ -56,16 +58,12 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
-%%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
-%% @end
+%% @doc Starts the server
 %%--------------------------------------------------------------------
 -spec start_link() -> startlink_ret().
 start_link() ->
     {Bindings, Responders} = load_module_bindings_and_responders(),
-    gen_listener:start_link({'local', ?MODULE}
+    gen_listener:start_link({'local', ?SERVER}
                             ,?MODULE
                             ,[{'bindings', Bindings}
                               ,{'responders', Responders}
@@ -106,28 +104,28 @@ load_module_fold(Module, {Bindings, Responders}=Acc) ->
             Acc
     end.
 
--spec handle_doc_type_update(wh_json:object(), wh_proplist()) -> 'ok'.
+-spec handle_doc_type_update(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_doc_type_update(JObj, _Props) ->
-    'true' = wapi_conf:doc_type_update_v(JObj),
-    wh_util:put_callid(JObj),
+    'true' = kapi_conf:doc_type_update_v(JObj),
+    kz_util:put_callid(JObj),
 
     lager:debug("re-enabling hooks for ~s: ~s"
-                ,[wapi_conf:get_account_id(JObj)
-                  ,wapi_conf:get_action(JObj)
+                ,[kapi_conf:get_account_id(JObj)
+                  ,kapi_conf:get_action(JObj)
                  ]),
-    webhooks_util:reenable(wapi_conf:get_account_id(JObj)
-                           ,wapi_conf:get_action(JObj)
+    webhooks_util:reenable(kapi_conf:get_account_id(JObj)
+                           ,kapi_conf:get_action(JObj)
                           ),
 
-    ServerId = wh_api:server_id(JObj),
+    ServerId = kz_api:server_id(JObj),
     lager:debug("publishing resp to ~s", [ServerId]),
-    wh_amqp_worker:cast([{<<"status">>, <<"success">>}
+    kz_amqp_worker:cast([{<<"status">>, <<"success">>}
                          ,{<<"Event-Category">>, <<"configuration">>}
                          ,{<<"Event-Name">>, <<"doc_type_updated">>}
-                         ,{<<"Msg-ID">>, wh_api:msg_id(JObj)}
-                         | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                         ,{<<"Msg-ID">>, kz_api:msg_id(JObj)}
+                         | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                         ]
-                        ,fun(P) -> wapi_self:publish_message(ServerId, P) end
+                        ,fun(P) -> kapi_self:publish_message(ServerId, P) end
                        ).
 
 -spec hooks_configured() -> 'ok'.
@@ -172,7 +170,7 @@ print_summary({[#webhook{uri=URI
               }
               ,Count) ->
     io:format(?FORMAT_STRING_SUMMARY
-              ,[URI, Verb, Event, wh_util:to_binary(Retries), AccountId]
+              ,[URI, Verb, Event, kz_util:to_binary(Retries), AccountId]
              ),
     print_summary(ets:select(Continuation), Count+1).
 
@@ -205,15 +203,15 @@ remove_object_bindings(AccountId) ->
 
 -spec add_account_bindings() -> 'ok'.
 add_account_bindings() ->
-    gen_listener:add_responder(?MODULE
+    gen_listener:add_responder(?SERVER
                               ,{'webhooks_init', 'maybe_init_account'}
                               ,[{<<"configuration">>, ?DB_CREATED}]
                               ),
-    gen_listener:add_binding(?MODULE, ?ACCOUNT_BINDING).
+    gen_listener:add_binding(?SERVER, ?ACCOUNT_BINDING).
 
 -spec remove_account_bindings() -> 'ok'.
 remove_account_bindings() ->
-    gen_listener:rm_binding(?MODULE, ?ACCOUNT_BINDING).
+    gen_listener:rm_binding(?SERVER, ?ACCOUNT_BINDING).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -232,7 +230,7 @@ remove_account_bindings() ->
 %%--------------------------------------------------------------------
 -spec init([]) -> {'ok', state()}.
 init([]) ->
-    wh_util:put_callid(?MODULE),
+    kz_util:put_callid(?MODULE),
     {'ok', #state{}}.
 
 %%--------------------------------------------------------------------
@@ -282,8 +280,7 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info(?HOOK_EVT(AccountId, EventType, JObj), State) ->
-    _ = wh_util:spawn(?MODULE
-                      ,'maybe_handle_channel_event'
+    _ = kz_util:spawn(fun webhooks_channel_util:maybe_handle_channel_event/3
                       ,[AccountId, EventType, JObj]
                      ),
     {'noreply', State};

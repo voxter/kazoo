@@ -9,7 +9,7 @@
 %%%-------------------------------------------------------------------
 -module(cf_callflow).
 
--include("../callflow.hrl").
+-include("callflow.hrl").
 
 -export([handle/2]).
 
@@ -19,7 +19,7 @@
 %% Entry point for this module
 %% @end
 %%--------------------------------------------------------------------
--spec handle(wh_json:object(), whapps_call:call()) -> 'ok'.
+-spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     Id = maybe_use_variable(Data, Call),
     case couch_mgr:open_cache_doc(whapps_call:account_db(Call), Id) of

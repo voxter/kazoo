@@ -10,7 +10,7 @@
 
 -behaviour(gen_server).
 
--include("../call_inspector.hrl").
+-include("call_inspector.hrl").
 
 %% API
 -export([start_link/1]).
@@ -37,12 +37,9 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
-%%
-%% @spec start_link(term()) -> {ok, Pid} | ignore | {error, Error}
-%% @end
+%% @doc Starts the server
 %%--------------------------------------------------------------------
+-spec start_link(list()) -> startlink_ret().
 start_link(Args) ->
     ServerName = ci_parsers_util:make_name(Args),
     gen_server:start_link({'local', ServerName}, ?MODULE, Args, []).
@@ -64,7 +61,7 @@ start_link(Args) ->
 %%--------------------------------------------------------------------
 init({'parser_args', IP, Port} = Args) ->
     ParserId = ci_parsers_util:make_name(Args),
-    _ = wh_util:put_callid(ParserId),
+    _ = kz_util:put_callid(ParserId),
     {'ok', Socket} = gen_udp:open(Port, ['binary'
                                          ,{'active', 'true'}
                                         ]),
@@ -182,4 +179,4 @@ ip({92,_,_,_}=IP) ->
     lager:debug("look we hit this terrible case again!"),
     ip(setelement(1, IP, 192));
 ip(IP) ->
-    wh_network_utils:iptuple_to_binary(IP).
+    kz_network_utils:iptuple_to_binary(IP).

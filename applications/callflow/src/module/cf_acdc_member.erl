@@ -16,14 +16,14 @@
 
 -export([handle/2]).
 
--include("../callflow.hrl").
+-include("callflow.hrl").
 
 -type max_wait() :: pos_integer() | 'infinity'.
 
 -define(MEMBER_TIMEOUT, <<"member_timeout">>).
 -define(MEMBER_HANGUP, <<"member_hangup">>).
 
--record(member_call, {call              :: whapps_call:call()
+-record(member_call, {call              :: kapps_call:call()
                       ,queue_id         :: api_binary()
                       ,config_data = [] :: wh_proplist()
                       ,breakout_media   :: api_object()
@@ -44,7 +44,7 @@
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec handle(wh_json:object(), whapps_call:call()) -> 'ok'.
+-spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     QueueId = maybe_use_variable(Data, Call),
     lager:info("sending call to queue ~s", [QueueId]),
@@ -52,24 +52,24 @@ handle(Data, Call) ->
     Priority = lookup_priority(Data, Call),
 
     MemberCall = props:filter_undefined(
-                   [{<<"Account-ID">>, whapps_call:account_id(Call)}
+                   [{<<"Account-ID">>, kapps_call:account_id(Call)}
                     ,{<<"Queue-ID">>, QueueId}
-                    ,{<<"Call">>, whapps_call:to_json(Call)}
+                    ,{<<"Call">>, kapps_call:to_json(Call)}
                     ,{<<"Member-Priority">>, Priority}
-                    | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                    | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                    ]),
 
     lager:info("loading ACDc queue: ~s", [QueueId]),
-    {'ok', QueueJObj} = couch_mgr:open_cache_doc(whapps_call:account_db(Call), QueueId),
+    {'ok', QueueJObj} = kz_datamgr:open_cache_doc(kapps_call:account_db(Call), QueueId),
 
-    MaxWait = max_wait(wh_json:get_integer_value(<<"connection_timeout">>, QueueJObj, 3600)),
-    MaxQueueSize = max_queue_size(wh_json:get_integer_value(<<"max_queue_size">>, QueueJObj, 0)),
+    MaxWait = max_wait(kz_json:get_integer_value(<<"connection_timeout">>, QueueJObj, 3600)),
+    MaxQueueSize = max_queue_size(kz_json:get_integer_value(<<"max_queue_size">>, QueueJObj, 0)),
 
     Call1 = whapps_call:kvs_store_proplist([{'caller_exit_key', wh_json:get_value(<<"caller_exit_key">>, QueueJObj)}
                                             ,{'breakout_key', wh_json:get_value([<<"breakout">>, <<"dtmf">>], QueueJObj)}
                                            ], Call),
 
-    CurrQueueSize = wapi_acdc_queue:queue_size(whapps_call:account_id(Call1), QueueId),
+    CurrQueueSize = kapi_acdc_queue:queue_size(kapps_call:account_id(Call1), QueueId),
 
     lager:info("max size: ~p curr size: ~p", [MaxQueueSize, CurrQueueSize]),
 
@@ -97,11 +97,11 @@ maybe_use_variable(Data, Call) ->
 
 -spec lookup_priority(wh_json:object(), whapps_call:call()) -> api_binary().
 lookup_priority(Data, Call) ->
-    FromData = wh_json:get_integer_value(<<"priority">>, Data),
-    FromCall = whapps_call:custom_channel_var(<<"Call-Priority">>, Call),
+    FromData = kz_json:get_integer_value(<<"priority">>, Data),
+    FromCall = kapps_call:custom_channel_var(<<"Call-Priority">>, Call),
     case {FromData, FromCall} of
         {FromData, _} when is_integer(FromData) -> FromData;
-        {_, FromCall} when is_binary(FromCall) -> wh_util:to_integer(FromCall);
+        {_, FromCall} when is_binary(FromCall) -> kz_util:to_integer(FromCall);
         _ -> 'undefined'
     end.
 
@@ -180,9 +180,9 @@ process_message(#member_call{call=Call
                             }=MC, BreakoutState, Timeout, Start, Wait, JObj, {<<"member">>, <<"call_fail">>}) ->
     case QueueId =:= wh_json:get_value(<<"Queue-ID">>, JObj) of
         'true' ->
-            Failure = wh_json:get_value(<<"Failure-Reason">>, JObj),
+            Failure = kz_json:get_value(<<"Failure-Reason">>, JObj),
             lager:info("call failed to be processed: ~s (took ~b s)"
-                       ,[Failure, wh_util:elapsed_s(Start)]
+                       ,[Failure, kz_util:elapsed_s(Start)]
                       ),
             cancel_member_call(Call, Failure),
             stop_hold_music(Call),
@@ -212,7 +212,7 @@ process_dtmf(DTMF, #member_call{call=Call
         CallerExitKey ->
             lager:info("caller pressed the exit key(~s), moving to next callflow action", [DTMF]),
             cancel_member_call(Call, <<"dtmf_exit">>),
-            _ = whapps_call_command:flush_dtmf(Call),
+            _ = kapps_call_command:flush_dtmf(Call),
             timer:sleep(?MILLISECONDS_IN_SECOND),
             cf_exe:continue(Call);
         BreakoutKey ->
@@ -347,30 +347,30 @@ max_queue_size(_) -> 0.
 is_queue_full(0, _) -> 'false';
 is_queue_full(MaxQueueSize, CurrQueueSize) -> CurrQueueSize >= MaxQueueSize.
 
--spec cancel_member_call(whapps_call:call(), ne_binary()) -> 'ok'.
+-spec cancel_member_call(kapps_call:call(), ne_binary()) -> 'ok'.
 cancel_member_call(Call, <<"timeout">>) ->
     lager:info("update reason from `timeout` to `member_timeout`"),
     cancel_member_call(Call, ?MEMBER_TIMEOUT);
 cancel_member_call(_, <<"no agents">>) ->
     'ok';
 cancel_member_call(Call, Reason) ->
-    AcctId = whapps_call:account_id(Call),
-    {'ok', QueueId} = whapps_call:kvs_find('queue_id', Call),
-    CallId = whapps_call:call_id(Call),
+    AcctId = kapps_call:account_id(Call),
+    {'ok', QueueId} = kapps_call:kvs_find('queue_id', Call),
+    CallId = kapps_call:call_id(Call),
 
     Req = props:filter_undefined(
             [{<<"Account-ID">>, AcctId}
              ,{<<"Queue-ID">>, QueueId}
              ,{<<"Call-ID">>, CallId}
              ,{<<"Reason">>, Reason}
-             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
-    wapi_acdc_queue:publish_member_call_cancel(Req).
+    kapi_acdc_queue:publish_member_call_cancel(Req).
 
 stop_hold_music(Call) ->
     Cmd = [{<<"Application-Name">>, <<"play">>}
-           ,{<<"Call-ID">>, whapps_call:call_id(Call)}
+           ,{<<"Call-ID">>, kapps_call:call_id(Call)}
            ,{<<"Media-Name">>, <<"silence_stream://50">>}
            ,{<<"Insert-At">>, <<"now">>}
           ],
-    whapps_call_command:send_command(Cmd, Call).
+    kapps_call_command:send_command(Cmd, Call).

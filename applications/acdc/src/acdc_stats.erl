@@ -76,6 +76,8 @@
 -include("acdc.hrl").
 -include("acdc_stats.hrl").
 
+-define(SERVER, ?MODULE).
+
 %% Public API
 -spec call_waiting(api_binary()
                    ,api_binary()
@@ -91,11 +93,11 @@ call_waiting(AccountId, QueueId, CallId, CallerIdName, CallerIdNumber, CallerPri
               ,{<<"Call-ID">>, CallId}
               ,{<<"Caller-ID-Name">>, CallerIdName}
               ,{<<"Caller-ID-Number">>, CallerIdNumber}
-              ,{<<"Entered-Timestamp">>, wh_util:current_tstamp()}
+              ,{<<"Entered-Timestamp">>, kz_util:current_tstamp()}
               ,{<<"Caller-Priority">>, CallerPriority}
-              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    whapps_util:amqp_pool_send(Prop, fun wapi_acdc_stats:publish_call_waiting/1).
+    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_waiting/1).
 
 call_waiting(AccountId, QueueId, Position, CallId, CallerIdName, CallerIdNumber, CallerPriority) ->
     Prop = props:filter_undefined(
@@ -117,10 +119,10 @@ call_abandoned(AccountId, QueueId, CallId, Reason) ->
               ,{<<"Queue-ID">>, QueueId}
               ,{<<"Call-ID">>, CallId}
               ,{<<"Abandon-Reason">>, Reason}
-              ,{<<"Abandon-Timestamp">>, wh_util:current_tstamp()}
-              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+              ,{<<"Abandon-Timestamp">>, kz_util:current_tstamp()}
+              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    whapps_util:amqp_pool_send(Prop, fun wapi_acdc_stats:publish_call_abandoned/1).
+    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_abandoned/1).
 
 call_handled(AccountId, QueueId, CallId, AgentId) ->
     Prop = props:filter_undefined(
@@ -128,10 +130,10 @@ call_handled(AccountId, QueueId, CallId, AgentId) ->
               ,{<<"Queue-ID">>, QueueId}
               ,{<<"Call-ID">>, CallId}
               ,{<<"Agent-ID">>, AgentId}
-              ,{<<"Handled-Timestamp">>, wh_util:current_tstamp()}
-              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+              ,{<<"Handled-Timestamp">>, kz_util:current_tstamp()}
+              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    whapps_util:amqp_pool_send(Prop, fun wapi_acdc_stats:publish_call_handled/1).
+    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_handled/1).
 
 call_missed(AccountId, QueueId, AgentId, CallId, ErrReason) ->
     Prop = props:filter_undefined(
@@ -140,10 +142,10 @@ call_missed(AccountId, QueueId, AgentId, CallId, ErrReason) ->
               ,{<<"Call-ID">>, CallId}
               ,{<<"Agent-ID">>, AgentId}
               ,{<<"Miss-Reason">>, ErrReason}
-              ,{<<"Miss-Timestamp">>, wh_util:current_tstamp()}
-              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+              ,{<<"Miss-Timestamp">>, kz_util:current_tstamp()}
+              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    whapps_util:amqp_pool_send(Prop, fun wapi_acdc_stats:publish_call_missed/1).
+    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_missed/1).
 
 call_processed(AccountId, QueueId, AgentId, CallId, Initiator) ->
     Prop = props:filter_undefined(
@@ -151,11 +153,11 @@ call_processed(AccountId, QueueId, AgentId, CallId, Initiator) ->
               ,{<<"Queue-ID">>, QueueId}
               ,{<<"Call-ID">>, CallId}
               ,{<<"Agent-ID">>, AgentId}
-              ,{<<"Processed-Timestamp">>, wh_util:current_tstamp()}
+              ,{<<"Processed-Timestamp">>, kz_util:current_tstamp()}
               ,{<<"Hung-Up-By">>, Initiator}
-              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    whapps_util:amqp_pool_send(Prop, fun wapi_acdc_stats:publish_call_processed/1).
+    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_processed/1).
 
 call_id_change(AccountId, QueueId, OldCallId, NewCallId) ->
     Prop = props:filter_undefined(
@@ -171,31 +173,31 @@ agent_ready(AcctId, AgentId) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AcctId}
               ,{<<"Agent-ID">>, AgentId}
-              ,{<<"Timestamp">>, wh_util:current_tstamp()}
+              ,{<<"Timestamp">>, kz_util:current_tstamp()}
               ,{<<"Status">>, <<"ready">>}
-              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    whapps_util:amqp_pool_send(Prop, fun wapi_acdc_stats:publish_status_ready/1).
+    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_status_ready/1).
 
 agent_logged_in(AcctId, AgentId) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AcctId}
               ,{<<"Agent-ID">>, AgentId}
-              ,{<<"Timestamp">>, wh_util:current_tstamp()}
+              ,{<<"Timestamp">>, kz_util:current_tstamp()}
               ,{<<"Status">>, <<"logged_in">>}
-              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    whapps_util:amqp_pool_send(Prop, fun wapi_acdc_stats:publish_status_logged_in/1).
+    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_status_logged_in/1).
 
 agent_logged_out(AcctId, AgentId) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AcctId}
               ,{<<"Agent-ID">>, AgentId}
-              ,{<<"Timestamp">>, wh_util:current_tstamp()}
+              ,{<<"Timestamp">>, kz_util:current_tstamp()}
               ,{<<"Status">>, <<"logged_out">>}
-              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    whapps_util:amqp_pool_send(Prop, fun wapi_acdc_stats:publish_status_logged_out/1).
+    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_status_logged_out/1).
 
 agent_connecting(AcctId, AgentId, CallId) ->
     agent_connecting(AcctId, AgentId, CallId, 'undefined', 'undefined').
@@ -203,14 +205,14 @@ agent_connecting(AcctId, AgentId, CallId, CallerIDName, CallerIDNumber) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AcctId}
               ,{<<"Agent-ID">>, AgentId}
-              ,{<<"Timestamp">>, wh_util:current_tstamp()}
+              ,{<<"Timestamp">>, kz_util:current_tstamp()}
               ,{<<"Status">>, <<"connecting">>}
               ,{<<"Call-ID">>, CallId}
               ,{<<"Caller-ID-Name">>, CallerIDName}
               ,{<<"Caller-ID-Number">>, CallerIDNumber}
-              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    whapps_util:amqp_pool_send(Prop, fun wapi_acdc_stats:publish_status_connecting/1).
+    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_status_connecting/1).
 
 agent_connected(AcctId, AgentId, CallId) ->
     agent_connected(AcctId, AgentId, CallId, 'undefined', 'undefined').
@@ -218,25 +220,25 @@ agent_connected(AcctId, AgentId, CallId, CallerIDName, CallerIDNumber) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AcctId}
               ,{<<"Agent-ID">>, AgentId}
-              ,{<<"Timestamp">>, wh_util:current_tstamp()}
+              ,{<<"Timestamp">>, kz_util:current_tstamp()}
               ,{<<"Status">>, <<"connected">>}
               ,{<<"Call-ID">>, CallId}
               ,{<<"Caller-ID-Name">>, CallerIDName}
               ,{<<"Caller-ID-Number">>, CallerIDNumber}
-              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    whapps_util:amqp_pool_send(Prop, fun wapi_acdc_stats:publish_status_connected/1).
+    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_status_connected/1).
 
 agent_wrapup(AcctId, AgentId, WaitTime) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AcctId}
               ,{<<"Agent-ID">>, AgentId}
-              ,{<<"Timestamp">>, wh_util:current_tstamp()}
+              ,{<<"Timestamp">>, kz_util:current_tstamp()}
               ,{<<"Status">>, <<"wrapup">>}
               ,{<<"Wait-Time">>, WaitTime}
-              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    whapps_util:amqp_pool_send(Prop, fun wapi_acdc_stats:publish_status_wrapup/1).
+    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_status_wrapup/1).
 
 agent_paused(AcctId, AgentId, 'undefined', _) ->
     lager:debug("undefined pause time for ~s(~s)", [AgentId, AcctId]);
@@ -244,24 +246,24 @@ agent_paused(AcctId, AgentId, PauseTime, Alias) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AcctId}
               ,{<<"Agent-ID">>, AgentId}
-              ,{<<"Timestamp">>, wh_util:current_tstamp()}
+              ,{<<"Timestamp">>, kz_util:current_tstamp()}
               ,{<<"Status">>, <<"paused">>}
               ,{<<"Pause-Time">>, PauseTime}
               ,{<<"Pause-Alias">>, Alias}
               | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    whapps_util:amqp_pool_send(Prop, fun wapi_acdc_stats:publish_status_paused/1).
+    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_status_paused/1).
 
 agent_outbound(AcctId, AgentId, CallId) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AcctId}
               ,{<<"Agent-ID">>, AgentId}
-              ,{<<"Timestamp">>, wh_util:current_tstamp()}
+              ,{<<"Timestamp">>, kz_util:current_tstamp()}
               ,{<<"Status">>, <<"outbound">>}
               ,{<<"Call-ID">>, CallId}
-              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    whapps_util:amqp_pool_send(Prop, fun wapi_acdc_stats:publish_status_outbound/1).
+    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_status_outbound/1).
 
 -spec agent_statuses() -> ne_binaries().
 agent_statuses() ->
@@ -377,17 +379,18 @@ agent_call_table_opts() ->
                     ]).
 -define(QUEUE_NAME, <<>>).
 
+-spec start_link() -> startlink_ret().
 start_link() ->
-    gen_listener:start_link(?MODULE
+    gen_listener:start_link(?SERVER
                             ,[{'bindings', ?BINDINGS}
                               ,{'responders', ?RESPONDERS}
                               ,{'queue_name', ?QUEUE_NAME}
                              ],
                             []).
 
--spec handle_call_stat(wh_json:object(), wh_proplist()) -> 'ok'.
+-spec handle_call_stat(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_call_stat(JObj, Props) ->
-    case wh_json:get_value(<<"Event-Name">>, JObj) of
+    case kz_json:get_value(<<"Event-Name">>, JObj) of
         <<"waiting">> -> handle_waiting_stat(JObj, Props);
         <<"missed">> -> handle_missed_stat(JObj, Props);
         <<"abandoned">> -> handle_abandoned_stat(JObj, Props);
@@ -400,7 +403,7 @@ handle_call_stat(JObj, Props) ->
             lager:debug("recv unknown call stat type ~s: ~p", [_Name, JObj])
     end.
 
--spec handle_call_query(wh_json:object(), wh_proplist()) -> 'ok'.
+-spec handle_call_query(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_call_query(JObj, _Prop) ->
     'true' = wapi_acdc_stats:current_calls_req_v(JObj),
     RespQ = wh_json:get_value(<<"Server-ID">>, JObj),
@@ -469,9 +472,10 @@ find_call(CallId) ->
           ,status_table_id :: ets:table_id()
          }).
 
+-spec init([]) -> {'ok', #state{}}.
 init([]) ->
-    wh_util:put_callid(<<"acdc.stats">>),
-    couch_mgr:suppress_change_notice(),
+    kz_util:put_callid(<<"acdc.stats">>),
+    kz_datamgr:suppress_change_notice(),
     lager:debug("started new acdc stats collector"),
 
     {'ok', #state{archive_ref=start_archive_timer()
@@ -622,15 +626,15 @@ publish_agent_call_query_errors(RespQ, MsgId, Errors) ->
 publish_query_errors(RespQ, MsgId, Errors, PubFun) ->
     API = [{<<"Error-Reason">>, Errors}
            ,{<<"Msg-ID">>, MsgId}
-           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+           | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     lager:debug("responding with errors to req ~s: ~p", [MsgId, Errors]),
     PubFun(RespQ, API).
 
 call_build_match_spec(JObj) ->
-    case wh_json:get_value(<<"Account-ID">>, JObj) of
+    case kz_json:get_value(<<"Account-ID">>, JObj) of
         'undefined' ->
-            {'error', wh_json:from_list([{<<"Account-ID">>, <<"missing but required">>}])};
+            {'error', kz_json:from_list([{<<"Account-ID">>, <<"missing but required">>}])};
         AccountId ->
             AccountMatch = {#call_stat{account_id='$1', _='_'}
                          ,[{'=:=', '$1', {'const', AccountId}}]
@@ -638,11 +642,11 @@ call_build_match_spec(JObj) ->
             call_build_match_spec(JObj, AccountMatch)
     end.
 
--spec call_build_match_spec(wh_json:object(), {call_stat(), list()}) ->
+-spec call_build_match_spec(kz_json:object(), {call_stat(), list()}) ->
                                    {'ok', ets:match_spec()} |
-                                   {'error', wh_json:object()}.
+                                   {'error', kz_json:object()}.
 call_build_match_spec(JObj, AccountMatch) ->
-    case wh_json:foldl(fun call_match_builder_fold/3, AccountMatch, JObj) of
+    case kz_json:foldl(fun call_match_builder_fold/3, AccountMatch, JObj) of
         {'error', _Errs}=Errors -> Errors;
         {CallStat, Constraints} -> {'ok', [{CallStat, Constraints, ['$_']}]}
     end.
@@ -679,13 +683,13 @@ call_match_builder_fold(<<"Status">>, Status, {CallStat, Contstraints}) ->
              ,[{'=:=', '$4', {'const', Normalized}} | Contstraints]
             };
         'false' ->
-            {'error', wh_json:from_list([{<<"Status">>, <<"unknown status supplied">>}])}
+            {'error', kz_json:from_list([{<<"Status">>, <<"unknown status supplied">>}])}
     end;
 call_match_builder_fold(<<"Start-Range">>, Start, {CallStat, Contstraints}) ->
     Now = wh_util:current_tstamp(),
     Past = Now - (?CLEANUP_WINDOW + 1),
 
-    try wh_util:to_integer(Start) of
+    try kz_util:to_integer(Start) of
         N when N < Past ->
             {'error', wh_json:from_list([{<<"Start-Range">>, <<"supplied value is too far in the past">>}
                                          ,{<<"Window-Size">>, ?CLEANUP_WINDOW + 1}
@@ -693,7 +697,7 @@ call_match_builder_fold(<<"Start-Range">>, Start, {CallStat, Contstraints}) ->
                                          ,{<<"Past-Timestamp">>, Past}
                                         ])};
         N when N > Now ->
-            {'error', wh_json:from_list([{<<"Start-Range">>, <<"supplied value is in the future">>}
+            {'error', kz_json:from_list([{<<"Start-Range">>, <<"supplied value is in the future">>}
                                          ,{<<"Current-Timestamp">>, Now}
                                         ])};
         N ->
@@ -702,20 +706,20 @@ call_match_builder_fold(<<"Start-Range">>, Start, {CallStat, Contstraints}) ->
             }
     catch
         _:_ ->
-            {'error', wh_json:from_list([{<<"Start-Range">>, <<"supplied value is not an integer">>}])}
+            {'error', kz_json:from_list([{<<"Start-Range">>, <<"supplied value is not an integer">>}])}
     end;
 call_match_builder_fold(<<"End-Range">>, End, {CallStat, Contstraints}) ->
     Now = wh_util:current_tstamp(),
     Past = Now - (?CLEANUP_WINDOW + 1),
 
-    try wh_util:to_integer(End) of
+    try kz_util:to_integer(End) of
         N when N < Past ->
             {'error', wh_json:from_list([{<<"End-Range">>, <<"supplied value is too far in the past">>}
                                          ,{<<"Window-Size">>, ?CLEANUP_WINDOW + 1}
                                          ,{<<"Current-Timestamp">>, Now}
                                         ])};
         N when N > Now ->
-            {'error', wh_json:from_list([{<<"End-Range">>, <<"supplied value is in the future">>}
+            {'error', kz_json:from_list([{<<"End-Range">>, <<"supplied value is in the future">>}
                                          ,{<<"Current-Timestamp">>, Now}
                                         ])};
         N ->
@@ -724,7 +728,7 @@ call_match_builder_fold(<<"End-Range">>, End, {CallStat, Contstraints}) ->
             }
     catch
         _:_ ->
-            {'error', wh_json:from_list([{<<"End-Range">>, <<"supplied value is not an integer">>}])}
+            {'error', kz_json:from_list([{<<"End-Range">>, <<"supplied value is not an integer">>}])}
     end;
 call_match_builder_fold(_, _, Acc) -> Acc.
 
@@ -788,7 +792,7 @@ agent_call_match_builder_fold(_, _, {'error', _Err}=E) -> E;
 agent_call_match_builder_fold(_, _, Acc) -> Acc.
 
 is_valid_call_status(S) ->
-    Status = wh_util:to_lower_binary(S),
+    Status = kz_util:to_lower_binary(S),
     case lists:member(Status, ?VALID_STATUSES) of
         'true' -> {'true', Status};
         'false' -> 'false'
@@ -858,7 +862,7 @@ query_agent_calls(RespQ, MsgId, Match, _Limit) ->
             lager:debug("no stats found, sorry ~s", [RespQ]),
             Resp = [{<<"Query-Time">>, wh_util:current_tstamp()}
                     ,{<<"Msg-ID">>, MsgId}
-                    | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                    | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                    ],
             wapi_acdc_stats:publish_agent_calls_resp(RespQ, Resp);
         Stats ->
@@ -894,18 +898,18 @@ increment_agent_calls(QueueId, AgentJObj, Key) ->
 -spec archive_data() -> 'ok'.
 archive_data() ->
     Self = self(),
-    _ = wh_util:spawn(?MODULE, 'archive_call_data', [Self, 'false']),
-    _ = wh_util:spawn('acdc_agent_stats', 'archive_status_data', [Self, 'false']),
+    _ = kz_util:spawn(fun archive_call_data/2, [Self, 'false']),
+    _ = kz_util:spawn(fun acdc_agent_stats:archive_status_data/2, [Self, 'false']),
     'ok'.
 
 force_archive_data() ->
     Self = self(),
-    _ = wh_util:spawn(?MODULE, 'archive_call_data', [Self, 'true']),
-    _ = wh_util:spawn('acdc_agent_stats', 'archive_status_data', [Self, 'true']),
+    _ = kz_util:spawn(fun archive_call_data/2, [Self, 'true']),
+    _ = kz_util:spawn(fun acdc_agent_stats:archive_status_data/2, [Self, 'true']),
     'ok'.
 
 cleanup_data(Srv) ->
-    Past = wh_util:current_tstamp() - ?CLEANUP_WINDOW,
+    Past = kz_util:current_tstamp() - ?CLEANUP_WINDOW,
     PastConstraint = {'=<', '$1', Past},
 
     TypeConstraints = [{'=/=', '$2', {'const', <<"waiting">>}}
@@ -943,7 +947,7 @@ cleanup_unfinished(Unfinished) ->
     lager:debug("unfinished stats: ~p", [Unfinished]).
 
 archive_call_data(Srv, 'true') ->
-    wh_util:put_callid(<<"acdc_stats.force_call_archiver">>),
+    kz_util:put_callid(<<"acdc_stats.force_call_archiver">>),
 
     Match = [{#call_stat{status='$1'
                          ,is_archived='$2'
@@ -957,9 +961,9 @@ archive_call_data(Srv, 'true') ->
              }],
     maybe_archive_call_data(Srv, Match);
 archive_call_data(Srv, 'false') ->
-    wh_util:put_callid(<<"acdc_stats.call_archiver">>),
+    kz_util:put_callid(<<"acdc_stats.call_archiver">>),
 
-    Past = wh_util:current_tstamp() - ?ARCHIVE_WINDOW,
+    Past = kz_util:current_tstamp() - ?ARCHIVE_WINDOW,
     Match = [{#call_stat{entered_timestamp='$1'
                          ,status='$2'
                          ,is_archived='$3'
@@ -978,9 +982,9 @@ maybe_archive_call_data(Srv, Match) ->
     case ets:select(call_table_id(), Match) of
         [] -> 'ok';
         Stats ->
-            couch_mgr:suppress_change_notice(),
+            kz_datamgr:suppress_change_notice(),
             ToSave = lists:foldl(fun archive_call_fold/2, dict:new(), Stats),
-            _ = [couch_mgr:save_docs(acdc_stats_util:db_name(Account), Docs)
+            _ = [kz_datamgr:save_docs(acdc_stats_util:db_name(Account), Docs)
                  || {Account, Docs} <- dict:to_list(ToSave)
                 ],
             [gen_listener:cast(Srv, {'update_call', Id, [{#call_stat.is_archived, 'true'}]})
@@ -988,17 +992,17 @@ maybe_archive_call_data(Srv, Match) ->
             ]
     end.
 
--spec query_call_fold(call_stat(), dict()) -> dict().
+-spec query_call_fold(call_stat(), dict:dict()) -> dict:dict().
 query_call_fold(#call_stat{status=Status}=Stat, Acc) ->
     Doc = call_stat_to_doc(Stat),
     dict:update(Status, fun(L) -> [Doc | L] end, [Doc], Acc).
 
--spec archive_call_fold(call_stat(), dict()) -> dict().
+-spec archive_call_fold(call_stat(), dict:dict()) -> dict:dict().
 archive_call_fold(#call_stat{account_id=AccountId}=Stat, Acc) ->
     Doc = call_stat_to_doc(Stat),
     dict:update(AccountId, fun(L) -> [Doc | L] end, [Doc], Acc).
 
--spec call_stat_to_doc(call_stat()) -> wh_json:object().
+-spec call_stat_to_doc(call_stat()) -> kz_json:object().
 call_stat_to_doc(#call_stat{id=Id
                             ,call_id=CallId
                             ,account_id=AccountId
@@ -1018,8 +1022,8 @@ call_stat_to_doc(#call_stat{id=Id
                             ,caller_id_number=CallerIdNumber
                             ,caller_priority=CallerPriority
                            }) ->
-    wh_doc:update_pvt_parameters(
-      wh_json:from_list(
+    kz_doc:update_pvt_parameters(
+      kz_json:from_list(
         props:filter_undefined(
           [{<<"_id">>, Id}
            ,{<<"call_id">>, CallId}
@@ -1046,7 +1050,7 @@ call_stat_to_doc(#call_stat{id=Id
         ,{'type', <<"call_stat">>}
        ]).
 
--spec call_stat_to_json(call_stat()) -> wh_json:object().
+-spec call_stat_to_json(call_stat()) -> kz_json:object().
 call_stat_to_json(#call_stat{id=Id
                              ,call_id=CallId
                              ,account_id=AccountId
@@ -1065,7 +1069,7 @@ call_stat_to_json(#call_stat{id=Id
                              ,caller_id_name=CallerIdName
                              ,caller_id_number=CallerIdNumber
                             }) ->
-    wh_json:from_list(
+    kz_json:from_list(
       props:filter_undefined(
         [{<<"Id">>, Id}
          ,{<<"Call-ID">>, CallId}
@@ -1095,14 +1099,14 @@ wait_time(_, _, _) -> 'undefined'.
 talk_time(H, P) when is_integer(H), is_integer(P) -> P - H;
 talk_time(_, _) -> 'undefined'.
 
--spec misses_to_docs(agent_misses()) -> wh_json:objects().
--spec miss_to_doc(agent_miss()) -> wh_json:object().
+-spec misses_to_docs(agent_misses()) -> kz_json:objects().
+-spec miss_to_doc(agent_miss()) -> kz_json:object().
 misses_to_docs(Misses) -> [miss_to_doc(Miss) || Miss <- Misses].
 miss_to_doc(#agent_miss{agent_id=AgentId
                         ,miss_reason=Reason
                         ,miss_timestamp=T
                        }) ->
-    wh_json:from_list([{<<"agent_id">>, AgentId}
+    kz_json:from_list([{<<"agent_id">>, AgentId}
                        ,{<<"reason">>, Reason}
                        ,{<<"timestamp">>, T}
                       ]).
@@ -1143,26 +1147,26 @@ remove_misses_fold([JObj|JObjs], Acc) ->
 -spec init_db(ne_binary()) -> 'ok'.
 init_db(AccountId) ->
     DbName = acdc_stats_util:db_name(AccountId),
-    maybe_created_db(DbName, couch_mgr:db_create(DbName)).
+    maybe_created_db(DbName, kz_datamgr:db_create(DbName)).
 
 -spec maybe_created_db(ne_binary(), boolean()) -> 'ok'.
 maybe_created_db(DbName, 'false') ->
     lager:debug("database ~s already created", [DbName]);
 maybe_created_db(DbName, 'true') ->
     lager:debug("created db ~s, adding views", [DbName]),
-    couch_mgr:revise_views_from_folder(DbName, 'acdc').
+    kz_datamgr:revise_views_from_folder(DbName, 'acdc').
 
--spec call_stat_id(wh_json:object()) -> ne_binary().
+-spec call_stat_id(kz_json:object()) -> ne_binary().
 -spec call_stat_id(ne_binary(), ne_binary()) -> ne_binary().
 call_stat_id(JObj) ->
-    call_stat_id(wh_json:get_value(<<"Call-ID">>, JObj)
-            ,wh_json:get_value(<<"Queue-ID">>, JObj)
+    call_stat_id(kz_json:get_value(<<"Call-ID">>, JObj)
+            ,kz_json:get_value(<<"Queue-ID">>, JObj)
            ).
 call_stat_id(CallId, QueueId) -> <<CallId/binary, "::", QueueId/binary>>.
 
--spec handle_waiting_stat(wh_json:object(), wh_proplist()) -> 'ok'.
+-spec handle_waiting_stat(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_waiting_stat(JObj, Props) ->
-    'true' = wapi_acdc_stats:call_waiting_v(JObj),
+    'true' = kapi_acdc_stats:call_waiting_v(JObj),
 
     Id = call_stat_id(JObj),
     case find_call_stat(Id) of
@@ -1177,9 +1181,9 @@ handle_waiting_stat(JObj, Props) ->
             update_call_stat(Id, Updates, Props)
     end.
 
--spec handle_missed_stat(wh_json:object(), wh_proplist()) -> 'ok'.
+-spec handle_missed_stat(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_missed_stat(JObj, Props) ->
-    'true' = wapi_acdc_stats:call_missed_v(JObj),
+    'true' = kapi_acdc_stats:call_missed_v(JObj),
 
     Id = call_stat_id(JObj),
     case find_call_stat(Id) of
@@ -1187,17 +1191,17 @@ handle_missed_stat(JObj, Props) ->
         _ -> gen_listener:cast(props:get_value('server', Props), {'add_miss', JObj})
     end.
 
--spec create_miss(wh_json:object()) -> agent_miss().
+-spec create_miss(kz_json:object()) -> agent_miss().
 create_miss(JObj) ->
     #agent_miss{
-       agent_id = wh_json:get_value(<<"Agent-ID">>, JObj)
-       ,miss_reason = wh_json:get_value(<<"Miss-Reason">>, JObj)
-       ,miss_timestamp = wh_json:get_value(<<"Miss-Timestamp">>, JObj)
+       agent_id = kz_json:get_value(<<"Agent-ID">>, JObj)
+       ,miss_reason = kz_json:get_value(<<"Miss-Reason">>, JObj)
+       ,miss_timestamp = kz_json:get_value(<<"Miss-Timestamp">>, JObj)
       }.
 
--spec handle_abandoned_stat(wh_json:object(), wh_proplist()) -> 'ok'.
+-spec handle_abandoned_stat(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_abandoned_stat(JObj, Props) ->
-    'true' = wapi_acdc_stats:call_abandoned_v(JObj),
+    'true' = kapi_acdc_stats:call_abandoned_v(JObj),
 
     Id = call_stat_id(JObj),
     %% If caller leaves quickly, the waiting entry might not have arrived yet
@@ -1212,27 +1216,27 @@ handle_abandoned_stat(JObj, Props) ->
             update_call_stat(Id, Updates, Props)
     end.
 
--spec handle_handled_stat(wh_json:object(), wh_proplist()) -> 'ok'.
+-spec handle_handled_stat(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_handled_stat(JObj, Props) ->
-    'true' = wapi_acdc_stats:call_handled_v(JObj),
+    'true' = kapi_acdc_stats:call_handled_v(JObj),
 
     Id = call_stat_id(JObj),
     Updates = props:filter_undefined(
-                [{#call_stat.agent_id, wh_json:get_value(<<"Agent-ID">>, JObj)}
-                 ,{#call_stat.handled_timestamp, wh_json:get_value(<<"Handled-Timestamp">>, JObj)}
+                [{#call_stat.agent_id, kz_json:get_value(<<"Agent-ID">>, JObj)}
+                 ,{#call_stat.handled_timestamp, kz_json:get_value(<<"Handled-Timestamp">>, JObj)}
                  ,{#call_stat.status, <<"handled">>}
                 ]),
     update_call_stat(Id, Updates, Props).
 
--spec handle_processed_stat(wh_json:object(), wh_proplist()) -> 'ok'.
+-spec handle_processed_stat(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_processed_stat(JObj, Props) ->
-    'true' = wapi_acdc_stats:call_processed_v(JObj),
+    'true' = kapi_acdc_stats:call_processed_v(JObj),
 
     Id = call_stat_id(JObj),
     Updates = props:filter_undefined(
-                [{#call_stat.agent_id, wh_json:get_value(<<"Agent-ID">>, JObj)}
-                 ,{#call_stat.processed_timestamp, wh_json:get_value(<<"Processed-Timestamp">>, JObj)}
-                 ,{#call_stat.hung_up_by, wh_json:get_value(<<"Hung-Up-By">>, JObj)}
+                [{#call_stat.agent_id, kz_json:get_value(<<"Agent-ID">>, JObj)}
+                 ,{#call_stat.processed_timestamp, kz_json:get_value(<<"Processed-Timestamp">>, JObj)}
+                 ,{#call_stat.hung_up_by, kz_json:get_value(<<"Hung-Up-By">>, JObj)}
                  ,{#call_stat.status, <<"processed">>}
                 ]),
     update_call_stat(Id, Updates, Props).
@@ -1296,7 +1300,7 @@ replace_call_id(QueueId, OldCallId, NewCallId, Stat) ->
 
 -spec flush_call_stat(wh_json:object(), wh_proplist()) -> 'ok'.
 flush_call_stat(JObj, Props) ->
-    'true' = wapi_acdc_stats:call_flush_v(JObj),
+    'true' = kapi_acdc_stats:call_flush_v(JObj),
 
     Id = call_stat_id(JObj),
 

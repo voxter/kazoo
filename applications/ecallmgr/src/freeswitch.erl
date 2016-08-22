@@ -36,6 +36,9 @@
 
 -define(TIMEOUT, 5 * ?MILLISECONDS_IN_SECOND).
 
+-type fs_api_return() :: {'ok', binary()} | {'error', 'timeout' | binary()}.
+-export_type([fs_api_return/0]).
+
 version(Node) ->
     version(Node, ?TIMEOUT).
 version(Node, Timeout) ->
@@ -131,7 +134,7 @@ api(Node, Cmd, Args, Timeout) ->
                    {'error', 'timeout' | binary()}.
 bgapi(Node, Cmd, Args) ->
     Self = self(),
-    _ = wh_util:spawn(
+    _ = kz_util:spawn(
           fun() ->
                   try gen_server:call({'mod_kazoo', Node}, {'bgapi', Cmd, Args}, ?TIMEOUT) of
                       {'ok', JobId}=JobOk ->
@@ -161,7 +164,7 @@ bgapi(Node, Cmd, Args) ->
 
 bgapi(Node, Cmd, Args, Fun) when is_function(Fun, 2) ->
     Self = self(),
-    _ = wh_util:spawn(
+    _ = kz_util:spawn(
           fun() ->
                   try gen_server:call({'mod_kazoo', Node}, {'bgapi', Cmd, Args}, ?TIMEOUT) of
                       {'ok', JobId}=JobOk ->
@@ -194,7 +197,7 @@ bgapi(Node, Cmd, Args, Fun) when is_function(Fun, 2) ->
                    {'error', 'timeout' | 'exception' | binary()}.
 bgapi(Node, Cmd, Args, Fun, CallBackParams) when is_function(Fun, 3) ->
     Self = self(),
-    _ = wh_util:spawn(
+    _ = kz_util:spawn(
           fun() ->
                   try gen_server:call({'mod_kazoo', Node}, {'bgapi', Cmd, Args}, ?TIMEOUT) of
                       {'ok', JobId}=JobOk ->
@@ -227,7 +230,7 @@ bgapi(Node, Cmd, Args, Fun, CallBackParams) when is_function(Fun, 3) ->
                    {'error', 'timeout' | 'exception' | binary()}.
 bgapi(Node, UUID, CallBackParams, Cmd, Args, Fun) when is_function(Fun, 6) ->
     Self = self(),
-    _ = wh_util:spawn(
+    _ = kz_util:spawn(
           fun() ->
                   try gen_server:call({'mod_kazoo', Node}, {'bgapi', Cmd, Args}, ?TIMEOUT) of
                       {'ok', JobId}=JobOk ->

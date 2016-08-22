@@ -78,6 +78,8 @@
 
 -include("acdc.hrl").
 
+-define(SERVER, ?MODULE).
+
 %% When an agent starts up, how long do we wait for other agents to respond with their status?
 -define(SYNC_RESPONSE_TIMEOUT, 5000).
 -define(SYNC_RESPONSE_MESSAGE, 'sync_response_timeout').
@@ -91,7 +93,7 @@
 -define(WRAPUP_FINISHED, 'wrapup_finished').
 
 -define(MAX_CONNECT_FAILURES, <<"max_connect_failures">>).
--define(MAX_FAILURES, whapps_config:get_integer(?CONFIG_CAT, ?MAX_CONNECT_FAILURES, 3)).
+-define(MAX_FAILURES, kapps_config:get_integer(?CONFIG_CAT, ?MAX_CONNECT_FAILURES, 3)).
 
 -define(NOTIFY_PICKUP, <<"pickup">>).
 -define(NOTIFY_HANGUP, <<"hangup">>).
@@ -115,14 +117,14 @@
                 ,pause_ref :: reference() | 'infinity'
                 ,pause_alias :: api_binary()
 
-                ,member_call :: whapps_call:call()
+                ,member_call :: kapps_call:call()
                 ,member_call_id :: api_binary()
                 ,member_callback_candidates = [] :: wh_proplist()
                 ,member_callback_flag = 'false' :: boolean()
                 ,member_original_call :: whapps_call:call()
                 ,member_original_call_id :: api_binary()
                 ,member_call_queue_id :: api_binary()
-                ,member_call_start :: wh_now()
+                ,member_call_start :: kz_now()
                 ,caller_exit_key = <<"#">> :: ne_binary()
                 ,queue_notifications :: api_object()
 
@@ -151,7 +153,7 @@
 %%   member_connect_resp payload or ignore the request
 %% @end
 %%--------------------------------------------------------------------
--spec member_connect_req(pid(), wh_json:object()) -> 'ok'.
+-spec member_connect_req(pid(), kz_json:object()) -> 'ok'.
 member_connect_req(FSM, JObj) ->
     gen_fsm:send_event(FSM, {'member_connect_req', JObj}).
 
@@ -166,7 +168,7 @@ member_connect_req(FSM, JObj) ->
 member_connect_win(FSM, JObj, Node) ->
     gen_fsm:send_event(FSM, {'member_connect_win', JObj, Node}).
 
--spec agent_timeout(pid(), wh_json:object()) -> 'ok'.
+-spec agent_timeout(pid(), kz_json:object()) -> 'ok'.
 agent_timeout(FSM, JObj) ->
     gen_fsm:send_event(FSM, {'agent_timeout', JObj}).
 
@@ -185,7 +187,7 @@ shared_call_id(FSM, JObj) ->
 %%   for bridge and hangup events).
 %% @end
 %%--------------------------------------------------------------------
--spec call_event(pid(), ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
+-spec call_event(pid(), ne_binary(), ne_binary(), kz_json:object()) -> 'ok'.
 call_event(FSM, <<"call_event">>, <<"CHANNEL_BRIDGE">>, JObj) ->
     gen_fsm:send_event(FSM, {'channel_bridged', call_id(JObj)});
 call_event(FSM, <<"call_event">>, <<"CHANNEL_UNBRIDGE">>, JObj) ->
@@ -203,16 +205,16 @@ call_event(FSM, <<"call_event">>, <<"LEG_DESTROYED">>, JObj) ->
 call_event(FSM, <<"call_event">>, <<"CHANNEL_ANSWER">>, JObj) ->
     gen_fsm:send_event(FSM, {'channel_answered', JObj});
 call_event(FSM, <<"call_event">>, <<"DTMF">>, EvtJObj) ->
-    gen_fsm:send_event(FSM, {'dtmf_pressed', wh_json:get_value(<<"DTMF-Digit">>, EvtJObj)});
+    gen_fsm:send_event(FSM, {'dtmf_pressed', kz_json:get_value(<<"DTMF-Digit">>, EvtJObj)});
 call_event(FSM, <<"call_event">>, <<"CHANNEL_EXECUTE_COMPLETE">>, JObj) ->
-    maybe_send_execute_complete(FSM, wh_json:get_value(<<"Application-Name">>, JObj), JObj);
+    maybe_send_execute_complete(FSM, kz_json:get_value(<<"Application-Name">>, JObj), JObj);
 call_event(FSM, <<"error">>, <<"dialplan">>, JObj) ->
-    _ = wh_util:put_callid(JObj),
-    lager:debug("error event: ~s", [wh_json:get_value(<<"Error-Message">>, JObj)]),
+    _ = kz_util:put_callid(JObj),
+    lager:debug("error event: ~s", [kz_json:get_value(<<"Error-Message">>, JObj)]),
 
-    Req = wh_json:get_value(<<"Request">>, JObj),
+    Req = kz_json:get_value(<<"Request">>, JObj),
 
-    gen_fsm:send_event(FSM, {'dialplan_error', wh_json:get_value(<<"Application-Name">>, Req)});
+    gen_fsm:send_event(FSM, {'dialplan_error', kz_json:get_value(<<"Application-Name">>, Req)});
 call_event(FSM, <<"call_event">>, <<"CHANNEL_REPLACED">>, JObj) ->
     gen_fsm:send_event(FSM, {'channel_replaced', JObj});
 call_event(FSM, <<"call_event">>, <<"CHANNEL_TRANSFEREE">>, JObj) ->
@@ -231,7 +233,7 @@ call_event(_, _C, _E, _) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_send_execute_complete(pid(), ne_binary(), wh_json:object()) -> 'ok'.
+-spec maybe_send_execute_complete(pid(), ne_binary(), kz_json:object()) -> 'ok'.
 maybe_send_execute_complete(FSM, <<"bridge">>, JObj) ->
     lager:info("Send EXECUTE_COMPLETE,bridge to ~p with ci: ~s, olci: ~s",
                [FSM
@@ -247,26 +249,26 @@ maybe_send_execute_complete(_, _, _) -> 'ok'.
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec originate_ready(server_ref(), wh_json:object()) -> 'ok'.
+-spec originate_ready(server_ref(), kz_json:object()) -> 'ok'.
 originate_ready(FSM, JObj) ->
     gen_fsm:send_event(FSM, {'originate_ready', JObj}).
 
--spec originate_resp(server_ref(), wh_json:object()) -> 'ok'.
+-spec originate_resp(server_ref(), kz_json:object()) -> 'ok'.
 originate_resp(FSM, JObj) ->
-    gen_fsm:send_event(FSM, {'originate_resp', wh_json:get_value(<<"Call-ID">>, JObj)}).
+    gen_fsm:send_event(FSM, {'originate_resp', kz_json:get_value(<<"Call-ID">>, JObj)}).
 originate_started(FSM, JObj) ->
-    gen_fsm:send_event(FSM, {'originate_started', wh_json:get_value(<<"Call-ID">>, JObj)}).
+    gen_fsm:send_event(FSM, {'originate_started', kz_json:get_value(<<"Call-ID">>, JObj)}).
 originate_uuid(FSM, JObj) ->
     gen_fsm:send_event(FSM, {'originate_uuid'
-                             ,wh_json:get_value(<<"Outbound-Call-ID">>, JObj)
-                             ,wh_json:get_value(<<"Outbound-Call-Control-Queue">>, JObj)
+                             ,kz_json:get_value(<<"Outbound-Call-ID">>, JObj)
+                             ,kz_json:get_value(<<"Outbound-Call-Control-Queue">>, JObj)
                             }).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec originate_failed(server_ref(), wh_json:object()) -> 'ok'.
+-spec originate_failed(server_ref(), kz_json:object()) -> 'ok'.
 originate_failed(FSM, JObj) ->
     gen_fsm:send_event(FSM, {'originate_failed', JObj}).
 
@@ -274,7 +276,7 @@ originate_failed(FSM, JObj) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec sync_req(server_ref(), wh_json:object()) -> 'ok'.
+-spec sync_req(server_ref(), kz_json:object()) -> 'ok'.
 sync_req(FSM, JObj) ->
     gen_fsm:send_event(FSM, {'sync_req', JObj}).
 
@@ -282,7 +284,7 @@ sync_req(FSM, JObj) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec sync_resp(server_ref(), wh_json:object()) -> 'ok'.
+-spec sync_resp(server_ref(), kz_json:object()) -> 'ok'.
 sync_resp(FSM, JObj) ->
     gen_fsm:send_event(FSM, {'sync_resp', JObj}).
 
@@ -322,13 +324,13 @@ agent_logout(FSM) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec refresh(pid(), wh_json:object()) -> 'ok'.
+-spec refresh(pid(), kz_json:object()) -> 'ok'.
 refresh(FSM, AgentJObj) -> gen_fsm:send_all_state_event(FSM, {'refresh', AgentJObj}).
 
 -spec current_call(pid()) -> api_object().
 current_call(FSM) -> gen_fsm:sync_send_event(FSM, 'current_call').
 
--spec status(pid()) -> wh_proplist().
+-spec status(pid()) -> kz_proplist().
 status(FSM) -> gen_fsm:sync_send_event(FSM, 'status').
 
 %%--------------------------------------------------------------------
@@ -336,24 +338,22 @@ status(FSM) -> gen_fsm:sync_send_event(FSM, 'status').
 %% Creates a gen_fsm process which calls Module:init/1 to
 %% initialize. To ensure a synchronized start-up procedure, this
 %% function does not return until Module:init/1 has returned.
-%%
-%% @spec start_link() -> {'ok', Pid} | ignore | {'error', Error}
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(pid(), wh_json:object()) -> startlink_ret().
--spec start_link(pid(), whapps_call:call(), ne_binary()) -> startlink_ret().
--spec start_link(ne_binary(), ne_binary(), pid(), wh_proplist()) -> startlink_ret().
+-spec start_link(pid(), kz_json:object()) -> startlink_ret().
+-spec start_link(pid(), kapps_call:call(), ne_binary()) -> startlink_ret().
+-spec start_link(ne_binary(), ne_binary(), pid(), kz_proplist()) -> startlink_ret().
 
 start_link(Supervisor, AgentJObj) when is_pid(Supervisor) ->
-    pvt_start_link(wh_doc:account_id(AgentJObj)
-                   ,wh_doc:id(AgentJObj)
+    pvt_start_link(kz_doc:account_id(AgentJObj)
+                   ,kz_doc:id(AgentJObj)
                    ,Supervisor
                    ,[]
                    ,'false'
                   ).
 start_link(Supervisor, ThiefCall, _QueueId) ->
-    pvt_start_link(whapps_call:account_id(ThiefCall)
-                   ,whapps_call:owner_id(ThiefCall)
+    pvt_start_link(kapps_call:account_id(ThiefCall)
+                   ,kapps_call:owner_id(ThiefCall)
                    ,Supervisor
                    ,[]
                    ,'true'
@@ -366,20 +366,20 @@ start_link(Supervisor, _AgentJObj, AccountId, AgentId, _Queues) ->
 
 pvt_start_link('undefined', _AgentId, Supervisor, _, _) ->
     lager:debug("agent ~s trying to start with no account id", [_AgentId]),
-    _ = wh_util:spawn('acdc_agent_sup', 'stop', [Supervisor]),
+    _ = kz_util:spawn(fun acdc_agent_sup:stop/1, [Supervisor]),
     'ignore';
 pvt_start_link(_AccountId, 'undefined', Supervisor, _, _) ->
     lager:debug("undefined agent id trying to start in account ~s", [_AccountId]),
-    _ = wh_util:spawn('acdc_agent_sup', 'stop', [Supervisor]),
+    _ = kz_util:spawn(fun acdc_agent_sup:stop/1, [Supervisor]),
     'ignore';
 pvt_start_link(AccountId, AgentId, Supervisor, Props, IsThief) ->
-    gen_fsm:start_link(?MODULE, [AccountId, AgentId, Supervisor, Props, IsThief], []).
+    gen_fsm:start_link(?SERVER, [AccountId, AgentId, Supervisor, Props, IsThief], []).
 
 new_endpoint(FSM, EP) ->
     lager:debug("sending EP to ~p: ~p", [FSM, EP]).
 edited_endpoint(FSM, EP) ->
     lager:debug("sending EP to ~p: ~p", [FSM, EP]),
-    gen_fsm:send_all_state_event(FSM, {'edited_endpoint', wh_doc:id(EP), EP}).
+    gen_fsm:send_all_state_event(FSM, {'edited_endpoint', kz_doc:id(EP), EP}).
 deleted_endpoint(FSM, EP) -> lager:debug("sending EP to ~p: ~p", [FSM, EP]).
 
 %%%===================================================================
@@ -401,11 +401,10 @@ deleted_endpoint(FSM, EP) -> lager:debug("sending EP to ~p: ~p", [FSM, EP]).
 %%--------------------------------------------------------------------
 init([AccountId, AgentId, Supervisor, Props, IsThief]) ->
     FSMCallId = <<"fsm_", AccountId/binary, "_", AgentId/binary>>,
-    wh_util:put_callid(FSMCallId),
+    kz_util:put_callid(FSMCallId),
     lager:debug("started acdc agent fsm"),
 
-    Self = self(),
-    _P = wh_util:spawn(?MODULE, 'wait_for_listener', [Supervisor, Self, Props, IsThief]),
+    _P = kz_util:spawn(fun wait_for_listener/4, [Supervisor, self(), Props, IsThief]),
     lager:debug("waiting for listener in ~p", [_P]),
 
     AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
@@ -419,16 +418,16 @@ init([AccountId, AgentId, Supervisor, Props, IsThief]) ->
                           ,max_connect_failures = max_failures(AccountId)
                          }}.
 
--spec max_failures(ne_binary() | wh_json:object()) -> non_neg_integer().
+-spec max_failures(ne_binary() | kz_json:object()) -> non_neg_integer().
 max_failures(Account) when is_binary(Account) ->
     case kz_account:fetch(Account) of
         {'ok', AccountJObj} -> max_failures(AccountJObj);
         {'error', _} -> ?MAX_FAILURES
     end;
 max_failures(JObj) ->
-    wh_json:get_integer_value(?MAX_CONNECT_FAILURES, JObj, ?MAX_FAILURES).
+    kz_json:get_integer_value(?MAX_CONNECT_FAILURES, JObj, ?MAX_FAILURES).
 
--spec wait_for_listener(pid(), pid(), wh_proplist(), boolean()) -> 'ok'.
+-spec wait_for_listener(pid(), pid(), kz_proplist(), boolean()) -> 'ok'.
 wait_for_listener(Supervisor, FSM, Props, IsThief) ->
     case acdc_agent_sup:listener(Supervisor) of
         'undefined' ->
@@ -503,7 +502,7 @@ sync('send_sync_event', #state{agent_listener=AgentListener
 sync({'sync_req', JObj}, #state{agent_listener=AgentListener
                                 ,agent_listener_id=AProcId
                                }=State) ->
-    case wh_json:get_value(<<"Process-ID">>, JObj) of
+    case kz_json:get_value(<<"Process-ID">>, JObj) of
         AProcId ->
             lager:debug("recv sync req from ourself"),
             {'next_state', 'sync', State};
@@ -515,7 +514,7 @@ sync({'sync_req', JObj}, #state{agent_listener=AgentListener
 sync({'sync_resp', JObj}, #state{sync_ref=Ref
                                  ,agent_listener=AgentListener
                                 }=State) ->
-    case catch wh_util:to_atom(wh_json:get_value(<<"Status">>, JObj)) of
+    case catch kz_util:to_atom(kz_json:get_value(<<"Status">>, JObj)) of
         'sync' ->
             lager:debug("other agent is in sync too"),
             {'next_state', 'sync', State};
@@ -558,7 +557,7 @@ sync('current_call', _, State) ->
 %% @end
 %%--------------------------------------------------------------------
 ready({'sync_req', JObj}, #state{agent_listener=AgentListener}=State) ->
-    lager:debug("recv sync_req from ~s", [wh_json:get_value(<<"Server-ID">>, JObj)]),
+    lager:debug("recv sync_req from ~s", [kz_json:get_value(<<"Server-ID">>, JObj)]),
     acdc_agent_listener:send_sync_resp(AgentListener, 'ready', JObj),
     {'next_state', 'ready', State};
 ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentListener
@@ -570,11 +569,11 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
     Call = whapps_call:from_json(wh_json:get_value(<<"Call">>, JObj)),
     CallId = whapps_call:call_id(Call),
 
-    wh_util:put_callid(CallId),
+    kz_util:put_callid(CallId),
 
-    WrapupTimer = wh_json:get_integer_value(<<"Wrapup-Timeout">>, JObj, 0),
-    CallerExitKey = wh_json:get_value(<<"Caller-Exit-Key">>, JObj, <<"#">>),
-    QueueId = wh_json:get_value(<<"Queue-ID">>, JObj),
+    WrapupTimer = kz_json:get_integer_value(<<"Wrapup-Timeout">>, JObj, 0),
+    CallerExitKey = kz_json:get_value(<<"Caller-Exit-Key">>, JObj, <<"#">>),
+    QueueId = kz_json:get_value(<<"Queue-ID">>, JObj),
 
     CDRUrl = cdr_url(JObj),
     RecordingUrl = recording_url(JObj),
@@ -752,7 +751,7 @@ ringing({'member_connect_win', _, 'different_node'}, State) ->
     lager:debug("received member_connect_win for different node (ringing)"),
     {'next_state', 'ringing', State};
 ringing({'originate_ready', JObj}, #state{agent_listener=AgentListener}=State) ->
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    CallId = kz_json:get_value(<<"Call-ID">>, JObj),
 
     lager:debug("ringing agent's phone with call-id ~s", [CallId]),
     acdc_agent_listener:originate_execute(AgentListener, JObj),
@@ -905,7 +904,7 @@ ringing({'channel_answered', JObj}, #state{member_call_id=MemberCallId
             end
     end;
 ringing({'sync_req', JObj}, #state{agent_listener=AgentListener}=State) ->
-    lager:debug("recv sync_req from ~s", [wh_json:get_value(<<"Process-ID">>, JObj)]),
+    lager:debug("recv sync_req from ~s", [kz_json:get_value(<<"Process-ID">>, JObj)]),
     acdc_agent_listener:send_sync_resp(AgentListener, 'ringing', JObj),
     {'next_state', 'ringing', State};
 ringing({'originate_resp', ACallId}, #state{agent_listener=AgentListener
@@ -1425,7 +1424,7 @@ answered({'channel_hungup', CallId, _Cause}, #state{agent_listener=AgentListener
 answered({'sync_req', JObj}, #state{agent_listener=AgentListener
                                     ,member_call_id=CallId
                                    }=State) ->
-    lager:debug("recv sync_req from ~s", [wh_json:get_value(<<"Process-ID">>, JObj)]),
+    lager:debug("recv sync_req from ~s", [kz_json:get_value(<<"Process-ID">>, JObj)]),
     acdc_agent_listener:send_sync_resp(AgentListener, 'answered', JObj, [{<<"Call-ID">>, CallId}]),
     {'next_state', 'answered', State};
 answered({'channel_unbridged', CallId}, #state{member_call_id=CallId}=State) ->
@@ -1538,7 +1537,7 @@ wrapup({'timeout', Ref, ?WRAPUP_FINISHED}, #state{wrapup_ref=Ref
 wrapup({'sync_req', JObj}, #state{agent_listener=AgentListener
                                   ,wrapup_ref=Ref
                                  }=State) ->
-    lager:debug("recv sync_req from ~s", [wh_json:get_value(<<"Process-ID">>, JObj)]),
+    lager:debug("recv sync_req from ~s", [kz_json:get_value(<<"Process-ID">>, JObj)]),
     acdc_agent_listener:send_sync_resp(AgentListener, 'wrapup', JObj, [{<<"Time-Left">>, time_left(Ref)}]),
     {'next_state', 'wrapup', State};
 wrapup({'channel_bridged', _}, State) ->
@@ -1598,7 +1597,7 @@ paused({'timeout', Ref, ?PAUSE_MESSAGE}, #state{pause_ref=Ref
 paused({'sync_req', JObj}, #state{agent_listener=AgentListener
                                   ,pause_ref=Ref
                                  }=State) ->
-    lager:debug("recv sync_req from ~s", [wh_json:get_value(<<"Process-ID">>, JObj)]),
+    lager:debug("recv sync_req from ~s", [kz_json:get_value(<<"Process-ID">>, JObj)]),
     acdc_agent_listener:send_sync_resp(AgentListener, 'paused', JObj, [{<<"Time-Left">>, time_left(Ref)}]),
     {'next_state', 'paused', State};
 paused({'member_connect_req', _}, State) ->
@@ -1781,7 +1780,7 @@ handle_event({'update_presence', _, _}=Event, StateName, #state{agent_state_upda
     NewQueue = [Event | Queue],
     {'next_state', StateName, State#state{agent_state_updates=NewQueue}};
 handle_event({'refresh', AgentJObj}, StateName, #state{agent_listener=AgentListener}=State) ->
-    acdc_agent_listener:refresh_config(AgentListener, wh_json:get_value(<<"queues">>, AgentJObj)),
+    acdc_agent_listener:refresh_config(AgentListener, kz_json:get_value(<<"queues">>, AgentJObj)),
     {'next_state', StateName, State};
 handle_event('load_endpoints', StateName, #state{agent_listener='undefined'}=State) ->
     lager:debug("agent proc not ready, not loading endpoints yet"),
@@ -1792,13 +1791,13 @@ handle_event('load_endpoints', StateName, #state{agent_id=AgentId
                                                  ,account_id=AccountId
                                                  ,account_db=AccountDb
                                                 }=State) ->
-    Setters = [{fun whapps_call:set_account_id/2, AccountId}
-               ,{fun whapps_call:set_account_db/2, AccountDb}
-               ,{fun whapps_call:set_owner_id/2, AgentId}
-               ,{fun whapps_call:set_resource_type/2, ?RESOURCE_TYPE_AUDIO}
+    Setters = [{fun kapps_call:set_account_id/2, AccountId}
+               ,{fun kapps_call:set_account_db/2, AccountDb}
+               ,{fun kapps_call:set_owner_id/2, AgentId}
+               ,{fun kapps_call:set_resource_type/2, ?RESOURCE_TYPE_AUDIO}
               ],
 
-    Call = whapps_call:exec(Setters, whapps_call:new()),
+    Call = kapps_call:exec(Setters, kapps_call:new()),
 
     %% Inform us of things with us as owner
     catch gproc:reg(?OWNER_UPDATE_REG(AccountId, AgentId)),
@@ -1853,8 +1852,8 @@ handle_info({'endpoint_edited', EP}, StateName, #state{endpoints=EPs
                                                        ,agent_id=AgentId
                                                        ,agent_listener=AgentListener
                                                       }=State) ->
-    EPId = wh_doc:id(EP),
-    case wh_json:get_value(<<"owner_id">>, EP) of
+    EPId = kz_doc:id(EP),
+    case kz_json:get_value(<<"owner_id">>, EP) of
         AgentId ->
             lager:debug("device ~s edited, we're the owner, maybe adding it", [EPId]),
             {'next_state', StateName, State#state{endpoints=maybe_add_endpoint(EPId, EP, EPs, AccountId, AgentListener)}, 'hibernate'};
@@ -1866,7 +1865,7 @@ handle_info({'endpoint_deleted', EP}, StateName, #state{endpoints=EPs
                                                         ,account_id=AccountId
                                                         ,agent_listener=AgentListener
                                                        }=State) ->
-    EPId = wh_doc:id(EP),
+    EPId = kz_doc:id(EP),
     lager:debug("device ~s deleted, maybe removing it", [EPId]),
     {'next_state', StateName, State#state{endpoints=maybe_remove_endpoint(EPId, EPs, AccountId, AgentListener)}, 'hibernate'};
 handle_info({'endpoint_created', EP}, StateName, #state{endpoints=EPs
@@ -1874,15 +1873,15 @@ handle_info({'endpoint_created', EP}, StateName, #state{endpoints=EPs
                                                         ,agent_id=AgentId
                                                         ,agent_listener=AgentListener
                                                        }=State) ->
-    EPId = wh_doc:id(EP),
-    case wh_json:get_value(<<"owner_id">>, EP) of
+    EPId = kz_doc:id(EP),
+    case kz_json:get_value(<<"owner_id">>, EP) of
         AgentId ->
             lager:debug("device ~s created, we're the owner, maybe adding it", [EPId]),
             {'next_state', StateName, State#state{endpoints=maybe_add_endpoint(EPId, EP, EPs, AccountId, AgentListener)}, 'hibernate'};
         _OwnerId ->
             lager:debug("device ~s created, owner is ~s, maybe ignoring", [EPId, _OwnerId]),
 
-            case wh_json:get_value([<<"hotdesk">>, <<"users">>, AgentId], EP) of
+            case kz_json:get_value([<<"hotdesk">>, <<"users">>, AgentId], EP) of
                 'undefined' -> {'next_state', StateName, State};
                 _ ->
             lager:debug("device ~s created, we're a hotdesk user, maybe adding it", [EPId]),
@@ -1951,16 +1950,16 @@ start_pause_timer(0) -> 'undefined';
 start_pause_timer(Timeout) ->
     gen_fsm:start_timer(Timeout * 1000, ?PAUSE_MESSAGE).
 
--spec call_id(wh_json:object()) -> api_binary().
+-spec call_id(kz_json:object()) -> api_binary().
 call_id(JObj) ->
-    case wh_json:get_value(<<"Call-ID">>, JObj) of
-        'undefined' -> wh_json:get_value([<<"Call">>, <<"Call-ID">>], JObj);
+    case kz_json:get_value(<<"Call-ID">>, JObj) of
+        'undefined' -> kz_json:get_value([<<"Call">>, <<"Call-ID">>], JObj);
         CallId -> CallId
     end.
 
--spec hangup_cause(wh_json:object()) -> ne_binary().
+-spec hangup_cause(kz_json:object()) -> ne_binary().
 hangup_cause(JObj) ->
-    case wh_json:get_value(<<"Hangup-Cause">>, JObj) of
+    case kz_json:get_value(<<"Hangup-Cause">>, JObj) of
         'undefined' -> <<"unknown">>;
         Cause -> Cause
     end.
@@ -1993,7 +1992,7 @@ clear_call(#state{fsm_call_id=FSMemberCallId
                   ,wrapup_ref=WRef
                   ,pause_ref=PRef
                  }=State, NextState)->
-    wh_util:put_callid(FSMemberCallId),
+    kz_util:put_callid(FSMemberCallId),
 
     ReadyForAction = not (NextState =:= 'wrapup' orelse NextState =:= 'paused'),
     lager:debug("ready for action: ~s: ~s", [NextState, ReadyForAction]),
@@ -2019,23 +2018,23 @@ clear_call(#state{fsm_call_id=FSMemberCallId
                 ,monitoring = 'false'
                }.
 
--spec current_call(whapps_call:call() | 'undefined', atom(), ne_binary(), 'undefined' | wh_now()) ->
+-spec current_call(kapps_call:call() | 'undefined', atom(), ne_binary(), 'undefined' | kz_now()) ->
                           api_object().
 current_call('undefined', _, _, _) -> 'undefined';
 current_call(Call, AgentState, QueueId, Start) ->
-    wh_json:from_list([{<<"call_id">>, whapps_call:call_id(Call)}
-                       ,{<<"caller_id_name">>, whapps_call:caller_id_name(Call)}
-                       ,{<<"caller_id_number">>, whapps_call:caller_id_name(Call)}
-                       ,{<<"to">>, whapps_call:to_user(Call)}
-                       ,{<<"from">>, whapps_call:from_user(Call)}
-                       ,{<<"agent_state">>, wh_util:to_binary(AgentState)}
+    kz_json:from_list([{<<"call_id">>, kapps_call:call_id(Call)}
+                       ,{<<"caller_id_name">>, kapps_call:caller_id_name(Call)}
+                       ,{<<"caller_id_number">>, kapps_call:caller_id_name(Call)}
+                       ,{<<"to">>, kapps_call:to_user(Call)}
+                       ,{<<"from">>, kapps_call:from_user(Call)}
+                       ,{<<"agent_state">>, kz_util:to_binary(AgentState)}
                        ,{<<"duration">>, elapsed(Start)}
                        ,{<<"queue_id">>, QueueId}
                       ]).
 
--spec elapsed('undefined' | wh_now()) -> api_integer().
+-spec elapsed('undefined' | kz_now()) -> api_integer().
 elapsed('undefined') -> 'undefined';
-elapsed(Start) -> wh_util:elapsed_s(Start).
+elapsed(Start) -> kz_util:elapsed_s(Start).
 
 -spec wrapup_timer(fsm_state()) -> reference().
 wrapup_timer(#state{agent_listener=AgentListener
@@ -2076,20 +2075,20 @@ maybe_stop_timer(ConnRef) when is_reference(ConnRef) ->
 maybe_stop_timer(TimerRef, 'true') -> maybe_stop_timer(TimerRef);
 maybe_stop_timer(_, 'false') -> 'ok'.
 
--spec start_outbound_call_handling(ne_binary() | whapps_call:call(), fsm_state()) -> fsm_state().
+-spec start_outbound_call_handling(ne_binary() | kapps_call:call(), fsm_state()) -> fsm_state().
 start_outbound_call_handling(CallId, #state{agent_listener=AgentListener
                                             ,account_id=AccountId
                                             ,agent_id=AgentId
                                             ,outbound_call_ids=OutboundCallIds
                                            }=State) when is_binary(CallId) ->
-    wh_util:put_callid(CallId),
+    kz_util:put_callid(CallId),
     lager:debug("agent making outbound call, not receiving ACDc calls"),
     acdc_agent_listener:outbound_call(AgentListener, CallId),
     acdc_agent_stats:agent_outbound(AccountId, AgentId, CallId),
 
     State#state{outbound_call_ids=[CallId | lists:delete(CallId, OutboundCallIds)]};
 start_outbound_call_handling(Call, State) ->
-    start_outbound_call_handling(whapps_call:call_id(Call), State).
+    start_outbound_call_handling(kapps_call:call_id(Call), State).
 
 -spec outbound_hungup(fsm_state()) ->
                              {'next_state', atom(), fsm_state()}
@@ -2124,46 +2123,46 @@ missed_reason(<<"CALL_REJECTED">>) -> <<"rejected">>;
 missed_reason(<<"USER_BUSY">>) -> <<"rejected">>;
 missed_reason(Reason) -> Reason.
 
--spec find_username(wh_json:object()) -> api_binary().
+-spec find_username(kz_json:object()) -> api_binary().
 find_username(EP) ->
     find_sip_username(EP, kz_device:sip_username(EP)).
 
--spec find_sip_username(wh_json:object(), api_binary()) -> api_binary().
-find_sip_username(EP, 'undefined') -> wh_json:get_value(<<"To-User">>, EP);
+-spec find_sip_username(kz_json:object(), api_binary()) -> api_binary().
+find_sip_username(EP, 'undefined') -> kz_json:get_value(<<"To-User">>, EP);
 find_sip_username(_EP, Username) -> Username.
 
--spec find_endpoint_id(wh_json:object()) -> api_binary().
--spec find_endpoint_id(wh_json:object(), api_binary()) -> api_binary().
+-spec find_endpoint_id(kz_json:object()) -> api_binary().
+-spec find_endpoint_id(kz_json:object(), api_binary()) -> api_binary().
 
 find_endpoint_id(EP) ->
-    find_endpoint_id(EP, wh_doc:id(EP)).
+    find_endpoint_id(EP, kz_doc:id(EP)).
 
-find_endpoint_id(EP, 'undefined') -> wh_json:get_value(<<"Endpoint-ID">>, EP);
+find_endpoint_id(EP, 'undefined') -> kz_json:get_value(<<"Endpoint-ID">>, EP);
 find_endpoint_id(_EP, EPId) -> EPId.
 
--spec monitor_endpoint(wh_json:object(), ne_binary(), server_ref()) -> _.
+-spec monitor_endpoint(kz_json:object(), ne_binary(), server_ref()) -> any().
 monitor_endpoint(EP, AccountId, AgentListener) ->
     %% Bind for outbound call requests
     acdc_agent_listener:add_endpoint_bindings(AgentListener
-                                     ,cf_util:get_sip_realm(EP, AccountId)
+                                     ,kz_endpoint:get_sip_realm(EP, AccountId)
                                      ,find_username(EP)
                                     ),
     %% Inform us of device changes
     catch gproc:reg(?ENDPOINT_UPDATE_REG(AccountId, find_endpoint_id(EP))),
     catch gproc:reg(?NEW_CHANNEL_REG(AccountId, find_username(EP))).
 
--spec unmonitor_endpoint(wh_json:object(), ne_binary(), server_ref()) -> _.
+-spec unmonitor_endpoint(kz_json:object(), ne_binary(), server_ref()) -> any().
 unmonitor_endpoint(EP, AccountId, AgentListener) ->
     %% Bind for outbound call requests
     acdc_agent_listener:remove_endpoint_bindings(AgentListener
-                                        ,cf_util:get_sip_realm(EP, AccountId)
-                                        ,find_username(EP)
-                                       ),
+                                                ,kz_endpoint:get_sip_realm(EP, AccountId)
+                                                ,find_username(EP)
+                                                ),
     %% Inform us of device changes
-    catch gproc:unreg(?ENDPOINT_UPDATE_REG(AccountId, wh_doc:id(EP))),
+    catch gproc:unreg(?ENDPOINT_UPDATE_REG(AccountId, kz_doc:id(EP))),
     catch gproc:unreg(?NEW_CHANNEL_REG(AccountId, find_username(EP))).
 
--spec maybe_add_endpoint(ne_binary(), wh_json:object(), wh_json:objects(), ne_binary(), server_ref()) -> _.
+-spec maybe_add_endpoint(ne_binary(), kz_json:object(), kz_json:objects(), ne_binary(), server_ref()) -> any().
 maybe_add_endpoint(EPId, EP, EPs, AccountId, AgentListener) ->
     case lists:partition(fun(E) -> find_endpoint_id(E) =:= EPId end, EPs) of
         {[], _} ->
@@ -2172,7 +2171,7 @@ maybe_add_endpoint(EPId, EP, EPs, AccountId, AgentListener) ->
         {_, _} -> EPs
     end.
 
--spec maybe_remove_endpoint(ne_binary(), wh_json:objects(), ne_binary(), server_ref()) -> wh_json:objects().
+-spec maybe_remove_endpoint(ne_binary(), kz_json:objects(), ne_binary(), server_ref()) -> kz_json:objects().
 maybe_remove_endpoint(EPId, EPs, AccountId, AgentListener) ->
     case lists:partition(fun(EP) -> find_endpoint_id(EP) =:= EPId end, EPs) of
         {[], _} -> EPs; %% unknown endpoint
@@ -2182,8 +2181,8 @@ maybe_remove_endpoint(EPId, EPs, AccountId, AgentListener) ->
             EPs1
     end.
 
--spec get_endpoints(wh_json:objects(), server_ref(), whapps_call:call(), api_binary(), api_binary()) ->
-                           {'ok', wh_json:objects()} |
+-spec get_endpoints(kz_json:objects(), server_ref(), kapps_call:call(), api_binary(), api_binary()) ->
+                           {'ok', kz_json:objects()} |
                            {'error', any()}.
 get_endpoints(OrigEPs, AgentListener, Call, AgentId, QueueId) ->
     case catch acdc_util:get_endpoints(Call, AgentId) of
@@ -2194,13 +2193,13 @@ get_endpoints(OrigEPs, AgentListener, Call, AgentId, QueueId) ->
                 _ -> {'ok', [wh_json:set_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], QueueId, EP) || EP <- OrigEPs]}
             end;
         [_|_]=EPs ->
-            AccountId = whapps_call:account_id(Call),
+            AccountId = kapps_call:account_id(Call),
 
             {Add, Rm} = changed_endpoints(OrigEPs, EPs),
             _ = [monitor_endpoint(EP, AccountId, AgentListener) || EP <- Add],
             _ = [unmonitor_endpoint(EP, AccountId, AgentListener) || EP <- Rm],
 
-            {'ok', [wh_json:set_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], QueueId, EP) || EP <- EPs]};
+            {'ok', [kz_json:set_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], QueueId, EP) || EP <- EPs]};
         {'EXIT', E} ->
             lager:debug("failed to load endpoints: ~p", [E]),
             {'error', E}
@@ -2239,26 +2238,26 @@ changed_endpoints(OrigEPs, [EP|EPs], Add) ->
 
 maybe_notify('undefined', _, _) -> 'ok';
 maybe_notify(Ns, Key, State) ->
-    case wh_json:get_value(Key, Ns) of
+    case kz_json:get_value(Key, Ns) of
         'undefined' ->
-            case wh_json:get_value(?NOTIFY_ALL, Ns) of
+            case kz_json:get_value(?NOTIFY_ALL, Ns) of
                 'undefined' -> 'ok';
                 Url ->
                     lager:debug("send update for ~s to ~s", [?NOTIFY_ALL, Url]),
-                    _P = wh_util:spawn(fun() -> notify(Url, get_method(Ns), Key, State) end),
+                    _ = kz_util:spawn(fun notify/4, [Url, get_method(Ns), Key, State]),
                     'ok'
             end;
         Url ->
             lager:debug("send update for ~s to ~s", [Key, Url]),
-            _P = wh_util:spawn(fun() -> notify(Url, get_method(Ns), Key, State) end),
+            _ = kz_util:spawn(fun notify/4, [Url, get_method(Ns), Key, State]),
             'ok'
     end.
 
--spec get_method(wh_json:object()) -> 'get' | 'post'.
+-spec get_method(kz_json:object()) -> 'get' | 'post'.
 get_method(Ns) ->
-    case wh_json:get_value(<<"method">>, Ns) of
+    case kz_json:get_value(<<"method">>, Ns) of
         'undefined' -> 'get';
-        M -> standardize_method(wh_util:to_lower_binary(M))
+        M -> standardize_method(kz_util:to_lower_binary(M))
     end.
 
 -spec standardize_method(ne_binary()) -> 'get' | 'post'.
@@ -2306,48 +2305,42 @@ notify_method(Url, 'get', Headers, Data) ->
            ,Headers, 'get', <<>>, []
           ).
 
--spec notify(iolist(), [], 'get' | 'post', binary(), wh_proplist()) -> 'ok'.
+-spec notify(iolist(), [], 'get' | 'post', binary(), kz_proplist()) -> 'ok'.
 notify(Uri, Headers, Method, Body, Opts) ->
-    case ibrowse:send_req(wh_util:to_list(Uri)
-                          ,Headers
-                          ,Method
-                          ,Body
-                          ,[{'connect_timeout', 1000} % wait up to 1000ms for connection
-                            ,{'ssl_options', [{'versions', ['tlsv1.2','tlsv1.1','tlsv1','sslv3']}]}
-                            | Opts
-                           ]
-                          ,1000
-                         )
-    of
+    Options = [{'connect_timeout', 1000}
+               ,{'timeout', 1000}
+               ,{'ssl_options', [{'versions', ['tlsv1.2','tlsv1.1','tlsv1','sslv3']}]}
+               | Opts
+              ],
+    URI = kz_util:to_list(Uri),
+    case kz_http:req(Method, URI, Headers, Body, Options) of
         {'ok', _Status, _ResponseHeaders, _ResponseBody} ->
-            lager:debug("~s req to ~s: ~s", [Method, Uri, _Status]);
-        {'error', {'url_parsing_failed',_}} ->
-            lager:debug("failed to parse the URL ~s", [Uri]);
+            lager:debug("~s req to ~s: ~p", [Method, Uri, _Status]);
         {'error', _E} ->
             lager:debug("failed to send request to ~s: ~p", [Uri, _E])
     end.
 
--spec cdr_url(wh_json:object()) -> api_binary().
+-spec cdr_url(kz_json:object()) -> api_binary().
 cdr_url(JObj) ->
-    case wh_json:get_value([<<"Notifications">>, ?NOTIFY_CDR], JObj) of
-        'undefined' -> wh_json:get_ne_value(<<"CDR-Url">>, JObj);
+    case kz_json:get_value([<<"Notifications">>, ?NOTIFY_CDR], JObj) of
+        'undefined' -> kz_json:get_ne_value(<<"CDR-Url">>, JObj);
         Url -> Url
     end.
 
--spec recording_url(wh_json:object()) -> api_binary().
+-spec recording_url(kz_json:object()) -> api_binary().
 recording_url(JObj) ->
-    case wh_json:get_value([<<"Notifications">>, ?NOTIFY_RECORDING], JObj) of
-        'undefined' -> wh_json:get_ne_value(<<"Recording-URL">>, JObj);
+    case kz_json:get_value([<<"Notifications">>, ?NOTIFY_RECORDING], JObj) of
+        'undefined' -> kz_json:get_ne_value(<<"Recording-URL">>, JObj);
         Url -> Url
     end.
 
 -spec uri(ne_binary(), iolist()) -> iolist().
 uri(URI, QueryString) ->
-    case mochiweb_util:urlsplit(wh_util:to_list(URI)) of
-        {Scheme, Host, Path, [], Fragment} ->
-            mochiweb_util:urlunsplit({Scheme, Host, Path, QueryString, Fragment});
+    case kz_http_util:urlsplit(URI) of
+        {Scheme, Host, Path, <<>>, Fragment} ->
+            kz_http_util:urlunsplit({Scheme, Host, Path, QueryString, Fragment});
         {Scheme, Host, Path, QS, Fragment} ->
-            mochiweb_util:urlunsplit({Scheme, Host, Path, [QS, "&", QueryString], Fragment})
+            kz_http_util:urlunsplit({Scheme, Host, Path, <<QS/binary, "&", (kz_util:to_binary(QueryString))/binary>>, Fragment})
     end.
 
 -spec apply_state_updates(fsm_state()) ->

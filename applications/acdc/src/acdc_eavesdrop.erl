@@ -26,9 +26,9 @@ start(MCall, AcctId, AgentCallId) ->
 
 eavesdrop_req(Prop) ->
     lager:debug("Sending eavs ~p", [Prop]),
-    case whapps_util:amqp_pool_request(Prop
-                                       ,fun wapi_resource:publish_eavesdrop_req/1
-                                       ,fun wapi_resource:eavesdrop_resp_v/1
+    case kapps_util:amqp_pool_request(Prop
+                                       ,fun kapi_resource:publish_eavesdrop_req/1
+                                       ,fun kapi_resource:eavesdrop_resp_v/1
                                        ,2000
                                       )
     of

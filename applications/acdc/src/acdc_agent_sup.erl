@@ -12,6 +12,8 @@
 
 -include("acdc.hrl").
 
+-define(SERVER, ?MODULE).
+
 %% API
 -export([start_link/1, start_link/2, start_link/4
          ,restart/1
@@ -24,23 +26,25 @@
 %% Supervisor callbacks
 -export([init/1]).
 
+-define(CHILDREN, [?WORKER_ARGS_TYPE('acdc_agent_listener', [self() | Args], 'transient')
+                   ,?WORKER_ARGS_TYPE('acdc_agent_fsm', [self() | Args], 'transient')
+                  ]).
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Starts the supervisor
-%%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
-%% @end
+%% @doc Starts the supervisor
 %%--------------------------------------------------------------------
--spec start_link(wh_json:object()) -> startlink_ret().
--spec start_link(whapps_call:call(), ne_binary()) -> startlink_ret().
-start_link(AgentJObj) -> supervisor:start_link(?MODULE, [AgentJObj]).
-start_link(ThiefCall, QueueId) -> supervisor:start_link(?MODULE, [ThiefCall, QueueId]).
+-spec start_link(kz_json:object()) -> startlink_ret().
+-spec start_link(kapps_call:call(), ne_binary()) -> startlink_ret().
+start_link(AgentJObj) ->
+    supervisor:start_link(?SERVER, [AgentJObj]).
+start_link(ThiefCall, QueueId) ->
+    supervisor:start_link(?SERVER, [ThiefCall, QueueId]).
 start_link(AcctId, AgentId, AgentJObj, Queues) ->
-    supervisor:start_link(?MODULE, [AcctId, AgentId, AgentJObj, Queues]).
+    supervisor:start_link(?SERVER, [AcctId, AgentId, AgentJObj, Queues]).
 
 -spec stop(pid()) -> 'ok' | {'error', 'not_found'}.
 stop(Supervisor) ->
@@ -67,7 +71,7 @@ status(Supervisor) ->
             ?MODULE:stop(Supervisor)
     end.
 
--define(AGENT_INFO_FIELDS, whapps_config:get(?CONFIG_CAT, <<"agent_info_fields">>
+-define(AGENT_INFO_FIELDS, kapps_config:get(?CONFIG_CAT, <<"agent_info_fields">>
                                                  ,[<<"first_name">>, <<"last_name">>, <<"username">>, <<"email">>]
                                             )).
 
@@ -112,13 +116,9 @@ child_of_type(S, T) -> [P || {Ty, P, 'worker', _} <- supervisor:which_children(S
 %% this function is called by the new process to find out about
 %% restart strategy, maximum restart frequency and child
 %% specifications.
-%%
-%% @spec init(Args) -> {ok, {SupFlags, [ChildSpec]}} |
-%%                     ignore |
-%%                     {error, Reason}
 %% @end
 %%--------------------------------------------------------------------
--spec init(list()) -> sup_init_ret().
+-spec init(any()) -> sup_init_ret().
 init(Args) ->
     RestartStrategy = 'one_for_all',
     MaxRestarts = 2,
@@ -126,9 +126,7 @@ init(Args) ->
 
     SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
 
-    {'ok', {SupFlags, [?WORKER_ARGS_TYPE('acdc_agent_listener', [self() | Args], 'transient')
-                       ,?WORKER_ARGS_TYPE('acdc_agent_fsm', [self() | Args], 'transient')
-                      ]}}.
+    {'ok', {SupFlags, ?CHILDREN}}.
 
 %%%===================================================================
 %%% Internal functions

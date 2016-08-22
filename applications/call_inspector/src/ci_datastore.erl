@@ -12,6 +12,8 @@
 
 -include("call_inspector.hrl").
 
+-define(SERVER, ?MODULE).
+
 %% API
 -export([start_link/0]).
 -export([store_chunk/1]).
@@ -47,7 +49,6 @@
 
 -export_type([data/0]).
 
--define(SERVER, ?MODULE).
 -define(CI_DIR, "/tmp/2600hz-call_inspector").
 
 %%%===================================================================
@@ -55,12 +56,9 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
-%%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
-%% @end
+%% @doc Starts the server
 %%--------------------------------------------------------------------
+-spec start_link() -> startlink_ret().
 start_link() ->
     gen_server:start_link({'local', ?SERVER}, ?MODULE, [], []).
 
@@ -113,15 +111,9 @@ flush(CallId) ->
 
 %%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Initializes the server
-%%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
-%% @end
+%% @doc Initializes the server
 %%--------------------------------------------------------------------
+-spec init([]) -> {'ok', #state{}}.
 init([]) ->
     mkdir(?CI_DIR),
     {'ok', #state{}}.
@@ -158,7 +150,7 @@ handle_call(_Request, _From, State) ->
 %%--------------------------------------------------------------------
 handle_cast({'store_chunk', CallId, Chunk}, State) ->
     Object = #object{call_id=CallId
-                    ,timestamp=wh_util:current_tstamp()
+                    ,timestamp=kz_util:current_tstamp()
                     ,type='chunk'
                     ,value=Chunk
                     },
@@ -167,7 +159,7 @@ handle_cast({'store_chunk', CallId, Chunk}, State) ->
     {'noreply', State};
 handle_cast({'store_analysis', CallId, Analysis}, State) ->
     Object = #object{call_id=CallId
-                    ,timestamp=wh_util:current_tstamp()
+                    ,timestamp=kz_util:current_tstamp()
                     ,type='analysis'
                     ,value=Analysis
                     },
@@ -177,7 +169,7 @@ handle_cast('flush', State) ->
     recursive_remove(),
     {'noreply', State};
 handle_cast({'flush', CallId}, State) ->
-    wh_util:delete_file(make_name(CallId)),
+    kz_util:delete_file(make_name(CallId)),
     {'noreply', State};
 handle_cast(_Msg, State) ->
     lager:debug("unhandled handle_cast ~p", [_Msg]),
@@ -229,7 +221,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 -spec make_name(ne_binary()) -> file:filename().
 make_name(CallId) ->
-    <<D1:2/binary, D2:2/binary, Rest/binary>> = wh_util:binary_md5(CallId),
+    <<D1:2/binary, D2:2/binary, Rest/binary>> = kz_util:binary_md5(CallId),
     filename:join([?CI_DIR, D1, D2, Rest]).
 
 -spec ensure_path_exists(file:filename()) -> 'ok'.
@@ -242,7 +234,7 @@ insert_object(#object{call_id = CallId} = Object) ->
     Path = make_name(CallId),
     ensure_path_exists(Path),
     IoData = io_lib:fwrite("~p.\n", [Object]),
-    wh_util:write_file(Path, IoData, ['append']).
+    kz_util:write_file(Path, IoData, ['append']).
 
 -spec lookup_objects(ne_binary()) -> [object()].
 lookup_objects(CallId) ->

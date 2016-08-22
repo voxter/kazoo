@@ -23,6 +23,8 @@
 
 -include("doodle.hrl").
 
+-define(SERVER, ?MODULE).
+
 -record(state, {connection :: amqp_listener_connection()}).
 
 -define(BINDINGS(Ex), [{'sms', [{'exchange', Ex}
@@ -51,11 +53,7 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
-%%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
-%% @end
+%% @doc Starts the server
 %%--------------------------------------------------------------------
 -spec start_link(amqp_listener_connection()) -> startlink_ret().
 start_link(#amqp_listener_connection{broker=Broker
@@ -65,7 +63,7 @@ start_link(#amqp_listener_connection{broker=Broker
                                      ,options=Options
                                     }=C) ->
     Exchanges = [{Exchange, Type, Options}],
-    gen_listener:start_link(?MODULE
+    gen_listener:start_link(?SERVER
                             ,[{'bindings', ?BINDINGS(Exchange)}
                               ,{'responders', ?RESPONDERS}
                               ,{'queue_name', Queue}       % optional to include
@@ -144,7 +142,7 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info({'send_outbound', Payload}, State) ->
-    wapi_sms:publish_outbound(Payload),
+    kapi_sms:publish_outbound(Payload),
     {'noreply', State};
 handle_info(_Info, State) ->
     lager:debug("inbound listener unhandled info: ~p", [_Info]),
@@ -176,7 +174,7 @@ terminate('shutdown', _State) ->
     lager:debug("inbound listener terminating");
 terminate(Reason, #state{connection=Connection}) ->
     lager:error("inbound listener unexpected termination : ~p", [Reason]),
-    wh_util:spawn(fun()->
+    kz_util:spawn(fun()->
                           timer:sleep(10000),
                           doodle_inbound_listener_sup:start_inbound_listener(Connection)
                   end).

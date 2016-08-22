@@ -40,7 +40,7 @@
                 ,patterns :: api_object()
                 ,binding_digit = konami_config:binding_digit() :: ne_binary()
                 ,digit_timeout = konami_config:timeout() :: pos_integer()
-                ,call :: whapps_call:call() | 'undefined'
+                ,call :: kapps_call:call() | 'undefined'
 
                 ,listen_on = 'a' :: listen_on()
 
@@ -59,15 +59,13 @@
                }).
 -type state() :: #state{}.
 
--define(WSD_ENABLED, 'false').
-
 -define(WSD_ID, ?WSD_ENABLED andalso {'file', get('callid')}).
 
--define(WSD_EVT(Fr, T, E), ?WSD_ENABLED andalso webseq:evt(?WSD_ID, Fr, T, <<(wh_util:to_binary(?LINE))/binary, "-", E/binary>>)).
+-define(WSD_EVT(Fr, T, E), ?WSD_ENABLED andalso webseq:evt(?WSD_ID, Fr, T, <<(kz_util:to_binary(?LINE))/binary, "-", E/binary>>)).
 
--define(WSD_NOTE(W, D, N), ?WSD_ENABLED andalso webseq:note(?WSD_ID, W, D, <<(wh_util:to_binary(?LINE))/binary, "-", N/binary>>)).
+-define(WSD_NOTE(W, D, N), ?WSD_ENABLED andalso webseq:note(?WSD_ID, W, D, <<(kz_util:to_binary(?LINE))/binary, "-", N/binary>>)).
 
--define(WSD_TITLE(T), ?WSD_ENABLED andalso webseq:title(?WSD_ID, [T, " in ", wh_util:to_binary(self())])).
+-define(WSD_TITLE(T), ?WSD_ENABLED andalso webseq:title(?WSD_ID, [T, " in ", kz_util:to_binary(self())])).
 -define(WSD_START(), ?WSD_ENABLED andalso webseq:start(?WSD_ID)).
 
 -define(WSD_STOP(), ?WSD_ENABLED andalso webseq:stop(?WSD_ID)).
@@ -80,7 +78,7 @@
 start_fsm(Call, JObj, KonamiCallPid) ->
     ListenOn = listen_on(Call, JObj),
 
-    whapps_call:put_callid(Call),
+    kapps_call:put_callid(Call),
 
     maybe_add_call_event_bindings(Call, ListenOn),
 
@@ -88,10 +86,10 @@ start_fsm(Call, JObj, KonamiCallPid) ->
 
     BEndpointId = b_endpoint_id(JObj, ListenOn),
 
-    lager:debug("a endpoint: ~s b endpoint: ~s", [whapps_call:authorizing_id(Call), BEndpointId]),
+    lager:debug("a endpoint: ~s b endpoint: ~s", [kapps_call:authorizing_id(Call), BEndpointId]),
 
     ?WSD_START(),
-    ?WSD_TITLE(["FSM: ", whapps_call:call_id(Call), " listen on: ", wh_util:to_list(ListenOn)]),
+    ?WSD_TITLE(["FSM: ", kapps_call:call_id(Call), " listen on: ", kz_util:to_list(ListenOn)]),
 
     gen_fsm:enter_loop(?MODULE, [], 'unarmed'
                        ,#state{konami_call_pid=KonamiCallPid
@@ -100,10 +98,10 @@ start_fsm(Call, JObj, KonamiCallPid) ->
 
                                ,listen_on=ListenOn
 
-                               ,call=whapps_call:clear_helpers(
-                                       whapps_call:kvs_store(?MODULE, self(), Call)
+                               ,call=kapps_call:clear_helpers(
+                                       kapps_call:kvs_store(?MODULE, self(), Call)
                                       )
-                               ,call_id=whapps_call:call_id_direct(Call)
+                               ,call_id=kapps_call:call_id_direct(Call)
 
                                ,b_endpoint_ids=[BEndpointId]
                               }).
@@ -120,9 +118,9 @@ event(FSM, CallId, <<"DTMF">>, JObj) ->
 event(FSM, CallId, Event, JObj) ->
     gen_fsm:send_all_state_event(FSM, ?EVENT(CallId, Event, JObj)).
 
--spec transfer_to(whapps_call:call(), 'a' | 'b') -> 'ok'.
+-spec transfer_to(kapps_call:call(), 'a' | 'b') -> 'ok'.
 transfer_to(Call, Leg) ->
-    gen_fsm:send_all_state_event(whapps_call:kvs_fetch(?MODULE, Call)
+    gen_fsm:send_all_state_event(kapps_call:kvs_fetch(?MODULE, Call)
                                  ,{'transfer_to', Call, Leg}
                                 ).
 
@@ -304,11 +302,11 @@ format_status(_, [_Dict, #state{call_id=CallId
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
--spec binding_digit(whapps_call:call(), wh_json:object()) -> ne_binary().
+-spec binding_digit(kapps_call:call(), kz_json:object()) -> ne_binary().
 binding_digit(Call, JObj) ->
-    case wh_json:get_value(<<"Binding-Digit">>, JObj) of
+    case kz_json:get_value(<<"Binding-Digit">>, JObj) of
         'undefined' ->
-            konami_config:binding_digit(whapps_call:account_id(Call));
+            konami_config:binding_digit(kapps_call:account_id(Call));
         BindingDigit ->
             lager:debug("using custom binding digit '~s'", [BindingDigit]),
             BindingDigit
@@ -341,28 +339,28 @@ patterns(Pid, EndpointId) ->
 
 -spec digit_timeout(whapps_call:call(), wh_json:object()) -> pos_integer().
 digit_timeout(Call, JObj) ->
-    case wh_json:get_integer_value(<<"Digit-Timeout">>, JObj) of
-        'undefined' -> konami_config:timeout(whapps_call:account_id(Call));
+    case kz_json:get_integer_value(<<"Digit-Timeout">>, JObj) of
+        'undefined' -> konami_config:timeout(kapps_call:account_id(Call));
         Timeout -> Timeout
     end.
 
--spec is_a_leg(whapps_call:call(), api_object() | ne_binary()) -> boolean().
+-spec is_a_leg(kapps_call:call(), api_object() | ne_binary()) -> boolean().
 is_a_leg(_Call, 'undefined') -> 'true';
 is_a_leg(Call, <<_/binary>> = EndpointId) ->
-    EndpointId =:= whapps_call:authorizing_id(Call);
+    EndpointId =:= kapps_call:authorizing_id(Call);
 is_a_leg(Call, JObj) ->
-    is_a_leg(Call, wh_json:get_value(<<"Endpoint-ID">>, JObj)).
+    is_a_leg(Call, kz_json:get_value(<<"Endpoint-ID">>, JObj)).
 
 -define(B_LEG_EVENTS, [<<"DTMF">>, <<"CHANNEL_ANSWER">>
                        ,<<"CHANNEL_BRIDGE">>, <<"CHANNEL_TRANSFEREE">>
                        ,<<"CHANNEL_REPLACED">>
                       ]).
 
--spec listen_on(whapps_call:call(), wh_json:object()) -> 'a' | 'b' | 'ab'.
+-spec listen_on(kapps_call:call(), kz_json:object()) -> 'a' | 'b' | 'ab'.
 listen_on(Call, JObj) ->
     IsALegEndpoint = is_a_leg(Call, JObj),
 
-    case wh_json:get_value(<<"Listen-On">>, JObj) of
+    case kz_json:get_value(<<"Listen-On">>, JObj) of
         <<"both">> ->
             konami_util:listen_on_other_leg(Call, ?B_LEG_EVENTS),
             'ab';
@@ -380,30 +378,30 @@ listen_on(Call, JObj) ->
             'b'
     end.
 
--spec has_metaflow(ne_binary(), wh_json:object(), wh_json:object()) ->
+-spec has_metaflow(ne_binary(), kz_json:object(), kz_json:object()) ->
                           'false' |
-                          {'number', wh_json:object()} |
-                          {'patterm', wh_json:object()}.
+                          {'number', kz_json:object()} |
+                          {'patterm', kz_json:object()}.
 has_metaflow(Collected, Ns, Ps) ->
     case has_number(Collected, Ns) of
         'false' -> has_pattern(Collected, Ps);
         N -> N
     end.
 
--spec has_number(ne_binary(), wh_json:object()) ->
+-spec has_number(ne_binary(), kz_json:object()) ->
                         'false' |
-                        {'number', wh_json:object()}.
+                        {'number', kz_json:object()}.
 has_number(Collected, Ns) ->
-    case wh_json:get_value(Collected, Ns) of
+    case kz_json:get_value(Collected, Ns) of
         'undefined' -> 'false';
         N -> {'number', N}
     end.
 
--spec has_pattern(ne_binary(), wh_json:object()) ->
+-spec has_pattern(ne_binary(), kz_json:object()) ->
                          'false' |
-                         {'pattern', wh_json:object()}.
+                         {'pattern', kz_json:object()}.
 has_pattern(Collected, Ps) ->
-    Regexes = wh_json:get_keys(Ps),
+    Regexes = kz_json:get_keys(Ps),
     has_pattern(Collected, Ps, Regexes).
 
 has_pattern(_Collected, _Ps, []) -> 'false';
@@ -411,8 +409,8 @@ has_pattern(Collected, Ps, [Regex|Regexes]) ->
     case re:run(Collected, Regex, [{'capture', 'all_but_first', 'binary'}]) of
         'nomatch' -> has_pattern(Collected, Ps, Regexes);
         {'match', Captured} ->
-            P = wh_json:get_value(Regex, Ps),
-            {'pattern', wh_json:set_values([{[<<"data">>, <<"collected">>], Collected}
+            P = kz_json:get_value(Regex, Ps),
+            {'pattern', kz_json:set_values([{[<<"data">>, <<"collected">>], Collected}
                                             ,{[<<"data">>, <<"captures">>], Captured}
                                            ], P)
             }
@@ -472,16 +470,16 @@ maybe_handle_bleg_code(#state{konami_call_pid=Pid
         {'pattern', P} -> handle_pattern_metaflow(Call, P, OtherLeg)
     end.
 
--spec handle_number_metaflow(whapps_call:call(), wh_json:object(), ne_binary()) -> 'ok'.
+-spec handle_number_metaflow(kapps_call:call(), kz_json:object(), ne_binary()) -> 'ok'.
 handle_number_metaflow(Call, N, DTMFLeg) ->
-    Metaflow = wh_json:set_values([{[<<"data">>, <<"dtmf_leg">>], DTMFLeg}], N),
+    Metaflow = kz_json:set_values([{[<<"data">>, <<"dtmf_leg">>], DTMFLeg}], N),
     _Pid = proc_lib:spawn('konami_code_exe', 'handle', [Metaflow, Call]),
     ?WSD_NOTE(DTMFLeg, 'right', <<"executing number metaflow">>),
     lager:debug("number exe in ~p: ~p", [_Pid, Metaflow]).
 
--spec handle_pattern_metaflow(whapps_call:call(), wh_json:object(), ne_binary()) -> 'ok'.
+-spec handle_pattern_metaflow(kapps_call:call(), kz_json:object(), ne_binary()) -> 'ok'.
 handle_pattern_metaflow(Call, P, DTMFLeg) ->
-    Metaflow = wh_json:set_values([{[<<"data">>, <<"dtmf_leg">>], DTMFLeg}], P),
+    Metaflow = kz_json:set_values([{[<<"data">>, <<"dtmf_leg">>], DTMFLeg}], P),
     _Pid = proc_lib:spawn('konami_code_exe', 'handle', [Metaflow, Call]),
     ?WSD_NOTE(DTMFLeg, 'right', <<"executing pattern metaflow">>),
     lager:debug("pattern exe in ~p: ~p", [_Pid, Metaflow]).
@@ -522,28 +520,28 @@ add_bleg_dtmf(#state{b_collected_dtmf=Collected
                 ,b_collected_dtmf = <<Collected/binary, DTMF/binary>>
                }.
 
--spec maybe_add_call_event_bindings(api_binary() | whapps_call:call()) -> 'ok'.
--spec maybe_add_call_event_bindings(whapps_call:call(), listen_on()) -> 'ok'.
+-spec maybe_add_call_event_bindings(api_binary() | kapps_call:call()) -> 'ok'.
+-spec maybe_add_call_event_bindings(kapps_call:call(), listen_on()) -> 'ok'.
 maybe_add_call_event_bindings('undefined') -> 'ok';
 maybe_add_call_event_bindings(<<_/binary>> = Leg) -> konami_event_listener:add_call_binding(Leg);
 maybe_add_call_event_bindings(Call) -> konami_event_listener:add_call_binding(Call).
 
 maybe_add_call_event_bindings(Call, 'a') ->
-    konami_event_listener:add_konami_binding(whapps_call:call_id(Call)),
+    konami_event_listener:add_konami_binding(kapps_call:call_id(Call)),
     maybe_add_call_event_bindings(Call);
 maybe_add_call_event_bindings(Call, 'b') ->
-    konami_event_listener:add_konami_binding(whapps_call:other_leg_call_id(Call)),
+    konami_event_listener:add_konami_binding(kapps_call:other_leg_call_id(Call)),
     maybe_add_call_event_bindings(Call);
 maybe_add_call_event_bindings(Call, 'ab') ->
-    konami_event_listener:add_konami_binding(whapps_call:call_id(Call)),
-    konami_event_listener:add_konami_binding(whapps_call:other_leg_call_id(Call)),
+    konami_event_listener:add_konami_binding(kapps_call:call_id(Call)),
+    konami_event_listener:add_konami_binding(kapps_call:other_leg_call_id(Call)),
     maybe_add_call_event_bindings(Call).
 
--spec b_endpoint_id(wh_json:object(), listen_on()) -> api_binary().
+-spec b_endpoint_id(kz_json:object(), listen_on()) -> api_binary().
 b_endpoint_id(_JObj, 'a') -> 'undefined';
-b_endpoint_id(JObj, _ListenOn) -> wh_json:get_value(<<"Endpoint-ID">>, JObj).
+b_endpoint_id(JObj, _ListenOn) -> kz_json:get_value(<<"Endpoint-ID">>, JObj).
 
--spec handle_channel_answer(state(), ne_binary(), wh_json:object()) -> state().
+-spec handle_channel_answer(state(), ne_binary(), kz_json:object()) -> state().
 handle_channel_answer(#state{call_id=CallId}=State, CallId, _Evt) ->
     lager:debug("'a' leg ~s answered", [CallId]),
     State;
@@ -625,7 +623,7 @@ handle_channel_bridge(#state{call_id=CallId
                             }=State, CallId, OtherLeg) ->
     lager:debug("joy, 'a' is bridged to ~s", [OtherLeg]),
     maybe_add_call_event_bindings(OtherLeg),
-    State#state{call=whapps_call:set_other_leg_call_id(OtherLeg, Call)
+    State#state{call=kapps_call:set_other_leg_call_id(OtherLeg, Call)
                 ,other_leg=OtherLeg
                };
 handle_channel_bridge(#state{other_leg='undefined'}
@@ -652,7 +650,7 @@ handle_channel_bridge(#state{call_id=_CallId
                      ) ->
     lager:debug("our 'b' leg ~s bridged to ~s instead of ~s", [OtherLeg, UUID, _CallId]),
     State#state{call_id=UUID
-                ,call=whapps_call:set_call_id(UUID, Call)
+                ,call=kapps_call:set_call_id(UUID, Call)
                }.
 
 -spec handle_channel_destroy(state(), ne_binary()) -> state().
@@ -678,7 +676,7 @@ handle_channel_destroy(#state{call_id=CallId
                       ) ->
     lager:debug("'a' leg has ended but we're interested in the 'b' ~s", [_OtherLeg]),
     State#state{call_id='undefined'
-                ,call=whapps_call:set_call_id('undefined', Call)
+                ,call=kapps_call:set_call_id('undefined', Call)
                };
 handle_channel_destroy(#state{other_leg=OtherLeg
                               ,listen_on='b'
@@ -699,5 +697,5 @@ handle_channel_destroy(#state{other_leg=OtherLeg
                       ) ->
     lager:debug("'b' ~s has ended but we're still interested in the 'a'", [OtherLeg]),
     State#state{other_leg='undefined'
-                ,call=whapps_call:set_other_leg_call_id('undefined', Call)
+                ,call=kapps_call:set_other_leg_call_id('undefined', Call)
                }.

@@ -24,6 +24,7 @@
 -export([summary/0, summary/1
          ,details/0, details/1, details/2
          ,flush/0, flush/1, flush/2
+         ,sync/0
          ,count/0
         ]).
 
@@ -41,7 +42,9 @@
 -endif.
 
 -include("ecallmgr.hrl").
--include_lib("nksip/include/nksip.hrl").
+-include_lib("kazoo_sip/include/kzsip_uri.hrl").
+
+-define(SERVER, ?MODULE).
 
 -define(RESPONDERS, [{{?MODULE, 'handle_reg_query'}
                       ,[{<<"directory">>, <<"reg_query">>}]
@@ -63,13 +66,12 @@
                                     ]}
                    ,{'self', []}
                   ]).
--define(SERVER, ?MODULE).
 -define(REG_QUEUE_NAME, <<>>).
 -define(REG_QUEUE_OPTIONS, []).
 -define(REG_CONSUME_OPTIONS, []).
 -define(EXPIRES_MISSING_VALUE, 0).
 
--record(state, {started = wh_util:current_tstamp()
+-record(state, {started = kz_util:current_tstamp()
                 ,queue :: api_binary()
                }).
 
@@ -88,8 +90,8 @@
                        ,contact :: ne_binary() | '_'
                        ,previous_contact :: api_binary() | '_'
                        ,original_contact :: ne_binary() | '_'
-                       ,last_registration = wh_util:current_tstamp() :: gregorian_seconds() | '_' | '$2'
-                       ,initial_registration = wh_util:current_tstamp() :: gregorian_seconds() | '_'
+                       ,last_registration = kz_util:current_tstamp() :: gregorian_seconds() | '_' | '$2'
+                       ,initial_registration = kz_util:current_tstamp() :: gregorian_seconds() | '_'
                        ,registrar_node :: ne_binary() | '_'
                        ,registrar_hostname :: ne_binary() | '_'
                        ,suppress_unregister = 'true' :: boolean() | '_'
@@ -114,14 +116,11 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
-%%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
-%% @end
+%% @doc Starts the server
 %%--------------------------------------------------------------------
+-spec start_link() -> startlink_ret().
 start_link() ->
-    gen_listener:start_link({'local', ?MODULE}
+    gen_listener:start_link({'local', ?SERVER}
                             ,?MODULE
                             ,[{'responders', ?RESPONDERS}
                               ,{'bindings', ?BINDINGS}
@@ -132,50 +131,50 @@ start_link() ->
                             ,[]
                            ).
 
--spec handle_reg_success(wh_json:object(), wh_proplist()) -> 'ok'.
+-spec handle_reg_success(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_reg_success(JObj, _Props) ->
-    'true' = wapi_registration:success_v(JObj),
-    _ = wh_util:put_callid(JObj),
+    'true' = kapi_registration:success_v(JObj),
+    _ = kz_util:put_callid(JObj),
     Registration = create_registration(JObj),
     insert_registration(Registration).
 
--spec handle_reg_query(wh_json:object(), wh_proplist()) -> 'ok'.
-handle_reg_query(JObj, _Props) ->
-    'true' = wapi_registration:query_req_v(JObj),
-    _ = wh_util:put_callid(JObj),
-    maybe_resp_to_query(JObj).
+-spec handle_reg_query(kz_json:object(), kz_proplist()) -> 'ok'.
+handle_reg_query(JObj, Props) ->
+    'true' = kapi_registration:query_req_v(JObj),
+    _ = kz_util:put_callid(JObj),
+    maybe_resp_to_query(JObj, props:get_value('registrar_age', Props)).
 
--spec handle_reg_flush(wh_json:object(), wh_proplist()) -> 'ok'.
+-spec handle_reg_flush(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_reg_flush(JObj, _Props) ->
-    'true' = wapi_registration:flush_v(JObj),
-    Username = wh_json:get_value(<<"Username">>, JObj),
-    Realm = wh_json:get_value(<<"Realm">>, JObj),
+    'true' = kapi_registration:flush_v(JObj),
+    Username = kz_json:get_value(<<"Username">>, JObj),
+    Realm = kz_json:get_value(<<"Realm">>, JObj),
     lager:debug("recv req to flush ~s @ ~s"
                 ,[Username, Realm]
                ),
     flush(Username, Realm).
 
--spec handle_fs_reg(atom(), wh_proplist()) -> 'ok'.
+-spec handle_fs_reg(atom(), kz_proplist()) -> 'ok'.
 handle_fs_reg(Node, Props) ->
-    wh_util:put_callid(kzd_freeswitch:call_id(Props)),
+    kz_util:put_callid(kzd_freeswitch:call_id(Props)),
 
     Req = lists:foldl(fun(<<"Contact">>=K, Acc) ->
                               [{K, get_fs_contact(Props)} | Acc];
                          (K, Acc) ->
-                              case props:get_first_defined([wh_util:to_lower_binary(K), K], Props) of
+                              case props:get_first_defined([kz_util:to_lower_binary(K), K], Props) of
                                   'undefined' -> Acc;
                                   V -> [{K, V} | Acc]
                               end
                       end
-                      ,[{<<"Event-Timestamp">>, round(wh_util:current_tstamp())}
-                        ,{<<"FreeSWITCH-Nodename">>, wh_util:to_binary(Node)}
-                        | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                      ,[{<<"Event-Timestamp">>, round(kz_util:current_tstamp())}
+                        ,{<<"FreeSWITCH-Nodename">>, kz_util:to_binary(Node)}
+                        | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                        ]
-                      ,wapi_registration:success_keys()),
+                      ,kapi_registration:success_keys()),
     lager:debug("sending successful registration for ~s@~s"
                 ,[props:get_value(<<"Username">>, Req), props:get_value(<<"Realm">>, Req)]
                ),
-    wh_amqp_worker:cast(Req, fun wapi_registration:publish_success/1).
+    kz_amqp_worker:cast(Req, fun kapi_registration:publish_success/1).
 
 -spec lookup_contact(ne_binary(), ne_binary()) ->
                             {'ok', ne_binary()} |
@@ -203,8 +202,8 @@ lookup_contact(<<_/binary>> = Realm, <<_/binary>> = Username) ->
                                      {'ok', ne_binary()} |
                                      {'error', 'not_found'}.
 lookup_original_contact(Realm, Username) ->
-    case wh_util:is_empty(Realm)
-        orelse wh_util:is_empty(Username)
+    case kz_util:is_empty(Realm)
+        orelse kz_util:is_empty(Username)
     of
         'true' -> {'error', 'not_found'};
         'false' ->
@@ -219,12 +218,12 @@ lookup_original_contact(Realm, Username) ->
     end.
 
 -spec lookup_registration(ne_binary(), ne_binary()) ->
-                                 {'ok', wh_json:object()} |
+                                 {'ok', kz_json:object()} |
                                  {'error', 'not_found'}.
 lookup_registration(Realm, Username) ->
     case get_registration(Realm, Username) of
         #registration{}=Registration ->
-            {'ok', wh_json:from_list(to_props(Registration))};
+            {'ok', kz_json:from_list(to_props(Registration))};
         'undefined' -> fetch_registration(Username, Realm)
     end.
 
@@ -247,9 +246,9 @@ summary() ->
 
 -spec summary(text()) -> 'ok'.
 summary(Realm) when not is_binary(Realm) ->
-    summary(wh_util:to_binary(Realm));
+    summary(kz_util:to_binary(Realm));
 summary(Realm) ->
-    R = wh_util:to_lower_binary(Realm),
+    R = kz_util:to_lower_binary(Realm),
     MatchSpec =
         [{#registration{realm = '$1'
                         ,account_realm = '$2'
@@ -277,12 +276,12 @@ details() ->
 
 -spec details(text()) -> 'ok'.
 details(User) when not is_binary(User) ->
-    details(wh_util:to_binary(User));
+    details(kz_util:to_binary(User));
 details(User) ->
     case binary:split(User, <<"@">>) of
         [Username, Realm] -> details(Username, Realm);
         _Else ->
-            Realm = wh_util:to_lower_binary(User),
+            Realm = kz_util:to_lower_binary(User),
             MatchSpec =
                 [{#registration{realm = '$1'
                                 ,account_realm = '$2'
@@ -301,9 +300,9 @@ details(User) ->
 
 -spec details(text(), text()) -> 'ok'.
 details(Username, Realm) when not is_binary(Username) ->
-    details(wh_util:to_binary(Username), Realm);
+    details(kz_util:to_binary(Username), Realm);
 details(Username, Realm) when not is_binary(Realm) ->
-    details(Username, wh_util:to_binary(Realm));
+    details(Username, kz_util:to_binary(Realm));
 details(Username, Realm) ->
     Id =  registration_id(Username, Realm),
     MatchSpec =
@@ -314,28 +313,32 @@ details(Username, Realm) ->
         ],
     print_details(ets:select(?MODULE, MatchSpec, 1)).
 
+-spec sync() -> 'ok'.
+sync() ->
+    gen_server:cast(?SERVER, 'registrar_sync').
+
 -spec flush() -> 'ok'.
 flush() ->
-    gen_server:cast(?MODULE, 'flush').
+    gen_server:cast(?SERVER, 'flush').
 
 -spec flush(text()) -> 'ok'.
 flush(Realm) when not is_binary(Realm)->
-    flush(wh_util:to_binary(Realm));
+    flush(kz_util:to_binary(Realm));
 flush(Realm) ->
     case binary:split(Realm, <<"@">>) of
         [Username, Realm] -> flush(Username, Realm);
-        _Else -> gen_server:cast(?MODULE, {'flush', Realm})
+        _Else -> gen_server:cast(?SERVER, {'flush', Realm})
     end.
 
 -spec flush(text() | 'undefined', text()) -> 'ok'.
 flush('undefined', Realm) ->
     flush(Realm);
 flush(Username, Realm) when not is_binary(Realm) ->
-    flush(Username, wh_util:to_binary(Realm));
+    flush(Username, kz_util:to_binary(Realm));
 flush(Username, Realm) when not is_binary(Username) ->
-    flush(wh_util:to_binary(Username), Realm);
+    flush(kz_util:to_binary(Username), Realm);
 flush(Username, Realm) ->
-    gen_server:cast(?MODULE, {'flush', Username, Realm}).
+    gen_server:cast(?SERVER, {'flush', Username, Realm}).
 
 -spec count() -> non_neg_integer().
 count() -> ets:info(?MODULE, 'size').
@@ -356,7 +359,7 @@ count() -> ets:info(?MODULE, 'size').
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    wh_util:put_callid(?LOG_SYSTEM_ID),
+    kz_util:put_callid(?LOG_SYSTEM_ID),
     process_flag('trap_exit', 'true'),
     lager:debug("starting new ecallmgr registrar"),
     _ = ets:new(?MODULE, ['set', 'protected', 'named_table', {'keypos', #registration.id}]),
@@ -378,11 +381,7 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_call('registrar_age', _, #state{started=Started}=State) ->
-    wh_util:put_callid(?LOG_SYSTEM_ID),
-    {'reply', wh_util:current_tstamp() - Started, State};
 handle_call(_Msg, _From, State) ->
-    wh_util:put_callid(?LOG_SYSTEM_ID),
     {'noreply', State}.
 
 %%--------------------------------------------------------------------
@@ -395,8 +394,12 @@ handle_call(_Msg, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_cast('registrar_sync', #state{queue=Q}=State) ->
+    Payload = kz_api:default_headers(Q, ?APP_NAME, ?APP_VERSION),
+    kz_amqp_worker:cast(Payload, fun kapi_registration:publish_sync/1),
+    {'noreply', State};
 handle_cast({'insert_registration', Registration}, State) ->
-    wh_util:put_callid(Registration#registration.call_id),
+    kz_util:put_callid(Registration#registration.call_id),
     _ = ets:insert(?MODULE, Registration#registration{initial='false'}),
     {'noreply', State};
 handle_cast({'update_registration', {Username, Realm}=Id, Props}, State) ->
@@ -409,17 +412,17 @@ handle_cast({'delete_registration'
                            }=Reg
             }
             ,State) ->
-    wh_util:put_callid(CallId),
-    _ = wh_util:spawn(fun() -> maybe_send_deregister_notice(Reg) end),
+    kz_util:put_callid(CallId),
+    _ = kz_util:spawn(fun maybe_send_deregister_notice/1, [Reg]),
     ets:delete(?MODULE, Id),
     {'noreply', State};
 handle_cast('flush', State) ->
-    wh_util:put_callid(?LOG_SYSTEM_ID),
+    kz_util:put_callid(?LOG_SYSTEM_ID),
     _ = ets:delete_all_objects(?MODULE),
     {'noreply', State};
 handle_cast({'flush', Realm}, State) ->
-    wh_util:put_callid(?LOG_SYSTEM_ID),
-    R = wh_util:to_lower_binary(Realm),
+    kz_util:put_callid(?LOG_SYSTEM_ID),
+    R = kz_util:to_lower_binary(Realm),
     MatchSpec = [{#registration{realm = '$1'
                                 ,account_realm = '$2'
                                 ,_ = '_'
@@ -434,18 +437,18 @@ handle_cast({'flush', Realm}, State) ->
     ecallmgr_fs_nodes:flush(),
     {'noreply', State};
 handle_cast({'flush', Username, Realm}, State) ->
-    wh_util:put_callid(?LOG_SYSTEM_ID),
+    kz_util:put_callid(?LOG_SYSTEM_ID),
     _ = ets:delete(?MODULE, registration_id(Username, Realm)),
     {'noreply', State};
 handle_cast({'gen_listener', {'created_queue', Q}}, State) ->
-    wh_util:put_callid(?LOG_SYSTEM_ID),
+    kz_util:put_callid(?LOG_SYSTEM_ID),
     {'noreply', State#state{queue=Q}};
 handle_cast({'gen_listener',{'is_consuming', 'true'}}, #state{queue=Q}=State) ->
-    wh_util:put_callid(?LOG_SYSTEM_ID),
-    wapi_registration:publish_sync(wh_api:default_headers(Q, ?APP_NAME, ?APP_VERSION)),
+    kz_util:put_callid(?LOG_SYSTEM_ID),
+    kapi_registration:publish_sync(kz_api:default_headers(Q, ?APP_NAME, ?APP_VERSION)),
     {'noreply', State};
 handle_cast(_Msg, State) ->
-    wh_util:put_callid(?LOG_SYSTEM_ID),
+    kz_util:put_callid(?LOG_SYSTEM_ID),
     {'noreply', State}.
 
 %%--------------------------------------------------------------------
@@ -459,16 +462,16 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info('expire', State) ->
-    wh_util:put_callid(?LOG_SYSTEM_ID),
+    kz_util:put_callid(?LOG_SYSTEM_ID),
     _ = expire_objects(),
     _ = erlang:send_after(2 * ?MILLISECONDS_IN_SECOND, self(), 'expire'),
     {'noreply', State};
 handle_info(?REGISTER_SUCCESS_MSG(Node, Props), State) ->
-    wh_util:put_callid(?LOG_SYSTEM_ID),
-    _ = wh_util:spawn(?MODULE, 'handle_fs_reg', [Node, Props]),
+    kz_util:put_callid(?LOG_SYSTEM_ID),
+    _ = kz_util:spawn(fun handle_fs_reg/2, [Node, Props]),
     {'noreply', State};
 handle_info(_Info, State) ->
-    wh_util:put_callid(?LOG_SYSTEM_ID),
+    kz_util:put_callid(?LOG_SYSTEM_ID),
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State}.
 
@@ -480,9 +483,8 @@ handle_info(_Info, State) ->
 %% @spec handle_event(JObj, State) -> {reply, Props}
 %% @end
 %%--------------------------------------------------------------------
-handle_event(_JObj, _State) ->
-    wh_util:put_callid(?LOG_SYSTEM_ID),
-    {'reply', []}.
+handle_event(_JObj, #state{started=Started}) ->
+    {'reply', [{'registrar_age', kz_util:current_tstamp() - Started}]}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -497,7 +499,7 @@ handle_event(_JObj, _State) ->
 %%--------------------------------------------------------------------
 -spec terminate(any(), any()) -> 'ok'.
 terminate(_Reason, _) ->
-    wh_util:put_callid(?LOG_SYSTEM_ID),
+    kz_util:put_callid(?LOG_SYSTEM_ID),
     lager:debug("ecallmgr registrar ~p termination", [_Reason]).
 
 %%--------------------------------------------------------------------
@@ -509,7 +511,7 @@ terminate(_Reason, _) ->
 %% @end
 %%--------------------------------------------------------------------
 code_change(_OldVsn, State, _Extra) ->
-    wh_util:put_callid(?LOG_SYSTEM_ID),
+    kz_util:put_callid(?LOG_SYSTEM_ID),
     {'ok', State}.
 
 %%%===================================================================
@@ -523,9 +525,9 @@ insert_registration(#registration{expires=0}=Registration) ->
                  ,Registration#registration.contact
                 ]
               ),
-    gen_server:cast(?MODULE, {'delete_registration', Registration});
+    gen_server:cast(?SERVER, {'delete_registration', Registration});
 insert_registration(#registration{initial='true'}=Registration) ->
-    gen_server:cast(?MODULE, {'insert_registration', Registration}),
+    gen_server:cast(?SERVER, {'insert_registration', Registration}),
     lager:info("inserted registration ~s@~s with contact ~s"
                ,[Registration#registration.username
                  ,Registration#registration.realm
@@ -534,7 +536,7 @@ insert_registration(#registration{initial='true'}=Registration) ->
               ),
     initial_registration(Registration);
 insert_registration(#registration{}=Registration) ->
-    gen_server:cast(?MODULE, {'insert_registration', Registration}),
+    gen_server:cast(?SERVER, {'insert_registration', Registration}),
     lager:debug("updated registration ~s@~s with contact ~s"
                 ,[Registration#registration.username
                   ,Registration#registration.realm
@@ -542,13 +544,13 @@ insert_registration(#registration{}=Registration) ->
                  ]).
 
 -spec fetch_registration(ne_binary(), ne_binary()) ->
-                                {'ok', wh_json:object()} |
+                                {'ok', kz_json:object()} |
                                 {'error', 'not_found'}.
 fetch_registration(Username, Realm) ->
     Reg = [{<<"Username">>, Username}
            ,{<<"Realm">>, Realm}
            ,{<<"Fields">>, []} % will fetch all fields
-           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+           | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     case query_for_registration(Reg) of
         {'ok', JObjs} ->
@@ -559,25 +561,25 @@ fetch_registration(Username, Realm) ->
     end.
 
 -spec query_for_registration(api_terms()) ->
-                                    {'ok', wh_json:objects()} |
+                                    {'ok', kz_json:objects()} |
                                     {'error', any()}.
 query_for_registration(Reg) ->
-    wh_amqp_worker:call_collect(Reg
-                                ,fun wapi_registration:publish_query_req/1
+    kz_amqp_worker:call_collect(Reg
+                                ,fun kapi_registration:publish_query_req/1
                                 ,{'ecallmgr', 'true'}
                                 ,2 * ?MILLISECONDS_IN_SECOND
                                ).
 
--spec find_newest_fetched_registration(ne_binary(), ne_binary(), wh_json:objects()) ->
-                                              {'ok', wh_json:object()} |
+-spec find_newest_fetched_registration(ne_binary(), ne_binary(), kz_json:objects()) ->
+                                              {'ok', kz_json:object()} |
                                               {'error', 'not_found'}.
 find_newest_fetched_registration(Username, Realm, JObjs) ->
     Registrations =
         lists:flatten(
           [Replies
            || JObj <- JObjs,
-              wapi_registration:query_resp_v(JObj),
-              (Replies = wh_json:get_value(<<"Fields">>, JObj, [])) =/= []
+              kapi_registration:query_resp_v(JObj),
+              (Replies = kz_json:get_value(<<"Fields">>, JObj, [])) =/= []
           ]
          ),
     case lists:sort(fun sort_fetched_registrations/2, Registrations) of
@@ -592,29 +594,29 @@ find_newest_fetched_registration(Username, Realm, JObjs) ->
             {'error', 'not_found'}
     end.
 
--spec maybe_insert_fetched_registration(wh_json:object()) -> 'ok'.
+-spec maybe_insert_fetched_registration(kz_json:object()) -> 'ok'.
 maybe_insert_fetched_registration(JObj) ->
     case ecallmgr_config:get_boolean(<<"insert_fetched_registration_locally">>, 'false') of
         'false' -> 'ok';
         'true' -> insert_fetched_registration(JObj)
     end.
 
--spec insert_fetched_registration(wh_json:object()) -> 'ok'.
+-spec insert_fetched_registration(kz_json:object()) -> 'ok'.
 insert_fetched_registration(JObj) ->
     %% NOTE: create_registration will pad the registration which
     %%   will cause it to live longer on this server.  If the re-registration
     %%   to the other zone changes the contact this zone will continue to
     %%   use a stale value (also an issue if it re-registers before expiration)
     %%   unless it also expires here at close to the same time (preferably before).
-    Expires = wh_json:get_integer_value(<<"Expires">>, JObj, ?EXPIRES_MISSING_VALUE)
+    Expires = kz_json:get_integer_value(<<"Expires">>, JObj, ?EXPIRES_MISSING_VALUE)
         - ecallmgr_config:get_integer(<<"expires_deviation_time">>, 180),
     Registration = create_registration(JObj),
     insert_registration(Registration#registration{expires=Expires}).
 
--spec sort_fetched_registrations(wh_json:object(), wh_json:object()) -> boolean().
+-spec sort_fetched_registrations(kz_json:object(), kz_json:object()) -> boolean().
 sort_fetched_registrations(A, B) ->
-    wh_json:get_integer_value(<<"Event-Timestamp">>, B) =<
-        wh_json:get_integer_value(<<"Event-Timestamp">>, A).
+    kz_json:get_integer_value(<<"Event-Timestamp">>, B) =<
+        kz_json:get_integer_value(<<"Event-Timestamp">>, A).
 
 -spec fetch_contact(ne_binary(), ne_binary()) ->
                            {'ok', ne_binary()} |
@@ -622,7 +624,7 @@ sort_fetched_registrations(A, B) ->
 fetch_contact(Username, Realm) ->
     case fetch_registration(Username, Realm) of
         {'ok', JObj} ->
-            Contact = wh_json:get_first_defined([<<"Bridge-RURI">>, <<"Contact">>], JObj),
+            Contact = kz_json:get_first_defined([<<"Bridge-RURI">>, <<"Contact">>], JObj),
             lager:info("found user ~s@~s contact ~s via fetch"
                        ,[Username, Realm, Contact]
                       ),
@@ -638,7 +640,7 @@ fetch_contact(Username, Realm) ->
 fetch_original_contact(Username, Realm) ->
     case fetch_registration(Username, Realm) of
         {'ok', JObj} ->
-            Contact = wh_json:get_value(<<"Original-Contact">>, JObj),
+            Contact = kz_json:get_value(<<"Original-Contact">>, JObj),
             lager:info("found user ~s@~s original contact ~s via query"
                        ,[Username, Realm, Contact]
                       ),
@@ -650,7 +652,7 @@ fetch_original_contact(Username, Realm) ->
 
 -spec expire_objects() -> 'ok'.
 expire_objects() ->
-    Now = wh_util:current_tstamp(),
+    Now = kz_util:current_tstamp(),
     MatchSpec = [{#registration{expires = '$1'
                                 ,last_registration = '$2'
                                 , _ = '_'
@@ -664,28 +666,30 @@ expire_objects() ->
 -spec expire_object(any()) -> 'ok'.
 expire_object('$end_of_table') -> 'ok';
 expire_object({[#registration{id=Id}=Reg], Continuation}) ->
-    _ = wh_util:spawn(fun() -> maybe_send_deregister_notice(Reg) end),
+    _ = kz_util:spawn(fun maybe_send_deregister_notice/1, [Reg]),
     _ = ets:delete(?MODULE, Id),
     expire_object(ets:select(Continuation)).
 
--spec maybe_resp_to_query(wh_json:object()) -> 'ok'.
-maybe_resp_to_query(JObj) ->
-    case wh_json:get_value(<<"Node">>, JObj)
-        =:= wh_util:to_binary(node())
+-spec maybe_resp_to_query(kz_json:object(), integer()) -> 'ok'.
+maybe_resp_to_query(JObj, RegistrarAge) ->
+    case kz_json:get_value(<<"Node">>, JObj)
+        =:= kz_util:to_binary(node())
+        andalso kz_json:get_value(<<"App-Name">>, JObj)
+        =:= ?APP_NAME
     of
-        'false' -> resp_to_query(JObj);
+        'false' -> resp_to_query(JObj,  RegistrarAge);
         'true' ->
-            Resp = [{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, JObj)}
-                    ,{<<"Registrar-Age">>, gen_server:call(?MODULE, 'registrar_age')}
-                    | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+            Resp = [{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
+                    ,{<<"Registrar-Age">>,  RegistrarAge}
+                    | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                    ],
-            wapi_registration:publish_query_err(wh_json:get_value(<<"Server-ID">>, JObj), Resp)
+            kapi_registration:publish_query_err(kz_json:get_value(<<"Server-ID">>, JObj), Resp)
     end.
 
--spec build_query_spec(wh_json:object(), boolean()) -> ets:match_spec().
+-spec build_query_spec(kz_json:object(), boolean()) -> ets:match_spec().
 build_query_spec(JObj, CountOnly) ->
     {SelectFormat, QueryFormat} =
-        case wh_util:to_lower_binary(wh_json:get_value(<<"Realm">>, JObj)) of
+        case kz_util:to_lower_binary(kz_json:get_value(<<"Realm">>, JObj)) of
             <<"all">> -> {#registration{_='_'}, {'=:=', 'undefined', 'undefined'}};
             Realm -> build_query_spec_maybe_username(Realm, JObj)
         end,
@@ -700,9 +704,9 @@ build_query_spec(JObj, CountOnly) ->
      }
     ].
 
--spec build_query_spec_maybe_username(ne_binary(), wh_json:object()) -> any().
+-spec build_query_spec_maybe_username(ne_binary(), kz_json:object()) -> any().
 build_query_spec_maybe_username(Realm, JObj) ->
-    case wh_json:get_value(<<"Username">>, JObj) of
+    case kz_json:get_value(<<"Username">>, JObj) of
         'undefined' ->
             {#registration{realm = '$1'
                            ,account_realm = '$2'
@@ -719,10 +723,10 @@ build_query_spec_maybe_username(Realm, JObj) ->
             }
     end.
 
--spec resp_to_query(wh_json:object()) -> 'ok'.
-resp_to_query(JObj) ->
-    Fields = wh_json:get_value(<<"Fields">>, JObj, []),
-    CountOnly = wh_json:is_true(<<"Count-Only">>, JObj, 'false'),
+-spec resp_to_query(kz_json:object(), integer()) -> 'ok'.
+resp_to_query(JObj, RegistrarAge) ->
+    Fields = kz_json:get_value(<<"Fields">>, JObj, []),
+    CountOnly = kz_json:is_true(<<"Count-Only">>, JObj, 'false'),
 
     SelectFun = case CountOnly of
                     'true' -> fun ets:select_count/2;
@@ -732,37 +736,37 @@ resp_to_query(JObj) ->
 
     case SelectFun(?MODULE, MatchSpec) of
         [] ->
-            Resp = [{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, JObj)}
-                    ,{<<"Registrar-Age">>, gen_server:call(?MODULE, 'registrar_age')}
-                    | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+            Resp = [{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
+                    ,{<<"Registrar-Age">>, RegistrarAge}
+                    | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                    ],
-            wapi_registration:publish_query_err(wh_json:get_value(<<"Server-ID">>, JObj), Resp);
+            kapi_registration:publish_query_err(kz_json:get_value(<<"Server-ID">>, JObj), Resp);
         [_|_]=Registrations ->
-            Resp = [{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, JObj)}
-                    ,{<<"Registrar-Age">>, gen_server:call(?MODULE, 'registrar_age')}
-                    ,{<<"Fields">>, [filter(Fields, wh_json:from_list(to_props(Registration)))
+            Resp = [{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
+                    ,{<<"Registrar-Age">>, RegistrarAge}
+                    ,{<<"Fields">>, [filter(Fields, kz_json:from_list(to_props(Registration)))
                                      || Registration <- Registrations
                                     ]
                      }
-                    | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                    | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                    ],
-            wapi_registration:publish_query_resp(wh_json:get_value(<<"Server-ID">>, JObj), Resp);
+            kapi_registration:publish_query_resp(kz_json:get_value(<<"Server-ID">>, JObj), Resp);
         Count when is_integer(Count) ->
-            Resp = [{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, JObj)}
-                    ,{<<"Registrar-Age">>, gen_server:call(?MODULE, 'registrar_age')}
+            Resp = [{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
+                    ,{<<"Registrar-Age">>, RegistrarAge}
                     ,{<<"Fields">>, []}
                     ,{<<"Count">>, Count}
-                    | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                    | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                    ],
-            wapi_registration:publish_query_resp(wh_json:get_value(<<"Server-ID">>, JObj), Resp)
+            kapi_registration:publish_query_resp(kz_json:get_value(<<"Server-ID">>, JObj), Resp)
     end.
 
--spec filter(wh_json:keys(), wh_json:object()) -> wh_json:object().
+-spec filter(kz_json:keys(), kz_json:object()) -> kz_json:object().
 filter([], JObj) -> JObj;
 filter(Fields, JObj) ->
-    wh_json:from_list(
+    kz_json:from_list(
       lists:foldl(fun(F, Acc) ->
-                          [{F, wh_json:get_value(F, JObj)} | Acc]
+                          [{F, kz_json:get_value(F, JObj)} | Acc]
                   end
                   ,[]
                   ,Fields
@@ -771,16 +775,16 @@ filter(Fields, JObj) ->
 
 -spec registration_id(ne_binary(), ne_binary()) -> {ne_binary(), ne_binary()}.
 registration_id(Username, Realm) ->
-    {wh_util:to_lower_binary(Username), wh_util:to_lower_binary(Realm)}.
+    {kz_util:to_lower_binary(Username), kz_util:to_lower_binary(Realm)}.
 
--spec create_registration(wh_json:object()) -> registration().
+-spec create_registration(kz_json:object()) -> registration().
 create_registration(JObj) ->
-    Username = wh_json:get_value(<<"Username">>, JObj),
-    Realm = wh_json:get_value(<<"Realm">>, JObj),
+    Username = kz_json:get_value(<<"Username">>, JObj),
+    Realm = kz_json:get_value(<<"Realm">>, JObj),
     Reg = existing_or_new_registration(Username, Realm),
-    Proxy = wh_json:get_value(<<"Proxy-Path">>, JObj, Reg#registration.proxy),
+    Proxy = kz_json:get_value(<<"Proxy-Path">>, JObj, Reg#registration.proxy),
     OriginalContact =
-        wh_json:get_first_defined(
+        kz_json:get_first_defined(
           [<<"Original-Contact">>
            ,<<"Contact">>
           ]
@@ -789,10 +793,10 @@ create_registration(JObj) ->
          ),
     Expires =
         ecallmgr_util:maybe_add_expires_deviation(
-          wh_json:get_integer_value(<<"Expires">>, JObj, Reg#registration.expires)
+          kz_json:get_integer_value(<<"Expires">>, JObj, Reg#registration.expires)
          ),
     RegistrarNode =
-        wh_json:get_first_defined(
+        kz_json:get_first_defined(
           [<<"Registrar-Node">>
            ,<<"FreeSWITCH-Nodename">>
            ,<<"Node">>
@@ -801,7 +805,7 @@ create_registration(JObj) ->
           ,Reg#registration.registrar_node
          ),
     RegistrarHostname =
-        wh_json:get_first_defined(
+        kz_json:get_first_defined(
           [<<"Hostname">>
            ,<<"Registrar-Hostname">>
           ]
@@ -819,34 +823,34 @@ create_registration(JObj) ->
         ,contact=fix_contact(OriginalContact)
         ,original_contact=OriginalContact
         ,bridge_uri=bridge_uri(OriginalContact, Proxy, Username, Realm)
-        ,previous_contact=wh_json:get_value(<<"Previous-Contact">>, JObj, Reg#registration.previous_contact)
-        ,last_registration=wh_json:get_integer_value(<<"Last-Registration">>, JObj, Reg#registration.last_registration)
-        ,initial_registration=wh_json:get_integer_value(<<"Initial-Registration">>, JObj, Reg#registration.initial_registration)
-        ,network_port=wh_json:get_value(<<"Network-Port">>, JObj, Reg#registration.network_port)
-        ,network_ip=wh_json:get_value(<<"Network-IP">>, JObj, Reg#registration.network_ip)
-        ,to_host=wh_json:get_value(<<"To-Host">>, JObj, Reg#registration.to_host)
-        ,to_user=wh_json:get_value(<<"To-User">>, JObj, Reg#registration.to_user)
-        ,from_host=wh_json:get_value(<<"From-Host">>, JObj, Reg#registration.from_host)
-        ,from_user=wh_json:get_value(<<"From-User">>, JObj, Reg#registration.from_user)
-        ,call_id=wh_json:get_value(<<"Call-ID">>, JObj, Reg#registration.call_id)
-        ,user_agent=wh_json:get_value(<<"User-Agent">>, JObj, Reg#registration.user_agent)
-        ,initial=wh_json:is_true(<<"First-Registration">>, JObj, Reg#registration.initial)
+        ,previous_contact=kz_json:get_value(<<"Previous-Contact">>, JObj, Reg#registration.previous_contact)
+        ,last_registration=kz_json:get_integer_value(<<"Last-Registration">>, JObj, Reg#registration.last_registration)
+        ,initial_registration=kz_json:get_integer_value(<<"Initial-Registration">>, JObj, Reg#registration.initial_registration)
+        ,network_port=kz_json:get_value(<<"Network-Port">>, JObj, Reg#registration.network_port)
+        ,network_ip=kz_json:get_value(<<"Network-IP">>, JObj, Reg#registration.network_ip)
+        ,to_host=kz_json:get_value(<<"To-Host">>, JObj, Reg#registration.to_host)
+        ,to_user=kz_json:get_value(<<"To-User">>, JObj, Reg#registration.to_user)
+        ,from_host=kz_json:get_value(<<"From-Host">>, JObj, Reg#registration.from_host)
+        ,from_user=kz_json:get_value(<<"From-User">>, JObj, Reg#registration.from_user)
+        ,call_id=kz_json:get_value(<<"Call-ID">>, JObj, Reg#registration.call_id)
+        ,user_agent=kz_json:get_value(<<"User-Agent">>, JObj, Reg#registration.user_agent)
+        ,initial=kz_json:is_true(<<"First-Registration">>, JObj, Reg#registration.initial)
        }
       ,JObj
      ).
 
--spec augment_registration(registration(), wh_json:object()) -> registration().
+-spec augment_registration(registration(), kz_json:object()) -> registration().
 augment_registration(Reg, JObj) ->
-    CCVs = wh_json:get_value(<<"Custom-Channel-Vars">>, JObj, wh_json:new()),
-    AccountId = wh_json:find(<<"Account-ID">>
+    CCVs = kz_json:get_value(<<"Custom-Channel-Vars">>, JObj, kz_json:new()),
+    AccountId = kz_json:find(<<"Account-ID">>
                              ,[JObj, CCVs]
                              ,Reg#registration.account_id
                             ),
     SuppressUnregister =
-        wh_util:is_true(
-          case wh_json:find(<<"Suppress-Unregister-Notifications">>, [JObj, CCVs]) of
+        kz_util:is_true(
+          case kz_json:find(<<"Suppress-Unregister-Notifications">>, [JObj, CCVs]) of
               'undefined' ->
-                  wh_json:find(<<"Suppress-Unregister-Notify">>
+                  kz_json:find(<<"Suppress-Unregister-Notify">>
                                ,[JObj, CCVs]
                                ,Reg#registration.suppress_unregister
                               );
@@ -854,35 +858,35 @@ augment_registration(Reg, JObj) ->
           end
          ),
     OverwriteNotify =
-        wh_util:is_true(
-          wh_json:find(<<"Register-Overwrite-Notify">>
+        kz_util:is_true(
+          kz_json:find(<<"Register-Overwrite-Notify">>
                        ,[JObj, CCVs]
                        ,Reg#registration.register_overwrite_notify
                       )
          ),
-    AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
+    AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
     Reg#registration{
       account_id=AccountId
       ,account_db=AccountDb
       ,suppress_unregister=SuppressUnregister
       ,register_overwrite_notify=OverwriteNotify
-      ,account_realm=wh_json:find(<<"Account-Realm">>
+      ,account_realm=kz_json:find(<<"Account-Realm">>
                                   ,[JObj, CCVs]
                                   ,Reg#registration.account_realm
                                  )
-      ,account_name=wh_json:find(<<"Account-Name">>
+      ,account_name=kz_json:find(<<"Account-Name">>
                                  ,[JObj, CCVs]
                                  ,Reg#registration.account_name
                                 )
-      ,owner_id=wh_json:find(<<"Owner-ID">>
+      ,owner_id=kz_json:find(<<"Owner-ID">>
                              ,[JObj, CCVs]
                              ,Reg#registration.owner_id
                             )
-      ,authorizing_id=wh_json:find(<<"Authorizing-ID">>
+      ,authorizing_id=kz_json:find(<<"Authorizing-ID">>
                                    ,[JObj, CCVs]
                                    ,Reg#registration.authorizing_id
                                   )
-      ,authorizing_type=wh_json:find(<<"Authorizing-Type">>
+      ,authorizing_type=kz_json:find(<<"Authorizing-Type">>
                                      ,[JObj, CCVs]
                                      ,Reg#registration.authorizing_type
                                     )
@@ -901,8 +905,8 @@ fix_contact(Contact) ->
 bridge_uri(_Contact, 'undefined', _, _) -> 'undefined';
 bridge_uri('undefined', _Proxy, _, _) -> 'undefined';
 bridge_uri(Contact, Proxy, Username, Realm) ->
-    [#uri{}=UriContact] = nksip_parse_uri:uris(Contact),
-    [#uri{}=UriProxy] = nksip_parse_uri:uris(Proxy),
+    [#uri{}=UriContact] = kzsip_uri:uris(Contact),
+    [#uri{}=UriProxy] = kzsip_uri:uris(Proxy),
     Scheme = UriContact#uri.scheme,
     Transport = props:get_value(<<"transport">>, UriContact#uri.opts),
     BridgeUri = #uri{scheme=Scheme
@@ -910,17 +914,17 @@ bridge_uri(Contact, Proxy, Username, Realm) ->
                      ,domain=Realm
                      ,opts=props:filter_undefined(
                              [{<<"transport">>, Transport}
-                              ,{<<"fs_path">>, nksip_unparse:ruri(UriProxy)}
+                              ,{<<"fs_path">>, kzsip_uri:ruri(UriProxy)}
                              ]
                             )
                     },
-    nksip_unparse:ruri(BridgeUri).
+    kzsip_uri:ruri(BridgeUri).
 
 -spec existing_or_new_registration(ne_binary(), ne_binary()) -> registration().
 existing_or_new_registration(Username, Realm) ->
     case ets:lookup(?MODULE, registration_id(Username, Realm)) of
         [#registration{contact=Contact}=Reg] ->
-            Reg#registration{last_registration=wh_util:current_tstamp()
+            Reg#registration{last_registration=kz_util:current_tstamp()
                              ,previous_contact=Contact
                             };
         _Else ->
@@ -941,8 +945,8 @@ initial_registration(#registration{}=Reg) ->
 maybe_query_authn(#registration{account_id=AccountId
                                 ,authorizing_id=AuthorizingId
                                }=Reg) ->
-    case wh_util:is_empty(AccountId)
-        orelse wh_util:is_empty(AuthorizingId)
+    case kz_util:is_empty(AccountId)
+        orelse kz_util:is_empty(AuthorizingId)
     of
         'true' -> query_authn(Reg);
         'false' -> Reg
@@ -952,7 +956,7 @@ maybe_query_authn(#registration{account_id=AccountId
 query_authn(#registration{username=Username
                           ,realm=Realm
                          }=Reg) ->
-    case wh_cache:peek_local(?ECALLMGR_AUTH_CACHE, ?CREDS_KEY(Realm, Username)) of
+    case kz_cache:peek_local(?ECALLMGR_AUTH_CACHE, ?CREDS_KEY(Realm, Username)) of
         {'error', 'not_found'} -> fetch_authn(Reg);
         {'ok', JObj} ->
             update_registration(
@@ -979,15 +983,15 @@ fetch_authn(#registration{username=Username
            ,{<<"Orig-Port">>, NetworkPort}
            ,{<<"Auth-User">>, Username}
            ,{<<"Auth-Realm">>, Realm}
-           ,{<<"Media-Server">>, wh_util:to_binary(Node)}
+           ,{<<"Media-Server">>, kz_util:to_binary(Node)}
            ,{<<"Method">>, <<"REGISTER">>}
            ,{<<"Call-ID">>, CallId}
-           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+           | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
-    ReqResp = wh_amqp_worker:call(
+    ReqResp = kz_amqp_worker:call(
                 props:filter_undefined(Req)
-                ,fun wapi_authn:publish_req/1
-                ,fun wapi_authn:resp_v/1
+                ,fun kapi_authn:publish_req/1
+                ,fun kapi_authn:resp_v/1
                ),
     case ReqResp of
         {'error', _} -> Reg;
@@ -996,17 +1000,17 @@ fetch_authn(#registration{username=Username
             update_from_authn_response(Reg, JObj)
     end.
 
--spec update_from_authn_response(registration(), wh_json:object()) -> registration().
+-spec update_from_authn_response(registration(), kz_json:object()) -> registration().
 update_from_authn_response(#registration{username=Username
                                          ,realm=Realm
                                         }=Reg
                            ,JObj) ->
-    CCVs = wh_json:get_value(<<"Custom-Channel-Vars">>, JObj, wh_json:new()),
-    AccountId = wh_json:get_value(<<"Account-ID">>, CCVs),
-    AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
-    AuthorizingId = wh_json:get_value(<<"Authorizing-ID">>, CCVs),
+    CCVs = kz_json:get_value(<<"Custom-Channel-Vars">>, JObj, kz_json:new()),
+    AccountId = kz_json:get_value(<<"Account-ID">>, CCVs),
+    AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
+    AuthorizingId = kz_json:get_value(<<"Authorizing-ID">>, CCVs),
     OwnerIdProp =
-        case wh_json:get_value(<<"Owner-ID">>, CCVs) of
+        case kz_json:get_value(<<"Owner-ID">>, CCVs) of
             'undefined' -> [];
             OwnerId -> [{'db', AccountDb, OwnerId}]
         end,
@@ -1018,7 +1022,7 @@ update_from_authn_response(#registration{username=Username
           ]
          }
         ],
-    wh_cache:store_local(?ECALLMGR_AUTH_CACHE
+    kz_cache:store_local(?ECALLMGR_AUTH_CACHE
                          ,?CREDS_KEY(Realm, Username)
                          ,JObj
                          ,CacheProps
@@ -1049,7 +1053,7 @@ update_registration(#registration{authorizing_id=AuthorizingId
              ,{#registration.account_realm, AccountRealm}
              ,{#registration.account_name, AccountName}
             ],
-    _ = gen_server:cast(?MODULE, {'update_registration', Id, Props}),
+    _ = gen_server:cast(?SERVER, {'update_registration', Id, Props}),
     Reg.
 
 -spec maybe_send_register_notice(registration()) -> registration().
@@ -1067,8 +1071,8 @@ maybe_send_register_notice(#registration{username=Username
 -spec send_register_notice(registration()) -> 'ok'.
 send_register_notice(Reg) ->
     Props = to_props(Reg)
-        ++ wh_api:default_headers(?APP_NAME, ?APP_VERSION),
-    wapi_notifications:publish_register(Props).
+        ++ kz_api:default_headers(?APP_NAME, ?APP_VERSION),
+    kapi_notifications:publish_register(Props).
 
 -spec maybe_send_deregister_notice(registration()) -> 'ok'.
 maybe_send_deregister_notice(#registration{username=Username
@@ -1076,13 +1080,13 @@ maybe_send_deregister_notice(#registration{username=Username
                                            ,suppress_unregister='true'
                                            ,call_id=CallId
                                           }) ->
-    wh_util:put_callid(CallId),
+    kz_util:put_callid(CallId),
     lager:debug("registration ~s@~s expired", [Username, Realm]);
 maybe_send_deregister_notice(#registration{username=Username
                                            ,realm=Realm
                                            ,call_id=CallId
                                           }=Reg) ->
-    wh_util:put_callid(CallId),
+    kz_util:put_callid(CallId),
     case oldest_registrar() of
         'false' -> 'ok';
         'true' ->
@@ -1093,8 +1097,8 @@ maybe_send_deregister_notice(#registration{username=Username
 -spec send_deregister_notice(registration()) -> 'ok'.
 send_deregister_notice(Reg) ->
     Props = to_props(Reg)
-        ++ wh_api:default_headers(?APP_NAME, ?APP_VERSION),
-    wh_amqp_worker:cast(Props, fun wapi_notifications:publish_deregister/1).
+        ++ kz_api:default_headers(?APP_NAME, ?APP_VERSION),
+    kz_amqp_worker:cast(Props, fun kapi_notifications:publish_deregister/1).
 
 -spec maybe_registration_notify(registration()) -> registration().
 maybe_registration_notify(#registration{register_overwrite_notify='false'}=Reg) -> Reg;
@@ -1120,11 +1124,11 @@ registration_notify(#registration{previous_contact=PrevContact
                ,{<<"Contact">>, Contact}
                ,{<<"Username">>, Username}
                ,{<<"Realm">>, Realm}
-               | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
               ]),
-    wapi_presence:publish_register_overwrite(Props).
+    kapi_presence:publish_register_overwrite(Props).
 
--spec to_props(registration()) -> wh_proplist().
+-spec to_props(registration()) -> kz_proplist().
 to_props(Reg) ->
     props:filter_undefined(
       [{<<"Username">>, Reg#registration.username}
@@ -1163,14 +1167,14 @@ to_props(Reg) ->
 
 -spec oldest_registrar() -> boolean().
 oldest_registrar() ->
-    wh_nodes:whapp_zone_count(?APP_NAME) =:= 1
-        orelse wh_nodes:whapp_oldest_node(?APP_NAME, 'true') =:= node().
+    kz_nodes:whapp_zone_count(?APP_NAME) =:= 1
+        orelse kz_nodes:whapp_oldest_node(?APP_NAME, 'true') =:= node().
 
--spec get_fs_contact(wh_proplist()) -> ne_binary().
+-spec get_fs_contact(kz_proplist()) -> ne_binary().
 get_fs_contact(Props) ->
     Contact = props:get_first_defined([<<"Contact">>, <<"contact">>], Props),
     [User, AfterAt] = binary:split(Contact, <<"@">>), % only one @ allowed
-    <<User/binary, "@", (wh_util:to_binary(mochiweb_util:unquote(AfterAt)))/binary>>.
+    <<User/binary, "@", (kz_http_util:urldecode(AfterAt))/binary>>.
 
 -type ets_continuation() :: '$end_of_table' |
                             {registrations(), any()}.
@@ -1200,7 +1204,7 @@ print_summary({[#registration{username=Username
               }
               ,Count) ->
     User = <<Username/binary, "@", Realm/binary>>,
-    Remaining = (LastRegistration + Expires) - wh_util:current_tstamp(),
+    Remaining = (LastRegistration + Expires) - kz_util:current_tstamp(),
     Props = breakup_contact(Contact),
     Hostport = props:get_first_defined(['received', 'hostport'], Props),
     _ = case props:get_value('fs_path', Props) of
@@ -1234,10 +1238,10 @@ print_details({[#registration{}=Reg], Continuation}, Count) ->
 print_property(<<"Expires">> =Key, Value, #registration{expires=Expires
                                                         ,last_registration=LastRegistration
                                                        }) ->
-    Remaining = (LastRegistration + Expires) - wh_util:current_tstamp(),
-    io:format("~-19s: ~b/~s~n", [Key, Remaining, wh_util:to_binary(Value)]);
+    Remaining = (LastRegistration + Expires) - kz_util:current_tstamp(),
+    io:format("~-19s: ~b/~s~n", [Key, Remaining, kz_util:to_binary(Value)]);
 print_property(Key, Value, _) ->
-    io:format("~-19s: ~s~n", [Key, wh_util:to_binary(Value)]).
+    io:format("~-19s: ~s~n", [Key, kz_util:to_binary(Value)]).
 
 -type contact_param() :: {'uri', ne_binary()} |
                          {'hostport', ne_binary()} |
@@ -1253,12 +1257,12 @@ breakup_contact(Contact) when is_binary(Contact) ->
     Hostport = get_contact_hostport(Uri),
     find_contact_parameters(Parameters, [{'uri', Uri}, {'hostport', Hostport}]);
 breakup_contact(Contact) ->
-    breakup_contact(wh_util:to_binary(Contact)).
+    breakup_contact(kz_util:to_binary(Contact)).
 
--spec find_contact_parameters(ne_binaries(), wh_proplist()) -> wh_proplist().
+-spec find_contact_parameters(ne_binaries(), kz_proplist()) -> kz_proplist().
 find_contact_parameters([], Props) -> Props;
 find_contact_parameters([<<"transport=", Transport/binary>>|Parameters], Props) ->
-    find_contact_parameters(Parameters, [{'transport', wh_util:to_lower_binary(Transport)}|Props]);
+    find_contact_parameters(Parameters, [{'transport', kz_util:to_lower_binary(Transport)}|Props]);
 find_contact_parameters([<<"fs_path=", FsPath/binary>>|Parameters], Props) ->
     find_contact_parameters(Parameters, [{'fs_path', FsPath}|Props]);
 find_contact_parameters([<<"received=", Received/binary>>|Parameters], Props) ->

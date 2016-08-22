@@ -18,7 +18,7 @@
          ,delete/2
         ]).
 
--include("../crossbar.hrl").
+-include("crossbar.hrl").
 
 -define(CB_LIST, <<"blacklists/crossbar_listing">>).
 
@@ -60,8 +60,8 @@ allowed_methods(_) ->
 %%--------------------------------------------------------------------
 -spec resource_exists() -> 'true'.
 -spec resource_exists(path_token()) -> 'true'.
-resource_exists() -> true.
-resource_exists(_) -> true.
+resource_exists() -> 'true'.
+resource_exists(_) -> 'true'.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -135,7 +135,7 @@ create(Context) ->
 %%--------------------------------------------------------------------
 -spec read(ne_binary(), cb_context:context()) -> cb_context:context().
 read(Id, Context) ->
-    crossbar_doc:load(Id, Context).
+    crossbar_doc:load(Id, Context, ?TYPE_CHECK_OPTION(<<"blacklist">>)).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -180,9 +180,9 @@ summary(Context) ->
 -spec on_successful_validation(api_binary(), cb_context:context()) -> cb_context:context().
 on_successful_validation('undefined', Context) ->
     Doc = cb_context:doc(Context),
-    cb_context:set_doc(Context, wh_doc:set_type(Doc, <<"blacklist">>));
+    cb_context:set_doc(Context, kz_doc:set_type(Doc, <<"blacklist">>));
 on_successful_validation(Id, Context) ->
-    crossbar_doc:load_merge(Id, Context).
+    crossbar_doc:load_merge(Id, Context, ?TYPE_CHECK_OPTION(<<"blacklist">>)).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -190,9 +190,9 @@ on_successful_validation(Id, Context) ->
 %% Normalizes the resuts of a view
 %% @end
 %%--------------------------------------------------------------------
--spec normalize_view_results(wh_json:object(), wh_json:objects()) -> wh_json:objects().
+-spec normalize_view_results(kz_json:object(), kz_json:objects()) -> kz_json:objects().
 normalize_view_results(JObj, Acc) ->
-    [wh_json:get_value(<<"value">>, JObj) | Acc].
+    [kz_json:get_value(<<"value">>, JObj) | Acc].
 
 %%--------------------------------------------------------------------
 %% @private
@@ -203,22 +203,14 @@ normalize_view_results(JObj, Acc) ->
 format_numbers(Context) ->
     Doc = cb_context:doc(Context),
     Numbers =
-        wh_json:foldl(
-            fun format_numbers_foldl/3
-            ,wh_json:get_value(<<"raw_numbers">>, Doc, wh_json:new())
-            ,wh_json:get_value(<<"numbers">>, Doc, wh_json:new())
-        ),
-    cb_context:set_doc(
-        Context
-        ,wh_json:set_value(<<"numbers">>, Numbers, Doc)
-    ).
+        kz_json:map(fun format_number_map/2
+                   ,kz_json:get_value(<<"numbers">>, Doc, kz_json:new())
+                   ),
+    cb_context:set_doc(Context
+                      ,kz_json:set_value(<<"numbers">>, Numbers, Doc)
+                      ).
 
-
--spec format_numbers_foldl(ne_binary(), wh_json:object(), wh_json:object()) -> wh_json:object().
-format_numbers_foldl(Number, Data, JObj) ->
-    case wh_util:anonymous_caller_id_number() of
-        Number -> wh_json:set_value(Number, Data, JObj);
-        _Else ->
-            E164 = wnm_util:normalize_number(Number),
-            wh_json:set_value(E164, Data, JObj)
-    end.
+-spec format_number_map(ne_binary(), kz_json:object()) ->
+                               {ne_binary(), kz_json:object()}.
+format_number_map(Number, Data) ->
+    {knm_converters:normalize(Number), Data}.

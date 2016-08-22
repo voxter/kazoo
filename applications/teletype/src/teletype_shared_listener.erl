@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2015, 2600Hz
+%%% @copyright (C) 2013-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -21,6 +21,8 @@
         ]).
 
 -include("teletype.hrl").
+
+-define(SERVER, ?MODULE).
 
 -record(state, {}).
 
@@ -50,6 +52,9 @@
                       }
                      ,{'teletype_template_skel'
                        ,[{<<"notification">>, <<"skel">>}]
+                      }
+                     ,{{'teletype_customer_update', 'handle_req'}
+                       ,[{<<"notification">>, <<"customer_update">>}]
                       }
                      ,{{'teletype_deregister', 'handle_deregister'}
                        ,[{<<"notification">>, <<"deregister">>}]
@@ -102,6 +107,9 @@
                      ,{'teletype_denied_emergency_bridge'
                        ,[{<<"notification">>, <<"denied_emergency_bridge">>}]
                       }
+                     ,{'teletype_service_added'
+                       ,[{<<"notification">>, <<"service_added">>}]
+                      }
                     ]).
 
 -define(RESTRICT_TO, ['cnam_requests'
@@ -128,6 +136,8 @@
                       ,'transaction'
                       ,'voicemail_full'
                       ,'webhook_disabled'
+                      ,'customer_update'
+                      ,'service_added'
                       %%,'skel'
                      ]).
 
@@ -143,14 +153,11 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
-%%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
-%% @end
+%% @doc Starts the server
 %%--------------------------------------------------------------------
+-spec start_link() -> startlink_ret().
 start_link() ->
-    gen_listener:start_link(?MODULE
+    gen_listener:start_link(?SERVER
                             ,[{'bindings', ?BINDINGS}
                               ,{'responders', ?RESPONDERS}
                               ,{'queue_name', ?QUEUE_NAME}
@@ -206,10 +213,10 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_cast({'gen_listener', {'created_queue', _QueueName}}, State) ->
-    wh_util:put_callid(?MODULE),
+    kz_util:put_callid(?MODULE),
     {'noreply', State};
 handle_cast({'gen_listener', {'is_consuming', _IsConsuming}}, State) ->
-    wh_util:put_callid(?MODULE),
+    kz_util:put_callid(?MODULE),
     {'noreply', State};
 handle_cast(_Msg, State) ->
     {'noreply', State}.
@@ -224,6 +231,8 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_info({'EXIT', _Pid, 'normal'}, State) ->
+    {'noreply', State};
 handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State}.

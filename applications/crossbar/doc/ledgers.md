@@ -1,96 +1,155 @@
-/*
-Section: Crossbar
-Title: Ledgers
-Language: en-US
-Version: 3.22
-*/
+### Ledgers
 
-# Ledgers
+#### About Ledgers
 
-## List current Ledgers
+#### Schema
 
-List current ledgers and value for an account.
+Key | Description | Type | Default | Required
+--- | ----------- | ---- | ------- | --------
+`account` | Account info | `object` |   | `false`
+`account.id` | Account ID | `string` |   | `false`
+`account.name` | Account name | `string` |   | `false`
+`amount` | Ledger amount | `integer` |   | `false`
+`description` | Useful description for ledger | `string` |   | `false`
+`metadata` | Metadata for ledger document | `object` |   | `false`
+`period` | Period of ledger | `object` |   | `false`
+`period.end` | Period end | `integer` |   | `false`
+`period.start` | Period start | `integer` |   | `false`
+`source` | Origin of ledger | `object` |   | `true`
+`source.id` | Source ID | `string` |   | `true`
+`source.service` | Source service | `string` |   | `true`
+`usage` | Usage for ledger | `object` |   | `true`
+`usage.quantity` | Usage quantity | `integer` |   | `true`
+`usage.type` | Usage type | `string` |   | `true`
+`usage.unit` | Usage unit | `string` |   | `true`
 
-### Request
 
-- Verb: `GET`
-- Url: `/accounts/{{ACCOUNT_ID}}/ledgers`
-
-
-### Response
-
-```json
-{
-    "data": {
-        "test": 10,
-        "support": 17
-    },
-    "status": "success"
-}
-```
-
-## Get Ledger value
+#### List current Ledgers
 
 List current ledgers and value for an account.
 
-### Request
+> GET /v2/accounts/{ACCOUNT_ID}/ledgers
 
-- Verb: `GET`
-- Url: `/accounts/{{ACCOUNT_ID}}/ledgers/{{LEDGER}}`
-
-
-### Response
-
+```curl
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ledgers
+```
 ```json
 {
-    "data": {
-        "{{LEDGER}}": 17
-    },
-    "status": "success"
+  "data": {
+    "per-minute-voip": -825,
+    "support": -148
+  },
+  "request_id": "{REQUEST_ID}",
+  "status": "success",
+  "auth_token": "{AUTH_TOKEN}"
 }
 ```
 
-## Credit / Debit
+#### Get Ledger values
 
-Credit or Debit a specific ledger (**must be admin to use**).
+List ledger values for an account with paging and filtering support
 
-### Request
+> GET /v2/accounts/{ACCOUNT_ID}/ledgers/{LEDGER_ID}?created_from=11111111&created_to=22222222
 
-- Verb: `PUT`
-- Url: `/accounts/{{ACCOUNT_ID}}/ledgers/credit` or `/accounts/{{ACCOUNT_ID}}/ledgers/debit`
-- Payload:
-    - `amount` *integer*: is mandatory and must be > 0
-    - `description` *string*: not mandatory
-
+```curl
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ledgers/{LEDGER_ID}
+```
 ```json
 {
-    "amount": 100,
-    "description": "blablabla",
-    "source": {
-        "service": "tower/support/...",
-        "id": "mac/mdn/..."
+  "page_size": 30,
+  "data": [
+    {
+      "source": {
+        "service": "per-minute-voip",
+        "id": "{CALL_ID}"
+      },
+      "account": {
+        "id": "{ACCOUNT_ID}",
+        "name": "{ACCOUNT_NAME}"
+      },
+      "usage": {
+        "type": "voice",
+        "quantity": 3,
+        "unit": "sec"
+      },
+      "amount": 6,
+      "description": "US Hollywood",
+      "period": {
+        "start": 63630348840
+      },
+      "id": "{DOC_ID}"
     },
-    "usage": {
-        "type": "data",
-        "quantity": 5,
-        "unit": "MB"
-    },
-    "period": {
-        "start": 10938710938,
-        "end": 214109238023899
-    },
-    "account": {
-        "id": "390820938109diadiuw",
-        "name": "Account Name"
-    }
+    ...
+  ],
+  "revision": "{REVISION}",
+  "request_id": "{REQUEST_ID}",
+  "status": "success",
+  "auth_token": "AUTH_TOKEN"
 }
 ```
 
-### Response
+#### Get Ledger document
 
+retrieves ledger document
+
+> GET /v2/accounts/{ACCOUNT_ID}/ledgers/{LEDGER_ID}/{ID}
+
+```curl
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ledgers/{LEDGER_ID}/{ID}
+```
 ```json
 {
-    "data": {
+  "data": {
+      "source": {
+        "service": "per-minute-voip",
+        "id": "{CALL_ID}"
+      },
+      "account": {
+        "id": "{ACCOUNT_ID}",
+        "name": "{ACCOUNT_NAME}"
+      },
+      "usage": {
+        "type": "voice",
+        "quantity": 3,
+        "unit": "sec"
+      },
+      "amount": 6,
+      "description": "US Hollywood",
+      "period": {
+        "start": 63630348840
+      },
+      "id": "{DOC_ID}"
+  },
+  "revision": "{REVISION}",
+  "request_id": "{REQUEST_ID}",
+  "status": "success",
+  "auth_token": "AUTH_TOKEN"
+}
+```
+
+#### Credit / Debit
+
+Credit or Debit a specific ledger
+the account_id for AUTH_TOKEN must be reseller of target account
+
+parameter "impact_reseller" (boolean not required) when true will also create the document in the reseller
+
+> PUT /v2/accounts/{ACCOUNT_ID}/ledgers/debit
+> PUT /v2/accounts/{ACCOUNT_ID}/ledgers/credit
+
+```curl
+curl -v -X PUT \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ledgers/debit
+```
+```json
+{ "data" : {
         "amount": 100,
         "description": "blablabla",
         "source": {
@@ -105,12 +164,8 @@ Credit or Debit a specific ledger (**must be admin to use**).
         "period": {
             "start": 10938710938,
             "end": 214109238023899
-        },
-        "account": {
-            "id": "390820938109diadiuw",
-            "name": "Account Name"
         }
     },
-    "status": "success"
+ "impact_reseller" : true
 }
 ```

@@ -8,6 +8,8 @@
 %%%-------------------------------------------------------------------
 -module(camper_request_listener).
 
+-behaviour(gen_listener).
+
 -export([start_link/0]).
 -export([init/1
          ,handle_call/3
@@ -19,9 +21,9 @@
         ]).
 
 -include("camper.hrl").
--include_lib("rabbitmq_client/include/amqp_client.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
--behaviour(gen_listener).
+-define(SERVER, ?MODULE).
 
 %% gen_listener callbacks
 -export([handle_camper_req/3]).
@@ -43,15 +45,11 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
-%%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
-%% @end
+%% @doc Starts the server
 %%--------------------------------------------------------------------
 -spec start_link() -> startlink_ret().
 start_link() ->
-    gen_listener:start_link(?MODULE, [{'responders', ?RESPONDERS}
+    gen_listener:start_link(?SERVER, [{'responders', ?RESPONDERS}
                                       ,{'bindings', ?BINDINGS}
                                       ,{'queue_name', ?QUEUE_NAME}
                                       ,{'queue_options', ?QUEUE_OPTIONS}
@@ -68,14 +66,14 @@ start_link() ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec handle_camper_req(wh_json:object(), wh_proplist(), gen_listener:basic_deliver()) -> any().
+-spec handle_camper_req(kz_json:object(), kz_proplist(), gen_listener:basic_deliver()) -> any().
 handle_camper_req(JObj, _Props, #'basic.deliver'{'routing_key' = Key}) ->
     case binary:split(Key, <<".">>, ['global']) of
         [_, ?APP_NAME, <<"offnet">>] ->
-            Msg = wh_json:get_value(<<"Delegate-Message">>, JObj),
+            Msg = kz_json:get_value(<<"Delegate-Message">>, JObj),
             camper_offnet_handler:add_request(Msg);
         [_, ?APP_NAME, <<"onnet">>] ->
-            Msg = wh_json:get_value(<<"Delegate-Message">>, JObj),
+            Msg = kz_json:get_value(<<"Delegate-Message">>, JObj),
             camper_onnet_handler:add_request(Msg)
     end.
 

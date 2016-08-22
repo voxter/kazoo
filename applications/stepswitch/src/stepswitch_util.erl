@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -16,8 +16,8 @@
 -export([default_realm/1]).
 
 -include("stepswitch.hrl").
--include_lib("whistle/src/wh_json.hrl").
--include_lib("whistle/include/wapi_offnet_resource.hrl").
+-include_lib("kazoo/src/kz_json.hrl").
+-include_lib("kazoo/include/kapi_offnet_resource.hrl").
 
 %%--------------------------------------------------------------------
 %% @public
@@ -25,7 +25,7 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_realm(api_binary() | wh_json:object()) -> api_binary().
+-spec get_realm(api_binary() | kz_json:object()) -> api_binary().
 get_realm('undefined') -> 'undefined';
 get_realm(From) when is_binary(From) ->
     case binary:split(From, <<"@">>) of
@@ -33,14 +33,14 @@ get_realm(From) when is_binary(From) ->
         _Else -> 'undefined'
     end;
 get_realm(JObj) ->
-    AuthRealm = wh_json:get_value(<<"Auth-Realm">>, JObj),
-    case wh_util:is_empty(AuthRealm)
-        orelse wh_network_utils:is_ipv4(AuthRealm)
-        orelse wh_network_utils:is_ipv6(AuthRealm)
+    AuthRealm = kz_json:get_value(<<"Auth-Realm">>, JObj),
+    case kz_util:is_empty(AuthRealm)
+        orelse kz_network_utils:is_ipv4(AuthRealm)
+        orelse kz_network_utils:is_ipv6(AuthRealm)
     of
         'false' -> AuthRealm;
         'true' ->
-            get_realm(wh_json:get_value(<<"From">>, JObj))
+            get_realm(kz_json:get_value(<<"From">>, JObj))
     end.
 
 %%--------------------------------------------------------------------
@@ -49,12 +49,12 @@ get_realm(JObj) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_inbound_destination(wh_json:object()) -> ne_binary().
+-spec get_inbound_destination(kz_json:object()) -> ne_binary().
 get_inbound_destination(JObj) ->
-    {Number, _} = whapps_util:get_destination(JObj, ?APP_NAME, <<"inbound_user_field">>),
-    case whapps_config:get_is_true(?SS_CONFIG_CAT, <<"assume_inbound_e164">>, 'false') of
+    {Number, _} = kapps_util:get_destination(JObj, ?APP_NAME, <<"inbound_user_field">>),
+    case kapps_config:get_is_true(?SS_CONFIG_CAT, <<"assume_inbound_e164">>, 'false') of
         'true' -> assume_e164(Number);
-        'false' -> wnm_util:to_e164(Number)
+        'false' -> knm_converters:normalize(Number)
     end.
 
 -spec assume_e164(ne_binary()) -> ne_binary().
@@ -67,11 +67,11 @@ assume_e164(Number) -> <<$+, Number/binary>>.
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_outbound_destination(wapi_offnet_resource:req()) -> ne_binary().
+-spec get_outbound_destination(kapi_offnet_resource:req()) -> ne_binary().
 get_outbound_destination(OffnetReq) ->
-    Number = wapi_offnet_resource:to_did(OffnetReq),
-    case wapi_offnet_resource:bypass_e164(OffnetReq) of
-        'false' -> wnm_util:to_e164(Number);
+    Number = kapi_offnet_resource:to_did(OffnetReq),
+    case kapi_offnet_resource:bypass_e164(OffnetReq) of
+         'false' -> knm_converters:normalize(Number);
         'true' -> Number
     end.
 
@@ -81,26 +81,25 @@ get_outbound_destination(OffnetReq) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec lookup_number(ne_binary()) ->
-                           {'ok', ne_binary(), number_properties()} |
-                           {'error', any()}.
+-spec lookup_number(ne_binary()) -> {'ok', ne_binary(), knm_number_options:extra_options()} |
+                                    {'error', any()}.
 lookup_number(Number) ->
-    Num = wnm_util:normalize_number(Number),
-    case wh_cache:fetch_local(?STEPSWITCH_CACHE, cache_key_number(Num)) of
+    Num = knm_converters:normalize(Number),
+    case kz_cache:fetch_local(?CACHE_NAME, cache_key_number(Num)) of
         {'ok', {AccountId, Props}} ->
             lager:debug("found number properties in stepswitch cache"),
             {'ok', AccountId, Props};
-        {'error', 'not_found'} -> fetch_number(Num)
+        {'error', 'not_found'} ->
+            fetch_number(Num)
     end.
 
--spec fetch_number(ne_binary()) ->
-                          {'ok', ne_binary(), number_properties()} |
-                          {'error', any()}.
+-spec fetch_number(ne_binary()) -> {'ok', ne_binary(), knm_number_options:extra_options()} |
+                                   {'error', any()}.
 fetch_number(Num) ->
-    case wh_number_manager:lookup_account_by_number(Num) of
+    case knm_number:lookup_account(Num) of
         {'ok', AccountId, Props} ->
-            CacheProps = [{'origin', [{'db', wnm_util:number_to_db_name(Num), Num}, {'type', <<"number">>}]}],
-            wh_cache:store_local(?STEPSWITCH_CACHE, cache_key_number(Num), {AccountId, Props}, CacheProps),
+            CacheProps = [{'origin', [{'db', knm_converters:to_db(Num), Num}, {'type', <<"number">>}]}],
+            kz_cache:store_local(?CACHE_NAME, cache_key_number(Num), {AccountId, Props}, CacheProps),
             lager:debug("~s is associated with account ~s", [Num, AccountId]),
             {'ok', AccountId, Props};
         {'error', Reason}=E ->
@@ -120,18 +119,18 @@ cache_key_number(Number) ->
 %% callerid.
 %% @end
 %%--------------------------------------------------------------------
--spec correct_shortdial(ne_binary(), ne_binary() | wapi_offnet_resource:req()) -> api_binary().
+-spec correct_shortdial(ne_binary(), ne_binary() | kapi_offnet_resource:req()) -> api_binary().
 correct_shortdial(<<"+", Number/binary>>, CIDNum) ->
     correct_shortdial(Number, CIDNum);
 correct_shortdial(Number, <<"+", CIDNum/binary>>) ->
     correct_shortdial(Number, CIDNum);
 correct_shortdial(Number, CIDNum) when is_binary(CIDNum) ->
-    MaxCorrection = whapps_config:get_integer(?SS_CONFIG_CAT, <<"max_shortdial_correction">>, 5),
-    MinCorrection = whapps_config:get_integer(?SS_CONFIG_CAT, <<"min_shortdial_correction">>, 2),
+    MaxCorrection = kapps_config:get_integer(?SS_CONFIG_CAT, <<"max_shortdial_correction">>, 5),
+    MinCorrection = kapps_config:get_integer(?SS_CONFIG_CAT, <<"min_shortdial_correction">>, 2),
     case is_binary(CIDNum) andalso (size(CIDNum) - size(Number)) of
         Length when Length =< MaxCorrection, Length >= MinCorrection ->
-            Correction = wh_util:truncate_right_binary(CIDNum, Length),
-            CorrectedNumber = wnm_util:to_e164(<<Correction/binary, Number/binary>>),
+            Correction = kz_util:truncate_right_binary(CIDNum, Length),
+            CorrectedNumber = knm_converters:normalize(<<Correction/binary, Number/binary>>),
             lager:debug("corrected shortdial ~s via CID ~s to ~s"
                        ,[Number, CIDNum, CorrectedNumber]),
             CorrectedNumber;
@@ -147,25 +146,25 @@ correct_shortdial(Number, OffnetReq) ->
              end,
     correct_shortdial(Number, CIDNum).
 
--spec get_sip_headers(wapi_offnet_resource:req()) -> wh_json:object().
+-spec get_sip_headers(kapi_offnet_resource:req()) -> kz_json:object().
 get_sip_headers(OffnetReq) ->
-    SIPHeaders = wapi_offnet_resource:custom_sip_headers(OffnetReq, wh_json:new()),
+    SIPHeaders = kapi_offnet_resource:custom_sip_headers(OffnetReq, kz_json:new()),
     case get_diversions(SIPHeaders) of
         'undefined' ->
             maybe_remove_diversions(SIPHeaders);
         Diversions ->
             lager:debug("setting diversions ~p", [Diversions]),
-            wh_json:set_value(<<"Diversions">>
+            kz_json:set_value(<<"Diversions">>
                               ,Diversions
                               ,SIPHeaders
                              )
     end.
 
--spec maybe_remove_diversions(wh_json:object()) -> wh_json:object().
+-spec maybe_remove_diversions(kz_json:object()) -> kz_json:object().
 maybe_remove_diversions(JObj) ->
-    wh_json:delete_key(<<"Diversions">>, JObj).
+    kz_json:delete_key(<<"Diversions">>, JObj).
 
--spec get_diversions(wh_json:object()) ->
+-spec get_diversions(kz_json:object()) ->
                             'undefined' |
                             ne_binaries().
 -spec get_diversions(api_binary(), ne_binaries()) ->
@@ -173,8 +172,8 @@ maybe_remove_diversions(JObj) ->
                             ne_binaries().
 
 get_diversions(JObj) ->
-    Inception = wh_json:get_value(<<"Inception">>, JObj),
-    Diversions = wh_json:get_value(<<"Diversions">>, JObj, []),
+    Inception = kz_json:get_value(<<"Inception">>, JObj),
+    Diversions = kz_json:get_value(<<"Diversions">>, JObj, []),
     get_diversions(Inception, Diversions).
 
 get_diversions('undefined', _Diversion) -> 'undefined';
@@ -211,88 +210,88 @@ build_filter_fun(Name, Number) ->
        (_Else) -> 'true'
     end.
 
--spec format_endpoints(wh_json:objects(), api_binary(), api_binary(), wapi_offnet_resource:req(), filter_fun()) ->
-                              wh_json:objects().
+-spec format_endpoints(kz_json:objects(), api_binary(), api_binary(), kapi_offnet_resource:req(), filter_fun()) ->
+                              kz_json:objects().
 format_endpoints(Endpoints, Name, Number, OffnetReq, FilterFun) ->
-    DefaultRealm = default_realm(OffnetReq),
     SIPHeaders = stepswitch_util:get_sip_headers(OffnetReq),
-    AccountId = wapi_offnet_resource:hunt_account_id(
+    AccountId = kapi_offnet_resource:hunt_account_id(
                   OffnetReq
-                  ,wapi_offnet_resource:account_id(OffnetReq)
+                  ,kapi_offnet_resource:account_id(OffnetReq)
                  ),
     [format_endpoint(set_endpoint_caller_id(Endpoint, Name, Number)
-                     ,Number, FilterFun, DefaultRealm, SIPHeaders, AccountId
+                     ,Number, FilterFun, OffnetReq, SIPHeaders, AccountId
                     )
      || Endpoint <- Endpoints
     ].
 
--spec default_realm(wapi_offnet_resource:req()) -> api_binary().
+-spec default_realm(kapi_offnet_resource:req()) -> api_binary().
 default_realm(OffnetReq) ->
-    case wapi_offnet_resource:from_uri_realm(OffnetReq) of
-        'undefined' -> wapi_offnet_resource:account_realm(OffnetReq);
+    case kapi_offnet_resource:from_uri_realm(OffnetReq) of
+        'undefined' -> kapi_offnet_resource:account_realm(OffnetReq);
         Realm -> Realm
     end.
 
--spec set_endpoint_caller_id(wh_json:object(), api_binary(), api_binary()) -> wh_json:object().
+-spec set_endpoint_caller_id(kz_json:object(), api_binary(), api_binary()) -> kz_json:object().
 set_endpoint_caller_id(Endpoint, Name, Number) ->
-    wh_json:set_values(props:filter_undefined(
-                         [{?KEY_OUTBOUND_CALLER_ID_NUMBER, Number}
-                          ,{?KEY_OUTBOUND_CALLER_ID_NAME, Name}
-                         ]
-                        )
-                       ,Endpoint
-                      ).
+    kz_json:insert_values(props:filter_undefined(
+                            [{?KEY_OUTBOUND_CALLER_ID_NUMBER, Number}
+                            ,{?KEY_OUTBOUND_CALLER_ID_NAME, Name}
+                            ]
+                           )
+                          ,Endpoint
+                         ).
 
--spec format_endpoint(wh_json:object(), api_binary(), filter_fun(), api_binary(), wh_json:object(), ne_binary()) ->
-                             wh_json:object().
-format_endpoint(Endpoint, Number, FilterFun, DefaultRealm, SIPHeaders, AccountId) ->
+-spec format_endpoint(kz_json:object(), api_binary(), filter_fun(), kapi_offnet_resource:req(), kz_json:object(), ne_binary()) ->
+                             kz_json:object().
+format_endpoint(Endpoint, Number, FilterFun, OffnetReq, SIPHeaders, AccountId) ->
     FormattedEndpoint = apply_formatters(Endpoint, SIPHeaders, AccountId),
-    FilteredEndpoint = wh_json:filter(FilterFun, FormattedEndpoint),
-    maybe_endpoint_format_from(FilteredEndpoint, Number, DefaultRealm).
+    FilteredEndpoint = kz_json:filter(FilterFun, FormattedEndpoint),
+    maybe_endpoint_format_from(FilteredEndpoint, Number, OffnetReq).
 
--spec apply_formatters(wh_json:object(), wh_json:object(), ne_binary()) -> wh_json:object().
+-spec apply_formatters(kz_json:object(), kz_json:object(), ne_binary()) -> kz_json:object().
 apply_formatters(Endpoint, SIPHeaders, AccountId) ->
     stepswitch_formatters:apply(maybe_add_sip_headers(Endpoint, SIPHeaders)
                                 ,props:get_value(<<"Formatters">>
                                                  ,endpoint_props(Endpoint, AccountId)
-                                                 ,wh_json:new()
+                                                 ,kz_json:new()
                                                 )
                                 ,'outbound'
                                ).
 
--spec endpoint_props(wh_json:object(), api_binary()) -> wh_proplist().
+-spec endpoint_props(kz_json:object(), api_binary()) -> kz_proplist().
 endpoint_props(Endpoint, AccountId) ->
-    ResourceId = wh_json:get_value(?CCV(<<"Resource-ID">>), Endpoint),
-    case wh_json:is_true(?CCV(<<"Global-Resource">>), Endpoint) of
+    ResourceId = kz_json:get_value(?CCV(<<"Resource-ID">>), Endpoint),
+    case kz_json:is_true(?CCV(<<"Global-Resource">>), Endpoint) of
         'true' ->
             empty_list_on_undefined(stepswitch_resources:get_props(ResourceId));
         'false' ->
             empty_list_on_undefined(stepswitch_resources:get_props(ResourceId, AccountId))
     end.
 
--spec empty_list_on_undefined(wh_proplist() | 'undefined') -> wh_proplist().
+-spec empty_list_on_undefined(kz_proplist() | 'undefined') -> kz_proplist().
 empty_list_on_undefined('undefined') -> [];
 empty_list_on_undefined(L) -> L.
 
--spec maybe_add_sip_headers(wh_json:object(), wh_json:object()) -> wh_json:object().
+-spec maybe_add_sip_headers(kz_json:object(), kz_json:object()) -> kz_json:object().
 maybe_add_sip_headers(Endpoint, SIPHeaders) ->
-    LocalSIPHeaders = wh_json:get_value(<<"Custom-SIP-Headers">>, Endpoint, wh_json:new()),
+    LocalSIPHeaders = kz_json:get_value(<<"Custom-SIP-Headers">>, Endpoint, kz_json:new()),
 
-    case wh_json:merge_jobjs(SIPHeaders, LocalSIPHeaders) of
+    case kz_json:merge_jobjs(SIPHeaders, LocalSIPHeaders) of
         ?EMPTY_JSON_OBJECT -> Endpoint;
-        MergedHeaders -> wh_json:set_value(<<"Custom-SIP-Headers">>, MergedHeaders, Endpoint)
+        MergedHeaders -> kz_json:set_value(<<"Custom-SIP-Headers">>, MergedHeaders, Endpoint)
     end.
 
--spec maybe_endpoint_format_from(wh_json:object(), ne_binary(), api_binary()) ->
-                                        wh_json:object().
-maybe_endpoint_format_from(Endpoint, Number, DefaultRealm) ->
-    CCVs = wh_json:get_value(<<"Custom-Channel-Vars">>, Endpoint, wh_json:new()),
-    case wh_json:is_true(<<"Format-From-URI">>, CCVs) of
-        'true' -> endpoint_format_from(Endpoint, Number, DefaultRealm, CCVs);
+-spec maybe_endpoint_format_from(kz_json:object(), ne_binary(), kapi_offnet_resource:req()) ->
+                                        kz_json:object().
+maybe_endpoint_format_from(Endpoint, Number, OffnetReq) ->
+    CCVs = kz_json:get_value(<<"Custom-Channel-Vars">>, Endpoint, kz_json:new()),
+    case kz_json:is_true(<<"Format-From-URI">>, CCVs) of
+        'true' -> endpoint_format_from(Endpoint, Number, OffnetReq, CCVs);
         'false' ->
-            wh_json:set_value(<<"Custom-Channel-Vars">>
-                              ,wh_json:delete_keys([<<"Format-From-URI">>
+            kz_json:set_value(<<"Custom-Channel-Vars">>
+                              ,kz_json:delete_keys([<<"Format-From-URI">>
                                                     ,<<"From-URI-Realm">>
+                                                    ,<<"From-Account-Realm">>
                                                    ]
                                                    ,CCVs
                                                   )
@@ -300,33 +299,43 @@ maybe_endpoint_format_from(Endpoint, Number, DefaultRealm) ->
                              )
     end.
 
--spec endpoint_format_from(wh_json:object(), ne_binary(), api_binary(), wh_json:object()) ->
-                                  wh_json:object().
-endpoint_format_from(Endpoint, Number, DefaultRealm, CCVs) ->
-    FromNumber = wh_json:get_ne_value(?KEY_OUTBOUND_CALLER_ID_NUMBER, Endpoint, Number),
-    case wh_json:get_value(<<"From-URI-Realm">>, CCVs, DefaultRealm) of
+-spec endpoint_format_from(kz_json:object(), ne_binary(), kapi_offnet_resource:req(), kz_json:object()) ->
+                                  kz_json:object().
+endpoint_format_from(Endpoint, Number, OffnetReq, CCVs) ->
+    FromNumber = kz_json:get_ne_value(?KEY_OUTBOUND_CALLER_ID_NUMBER, Endpoint, Number),
+    case get_endpoint_format_from(OffnetReq, CCVs) of
         <<_/binary>> = Realm ->
             FromURI = <<"sip:", FromNumber/binary, "@", Realm/binary>>,
             lager:debug("setting resource ~s from-uri to ~s"
-                        ,[wh_json:get_value(<<"Resource-ID">>, CCVs)
+                        ,[kz_json:get_value(<<"Resource-ID">>, CCVs)
                           ,FromURI
                          ]),
-            UpdatedCCVs = wh_json:set_value(<<"From-URI">>, FromURI, CCVs),
-            wh_json:set_value(<<"Custom-Channel-Vars">>
-                              ,wh_json:delete_keys([<<"Format-From-URI">>
+            UpdatedCCVs = kz_json:set_value(<<"From-URI">>, FromURI, CCVs),
+            kz_json:set_value(<<"Custom-Channel-Vars">>
+                              ,kz_json:delete_keys([<<"Format-From-URI">>
                                                     ,<<"From-URI-Realm">>
+                                                    ,<<"From-Account-Realm">>
                                                    ]
                                                    ,UpdatedCCVs
                                                   )
                               ,Endpoint
                              );
         _ ->
-            wh_json:set_value(<<"Custom-Channel-Vars">>
-                              ,wh_json:delete_keys([<<"Format-From-URI">>
+            kz_json:set_value(<<"Custom-Channel-Vars">>
+                              ,kz_json:delete_keys([<<"Format-From-URI">>
                                                     ,<<"From-URI-Realm">>
+                                                    ,<<"From-Account-Realm">>
                                                    ]
                                                    ,CCVs
                                                   )
                               ,Endpoint
                              )
+    end.
+
+-spec get_endpoint_format_from(kapi_offnet_resource:req(), kz_json:object()) -> api_binary().
+get_endpoint_format_from(OffnetReq, CCVs) ->
+    DefaultRealm = default_realm(OffnetReq),
+    case kz_json:is_true(<<"From-Account-Realm">>, CCVs) of
+        'true' -> DefaultRealm;
+        'false' -> kz_json:get_value(<<"From-URI-Realm">>, CCVs, DefaultRealm)
     end.

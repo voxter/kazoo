@@ -1,18 +1,18 @@
 -ifndef(TS_HRL).
--include_lib("rabbitmq_client/include/amqp_client.hrl").
--include_lib("whistle/include/wh_types.hrl").
--include_lib("whistle/include/wh_amqp.hrl").
--include_lib("whistle/include/wh_log.hrl").
--include_lib("whistle/include/wh_databases.hrl").
--include_lib("whistle_number_manager/include/wh_number_manager.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("kazoo/include/kz_types.hrl").
+-include_lib("kazoo/include/kz_amqp.hrl").
+-include_lib("kazoo/include/kz_log.hrl").
+-include_lib("kazoo/include/kz_databases.hrl").
+-include_lib("kazoo_number_manager/include/knm_phone_number.hrl").
 
 -define(APP_NAME, <<"trunkstore">>).
--define(APP_VERSION, <<"0.9.0">>).
+-define(APP_VERSION, <<"4.0.0">>).
 
 %% couch params for the trunk store and its views
 -define(TS_DB, <<"ts">>).
 
--define(TRUNKSTORE_CACHE, 'trunkstore_cache').
+-define(CACHE_NAME, 'trunkstore_cache').
 
 %% cdr doc store
 -define(TS_CDR_PREFIX, <<"ts_cdr">>).
@@ -46,12 +46,12 @@
           ,bleg_callid :: api_binary()
           ,acctid = <<>> :: binary()
           ,acctdb = <<>> :: binary()
-          ,route_req_jobj = wh_json:new() :: wh_json:object()
-          ,ep_data = wh_json:new() :: wh_json:object() %% data for the endpoint, either an actual endpoint or an offnet request
+          ,route_req_jobj = kz_json:new() :: kz_json:object()
+          ,ep_data = kz_json:new() :: kz_json:object() %% data for the endpoint, either an actual endpoint or an offnet request
           ,my_q = <<>> :: binary()
           ,callctl_q :: api_binary()
           ,call_cost = 0.0 :: float()
-          ,failover :: wh_json:object()
+          ,failover :: kz_json:object()
          }).
 
 -record(route_flags, {
@@ -82,7 +82,7 @@
           ,flat_rate_enabled = true :: boolean()
           ,account_doc_id = <<>> :: binary()             % doc id of the account
           ,diverted_account_doc_id = <<>> :: binary()    % if an outbound call routes to a known DID, route internally rather than over a carrier; for billing
-          ,routes_generated = wh_json:new() :: wh_json:object() | wh_json:objects()           % the routes generated during the routing phase
+          ,routes_generated = kz_json:new() :: kz_json:object() | kz_json:objects()           % the routes generated during the routing phase
           ,scenario = inbound :: inbound | outbound | inbound_failover | outbound_inbound | outbound_inbound_failover % what scenario have we routed over
          }).
 

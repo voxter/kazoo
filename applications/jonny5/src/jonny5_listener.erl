@@ -24,10 +24,11 @@
 -record(state, {}).
 
 
-%% NOTE: do not replace CHANNEL_DESTROY bindings with wh_hooks (which federate)
+%% NOTE: do not replace CHANNEL_DESTROY bindings with kz_hooks (which federate)
 %%   as that will cause duplicate credit/debits at the end of the call since
 %%   the round-robin shared queue thing wont work.
 -define(RESPONDERS, [{'j5_authz_req', [{<<"authz">>, <<"authz_req">>}]}
+                     ,{'j5_balance_check_req', [{<<"authz">>, <<"balance_check_req">>}]}
                      ,{'j5_channel_destroy', [{<<"call_event">>, <<"CHANNEL_DESTROY">>}]}
                     ]).
 -define(BINDINGS, [{'call', [{'restrict_to', [<<"CHANNEL_DESTROY">>]}]}
@@ -45,12 +46,9 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
-%%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
-%% @end
+%% @doc Starts the server
 %%--------------------------------------------------------------------
+-spec start_link() -> startlink_ret().
 start_link() ->
     gen_listener:start_link({'local', ?SERVER}, ?MODULE, [{'bindings', ?BINDINGS}
                                                           ,{'responders', ?RESPONDERS}

@@ -37,6 +37,8 @@
 
 -include("crossbar.hrl").
 
+-define(SERVER, ?MODULE).
+
 -record(state, {cleanup_timer_ref=start_cleanup_timer()
                 ,minute_timer_ref=start_minute_timer()
                 ,hour_timer_ref=start_hour_timer()
@@ -46,7 +48,7 @@
 
 %% How long to pause before attempting to delete the next chunk of soft-deleted docs
 -define(SOFT_DELETE_PAUSE
-        ,whapps_config:get(?CONFIG_CAT, <<"soft_delete_pause_ms">>, 10 * ?MILLISECONDS_IN_SECOND)
+        ,kapps_config:get(?CONFIG_CAT, <<"soft_delete_pause_ms">>, 10 * ?MILLISECONDS_IN_SECOND)
        ).
 
 %%%===================================================================
@@ -54,18 +56,15 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
-%%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
-%% @end
+%% @doc Starts the server
 %%--------------------------------------------------------------------
+-spec start_link() -> startlink_ret().
 start_link() ->
-    gen_server:start_link({'local', ?MODULE}, ?MODULE, [], []).
+    gen_server:start_link({'local', ?SERVER}, ?MODULE, [], []).
 
--spec status() -> wh_proplist().
+-spec status() -> kz_proplist().
 status() ->
-    gen_server:call(?MODULE, 'status').
+    gen_server:call(?SERVER, 'status').
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -83,7 +82,7 @@ status() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    wh_util:put_callid(?MODULE),
+    kz_util:put_callid(?MODULE),
 
     _ = crossbar_bindings:bind(binding_all_dbs(), ?MODULE, 'cleanup_soft_deletes'),
 
@@ -186,19 +185,19 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info('cleanup', #state{cleanup_timer_ref=Ref}=State) ->
-    _Pid = wh_util:spawn(?MODULE, 'start_cleanup_pass', [Ref]),
+    _Pid = kz_util:spawn(fun start_cleanup_pass/1, [Ref]),
     lager:debug("cleaning up in ~p(~p)", [_Pid, Ref]),
     {'noreply', State};
 handle_info('minute_cleanup', #state{minute_timer_ref=Ref}=State) ->
-    _Pid = wh_util:spawn('crossbar_bindings', 'map', [binding_minute(), []]),
+    _Pid = kz_util:spawn(fun crossbar_bindings:map/2, [binding_minute(), []]),
     _ = stop_timer(Ref),
     {'noreply', State#state{minute_timer_ref=start_minute_timer()}};
 handle_info('hour_cleanup', #state{hour_timer_ref=Ref}=State) ->
-    _Pid = wh_util:spawn('crossbar_bindings', 'map', [binding_hour(), []]),
+    _Pid = kz_util:spawn(fun crossbar_bindings:map/2, [binding_hour(), []]),
     _ = stop_timer(Ref),
     {'noreply', State#state{hour_timer_ref=start_hour_timer()}};
 handle_info('day_cleanup', #state{day_timer_ref=Ref}=State) ->
-    _Pid = wh_util:spawn('crossbar_bindings', 'map', [binding_day(), []]),
+    _Pid = kz_util:spawn(fun crossbar_bindings:map/2, [binding_day(), []]),
     _ = stop_timer(Ref),
     {'noreply', State#state{day_timer_ref=start_day_timer()}};
 handle_info(_Msg, State) ->
@@ -235,21 +234,21 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 -spec start_cleanup_pass(reference()) -> 'ok'.
 start_cleanup_pass(Ref) ->
-    wh_util:put_callid(<<"cleanup_pass">>),
-    {'ok', Dbs} = couch_mgr:db_info(),
+    kz_util:put_callid(<<"cleanup_pass">>),
+    {'ok', Dbs} = kz_datamgr:db_info(),
     lager:debug("starting cleanup pass of databases"),
 
     _ = [crossbar_bindings:map(db_routing_key(Db), Db)
          || Db <- Dbs
         ],
     lager:debug("pass completed for ~p", [Ref]),
-    gen_server:cast(?MODULE, {'cleanup_finished', Ref}).
+    gen_server:cast(?SERVER, {'cleanup_finished', Ref}).
 
 -spec db_routing_key(ne_binary()) -> ne_binary().
 db_routing_key(Db) ->
-    Classifiers = [{fun whapps_util:is_account_db/1, fun binding_account/0}
-                   ,{fun whapps_util:is_account_mod/1, fun binding_account_mod/0}
-                   ,{fun wh_util:is_system_db/1, fun binding_system/0}
+    Classifiers = [{fun kapps_util:is_account_db/1, fun binding_account/0}
+                   ,{fun kapps_util:is_account_mod/1, fun binding_account_mod/0}
+                   ,{fun kz_util:is_system_db/1, fun binding_system/0}
                   ],
     db_routing_key(Db, Classifiers).
 db_routing_key(_Db, []) ->
@@ -279,7 +278,7 @@ start_timer(Expiry, Msg) ->
 
 -spec start_cleanup_timer() -> reference().
 start_cleanup_timer() ->
-    Expiry = whapps_config:get_integer(?CONFIG_CAT, <<"cleanup_timer">>, ?SECONDS_IN_DAY),
+    Expiry = kapps_config:get_integer(?CONFIG_CAT, <<"cleanup_timer">>, ?SECONDS_IN_DAY),
     lager:debug("starting cleanup timer for ~b s", [Expiry]),
     start_timer(Expiry * ?MILLISECONDS_IN_SECOND, 'cleanup').
 
@@ -297,27 +296,27 @@ start_day_timer() ->
 
 -spec cleanup_soft_deletes(ne_binary()) -> any().
 cleanup_soft_deletes(Account) ->
-    couch_mgr:suppress_change_notice(),
-    case whapps_util:is_account_db(Account) of
+    kz_datamgr:suppress_change_notice(),
+    case kapps_util:is_account_db(Account) of
         'true' -> cleanup_account_soft_deletes(Account);
         'false' -> 'ok' % no longer checking other dbs for soft deletes
     end.
 
 -spec cleanup_account_soft_deletes(ne_binary()) -> 'ok'.
 cleanup_account_soft_deletes(Account) ->
-    AccountDb = wh_util:format_account_id(Account, 'encoded'),
+    AccountDb = kz_util:format_account_id(Account, 'encoded'),
     do_cleanup(AccountDb).
 
 -spec do_cleanup(ne_binary()) -> 'ok'.
 do_cleanup(Db) ->
-    case couch_mgr:get_results(Db
+    case kz_datamgr:get_results(Db
                                ,<<"maintenance/soft_deletes">>
-                               ,[{'limit', couch_util:max_bulk_insert()}]
+                               ,[{'limit', kz_datamgr:max_bulk_insert()}]
                               ) of
         {'ok', []} -> 'ok';
         {'ok', L} ->
             lager:debug("removing ~b soft-deleted docs from ~s", [length(L), Db]),
-            _ = couch_mgr:del_docs(Db, L),
+            _ = kz_datamgr:del_docs(Db, L),
             'ok' = timer:sleep(?SOFT_DELETE_PAUSE),
             do_cleanup(Db);
         {'error', 'not_found'} ->

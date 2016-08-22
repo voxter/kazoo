@@ -37,7 +37,7 @@
 %%%-------------------------------------------------------------------
 -module(cf_directory).
 
--include("../callflow.hrl").
+-include("callflow.hrl").
 
 -export([handle/2]).
 
@@ -107,15 +107,15 @@
 %% stop when successfull.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(wh_json:object(), whapps_call:call()) -> 'ok'.
+-spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
-    {'ok', DirJObj} = couch_mgr:open_cache_doc(whapps_call:account_db(Call)
-                                               ,wh_doc:id(Data)
+    {'ok', DirJObj} = kz_datamgr:open_cache_doc(kapps_call:account_db(Call)
+                                               ,kz_doc:id(Data)
                                               ),
-    whapps_call_command:answer(Call),
+    kapps_call_command:answer(Call),
 
-    case get_directory_listing(whapps_call:account_db(Call)
-                               ,wh_doc:id(DirJObj)
+    case get_directory_listing(kapps_call:account_db(Call)
+                               ,kz_doc:id(DirJObj)
                               )
     of
         {'ok', Users} ->
@@ -139,7 +139,7 @@ handle(Data, Call) ->
             cf_exe:continue(Call)
     end.
 
--spec directory_start(whapps_call:call(), directory(), directory_users()) -> 'ok'.
+-spec directory_start(kapps_call:call(), directory(), directory_users()) -> 'ok'.
 directory_start(Call, State, CurrUsers) ->
     _ = whapps_call_command:flush_dtmf(Call),
     case play_directory_instructions(Call, search_fields(State)) of
@@ -149,20 +149,23 @@ directory_start(Call, State, CurrUsers) ->
 	    cf_exe:stop(Call)
     end.
 
--spec collect_digits(whapps_call:call(), directory(), directory_users(), binary()) -> 'ok'.
+-spec collect_digits(kapps_call:call(), directory(), directory_users(), binary()) -> 'ok'.
 collect_digits(Call, State, CurrUsers, DTMF) ->
-    case whapps_call_command:collect_digits(100, ?TIMEOUT_DTMF, ?TIMEOUT_DTMF, Call) of
+    case kapps_call_command:collect_digits(100, ?TIMEOUT_DTMF, ?TIMEOUT_DTMF, Call) of
 	{'error', _E} ->
 	    lager:error("failed to collect digits: ~p", [_E]),
 	    cf_exe:stop(Call);
 	{'ok', <<>>} ->
-	    whapps_call_command:audio_macro([{'prompt', ?PROMPT_SPECIFY_MINIMUM}], Call),
+	    kapps_call_command:audio_macro([{'prompt', ?PROMPT_SPECIFY_MINIMUM}], Call),
 	    directory_start(Call, State, CurrUsers);
+        {'ok', <<"0">>} ->
+            lager:info("caller chose to return to the main menu"),
+            cf_exe:continue(Call);
 	{'ok', DTMFS} ->
 	    maybe_match(Call, add_dtmf(add_dtmf(State, DTMF), DTMFS), CurrUsers)
     end.
 
--spec maybe_match(whapps_call:call(), directory(), directory_users()) -> 'ok'.
+-spec maybe_match(kapps_call:call(), directory(), directory_users()) -> 'ok'.
 maybe_match(Call, State, CurrUsers) ->
     case filter_users(CurrUsers, dtmf_collected(State), search_fields(State)) of
         [] ->
@@ -184,11 +187,11 @@ maybe_match(Call, State, CurrUsers) ->
             matches_menu(Call, State, Users)
     end.
 
--spec matches_menu(whapps_call:call(), directory(), directory_users()) -> 'ok'.
+-spec matches_menu(kapps_call:call(), directory(), directory_users()) -> 'ok'.
 matches_menu(Call, State, Users) ->
     maybe_match_users(Call, save_current_users(State, Users), Users, 1).
 
--spec maybe_match_users(whapps_call:call(), directory(), directory_users(), pos_integer()) -> 'ok'.
+-spec maybe_match_users(kapps_call:call(), directory(), directory_users(), pos_integer()) -> 'ok'.
 maybe_match_users(Call, State, [], _) ->
     lager:info("failed to match any users, back to the beginning"),
     _ = play_no_users(Call),
@@ -210,7 +213,7 @@ maybe_match_users(Call, State, [U|Us], MatchNum) ->
         'stop' -> cf_exe:stop(Call)
     end.
 
--spec maybe_match_user(whapps_call:call(), directory_user(), pos_integer()) -> dtmf_action().
+-spec maybe_match_user(kapps_call:call(), directory_user(), pos_integer()) -> dtmf_action().
 maybe_match_user(Call, U, MatchNum) ->
     UserName = username_audio_macro(Call, U),
     lager:info("playing username with: ~p", [UserName]),
@@ -218,7 +221,7 @@ maybe_match_user(Call, U, MatchNum) ->
     case play_user(Call, UserName, MatchNum) of
         {'ok', <<>>} ->
             lager:info("nothing pressed during user prompts, wait for something"),
-            case whapps_call_command:wait_for_dtmf(?TIMEOUT_DTMF) of
+            case kapps_call_command:wait_for_dtmf(?TIMEOUT_DTMF) of
                 {'ok', <<>>} -> maybe_match_user(Call, U, MatchNum);
                 {'ok', DTMF} -> interpret_user_match_dtmf(DTMF);
                 {'error', 'timeout'} ->
@@ -238,24 +241,24 @@ interpret_user_match_dtmf(?DTMF_RESULT_NEXT) -> 'next';
 interpret_user_match_dtmf(?DTMF_RESULT_START) -> 'start_over';
 interpret_user_match_dtmf(_) -> 'invalid'.
 
--spec maybe_confirm_match(whapps_call:call(), directory_user(), boolean()) -> boolean().
+-spec maybe_confirm_match(kapps_call:call(), directory_user(), boolean()) -> boolean().
 maybe_confirm_match(_, _, 'false') -> 'true';
 maybe_confirm_match(Call, User, 'true') ->
-    _ = whapps_call_command:flush_dtmf(Call),
+    _ = kapps_call_command:flush_dtmf(Call),
     case play_confirm_match(Call, User) of
         {'ok', ?DTMF_ACCEPT_MATCH} -> 'true';
         _ -> 'false'
     end.
 
--spec route_to_match(whapps_call:call(), 'fail' | wh_json:object()) -> 'ok'.
+-spec route_to_match(kapps_call:call(), 'fail' | kz_json:object()) -> 'ok'.
 route_to_match(Call, 'fail') -> cf_exe:continue(Call);
 route_to_match(Call, Callflow) ->
-    cf_exe:branch(wh_json:get_value(<<"flow">>, Callflow), Call).
+    cf_exe:branch(kz_json:get_value(<<"flow">>, Callflow), Call).
 
 %%------------------------------------------------------------------------------
 %% Audio Prompts
 %%------------------------------------------------------------------------------
--spec play_user(whapps_call:call(), whapps_call_command:audio_macro_prompt(), any()) ->
+-spec play_user(kapps_call:call(), kapps_call_command:audio_macro_prompt(), any()) ->
                        {'ok', binary()}.
 play_user(Call, UsernameTuple, _MatchNum) ->
     play_and_collect(Call, [{'prompt', ?PROMPT_RESULT_NUMBER}
@@ -263,11 +266,11 @@ play_user(Call, UsernameTuple, _MatchNum) ->
                             ,{'prompt', ?PROMPT_RESULT_MENU}
                            ]).
 
--spec play_invalid(whapps_call:call()) -> ne_binary().
+-spec play_invalid(kapps_call:call()) -> ne_binary().
 play_invalid(Call) ->
-    whapps_call_command:audio_macro([{'prompt', ?PROMPT_INVALID_KEY}], Call).
+    kapps_call_command:audio_macro([{'prompt', ?PROMPT_INVALID_KEY}], Call).
 
--spec play_confirm_match(whapps_call:call(), directory_user()) -> {'ok', binary()}.
+-spec play_confirm_match(kapps_call:call(), directory_user()) -> {'ok', binary()}.
 play_confirm_match(Call, User) ->
     UserName = username_audio_macro(Call, User),
     lager:info("playing confirm_match with username: ~p", [UserName]),
@@ -277,21 +280,21 @@ play_confirm_match(Call, User) ->
                             ,{'prompt', ?PROMPT_CONFIRM_MENU, ?ANY_DIGIT}
                            ]).
 
--spec username_audio_macro(whapps_call:call(), directory_user()) -> whapps_call_command:audio_macro_prompt().
+-spec username_audio_macro(kapps_call:call(), directory_user()) -> kapps_call_command:audio_macro_prompt().
 username_audio_macro(Call, User) ->
     case media_name(User) of
         'undefined' -> {'tts', <<39, (full_name(User))/binary, 39>>}; % 39 is ascii '
         MediaID     -> maybe_play_media(Call, User, MediaID)
     end.
 
--spec maybe_play_media(whapps_call:call(), directory_user(), api_binary()) ->
-                              whapps_call_command:audio_macro_prompt().
+-spec maybe_play_media(kapps_call:call(), directory_user(), api_binary()) ->
+                              kapps_call_command:audio_macro_prompt().
 maybe_play_media(Call, User, MediaId) ->
-    AccountDb = whapps_call:account_db(Call),
+    AccountDb = kapps_call:account_db(Call),
 
-    case couch_mgr:open_cache_doc(AccountDb, MediaId) of
+    case kz_datamgr:open_cache_doc(AccountDb, MediaId) of
 	{'ok', Doc}    ->
-	    case wh_doc:attachments(Doc) of
+	    case kz_doc:attachments(Doc) of
 		'undefined'  -> {'tts', <<39, (full_name(User))/binary, 39>>};
 		_ValidAttach -> {'play', <<$/, AccountDb/binary, $/, MediaId/binary>>}
 	    end;
@@ -308,26 +311,26 @@ play_directory_instructions(Call, 'last') ->
 play_directory_instructions(Call, 'both') ->
     play_and_collect(Call, [{'prompt', ?PROMPT_ENTER_PERSON_NAME}]).
 
--spec play_no_users(whapps_call:call()) -> ne_binary(). % noop id
+-spec play_no_users(kapps_call:call()) -> ne_binary(). % noop id
 play_no_users(Call) ->
-    whapps_call_command:audio_macro([{'prompt', ?PROMPT_NO_MORE_RESULTS}], Call).
+    kapps_call_command:audio_macro([{'prompt', ?PROMPT_NO_MORE_RESULTS}], Call).
 
--spec play_no_users_found(whapps_call:call()) -> ne_binary(). % noop id
+-spec play_no_users_found(kapps_call:call()) -> ne_binary(). % noop id
 play_no_users_found(Call) ->
-    whapps_call_command:audio_macro([{'prompt', ?PROMPT_NO_RESULTS_FOUND}], Call).
+    kapps_call_command:audio_macro([{'prompt', ?PROMPT_NO_RESULTS_FOUND}], Call).
 
--spec play_and_collect(whapps_call:call(), whapps_call_command:audio_macro_prompts()) ->
+-spec play_and_collect(kapps_call:call(), kapps_call_command:audio_macro_prompts()) ->
                               {'ok', binary()} |
 			      {'error', atom()}.
--spec play_and_collect(whapps_call:call(), whapps_call_command:audio_macro_prompts(), non_neg_integer()) ->
+-spec play_and_collect(kapps_call:call(), kapps_call_command:audio_macro_prompts(), non_neg_integer()) ->
                               {'ok', binary()} |
 			      {'error', atom()}.
 play_and_collect(Call, AudioMacro) ->
     play_and_collect(Call, AudioMacro, 1).
 play_and_collect(Call, AudioMacro, NumDigits) ->
-    NoopID = whapps_call_command:audio_macro(AudioMacro, Call),
+    NoopID = kapps_call_command:audio_macro(AudioMacro, Call),
     lager:info("play and collect noopID: ~s", [NoopID]),
-    whapps_call_command:collect_digits(NumDigits, ?TIMEOUT_DTMF, ?TIMEOUT_DTMF, NoopID, Call).
+    kapps_call_command:collect_digits(NumDigits, ?TIMEOUT_DTMF, ?TIMEOUT_DTMF, NoopID, Call).
 
 %%------------------------------------------------------------------------------
 %% Directory State Functions
@@ -349,9 +352,9 @@ save_current_users(#directory{}=State, Users) -> State#directory{curr_users=User
 %%------------------------------------------------------------------------------
 %% Directory User Functions
 %%------------------------------------------------------------------------------
--spec callflow(whapps_call:call(), directory_user()) -> wh_json:object() | 'fail'.
+-spec callflow(kapps_call:call(), directory_user()) -> kz_json:object() | 'fail'.
 callflow(Call, #directory_user{callflow_id=CF}) ->
-    case couch_mgr:open_doc(whapps_call:account_db(Call), CF) of
+    case kz_datamgr:open_doc(kapps_call:account_db(Call), CF) of
         {'ok', JObj} -> JObj;
         {'error', _E} ->
             lager:info("failed to find callflow ~s: ~p", [CF, _E]),
@@ -379,22 +382,22 @@ get_search_fields(_) -> 'last'.
                                    {'ok', directory_users()} |
                                    {'error', any()}.
 get_directory_listing(Db, DirId) ->
-    case couch_mgr:get_results(Db, ?DIR_DOCS_VIEW, [{'key', DirId}, 'include_docs']) of
+    case kz_datamgr:get_results(Db, ?DIR_DOCS_VIEW, [{'key', DirId}, 'include_docs']) of
         {'ok', []} ->
             lager:info("no users have been assigned to directory ~s", [DirId]),
             %% play no users in this directory
             {'error', 'no_users_in_directory'};
         {'ok', Users} ->
-            {'ok', [get_directory_user(wh_json:get_value(<<"doc">>, U), wh_json:get_value(<<"value">>, U)) || U <- Users]};
+            {'ok', [get_directory_user(kz_json:get_value(<<"doc">>, U), kz_json:get_value(<<"value">>, U)) || U <- Users]};
         {'error', _E}=E ->
             lager:info("failed to lookup users for directory ~s: ~p", [DirId, _E]),
             E
     end.
 
--spec get_directory_user(wh_json:object(), ne_binary()) -> directory_user().
+-spec get_directory_user(kz_json:object(), ne_binary()) -> directory_user().
 get_directory_user(U, CallflowId) ->
-    First = wh_json:get_value(<<"first_name">>, U),
-    Last = wh_json:get_value(<<"last_name">>, U),
+    First = kz_json:get_value(<<"first_name">>, U),
+    Last = kz_json:get_value(<<"last_name">>, U),
 
     #directory_user{
        first_name = First
@@ -403,7 +406,7 @@ get_directory_user(U, CallflowId) ->
        ,first_last_keys = cf_util:alpha_to_dialpad(<<First/binary, Last/binary>>)
        ,last_first_keys = cf_util:alpha_to_dialpad(<<Last/binary, First/binary>>)
        ,callflow_id = CallflowId
-       ,name_audio_id = wh_json:get_value(?RECORDED_NAME_KEY, U)
+       ,name_audio_id = kz_json:get_value(?RECORDED_NAME_KEY, U)
       }.
 
 -spec sort_users(directory_users(), 'first' | 'last') -> directory_users().

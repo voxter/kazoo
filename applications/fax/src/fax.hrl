@@ -1,16 +1,17 @@
 -ifndef(FAX_HRL).
 
 %% Typical includes needed
--include_lib("whistle/include/wh_types.hrl").
--include_lib("whistle/include/wh_log.hrl").
--include_lib("whistle/include/wh_databases.hrl").
+-include_lib("kazoo/include/kz_types.hrl").
+-include_lib("kazoo/include/kz_log.hrl").
+-include_lib("kazoo/include/kz_databases.hrl").
 
 -define(CONFIG_CAT, <<"fax">>).
 
 -define(APP_NAME, <<"fax">>).
--define(APP_VERSION, <<"1.0.0">>).
+-define(APP_VERSION, <<"4.0.0">>).
 
--define(FAX_CACHE, 'fax_cache').
+-define(CACHE_NAME, 'fax_cache').
+-define(FAX_WORKER_POOL, 'fax_worker_pool').
 
 -define(FAX_CHANNEL_DESTROY_PROPS, [<<"Ringing-Seconds">>, <<"Billing-Seconds">>
                                     ,<<"0">>, <<"Duration-Seconds">>
@@ -28,11 +29,17 @@
          }).
 -type fax_storage() :: #fax_storage{}.
 
+-type fax_job() :: kz_json:object().
+-type fax_jobs() :: [fax_job()].
+
 -define(FAX_OUTGOING, <<"outgoing">>).
 -define(FAX_INCOMING, <<"incoming">>).
 
 -define(FAX_START, <<"start">>).
+-define(FAX_ACQUIRE, <<"acquire">>).
 -define(FAX_PREPARE, <<"prepare">>).
+-define(FAX_ORIGINATE, <<"originate">>).
+-define(FAX_NEGOTIATE, <<"negotiate">>).
 -define(FAX_SEND, <<"send">>).
 -define(FAX_RECEIVE, <<"receive">>).
 -define(FAX_END, <<"end">>).
@@ -59,10 +66,14 @@
                                         ,<<"application/vnd.ms-powerpoint">>
                                        ]).
 
--define(SMTP_MSG_MAX_SIZE, whapps_config:get_integer(?CONFIG_CAT, <<"smtp_max_msg_size">>, 10485670)).
--define(SMTP_EXTENSIONS, [{"SIZE", wh_util:to_list(?SMTP_MSG_MAX_SIZE)}]).
+-define(SMTP_MSG_MAX_SIZE, kapps_config:get_integer(?CONFIG_CAT, <<"smtp_max_msg_size">>, 10485670)).
+-define(SMTP_EXTENSIONS, [{"SIZE", kz_util:to_list(?SMTP_MSG_MAX_SIZE)}]).
 -define(SMTP_CALLBACK_OPTIONS, {'callbackoptions', ['extensions', ?SMTP_EXTENSIONS]}).
--define(SMTP_PORT, whapps_config:get_integer(?CONFIG_CAT, <<"smtp_port">>, 19025)).
+-define(SMTP_PORT, kapps_config:get_integer(?CONFIG_CAT, <<"smtp_port">>, 19025)).
+
+-define(FAX_EXTENSION, <<"tiff">>).
+
+-define(FAX_OUTBOUND_SERVER(AccountId), <<"fax_outbound_", AccountId/binary>>).
 
 -define(FAX_HRL, 'true').
 -endif.

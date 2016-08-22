@@ -9,6 +9,7 @@
 
 -export([authorize/2]).
 -export([reconcile_cdr/2]).
+-export([maybe_credit_available/2, maybe_credit_available/3]).
 
 -include("jonny5.hrl").
 
@@ -47,7 +48,7 @@ reconcile_call_cost(Request, Limits) ->
     case j5_request:call_cost(Request) of
         0 -> 'ok';
         Amount ->
-            create_debit_transaction(<<"end">>, Amount, Request, Limits)
+            create_ledger_usage(Amount, Request, Limits)
     end.
 
 %%--------------------------------------------------------------------
@@ -57,12 +58,18 @@ reconcile_call_cost(Request, Limits) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_credit_available(integer(), j5_limits:limits()) -> boolean().
-maybe_credit_available(Amount, Limits) ->
+maybe_credit_available(Amount, Limits) -> maybe_credit_available(Amount, Limits, 'false').
+
+-spec maybe_credit_available(integer(), j5_limits:limits(), boolean()) -> boolean().
+maybe_credit_available(Amount, Limits, IsReal) ->
     AccountId = j5_limits:account_id(Limits),
-    Balance = wht_util:current_balance(AccountId)
-        - j5_channels:per_minute_cost(AccountId),
-    maybe_prepay_credit_available(Balance, Amount, Limits)
-        orelse maybe_postpay_credit_available(Balance, Amount, Limits).
+    Balance = wht_util:current_balance(AccountId),
+    PerMinuteCost = case kz_util:is_true(IsReal) of
+        'true' -> j5_channels:real_per_minute_cost(AccountId);
+        'false' -> j5_channels:per_minute_cost(AccountId)
+    end,
+    maybe_prepay_credit_available(Balance - PerMinuteCost, Amount, Limits)
+        orelse maybe_postpay_credit_available(Balance - PerMinuteCost, Amount, Limits).
 
 -spec maybe_prepay_credit_available(integer(), integer(), j5_limits:limits()) -> boolean().
 maybe_prepay_credit_available(Balance, Amount, Limits) ->
@@ -117,42 +124,32 @@ maybe_postpay_credit_available(Balance, Amount, Limits) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec create_debit_transaction(ne_binary(), integer(), j5_request:request(), j5_limits:limits()) -> any().
-create_debit_transaction(Event, Amount, Request, Limits) ->
+-spec create_ledger_usage(integer(), j5_request:request(), j5_limits:limits()) -> any().
+create_ledger_usage(Amount, Request, Limits) ->
+    SrcService = <<"per-minute-voip">>,
+    SrcId = j5_request:call_id(Request),
     LedgerId = j5_limits:account_id(Limits),
-    lager:debug("creating debit transaction in ledger ~s for $~w"
-                ,[LedgerId, wht_util:units_to_dollars(Amount)]
+    lager:debug("creating debit transaction in ledger ~s / ~s for $~w"
+                ,[LedgerId, SrcService, wht_util:units_to_dollars(Amount)]
                ),
-    Routines = [fun(T) ->
-                        case j5_request:account_id(Request) of
-                            LedgerId ->
-                                wh_transaction:set_reason(<<"per_minute_call">>, T);
-                            AccountId ->
-                                T1 = wh_transaction:set_reason(<<"sub_account_per_minute_call">>, T),
-                                wh_transaction:set_sub_account_info(AccountId, T1)
-                        end
-                end
-                ,fun(T) -> wh_transaction:set_event(Event, T) end
-                ,fun(T) -> wh_transaction:set_call_id(j5_request:call_id(Request), T) end
-                ,fun(T) ->  wh_transaction:set_description(<<"per minute call">>, T) end
-                ,fun(T) when Event =:= <<"end">> ->
-                         wh_transaction:set_metadata(metadata(Request), T);
-                    (T) -> T
-                 end
-               ],
-    wh_transaction:save(
-      lists:foldl(fun(F, T) -> F(T) end
-                  ,wh_transaction:debit(LedgerId, Amount)
-                  ,Routines
-                 )
-     ).
+    Usage = [{<<"type">>, <<"voice">>}
+             ,{<<"quantity">>, j5_request:billing_seconds(Request)}
+             ,{<<"unit">>, <<"sec">>}
+            ],
 
--spec metadata(j5_request:request()) -> wh_json:object().
+    Extra = [{<<"amount">>, Amount}
+             ,{<<"description">>, j5_request:rate_name(Request)}
+             ,{<<"period_start">>, j5_request:timestamp(Request)}
+             ,{<<"metadata">>, metadata(Request)}
+            ],
+
+    kz_ledger:debit(SrcService, SrcId, LedgerId, Usage, Extra).
+
+-spec metadata(j5_request:request()) -> kz_json:object().
 metadata(Request) ->
-    wh_json:from_list(
-      [{<<"direction">>, j5_request:call_direction(Request)}
-       ,{<<"duration">>, j5_request:billing_seconds(Request)}
-       ,{<<"account_id">>, j5_request:account_id(Request)}
-       ,{<<"to">>, j5_request:to(Request)}
+    kz_json:from_list(
+      [{<<"to">>, j5_request:to(Request)}
        ,{<<"from">>, j5_request:from(Request)}
+       ,{<<"direction">>, j5_request:call_direction(Request)}
+       ,{<<"rate">>, j5_request:rate(Request)}
       ]).

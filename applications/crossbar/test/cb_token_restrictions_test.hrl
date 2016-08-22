@@ -1,6 +1,6 @@
 -ifndef(CB_TOKEN_RESTRICTIONS_TEST_HRL).
 
--include("../src/crossbar_types.hrl").
+-include("crossbar_types.hrl").
 
 -define(AUTH_ACCOUNT_ID, <<"6eb37425cd30bf7e5b1785abdcbc2c1d">>).
 -define(ACCOUNT_ID, <<"c959c8f96db9891f99e6f655d1aeb503">>).
@@ -28,23 +28,23 @@
 -define(ACCOUNTS_EXACT, [?ACCOUNT_ID]).
 
 -define(ENDPOINT_DEVICE
-        ,wh_json:from_list(
+        ,kz_json:from_list(
            [{<<"allowed_accounts">>, ?ACCOUNTS_AUTH}
-            ,{<<"rules">>, wh_json:new()}
+            ,{<<"rules">>, kz_json:new()}
            ]
           )
        ).
 
 -define(DEVICE_RULES
-        ,wh_json:from_list([{<<"devices">>, [?ENDPOINT_DEVICE]}])
+        ,kz_json:from_list([{<<"devices">>, [?ENDPOINT_DEVICE]}])
        ).
 
 -define(ALLOW_ALL_RULE_RESTRICTIONS
-        ,wh_json:from_list(
+        ,kz_json:from_list(
            [{?CATCH_ALL
-             ,[wh_json:from_list(
+             ,[kz_json:from_list(
                  [{<<"allowed_accounts">>, ?ACCOUNTS_ANY}
-                  ,{<<"rules">>, wh_json:from_list([{?ARGS_ANY, ?HTTP_ANY}])}
+                  ,{<<"rules">>, kz_json:from_list([{?ARGS_ANY, ?HTTP_ANY}])}
                  ]
                 )
               ]
@@ -54,11 +54,11 @@
        ).
 
 -define(DENY_API_ENDPOINT_RESTRICTIONS
-        ,wh_json:from_list(
+        ,kz_json:from_list(
            [{<<"accounts">>
-             ,[wh_json:from_list(
+             ,[kz_json:from_list(
                  [{<<"allowed_accounts">>, ?ACCOUNTS_ANY}
-                  ,{<<"rules">>, wh_json:from_list([{?ARGS_ANY, ?HTTP_ANY}])}
+                  ,{<<"rules">>, kz_json:from_list([{?ARGS_ANY, ?HTTP_ANY}])}
                  ]
                 )
               ]
@@ -68,11 +68,11 @@
        ).
 
 -define(ALLOW_API_ENDPOINT_RESTRICTIONS
-        ,wh_json:from_list(
+        ,kz_json:from_list(
            [{<<"devices">>
-             ,[wh_json:from_list(
+             ,[kz_json:from_list(
                  [{<<"allowed_accounts">>, ?ACCOUNTS_ANY}
-                  ,{<<"rules">>, wh_json:from_list([{?ARGS_ANY, ?HTTP_ANY}])}
+                  ,{<<"rules">>, kz_json:from_list([{?ARGS_ANY, ?HTTP_ANY}])}
                  ]
                 )
               ]
@@ -82,13 +82,13 @@
        ).
 
 -define(ALLOW_ACCOUNTS_RESTRICTIONS(AccountId)
-        ,wh_json:from_list(
+        ,kz_json:from_list(
            [{<<"devices">>
-             ,[wh_json:from_list(
+             ,[kz_json:from_list(
                  [{<<"allowed_accounts">>
                    ,case AccountId of 'undefined' -> 'undefined'; _ -> [AccountId] end
                   }
-                  ,{<<"rules">>, wh_json:from_list([{?ARGS_ANY, ?HTTP_ANY}])}
+                  ,{<<"rules">>, kz_json:from_list([{?ARGS_ANY, ?HTTP_ANY}])}
                  ]
                 )
               ]
@@ -98,11 +98,11 @@
        ).
 
 -define(ARGUMENTS_RESTRICTIONS(Arg)
-        ,wh_json:from_list(
+        ,kz_json:from_list(
            [{<<"devices">>
-             ,[wh_json:from_list(
+             ,[kz_json:from_list(
                  [{<<"allowed_accounts">>, [?ACCOUNT_ID]}
-                  ,{<<"rules">>, wh_json:from_list([{Arg, ?HTTP_ANY}])}
+                  ,{<<"rules">>, kz_json:from_list([{Arg, ?HTTP_ANY}])}
                  ]
                 )
               ]
@@ -112,11 +112,11 @@
        ).
 
 -define(HTTP_VERB_RESTRICTIONS(Verbs)
-        ,wh_json:from_list(
+        ,kz_json:from_list(
            [{<<"devices">>
-             ,[wh_json:from_list(
+             ,[kz_json:from_list(
                  [{<<"allowed_accounts">>, [?ACCOUNT_ID]}
-                  ,{<<"rules">>, wh_json:from_list([{?ARGS_ANY, Verbs}])}
+                  ,{<<"rules">>, kz_json:from_list([{?ARGS_ANY, Verbs}])}
                  ]
                 )
               ]

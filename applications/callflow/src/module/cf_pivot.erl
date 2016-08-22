@@ -15,7 +15,7 @@
 %%%-------------------------------------------------------------------
 -module(cf_pivot).
 
--include("../callflow.hrl").
+-include("callflow.hrl").
 
 -export([handle/2]).
 
@@ -37,7 +37,7 @@
 %%   cdr_url: string(), url to POST the CDR
 %% @end
 %%--------------------------------------------------------------------
--spec handle(wh_json:object(), whapps_call:call()) -> any().
+-spec handle(kz_json:object(), kapps_call:call()) -> any().
 handle(Data, Call) ->
     Prop = props:filter_empty(
              [{<<"Call">>, whapps_call:to_json(Call)}
@@ -48,7 +48,7 @@ handle(Data, Call) ->
               ,{<<"Debug">>, wh_json:is_true(<<"debug">>, Data, 'false')}
               | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-    wapi_pivot:publish_req(Prop),
+    kapi_pivot:publish_req(Prop),
     lager:info("published pivot request"),
     wait_for_pivot(Data, Call).
 
@@ -63,9 +63,9 @@ maybe_use_variable(Data, Call) ->
 
 -spec wait_for_pivot(wh_json:object(), whapps_call:call()) -> any().
 wait_for_pivot(Data, Call) ->
-    case whapps_call_command:receive_event(?DEFAULT_EVENT_WAIT, 'true') of
+    case kapps_call_command:receive_event(?DEFAULT_EVENT_WAIT, 'true') of
         {'ok', JObj} ->
-            case wh_util:get_event_type(JObj) of
+            case kz_util:get_event_type(JObj) of
                 {<<"call_event">>,<<"CHANNEL_DESTROY">>} ->
                     lager:debug("CHANNEL_DESTROY received stoping call"),
                     cf_exe:stop(Call);

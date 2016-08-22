@@ -7,8 +7,8 @@
 %%%-------------------------------------------------------------------
 -module(cf_temporal_route_test).
 
--include("../src/callflow.hrl").
--include("../src/module/cf_temporal_route.hrl").
+-include("callflow.hrl").
+-include("module/cf_temporal_route.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -define(ROUTES, [<<"6a7bf6405e15d69827f27eba905f54da">>
@@ -24,7 +24,7 @@
 
 sort_wdays_test() ->
     Sorted = [<<"monday">>, <<"tuesday">>, <<"wednesday">>, <<"thursday">>, <<"friday">>, <<"saturday">>, <<"sunday">>],
-    Shuffled = wh_util:shuffle_list(Sorted),
+    Shuffled = kz_util:shuffle_list(Sorted),
     ?assertEqual(Sorted, cf_temporal_route:sort_wdays(Shuffled)).
 
 date_range_test() ->

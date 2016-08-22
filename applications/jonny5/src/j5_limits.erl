@@ -26,8 +26,9 @@
 -export([allow_postpay/1]).
 -export([reserve_amount/1]).
 -export([max_postpay/1]).
+-export([disconnect_active_calls/1]).
 
--include_lib("jonny5.hrl").
+-include("jonny5.hrl").
 
 -record(limits, {account_id  :: api_binary()
                  ,account_db :: api_binary()
@@ -45,9 +46,10 @@
                  ,reserve_amount = 0 :: non_neg_integer()
                  ,allow_prepay = 'true' :: boolean()
                  ,allow_postpay = 'false' :: boolean()
-                 ,allotments = wh_json:new() :: wh_json:object()
+                 ,allotments = kz_json:new() :: kz_json:object()
                  ,soft_limit_inbound = 'false' :: boolean()
                  ,soft_limit_outbound = 'false' :: boolean()
+                 ,disconnect_active_calls = 'false' :: boolean()
                 }).
 
 -type limits() :: #limits{}.
@@ -63,16 +65,16 @@
 %%--------------------------------------------------------------------
 -spec get(ne_binary()) -> limits().
 get(Account) ->
-    AccountId = wh_util:format_account_id(Account, 'raw'),
-    case wh_cache:peek_local(?JONNY5_CACHE, ?LIMITS_KEY(AccountId)) of
+    AccountId = kz_util:format_account_id(Account, 'raw'),
+    case kz_cache:peek_local(?CACHE_NAME, ?LIMITS_KEY(AccountId)) of
         {'ok', Limits} -> Limits;
         {'error', 'not_found'} -> fetch(AccountId)
     end.
 
 -spec fetch(ne_binary()) -> limits().
 fetch(Account) ->
-    AccountId = wh_util:format_account_id(Account, 'raw'),
-    AccountDb = wh_util:format_account_id(Account, 'encoded'),
+    AccountId = kz_util:format_account_id(Account, 'raw'),
+    AccountDb = kz_util:format_account_id(Account, 'encoded'),
     JObj = get_limit_jobj(AccountDb),
     Limits = #limits{account_id = AccountId
                      ,account_db = AccountDb
@@ -90,12 +92,13 @@ fetch(Account) ->
                      ,reserve_amount = get_limit_units(<<"reserve_amount">>, JObj, ?DEFAULT_RATE)
                      ,allow_prepay = get_limit_boolean(<<"allow_prepay">>, JObj, 'true')
                      ,allow_postpay = get_limit_boolean(<<"allow_postpay">>, JObj, 'false')
-                     ,allotments = wh_json:get_value(<<"pvt_allotments">>, JObj, wh_json:new())
+                     ,allotments = kz_json:get_value(<<"pvt_allotments">>, JObj, kz_json:new())
                      ,soft_limit_inbound = get_limit_boolean(<<"soft_limit_inbound">>, JObj, 'false')
                      ,soft_limit_outbound = get_limit_boolean(<<"soft_limit_outbound">>, JObj, 'false')
+                     ,disconnect_active_calls = get_limit_boolean(<<"disconnect_active_calls">>, JObj, 'false')
                     },
     CacheProps = [{'origin', {'db', AccountDb}}],
-    wh_cache:store_local(?JONNY5_CACHE, ?LIMITS_KEY(AccountId), Limits, CacheProps),
+    kz_cache:store_local(?CACHE_NAME, ?LIMITS_KEY(AccountId), Limits, CacheProps),
     Limits.
 
 -spec cached() -> [limits()].
@@ -103,7 +106,7 @@ cached() ->
     IsLimit = fun (_, #limits{}) -> 'true';
                   (_, _) -> 'false'
               end,
-    [Limit || {_, Limit} <- wh_cache:filter_local(?JONNY5_CACHE, IsLimit)].
+    [Limit || {_, Limit} <- kz_cache:filter_local(?CACHE_NAME, IsLimit)].
 
 %%--------------------------------------------------------------------
 %% @public
@@ -111,7 +114,7 @@ cached() ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec to_props(ne_binary() | limits()) -> wh_proplist().
+-spec to_props(ne_binary() | limits()) -> kz_proplist().
 to_props(#limits{}=Limits) ->
     lists:zip(record_info('fields', 'limits'), tl(tuple_to_list(Limits)));
 to_props(Account) -> to_props(?MODULE:get(Account)).
@@ -159,7 +162,7 @@ soft_limit_inbound(#limits{soft_limit_inbound=SoftLimit}) -> SoftLimit.
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec allotments(limits()) -> wh_json:object().
+-spec allotments(limits()) -> kz_json:object().
 allotments(#limits{allotments=Allotments}) -> Allotments.
 
 %%--------------------------------------------------------------------
@@ -262,12 +265,21 @@ reserve_amount(#limits{reserve_amount=ReserveAmount}) -> ReserveAmount.
 max_postpay(#limits{max_postpay_amount=MaxPostpay}) -> MaxPostpay.
 
 %%--------------------------------------------------------------------
+%% @public
+%% @doc
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec disconnect_active_calls(limits()) -> boolean().
+disconnect_active_calls(#limits{disconnect_active_calls=DisconnectActiveCalls}) -> DisconnectActiveCalls.
+
+%%--------------------------------------------------------------------
 %% @private
 %% @doc
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_limit(ne_binary(), wh_json:object(), tristate_integer()) ->
+-spec get_limit(ne_binary(), kz_json:object(), tristate_integer()) ->
                        tristate_integer().
 get_limit(Key, JObj, Default) ->
     PrivateValue = get_private_limit(Key, JObj),
@@ -279,22 +291,22 @@ get_limit(Key, JObj, Default) ->
         'false' -> PublicValue
     end.
 
--spec get_public_limit(ne_binary(), wh_json:object(), tristate_integer()) ->
+-spec get_public_limit(ne_binary(), kz_json:object(), tristate_integer()) ->
                               non_neg_integer().
 get_public_limit(Key, JObj, Default) ->
-    case wh_json:get_integer_value(Key, JObj) of
+    case kz_json:get_integer_value(Key, JObj) of
         'undefined' -> get_default_limit(Key, Default);
         Value when Value < 0 -> 0;
         Value -> Value
     end.
 
--spec get_private_limit(ne_binary(), wh_json:object()) -> tristate_integer().
+-spec get_private_limit(ne_binary(), kz_json:object()) -> tristate_integer().
 get_private_limit(Key, JObj) ->
-    wh_json:get_integer_value(<<"pvt_", Key/binary>>, JObj).
+    kz_json:get_integer_value(<<"pvt_", Key/binary>>, JObj).
 
 -spec get_default_limit(ne_binary(), tristate_integer()) -> tristate_integer().
 get_default_limit(Key, Default) ->
-    whapps_config:get_integer(<<"jonny5">>, <<"default_", Key/binary>>, Default).
+    kapps_config:get_integer(?APP_NAME, <<"default_", Key/binary>>, Default).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -302,16 +314,16 @@ get_default_limit(Key, Default) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_limit_units(ne_binary(), wh_json:object(), float()) -> non_neg_integer().
+-spec get_limit_units(ne_binary(), kz_json:object(), float()) -> non_neg_integer().
 get_limit_units(Key, JObj, Default) ->
-    case wh_json:get_float_value(<<"pvt_", Key/binary>>, JObj) of
+    case kz_json:get_float_value(<<"pvt_", Key/binary>>, JObj) of
         'undefined' -> get_default_limit_units(Key, Default);
         Value -> wht_util:dollars_to_units(abs(Value))
     end.
 
 -spec get_default_limit_units(ne_binary(), float()) -> non_neg_integer().
 get_default_limit_units(Key, Default) ->
-    Value = whapps_config:get_float(<<"jonny5">>, <<"default_", Key/binary>>, Default),
+    Value = kapps_config:get_float(?APP_NAME, <<"default_", Key/binary>>, Default),
     wht_util:dollars_to_units(abs(Value)).
 
 %%--------------------------------------------------------------------
@@ -320,27 +332,27 @@ get_default_limit_units(Key, Default) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_limit_boolean(ne_binary(), wh_json:object(), boolean()) -> boolean().
+-spec get_limit_boolean(ne_binary(), kz_json:object(), boolean()) -> boolean().
 get_limit_boolean(Key, JObj, Default) ->
-    case wh_json:get_value(<<"pvt_", Key/binary>>, JObj) of
+    case kz_json:get_value(<<"pvt_", Key/binary>>, JObj) of
         'undefined' -> get_public_limit_boolean(Key, JObj, Default);
-        Value -> wh_util:is_true(Value)
+        Value -> kz_util:is_true(Value)
     end.
 
--spec get_public_limit_boolean(ne_binary(), wh_json:object(), boolean()) -> boolean().
+-spec get_public_limit_boolean(ne_binary(), kz_json:object(), boolean()) -> boolean().
 %% NOTE: all other booleans (inbound_soft_limit, allow_postpay, etc) should
 %%  not be made public via this helper.
 get_public_limit_boolean(<<"allow_prepay">> = Key, JObj, Default) ->
-    case wh_json:get_value(Key, JObj) of
+    case kz_json:get_value(Key, JObj) of
         'undefined' -> get_default_limit_boolean(Key, Default);
-        Value -> wh_util:is_true(Value)
+        Value -> kz_util:is_true(Value)
     end;
 get_public_limit_boolean(Key, _, Default) ->
     get_default_limit_boolean(Key, Default).
 
 -spec get_default_limit_boolean(ne_binary(), boolean()) -> boolean().
 get_default_limit_boolean(Key, Default) ->
-    whapps_config:get_is_true(<<"jonny5">>, <<"default_", Key/binary>>, Default).
+    kapps_config:get_is_true(?APP_NAME, <<"default_", Key/binary>>, Default).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -348,27 +360,27 @@ get_default_limit_boolean(Key, Default) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_bundled_inbound_limit(ne_binary(), wh_json:object()) -> non_neg_integer().
+-spec get_bundled_inbound_limit(ne_binary(), kz_json:object()) -> non_neg_integer().
 get_bundled_inbound_limit(AccountDb, JObj) ->
-    case wh_json:get_ne_value(<<"pvt_bundled_inbound_trunks">>, JObj) of
+    case kz_json:get_ne_value(<<"pvt_bundled_inbound_trunks">>, JObj) of
         'undefined' -> 0;
         Type ->
             View = <<Type/binary, "/crossbar_listing">>,
             get_bundled_limit(AccountDb, View)
     end.
 
--spec get_bundled_outbound_limit(ne_binary(), wh_json:object()) -> non_neg_integer().
+-spec get_bundled_outbound_limit(ne_binary(), kz_json:object()) -> non_neg_integer().
 get_bundled_outbound_limit(AccountDb, JObj) ->
-    case wh_json:get_ne_value(<<"pvt_bundled_outbound_trunks">>, JObj) of
+    case kz_json:get_ne_value(<<"pvt_bundled_outbound_trunks">>, JObj) of
         'undefined' -> 0;
         Type ->
             View = <<Type/binary, "/crossbar_listing">>,
             get_bundled_limit(AccountDb, View)
     end.
 
--spec get_bundled_twoway_limit(ne_binary(), wh_json:object()) -> non_neg_integer().
+-spec get_bundled_twoway_limit(ne_binary(), kz_json:object()) -> non_neg_integer().
 get_bundled_twoway_limit(AccountDb, JObj) ->
-    case wh_json:get_ne_value(<<"pvt_bundled_twoway_trunks">>, JObj) of
+    case kz_json:get_ne_value(<<"pvt_bundled_twoway_trunks">>, JObj) of
         'undefined' -> 0;
         Type ->
             View = <<Type/binary, "/crossbar_listing">>,
@@ -377,7 +389,7 @@ get_bundled_twoway_limit(AccountDb, JObj) ->
 
 -spec get_bundled_limit(ne_binary(), ne_binary()) -> non_neg_integer().
 get_bundled_limit(AccountDb, View) ->
-    case couch_mgr:get_results(AccountDb, View, []) of
+    case kz_datamgr:get_results(AccountDb, View, []) of
         {'ok', JObjs} -> filter_bundled_limit(JObjs);
         {'error', _R} ->
             lager:debug("failed get bundled limit from ~s in ~s: ~p"
@@ -385,11 +397,11 @@ get_bundled_limit(AccountDb, View) ->
             0
     end.
 
--spec filter_bundled_limit(wh_json:objects()) -> non_neg_integer().
+-spec filter_bundled_limit(kz_json:objects()) -> non_neg_integer().
 filter_bundled_limit(JObjs) ->
     length([JObj
             || JObj <- JObjs
-                   ,wh_json:is_true([<<"value">>, <<"enabled">>]
+                   ,kz_json:is_true([<<"value">>, <<"enabled">>]
                                     ,JObj
                                     ,'true')
            ]).
@@ -400,9 +412,9 @@ filter_bundled_limit(JObjs) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_limit_jobj(ne_binary()) -> wh_json:object().
+-spec get_limit_jobj(ne_binary()) -> kz_json:object().
 get_limit_jobj(AccountDb) ->
-    case couch_mgr:open_doc(AccountDb, <<"limits">>) of
+    case kz_datamgr:open_doc(AccountDb, <<"limits">>) of
         {'ok', JObj} -> JObj;
         {'error', 'not_found'} ->
             lager:debug("limits doc in account db ~s not found", [AccountDb]),
@@ -410,26 +422,26 @@ get_limit_jobj(AccountDb) ->
         {'error', _R} ->
             lager:debug("failed to open limits doc in account db '~s': ~p"
                         ,[AccountDb, _R]),
-            wh_json:new()
+            kz_json:new()
     end.
 
--spec create_limit_jobj(ne_binary()) -> wh_json:object().
+-spec create_limit_jobj(ne_binary()) -> kz_json:object().
 create_limit_jobj(AccountDb) ->
-    TStamp = wh_util:current_tstamp(),
-    JObj = wh_json:from_list(
+    TStamp = kz_util:current_tstamp(),
+    JObj = kz_json:from_list(
              [{<<"_id">>, <<"limits">>}
               ,{<<"pvt_account_db">>, AccountDb}
-              ,{<<"pvt_account_id">>, wh_util:format_account_id(AccountDb, 'raw')}
+              ,{<<"pvt_account_id">>, kz_util:format_account_id(AccountDb, 'raw')}
               ,{<<"pvt_type">>, <<"limits">>}
               ,{<<"pvt_created">>, TStamp}
               ,{<<"pvt_modified">>, TStamp}
               ,{<<"pvt_vsn">>, 1}
              ]),
-    case couch_mgr:save_doc(AccountDb, JObj) of
+    case kz_datamgr:save_doc(AccountDb, JObj) of
         {'ok', J} ->
             lager:debug("created initial limits document in db ~s", [AccountDb]),
             J;
          {'error', _R} ->
             lager:debug("failed to create initial limits document in db ~s: ~p", [AccountDb, _R]),
-            wh_json:new()
+            kz_json:new()
     end.

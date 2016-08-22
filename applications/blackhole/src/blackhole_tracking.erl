@@ -30,10 +30,11 @@
 
 -include("blackhole.hrl").
 
+-define(SERVER, ?MODULE).
+
 -define(RESPONDERS, [{?MODULE, [{<<"blackhole">>, <<"get_req">>}]}]).
 -define(BINDINGS, [{'blackhole', ['federate']}]).
 
--define(SERVER, ?MODULE).
 -define(BLACKHOLE_QUEUE_NAME, <<>>).
 -define(BLACKHOLE_QUEUE_OPTIONS, []).
 -define(BLACKHOLE_CONSUME_OPTIONS, []).
@@ -43,14 +44,11 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
-%%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
-%% @end
+%% @doc Starts the server
 %%--------------------------------------------------------------------
+-spec start_link() -> startlink_ret().
 start_link() ->
-    gen_listener:start_link({'local', ?MODULE}
+    gen_listener:start_link({'local', ?SERVER}
                             ,?MODULE
                             ,[{'responders', ?RESPONDERS}
                                ,{'bindings', ?BINDINGS}
@@ -66,28 +64,28 @@ start_link() ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec handle_req(wh_json:object(), wh_proplist()) -> 'ok'.
+-spec handle_req(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_req(ApiJObj, _Props) ->
-    'true' = wapi_blackhole:get_req_v(ApiJObj),
-    wh_util:put_callid(ApiJObj),
+    'true' = kapi_blackhole:get_req_v(ApiJObj),
+    kz_util:put_callid(ApiJObj),
 
-    Node = wh_json:get_binary_value(<<"Node">>, ApiJObj),
+    Node = kz_json:get_binary_value(<<"Node">>, ApiJObj),
     RespData =
         handle_get_req_data(
-            wh_json:get_value(<<"Account-ID">>, ApiJObj)
-            ,wh_json:get_value(<<"Socket-ID">>, ApiJObj)
+            kz_json:get_value(<<"Account-ID">>, ApiJObj)
+            ,kz_json:get_value(<<"Socket-ID">>, ApiJObj)
             ,Node
         ),
     case RespData of
         'ok' -> 'ok';
         RespData ->
-            RespQ = wh_json:get_value(<<"Server-ID">>, ApiJObj),
+            RespQ = kz_json:get_value(<<"Server-ID">>, ApiJObj),
             Resp = [{<<"Data">>, RespData}
-                    ,{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, ApiJObj)}
-                    | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                    ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, ApiJObj)}
+                    | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                    ],
             lager:debug("sending reply ~p to ~s",[RespData, Node]),
-            wapi_blackhole:publish_get_resp(RespQ, Resp)
+            kapi_blackhole:publish_get_resp(RespQ, Resp)
     end.
 
 %%--------------------------------------------------------------------
@@ -97,7 +95,7 @@ handle_req(ApiJObj, _Props) ->
 %%--------------------------------------------------------------------
 -spec add_socket(bh_context:context()) -> 'ok'.
 add_socket(Context) ->
-    gen_server:cast(?MODULE, {'add_socket', Context}).
+    gen_server:cast(?SERVER, {'add_socket', Context}).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -106,7 +104,7 @@ add_socket(Context) ->
 %%--------------------------------------------------------------------
 -spec remove_socket(bh_context:context()) -> 'ok'.
 remove_socket(Context) ->
-    gen_server:cast(?MODULE, {'remove_socket', Context}).
+    gen_server:cast(?SERVER, {'remove_socket', Context}).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -115,7 +113,7 @@ remove_socket(Context) ->
 %%--------------------------------------------------------------------
 -spec update_socket(bh_context:context()) -> 'ok'.
 update_socket(Context) ->
-    gen_server:cast(?MODULE, {'update_socket', Context}).
+    gen_server:cast(?SERVER, {'update_socket', Context}).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -124,7 +122,7 @@ update_socket(Context) ->
 %%--------------------------------------------------------------------
 -spec get_sockets(ne_binary()) -> [bh_context:context(), ...] | {'error', 'not_found'}.
 get_sockets(AccountId) ->
-    gen_server:call(?MODULE, {'get_sockets', AccountId}).
+    gen_server:call(?SERVER, {'get_sockets', AccountId}).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -133,7 +131,7 @@ get_sockets(AccountId) ->
 %%--------------------------------------------------------------------
 -spec get_socket(ne_binary()) -> {'ok', bh_context:context()} | {'error', 'not_found'}.
 get_socket(Id) ->
-    gen_server:call(?MODULE, {'get_socket', Id}).
+    gen_server:call(?SERVER, {'get_socket', Id}).
 
 %%%===================================================================
 %%% gen_listener callbacks
@@ -152,8 +150,8 @@ get_socket(Id) ->
 %%--------------------------------------------------------------------
 init([]) ->
     process_flag('trap_exit', 'true'),
-    lager:debug("starting new ~s server", [?MODULE]),
-    Tab = ets:new(?MODULE, ['set'
+    lager:debug("starting new ~s server", [?SERVER]),
+    Tab = ets:new(?SERVER, ['set'
                             ,'protected'
                             ,'named_table'
                             ,{'keypos', #bh_context.websocket_session_id}
@@ -285,7 +283,7 @@ handle_get_req_data(AccountId, 'undefined', Node) ->
             [];
         Contexts ->
             ToDelete = [<<"account_id">>, <<"auth_token">>, <<"req_id">>, <<"auth_account_id">>],
-            [wh_json:delete_keys(ToDelete, bh_context:to_json(Context))
+            [kz_json:delete_keys(ToDelete, bh_context:to_json(Context))
              || Context <- Contexts]
     end;
 handle_get_req_data('undefined', SocketId, Node) ->

@@ -17,9 +17,15 @@
 -define(SCOPES,<<(?XMPP_SCOPE)/binary, " ", (?GCP_SCOPE)/binary>>).
 -define(XMPP_SERVER, <<"talk.google.com">>).
 
--define(POLLING_INTERVAL, whapps_config:get_integer(?CONFIG_CAT, <<"xmpp_interval">> , 600000)).
+-define(POLLING_INTERVAL, kapps_config:get_integer(?CONFIG_CAT, <<"xmpp_interval">> , 600000)).
 
--export([start/1, start_link/1, stop/1]).
+-export([start_link/1, stop/1]).
+
+-export([handle_printer_start/2
+        ,handle_printer_stop/2
+        ]).
+
+-export([start_all_printers/0]).
 
 %% gen_server callbacks
 -export([init/1
@@ -46,17 +52,27 @@
                }).
 
 -type state() :: #state{}.
-%-type packet() :: #received_packet{}.
-%-type jid() :: #jid{}.
 
-start(PrinterId) ->
-  gen_server:start({'local', wh_util:to_atom(PrinterId, 'true')}, ?MODULE, [PrinterId], []).
+-define(NAME(P), kz_util:to_atom(P, 'true')).
 
+%-define(SERVER(P), {{'via', 'kz_globals', {'xmpp', P}}).
+-define(SERVER(P), {'via', 'kz_globals', ?NAME(P)}).
+
+-spec start_link(ne_binary()) -> startlink_ret().
 start_link(PrinterId) ->
-  gen_server:start_link({'local', wh_util:to_atom(PrinterId, 'true')}, ?MODULE, [PrinterId], []).
+    lager:debug("starting new xmpp process for ~s", [PrinterId]),
+    case gen_server:start_link(?SERVER(PrinterId), ?MODULE, [PrinterId], []) of
+        {'error', {'already_started', Pid}} ->
+            erlang:link(Pid),
+            {'ok', Pid};
+        Other -> Other
+    end.
 
 stop(PrinterId) ->
-  gen_server:cast({'local', wh_util:to_atom(PrinterId, 'true')}, 'stop').
+    case kz_globals:whereis_name(?NAME(PrinterId)) of
+        'undefined' -> 'ok';
+        Pid -> gen_server:cast(Pid, 'stop')
+    end.
 
 init([PrinterId]) ->
     process_flag('trap_exit', 'true'),
@@ -67,7 +83,7 @@ handle_call(_Request, _From, State) ->
   {'reply', 'ok', State}.
 
 handle_cast('start', #state{faxbox_id=FaxBoxId} = State) ->
-    case couch_mgr:open_doc(?WH_FAXES_DB, FaxBoxId) of
+    case kz_datamgr:open_doc(?KZ_FAXES_DB, FaxBoxId) of
         {'ok', JObj} ->
             {'noreply', handle_start(JObj, State), ?POLLING_INTERVAL};
         E ->
@@ -138,7 +154,7 @@ code_change(_OldVsn, State, _Extra) -> {'ok', State}.
 
 -spec get_sub_msg(ne_binary()) -> ne_binary().
 get_sub_msg(JID) ->
-    BareJID = wapi_xmpp:jid_short(JID),
+    BareJID = kapi_xmpp:jid_short(JID),
     Document = <<"<iq type='set' from='", JID/binary, "' to='",BareJID/binary,"'>"
                  ,   "<subscribe xmlns='google:push'>"
                  ,      "<item channel='cloudprint.google.com' from='cloudprint.google.com'/>"
@@ -153,7 +169,7 @@ get_sub_msg(JID) ->
 -spec process_received_packet(exml:element(), state()) -> any().
 process_received_packet(#xmlel{name = <<"message">>}=Xml
                         ,#state{jid=JID}) ->
-    BareJID = wapi_xmpp:jid_short(JID),
+    BareJID = kapi_xmpp:jid_short(JID),
     Push = exml_query:path(Xml, [{'element', <<"push:push">>}
                                  ,{'element', <<"push:data">>}
                                  ,'cdata'
@@ -175,18 +191,18 @@ send_notify(PrinterId, JID) ->
                  ,{<<"Application-Event">>, <<"Queued-Job">>}
                  ,{<<"Application-Data">>, PrinterId}
                  ,{<<"JID">>, JID}
-                 | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                 | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                 ]),
     lager:debug("received xmpp push for printer ~s", [PrinterId]),
-    wh_amqp_worker:cast(Payload, fun wapi_xmpp:publish_event/1).
+    kz_amqp_worker:cast(Payload, fun kapi_xmpp:publish_event/1).
 
 -spec connect(ne_binary(), ne_binary()) ->
                      {'ok', xmpp_client()} |
                      {'error', any()}.
 connect(JID, Password) ->
-    Options = [{username, wapi_xmpp:jid_username(JID)}
-               ,{server, wapi_xmpp:jid_server(JID)}
-               ,{resource, wapi_xmpp:jid_resource(JID)}
+    Options = [{username, kapi_xmpp:jid_username(JID)}
+               ,{server, kapi_xmpp:jid_server(JID)}
+               ,{resource, kapi_xmpp:jid_resource(JID)}
                ,{password, Password}
                ,{host, ?XMPP_SERVER}
                ,{auth, {fax_xmpp, auth_xoauth2}}
@@ -210,13 +226,13 @@ disconnect(MySession) ->
             lager:debug("exception closing xmpp session ~p : ~p", [_E, _R])
     end.
 
--spec handle_start(wh_json:object(), state()) -> state().
+-spec handle_start(kz_json:object(), state()) -> state().
 handle_start(JObj, State) ->
-    JID = wh_json:get_value(<<"pvt_cloud_xmpp_jid">>, JObj),
-    PrinterId = wh_json:get_value(<<"pvt_cloud_printer_id">>, JObj),
+    JID = kz_json:get_value(<<"pvt_cloud_xmpp_jid">>, JObj),
+    PrinterId = kz_json:get_value(<<"pvt_cloud_printer_id">>, JObj),
     FullJID = <<JID/binary, "/", PrinterId/binary>>,
-    AppId = wh_json:get_value(<<"pvt_cloud_oauth_app">>, JObj),
-    RefreshToken = #oauth_refresh_token{token=wh_json:get_value(<<"pvt_cloud_refresh_token">>, JObj)},
+    AppId = kz_json:get_value(<<"pvt_cloud_oauth_app">>, JObj),
+    RefreshToken = #oauth_refresh_token{token=kz_json:get_value(<<"pvt_cloud_refresh_token">>, JObj)},
     gen_server:cast(self(), 'connect'),
     State#state{printer_id=PrinterId
                 ,oauth_app_id=AppId
@@ -251,3 +267,48 @@ wait_for_success(Username, Conn) ->
         R when R =:= <<"failure">> orelse R =:= <<"stream:error">> ->
             throw({auth_failed, Username, AuthReply})
     end.
+
+-spec start_all_printers() -> 'ok'.
+start_all_printers() ->
+    {'ok', Results} = kz_datamgr:get_results(?KZ_FAXES_DB, <<"faxbox/cloud">>),
+    List = kz_util:shuffle_list(
+             [ {crypto:rand_uniform(2000, 6000), Id, Jid}
+               || {Id, Jid, <<"claimed">>}
+                      <- [{kz_doc:id(Result)
+                           ,kz_json:get_value([<<"value">>,<<"xmpp_jid">>], Result)
+                           ,kz_json:get_value([<<"value">>,<<"state">>], Result)
+                          }
+                          || Result <- Results
+                         ]
+             ]),
+    [ begin
+          send_start_printer(Id, Jid),
+          timer:sleep(Pause)
+      end
+           || {Pause, Id, Jid} <- List],
+    'ok'.
+
+
+-spec send_start_printer(ne_binary(), ne_binary()) -> any().
+send_start_printer(PrinterId, JID) ->
+    Payload = props:filter_undefined(
+                [{<<"Event-Name">>, <<"start">>}
+                 ,{<<"Application-Name">>, <<"fax">>}
+                 ,{<<"Application-Event">>, <<"init">>}
+                 ,{<<"Application-Data">>, PrinterId}
+                 ,{<<"JID">>, JID}
+                 | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+                ]),
+    kz_amqp_worker:cast(Payload, fun kapi_xmpp:publish_event/1).
+
+-spec handle_printer_start(kz_json:object(), kz_proplist()) -> sup_startchild_ret().
+handle_printer_start(JObj, _Props) ->
+    'true' = kapi_xmpp:event_v(JObj),
+    PrinterId = kz_json:get_value(<<"Application-Data">>, JObj),
+    fax_xmpp_sup:start_printer(PrinterId).
+
+-spec handle_printer_stop(kz_json:object(), kz_proplist()) -> 'ok'.
+handle_printer_stop(JObj, _Props) ->
+    'true' = kapi_xmpp:event_v(JObj),
+    PrinterId = kz_json:get_value(<<"Application-Data">>, JObj),
+    stop(PrinterId).

@@ -23,13 +23,14 @@
 
 -include("sysconf.hrl").
 
+-define(SERVER, ?MODULE).
+
 -define(RESPONDERS, [{'sysconf_get', [{<<"sysconf">>, <<"get_req">>}]}
                      ,{'sysconf_set', [{<<"sysconf">>, <<"set_req">>}]}
                      ,{'sysconf_flush', [{<<"sysconf">>, <<"flush_req">>}]}
                     ]).
 -define(BINDINGS, [{'sysconf', []}]).
 
--define(SERVER, ?MODULE).
 -define(SYSCONF_QUEUE_NAME, <<"sysconf_listener">>).
 -define(SYSCONF_QUEUE_OPTIONS, [{'exclusive', 'false'}]).
 -define(SYSCONF_CONSUME_OPTIONS, [{'exclusive', 'false'}]).
@@ -39,14 +40,11 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
-%%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
-%% @end
+%% @doc Starts the server
 %%--------------------------------------------------------------------
+-spec start_link() -> startlink_ret().
 start_link() ->
-    gen_listener:start_link(?MODULE, [{'responders', ?RESPONDERS}
+    gen_listener:start_link(?SERVER, [{'responders', ?RESPONDERS}
                                       ,{'bindings', ?BINDINGS}
                                       ,{'queue_name', ?SYSCONF_QUEUE_NAME}
                                       ,{'queue_options', ?SYSCONF_QUEUE_OPTIONS}
@@ -71,7 +69,6 @@ start_link() ->
 init([]) ->
     process_flag('trap_exit', 'true'),
     lager:debug("starting new sysconf server"),
-    _ = wh_couch_connections:add_change_handler(?WH_CONFIG_DB),
     {'ok', 'ok'}.
 
 %%--------------------------------------------------------------------
@@ -120,12 +117,12 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_info({'document_changes', _, _}, State) ->
-    whapps_config:flush(),
-    lager:info("system configuration was updated, flushing whapps config cache"),
+    kapps_config:flush(),
+    lager:info("system configuration was updated, flushing kapps config cache"),
     {'noreply', State};
 handle_info({'document_deleted', _}, State) ->
-    whapps_config:flush(),
-    lager:info("system configuration was updated, flushing whapps config cache"),
+    kapps_config:flush(),
+    lager:info("system configuration was updated, flushing kapps config cache"),
     {'noreply', State};
 handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),

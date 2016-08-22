@@ -1,10 +1,10 @@
 #!/bin/bash
 
-ln -s /opt/kazoo/utils/sup/sup /usr/bin/sup
-ln -s /opt/kazoo/utils/media_importer/media_importer /usr/bin/media_importer
+ln -s /opt/kazoo/core/priv/sup /usr/bin/sup
+ln -s /opt/kazoo/make/media_importer/media_importer /usr/bin/media_importer
 ln -s /opt/kazoo/scripts/rabbitmq-server.init /etc/init.d/rabbitmq-server
 ln -s /opt/kazoo/scripts/kz-generic.init /etc/init.d/kz-ecallmgr
-ln -s /opt/kazoo/scripts/kz-generic.init /etc/init.d/kz-whistle_apps
+ln -s /opt/kazoo/scripts/kz-generic.init /etc/init.d/kz-kazoo_apps
 ln -s /opt/kazoo/scripts/rabbitmq-generic.sh /usr/bin/rabbitmq-server
 ln -s /opt/kazoo/scripts/rabbitmq-generic.sh /usr/bin/rabbitmq-plugins
 ln -s /opt/kazoo/scripts/rabbitmq-generic.sh /usr/bin/rabbitmqctl
@@ -23,6 +23,6 @@ fi
 if ! getent passwd rabbitmq >/dev/null 2>&1; then
     useradd -r -g daemon -M -d /var/lib/rabbitmq -s /sbin/nologin rabbitmq
 else
-    usermod -g daemon -d /var/lib/rabbitmq -s /sbin/nologin rabbitmq                                                                                                                
+    usermod -g daemon -d /var/lib/rabbitmq -s /sbin/nologin rabbitmq
 fi
 

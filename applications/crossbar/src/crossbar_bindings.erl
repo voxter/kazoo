@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2014, 2600Hz INC
+%%% @copyright (C) 2010-2016, 2600Hz INC
 %%% @doc
 %%% Store routing keys/pid bindings. When a binding is fired,
 %%% pass the payload to the pid for evaluation, accumulating
@@ -26,6 +26,9 @@
          ,fold/2
          ,flush/0, flush/1, flush_mod/1
          ,modules_loaded/0
+        ]).
+
+-export([start_link/0
          ,init/0
         ]).
 
@@ -43,10 +46,10 @@
                    ne_binary() | % crossbar_cleanup
                    [cb_context:context() | path_token() | 'undefined',...] |
                    cb_context:context() |
-                   {cb_context:context(), wh_proplist()} | % v1_resource:rest_init/2
+                   {cb_context:context(), kz_proplist()} | % v1_resource:rest_init/2
                    {'error', _} | % v1_util:execute_request/2
-                   {wh_json:keys(), cb_context:context(), path_tokens()} |
-                   {wh_datetime(), cowboy_req:req(), cb_context:context()} | % v1_resource:expires/2
+                   {kz_json:keys(), cb_context:context(), path_tokens()} |
+                   {kz_datetime(), cowboy_req:req(), cb_context:context()} | % v1_resource:expires/2
                    {cowboy_req:req(), cb_context:context()}. % mapping over the request/context records
 
 %%%===================================================================
@@ -87,11 +90,11 @@ fold(Routing, Payload) ->
 %% Helper functions for working on a result set of bindings
 %% @end
 %%-------------------------------------------------------------------
--spec any(wh_proplist()) -> boolean().
+-spec any(kz_proplist()) -> boolean().
 any(Res) when is_list(Res) ->
     kazoo_bindings:any(Res, fun check_bool/1).
 
--spec all(wh_proplist()) -> boolean().
+-spec all(kz_proplist()) -> boolean().
 all(Res) when is_list(Res) ->
     kazoo_bindings:all(Res, fun check_bool/1).
 
@@ -138,7 +141,7 @@ filter_out_failed({'halt', _}) -> 'true';
 filter_out_failed({'false', _}) -> 'false';
 filter_out_failed('false') -> 'false';
 filter_out_failed({'EXIT', _}) -> 'false';
-filter_out_failed(Term) -> not wh_util:is_empty(Term).
+filter_out_failed(Term) -> not kz_util:is_empty(Term).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -152,7 +155,7 @@ filter_out_succeeded({'halt', _}) -> 'true';
 filter_out_succeeded({'false', _}) -> 'true';
 filter_out_succeeded('false') -> 'true';
 filter_out_succeeded({'EXIT', _}) -> 'true';
-filter_out_succeeded(Term) -> wh_util:is_empty(Term).
+filter_out_succeeded(Term) -> kz_util:is_empty(Term).
 
 -type bind_result() :: 'ok' |
                        {'error', 'exists'}.
@@ -186,13 +189,18 @@ modules_loaded() ->
 is_cb_module(<<"cb_", _/binary>>) -> 'true';
 is_cb_module(<<"crossbar_", _binary>>) -> 'true';
 is_cb_module(<<_/binary>>) -> 'false';
-is_cb_module(Mod) -> is_cb_module(wh_util:to_binary(Mod)).
+is_cb_module(Mod) -> is_cb_module(kz_util:to_binary(Mod)).
+
+-spec start_link() -> 'ignore'.
+start_link() ->
+    _ = init(),
+    'ignore'.
 
 -spec init() -> 'ok'.
 init() ->
     lager:debug("initializing bindings"),
 
-    wh_util:put_callid(?LOG_SYSTEM_ID),
+    kz_util:put_callid(?LOG_SYSTEM_ID),
     _ = [maybe_init_mod(Mod)
          || Mod <- crossbar_config:autoload_modules(?DEFAULT_MODULES)
     ],
@@ -200,7 +208,7 @@ init() ->
 
 -spec maybe_init_mod(ne_binary() | atom()) -> 'ok'.
 maybe_init_mod(Mod) ->
-    try (wh_util:to_atom(Mod, 'true')):init() of
+    try (kz_util:to_atom(Mod, 'true')):init() of
         _ -> 'ok'
     catch
         _E:_R ->
@@ -211,10 +219,10 @@ maybe_init_mod(Mod) ->
 -spec maybe_init_mod_versions(ne_binaries(), ne_binary() | atom()) -> 'ok'.
 maybe_init_mod_versions([], _) -> 'ok';
 maybe_init_mod_versions([Version|Versions], Mod) ->
-    Module = <<(wh_util:to_binary(Mod))/binary
-               , "_", (wh_util:to_binary(Version))/binary
+    Module = <<(kz_util:to_binary(Mod))/binary
+               , "_", (kz_util:to_binary(Version))/binary
              >>,
-    try (wh_util:to_atom(Module, 'true')):init() of
+    try (kz_util:to_atom(Module, 'true')):init() of
         _ ->
             lager:notice("module ~s version ~s successfully loaded", [Mod, Version]),
             maybe_init_mod_versions(Versions, Mod)

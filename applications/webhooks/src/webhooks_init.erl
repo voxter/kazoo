@@ -17,8 +17,8 @@
 
 -spec start_link() -> 'ignore'.
 start_link() ->
-    wh_util:put_callid(?MODULE),
-    spawn(fun do_init/0),
+    kz_util:put_callid(?MODULE),
+    _ = kz_util:spawn(fun do_init/0),
     'ignore'.
 
 -spec do_init() -> 'ok'.
@@ -36,16 +36,16 @@ init_dbs() ->
     _ = init_master_account_db(),
     webhooks_util:init_webhook_db().
 
--spec maybe_init_account(wh_json:object(), wh_proplist()) -> 'ok' | 'false'.
+-spec maybe_init_account(kz_json:object(), kz_proplist()) -> 'ok' | 'false'.
 maybe_init_account(JObj, _Props) ->
-    Database = wapi_conf:get_database(JObj),
-    couch_util:db_classification(Database) =:= 'account'
+    Database = kapi_conf:get_database(JObj),
+    kz_datamgr:db_classification(Database) =:= 'account'
         andalso do_init(Database).
 
 -spec init_master_account_db() -> 'ok'.
 -spec init_master_account_db(ne_binary()) -> 'ok'.
 init_master_account_db() ->
-    case whapps_util:get_master_account_db() of
+    case kapps_util:get_master_account_db() of
         {'ok', MasterAccountDb} ->
             init_master_account_db(MasterAccountDb);
         {'error', _} ->
@@ -54,7 +54,7 @@ init_master_account_db() ->
     end.
 
 init_master_account_db(MasterAccountDb) ->
-    _ = couch_mgr:revise_doc_from_file(MasterAccountDb
+    _ = kz_datamgr:revise_doc_from_file(MasterAccountDb
                                       ,'webhooks'
                                       ,<<"webhooks.json">>
                                       ),
@@ -81,27 +81,25 @@ init_module(Module) ->
 
 -spec existing_modules() -> atoms().
 existing_modules() ->
-    ModulesDirectory =
-        filename:join([code:lib_dir('webhooks')
-                       ,"src"
-                       ,"modules"
-                      ]),
-    existing_modules(ModulesDirectory).
+    existing_modules(code:lib_dir(kz_util:to_atom(?APP_NAME))).
 
--spec existing_modules(text()) -> atoms().
-existing_modules(ModulesDirectory) ->
-    filelib:fold_files(ModulesDirectory
-                       ,"\\.erl$"
-                       ,'false'
-                       ,fun fold_files/2
-                       ,[]
-                      ).
-
--spec fold_files(text(), atoms()) -> atoms().
-fold_files(File, Acc) ->
-    [wh_util:to_atom(
-       filename:basename(File, ".erl")
-       ,'true'
-      )
-     | Acc
+-spec existing_modules(string()) -> atoms().
+existing_modules(WebhooksRoot) ->
+    ModulesDirectory = filename:join(WebhooksRoot, "ebin"),
+    Extension = ".beam",
+    Utils = ["webhooks_app"
+             ,"webhooks_channel_util"
+             ,"webhooks_disabler"
+             ,"webhooks_init"
+             ,"webhooks_listener"
+             ,"webhooks_maintenance"
+             ,"webhooks_shared_listener"
+             ,"webhooks_skel"
+             ,"webhooks_sup"
+             ,"webhooks_util"
+            ],
+    Pattern = filename:join(ModulesDirectory, "*"++Extension),
+    [kz_util:to_atom(Module, 'true')
+     || Path <- filelib:wildcard(Pattern),
+        not lists:member((Module=filename:basename(Path, Extension)), Utils)
     ].
