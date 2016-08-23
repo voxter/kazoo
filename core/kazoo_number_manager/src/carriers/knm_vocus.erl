@@ -2,13 +2,13 @@
 %%% @copyright (C) 2016, Voxter Communication Inc.
 %%% @doc
 %%%
-%%% WNM module for Vocus Communications
+%%% KNM module for Vocus Communications
 %%%
 %%% @end
 %%% @contributors
 %%%   Daniel Finke
 %%%-------------------------------------------------------------------
--module(wnm_vocus).
+-module(knm_vocus).
 
 -export([find_numbers/3
          ,acquire_number/1
@@ -17,7 +17,7 @@
          ,is_number_billable/1
         ]).
 
--include("../wnm.hrl").
+-include("../knm.hrl").
 
 %%--------------------------------------------------------------------
 %% @public
@@ -26,7 +26,7 @@
 %% in a rate center
 %% @end
 %%--------------------------------------------------------------------
--spec find_numbers(ne_binary(), pos_integer(), wh_proplist()) ->
+-spec find_numbers(ne_binary(), pos_integer(), kz_proplist()) ->
                           {'error', 'non_available'}.
 find_numbers(_Prefix, _Quantity, _Options) ->
     {'error', 'non_available'}.

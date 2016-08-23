@@ -8,7 +8,7 @@
 %%% @contributors
 %%%   Karl Anderson
 %%%-------------------------------------------------------------------
--module(wnm_wikibuli).
+-module(knm_wikibuli).
 
 -export([find_numbers/3]).
 -export([acquire_number/1]).
@@ -16,7 +16,7 @@
 -export([is_number_billable/1]).
 -export([should_lookup_cnam/0]).
 
--include("../wnm.hrl").
+-include("../knm.hrl").
 
 %%--------------------------------------------------------------------
 %% @public
@@ -25,7 +25,7 @@
 %% in a rate center
 %% @end
 %%--------------------------------------------------------------------
--spec find_numbers(ne_binary(), pos_integer(), wh_proplist()) ->
+-spec find_numbers(ne_binary(), pos_integer(), kz_proplist()) ->
                           {'error', 'non_available'}.
 find_numbers(Number, Quanity, Opts) when size(Number) < 5 ->
     find_numbers(<<"+1", Number/binary>>, Quanity, Opts);

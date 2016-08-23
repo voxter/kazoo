@@ -2,13 +2,13 @@
 %%% @copyright (C) 2016, Voxter Communication Inc.
 %%% @doc
 %%%
-%%% WNM module for ThinkTel
+%%% KNM module for ThinkTel
 %%%
 %%% @end
 %%% @contributors
 %%%   Daniel Finke
 %%%-------------------------------------------------------------------
--module(wnm_thinktel).
+-module(knm_thinktel).
 
 -export([find_numbers/3
          ,acquire_number/1
@@ -17,7 +17,7 @@
          ,is_number_billable/1
         ]).
 
--include("../wnm.hrl").
+-include("../knm.hrl").
 
 %%--------------------------------------------------------------------
 %% @public
@@ -26,7 +26,7 @@
 %% in a rate center
 %% @end
 %%--------------------------------------------------------------------
--spec find_numbers(ne_binary(), pos_integer(), wh_proplist()) ->
+-spec find_numbers(ne_binary(), pos_integer(), kz_proplist()) ->
                           {'error', 'non_available'}.
 find_numbers(_Prefix, _Quantity, _Options) ->
     {'error', 'non_available'}.

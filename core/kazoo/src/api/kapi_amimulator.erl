@@ -1,20 +1,20 @@
 %%%-------------------------------------------------------------------
 
 %%%-------------------------------------------------------------------
--module(wapi_amimulator).
+-module(kapi_amimulator).
 
 -export([control_queue_req/1, control_queue_req_v/1
-		 ,control_queue_resp/1, control_queue_resp_v/1
-	    ]).
+         ,control_queue_resp/1, control_queue_resp_v/1
+        ]).
 
 -export([bind_q/2, unbind_q/2]).
 -export([declare_exchanges/0]).
 
 -export([publish_control_queue_req/1, publish_control_queue_req/2
-		 ,publish_control_queue_resp/2, publish_control_queue_resp/3
-		]).
+         ,publish_control_queue_resp/2, publish_control_queue_resp/3
+        ]).
 
--include_lib("whistle/include/wh_api.hrl").
+-include_lib("kazoo/include/kz_api.hrl").
 
 -define(CONTROL_QUEUE_REQ_HEADERS, [<<"Call-ID">>]).
 -define(OPTIONAL_CONTROL_QUEUE_REQ_HEADERS, []).
@@ -37,51 +37,51 @@
 %%--------------------------------------------------------------------
 
 %%--------------------------------------------------------------------
--spec control_queue_req(wh_json:object() | wh_proplist()) ->
+-spec control_queue_req(kz_json:object() | kz_proplist()) ->
                  {'ok', iolist()} |
                  {'error', string()}.
 control_queue_req(Prop) when is_list(Prop) ->
     case control_queue_req_v(Prop) of
-        'true' -> wh_api:build_message(Prop, ?CONTROL_QUEUE_REQ_HEADERS, ?OPTIONAL_CONTROL_QUEUE_REQ_HEADERS);
+        'true' -> kz_api:build_message(Prop, ?CONTROL_QUEUE_REQ_HEADERS, ?OPTIONAL_CONTROL_QUEUE_REQ_HEADERS);
         'false' -> {'error', "Proplist failed validation for control_queue_req"}
     end;
-control_queue_req(JObj) -> control_queue_req(wh_json:to_proplist(JObj)).
+control_queue_req(JObj) -> control_queue_req(kz_json:to_proplist(JObj)).
 
--spec control_queue_req_v(wh_json:object() | wh_proplist()) -> boolean().
+-spec control_queue_req_v(kz_json:object() | kz_proplist()) -> boolean().
 control_queue_req_v(Prop) when is_list(Prop) ->
-    wh_api:validate(Prop, ?CONTROL_QUEUE_REQ_HEADERS, ?CONTROL_QUEUE_REQ_VALUES, ?CONTROL_QUEUE_REQ_TYPES);
-control_queue_req_v(JObj) -> control_queue_req_v(wh_json:to_proplist(JObj)).
+    kz_api:validate(Prop, ?CONTROL_QUEUE_REQ_HEADERS, ?CONTROL_QUEUE_REQ_VALUES, ?CONTROL_QUEUE_REQ_TYPES);
+control_queue_req_v(JObj) -> control_queue_req_v(kz_json:to_proplist(JObj)).
 
 %%--------------------------------------------------------------------
 
 %%--------------------------------------------------------------------
--spec control_queue_resp(wh_json:object() | wh_proplist()) ->
+-spec control_queue_resp(kz_json:object() | kz_proplist()) ->
                  {'ok', iolist()} |
                  {'error', string()}.
 control_queue_resp(Prop) when is_list(Prop) ->
     case control_queue_resp_v(Prop) of
-        'true' -> wh_api:build_message(Prop, ?CONTROL_QUEUE_RESP_HEADERS, ?OPTIONAL_CONTROL_QUEUE_RESP_HEADERS);
+        'true' -> kz_api:build_message(Prop, ?CONTROL_QUEUE_RESP_HEADERS, ?OPTIONAL_CONTROL_QUEUE_RESP_HEADERS);
         'false' -> {'error', "Proplist failed validation for control_queue_resp"}
     end;
-control_queue_resp(JObj) -> control_queue_resp(wh_json:to_proplist(JObj)).
+control_queue_resp(JObj) -> control_queue_resp(kz_json:to_proplist(JObj)).
 
--spec control_queue_resp_v(wh_json:object() | wh_proplist()) -> boolean().
+-spec control_queue_resp_v(kz_json:object() | kz_proplist()) -> boolean().
 control_queue_resp_v(Prop) when is_list(Prop) ->
-    wh_api:validate(Prop, ?CONTROL_QUEUE_RESP_HEADERS, ?CONTROL_QUEUE_RESP_VALUES, ?CONTROL_QUEUE_RESP_TYPES);
-control_queue_resp_v(JObj) -> control_queue_resp_v(wh_json:to_proplist(JObj)).
+    kz_api:validate(Prop, ?CONTROL_QUEUE_RESP_HEADERS, ?CONTROL_QUEUE_RESP_VALUES, ?CONTROL_QUEUE_RESP_TYPES);
+control_queue_resp_v(JObj) -> control_queue_resp_v(kz_json:to_proplist(JObj)).
 
 %%--------------------------------------------------------------------
 
 %%--------------------------------------------------------------------
--spec bind_q(ne_binary(), wh_proplist()) -> 'ok'.
+-spec bind_q(ne_binary(), kz_proplist()) -> 'ok'.
 bind_q(Queue, Props) ->
     CallId = props:get_value('callid', Props),
-    amqp_util:bind_q_to_whapps(Queue, ?CONTROL_QUEUE_ROUTING_KEY(CallId)).
+    amqp_util:bind_q_to_kapps(Queue, ?CONTROL_QUEUE_ROUTING_KEY(CallId)).
 
--spec unbind_q(ne_binary(), wh_proplist()) -> 'ok'.
+-spec unbind_q(ne_binary(), kz_proplist()) -> 'ok'.
 unbind_q(Queue, Props) ->
     CallId = props:get_value('callid', Props),
-    amqp_util:unbind_q_from_whapps(Queue, ?CONTROL_QUEUE_ROUTING_KEY(CallId)).
+    amqp_util:unbind_q_from_kapps(Queue, ?CONTROL_QUEUE_ROUTING_KEY(CallId)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -90,7 +90,7 @@ unbind_q(Queue, Props) ->
 %%--------------------------------------------------------------------
 -spec declare_exchanges() -> 'ok'.
 declare_exchanges() ->
-    amqp_util:whapps_exchange().
+    amqp_util:kapps_exchange().
 
 %%--------------------------------------------------------------------
 
@@ -100,13 +100,13 @@ declare_exchanges() ->
 publish_control_queue_req(JObj) ->
     publish_control_queue_req(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_control_queue_req(Req, ContentType) ->
-    {'ok', Payload} = wh_api:prepare_api_payload(Req, ?CONTROL_QUEUE_REQ_VALUES, fun ?MODULE:control_queue_req/1),
-    amqp_util:whapps_publish(?CONTROL_QUEUE_ROUTING_KEY(call_id(Req)), Payload, ContentType).
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?CONTROL_QUEUE_REQ_VALUES, fun ?MODULE:control_queue_req/1),
+    amqp_util:kapps_publish(?CONTROL_QUEUE_ROUTING_KEY(call_id(Req)), Payload, ContentType).
 
 call_id([_|_]=API) ->
     props:get_value(<<"Call-ID">>, API);
 call_id(JObj) ->
-    wh_json:get_value(<<"Call-ID">>, JObj).
+    kz_json:get_value(<<"Call-ID">>, JObj).
 
 %%--------------------------------------------------------------------
 
@@ -116,5 +116,5 @@ call_id(JObj) ->
 publish_control_queue_resp(Q, JObj) ->
     publish_control_queue_resp(Q, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_control_queue_resp(Q, Req, ContentType) ->
-    {'ok', Payload} = wh_api:prepare_api_payload(Req, ?CONTROL_QUEUE_RESP_VALUES, fun ?MODULE:control_queue_resp/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?CONTROL_QUEUE_RESP_VALUES, fun ?MODULE:control_queue_resp/1),
     amqp_util:targeted_publish(Q, Payload, ContentType).
