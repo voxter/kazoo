@@ -4,7 +4,7 @@
 %% mi :: Most Idle
 -type queue_strategy() :: 'rr' | 'mi'.
 
--record(state, {ignored_member_calls = dict:new() :: dict()
+-record(state, {ignored_member_calls = dict:new() :: dict:dict()
                 ,account_id :: api_binary()
                 ,queue_id :: api_binary()
                 ,supervisor :: pid()
@@ -27,7 +27,7 @@
                }).
 -type mgr_state() :: #state{}.
 
--type queue_strategy_state() :: queue() | ne_binaries().
+-type queue_strategy_state() :: queue:queue() | ne_binaries().
 -type ss_details() :: {non_neg_integer(), 'busy' | 'undefined'}.
 -record(strategy_state, {agents :: queue_strategy_state()
                           %% details include # of agent processes and availability
