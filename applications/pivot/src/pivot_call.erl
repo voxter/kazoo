@@ -457,7 +457,6 @@ send(Call, Uri, Method, ReqHdrs, ReqBody, Debug) ->
 
     Opts = [{'stream_to', self()}
             ,{'ssl_options', [{'versions', ['tlsv1.2','tlsv1.1',tlsv1,sslv3]}]}
-            | ?DEFAULT_OPTS
            ],
     case kz_http:async_req(self(), Method, kz_util:to_list(Uri), ReqHdrs, ReqBody, Opts) of
         {'http_req_id', ReqId} ->
