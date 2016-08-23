@@ -386,7 +386,7 @@ update_user_creds(VMBoxId, #cb_context{db_name=AccountDb, req_data=ReqData}) ->
 		'ok';
 	true ->
 		{'ok', VMJObj} = couch_mgr:open_doc(AccountDb, VMBoxId),
-		OwnerId = wh_json:get_value(<<"owner_id">>, VMJObj),
+		OwnerId = kz_json:get_value(<<"owner_id">>, VMJObj),
 	
 		if OwnerId == 'undefined' ->
 			lager:info("Voicemail does not have an owner"),
@@ -403,11 +403,11 @@ update_user_creds(VMBoxId, #cb_context{db_name=AccountDb, req_data=ReqData}) ->
 						false ->
 							'ok';
 						true ->
-							Username = wh_json:get_value(<<"username">>, UserFullDoc),
-							Pin = wh_json:get_value(<<"pin">>, ReqData),
+							Username = kz_json:get_value(<<"username">>, UserFullDoc),
+							Pin = kz_json:get_value(<<"pin">>, ReqData),
 							{MD5, SHA1} = cb_modules_util:pass_hashes(Username, Pin),
 							couch_mgr:save_doc(AccountDb,
-								wh_json:set_values([{<<"pvt_md5_auth">>, MD5}, {<<"pvt_sha1_auth">>, SHA1}],
+								kz_json:set_values([{<<"pvt_md5_auth">>, MD5}, {<<"pvt_sha1_auth">>, SHA1}],
 								UserFullDoc
 							))
 					end
@@ -417,7 +417,7 @@ update_user_creds(VMBoxId, #cb_context{db_name=AccountDb, req_data=ReqData}) ->
 			
 should_update_user_creds(UserFullDoc) ->
 	try
-		_ = list_to_integer(binary_to_list(wh_json:get_value(<<"username">>, UserFullDoc))),
+		_ = list_to_integer(binary_to_list(kz_json:get_value(<<"username">>, UserFullDoc))),
 		
 		case UserFullDoc of
 			'undefined' -> lager:info("Could not find user"),

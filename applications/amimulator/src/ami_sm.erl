@@ -509,16 +509,16 @@ maybe_purge_queue_call(QueueId, Call) ->
 
 initial_registrations(AccountId) ->
 	{'ok', AccountDoc} = couch_mgr:open_doc(<<"accounts">>, AccountId),
-    AccountRealm = wh_json:get_value(<<"realm">>, AccountDoc),
+    AccountRealm = kz_json:get_value(<<"realm">>, AccountDoc),
 
     Req = [
         {<<"Realm">>, AccountRealm}
-        | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+        | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
     ],
 
-    ReqResp = whapps_util:amqp_pool_collect(
+    ReqResp = kapps_util:amqp_pool_collect(
         Req,
-        fun wapi_registration:publish_query_req/1,
+        fun kapi_registration:publish_query_req/1,
         {'ecallmgr', 'true'}
     ),
     case ReqResp of
@@ -529,16 +529,16 @@ initial_registrations(AccountId) ->
         	lager:debug("~p responses for list of registrations", [length(JObjs)]),
             lists:foreach(fun(JObj) ->
                 lists:foreach(fun(RegJObj) ->
-                    % lager:debug("Going to add registration for username ~p", [wh_json:get_value(<<"Username">>, RegJObj)]),
-                    EndpointId = case wh_json:get_value(<<"Owner-ID">>, RegJObj) of
+                    % lager:debug("Going to add registration for username ~p", [kz_json:get_value(<<"Username">>, RegJObj)]),
+                    EndpointId = case kz_json:get_value(<<"Owner-ID">>, RegJObj) of
                     	<<"undefined">> ->
-                    		wh_json:get_value(<<"Authorizing-ID">>, RegJObj);
+                    		kz_json:get_value(<<"Authorizing-ID">>, RegJObj);
                     	OwnerId ->
                     		OwnerId
                     end,
                     NormalizedReg = cb_registrations:normalize_registration(RegJObj),
-                    ets:insert('registrations', {EndpointId, AccountId, wh_json:get_value(<<"contact_ip">>, NormalizedReg), wh_json:get_value(<<"contact_port">>, NormalizedReg)})
-                end, wh_json:get_value(<<"Fields">>, JObj))
+                    ets:insert('registrations', {EndpointId, AccountId, kz_json:get_value(<<"contact_ip">>, NormalizedReg), kz_json:get_value(<<"contact_port">>, NormalizedReg)})
+                end, kz_json:get_value(<<"Fields">>, JObj))
             end, JObjs)
     end.
 

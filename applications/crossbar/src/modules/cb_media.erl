@@ -382,14 +382,14 @@ put(Context) ->
     put_media(Context, cb_context:account_id(Context)).
 
 -spec put_media(cb_context:context(), api_binary()) -> cb_context:context().
--spec put_media(cb_context:context(), wh_json:object(), boolean()) -> cb_context:context().
+-spec put_media(cb_context:context(), kz_json:object(), boolean()) -> cb_context:context().
 put_media(Context, 'undefined') ->
     put_media(cb_context:set_account_db(Context, ?KZ_MEDIA_DB), <<"ignore">>);
 put_media(Context, _AccountId) ->
     JObj = cb_context:doc(Context),
     TTS = is_tts(JObj),
 
-    case wh_json:get_value(<<"prompt_id">>, JObj) of
+    case kz_json:get_value(<<"prompt_id">>, JObj) of
         'undefined' -> put_media(Context, JObj, TTS);
         _PromptId -> put_prompt(Context, JObj)
     end.
@@ -413,9 +413,9 @@ put_media(Context, JObj, TTS) ->
                ],
     lists:foldl(fun(F, C) -> F(C) end, Context, Routines).
 
--spec put_prompt(cb_context:context(), wh_json:object()) -> cb_context:context().
+-spec put_prompt(cb_context:context(), kz_json:object()) -> cb_context:context().
 put_prompt(Context, JObj) ->
-    case couch_mgr:open_cache_doc(cb_context:account_db(Context), wh_doc:id(JObj)) of
+    case couch_mgr:open_cache_doc(cb_context:account_db(Context), kz_doc:id(JObj)) of
         {'ok', ExistingDoc} -> force_put_prompt_if_deleted(Context, ExistingDoc);
         _ -> do_put_prompt(Context)
     end.
@@ -427,9 +427,9 @@ put_prompt(Context, JObj) ->
 %% pvt_deleted set to 'true'. Remove them and replace here
 %% @end
 %%--------------------------------------------------------------------
--spec force_put_prompt_if_deleted(cb_context:context(), wh_json:object()) -> cb_context:context().
+-spec force_put_prompt_if_deleted(cb_context:context(), kz_json:object()) -> cb_context:context().
 force_put_prompt_if_deleted(Context, ExistingDoc) ->
-    case wh_json:is_true(<<"pvt_deleted">>, ExistingDoc) of
+    case kz_json:is_true(<<"pvt_deleted">>, ExistingDoc) of
         'false' ->
             %% Still perform the normal behaviour which will cause a 409 Conflict
             'ok';

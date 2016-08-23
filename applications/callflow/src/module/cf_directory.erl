@@ -120,11 +120,11 @@ handle(Data, Call) ->
     of
         {'ok', Users} ->
             State = #directory{
-                       sort_by = get_sort_by(wh_json:get_value(<<"sort_by">>, DirJObj, <<"last_name">>))
-                       ,search_fields = get_search_fields(wh_json:get_value(<<"search_fields">>, DirJObj, <<"both">>))
-                       ,min_dtmf = wh_json:get_integer_value(<<"min_dtmf">>, DirJObj, 3)
-                       ,max_dtmf = wh_json:get_integer_value(<<"max_dtmf">>, DirJObj, 0)
-                       ,confirm_match = wh_json:is_true(<<"confirm_match">>, DirJObj, 'false')
+                       sort_by = get_sort_by(kz_json:get_value(<<"sort_by">>, DirJObj, <<"last_name">>))
+                       ,search_fields = get_search_fields(kz_json:get_value(<<"search_fields">>, DirJObj, <<"both">>))
+                       ,min_dtmf = kz_json:get_integer_value(<<"min_dtmf">>, DirJObj, 3)
+                       ,max_dtmf = kz_json:get_integer_value(<<"max_dtmf">>, DirJObj, 0)
+                       ,confirm_match = kz_json:is_true(<<"confirm_match">>, DirJObj, 'false')
                        ,digits_collected = <<>>
                       },
             Users1 = sort_users(Users, State#directory.sort_by),
@@ -141,7 +141,7 @@ handle(Data, Call) ->
 
 -spec directory_start(kapps_call:call(), directory(), directory_users()) -> 'ok'.
 directory_start(Call, State, CurrUsers) ->
-    _ = whapps_call_command:flush_dtmf(Call),
+    _ = kapps_call_command:flush_dtmf(Call),
     case play_directory_instructions(Call, search_fields(State)) of
 	{'ok', DTMF} -> collect_digits(Call, State, CurrUsers, DTMF);
 	{'error', _Error} ->
@@ -301,7 +301,7 @@ maybe_play_media(Call, User, MediaId) ->
 	{'error', _} -> {'tts', <<39, (full_name(User))/binary, 39>>}
     end.
 
--spec play_directory_instructions(whapps_call:call(), 'first' | 'last' | 'both' | ne_binary()) ->
+-spec play_directory_instructions(kapps_call:call(), 'first' | 'last' | 'both' | ne_binary()) ->
                                          {'ok', binary()} |
 					 {'error', atom()}.
 play_directory_instructions(Call, 'first') ->
@@ -415,17 +415,17 @@ sort_users(Users, Order) ->
                        case Order of
                            'first' ->
                                name_compare(
-                                 wh_util:to_list(User1#directory_user.first_name)
-                                 ,wh_util:to_list(User1#directory_user.last_name)
-                                 ,wh_util:to_list(User2#directory_user.first_name)
-                                 ,wh_util:to_list(User2#directory_user.last_name)
+                                 kz_util:to_list(User1#directory_user.first_name)
+                                 ,kz_util:to_list(User1#directory_user.last_name)
+                                 ,kz_util:to_list(User2#directory_user.first_name)
+                                 ,kz_util:to_list(User2#directory_user.last_name)
                                 );
                            'last' ->
                                name_compare(
-                                 wh_util:to_list(User1#directory_user.last_name)
-                                 ,wh_util:to_list(User1#directory_user.first_name)
-                                 ,wh_util:to_list(User2#directory_user.last_name)
-                                 ,wh_util:to_list(User2#directory_user.first_name)
+                                 kz_util:to_list(User1#directory_user.last_name)
+                                 ,kz_util:to_list(User1#directory_user.first_name)
+                                 ,kz_util:to_list(User2#directory_user.last_name)
+                                 ,kz_util:to_list(User2#directory_user.first_name)
                                 )
                        end
                end, Users).

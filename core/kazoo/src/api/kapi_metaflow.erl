@@ -63,34 +63,34 @@ req_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?METAFLOW_REQ_HEADERS, ?METAFLOW_REQ_VALUES, ?METAFLOW_REQ_TYPES);
 req_v(JObj) -> req_v(kz_json:to_proplist(JObj)).
 
--spec update(wh_json:object() | wh_proplist()) ->
+-spec update(kz_json:object() | kz_proplist()) ->
                  {'ok', iolist()} |
                  {'error', string()}.
 update(Prop) when is_list(Prop) ->
     case update_v(Prop) of
-        'true' -> wh_api:build_message(Prop, ?METAFLOW_UPDATE_HEADERS, ?OPTIONAL_METAFLOW_UPDATE_HEADERS);
+        'true' -> kz_api:build_message(Prop, ?METAFLOW_UPDATE_HEADERS, ?OPTIONAL_METAFLOW_UPDATE_HEADERS);
         'false' -> {'error', "Proplist failed validation for metaflow_update"}
     end;
-update(JObj) -> update(wh_json:to_proplist(JObj)).
+update(JObj) -> update(kz_json:to_proplist(JObj)).
 
--spec update_v(wh_json:object() | wh_proplist()) -> boolean().
+-spec update_v(kz_json:object() | kz_proplist()) -> boolean().
 update_v(Prop) when is_list(Prop) ->
-    wh_api:validate(Prop, ?METAFLOW_UPDATE_HEADERS, ?METAFLOW_UPDATE_VALUES, ?METAFLOW_UPDATE_TYPES);
-update_v(JObj) -> update_v(wh_json:to_proplist(JObj)).
+    kz_api:validate(Prop, ?METAFLOW_UPDATE_HEADERS, ?METAFLOW_UPDATE_VALUES, ?METAFLOW_UPDATE_TYPES);
+update_v(JObj) -> update_v(kz_json:to_proplist(JObj)).
 
--spec bind_q(ne_binary(), wh_proplist()) -> 'ok'.
+-spec bind_q(ne_binary(), kz_proplist()) -> 'ok'.
 bind_q(Queue, Props) ->
     CallId = props:get_value('callid', Props),
     Action = props:get_value('action', Props, <<"*">>),
-    amqp_util:bind_q_to_whapps(Queue, ?METAFLOW_REQ_ROUTING_KEY(CallId, Action)),
-    amqp_util:bind_q_to_whapps(Queue, ?METAFLOW_UPDATE_ROUTING_KEY(CallId)).
+    amqp_util:bind_q_to_kapps(Queue, ?METAFLOW_REQ_ROUTING_KEY(CallId, Action)),
+    amqp_util:bind_q_to_kapps(Queue, ?METAFLOW_UPDATE_ROUTING_KEY(CallId)).
 
 -spec unbind_q(ne_binary(), kz_proplist()) -> 'ok'.
 unbind_q(Queue, Props) ->
     CallId = props:get_value('callid', Props),
     Action = props:get_value('action', Props, <<"*">>),
-    amqp_util:unbind_q_from_whapps(Queue, ?METAFLOW_REQ_ROUTING_KEY(CallId, Action)),
-    amqp_util:unbind_q_from_whapps(Queue, ?METAFLOW_UPDATE_ROUTING_KEY(CallId)).
+    amqp_util:unbind_q_from_kapps(Queue, ?METAFLOW_REQ_ROUTING_KEY(CallId, Action)),
+    amqp_util:unbind_q_from_kapps(Queue, ?METAFLOW_UPDATE_ROUTING_KEY(CallId)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -114,8 +114,8 @@ publish_req(Req, ContentType) ->
 publish_update(JObj) ->
     publish_update(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_update(Req, ContentType) ->
-    {'ok', Payload} = wh_api:prepare_api_payload(Req, ?METAFLOW_UPDATE_VALUES, fun ?MODULE:update/1),
-    amqp_util:whapps_publish(?METAFLOW_UPDATE_ROUTING_KEY(call_id(Req)), Payload, ContentType).
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?METAFLOW_UPDATE_VALUES, fun ?MODULE:update/1),
+    amqp_util:kapps_publish(?METAFLOW_UPDATE_ROUTING_KEY(call_id(Req)), Payload, ContentType).
 
 action([_|_]=API) ->
     props:get_value(<<"Action">>, API);

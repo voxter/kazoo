@@ -241,14 +241,14 @@ handle_metaflow_req(JObj, _Props) ->
             ]),
     relay_to_fsm(CallId, <<"metaflow_exe">>, Evt).
 
--spec handle_metaflow_update(wh_json:object(), wh_proplist()) -> any().
+-spec handle_metaflow_update(kz_json:object(), kz_proplist()) -> any().
 handle_metaflow_update(JObj, _Props) ->
-    'true' = wapi_metaflow:update_v(JObj),
+    'true' = kapi_metaflow:update_v(JObj),
 
     CallId = kz_call_event:call_id(JObj),
     relay_to_fsm(CallId, <<"update">>, JObj).
 
--spec handle_konami(wh_json:object(), wh_proplist()) -> 'ok'.
+-spec handle_konami(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_konami(JObj, _Props) ->
     handle_konami_api(JObj, kz_json:get_value(<<"Event-Name">>, JObj)).
 

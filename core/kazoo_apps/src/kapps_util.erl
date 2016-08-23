@@ -355,9 +355,9 @@ is_account_db(Db) -> kz_datamgr:db_classification(Db) =:= 'account'.
                                   {'ok', ne_binary()} |
                                   {'error', 'not_found'}.
 get_account_by_id(Id) ->
-    case couch_mgr:open_doc(?WH_ACCOUNTS_DB, Id) of
+    case couch_mgr:open_doc(?KZ_ACCOUNTS_DB, Id) of
         {'ok', JObj} ->
-            AccountDb = wh_json:get_value(<<"pvt_account_db">>, JObj),
+            AccountDb = kz_json:get_value(<<"pvt_account_db">>, JObj),
             {'ok', AccountDb};
         _E ->
             lager:debug("error while fetching account by id: ~p", [_E]),

@@ -6,7 +6,7 @@
 %%% @contributors
 %%%   James Aimonetti
 %%%-------------------------------------------------------------------
--module(wapi_pivot).
+-module(kapi_pivot).
 
 -include("pivot.hrl").
 
@@ -35,8 +35,8 @@
 -define(PIVOT_REQ_VALUES, [{<<"Event-Category">>,<<"dialplan">>}
                            ,{<<"Event-Name">>, <<"pivot_req">>}
                           ]).
--define(PIVOT_REQ_TYPES, [{<<"Call">>, fun wh_json:is_json_object/1}
-                          ,{<<"Debug">>, fun wh_util:is_boolean/1}
+-define(PIVOT_REQ_TYPES, [{<<"Call">>, fun kz_json:is_json_object/1}
+                          ,{<<"Debug">>, fun kz_util:is_boolean/1}
                          ]).
 
 -define(PIVOT_SUCCEEDED_HEADERS, [<<"Call-ID">>]).
@@ -58,55 +58,55 @@
 req(Prop) when is_list(Prop) ->
     case req_v(Prop) of
         'false' -> {'error', "Proplist failed validation for pivot_req"};
-        'true' -> wh_api:build_message(Prop, ?PIVOT_REQ_HEADERS, ?OPTIONAL_PIVOT_REQ_HEADERS)
+        'true' -> kz_api:build_message(Prop, ?PIVOT_REQ_HEADERS, ?OPTIONAL_PIVOT_REQ_HEADERS)
     end;
 req(JObj) ->
-    req(wh_json:to_proplist(JObj)).
+    req(kz_json:to_proplist(JObj)).
 
 -spec req_v(api_terms()) -> boolean().
 req_v(Prop) when is_list(Prop) ->
-    wh_api:validate(Prop, ?PIVOT_REQ_HEADERS, ?PIVOT_REQ_VALUES, ?PIVOT_REQ_TYPES);
+    kz_api:validate(Prop, ?PIVOT_REQ_HEADERS, ?PIVOT_REQ_VALUES, ?PIVOT_REQ_TYPES);
 req_v(JObj) ->
-    req_v(wh_json:to_proplist(JObj)).
+    req_v(kz_json:to_proplist(JObj)).
 
 -spec succeeded(api_terms()) -> {'ok', iolist()} |
                           {'error', string()}.
 succeeded(Prop) when is_list(Prop) ->
     case succeeded_v(Prop) of
         'false' -> {'error', "Proplist failed validation for pivot_succeeded"};
-        'true' -> wh_api:build_message(Prop, ?PIVOT_SUCCEEDED_HEADERS, ?OPTIONAL_PIVOT_SUCCEEDED_HEADERS)
+        'true' -> kz_api:build_message(Prop, ?PIVOT_SUCCEEDED_HEADERS, ?OPTIONAL_PIVOT_SUCCEEDED_HEADERS)
     end;
 succeeded(JObj) ->
-    succeeded(wh_json:to_proplist(JObj)).
+    succeeded(kz_json:to_proplist(JObj)).
 
 -spec succeeded_v(api_terms()) -> boolean().
 succeeded_v(Prop) when is_list(Prop) ->
-    wh_api:validate(Prop, ?PIVOT_SUCCEEDED_HEADERS, ?PIVOT_SUCCEEDED_VALUES, ?PIVOT_SUCCEEDED_TYPES);
+    kz_api:validate(Prop, ?PIVOT_SUCCEEDED_HEADERS, ?PIVOT_SUCCEEDED_VALUES, ?PIVOT_SUCCEEDED_TYPES);
 succeeded_v(JObj) ->
-    succeeded_v(wh_json:to_proplist(JObj)).
+    succeeded_v(kz_json:to_proplist(JObj)).
 
 -spec failed(api_terms()) -> {'ok', iolist()} |
                           {'error', string()}.
 failed(Prop) when is_list(Prop) ->
     case failed_v(Prop) of
         'false' -> {'error', "Proplist failed validation for pivot_failed"};
-        'true' -> wh_api:build_message(Prop, ?PIVOT_FAILED_HEADERS, ?OPTIONAL_PIVOT_FAILED_HEADERS)
+        'true' -> kz_api:build_message(Prop, ?PIVOT_FAILED_HEADERS, ?OPTIONAL_PIVOT_FAILED_HEADERS)
     end;
 failed(JObj) ->
-    failed(wh_json:to_proplist(JObj)).
+    failed(kz_json:to_proplist(JObj)).
 
 -spec failed_v(api_terms()) -> boolean().
 failed_v(Prop) when is_list(Prop) ->
-    wh_api:validate(Prop, ?PIVOT_FAILED_HEADERS, ?PIVOT_FAILED_VALUES, ?PIVOT_FAILED_TYPES);
+    kz_api:validate(Prop, ?PIVOT_FAILED_HEADERS, ?PIVOT_FAILED_VALUES, ?PIVOT_FAILED_TYPES);
 failed_v(JObj) ->
-    failed_v(wh_json:to_proplist(JObj)).
+    failed_v(kz_json:to_proplist(JObj)).
 
--spec bind_q(ne_binary(), wh_proplist()) -> 'ok'.
+-spec bind_q(ne_binary(), kz_proplist()) -> 'ok'.
 bind_q(Queue, Props) ->
     Realm = props:get_value('realm', Props, <<"*">>),
     amqp_util:bind_q_to_callmgr(Queue, get_pivot_req_routing(Realm)).
 
--spec unbind_q(ne_binary(), wh_proplist()) -> 'ok'.
+-spec unbind_q(ne_binary(), kz_proplist()) -> 'ok'.
 unbind_q(Queue, Props) ->
     Realm = props:get_value('realm', Props, <<"*">>),
     amqp_util:unbind_q_from_callmgr(Queue, get_pivot_req_routing(Realm)).
@@ -130,21 +130,21 @@ get_pivot_req_routing(Api) ->
 publish_req(JObj) ->
     publish_req(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_req(Req, ContentType) ->
-    {'ok', Payload} = wh_api:prepare_api_payload(Req, ?PIVOT_REQ_VALUES, fun req/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?PIVOT_REQ_VALUES, fun req/1),
     amqp_util:callmgr_publish(Payload, ContentType, get_pivot_req_routing(Req)).
 
 -spec publish_succeeded(ne_binary(), ne_binary()) -> 'ok'.
 publish_succeeded(Target, JObj) ->
-    {'ok', Payload} = wh_api:prepare_api_payload(JObj, ?PIVOT_SUCCEEDED_VALUES, fun succeeded/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(JObj, ?PIVOT_SUCCEEDED_VALUES, fun succeeded/1),
     amqp_util:targeted_publish(Target, Payload).
 
 -spec publish_failed(ne_binary(), ne_binary()) -> 'ok'.
 publish_failed(Target, JObj) ->
-    {'ok', Payload} = wh_api:prepare_api_payload(JObj, ?PIVOT_FAILED_VALUES, fun failed/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(JObj, ?PIVOT_FAILED_VALUES, fun failed/1),
     amqp_util:targeted_publish(Target, Payload).
 
 -spec get_from_realm(api_terms()) -> ne_binary().
 get_from_realm(Prop) when is_list(Prop) ->
-    wh_json:get_value(<<"From-Realm">>, props:get_value(<<"Call">>, Prop));
+    kz_json:get_value(<<"From-Realm">>, props:get_value(<<"Call">>, Prop));
 get_from_realm(JObj) ->
-    wh_json:get_value([<<"Call">>, <<"From-Realm">>], JObj).
+    kz_json:get_value([<<"Call">>, <<"From-Realm">>], JObj).

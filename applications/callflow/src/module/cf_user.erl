@@ -56,20 +56,20 @@ handle(Data, Call) ->
             cf_exe:continue(Call)
     end.
 
--spec maybe_use_variable(wh_json:object(), whapps_call:call()) -> api_binary().
+-spec maybe_use_variable(kz_json:object(), kapps_call:call()) -> api_binary().
 maybe_use_variable(Data, Call) ->
-    case wh_json:get_value(<<"var">>, Data) of
+    case kz_json:get_value(<<"var">>, Data) of
         'undefined' ->
-            wh_doc:id(Data);
+            kz_doc:id(Data);
         Variable ->
-            Value = wh_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
-            case couch_mgr:open_cache_doc(whapps_call:account_db(Call), Value) of
+            Value = kz_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
+            case couch_mgr:open_cache_doc(kapps_call:account_db(Call), Value) of
                 {'ok', _} -> Value;
-                _ -> wh_doc:id(Data)
+                _ -> kz_doc:id(Data)
             end
     end.
 
--spec maybe_handle_bridge_failure(_, whapps_call:call()) -> 'ok'.
+-spec maybe_handle_bridge_failure(_, kapps_call:call()) -> 'ok'.
 maybe_handle_bridge_failure(Reason, Call) ->
     case cf_util:handle_bridge_failure(Reason, Call) of
         'not_found' -> cf_exe:continue(Call);

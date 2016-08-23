@@ -658,12 +658,12 @@ slots_configuration(Data) ->
 
 -spec slot_configuration(kz_json:object(), ne_binary()) -> kz_json:object().
 slot_configuration(Data, SlotNumber) ->
-    Slot = wh_json:get_value(SlotNumber, slots_configuration(Data), wh_json:new()),
+    Slot = kz_json:get_value(SlotNumber, slots_configuration(Data), kz_json:new()),
     slot_configuration_overrides(Data, Slot).
 
--spec slot_configuration_overrides(wh_json:object(), wh_json:object()) -> wh_json:object().
+-spec slot_configuration_overrides(kz_json:object(), kz_json:object()) -> kz_json:object().
 slot_configuration_overrides(Data, Slot) ->
-    wh_json:set_value(<<"ringback_timeout">>, wh_json:get_value(<<"ringback_timeout">>, Data), Slot).
+    kz_json:set_value(<<"ringback_timeout">>, kz_json:get_value(<<"ringback_timeout">>, Data), Slot).
 
 %%--------------------------------------------------------------------
 %% @private

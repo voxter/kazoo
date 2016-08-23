@@ -4,7 +4,7 @@
 -include("amimulator_call.hrl").
 
 -export([from_json/1]).
--export([to_whapps_call/1]).
+-export([to_kapps_call/1]).
 -export([update_from_other/2]).
 -export([call_id/1, set_call_id/2]).
 -export([other_leg_call_id/1, set_other_leg_call_id/2]).
@@ -39,7 +39,7 @@
 %% @end
 %%--------------------------------------------------------------------
 
--spec from_json(wh_json:objects() | wh_json:object()) -> call().
+-spec from_json(kz_json:objects() | kz_json:object()) -> call().
 from_json(JObjs) when is_list(JObjs) ->
     lists:foldl(
       fun(JObj, Calls) ->
@@ -48,26 +48,26 @@ from_json(JObjs) when is_list(JObjs) ->
       ,[]
       ,JObjs);
 from_json(JObj) ->
-    Call = #call{call_id = wh_json:get_first_defined([<<"uuid">>, <<"Call-ID">>], JObj)
-                 ,other_leg_call_id = wh_json:get_first_defined([<<"other_leg">>, <<"Other-Leg-Call-ID">>], JObj)
-                 ,account_id = wh_json:get_first_defined([<<"account_id">>, [<<"Custom-Channel-Vars">>, <<"Account-ID">>]], JObj)
-                 ,authorizing_id = wh_json:get_first_defined([<<"authorizing_id">>, [<<"Custom-Channel-Vars">>, <<"Authorizing-ID">>]], JObj)
-                 ,authorizing_type = wh_json:get_first_defined([<<"authorizing_type">>, <<"Authorizing-Type">>], JObj)
-                 ,custom_channel_vars = wh_json:get_value(<<"Custom-Channel-Vars">>, JObj, wh_json:new())
-                 ,control_q = wh_json:get_value(<<"Control-Queue">>, JObj)
-                 ,acdc_queue_id = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], JObj)
-                 ,agent_id = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Agent-ID">>], JObj)
+    Call = #call{call_id = kz_json:get_first_defined([<<"uuid">>, <<"Call-ID">>], JObj)
+                 ,other_leg_call_id = kz_json:get_first_defined([<<"other_leg">>, <<"Other-Leg-Call-ID">>], JObj)
+                 ,account_id = kz_json:get_first_defined([<<"account_id">>, [<<"Custom-Channel-Vars">>, <<"Account-ID">>]], JObj)
+                 ,authorizing_id = kz_json:get_first_defined([<<"authorizing_id">>, [<<"Custom-Channel-Vars">>, <<"Authorizing-ID">>]], JObj)
+                 ,authorizing_type = kz_json:get_first_defined([<<"authorizing_type">>, <<"Authorizing-Type">>], JObj)
+                 ,custom_channel_vars = kz_json:get_value(<<"Custom-Channel-Vars">>, JObj, kz_json:new())
+                 ,control_q = kz_json:get_value(<<"Control-Queue">>, JObj)
+                 ,acdc_queue_id = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], JObj)
+                 ,agent_id = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Agent-ID">>], JObj)
                  %,conference_id
-                 ,username = wh_json:get_first_defined([<<"username">>, <<"Username">>], JObj)
-                 ,to = case binary:split(wh_json:get_first_defined([<<"destination">>, <<"To">>], JObj, <<"@">>), <<"@">>) of
+                 ,username = kz_json:get_first_defined([<<"username">>, <<"Username">>], JObj)
+                 ,to = case binary:split(kz_json:get_first_defined([<<"destination">>, <<"To">>], JObj, <<"@">>), <<"@">>) of
                            [ToUser, ToRealm] -> <<ToUser/binary, "@", ToRealm/binary>>;
                            [ToUser] -> <<ToUser/binary, "@">>
                        end
-                 ,from = case wh_json:get_value(<<"From">>, JObj) of
+                 ,from = case kz_json:get_value(<<"From">>, JObj) of
                              'undefined' ->
-                                 case wh_json:get_first_defined([<<"direction">>, <<"Call-Direction">>], JObj) of
+                                 case kz_json:get_first_defined([<<"direction">>, <<"Call-Direction">>], JObj) of
                                      <<"inbound">> ->
-                                        case wh_json:get_first_defined([<<"Caller-ID-Number">>, <<"caller_id">>], JObj) of
+                                        case kz_json:get_first_defined([<<"Caller-ID-Number">>, <<"caller_id">>], JObj) of
                                             'undefined' ->
                                                 lager:debug("JObj ~p", [JObj]),
                                                 <<"@">>;
@@ -77,28 +77,28 @@ from_json(JObj) ->
                                  end;
                              From -> From
                          end
-                 ,direction = wh_json:get_first_defined([<<"direction">>, <<"Call-Direction">>], JObj)
-                 ,answered = wh_json:is_true(<<"answered">>, JObj, 'undefined')
-                 ,timestamp = case wh_json:get_integer_value(<<"timestamp">>, JObj) of
+                 ,direction = kz_json:get_first_defined([<<"direction">>, <<"Call-Direction">>], JObj)
+                 ,answered = kz_json:is_true(<<"answered">>, JObj, 'undefined')
+                 ,timestamp = case kz_json:get_integer_value(<<"timestamp">>, JObj) of
                                   'undefined' ->
-                                      Sec = wh_json:get_first_defined([<<"elapsed_s">>, <<"Duration-Seconds">>], JObj, 0),
-                                      wh_util:current_tstamp() - Sec;
+                                      Sec = kz_json:get_first_defined([<<"elapsed_s">>, <<"Duration-Seconds">>], JObj, 0),
+                                      kz_util:current_tstamp() - Sec;
                                   Timestamp -> Timestamp
                               end
-                 ,caller_id_name = wh_json:get_first_defined([<<"Caller-ID-Name">>, <<"caller_id">>], JObj, wh_util:anonymous_caller_id_name())
-                 ,caller_id_number = wh_json:get_first_defined([<<"Caller-ID-Number">>, <<"caller_id">>], JObj, wh_util:anonymous_caller_id_number())
+                 ,caller_id_name = kz_json:get_first_defined([<<"Caller-ID-Name">>, <<"caller_id">>], JObj, kz_util:anonymous_caller_id_name())
+                 ,caller_id_number = kz_json:get_first_defined([<<"Caller-ID-Number">>, <<"caller_id">>], JObj, kz_util:anonymous_caller_id_number())
 
-                 ,callee_id_name = case wh_json:get_value(<<"Callee-ID-Name">>, JObj) of
+                 ,callee_id_name = case kz_json:get_value(<<"Callee-ID-Name">>, JObj) of
                     'undefined' ->
-                       case binary:split(wh_json:get_first_defined([<<"destination">>, <<"To">>], JObj, <<"@">>), <<"@">>) of
+                       case binary:split(kz_json:get_first_defined([<<"destination">>, <<"To">>], JObj, <<"@">>), <<"@">>) of
                            [ToUser, _] -> ToUser;
                            [ToUser] -> ToUser
                        end;
                     CalleeIdName -> CalleeIdName
                   end
-                 ,callee_id_number = case wh_json:get_value(<<"Callee-ID-Number">>, JObj) of
+                 ,callee_id_number = case kz_json:get_value(<<"Callee-ID-Number">>, JObj) of
                     'undefined' ->
-                       case binary:split(wh_json:get_first_defined([<<"destination">>, <<"To">>], JObj, <<"@">>), <<"@">>) of
+                       case binary:split(kz_json:get_first_defined([<<"destination">>, <<"To">>], JObj, <<"@">>), <<"@">>) of
                            [ToUser, _] -> ToUser;
                            [ToUser] -> ToUser
                        end;
@@ -107,8 +107,8 @@ from_json(JObj) ->
                 },
     update_post_create(Call).
 
--spec to_whapps_call(call()) -> whapps_call:call().
-to_whapps_call(#call{call_id=CallId
+-spec to_kapps_call(call()) -> kapps_call:call().
+to_kapps_call(#call{call_id=CallId
                      ,other_leg_call_id=OtherLegCallId
                      ,account_id=AccountId
                      ,authorizing_id=AuthorizingId
@@ -122,57 +122,57 @@ to_whapps_call(#call{call_id=CallId
                      ,callee_id_name=CalleeIdName
                      ,callee_id_number=CalleeIdNumber
                     }) ->
-    Setters = [fun(Call) -> whapps_call:set_call_id(CallId, Call) end
-               ,fun(Call) -> whapps_call:set_other_leg_call_id(OtherLegCallId, Call) end
-               ,fun(Call) -> whapps_call:set_account_id(AccountId, Call) end
+    Setters = [fun(Call) -> kapps_call:set_call_id(CallId, Call) end
+               ,fun(Call) -> kapps_call:set_other_leg_call_id(OtherLegCallId, Call) end
+               ,fun(Call) -> kapps_call:set_account_id(AccountId, Call) end
                ,fun(Call) ->
                     case AuthorizingId of
                         'undefined' -> Call;
-                        _ -> whapps_call:set_authorizing_id(AuthorizingId, Call) end
+                        _ -> kapps_call:set_authorizing_id(AuthorizingId, Call) end
                     end
                ,fun(Call) ->
                     case AuthorizingType of
                         'undefined' -> Call;
-                        _ -> whapps_call:set_authorizing_type(AuthorizingType, Call)
+                        _ -> kapps_call:set_authorizing_type(AuthorizingType, Call)
                     end
                 end
-               ,fun(Call) -> whapps_call:set_custom_channel_vars(wh_json:to_proplist(CCVs), Call) end
+               ,fun(Call) -> kapps_call:set_custom_channel_vars(kz_json:to_proplist(CCVs), Call) end
                ,fun(Call) ->
                     case ControlQueue of
                         'undefined' -> Call;
-                        _ -> whapps_call:set_control_queue(ControlQueue, Call)
+                        _ -> kapps_call:set_control_queue(ControlQueue, Call)
                     end
                 end
-               ,fun(Call) -> whapps_call:set_to(To, Call) end
+               ,fun(Call) -> kapps_call:set_to(To, Call) end
                ,fun(Call) ->
                     case binary:split(From, <<"@">>) of
                         [_ToUser, _ToRealm] ->
-                            whapps_call:set_from(From, Call);
+                            kapps_call:set_from(From, Call);
                         [_ToUser] ->
-                            whapps_call:set_from(<<From/binary, "@">>, Call)
+                            kapps_call:set_from(<<From/binary, "@">>, Call)
                     end
                 end
                ,fun(Call) ->
                     case CIDName of
                         'undefined' -> Call;
-                        _ -> whapps_call:set_caller_id_name(CIDName, Call)
+                        _ -> kapps_call:set_caller_id_name(CIDName, Call)
                     end
                 end
-               ,fun(Call) -> whapps_call:set_caller_id_number(CIDNumber, Call) end
+               ,fun(Call) -> kapps_call:set_caller_id_number(CIDNumber, Call) end
                ,fun(Call) ->
                     case CalleeIdName of
                         'undefined' -> Call;
-                        _ -> whapps_call:set_callee_id_name(CalleeIdName, Call)
+                        _ -> kapps_call:set_callee_id_name(CalleeIdName, Call)
                     end
                 end
                ,fun(Call) ->
                     case CalleeIdNumber of
                         'undefined' -> Call;
-                        _ -> whapps_call:set_callee_id_number(CalleeIdNumber, Call)
+                        _ -> kapps_call:set_callee_id_number(CalleeIdNumber, Call)
                     end
                 end
               ],
-    lists:foldl(fun(Setter, Call) -> Setter(Call) end, whapps_call:new(), Setters).
+    lists:foldl(fun(Setter, Call) -> Setter(Call) end, kapps_call:new(), Setters).
 
 -spec update_from_other(call(), call()) -> call().
 update_from_other('undefined', Call) ->
@@ -244,7 +244,7 @@ account_id(#call{account_id=AccountId}) ->
 
 -spec account_db(call()) -> api_binary().
 account_db(#call{account_id=AccountId}) ->
-    wh_util:format_account_id(AccountId, 'encoded').
+    kz_util:format_account_id(AccountId, 'encoded').
 
 -spec authorizing_id(call()) -> api_binary().
 authorizing_id(#call{authorizing_id=AuthorizingId}) ->
@@ -254,39 +254,39 @@ authorizing_id(#call{authorizing_id=AuthorizingId}) ->
 authorizing_type(#call{authorizing_type=AuthorizingType}) ->
     AuthorizingType.
 
--spec ccv(wh_json:key(), call()) -> wh_json:json_term() | 'undefined'.
+-spec ccv(kz_json:key(), call()) -> kz_json:json_term() | 'undefined'.
 ccv(Key, #call{custom_channel_vars=CCVs}) ->
-    wh_json:get_value(Key, CCVs).
+    kz_json:get_value(Key, CCVs).
 
--spec set_ccv(wh_json:key(), wh_json:json_term(), call()) -> call().
+-spec set_ccv(kz_json:key(), kz_json:json_term(), call()) -> call().
 set_ccv(Key, Value, #call{custom_channel_vars=CCVs}=Call) ->
-    Call#call{custom_channel_vars=wh_json:set_value(Key, Value, CCVs)}.
+    Call#call{custom_channel_vars=kz_json:set_value(Key, Value, CCVs)}.
 
--spec delete_ccv(wh_json:key(), call()) -> call().
+-spec delete_ccv(kz_json:key(), call()) -> call().
 delete_ccv(Key, #call{custom_channel_vars=CCVs}=Call) ->
-    Call#call{custom_channel_vars=wh_json:delete_key(Key, CCVs)}.
+    Call#call{custom_channel_vars=kz_json:delete_key(Key, CCVs)}.
 
 -spec control_queue(call()) -> api_binary().
 control_queue(#call{call_id=CallId
                     ,control_q='undefined'
                    }) ->
     Req = props:filter_undefined([{<<"Call-ID">>, CallId}
-                                  | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                  | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                  ]),
-    ReqResp = whapps_util:amqp_pool_request(Req
-                                            ,fun wapi_amimulator:publish_control_queue_req/1
-                                            ,fun wapi_amimulator:control_queue_resp_v/1
+    ReqResp = kapps_util:amqp_pool_request(Req
+                                            ,fun kapi_amimulator:publish_control_queue_req/1
+                                            ,fun kapi_amimulator:control_queue_resp_v/1
                                            ),
     case ReqResp of
         {'error', 'timeout'} ->
             'undefined';
-            % case whapps_call:other_leg_call_id(WhappsCall) of
+            % case kapps_call:other_leg_call_id(WhappsCall) of
             %     'undefined' ->
             %         {'error', 'not_found'};
             %     OtherCallId ->
-            %         ReqResp2 = whapps_util:amqp_pool_request(props:set_value(<<"Call-ID">>, OtherCallId, Req)
-            %                                                  ,fun wapi_amimulator:publish_control_queue_req/1
-            %                                                  ,fun wapi_amimulator:control_queue_resp_v/1
+            %         ReqResp2 = kapps_util:amqp_pool_request(props:set_value(<<"Call-ID">>, OtherCallId, Req)
+            %                                                  ,fun kapi_amimulator:publish_control_queue_req/1
+            %                                                  ,fun kapi_amimulator:control_queue_resp_v/1
             %                                                 ),
             %         case ReqResp2 of
             %             {'error', _E}=Error -> Error;
@@ -298,7 +298,7 @@ control_queue(#call{call_id=CallId
             lager:debug("could not fetch control queue for ~p (~p)", [CallId, E]),
             'undefined';
         {'ok', Resp} ->
-            wh_json:get_value(<<"Control-Queue">>, Resp)
+            kz_json:get_value(<<"Control-Queue">>, Resp)
     end;
 control_queue(#call{control_q=ControlQueue}) ->
     ControlQueue.
@@ -393,7 +393,7 @@ set_answered(Answered, Call) ->
 
 -spec elapsed_s(call()) -> api_integer().
 elapsed_s(#call{timestamp=Timestamp}) ->
-    wh_util:current_tstamp() - Timestamp.
+    kz_util:current_tstamp() - Timestamp.
 
 -spec caller_id_name(call()) -> api_binary().
 caller_id_name(#call{caller_id_name=CIDName}) ->
@@ -429,7 +429,7 @@ set_callee_id_number(CIDNumber, Call) ->
 
 -spec endpoint(call()) -> api_object().
 endpoint(Call) ->
-    case cf_endpoint:get(to_whapps_call(Call)) of
+    case cf_endpoint:get(to_kapps_call(Call)) of
         {'ok', Endpoint} -> Endpoint;
         {'error', _} -> maybe_cellphone_endpoint(Call)
     end.
@@ -488,10 +488,10 @@ set_quickcall_ccv(Call) ->
 unset_offnet_authorizing_id(#call{custom_channel_vars=CCVs}=Call) ->
     %% Use E164-Destination as indicator that this is an offnet leg
     %% and therefore the authorizing id is not valid for the destination
-    case wh_json:get_value(<<"E164-Destination">>, CCVs) of
+    case kz_json:get_value(<<"E164-Destination">>, CCVs) of
         'undefined' -> Call;
         _ -> Call#call{authorizing_id='undefined'
-                       ,custom_channel_vars=wh_json:delete_key(<<"Authorizing-ID">>, CCVs)
+                       ,custom_channel_vars=kz_json:delete_key(<<"Authorizing-ID">>, CCVs)
                       }
     end.
 
@@ -541,16 +541,16 @@ set_other_id(<<"outbound">>, #call{caller_id_name=CIDName
 set_other_id(<<"outbound">>, Call) ->
     Call.
 
--spec endpoint_caller_id(wh_json:object(), call()) -> {api_binary(), api_binary()} | 'undefined'.
+-spec endpoint_caller_id(kz_json:object(), call()) -> {api_binary(), api_binary()} | 'undefined'.
 endpoint_caller_id(Endpoint, Call) ->
-    case wh_json:get_value(<<"owner_id">>, Endpoint) of
-        'undefined' -> 'undefined';%{wh_json:get_value(<<"name">>, Endpoint), }
+    case kz_json:get_value(<<"owner_id">>, Endpoint) of
+        'undefined' -> 'undefined';%{kz_json:get_value(<<"name">>, Endpoint), }
         OwnerId ->
             {'ok', Owner} = couch_mgr:open_doc(account_db(Call), OwnerId),
-            {<<(wh_json:get_value(<<"username">>, Owner))/binary, " ",
-               (wh_json:get_value(<<"first_name">>, Owner))/binary, " ",
-               (wh_json:get_value(<<"last_name">>, Owner))/binary>>
-             ,<<(wh_json:get_value(<<"username">>, Owner))/binary>>}
+            {<<(kz_json:get_value(<<"username">>, Owner))/binary, " ",
+               (kz_json:get_value(<<"first_name">>, Owner))/binary, " ",
+               (kz_json:get_value(<<"last_name">>, Owner))/binary>>
+             ,<<(kz_json:get_value(<<"username">>, Owner))/binary>>}
     end.
 
 
@@ -578,17 +578,17 @@ maybe_cellphone_endpoint(Call) ->
     end,
     find_cellphone_endpoint_fold(AccountDb, E164, Results1).
 
--spec find_cellphone_endpoint_fold(api_binary(), ne_binary(), wh_json:objects()) -> api_object().
+-spec find_cellphone_endpoint_fold(api_binary(), ne_binary(), kz_json:objects()) -> api_object().
 find_cellphone_endpoint_fold(_, _, []) ->
     'undefined';
 find_cellphone_endpoint_fold(AccountDb, E164, [Result|Results]) ->
-    find_cellphone_endpoint_fold(AccountDb, E164, couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, Result)), Results).
+    find_cellphone_endpoint_fold(AccountDb, E164, couch_mgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, Result)), Results).
 
--spec find_cellphone_endpoint_fold(api_binary(), ne_binary(), {'ok', wh_json:object()} | couch_mgr:couchbeam_error() | {'error', 'not_found'}, wh_json:objects()) -> api_object().
+-spec find_cellphone_endpoint_fold(api_binary(), ne_binary(), {'ok', kz_json:object()} | couch_mgr:couchbeam_error() | {'error', 'not_found'}, kz_json:objects()) -> api_object().
 find_cellphone_endpoint_fold(AccountDb, E164, {'error', 'req_timedout'}, Results) ->
     find_cellphone_endpoint_fold(AccountDb, E164, Results);
 find_cellphone_endpoint_fold(AccountDb, E164, {'ok', Device}, Results) ->
-    case {wnm_util:to_e164(wh_json:get_value([<<"call_forward">>, <<"number">>], Device)), wh_json:get_value(<<"owner_id">>, Device)} of
+    case {wnm_util:to_e164(kz_json:get_value([<<"call_forward">>, <<"number">>], Device)), kz_json:get_value(<<"owner_id">>, Device)} of
         {_, 'undefined'} -> find_cellphone_endpoint_fold(AccountDb, E164, Results);
         {E164, _} -> Device;
         _ -> find_cellphone_endpoint_fold(AccountDb, E164, Results)
@@ -598,10 +598,10 @@ find_cellphone_endpoint_fold(AccountDb, E164, {'ok', Device}, Results) ->
 maybe_endpoint_owner('undefined') ->
     'undefined';
 maybe_endpoint_owner(Endpoint) ->
-    case wh_json:get_value(<<"owner_id">>, Endpoint) of
+    case kz_json:get_value(<<"owner_id">>, Endpoint) of
         'undefined' -> 'undefined';
         OwnerId ->
-            case couch_mgr:open_doc(wh_json:get_value(<<"account_db">>, Endpoint), OwnerId) of
+            case couch_mgr:open_doc(kz_json:get_value(<<"account_db">>, Endpoint), OwnerId) of
                 {'ok', UserDoc} -> UserDoc;
                 _ -> 'undefined'
             end

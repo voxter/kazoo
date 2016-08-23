@@ -429,9 +429,9 @@ audio_macro([{'play', MediaName, Terminators, Leg}|T], Call, Queue) ->
 audio_macro([{'prompt', PromptName}|T], Call, Queue) ->
     audio_macro(T, Call, [play_command(kz_media_util:get_prompt(PromptName, Call), ?ANY_DIGIT, Call) | Queue]);
 audio_macro([{'prompt', PromptName, Lang}|T], Call, Queue) ->
-    audio_macro(T, Call, [play_command(wh_media_util:get_prompt(PromptName, Lang, Call), ?ANY_DIGIT, Call) | Queue]);
+    audio_macro(T, Call, [play_command(kz_media_util:get_prompt(PromptName, Lang, Call), ?ANY_DIGIT, Call) | Queue]);
 audio_macro([{'prompt', PromptName, Lang, Leg}|T], Call, Queue) ->
-    audio_macro(T, Call, [play_command(wh_media_util:get_prompt(PromptName, Lang, Call), ?ANY_DIGIT, Leg, Call) | Queue]);
+    audio_macro(T, Call, [play_command(kz_media_util:get_prompt(PromptName, Lang, Call), ?ANY_DIGIT, Leg, Call) | Queue]);
 audio_macro([{'say', Say}|T], Call, Queue) ->
     audio_macro(T, Call, [say_command(Say, <<"name_spelled">>, <<"pronounced">>, kapps_call:language(Call), Call) | Queue]);
 audio_macro([{'say', Say, Type}|T], Call, Queue) ->
@@ -1184,9 +1184,9 @@ park_command(Call) ->
 %% caller.
 %% @end
 %%--------------------------------------------------------------------
--spec prompt(ne_binary(), whapps_call:call()) -> ne_binary().
--spec prompt(ne_binary(), ne_binary(), whapps_call:call()) -> ne_binary().
--spec prompt(ne_binary(), ne_binary(), api_object(), whapps_call:call()) -> ne_binary().
+-spec prompt(ne_binary(), kapps_call:call()) -> ne_binary().
+-spec prompt(ne_binary(), ne_binary(), kapps_call:call()) -> ne_binary().
+-spec prompt(ne_binary(), ne_binary(), api_object(), kapps_call:call()) -> ne_binary().
 
 -spec b_prompt(ne_binary(), kapps_call:call()) -> kapps_api_std_return().
 -spec b_prompt(ne_binary(), ne_binary(), kapps_call:call()) -> kapps_api_std_return().
@@ -1194,9 +1194,9 @@ park_command(Call) ->
 prompt(Prompt, Call) ->
     play(kz_media_util:get_prompt(Prompt, Call), Call).
 prompt(Prompt, Lang, Call) ->
-    play(wh_media_util:get_prompt(Prompt, Lang, Call), Call).
+    play(kz_media_util:get_prompt(Prompt, Lang, Call), Call).
 prompt(Prompt, Lang, Variables, Call) ->
-    play(wh_media_util:get_prompt(Prompt, Lang, Call), ?ANY_DIGIT, 'undefined', Variables, Call).
+    play(kz_media_util:get_prompt(Prompt, Lang, Call), ?ANY_DIGIT, 'undefined', Variables, Call).
 
 b_prompt(Prompt, Call) ->
     b_play(kz_media_util:get_prompt(Prompt, Call), Call).
@@ -1217,17 +1217,17 @@ b_prompt(Prompt, Lang, Call) ->
                   ne_binary().
 -spec play(ne_binary(), api_binaries(), api_binary(), kapps_call:call()) ->
                   ne_binary().
--spec play(ne_binary(), api_binaries(), api_binary(), api_object(), whapps_call:call()) ->
+-spec play(ne_binary(), api_binaries(), api_binary(), api_object(), kapps_call:call()) ->
                   ne_binary().
 
--spec play_command(ne_binary(), whapps_call:call() | ne_binary()) ->
-                          wh_json:object().
--spec play_command(ne_binary(), api_binaries(), whapps_call:call() | ne_binary()) ->
-                          wh_json:object().
--spec play_command(ne_binary(), api_binaries(), api_binary(), whapps_call:call() | ne_binary()) ->
-                          wh_json:object().
--spec play_command(ne_binary(), api_binaries(), api_binary(), api_object(), whapps_call:call() | ne_binary()) ->
-                          wh_json:object().
+-spec play_command(ne_binary(), kapps_call:call() | ne_binary()) ->
+                          kz_json:object().
+-spec play_command(ne_binary(), api_binaries(), kapps_call:call() | ne_binary()) ->
+                          kz_json:object().
+-spec play_command(ne_binary(), api_binaries(), api_binary(), kapps_call:call() | ne_binary()) ->
+                          kz_json:object().
+-spec play_command(ne_binary(), api_binaries(), api_binary(), api_object(), kapps_call:call() | ne_binary()) ->
+                          kz_json:object().
 
 -spec b_play(ne_binary(), kapps_call:call()) ->
                     kapps_api_std_return().
@@ -1243,7 +1243,7 @@ play_command(Media, Terminators, Call) ->
 play_command(Media, Terminators, Leg, Call) ->
     play_command(Media, Terminators, Leg, 'undefined', Call).
 play_command(Media, Terminators, Leg, Variables, <<_/binary>> = CallId) ->
-    wh_json:from_list(
+    kz_json:from_list(
       props:filter_undefined(
         [{<<"Application-Name">>, <<"play">>}
          ,{<<"Media-Name">>, Media}
@@ -1253,7 +1253,7 @@ play_command(Media, Terminators, Leg, Variables, <<_/binary>> = CallId) ->
          ,{<<"Call-ID">>, CallId}
         ]));
 play_command(Media, Terminators, Leg, Variables, Call) ->
-    play_command(Media, Terminators, Leg, Variables, whapps_call:call_id(Call)).
+    play_command(Media, Terminators, Leg, Variables, kapps_call:call_id(Call)).
 
 -spec play_terminators(api_binaries()) -> ne_binaries().
 play_terminators('undefined') -> ?ANY_DIGIT;
@@ -1270,8 +1270,8 @@ play(Media, Terminators, Leg, Call) ->
     play(Media, Terminators, Leg, 'undefined', Call).
 play(Media, Terminators, Leg, Variables, Call) ->
     NoopId = couch_mgr:get_uuid(),
-    Commands = [wh_json:from_list([{<<"Application-Name">>, <<"noop">>}
-                                   ,{<<"Call-ID">>, whapps_call:call_id(Call)}
+    Commands = [kz_json:from_list([{<<"Application-Name">>, <<"noop">>}
+                                   ,{<<"Call-ID">>, kapps_call:call_id(Call)}
                                    ,{<<"Msg-ID">>, NoopId}
                                   ])
                 ,play_command(Media, Terminators, Leg, Variables, Call)
@@ -2146,13 +2146,13 @@ collect_digits(MaxDigits, Timeout, Interdigit, NoopId, Call) ->
 
 %% When noop id is undefined, do not wait for the noop_complete before applying timeout
 collect_digits(MaxDigits, Timeout, Interdigit, 'undefined', Terminators, Call) ->
-	do_collect_digits(#wcc_collect_digits{max_digits=wh_util:to_integer(MaxDigits)
-                                          ,timeout=wh_util:to_integer(Timeout)
-                                          ,interdigit=wh_util:to_integer(Interdigit)
+	do_collect_digits(#wcc_collect_digits{max_digits=kz_util:to_integer(MaxDigits)
+                                          ,timeout=kz_util:to_integer(Timeout)
+                                          ,interdigit=kz_util:to_integer(Interdigit)
                                           ,noop_id='undefined'
                                           ,terminators=Terminators
                                           ,call=Call
-                                          ,after_timeout=wh_util:to_integer(Timeout)
+                                          ,after_timeout=kz_util:to_integer(Timeout)
 										 });
 collect_digits(MaxDigits, Timeout, Interdigit, NoopId, Terminators, Call) ->
     do_collect_digits(#wcc_collect_digits{max_digits=kz_util:to_integer(MaxDigits)
@@ -2672,9 +2672,9 @@ wait_for_application_or_dtmf(Application, Timeout) ->
 %% Waits for the length of a media file + timeout seconds, or dtmf
 %% @end
 %%--------------------------------------------------------------------
--spec wait_for_playback_timeout_or_dtmf(api_binary(), wh_timeout()) ->
+-spec wait_for_playback_timeout_or_dtmf(api_binary(), kz_timeout()) ->
                                             {'error', 'channel_hungup'} | {'ok', binary()}.
--spec wait_for_playback_timeout_or_dtmf(api_binary(), wh_timeout(), wh_timeout(), binary()) ->
+-spec wait_for_playback_timeout_or_dtmf(api_binary(), kz_timeout(), kz_timeout(), binary()) ->
                                             {'error', 'channel_hungup'} | {'ok', binary()}.
 wait_for_playback_timeout_or_dtmf(NoopId, Timeout) ->
     wait_for_playback_timeout_or_dtmf(NoopId, 300000, Timeout, <<>>).
@@ -2685,7 +2685,7 @@ wait_for_playback_timeout_or_dtmf(NoopId, RecvTimeout, Timeout, Digits) ->
         {'ok', JObj} ->
             case get_event_type(JObj) of
                 {<<"call_event">>, <<"CHANNEL_EXECUTE_COMPLETE">>, <<"noop">>} ->
-                    case wh_json:get_value(<<"Application-Response">>, JObj) of
+                    case kz_json:get_value(<<"Application-Response">>, JObj) of
                         NoopId when is_binary(NoopId), NoopId =/= <<>> ->
                             lager:debug("noop received, starting timeout"),
                             wait_for_playback_timeout_or_dtmf('undefined', Timeout, 1500, Digits);
@@ -2695,19 +2695,19 @@ wait_for_playback_timeout_or_dtmf(NoopId, RecvTimeout, Timeout, Digits) ->
                     lager:debug("channel was destroyed while waiting for playback timeout or DTMF"),
                     {'error', 'channel_hungup'};
                 {<<"call_event">>, <<"DTMF">>, _} ->
-                    Digit = wh_json:get_value(<<"DTMF-Digit">>, JObj),
+                    Digit = kz_json:get_value(<<"DTMF-Digit">>, JObj),
                     wait_for_playback_timeout_or_dtmf(NoopId, 1500, 1500, <<Digits/binary, Digit/binary>>);
-                _ -> wait_for_playback_timeout_or_dtmf(NoopId, wh_util:decr_timeout(RecvTimeout, Start), Timeout, Digits)
+                _ -> wait_for_playback_timeout_or_dtmf(NoopId, kz_util:decr_timeout(RecvTimeout, Start), Timeout, Digits)
             end;
         {'error', 'timeout'} ->
             lager:debug("timeout, got digits ~s", [Digits]),
             {'ok', Digits}
     end.
 
--type wait_for_fax_ret() :: {'ok', wh_json:object()} |
-                            {'error', 'timeout' | wh_json:object()}.
+-type wait_for_fax_ret() :: {'ok', kz_json:object()} |
+                            {'error', 'timeout' | kz_json:object()}.
 
--define(WAIT_FOR_FAX_TIMEOUT, whapps_config:get_integer(<<"fax">>, <<"wait_for_fax_timeout_ms">>, ?MILLISECONDS_IN_HOUR)).
+-define(WAIT_FOR_FAX_TIMEOUT, kapps_config:get_integer(<<"fax">>, <<"wait_for_fax_timeout_ms">>, ?MILLISECONDS_IN_HOUR)).
 
 -spec wait_for_fax() -> wait_for_fax_ret().
 -spec wait_for_fax(kz_timeout()) -> wait_for_fax_ret().
@@ -2973,26 +2973,26 @@ wait_for_fax_detection(Timeout, Call) ->
 %% Update the display of a phone by sending a SIP UPDATE or SIP INFO
 %% @end
 %%--------------------------------------------------------------------
--spec send_display(binary(), whapps_call:call()) -> 'ok'.
--spec send_display(binary(), api_binary(), whapps_call:call()) -> 'ok'.
+-spec send_display(binary(), kapps_call:call()) -> 'ok'.
+-spec send_display(binary(), api_binary(), kapps_call:call()) -> 'ok'.
 -spec send_display(binary(), api_binary(), ne_binary(), ne_binary()) -> 'ok'.
 send_display(CallerIdName, Call) ->
     send_display(CallerIdName, 'undefined', Call).
 
 send_display(CallerIdName, CallerIdNumber, Call) ->
-    Commands = [wh_json:from_list(
+    Commands = [kz_json:from_list(
                   props:filter_undefined(
                     [{<<"Application-Name">>, <<"send_display">>}
-                     ,{<<"Call-ID">>, whapps_call:call_id(Call)}
+                     ,{<<"Call-ID">>, kapps_call:call_id(Call)}
                      ,{<<"Insert-At">>, <<"now">>}
                      ,{<<"Caller-ID-Name">>, CallerIdName}
                      ,{<<"Caller-ID-Number">>, CallerIdNumber}
                     ]))
-                ,wh_json:from_list(
+                ,kz_json:from_list(
                    [{<<"Application-Name">>, <<"set">>}
                     ,{<<"Insert-At">>, <<"now">>}
-                    ,{<<"Custom-Channel-Vars">>, wh_json:set_value(<<"Ignore-Display-Updates">>, 'false', wh_json:new())}
-                    ,{<<"Custom-Call-Vars">>, wh_json:new()}
+                    ,{<<"Custom-Channel-Vars">>, kz_json:set_value(<<"Ignore-Display-Updates">>, 'false', kz_json:new())}
+                    ,{<<"Custom-Call-Vars">>, kz_json:new()}
                    ])
                ],
     Command = [{<<"Application-Name">>, <<"queue">>}
@@ -3001,10 +3001,10 @@ send_display(CallerIdName, CallerIdNumber, Call) ->
     send_command(Command, Call).
 
 send_display(CallerIdName, CallerIdNumber, CallId, CtrlQ) ->
-    JObj = wh_json:from_list([{<<"Call-ID">>, CallId}
+    JObj = kz_json:from_list([{<<"Call-ID">>, CallId}
                               ,{<<"Control-Queue">>, CtrlQ}
                              ]),
-    Call = whapps_call:from_json(JObj),
+    Call = kapps_call:from_json(JObj),
     send_display(CallerIdName, CallerIdNumber, Call).
 
 %%--------------------------------------------------------------------

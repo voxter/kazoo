@@ -31,7 +31,7 @@ relay_answer(CallId) ->
     end, find_call_handlers(CallId)).
 
 relay_bridge(EventJObj) ->
-    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
+    CallId = kz_json:get_value(<<"Call-ID">>, EventJObj),
     lists:foreach(fun(Pid) ->
         amimulator_call_fsm:bridge(Pid, EventJObj)
     end, find_call_handlers(CallId)).

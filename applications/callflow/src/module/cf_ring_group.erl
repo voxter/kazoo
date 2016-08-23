@@ -119,7 +119,7 @@ receive_endpoint_fold(Pid, Acc) ->
 
 -spec start_builders(kz_json:object(), kapps_call:call()) -> pids().
 start_builders(Data, Call) ->
-    [start_builder(EndpointId, wh_json:set_value(<<"can_call_self">>, 'true', Member), Call)
+    [start_builder(EndpointId, kz_json:set_value(<<"can_call_self">>, 'true', Member), Call)
      || {EndpointId, Member} <- resolve_endpoint_ids(Data, Call)
     ].
 

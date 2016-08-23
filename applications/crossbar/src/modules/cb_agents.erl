@@ -272,7 +272,7 @@ read(Id, Context) -> crossbar_doc:load(Id, Context, ?TYPE_CHECK_OPTION(kzd_user:
 -define(CB_AGENTS_LIST, <<"users/crossbar_listing">>).
 -spec fetch_all_agent_statuses(cb_context:context()) -> cb_context:context().
 fetch_all_agent_statuses(Context) ->
-    case wh_util:is_true(cb_context:req_value(Context, <<"recent">>)) of
+    case kz_util:is_true(cb_context:req_value(Context, <<"recent">>)) of
         'false' ->
             fetch_current_status(Context, 'undefined');
         'true' ->
@@ -306,19 +306,19 @@ fetch_stats_summary(Context) ->
     Req = props:filter_undefined(
             [{<<"Account-ID">>, cb_context:account_id(Context)}
              ,{<<"Agent-ID">>, cb_context:req_value(Context, <<"agent_id">>)}
-             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
-    case whapps_util:amqp_pool_request(Req
-                                       ,fun wapi_acdc_stats:publish_agent_calls_req/1
-                                       ,fun wapi_acdc_stats:agent_calls_resp_v/1
+    case kapps_util:amqp_pool_request(Req
+                                       ,fun kapi_acdc_stats:publish_agent_calls_req/1
+                                       ,fun kapi_acdc_stats:agent_calls_resp_v/1
                                       )
     of
         {'error', E} ->
             crossbar_util:response('error', <<"stat request had errors">>, 400
-                                   ,wh_json:get_value(<<"Error-Reason">>, E)
+                                   ,kz_json:get_value(<<"Error-Reason">>, E)
                                    ,Context
                                   );
-        {'ok', Resp} -> crossbar_util:response(wh_json:get_value(<<"Data">>, Resp, []), Context)
+        {'ok', Resp} -> crossbar_util:response(kz_json:get_value(<<"Data">>, Resp, []), Context)
     end.
 
 -spec fetch_all_current_agent_stats(cb_context:context()) -> cb_context:context().
@@ -346,23 +346,23 @@ fetch_current_status(Context, AgentId) ->
     Req = props:filter_undefined(
             [{<<"Account-ID">>, cb_context:account_id(Context)}
              ,{<<"Agent-ID">>, AgentId}
-             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
-    case whapps_util:amqp_pool_request(Req
-                                       ,fun wapi_acdc_stats:publish_agent_cur_status_req/1
-                                       ,fun wapi_acdc_stats:agent_cur_status_resp_v/1
+    case kapps_util:amqp_pool_request(Req
+                                       ,fun kapi_acdc_stats:publish_agent_cur_status_req/1
+                                       ,fun kapi_acdc_stats:agent_cur_status_resp_v/1
                                       )
     of
         {'error', _}=E ->
             crossbar_util:response('error', <<"status request had errors">>, 400
-                                   ,wh_json:get_value(<<"Error-Reason">>, E)
+                                   ,kz_json:get_value(<<"Error-Reason">>, E)
                                    ,Context
                                   );
         {'ok', Resp} ->
-            Agents = wh_json:get_value(<<"Agents">>, Resp, wh_json:new()),
-            Results = wh_json:foldl(fun(K, V, Acc) ->
-                                      wh_json:set_value(K, wh_doc:public_fields(V), Acc)
-                                    end, wh_json:new(), Agents),
+            Agents = kz_json:get_value(<<"Agents">>, Resp, kz_json:new()),
+            Results = kz_json:foldl(fun(K, V, Acc) ->
+                                      kz_json:set_value(K, kz_doc:public_fields(V), Acc)
+                                    end, kz_json:new(), Agents),
             crossbar_util:response(Results, Context)
     end.
 

@@ -189,10 +189,10 @@ fs_nodeup(Srv, Node) ->
 fs_nodedown(Srv, Node) ->
     gen_server:cast(Srv, {'fs_nodedown', Node}).
 
--spec handle_control_queue_req(wh_json:object(), wh_proplist()) -> 'ok'.
+-spec handle_control_queue_req(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_control_queue_req(JObj, Props) ->
     Srv = props:get_value('server', Props),
-    put('callid', wh_json:get_value(<<"Call-ID">>, JObj)),
+    put('callid', kz_json:get_value(<<"Call-ID">>, JObj)),
     gen_listener:cast(Srv, {'control_queue_req', JObj}).
 
 %%%===================================================================
@@ -274,10 +274,10 @@ handle_cast({'control_queue_req', JObj}, #state{call_id=CallId
 									   }=State) ->
 	Props = props:filter_undefined([{<<"Call-ID">>, CallId}
 									,{<<"Control-Queue">>, CtrlQ}
-									,{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, JObj)}
-									| wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+									,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
+									| kz_api:default_headers(?APP_NAME, ?APP_VERSION)
 								   ]),
-	wapi_amimulator:publish_control_queue_resp(wh_json:get_value(<<"Server-ID">>, JObj), Props),
+	kapi_amimulator:publish_control_queue_resp(kz_json:get_value(<<"Server-ID">>, JObj), Props),
 	{'noreply', State};
 handle_cast({'update_node', Node}, #state{node=OldNode}=State) ->
     lager:debug("channel has moved from ~s to ~s", [OldNode, Node]),
@@ -757,8 +757,8 @@ add_leg(Props, LegId, #state{other_legs=Legs
         'false' ->
             lager:debug("added leg ~s to call", [LegId]),
             gen_listener:add_binding(self(), {'amimulator', [{'callid', LegId}]}),
-            ConsumerPid = wh_amqp_channel:consumer_pid(),
-            _ = wh_util:spawn(
+            ConsumerPid = kz_amqp_channel:consumer_pid(),
+            _ = kz_util:spawn(
                   fun() ->
                           kz_util:put_callid(CallId),
                           kz_amqp_channel:consumer_pid(ConsumerPid),
@@ -847,8 +847,8 @@ remove_leg(Props, #state{other_legs=Legs
         'true' ->
             lager:debug("removed leg ~s from call", [LegId]),
             gen_listener:rm_binding(self(), {'amimulator', [{'callid', LegId}]}),
-            ConsumerPid = wh_amqp_channel:consumer_pid(),
-            _ = wh_util:spawn(
+            ConsumerPid = kz_amqp_channel:consumer_pid(),
+            _ = kz_util:spawn(
                   fun() ->
                           kz_util:put_callid(CallId),
                           kz_amqp_channel:consumer_pid(ConsumerPid),

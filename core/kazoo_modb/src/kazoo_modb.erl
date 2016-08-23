@@ -312,7 +312,7 @@ add_migrate_routines(Routines, Module) ->
 
 -spec migrate_routines(ne_binaries(), ne_binaries()) -> ne_binaries().
 migrate_routines([], Acc) -> Acc;
-migrate_routines([<<"wh_", Rest/binary>> | Rs], Acc) ->
+migrate_routines([<<"kz_", Rest/binary>> | Rs], Acc) ->
     migrate_routines(Rs, [<<"kz_", Rest/binary>> | Acc]);
 migrate_routines([R | Rs], Acc) ->
     migrate_routines(Rs, [R | Acc]).

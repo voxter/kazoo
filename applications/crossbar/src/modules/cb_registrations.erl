@@ -171,13 +171,13 @@ merge_responses([JObj|JObjs], Regs) ->
 -spec merge_response(kz_json:object(), dict:dict()) -> dict:dict().
 merge_response(JObj, Regs) ->
     lists:foldl(fun(J, R) ->
-		Username = wh_json:get_ne_value(<<"Username">>, J),
-		case wh_json:get_ne_value(<<"Contact">>, J) of
+		Username = kz_json:get_ne_value(<<"Username">>, J),
+		case kz_json:get_ne_value(<<"Contact">>, J) of
 			'undefined' -> R;
 			Contact -> dict:store(<<Contact/binary, Username/binary>>, J, R)
 		end
 			
-	end, Regs, wh_json:get_value(<<"Fields">>, JObj, [])).
+	end, Regs, kz_json:get_value(<<"Fields">>, JObj, [])).
 
 -spec normalize_registration(kz_json:object()) -> kz_json:object().
 normalize_registration(JObj) ->

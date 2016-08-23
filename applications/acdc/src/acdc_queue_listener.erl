@@ -315,8 +315,8 @@ handle_cast({'member_connect_req', MemberCallJObj, Delivery, _Url}
                     ,mgr_pid=MgrPid
                     ,queue_id=QueueId
                    }=State) ->
-    Call = whapps_call:from_json(wh_json:get_value(<<"Call">>, MemberCallJObj)),
-    CallId = whapps_call:call_id(Call),
+    Call = kapps_call:from_json(kz_json:get_value(<<"Call">>, MemberCallJObj)),
+    CallId = kapps_call:call_id(Call),
 
     kz_util:put_callid(CallId),
 
@@ -561,7 +561,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
--spec maybe_timeout_agent(api_object(), ne_binary(), whapps_call:call(), api_object()) -> 'ok'.
+-spec maybe_timeout_agent(api_object(), ne_binary(), kapps_call:call(), api_object()) -> 'ok'.
 maybe_timeout_agent('undefined', _QueueId, _Call, _JObj) -> 'ok';
 maybe_timeout_agent(_AgentId, _QueueId, _Call, 'undefined') -> 'ok';
 maybe_timeout_agent(_AgentId, QueueId, Call, JObj) ->
@@ -582,16 +582,16 @@ send_member_connect_req(CallId, AccountId, QueueId, MyQ, MyId) ->
 
 -spec send_member_connect_win(kz_json:object(), kapps_call:call(), ne_binary(), ne_binary(), ne_binary(), kz_proplist()) -> 'ok'.
 send_member_connect_win(RespJObj, Call, QueueId, MyQ, MyId, QueueOpts) ->
-    CallJSON = whapps_call:to_json(Call),
+    CallJSON = kapps_call:to_json(Call),
     Win = props:filter_undefined(
             [{<<"Call">>, CallJSON}
              ,{<<"Process-ID">>, MyId}
              ,{<<"Agent-Process-ID">>, kz_json:get_value(<<"Agent-Process-ID">>, RespJObj)}
              ,{<<"Queue-ID">>, QueueId}
-             ,{<<"Agent-ID">>, wh_json:get_value(<<"Agent-ID">>, RespJObj)}
-             | QueueOpts ++ wh_api:default_headers(MyQ, ?APP_NAME, ?APP_VERSION)
+             ,{<<"Agent-ID">>, kz_json:get_value(<<"Agent-ID">>, RespJObj)}
+             | QueueOpts ++ kz_api:default_headers(MyQ, ?APP_NAME, ?APP_VERSION)
             ]),
-    publish(Win, fun wapi_acdc_queue:publish_member_connect_win/1).
+    publish(Win, fun kapi_acdc_queue:publish_member_connect_win/1).
 
 -spec send_agent_timeout(kz_json:object(), kapps_call:call(), ne_binary()) -> 'ok'.
 send_agent_timeout(RespJObj, Call, QueueId) ->
@@ -629,14 +629,14 @@ send_member_call_failure(Q, AccountId, QueueId, CallId, MyId, AgentId, Reason) -
              ]),
     publish(Q, Resp, fun kapi_acdc_queue:publish_member_call_failure/2).
 
--spec publish_queue_member_remove(ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
+-spec publish_queue_member_remove(ne_binary(), ne_binary(), kz_json:object()) -> 'ok'.
 publish_queue_member_remove(AccountId, QueueId, JObj) ->
     Prop = [{<<"Account-ID">>, AccountId}
             ,{<<"Queue-ID">>, QueueId}
             ,{<<"JObj">>, JObj}
-            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
-    wapi_acdc_queue:publish_queue_member_remove(Prop).
+    kapi_acdc_queue:publish_queue_member_remove(Prop).
 
 send_sync_req(MyQ, MyId, AccountId, QueueId, Type) ->
     Resp = props:filter_undefined(
@@ -699,7 +699,7 @@ clear_call_state(#state{call=Call
     case Call of
         'undefined' -> 'ok';
         _ ->
-            CallId = whapps_call:call_id(Call),
+            CallId = kapps_call:call_id(Call),
             gen_listener:rm_binding(self(), 'acdc_queue', [{'restrict_to', ['member_callback_reg', 'member_call_result']}
                                                            ,{'account_id', AccountId}
                                                            ,{'queue_id', QueueId}
@@ -707,7 +707,7 @@ clear_call_state(#state{call=Call
                                                           ])
     end,
 
-    wh_util:put_callid(QueueId),
+    kz_util:put_callid(QueueId),
     State#state{call='undefined'
                 ,member_call_queue='undefined'
                 ,agent_id='undefined'

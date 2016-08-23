@@ -432,15 +432,15 @@ play_instructions(#mailbox{skip_instructions='false'}, Call) ->
 %%
 %% @end
 %%--------------------------------------------------------------------  
--spec maybe_hunt(mailbox(), whapps_call:call()) ->
+-spec maybe_hunt(mailbox(), kapps_call:call()) ->
                                'ok' | {'branch', _} |
                                {'error', 'channel_hungup'}.
 maybe_hunt(#mailbox{hunt='false'}=Mailbox, Call) ->
     do_compose_voicemail(Mailbox, Call);
 maybe_hunt(Mailbox, Call) ->
     lager:debug("offering opportunity to dial another extension before recording"),
-    NoopId = whapps_call_command:prompt(<<"vm-hunt">>, Call),
-    case whapps_call_command:wait_for_playback_timeout_or_dtmf(NoopId, 5000) of
+    NoopId = kapps_call_command:prompt(<<"vm-hunt">>, Call),
+    case kapps_call_command:wait_for_playback_timeout_or_dtmf(NoopId, 5000) of
         {'ok', <<>>} -> do_compose_voicemail(Mailbox, Call);
         {'ok', Digits} -> do_hunt(Mailbox, Call, Digits);
         {'error', 'channel_hungup'}=E -> E
@@ -452,7 +452,7 @@ maybe_hunt(Mailbox, Call) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec do_compose_voicemail(mailbox(), whapps_call:call()) ->
+-spec do_compose_voicemail(mailbox(), kapps_call:call()) ->
                                'ok' | {'branch', _} |
                                {'error', 'channel_hungup'}.
 do_compose_voicemail(#mailbox{keys=#keys{login=Login
@@ -460,21 +460,21 @@ do_compose_voicemail(#mailbox{keys=#keys{login=Login
                                         }
                              }=Box, Call) ->
     _ = play_instructions(Box, Call),
-    _NoopId = whapps_call_command:noop(Call),
+    _NoopId = kapps_call_command:noop(Call),
     %% timeout after 5 min for saftey, so this process cant hang around forever
-    case whapps_call_command:wait_for_application_or_dtmf(<<"noop">>, 300000) of
+    case kapps_call_command:wait_for_application_or_dtmf(<<"noop">>, 300000) of
         {'ok', _} ->
             lager:info("played greeting and instructions to caller, recording new message"),
             record_voicemail(tmp_file(), Box, Call);
         {'dtmf', Digit} ->
-            _ = whapps_call_command:b_flush(Call),
+            _ = kapps_call_command:b_flush(Call),
             case Digit of
                 Login ->
                     lager:info("caller pressed '~s', redirecting to check voicemail", [Login]),
                     check_mailbox(Box, Call);
                 Operator ->
                     lager:info("caller choose to ring the operator"),
-                    case cf_util:get_operator_callflow(whapps_call:account_id(Call)) of
+                    case cf_util:get_operator_callflow(kapps_call:account_id(Call)) of
                         {'ok', Flow} -> {'branch', Flow};
                         {'error', _R} -> record_voicemail(tmp_file(), Box, Call)
                     end;
@@ -492,18 +492,18 @@ do_compose_voicemail(#mailbox{keys=#keys{login=Login
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec do_hunt(mailbox(), whapps_call:call(), ne_binary()) ->
+-spec do_hunt(mailbox(), kapps_call:call(), ne_binary()) ->
                                'ok' | {'branch', _} |
                                {'error', 'channel_hungup'}.
 do_hunt(Mailbox, Call, Digits) ->
     case try_match_digits(Digits, Mailbox, Call) of
         'false' ->
-            whapps_call_command:prompt(<<"vm-invalid_hunt">>, Call),
+            kapps_call_command:prompt(<<"vm-invalid_hunt">>, Call),
             compose_voicemail(Mailbox, 'false', Call);
         {'branch', Flow} ->
             lager:debug("performing transfer from voicemail menu"),
-            _ = whapps_call_command:flush_dtmf(Call),
-            _ = whapps_call_command:b_prompt(<<"menu-transferring_call">>, Call),
+            _ = kapps_call_command:flush_dtmf(Call),
+            _ = kapps_call_command:b_prompt(<<"menu-transferring_call">>, Call),
             {'branch', Flow}
     end.
 
@@ -513,7 +513,7 @@ do_hunt(Mailbox, Call, Digits) ->
 %% The primary sequence logic to route the collected digits
 %% @end
 %%--------------------------------------------------------------------
--spec try_match_digits(ne_binary(), mailbox(), whapps_call:call()) -> 'false' | {'branch', wh_json:object()}.
+-spec try_match_digits(ne_binary(), mailbox(), kapps_call:call()) -> 'false' | {'branch', kz_json:object()}.
 try_match_digits(Digits, Mailbox, Call) ->
     lager:info("trying to match digits ~s", [Digits]),
     case is_callflow_child(Digits, Mailbox, Call)
@@ -530,7 +530,7 @@ try_match_digits(Digits, Mailbox, Call) ->
 %% Check if the digits are a exact match for the auto-attendant children
 %% @end
 %%--------------------------------------------------------------------
--spec is_callflow_child(ne_binary(), mailbox(), whapps_call:call()) -> boolean().
+-spec is_callflow_child(ne_binary(), mailbox(), kapps_call:call()) -> boolean().
 is_callflow_child(Digits, _, Call) ->
     case cf_exe:attempt(Digits, Call) of
         {'attempt_resp', 'ok'} ->
@@ -545,7 +545,7 @@ is_callflow_child(Digits, _, Call) ->
 %% Check if hunting is enabled
 %% @end
 %%--------------------------------------------------------------------
--spec is_hunt_enabled(ne_binary(), mailbox(), whapps_call:call()) -> boolean().
+-spec is_hunt_enabled(ne_binary(), mailbox(), kapps_call:call()) -> boolean().
 is_hunt_enabled(_, #mailbox{hunt=Hunt}, _) ->
     Hunt.
 
@@ -555,7 +555,7 @@ is_hunt_enabled(_, #mailbox{hunt=Hunt}, _) ->
 %% Check whitelist hunt digit patterns
 %% @end
 %%--------------------------------------------------------------------
--spec is_hunt_allowed(ne_binary(), mailbox(), whapps_call:call()) -> boolean().
+-spec is_hunt_allowed(ne_binary(), mailbox(), kapps_call:call()) -> boolean().
 is_hunt_allowed(_, #mailbox{hunt_allow = <<>>}, _) ->
     lager:info("hunt_allow implicitly accepted digits"),
     'true';
@@ -579,7 +579,7 @@ is_hunt_allowed(Digits, #mailbox{hunt_allow=RegEx}, _) ->
 %% Check blacklisted hunt digit patterns
 %% @end
 %%--------------------------------------------------------------------
--spec is_hunt_denied(ne_binary(), mailbox(), whapps_call:call()) -> boolean().
+-spec is_hunt_denied(ne_binary(), mailbox(), kapps_call:call()) -> boolean().
 is_hunt_denied(_, #mailbox{hunt_deny = <<>>}, _) ->
     lager:info("hunt_deny implicitly accepted digits"),
     'false';
@@ -603,14 +603,14 @@ is_hunt_denied(Digits, #mailbox{hunt_deny=RegEx}, _) ->
 %% Hunt for a callflow with these numbers
 %% @end
 %%--------------------------------------------------------------------
--spec hunt_for_callflow(ne_binary(), mailbox(), whapps_call:call()) -> 'false' | wh_json:object().
+-spec hunt_for_callflow(ne_binary(), mailbox(), kapps_call:call()) -> 'false' | kz_json:object().
 hunt_for_callflow(Digits, _, Call) ->
-    AccountId = whapps_call:account_id(Call),
+    AccountId = kapps_call:account_id(Call),
     lager:info("hunting for ~s in account ~s", [Digits, AccountId]),
     case cf_util:lookup_callflow(Digits, AccountId) of
         {'ok', Flow, 'false'} ->
             lager:info("callflow hunt succeeded, will branch callflow"),
-            wh_json:get_value(<<"flow">>, Flow, wh_json:new());
+            kz_json:get_value(<<"flow">>, Flow, kz_json:new());
         _ ->
             lager:info("callflow hunt failed"),
             'false'
@@ -622,7 +622,7 @@ hunt_for_callflow(Digits, _, Call) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec record_voicemail(ne_binary(), mailbox(), whapps_call:call()) -> 'ok'.
+-spec record_voicemail(ne_binary(), mailbox(), kapps_call:call()) -> 'ok'.
 record_voicemail(AttachmentName, #mailbox{max_message_length=MaxMessageLength}=Box, Call) ->
     Tone = kz_json:from_list([{<<"Frequencies">>, [<<"440">>]}
                               ,{<<"Duration-ON">>, <<"500">>}
@@ -900,9 +900,9 @@ play_messages([H|T]=Messages, PrevMessages, Count, #mailbox{timezone=Timezone
               ,{'say', kz_util:to_binary(Count - length(Messages) + 1), <<"number">>}
               ,{'play', Message}
               ,{'prompt', <<"vm-received">>}
-              ,{'say',  get_unix_epoch(wh_json:get_value(<<"timestamp">>, H), Timezone), <<"current_date_time">>}
+              ,{'say',  get_unix_epoch(kz_json:get_value(<<"timestamp">>, H), Timezone), <<"current_date_time">>}
               ,{'tts', <<"from">>}
-              ,{'say', wh_json:get_value(<<"caller_id_number">>, H)}
+              ,{'say', kz_json:get_value(<<"caller_id_number">>, H)}
               ,{'prompt', <<"vm-message_menu">>}
              ],
     case message_menu(Prompt, Box, Call) of
@@ -917,14 +917,14 @@ play_messages([H|T]=Messages, PrevMessages, Count, #mailbox{timezone=Timezone
         {'ok', 'envelope'} ->
             lager:info("caller chose to hear envelope"),
             Prompt2 = [{'prompt', <<"vm-message_number">>}
-                       ,{'say', wh_util:to_binary(Count - length(Messages) + 1), <<"number">>}
+                       ,{'say', kz_util:to_binary(Count - length(Messages) + 1), <<"number">>}
                        ,{'prompt', <<"vm-received">>}
-                       ,{'say', get_unix_epoch(wh_json:get_value(<<"timestamp">>, H), Timezone), <<"current_date_time">>}
+                       ,{'say', get_unix_epoch(kz_json:get_value(<<"timestamp">>, H), Timezone), <<"current_date_time">>}
                        ,{'tts', <<"from">>}
-                       ,{'say', wh_json:get_value(<<"caller_id_number">>, H)}
+                       ,{'say', kz_json:get_value(<<"caller_id_number">>, H)}
                        ,{'prompt', <<"vm-message_menu">>}
                       ],
-            whapps_call_command:audio_macro(Prompt2, Call),
+            kapps_call_command:audio_macro(Prompt2, Call),
             play_messages(Messages, PrevMessages, Count, Box, Call);
         {'ok', 'next'} ->
             lager:info("caller chose to listen to next message"),
@@ -1028,19 +1028,19 @@ config_menu(Box, Call) ->
 
 config_menu(Box, Call, Loop) when Loop < 4 ->
     lager:info("playing mailbox configuration menu"),
-    case whapps_call_command:b_flush(Call) of
+    case kapps_call_command:b_flush(Call) of
         {'ok', _} -> config_menu_collect_digits(Box, Call, Loop);
         {'error', 'channel_hungup'}=E -> E
     end.
 
--spec config_menu_collect_digits(mailbox(), whapps_call:call(), pos_integer()) ->
+-spec config_menu_collect_digits(mailbox(), kapps_call:call(), pos_integer()) ->
                                         'ok' | mailbox() |
                                         {'error', 'channel_hungup'}.
 config_menu_collect_digits(#mailbox{interdigit_timeout=Interdigit}=Box
                            ,Call
                            ,Loop
                           ) ->
-    NoopId = whapps_call_command:prompt(<<"vm-settings_menu">>, Call),
+    NoopId = kapps_call_command:prompt(<<"vm-settings_menu">>, Call),
 
     case kapps_call_command:collect_digits(?KEY_LENGTH
                                             ,kapps_call_command:default_collect_timeout()
@@ -1366,14 +1366,14 @@ change_pin(#mailbox{mailbox_id=Id
             {'ok', PublicJObj} ->
                 PrivJObj = kz_json:private_fields(JObj),
 
-                JObj1 = wh_json:merge_jobjs(PrivJObj, PublicJObj),
+                JObj1 = kz_json:merge_jobjs(PrivJObj, PublicJObj),
                 
                 % Start of Daniel's code
-				{'ok', UserObj} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"owner_id">>, JObj1)),
-				PrivLevel = wh_json:get_value(<<"priv_level">>, UserObj),
+				{'ok', UserObj} = couch_mgr:open_doc(AccountDb, kz_json:get_value(<<"owner_id">>, JObj1)),
+				PrivLevel = kz_json:get_value(<<"priv_level">>, UserObj),
 		
 				UsernameIsInteger = try
-					_ = list_to_integer(binary_to_list(wh_json:get_value(<<"username">>, UserObj))),
+					_ = list_to_integer(binary_to_list(kz_json:get_value(<<"username">>, UserObj))),
 					true
 				catch error:badarg ->
 					false
@@ -1381,10 +1381,10 @@ change_pin(#mailbox{mailbox_id=Id
 		
 				case { PrivLevel, UsernameIsInteger } of
 					{<<"user">>, true} ->
-						Username = wh_json:get_value(<<"username">>, UserObj),
+						Username = kz_json:get_value(<<"username">>, UserObj),
 						{MD5, SHA1} = cb_modules_util:pass_hashes(Username, Pin),
 						couch_mgr:save_doc(AccountDb,
-							wh_json:set_values([{<<"pvt_md5_auth">>, MD5}, {<<"pvt_sha1_auth">>, SHA1}],
+							kz_json:set_values([{<<"pvt_md5_auth">>, MD5}, {<<"pvt_sha1_auth">>, SHA1}],
 							UserObj
 						));
 					{_, false} -> lager:info("Did not save user PIN as pass because they do not have an extension username");
@@ -1512,7 +1512,7 @@ system_report(Msg, Call) ->
 -spec get_mailbox_profile(kz_json:object(), kapps_call:call()) -> mailbox().
 get_mailbox_profile(Data, Call) ->
     Id = maybe_use_variable(Data, Call),
-    AccountDb = whapps_call:account_db(Call),
+    AccountDb = kapps_call:account_db(Call),
 
     case get_mailbox_doc(AccountDb, Id, Data, Call) of
         {'ok', MailboxJObj} ->
@@ -1581,13 +1581,13 @@ get_mailbox_profile(Data, Call) ->
                      ,play_greeting_intro =
                          kz_json:is_true(<<"play_greeting_intro">>, MailboxJObj, Default#mailbox.play_greeting_intro)
                      ,use_person_not_available =
-                         wh_json:is_true(<<"use_person_not_available">>, MailboxJObj, Default#mailbox.use_person_not_available)
+                         kz_json:is_true(<<"use_person_not_available">>, MailboxJObj, Default#mailbox.use_person_not_available)
                      ,hunt =
-                         wh_json:is_true(<<"hunt">>, MailboxJObj, Default#mailbox.hunt)
+                         kz_json:is_true(<<"hunt">>, MailboxJObj, Default#mailbox.hunt)
                      ,hunt_deny =
-                         wh_json:get_value(<<"hunt_deny">>, MailboxJObj, Default#mailbox.hunt_deny)
+                         kz_json:get_value(<<"hunt_deny">>, MailboxJObj, Default#mailbox.hunt_deny)
                      ,hunt_allow =
-                         wh_json:get_value(<<"hunt_allow">>, MailboxJObj, Default#mailbox.hunt_allow)
+                         kz_json:get_value(<<"hunt_allow">>, MailboxJObj, Default#mailbox.hunt_allow)
                      ,not_configurable=
                          kz_json:is_true(<<"not_configurable">>, MailboxJObj, 'false')
                      ,account_db = AccountDb
@@ -1597,20 +1597,20 @@ get_mailbox_profile(Data, Call) ->
             #mailbox{}
     end.
 
--spec maybe_use_variable(wh_json:object(), whapps_call:call()) -> api_binary().
+-spec maybe_use_variable(kz_json:object(), kapps_call:call()) -> api_binary().
 maybe_use_variable(Data, Call) ->
-    case wh_json:get_value(<<"var">>, Data) of
+    case kz_json:get_value(<<"var">>, Data) of
         'undefined' ->
-            wh_doc:id(Data);
+            kz_doc:id(Data);
         Variable ->
-            Value = wh_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
-            case couch_mgr:open_cache_doc(whapps_call:account_db(Call), Value) of
+            Value = kz_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
+            case couch_mgr:open_cache_doc(kapps_call:account_db(Call), Value) of
                 {'ok', _} -> Value;
-                _ -> wh_doc:id(Data)
+                _ -> kz_doc:id(Data)
             end
     end.
 
--spec after_notify_action(wh_json:object()) -> atom().
+-spec after_notify_action(kz_json:object()) -> atom().
 after_notify_action(MailboxJObj) ->
     Delete = kz_json:is_true(?KEY_DELETE_AFTER_NOTIFY, MailboxJObj, ?DEFAULT_DELETE_AFTER_NOTIFY),
     Save   = kz_json:is_true(?KEY_SAVE_AFTER_NOTIFY, MailboxJObj, ?DEFAULT_SAVE_AFTER_NOTIFY),
@@ -1662,26 +1662,26 @@ owner_info(AccountDb, MailboxJObj, OwnerId) ->
 -spec populate_keys(kapps_call:call()) -> vm_keys().
 populate_keys(Call) ->
     Default = #keys{},
-    JObj = whapps_account_config:get(whapps_call:account_id(Call), <<"keys">>),
-    #keys{operator = wh_json:get_binary_value([?KEY_VOICEMAIL, <<"operator">>], JObj, Default#keys.operator)
-          ,login = wh_json:get_binary_value([?KEY_VOICEMAIL, <<"login">>], JObj, Default#keys.login)
-          ,save = wh_json:get_binary_value([?KEY_VOICEMAIL, <<"save">>], JObj, Default#keys.save)
-          ,listen = wh_json:get_binary_value([?KEY_VOICEMAIL, <<"listen">>], JObj, Default#keys.listen)
-          ,record = wh_json:get_binary_value([?KEY_VOICEMAIL, <<"record">>], JObj, Default#keys.record)
-          ,hear_new = wh_json:get_binary_value([?KEY_VOICEMAIL, <<"hear_new">>], JObj, Default#keys.hear_new)
-          ,hear_saved = wh_json:get_binary_value([?KEY_VOICEMAIL, <<"hear_saved">>], JObj, Default#keys.hear_saved)
-          ,configure = wh_json:get_binary_value([?KEY_VOICEMAIL, <<"configure">>], JObj, Default#keys.configure)
-          ,exit = wh_json:get_binary_value([?KEY_VOICEMAIL, <<"exit">>], JObj, Default#keys.exit)
-          ,rec_unavailable = wh_json:get_binary_value([?KEY_VOICEMAIL, <<"record_unavailable">>], JObj, Default#keys.rec_unavailable)
-          ,rec_name = wh_json:get_binary_value([?KEY_VOICEMAIL, <<"record_name">>], JObj, Default#keys.rec_name)
-          ,set_pin = wh_json:get_binary_value([?KEY_VOICEMAIL, <<"set_pin">>], JObj, Default#keys.set_pin)
-          ,return_main = wh_json:get_binary_value([?KEY_VOICEMAIL, <<"return_main_menu">>], JObj, Default#keys.return_main)
-          ,keep = wh_json:get_binary_value([?KEY_VOICEMAIL, <<"keep">>], JObj, Default#keys.keep)
-          ,envelope = wh_json:get_binary_value([?KEY_VOICEMAIL, <<"envelope">>], JObj, Default#keys.envelope)
-          ,replay = wh_json:get_binary_value([?KEY_VOICEMAIL, <<"replay">>], JObj, Default#keys.replay)
-          ,prev = wh_json:get_binary_value([?KEY_VOICEMAIL, <<"prev">>], JObj, Default#keys.prev)
-          ,next = wh_json:get_binary_value([?KEY_VOICEMAIL, <<"next">>], JObj, Default#keys.next)
-          ,delete = wh_json:get_binary_value([?KEY_VOICEMAIL, <<"delete">>], JObj, Default#keys.delete)
+    JObj = kapps_account_config:get(kapps_call:account_id(Call), <<"keys">>),
+    #keys{operator = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"operator">>], JObj, Default#keys.operator)
+          ,login = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"login">>], JObj, Default#keys.login)
+          ,save = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"save">>], JObj, Default#keys.save)
+          ,listen = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"listen">>], JObj, Default#keys.listen)
+          ,record = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"record">>], JObj, Default#keys.record)
+          ,hear_new = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"hear_new">>], JObj, Default#keys.hear_new)
+          ,hear_saved = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"hear_saved">>], JObj, Default#keys.hear_saved)
+          ,configure = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"configure">>], JObj, Default#keys.configure)
+          ,exit = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"exit">>], JObj, Default#keys.exit)
+          ,rec_unavailable = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"record_unavailable">>], JObj, Default#keys.rec_unavailable)
+          ,rec_name = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"record_name">>], JObj, Default#keys.rec_name)
+          ,set_pin = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"set_pin">>], JObj, Default#keys.set_pin)
+          ,return_main = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"return_main_menu">>], JObj, Default#keys.return_main)
+          ,keep = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"keep">>], JObj, Default#keys.keep)
+          ,envelope = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"envelope">>], JObj, Default#keys.envelope)
+          ,replay = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"replay">>], JObj, Default#keys.replay)
+          ,prev = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"prev">>], JObj, Default#keys.prev)
+          ,next = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"next">>], JObj, Default#keys.next)
+          ,delete = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"delete">>], JObj, Default#keys.delete)
          }.
 
 %%--------------------------------------------------------------------
@@ -1877,14 +1877,14 @@ get_new_attachment_url(AttachmentName, MediaId, #mailbox{owner_id=OwnerId}, Call
 
 -spec maybe_remove_attachments(ne_binary(), ne_binary(), kz_json:object()) -> 'ok'.
 maybe_remove_attachments(AccountDb, MediaId, JObj) ->
-    JObj1 = case wh_doc:maybe_remove_attachments(JObj) of
+    JObj1 = case kz_doc:maybe_remove_attachments(JObj) of
                 {'false', _} -> JObj;
                 {'true', Removed} ->
                     lager:debug("doc ~s has existing attachments, removing", [MediaId]),
                     Removed
             end,
     %% Undelete a possibly deleted media file
-    couch_mgr:save_doc(AccountDb, wh_doc:set_soft_deleted(JObj1, 'false')).
+    couch_mgr:save_doc(AccountDb, kz_doc:set_soft_deleted(JObj1, 'false')).
 
 %%--------------------------------------------------------------------
 %% @private

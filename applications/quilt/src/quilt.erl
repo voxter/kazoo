@@ -8,7 +8,7 @@
 %%%-------------------------------------------------------------------
 -module(quilt).
 
--include_lib("whistle/include/wh_types.hrl").
+-include_lib("kazoo/include/kz_types.hrl").
 
 -export([start_link/0
          ,start/0
@@ -55,12 +55,12 @@ stop() ->
 %%--------------------------------------------------------------------
 -spec start_deps() -> 'ok'.
 start_deps() ->
-    whistle_apps_deps:ensure(?MODULE), % if started by the whistle_controller, this will exist
-    _ = [wh_util:ensure_started(App) || App <- ['crypto'
+    kazoo_apps_deps:ensure(?MODULE), % if started by the kazoo_controller, this will exist
+    _ = [kz_util:ensure_started(App) || App <- ['crypto'
                                                ,'inets'
                                                ,'lager'
-                                               ,'whistle_amqp'
-                                               ,'whistle_couch'
+                                               ,'kazoo_amqp'
+                                               ,'kazoo_couch'
                                                ,'kazoo_bindings'
                                                ]],
     'ok'.

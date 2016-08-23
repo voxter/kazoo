@@ -687,24 +687,24 @@ fetch_stats_summary(Context) ->
             [{<<"Account-ID">>, cb_context:account_id(Context)}
              ,{<<"Status">>, cb_context:req_value(Context, <<"status">>)}
              ,{<<"Queue-ID">>, cb_context:req_value(Context, <<"queue_id">>)}
-             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
-    case whapps_util:amqp_pool_request(Req
-                                       ,fun wapi_acdc_stats:publish_call_summary_req/1
-                                       ,fun wapi_acdc_stats:call_summary_resp_v/1
+    case kapps_util:amqp_pool_request(Req
+                                       ,fun kapi_acdc_stats:publish_call_summary_req/1
+                                       ,fun kapi_acdc_stats:call_summary_resp_v/1
                                       )
     of
         {'error', E} ->
             crossbar_util:response('error', <<"stat request had errors">>, 400
-                                   ,wh_json:get_value(<<"Error-Reason">>, E)
+                                   ,kz_json:get_value(<<"Error-Reason">>, E)
                                    ,Context
                                   );
         {'ok', Resp} ->
-            RespJObj = wh_json:set_values([{<<"current_timestamp">>, wh_util:current_tstamp()}
-                                           ,{<<"Summarized">>, wh_json:get_value(<<"Data">>, Resp, [])}
-                                           ,{<<"Waiting">>, wh_doc:public_fields(wh_json:get_value(<<"Waiting">>, Resp, []))}
-                                           ,{<<"Handled">>, wh_doc:public_fields(wh_json:get_value(<<"Handled">>, Resp, []))}
-                                          ], wh_json:new()),
+            RespJObj = kz_json:set_values([{<<"current_timestamp">>, kz_util:current_tstamp()}
+                                           ,{<<"Summarized">>, kz_json:get_value(<<"Data">>, Resp, [])}
+                                           ,{<<"Waiting">>, kz_doc:public_fields(kz_json:get_value(<<"Waiting">>, Resp, []))}
+                                           ,{<<"Handled">>, kz_doc:public_fields(kz_json:get_value(<<"Handled">>, Resp, []))}
+                                          ], kz_json:new()),
             crossbar_util:response(RespJObj, Context)
     end.
 

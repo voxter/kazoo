@@ -273,9 +273,9 @@ fax_settings(JObj) ->
         'undefined' -> kz_json:set_value(?FAX_TIMEZONE_KEY, timezone(JObj), FaxSettings);
         _ -> FaxSettings
     end,
-    AccountFaxSettings = kz_account:fax_settings(wh_doc:account_id(JObj)),
-    wh_json:merge_jobjs(UserFaxSettings, AccountFaxSettings).
+    AccountFaxSettings = kz_account:fax_settings(kz_doc:account_id(JObj)),
+    kz_json:merge_jobjs(UserFaxSettings, AccountFaxSettings).
 
 -spec is_admin(doc()) -> boolean().
 is_admin(UserJObj) ->
-    wh_json:get_binary_value(<<"priv_level">>, UserJObj) =:= <<"admin">>.
+    kz_json:get_binary_value(<<"priv_level">>, UserJObj) =:= <<"admin">>.

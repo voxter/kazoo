@@ -76,7 +76,7 @@ handle(Data, Call) ->
 %% returns the first valid callflow, or the default.
 %% @end
 %%--------------------------------------------------------------------
--spec process_rules(temporal(), rules(), whapps_call:call(), rules()) ->
+-spec process_rules(temporal(), rules(), kapps_call:call(), rules()) ->
                            'default' | binary().
 process_rules(Temporal, [#rule{enabled='false'
                                ,id=Id
@@ -128,7 +128,7 @@ remove_unforced_rules(Rules) ->
 %% is added to the candidates.
 %% @end
 %%--------------------------------------------------------------------
--spec update_candidates(temporal(), rules(), whapps_call:call(), rules()) ->
+-spec update_candidates(temporal(), rules(), kapps_call:call(), rules()) ->
                                'default' | binary().
 update_candidates(T, Rules, Call, []) ->
     replace_candidates(T, Rules, Call, []);
@@ -147,7 +147,7 @@ update_candidates(#temporal{local_date={Y, M, D}}=T
             process_rules(T, Rules, Call, Candidates)
     end.
 
--spec replace_candidates(temporal(), rules(), whapps_call:call(), rules()) ->
+-spec replace_candidates(temporal(), rules(), kapps_call:call(), rules()) ->
                                 'default' | binary().
 replace_candidates(#temporal{local_sec=LSec
                              ,local_date={Y, M, D}
@@ -324,7 +324,7 @@ sort_by_occurrence_rate(Rules) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec date_difference(wh_datetime(), wh_datetime()) -> 'future' | 'equal' | 'past'.
+-spec date_difference(kz_datetime(), kz_datetime()) -> 'future' | 'equal' | 'past'.
 date_difference(Date1, Date2) ->
     case calendar:time_difference(Date1, Date2) of
         {D, _} when D > 0 -> 'future';

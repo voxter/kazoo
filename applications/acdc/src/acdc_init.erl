@@ -119,7 +119,7 @@ init_agents(AccountId, {'error', _E}) ->
     wait_a_bit(),
     'ok';
 init_agents(AccountId, {'ok', As}) ->
-    [spawn_previously_logged_in_agent(AccountId, wh_doc:id(A)) || A <- As].
+    [spawn_previously_logged_in_agent(AccountId, kz_doc:id(A)) || A <- As].
 
 wait_a_bit() -> timer:sleep(1000 + random:uniform(500)).
 
@@ -129,16 +129,16 @@ try_agents_again(AccountId) ->
     try_again(AccountId, fun init_acct_agents/2).
 
 try_again(AccountId, F) ->
-    wh_util:spawn(
+    kz_util:spawn(
       fun() ->
               wait_a_bit(),
-              AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
+              AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
               F(AccountDb, AccountId)
       end).
 
 -spec spawn_previously_logged_in_agent(ne_binary(), ne_binary()) -> any().
 spawn_previously_logged_in_agent(AccountId, AgentId) ->
-    wh_util:spawn(
+    kz_util:spawn(
       fun() ->
               case acdc_agent_util:most_recent_status(AccountId, AgentId) of
                   {'ok', <<"logged_out">>} -> lager:debug("agent ~s in ~s is logged out, not starting", [AgentId, AccountId]);

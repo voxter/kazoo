@@ -170,7 +170,7 @@ handle_search_error(Conference, Call, Srv) ->
     _ = amqp_util:new_queue(Queue),
     try amqp_util:basic_consume(Queue, [{'exclusive', 'true'}]) of
         'ok' ->
-            lager:debug("initial participant creating conference on switch nodename '~p'", [whapps_call:switch_hostname(Call)]),
+            lager:debug("initial participant creating conference on switch nodename '~p'", [kapps_call:switch_hostname(Call)]),
             play_participants_count(Call, 0),
             maybe_play_name(Conference, Call, Srv),
             conf_participant:set_conference(Conference, Srv),
@@ -182,23 +182,23 @@ handle_search_error(Conference, Call, Srv) ->
             handle_resource_locked(Conference, Call, Srv)
     end.
 
--spec play_participants_count(whapps_call:call(), non_neg_integer() | wh_json:object()) -> 'ok'.
+-spec play_participants_count(kapps_call:call(), non_neg_integer() | kz_json:object()) -> 'ok'.
 play_participants_count(Call, 0) ->
-    whapps_call_command:prompt(<<"conf-alone">>, Call),
+    kapps_call_command:prompt(<<"conf-alone">>, Call),
     'ok';
 play_participants_count(Call, 1) ->
-    whapps_call_command:prompt(<<"conf-single">>, Call),
+    kapps_call_command:prompt(<<"conf-single">>, Call),
     'ok';
 play_participants_count(Call, Count) when is_integer(Count) andalso Count > 0 ->
-    whapps_call_command:audio_macro([{'prompt', <<"conf-there_are">>}
-                                     ,{'say', wh_util:to_binary(Count), <<"number">>}
+    kapps_call_command:audio_macro([{'prompt', <<"conf-there_are">>}
+                                     ,{'say', kz_util:to_binary(Count), <<"number">>}
                                      ,{'prompt', <<"conf-other_participants">>}
                                     ], Call),
     'ok';
 play_participants_count(Call, JObj) ->
-    play_participants_count(Call, length(wh_json:get_value(<<"Participants">>, JObj, []))).
+    play_participants_count(Call, length(kz_json:get_value(<<"Participants">>, JObj, []))).
 
--spec handle_resource_locked(whapps_conference:conference(), whapps_call:call(), pid()) -> 'ok'.
+-spec handle_resource_locked(kapps_conference:conference(), kapps_call:call(), pid()) -> 'ok'.
 handle_resource_locked(Conference, Call, Srv) ->
     case wait_for_creation(Conference) of
         {'ok', JObj} -> handle_search_resp(JObj, Conference, Call, Srv);
@@ -228,8 +228,8 @@ wait_for_creation(Conference, After) ->
 
 -spec handle_search_resp(kz_json:object(), kapps_conference:conference(), kapps_call:call(), pid()) -> 'ok'.
 handle_search_resp(JObj, Conference, Call, Srv) ->
-    MaxParticipants =  whapps_conference:max_participants(Conference),
-    Participants = length(wh_json:get_value(<<"Participants">>, JObj, [])),
+    MaxParticipants =  kapps_conference:max_participants(Conference),
+    Participants = length(kz_json:get_value(<<"Participants">>, JObj, [])),
     case (MaxParticipants =/= 0) andalso (Participants >= MaxParticipants) of
         'false' ->
             play_participants_count(Call, Participants),
@@ -245,14 +245,14 @@ maybe_play_name(Conference, Call, Srv) ->
         andalso ?SUPPORT_NAME_ANNOUNCEMENT
     of
         'true' ->
-            PronouncedName = maybe_reuse_pronounced_name(whapps_conference:reuse_pronounced_name(Conference), Call),
+            PronouncedName = maybe_reuse_pronounced_name(kapps_conference:reuse_pronounced_name(Conference), Call),
             conf_participant:set_name_pronounced(PronouncedName, Srv);
         'false' -> 'ok'
     end.
 
--spec maybe_reuse_pronounced_name(atom(), whapps_call:call()) -> conf_pronounced_name:name_pronounced().
+-spec maybe_reuse_pronounced_name(atom(), kapps_call:call()) -> conf_pronounced_name:name_pronounced().
 maybe_reuse_pronounced_name('undefined', Call) ->
-    case whapps_config:get_is_true(?CONFIG_CAT, <<"reuse_pronounced_name">>, 'false') of
+    case kapps_config:get_is_true(?CONFIG_CAT, <<"reuse_pronounced_name">>, 'false') of
         'true' -> reuse_pronounced_name(Call);
         'false' -> record_pronounced_name(Call)
     end;
@@ -261,7 +261,7 @@ maybe_reuse_pronounced_name('true', Call) ->
 maybe_reuse_pronounced_name('false', Call) ->
     record_pronounced_name(Call).
 
--spec reuse_pronounced_name(whapps_call:call()) -> conf_pronounced_name:name_pronounced().
+-spec reuse_pronounced_name(kapps_call:call()) -> conf_pronounced_name:name_pronounced().
 reuse_pronounced_name(Call) ->
     case conf_pronounced_name:lookup_name(Call) of
         'undefined' -> record_pronounced_name(Call);
@@ -270,12 +270,12 @@ reuse_pronounced_name(Call) ->
             Value
     end.
 
--spec record_pronounced_name(whapps_call:call()) -> conf_pronounced_name:name_pronounced().
+-spec record_pronounced_name(kapps_call:call()) -> conf_pronounced_name:name_pronounced().
 record_pronounced_name(Call) ->
     lager:debug("Recording pronunciation of the name"),
     conf_pronounced_name:record(Call).
 
--spec add_participant_to_conference(wh_json:object(), whapps_conference:conference(), whapps_call:call(), pid()) -> 'ok'.
+-spec add_participant_to_conference(kz_json:object(), kapps_conference:conference(), kapps_call:call(), pid()) -> 'ok'.
 add_participant_to_conference(JObj, Conference, Call, Srv) ->
     _ = maybe_play_name(Conference, Call, Srv),
 

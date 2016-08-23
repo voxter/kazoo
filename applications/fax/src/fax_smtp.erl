@@ -422,7 +422,7 @@ check_permissions(#state{from=_From
     lager:debug("checking if ~s can send to ~p."
                 ,[_From, kz_json:get_value(<<"name">>, FaxBoxDoc)]
                ),
-    case wh_json:get_value(<<"smtp_permission_list">>, FaxBoxDoc, []) of
+    case kz_json:get_value(<<"smtp_permission_list">>, FaxBoxDoc, []) of
         [] ->
             check_empty_permissions(State);
         Permissions ->

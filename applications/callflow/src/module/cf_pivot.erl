@@ -40,28 +40,28 @@
 -spec handle(kz_json:object(), kapps_call:call()) -> any().
 handle(Data, Call) ->
     Prop = props:filter_empty(
-             [{<<"Call">>, whapps_call:to_json(Call)}
+             [{<<"Call">>, kapps_call:to_json(Call)}
               ,{<<"Voice-URI">>, maybe_use_variable(Data, Call)}
-              ,{<<"CDR-URI">>, wh_json:get_value(<<"cdr_url">>, Data)}
-              ,{<<"Request-Format">>, wh_json:get_value(<<"req_format">>, Data)}
-              ,{<<"HTTP-Method">>, kzt_util:http_method(wh_json:get_value(<<"method">>, Data, 'get'))}
-              ,{<<"Debug">>, wh_json:is_true(<<"debug">>, Data, 'false')}
-              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+              ,{<<"CDR-URI">>, kz_json:get_value(<<"cdr_url">>, Data)}
+              ,{<<"Request-Format">>, kz_json:get_value(<<"req_format">>, Data)}
+              ,{<<"HTTP-Method">>, kzt_util:http_method(kz_json:get_value(<<"method">>, Data, 'get'))}
+              ,{<<"Debug">>, kz_json:is_true(<<"debug">>, Data, 'false')}
+              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     kapi_pivot:publish_req(Prop),
     lager:info("published pivot request"),
     wait_for_pivot(Data, Call).
 
--spec maybe_use_variable(wh_json:object(), whapps_call:call()) -> api_binary().
+-spec maybe_use_variable(kz_json:object(), kapps_call:call()) -> api_binary().
 maybe_use_variable(Data, Call) ->
-    case wh_json:get_value(<<"var">>, Data) of
+    case kz_json:get_value(<<"var">>, Data) of
         'undefined' ->
-            wh_json:get_value(<<"voice_url">>, Data);
+            kz_json:get_value(<<"voice_url">>, Data);
         Variable ->
-            wh_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call))
+            kz_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call))
     end.
 
--spec wait_for_pivot(wh_json:object(), whapps_call:call()) -> any().
+-spec wait_for_pivot(kz_json:object(), kapps_call:call()) -> any().
 wait_for_pivot(Data, Call) ->
     case kapps_call_command:receive_event(?DEFAULT_EVENT_WAIT, 'true') of
         {'ok', JObj} ->

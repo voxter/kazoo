@@ -21,8 +21,8 @@
 
 -record(state, {call_id :: api_binary()
                 ,code_fsm_pid :: api_pid()
-                ,endpoint_numbers = [] :: wh_proplist()
-                ,endpoint_patterns = [] :: wh_proplist()
+                ,endpoint_numbers = [] :: kz_proplist()
+                ,endpoint_patterns = [] :: kz_proplist()
                }).
 
 start_link(JObj, Props) ->
@@ -30,8 +30,8 @@ start_link(JObj, Props) ->
 
 init([JObj, Props]) ->
     process_flag('trap_exit', 'true'),
-    EndpointId = wh_json:get_value(<<"Endpoint-ID">>, JObj),
-    CallId = wh_json:get_value([<<"Call">>, <<"Call-ID">>], JObj),
+    EndpointId = kz_json:get_value(<<"Endpoint-ID">>, JObj),
+    CallId = kz_json:get_value([<<"Call">>, <<"Call-ID">>], JObj),
     lager:debug("started new konami call for endpoint ~s on call ~s", [EndpointId, CallId]),
     init_state(JObj, Props).
 
@@ -60,12 +60,12 @@ handle_cast({'update', JObj, _Props}, #state{code_fsm_pid=FSM
                                              ,endpoint_numbers=Ns
                                              ,endpoint_patterns=Ps
                                             }=State) ->
-    EndpointId = wh_json:get_value(<<"Endpoint-ID">>, JObj),
-    CallId = wh_json:get_value([<<"Call">>, <<"Call-ID">>], JObj),
+    EndpointId = kz_json:get_value(<<"Endpoint-ID">>, JObj),
+    CallId = kz_json:get_value([<<"Call">>, <<"Call-ID">>], JObj),
     lager:debug("adding endpoint ~s to konami call ~s", [EndpointId, CallId]),
     konami_code_fsm:add_endpoint(FSM, EndpointId),
-    {'noreply', State#state{endpoint_numbers = [{EndpointId, wh_json:get_value(<<"Numbers">>, JObj)} | Ns]
-                            ,endpoint_patterns = [{EndpointId, wh_json:get_value(<<"Patterns">>, JObj)} | Ps]
+    {'noreply', State#state{endpoint_numbers = [{EndpointId, kz_json:get_value(<<"Numbers">>, JObj)} | Ns]
+                            ,endpoint_patterns = [{EndpointId, kz_json:get_value(<<"Patterns">>, JObj)} | Ps]
                            }};
 handle_cast(_Request, State) ->
     {'noreply', State}.
@@ -86,21 +86,21 @@ code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
 init_state(JObj, Props) ->
-    AuthorizingId = wh_json:get_value([<<"Call">>, <<"Custom-Channel-Vars">>, <<"Authorizing-ID">>], JObj),
-    EndpointId = wh_json:get_value(<<"Endpoint-ID">>, JObj),
-    {'ok', #state{call_id = wh_json:get_value([<<"Call">>, <<"Call-ID">>], JObj)
+    AuthorizingId = kz_json:get_value([<<"Call">>, <<"Custom-Channel-Vars">>, <<"Authorizing-ID">>], JObj),
+    EndpointId = kz_json:get_value(<<"Endpoint-ID">>, JObj),
+    {'ok', #state{call_id = kz_json:get_value([<<"Call">>, <<"Call-ID">>], JObj)
                   ,code_fsm_pid = start_fsm(JObj, Props)
-                  ,endpoint_numbers = [{AuthorizingId, wh_json:get_value(<<"Numbers">>, JObj)}
-                                       ,{EndpointId, wh_json:get_value(<<"Numbers">>, JObj)}
+                  ,endpoint_numbers = [{AuthorizingId, kz_json:get_value(<<"Numbers">>, JObj)}
+                                       ,{EndpointId, kz_json:get_value(<<"Numbers">>, JObj)}
                                       ]
-                  ,endpoint_patterns = [{AuthorizingId, wh_json:get_value(<<"Patterns">>, JObj)}
-                                        ,{EndpointId, wh_json:get_value(<<"Patterns">>, JObj)}
+                  ,endpoint_patterns = [{AuthorizingId, kz_json:get_value(<<"Patterns">>, JObj)}
+                                        ,{EndpointId, kz_json:get_value(<<"Patterns">>, JObj)}
                                        ]
                  }}.
 
 start_fsm(JObj, Props) ->
-    Call = whapps_call:from_json(wh_json:get_value(<<"Call">>, JObj)),
-    proc_lib:spawn_link('konami_code_fsm', 'start_fsm', [whapps_call:kvs_store('consumer_pid', props:get_value('server', Props), Call)
+    Call = kapps_call:from_json(kz_json:get_value(<<"Call">>, JObj)),
+    proc_lib:spawn_link('konami_code_fsm', 'start_fsm', [kapps_call:kvs_store('consumer_pid', props:get_value('server', Props), Call)
                                                          ,JObj
                                                          ,self()
                                                         ]).

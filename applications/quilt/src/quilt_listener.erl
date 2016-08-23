@@ -62,9 +62,9 @@ start_link() ->
         {'responders', ?RESPONDERS}
     ], []).
 
--spec handle_quilt_event(wh_json:object(), wh_proplist()) -> 'ok'.
+-spec handle_quilt_event(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_quilt_event(JObj, _Props) ->
-    handle_specific_event(wh_json:get_value(<<"Event-Name">>, JObj), JObj).
+    handle_specific_event(kz_json:get_value(<<"Event-Name">>, JObj), JObj).
 
 init([]) -> 
     {'ok', #state{}}.
@@ -102,7 +102,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%
 
 handle_specific_event(<<"waiting">>, JObj) ->
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    CallId = kz_json:get_value(<<"Call-ID">>, JObj),
     case quilt_sup:retrieve_member_fsm(CallId) of
         {'error', 'not_found'} ->
             {'ok', FSM} = quilt_sup:start_member_fsm(CallId),
@@ -115,7 +115,7 @@ handle_specific_event(<<"waiting">>, JObj) ->
     end;
 
 handle_specific_event(<<"abandoned">>, JObj) ->
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    CallId = kz_json:get_value(<<"Call-ID">>, JObj),
     case quilt_sup:retrieve_member_fsm(CallId) of
         {'ok', FSM} ->
             gen_fsm:sync_send_all_state_event(FSM, {'abandon', JObj});
@@ -127,7 +127,7 @@ handle_specific_event(<<"missed">>, JObj) ->
       quilt_log:handle_event(JObj);
 
 handle_specific_event(<<"handled">>, JObj) ->
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    CallId = kz_json:get_value(<<"Call-ID">>, JObj),
     case quilt_sup:retrieve_member_fsm(CallId) of
         {'ok', FSM} ->
             gen_fsm:sync_send_all_state_event(FSM, {'connected', JObj});
@@ -136,7 +136,7 @@ handle_specific_event(<<"handled">>, JObj) ->
     end;
 
 handle_specific_event(<<"exited-position">>, JObj) ->
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    CallId = kz_json:get_value(<<"Call-ID">>, JObj),
     case quilt_sup:retrieve_member_fsm(CallId) of
         {'ok', FSM} ->
             gen_fsm:sync_send_all_state_event(FSM, {'exitqueue', JObj});
@@ -145,11 +145,11 @@ handle_specific_event(<<"exited-position">>, JObj) ->
     end;
 
 handle_specific_event(<<"CHANNEL_BRIDGE">>, JObj) ->
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
-    AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
+    CallId = kz_json:get_value(<<"Call-ID">>, JObj),
+    AccountId = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
     AgentId = case acdc_stats:find_call(CallId) of
-        'undefined' -> wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Owner-ID">>], JObj);
-        Call -> wh_json:get_value(<<"Agent-ID">>, Call)
+        'undefined' -> kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Owner-ID">>], JObj);
+        Call -> kz_json:get_value(<<"Agent-ID">>, Call)
     end,
     case AgentId of
         'undefined' -> AgentId; %lager:debug("missing agent id");
@@ -162,7 +162,7 @@ handle_specific_event(<<"CHANNEL_BRIDGE">>, JObj) ->
                     quilt_sup:stop_member_fsm(CallId),
                     quilt_log:handle_event(JObj);
                 {"CONNECT", StoredCallId} -> % Agent is connected to a queue member/caller, transition to OUTBOUND state
-                    case wh_json:get_value(<<"Other-Leg-Call-ID">>, JObj) of
+                    case kz_json:get_value(<<"Other-Leg-Call-ID">>, JObj) of
                         StoredCallId -> % Member to agent bridge
                             lager:debug("ignoring member to agent bridge: ~p", [StoredState]);
                         _ ->
@@ -171,7 +171,7 @@ handle_specific_event(<<"CHANNEL_BRIDGE">>, JObj) ->
                             quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]), {"OUTBOUND", StoredCallId})
                     end;
                 {"TRANSFER_CANCELLED", StoredCallId} -> % Agent previously cancelled a transfer and is connected to a queue member/caller, set to OUTBOUND state
-                    case wh_json:get_value(<<"Other-Leg-Call-ID">>, JObj) of
+                    case kz_json:get_value(<<"Other-Leg-Call-ID">>, JObj) of
                         StoredCallId -> % Member to agent bridge
                             lager:debug("ignoring member to agent bridge: ~p", [StoredState]);
                         _ ->
@@ -180,7 +180,7 @@ handle_specific_event(<<"CHANNEL_BRIDGE">>, JObj) ->
                             quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]), {"OUTBOUND", StoredCallId})
                     end;
                 {"OUTBOUND", StoredCallId} ->
-                    case wh_json:get_value(<<"Other-Leg-Call-ID">>, JObj) of
+                    case kz_json:get_value(<<"Other-Leg-Call-ID">>, JObj) of
                         StoredCallId -> % Member to agent bridge
                             lager:debug("ignoring member to agent bridge: ~p", [StoredState]);
                         _ -> % Unexpected state detected
@@ -193,9 +193,9 @@ handle_specific_event(<<"CHANNEL_BRIDGE">>, JObj) ->
     end;
 
 handle_specific_event(<<"CHANNEL_DESTROY">>, JObj) ->
-    AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
-    AgentId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Owner-ID">>], JObj),
-    _CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    AccountId = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
+    AgentId = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Owner-ID">>], JObj),
+    _CallId = kz_json:get_value(<<"Call-ID">>, JObj),
     case AgentId of
         'undefined' -> AgentId; %lager:debug("missing agent id");
         _ ->
@@ -203,7 +203,7 @@ handle_specific_event(<<"CHANNEL_DESTROY">>, JObj) ->
             StoredState = quilt_store:get(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
             case StoredState of
                 {"OUTBOUND", StoredCallId} ->
-                    TransferHistory = wh_json:get_value([<<"Transfer-History">>], JObj),
+                    TransferHistory = kz_json:get_value([<<"Transfer-History">>], JObj),
                     lager:debug("retrieving transfer history from call channel variables: ~p", [TransferHistory]),
                     case TransferHistory of
                         'undefined' ->
@@ -218,8 +218,8 @@ handle_specific_event(<<"CHANNEL_DESTROY">>, JObj) ->
     end;
 
 handle_specific_event(<<"wrapup">>, JObj) ->
-    AccountId = wh_json:get_value(<<"Account-ID">>, JObj),
-    AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
+    AccountId = kz_json:get_value(<<"Account-ID">>, JObj),
+    AgentId = kz_json:get_value(<<"Agent-ID">>, JObj),
     StoredState = quilt_store:get(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
     lager:debug("agent wrapup, checking state for call transfer: ~p", [StoredState]),
     case StoredState of
@@ -233,9 +233,9 @@ handle_specific_event(<<"wrapup">>, JObj) ->
     end;
 
 handle_specific_event(<<"processed">>, JObj) ->
-    AccountId = wh_json:get_value(<<"Account-ID">>, JObj),
-    AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    AccountId = kz_json:get_value(<<"Account-ID">>, JObj),
+    AgentId = kz_json:get_value(<<"Agent-ID">>, JObj),
+    CallId = kz_json:get_value(<<"Call-ID">>, JObj),
     StoredState = quilt_store:get(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
     case StoredState of
         {"OUTBOUND", CallId} -> lager:debug("ignoring COMPLETE event when agent was in OUTBOUND state...", []);
@@ -247,8 +247,8 @@ handle_specific_event(<<"processed">>, JObj) ->
     end;
 
 handle_specific_event(<<"logged_in">>, JObj) ->
-    AccountId = wh_json:get_value(<<"Account-ID">>, JObj),
-    AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
+    AccountId = kz_json:get_value(<<"Account-ID">>, JObj),
+    AgentId = kz_json:get_value(<<"Agent-ID">>, JObj),
     case quilt_sup:retrieve_agent_fsm(AccountId, AgentId) of
         {'error', 'not_found'} ->
             {'ok', FSM} = quilt_sup:start_agent_fsm(AccountId, AgentId),
@@ -262,8 +262,8 @@ handle_specific_event(<<"logged_in">>, JObj) ->
     end;
 
 handle_specific_event(<<"logged_out">>, JObj) ->
-    AccountId = wh_json:get_value(<<"Account-ID">>, JObj),
-    AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
+    AccountId = kz_json:get_value(<<"Account-ID">>, JObj),
+    AgentId = kz_json:get_value(<<"Agent-ID">>, JObj),
     case quilt_sup:retrieve_agent_fsm(AccountId, AgentId) of
         {'ok', FSM} ->
             lager:debug("found FSM: ~p this account/agent: ~p, ~p", [FSM, AccountId, AgentId]),
@@ -273,8 +273,8 @@ handle_specific_event(<<"logged_out">>, JObj) ->
     end;
 
 handle_specific_event(<<"paused">>, JObj) ->
-    AccountId = wh_json:get_value(<<"Account-ID">>, JObj),
-    AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
+    AccountId = kz_json:get_value(<<"Account-ID">>, JObj),
+    AgentId = kz_json:get_value(<<"Agent-ID">>, JObj),
     case quilt_sup:retrieve_agent_fsm(AccountId, AgentId) of
         {'error', 'not_found'} ->
             {'ok', FSM} = quilt_sup:start_agent_fsm(AccountId, AgentId),
@@ -288,8 +288,8 @@ handle_specific_event(<<"paused">>, JObj) ->
     end;
 
 handle_specific_event(<<"resume">>, JObj) ->
-    AccountId = wh_json:get_value(<<"Account-ID">>, JObj),
-    AgentId = wh_json:get_value(<<"Agent-ID">>, JObj),
+    AccountId = kz_json:get_value(<<"Account-ID">>, JObj),
+    AgentId = kz_json:get_value(<<"Agent-ID">>, JObj),
     case quilt_sup:retrieve_agent_fsm(AccountId, AgentId) of
         {'error', 'not_found'} ->
             {'ok', FSM} = quilt_sup:start_agent_fsm(AccountId, AgentId),

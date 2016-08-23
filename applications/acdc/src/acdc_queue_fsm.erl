@@ -134,7 +134,7 @@ member_call(FSM, CallJObj, Delivery) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec member_call_cancel(pid(), wh_json:object()) -> 'ok'.
+-spec member_call_cancel(pid(), kz_json:object()) -> 'ok'.
 member_call_cancel(FSM, JObj) ->
     gen_fsm:send_event(FSM, {'member_call_cancel', JObj}).
 
@@ -142,7 +142,7 @@ member_call_cancel(FSM, JObj) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec member_connect_resp(pid(), wh_json:object()) -> 'ok'.
+-spec member_connect_resp(pid(), kz_json:object()) -> 'ok'.
 member_connect_resp(FSM, Resp) ->
     gen_fsm:send_event(FSM, {'agent_resp', Resp}).
 
@@ -154,7 +154,7 @@ member_connect_resp(FSM, Resp) ->
 member_accepted(FSM, AcceptJObj) ->
     gen_fsm:send_event(FSM, {'accepted', AcceptJObj}).
 
--spec member_callback_accepted(pid(), wh_json:object()) -> 'ok'.
+-spec member_callback_accepted(pid(), kz_json:object()) -> 'ok'.
 member_callback_accepted(FSM, AcceptJObj) ->
     gen_fsm:send_event(FSM, {'callback_accepted', AcceptJObj}).
 
@@ -197,7 +197,7 @@ status(FSM) ->
 cdr_url(FSM) ->
     gen_fsm:sync_send_all_state_event(FSM, 'cdr_url').
 
--spec register_callback(pid(), wh_json:object()) -> 'ok'.
+-spec register_callback(pid(), kz_json:object()) -> 'ok'.
 register_callback(FSM, JObj) ->
     gen_fsm:send_event(FSM, {'register_callback', JObj}).
 
@@ -232,19 +232,19 @@ init([MgrPid, ListenerPid, QueueJObj]) ->
              ,account_db = kz_doc:account_db(QueueJObj)
              ,queue_id = QueueId
 
-             ,name = wh_json:get_value(<<"name">>, QueueJObj)
-             ,connection_timeout = connection_timeout(wh_json:get_integer_value(<<"connection_timeout">>, QueueJObj))
-             ,agent_ring_timeout = agent_ring_timeout(wh_json:get_integer_value(<<"agent_ring_timeout">>, QueueJObj))
-             ,max_queue_size = wh_json:get_integer_value(<<"max_queue_size">>, QueueJObj)
-             ,ring_simultaneously = wh_json:get_value(<<"ring_simultaneously">>, QueueJObj)
-             ,enter_when_empty = wh_json:is_true(<<"enter_when_empty">>, QueueJObj, 'true')
-             ,agent_wrapup_time = wh_json:get_integer_value(<<"agent_wrapup_time">>, QueueJObj)
-             ,announce = wh_json:get_value(<<"announce">>, QueueJObj)
-             ,caller_exit_key = wh_json:get_value(<<"caller_exit_key">>, QueueJObj, <<"#">>)
-             ,record_caller = wh_json:is_true(<<"record_caller">>, QueueJObj, 'false')
-             ,recording_url = wh_json:get_ne_value(<<"call_recording_url">>, QueueJObj)
-             ,preserve_metadata = wh_json:is_true(<<"preserve_metadata">>, QueueJObj, 'false')
-             ,cdr_url = wh_json:get_ne_value(<<"cdr_url">>, QueueJObj)
+             ,name = kz_json:get_value(<<"name">>, QueueJObj)
+             ,connection_timeout = connection_timeout(kz_json:get_integer_value(<<"connection_timeout">>, QueueJObj))
+             ,agent_ring_timeout = agent_ring_timeout(kz_json:get_integer_value(<<"agent_ring_timeout">>, QueueJObj))
+             ,max_queue_size = kz_json:get_integer_value(<<"max_queue_size">>, QueueJObj)
+             ,ring_simultaneously = kz_json:get_value(<<"ring_simultaneously">>, QueueJObj)
+             ,enter_when_empty = kz_json:is_true(<<"enter_when_empty">>, QueueJObj, 'true')
+             ,agent_wrapup_time = kz_json:get_integer_value(<<"agent_wrapup_time">>, QueueJObj)
+             ,announce = kz_json:get_value(<<"announce">>, QueueJObj)
+             ,caller_exit_key = kz_json:get_value(<<"caller_exit_key">>, QueueJObj, <<"#">>)
+             ,record_caller = kz_json:is_true(<<"record_caller">>, QueueJObj, 'false')
+             ,recording_url = kz_json:get_ne_value(<<"call_recording_url">>, QueueJObj)
+             ,preserve_metadata = kz_json:is_true(<<"preserve_metadata">>, QueueJObj, 'false')
+             ,cdr_url = kz_json:get_ne_value(<<"cdr_url">>, QueueJObj)
              ,member_call = 'undefined'
 
              ,notifications = kz_json:get_value(<<"notifications">>, QueueJObj)
@@ -286,7 +286,7 @@ ready({'dtmf_pressed', _DTMF}, State) ->
     lager:debug("DTMF(~s) for old call", [_DTMF]),
     {'next_state', 'ready', State};
 ready({'register_callback', JObj}, State) ->
-    lager:debug("unexpected register_callback for ~s in ready", [wh_json:get_value(<<"Call-ID">>, JObj)]),
+    lager:debug("unexpected register_callback for ~s in ready", [kz_json:get_value(<<"Call-ID">>, JObj)]),
     {'next_state', 'ready', State};
 
 ready(_Event, State) ->
@@ -321,9 +321,9 @@ connect_req({'member_call_cancel', JObj}, #state{queue_proc=Srv
                                                  ,member_call=Call
                                                  ,caller_exit_key=DTMF
                                                 }=State) ->
-    CallId = whapps_call:call_id(Call),
-    case wh_json:get_value(<<"Reason">>, JObj) =:= <<"dtmf_exit">> andalso
-            wh_json:get_value(<<"Call-ID">>, JObj) =:= CallId of
+    CallId = kapps_call:call_id(Call),
+    case kz_json:get_value(<<"Reason">>, JObj) =:= <<"dtmf_exit">> andalso
+            kz_json:get_value(<<"Call-ID">>, JObj) =:= CallId of
         'true' ->
             lager:debug("member pressed the exit key (~s)", [DTMF]),
 
@@ -419,7 +419,7 @@ connect_req({'timeout', ConnRef, ?CONNECTION_TIMEOUT_MESSAGE}, #state{queue_proc
     {'next_state', 'ready', clear_member_call(State), 'hibernate'};
 
 connect_req({'register_callback', JObj}, #state{connection_timer_ref=ConnRef}=State) ->
-    lager:debug("register_callback recv'd for ~s during connect_req", [wh_json:get_value(<<"Call-ID">>, JObj)]),
+    lager:debug("register_callback recv'd for ~s during connect_req", [kz_json:get_value(<<"Call-ID">>, JObj)]),
     %% disable queue timeout for callback
     maybe_stop_timer(ConnRef),
     {'next_state', 'connect_req', State#state{connection_timer_ref='undefined'}};
@@ -468,9 +468,9 @@ connecting({'member_call_cancel', JObj}, #state{queue_proc=Srv
                                                 ,member_call_winner=Winner
                                                 ,caller_exit_key=DTMF
                                                }=State) ->
-    CallId = whapps_call:call_id(Call),
-    case wh_json:get_value(<<"Reason">>, JObj) =:= <<"dtmf_exit">> andalso
-            wh_json:get_value(<<"Call-ID">>, JObj) =:= CallId of
+    CallId = kapps_call:call_id(Call),
+    case kz_json:get_value(<<"Reason">>, JObj) =:= <<"dtmf_exit">> andalso
+            kz_json:get_value(<<"Call-ID">>, JObj) =:= CallId of
         'true' ->
             lager:debug("member pressed the exit key (~s)", [DTMF]),
 
@@ -499,10 +499,10 @@ connecting({'accepted', AcceptJObj}, #state{queue_proc=Srv
             webseq:evt(?WSD_ID, self(), CallId, <<"member call - agent acceptance">>),
 
             acdc_queue_listener:finish_member_call(Srv, AcceptJObj),
-            case wh_json:get_value(<<"Old-Call-ID">>, AcceptJObj) of
+            case kz_json:get_value(<<"Old-Call-ID">>, AcceptJObj) of
                 'undefined' ->
                     acdc_stats:call_handled(AccountId, QueueId, CallId
-                                            ,wh_json:get_value(<<"Agent-ID">>, AcceptJObj)
+                                            ,kz_json:get_value(<<"Agent-ID">>, AcceptJObj)
                                            );
                 %% If the old call id is set, we've already done the call handled stat update
                 _ -> 'ok'
@@ -520,7 +520,7 @@ connecting({'callback_accepted', AcceptJObj}, #state{agent_ring_timer_ref=AgentR
     case accept_is_for_call(AcceptJObj, Call) of
         'true' ->
             lager:debug("recv acceptance from agent, agent is calling back member"),
-            CallId = whapps_call:call_id(Call),
+            CallId = kapps_call:call_id(Call),
             webseq:evt(?WSD_ID, self(), CallId, <<"member call - agent callback acceptance">>),
 
             %% Do not send timeout to the agent once they've picked up the
@@ -583,7 +583,7 @@ connecting({'member_hungup', CallEvt}, #state{queue_proc=Srv
     lager:debug("caller did not answer a callback"),
     acdc_queue_listener:finish_member_call(Srv),
 
-    webseq:evt(?WSD_ID, self(), wh_json:get_value(<<"Call-ID">>, CallEvt), <<"member call - hungup">>),
+    webseq:evt(?WSD_ID, self(), kz_json:get_value(<<"Call-ID">>, CallEvt), <<"member call - hungup">>),
 
     {'next_state', 'ready', clear_member_call(State), 'hibernate'};
 
@@ -623,7 +623,7 @@ connecting({'register_callback', JObj}, #state{queue_proc=Srv
                                                ,agent_ring_timer_ref=AgentRef
                                                ,member_call_winner=Winner
                                               }=State) ->
-    lager:debug("register_callback recv'd for ~s while connecting", [wh_json:get_value(<<"Call-ID">>, JObj)]),
+    lager:debug("register_callback recv'd for ~s while connecting", [kz_json:get_value(<<"Call-ID">>, JObj)]),
     %% disable queue timeout for callback
     maybe_stop_timer(ConnRef),
     %% cancel agent ringing and do re_req
@@ -806,20 +806,20 @@ clear_member_call(#state{connection_timer_ref=ConnRef
 
 update_properties(QueueJObj, State) ->
     State#state{
-      name = wh_json:get_value(<<"name">>, QueueJObj)
-      ,connection_timeout = connection_timeout(wh_json:get_integer_value(<<"connection_timeout">>, QueueJObj))
-      ,agent_ring_timeout = agent_ring_timeout(wh_json:get_integer_value(<<"agent_ring_timeout">>, QueueJObj))
-      ,max_queue_size = wh_json:get_integer_value(<<"max_queue_size">>, QueueJObj)
-      ,ring_simultaneously = wh_json:get_value(<<"ring_simultaneously">>, QueueJObj)
-      ,enter_when_empty = wh_json:is_true(<<"enter_when_empty">>, QueueJObj, 'true')
-      ,agent_wrapup_time = wh_json:get_integer_value(<<"agent_wrapup_time">>, QueueJObj)
-      ,announce = wh_json:get_value(<<"announce">>, QueueJObj)
-      ,caller_exit_key = wh_json:get_value(<<"caller_exit_key">>, QueueJObj, <<"#">>)
-      ,record_caller = wh_json:is_true(<<"record_caller">>, QueueJObj, 'false')
-      ,recording_url = wh_json:get_ne_value(<<"call_recording_url">>, QueueJObj)
-      ,preserve_metadata = wh_json:is_true(<<"preserve_metadata">>, QueueJObj, 'false')
-      ,cdr_url = wh_json:get_ne_value(<<"cdr_url">>, QueueJObj)
-      ,notifications = wh_json:get_value(<<"notifications">>, QueueJObj)
+      name = kz_json:get_value(<<"name">>, QueueJObj)
+      ,connection_timeout = connection_timeout(kz_json:get_integer_value(<<"connection_timeout">>, QueueJObj))
+      ,agent_ring_timeout = agent_ring_timeout(kz_json:get_integer_value(<<"agent_ring_timeout">>, QueueJObj))
+      ,max_queue_size = kz_json:get_integer_value(<<"max_queue_size">>, QueueJObj)
+      ,ring_simultaneously = kz_json:get_value(<<"ring_simultaneously">>, QueueJObj)
+      ,enter_when_empty = kz_json:is_true(<<"enter_when_empty">>, QueueJObj, 'true')
+      ,agent_wrapup_time = kz_json:get_integer_value(<<"agent_wrapup_time">>, QueueJObj)
+      ,announce = kz_json:get_value(<<"announce">>, QueueJObj)
+      ,caller_exit_key = kz_json:get_value(<<"caller_exit_key">>, QueueJObj, <<"#">>)
+      ,record_caller = kz_json:is_true(<<"record_caller">>, QueueJObj, 'false')
+      ,recording_url = kz_json:get_ne_value(<<"call_recording_url">>, QueueJObj)
+      ,preserve_metadata = kz_json:is_true(<<"preserve_metadata">>, QueueJObj, 'false')
+      ,cdr_url = kz_json:get_ne_value(<<"cdr_url">>, QueueJObj)
+      ,notifications = kz_json:get_value(<<"notifications">>, QueueJObj)
 
       %% Changing queue strategy currently isn't feasible; definitely a TODO
       %%,strategy = get_strategy(kz_json:get_value(<<"strategy">>, QueueJObj))
@@ -852,7 +852,7 @@ elapsed(Time) -> kz_util:elapsed_s(Time).
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_delay_connect_req(whapps_call:call(), wh_json:object(), gen_listener:basic_deliver(), queue_fsm_state()) ->
+-spec maybe_delay_connect_req(kapps_call:call(), kz_json:object(), gen_listener:basic_deliver(), queue_fsm_state()) ->
                                 {'next_state', 'ready' | 'connect_req', queue_fsm_state()}.
 maybe_delay_connect_req(Call, CallJObj, Delivery, #state{queue_proc=QueueSrv
                                                          ,manager_proc=MgrSrv
@@ -860,7 +860,7 @@ maybe_delay_connect_req(Call, CallJObj, Delivery, #state{queue_proc=QueueSrv
                                                          ,connection_timer_ref=ConnRef
                                                          ,cdr_url=Url
                                                         }=State) ->
-    CallId = whapps_call:call_id(Call),
+    CallId = kapps_call:call_id(Call),
     case acdc_queue_manager:up_next(MgrSrv, CallId) of
         'true' ->
             lager:debug("member call received: ~s", [CallId]),
@@ -874,7 +874,7 @@ maybe_delay_connect_req(Call, CallJObj, Delivery, #state{queue_proc=QueueSrv
 
             {'next_state', 'connect_req', State#state{collect_ref=start_collect_timer()
                                                       ,member_call=Call
-                                                      ,member_call_start=wh_util:current_tstamp()
+                                                      ,member_call_start=kz_util:current_tstamp()
                                                       ,connection_timer_ref=start_connection_timer(ConnTimeout)
                                                      }};
         'false' ->
@@ -918,7 +918,7 @@ maybe_connect_re_req(MgrSrv, ListenerSrv, State) ->
 -spec maybe_delay_connect_re_req(pid(), pid(), queue_fsm_state()) ->
                                    {'next_state', 'connect_req', queue_fsm_state()}.
 maybe_delay_connect_re_req(MgrSrv, ListenerSrv, #state{member_call=Call}=State) ->
-    CallId = whapps_call:call_id(Call),
+    CallId = kapps_call:call_id(Call),
     case acdc_queue_manager:up_next(MgrSrv, CallId) of
         'true' ->
             lager:debug("done waiting, no agents responded, let's ask again"),
@@ -933,8 +933,8 @@ maybe_delay_connect_re_req(MgrSrv, ListenerSrv, #state{member_call=Call}=State) 
 
 -spec accept_is_for_call(kz_json:object(), kapps_call:call()) -> boolean().
 accept_is_for_call(AcceptJObj, Call) ->
-    (wh_json:get_value(<<"Call-ID">>, AcceptJObj) =:= whapps_call:call_id(Call)) or
-        (wh_json:get_value(<<"Old-Call-ID">>, AcceptJObj) =:= whapps_call:call_id(Call)).
+    (kz_json:get_value(<<"Call-ID">>, AcceptJObj) =:= kapps_call:call_id(Call)) or
+        (kz_json:get_value(<<"Old-Call-ID">>, AcceptJObj) =:= kapps_call:call_id(Call)).
 
 -spec update_agent(kz_json:object(), kz_json:object()) -> kz_json:object().
 update_agent(Agent, Winner) ->
@@ -956,7 +956,7 @@ handle_agent_responses(#state{collect_ref=Ref
             {'ready', clear_member_call(State)};
         'false' ->
             lager:debug("done waiting for agents to respond, picking a winner"),
-            CallbackNumber = acdc_queue_manager:callback_number(MgrSrv, whapps_call:call_id(Call)),
+            CallbackNumber = acdc_queue_manager:callback_number(MgrSrv, kapps_call:call_id(Call)),
             maybe_pick_winner(State#state{callback_number=CallbackNumber})
     end.
 

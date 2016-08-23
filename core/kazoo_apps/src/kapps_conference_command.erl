@@ -32,8 +32,8 @@
 -export([send_command/2]).
 -export([macro/2]).
 
--spec search(whapps_conference:conference() | api_binary() | string()) ->
-                    {'ok', wh_json:object()} |
+-spec search(kapps_conference:conference() | api_binary() | string()) ->
+                    {'ok', kz_json:object()} |
                     {'error', any()}.
 search(Conference) ->
     AppName = kapps_conference:application_name(Conference),

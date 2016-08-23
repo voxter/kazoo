@@ -105,7 +105,7 @@ agent_devices(AcctDb, AgentId) ->
                            kz_json:objects().
 get_endpoints(Call, ?NE_BINARY = AgentId) ->
     %% can_call_self allows attended transfer to successfully ring the transferring agent
-    cf_user:get_endpoints(AgentId, wh_json:set_value(<<"can_call_self">>, 'true', wh_json:new()), Call).
+    cf_user:get_endpoints(AgentId, kz_json:set_value(<<"can_call_self">>, 'true', kz_json:new()), Call).
 
 %% Handles subscribing/unsubscribing from call events
 -spec bind_to_call_events(api_binary() | {api_binary(), any()} | kapps_call:call()) -> 'ok'.
@@ -124,7 +124,7 @@ b_bind_to_call_events('undefined', _) -> 'ok';
 b_bind_to_call_events(CallId, Pid) ->
     gen_listener:b_add_binding(Pid, 'call', [{'callid', CallId}]).
 
--spec unbind_from_call_events(api_binary() | {api_binary(), any()} | whapps_call:call()) -> 'ok'.
+-spec unbind_from_call_events(api_binary() | {api_binary(), any()} | kapps_call:call()) -> 'ok'.
 unbind_from_call_events(Call) ->
     unbind_from_call_events(Call, self()).
 
@@ -143,11 +143,11 @@ unbind_from_call_events(Call, Pid) -> unbind_from_call_events(kapps_call:call_id
 -spec proc_id(pid(), atom() | ne_binary()) -> ne_binary().
 proc_id() -> proc_id(self()).
 proc_id(Pid) -> proc_id(Pid, node()).
-proc_id(Pid, Node) -> list_to_binary([wh_util:to_binary(Node), "-", pid_to_list(Pid)]).
+proc_id(Pid, Node) -> list_to_binary([kz_util:to_binary(Node), "-", pid_to_list(Pid)]).
 
--spec caller_id(whapps_call:call()) -> {api_binary(), api_binary()}.
+-spec caller_id(kapps_call:call()) -> {api_binary(), api_binary()}.
 caller_id(Call) ->
-    CallerIdType = case whapps_call:inception(Call) of
+    CallerIdType = case kapps_call:inception(Call) of
                        'undefined' -> <<"internal">>;
                        _Else -> <<"external">>
                    end,

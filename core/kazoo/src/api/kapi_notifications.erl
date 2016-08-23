@@ -546,7 +546,7 @@ voicemail_routing_key(Props) when is_list(Props) ->
     AcctId = props:get_value(<<"Account-ID">>, Props, <<"*">>),
     <<"notifications.voicemail.new.", AcctId/binary>>;
 voicemail_routing_key(JObj) ->
-    AcctId = wh_json:get_value(<<"Account-ID">>, JObj, <<"*">>),
+    AcctId = kz_json:get_value(<<"Account-ID">>, JObj, <<"*">>),
     <<"notifications.voicemail.new.", AcctId/binary>>.
 
 voicemail(Prop) when is_list(Prop) ->
@@ -1112,7 +1112,7 @@ skel_v(JObj) -> skel_v(kz_json:to_proplist(JObj)).
 bind_q(Queue, Props) ->
     bind_to_q(Queue, props:get_value('restrict_to', Props), Props).
 
--spec bind_to_q(ne_binary(), restrictions() | 'undefined', wh_proplist()) -> 'ok'.
+-spec bind_to_q(ne_binary(), restrictions() | 'undefined', kz_proplist()) -> 'ok'.
 bind_to_q(Q, 'undefined', _) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, <<"notifications.*.*">>);
 bind_to_q(Q, ['new_voicemail'|T], Props) ->
@@ -1203,24 +1203,24 @@ bind_to_q(Q, ['webhook_disabled'|T], Props) ->
     bind_to_q(Q, T, Props);
 bind_to_q(Q, ['denied_emergency_bridge'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_DENIED_EMERGENCY_BRIDGE),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['customer_update'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['customer_update'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_CUSTOMER_UPDATE),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['skel'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['skel'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_SKEL),
-    bind_to_q(Q, T);
-bind_to_q(Q, ['service_added'|T]) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['service_added'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_SERVICE_ADDED),
-    bind_to_q(Q, T);
-bind_to_q(_Q, []) ->
+    bind_to_q(Q, T, Props);
+bind_to_q(_Q, [], _Props) ->
     'ok'.
 
 -spec unbind_q(ne_binary(), options()) -> 'ok'.
 unbind_q(Queue, Props) ->
     unbind_q_from(Queue, props:get_value('restrict_to', Props), Props).
 
--spec unbind_q_from(ne_binary(), restrictions() | 'undefined', wh_proplist()) -> 'ok'.
+-spec unbind_q_from(ne_binary(), restrictions() | 'undefined', kz_proplist()) -> 'ok'.
 unbind_q_from(Q, 'undefined', _) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, <<"notifications.*.*">>);
 unbind_q_from(Q, ['new_voicemail'|T], Props) ->
@@ -1308,17 +1308,17 @@ unbind_q_from(Q, ['webhook_disabled'|T], Props) ->
     unbind_q_from(Q, T, Props);
 unbind_q_from(Q, ['denied_emergency_bridge'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_DENIED_EMERGENCY_BRIDGE),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['customer_update'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['customer_update'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_CUSTOMER_UPDATE),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['skel'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['skel'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_SKEL),
-    unbind_q_from(Q, T);
-unbind_q_from(Q, ['service_added'|T]) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['service_added'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_SERVICE_ADDED),
-    unbind_q_from(Q, T);
-unbind_q_from(_Q, []) ->
+    unbind_q_from(Q, T, Props);
+unbind_q_from(_Q, [], _Props) ->
     'ok'.
 
 %%--------------------------------------------------------------------
@@ -1341,7 +1341,7 @@ publish_voicemail_saved(Voicemail, ContentType) ->
 -spec publish_voicemail(api_terms(), ne_binary()) -> 'ok'.
 publish_voicemail(JObj) -> publish_voicemail(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_voicemail(Voicemail, ContentType) ->
-    {'ok', Payload} = wh_api:prepare_api_payload(Voicemail, ?VOICEMAIL_VALUES, fun ?MODULE:voicemail/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Voicemail, ?VOICEMAIL_VALUES, fun ?MODULE:voicemail/1),
     amqp_util:notifications_publish(voicemail_routing_key(Voicemail), Payload, ContentType).
 
 -spec publish_voicemail_full(api_terms()) -> 'ok'.

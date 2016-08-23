@@ -38,7 +38,7 @@
 start_link() ->
     gen_server:start_link({'local', ?SERVER}, ?MODULE, [], []).
 
--spec register(whapps_call:call(), wh_json:object()) -> pid().
+-spec register(kapps_call:call(), kz_json:object()) -> pid().
 register(Call, RecordingJObj) ->
     gen_server:call(?SERVER, {'register', Call, RecordingJObj}).
 
@@ -77,14 +77,14 @@ init([]) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_call({'register', Call, RecordingJObj}, _From, #state{table_id=TabId}=State) ->
-    case ets:lookup(TabId, whapps_call:call_id(Call)) of
+    case ets:lookup(TabId, kapps_call:call_id(Call)) of
         [] ->
             {'ok', Pid} = acdc_recordings_sup:new(Call, RecordingJObj),
             link(Pid),
-            ets:insert(TabId, {whapps_call:call_id(Call), Pid}),
+            ets:insert(TabId, {kapps_call:call_id(Call), Pid}),
             Pid;
         [{_, Pid}] ->
-            wh_media_recording:update_control_queue(Pid, whapps_call:control_queue(Call)),
+            kz_media_recording:update_control_queue(Pid, kapps_call:control_queue(Call)),
             Pid
     end,
     {'reply', Pid, State};

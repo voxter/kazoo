@@ -66,7 +66,7 @@ account_id(Listener) ->
     gen_listener:call(Listener, 'account_id').
 
 handle_amqp_event(EventJObj, Props) ->
-    ParsedEvents = case wh_json:get_value(<<"Events">>, EventJObj) of
+    ParsedEvents = case kz_json:get_value(<<"Events">>, EventJObj) of
         [{Event}] ->
             Event;
         Events ->
@@ -75,7 +75,7 @@ handle_amqp_event(EventJObj, Props) ->
             end, [], Events)
     end,
 
-    case wh_json:get_value(<<"RequestType">>, EventJObj) of
+    case kz_json:get_value(<<"RequestType">>, EventJObj) of
         <<"publish">> ->
             lists:foreach(fun(Pid) ->
                 gen_server:cast(Pid, {'publish', {ParsedEvents, 'n'}})
@@ -88,16 +88,16 @@ publish_amqp_event({_, []}, _) ->
     lager:debug("not publishing empty payload"),
     'ok';
 publish_amqp_event({'publish', Events}=_Req, AccountId) ->
-    {'ok', Payload} = wh_api:prepare_api_payload(
+    {'ok', Payload} = kz_api:prepare_api_payload(
         [{<<"RequestType">>, <<"publish">>},
          {<<"Events">>, amimulator_util:format_json_events(Events)} |
-         wh_api:default_headers(<<"amimulator">>, <<"events">>, ?APP_NAME, ?APP_VERSION)],
+         kz_api:default_headers(<<"amimulator">>, <<"events">>, ?APP_NAME, ?APP_VERSION)],
          [], fun amqp_event/1),
     amqp_util:basic_publish(?EXCHANGE_AMI, <<"amimulator.events.", AccountId/binary>>, Payload).
     
 -define(OPTIONAL_HEADERS, [<<"RequestType">>, <<"Events">>]).
 amqp_event(Prop) when is_list(Prop) ->
-    wh_api:build_message(Prop, [], ?OPTIONAL_HEADERS).
+    kz_api:build_message(Prop, [], ?OPTIONAL_HEADERS).
 
 %%
 %% gen_listener callbacks

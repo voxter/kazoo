@@ -20,7 +20,7 @@ start(MCall, AcctId, AgentCallId) ->
             ,{<<"Eavesdrop-Call-ID">>, AgentCallId}
             ,{<<"Outbound-Caller-ID-Name">>, CIDName}
             ,{<<"Outbound-Caller-ID-Number">>, CIDNumber}
-            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
     eavesdrop_req(Prop).
 

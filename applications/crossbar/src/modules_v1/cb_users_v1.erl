@@ -732,7 +732,7 @@ rehash_creds(_UserId, Username, Password, Context) ->
                                
     update_voicemail_creds(Username, Password, Context),
                                
-    cb_context:set_doc(Context, wh_json:delete_key(<<"password">>, JObj1)).
+    cb_context:set_doc(Context, kz_json:delete_key(<<"password">>, JObj1)).
     
 %% Update voicemail PIN at the same time as a password update
 update_voicemail_creds(Username, Password, #cb_context{db_name=AccountDb}) ->		
@@ -754,9 +754,9 @@ update_voicemail_creds(Username, Password, #cb_context{db_name=AccountDb}) ->
 				lager:info("New user"),
 				'ok';
 			true ->
-				lager:info("Detected user doc with id: ~p", [wh_json:get_value(<<"id">>, UserJObj)]),
+				lager:info("Detected user doc with id: ~p", [kz_json:get_value(<<"id">>, UserJObj)]),
 			
-				{'ok', UserFullDoc} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, UserJObj)),
+				{'ok', UserFullDoc} = couch_mgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, UserJObj)),
 			
 				VMJObj = try
 					{'ok', VMJObjs} = couch_mgr:get_results(AccountDb,
@@ -767,7 +767,7 @@ update_voicemail_creds(Username, Password, #cb_context{db_name=AccountDb}) ->
 						if VMJObjs == [] -> 'undefined';
 						true -> hd(VMJObjs)
 						end,
-					lager:info("Detected vmbox doc with id: ~p", [wh_json:get_value(<<"id">>, VMJObj1)]),
+					lager:info("Detected vmbox doc with id: ~p", [kz_json:get_value(<<"id">>, VMJObj1)]),
 					VMJObj1
 				catch error:badarg ->
 					'undefined'
@@ -777,7 +777,7 @@ update_voicemail_creds(Username, Password, #cb_context{db_name=AccountDb}) ->
 					lager:info("No voicemail box to update for the user"),
 					'ok';
 				true ->
-					{'ok', VMFullDoc} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, VMJObj)),
+					{'ok', VMFullDoc} = couch_mgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, VMJObj)),
 			
 					case should_update_voicemail_creds(Username, VMFullDoc, UserFullDoc) of
 						false ->
@@ -785,7 +785,7 @@ update_voicemail_creds(Username, Password, #cb_context{db_name=AccountDb}) ->
 						true ->
 							lager:info("Updating user password"),
 							couch_mgr:save_doc(AccountDb,
-								wh_json:set_value(<<"pin">>, Password, VMFullDoc))
+								kz_json:set_value(<<"pin">>, Password, VMFullDoc))
 					end
 				end
 			end

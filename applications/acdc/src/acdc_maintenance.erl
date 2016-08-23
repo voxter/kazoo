@@ -491,7 +491,7 @@ agent_queue_logout(AcctId, AgentId, QueueId) ->
     lager:info("published logout update for agent").
 
 agent_restart(AcctId, AgentId) ->
-    wh_util:put_callid(?MODULE),
+    kz_util:put_callid(?MODULE),
     case acdc_agents_sup:restart_agent(AcctId, AgentId) of
         {'ok', _} -> 'ok';
         {'error', _}=E -> E;

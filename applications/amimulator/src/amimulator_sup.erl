@@ -29,7 +29,7 @@ start_listeners(ListenSocket, Count) ->
     
 %% Launch a client handler process listening on the given socket
 start_listener(ListenSocket, Num) ->
-    supervisor:start_child(?MODULE, {"amimulator_socket_listener-" ++ wh_util:to_list(Num)
+    supervisor:start_child(?MODULE, {"amimulator_socket_listener-" ++ kz_util:to_list(Num)
                                      ,{'amimulator_socket_listener', 'start_link', [ListenSocket]}
                                      ,'permanent'
                                      ,2000
@@ -57,7 +57,7 @@ unregister_event_listener(AccountId, Consumer) ->
 %% Launch an event consumer for a specific kazoo account
 -spec start_event_listener(ne_binary()) -> supervisor:startchild_ret().
 start_event_listener(AccountId) ->
-    supervisor:start_child(?MODULE, {"amimulator_event_listener-" ++ wh_util:to_list(AccountId)
+    supervisor:start_child(?MODULE, {"amimulator_event_listener-" ++ kz_util:to_list(AccountId)
                                      ,{'amimulator_event_listener', 'start_link', [AccountId]}
                                      ,'transient'
                                      ,2000

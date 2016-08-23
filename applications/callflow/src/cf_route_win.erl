@@ -231,17 +231,17 @@ store_owner_id(Call) ->
 %%-----------------------------------------------------------------------------
 -spec set_language(kapps_call:call()) -> kapps_call:call().
 set_language(Call) ->
-    Default = wh_media_util:prompt_language(whapps_call:account_id(Call)),
-    case whapps_call:language(Call) of
+    Default = kz_media_util:prompt_language(kapps_call:account_id(Call)),
+    case kapps_call:language(Call) of
         Default ->
             case cf_endpoint:get(Call) of
                 {'ok', Endpoint} ->
                     Language = kz_device:language(Endpoint, Default),
                     lager:debug("setting language '~s' for this call", [Language]),
-                    whapps_call:set_language(wh_util:to_lower_binary(Language), Call);
+                    kapps_call:set_language(kz_util:to_lower_binary(Language), Call);
                 {'error', _E} ->
                     lager:debug("no source endpoint for this call, setting language to default ~s", [Default]),
-                    whapps_call:set_language(Default, Call)
+                    kapps_call:set_language(Default, Call)
             end;
         _ -> Call
     end.
@@ -272,8 +272,8 @@ update_ccvs(Call) ->
                ,{<<"Caller-ID-Number">>, CIDNumber}
                | get_incoming_security(Call)
               ]),
-    Call1 = whapps_call:kvs_erase(['prepend_cid_name', 'prepend_cid_number'], Call),
-    whapps_call:set_custom_channel_vars(Props, Call1).
+    Call1 = kapps_call:kvs_erase(['prepend_cid_name', 'prepend_cid_number'], Call),
+    kapps_call:set_custom_channel_vars(Props, Call1).
 
 -spec maybe_start_metaflow(kapps_call:call()) -> kapps_call:call().
 -spec maybe_start_metaflow(kapps_call:call(), api_binary()) -> kapps_call:call().

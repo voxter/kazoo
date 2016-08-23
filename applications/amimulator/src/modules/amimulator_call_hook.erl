@@ -10,8 +10,8 @@
 -define(CF_CONFIG_CAT, <<"callflow">>).
 -define(MOD_CONFIG_CAT, <<(?CF_CONFIG_CAT)/binary, ".park">>).
 
--define(DB_DOC_NAME, whapps_config:get(?MOD_CONFIG_CAT, <<"db_doc_name">>, <<"parked_calls">>)).
--define(DEFAULT_RINGBACK_TM, whapps_config:get_integer(?MOD_CONFIG_CAT, <<"default_ringback_time">>, 120000)).
+-define(DB_DOC_NAME, kapps_config:get(?MOD_CONFIG_CAT, <<"db_doc_name">>, <<"parked_calls">>)).
+-define(DEFAULT_RINGBACK_TM, kapps_config:get_integer(?MOD_CONFIG_CAT, <<"default_ringback_time">>, 120000)).
 -define(PARKED_CALLS_KEY(Db), {'cf_park', 'parked_calls', Db}).
 
 %%
@@ -19,7 +19,7 @@
 %%
 
 init(AccountId) ->
-    wh_hooks:register(AccountId).
+    kz_hooks:register(AccountId).
 
 bindings(Props) ->
     AccountId = props:get_value("AccountId", Props),
@@ -29,7 +29,7 @@ responders(_Props) ->
     [{<<"dialplan">>, <<"route_req">>}].
 
 get_extra_props(AccountId) ->
-    case couch_mgr:get_results(wh_util:format_account_id(AccountId, 'encoded'), <<"callflows/crossbar_listing">>) of
+    case couch_mgr:get_results(kz_util:format_account_id(AccountId, 'encoded'), <<"callflows/crossbar_listing">>) of
         {'ok', JObjs} -> extract_featurecodes(JObjs);
         {'error', E} -> lager:debug("could not open callflows/crossbar_listing to get featurecodes (~p)", [E])
     end.
@@ -38,11 +38,11 @@ handle_event(EventJObj) ->
     handle_event(EventJObj, []).
     
 handle_event(EventJObj, Props) ->
-    {_EventType, EventName} = wh_util:get_event_type(EventJObj),
+    {_EventType, EventName} = kz_util:get_event_type(EventJObj),
     handle_specific_event(EventName, EventJObj, Props).
     
 handle_specific_event(<<"CHANNEL_CREATE">>, EventJObj, _) ->
-	lager:debug("new channel with id ~p", [wh_json:get_value(<<"Call-ID">>, EventJObj)]),
+	lager:debug("new channel with id ~p", [kz_json:get_value(<<"Call-ID">>, EventJObj)]),
 
     %% First add the sip version of the call
 	Call = amimulator_util:create_call(EventJObj),
@@ -52,31 +52,31 @@ handle_specific_event(<<"CHANNEL_CREATE">>, EventJObj, _) ->
     relay_new_calls(maybe_create_agent_calls(Call));
 
 handle_specific_event(<<"CHANNEL_ANSWER">>, EventJObj, _) ->
-    lager:debug("channel answer for channel with id ~p", [wh_json:get_value(<<"Call-ID">>, EventJObj)]),
-    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
+    lager:debug("channel answer for channel with id ~p", [kz_json:get_value(<<"Call-ID">>, EventJObj)]),
+    CallId = kz_json:get_value(<<"Call-ID">>, EventJObj),
 
     amimulator_call_sup:relay_answer(CallId),
     amimulator_call_sup:relay_answer(<<CallId/binary, "-queue;1">>),
     amimulator_call_sup:relay_answer(<<CallId/binary, "-queue;2">>);
 
 handle_specific_event(<<"CHANNEL_BRIDGE">>, EventJObj, _) ->
-    lager:debug("channel bridge for channel with id ~p to ~p", [wh_json:get_value(<<"Call-ID">>, EventJObj)
-                                                                ,wh_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj)]),
+    lager:debug("channel bridge for channel with id ~p to ~p", [kz_json:get_value(<<"Call-ID">>, EventJObj)
+                                                                ,kz_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj)]),
     amimulator_call_sup:relay_bridge(EventJObj);
 
 handle_specific_event(<<"CHANNEL_DESTROY">>, EventJObj, _) ->
-    lager:debug("channel destroy for channel with id ~p", [wh_json:get_value(<<"Call-ID">>, EventJObj)]),
+    lager:debug("channel destroy for channel with id ~p", [kz_json:get_value(<<"Call-ID">>, EventJObj)]),
     % lager:debug("channel destroy ~p", [EventJObj]),
-    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
-    HangupCause = wh_json:get_value(<<"Hangup-Cause">>, EventJObj),
+    CallId = kz_json:get_value(<<"Call-ID">>, EventJObj),
+    HangupCause = kz_json:get_value(<<"Hangup-Cause">>, EventJObj),
 
     amimulator_call_sup:relay_destroy(HangupCause, CallId),
     amimulator_call_sup:relay_destroy(HangupCause, <<CallId/binary, "-queue;1">>),
     amimulator_call_sup:relay_destroy(HangupCause, <<CallId/binary, "-queue;2">>);
     
 handle_specific_event(<<"DTMF">>, EventJObj, _) ->
-    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
-    Digit = wh_json:get_value(<<"DTMF-Digit">>, EventJObj),
+    CallId = kz_json:get_value(<<"Call-ID">>, EventJObj),
+    Digit = kz_json:get_value(<<"DTMF-Digit">>, EventJObj),
 
     Payload = [
         {<<"Event">>, <<"DTMF">>},
@@ -95,7 +95,7 @@ handle_specific_event(<<"DTMF">>, EventJObj, _) ->
 handle_specific_event(<<"route_req">>, EventJObj, Props) ->
     % lager:debug("route_req ~p", [EventJObj]),
     % lager:debug("props ~p", [Props]),
-    maybe_handle_feature_code(wh_json:get_value(<<"Request">>, EventJObj), EventJObj, Props);
+    maybe_handle_feature_code(kz_json:get_value(<<"Request">>, EventJObj), EventJObj, Props);
 
 handle_specific_event(EventName, _EventJObj, _) ->
     lager:debug("unhandled call event ~p", [EventName]).
@@ -106,14 +106,14 @@ handle_specific_event(EventName, _EventJObj, _) ->
 
 get_realm(AccountId) ->
     {ok, AccountDoc} = couch_mgr:open_doc(<<"accounts">>, AccountId),
-    wh_json:get_value(<<"realm">>, AccountDoc).
+    kz_json:get_value(<<"realm">>, AccountDoc).
 
--spec extract_featurecodes(wh_json:objects()) -> proplist().
+-spec extract_featurecodes(kz_json:objects()) -> proplist().
 extract_featurecodes(JObjs) ->
     lists:foldl(fun(JObj, Acc) ->
-        case wh_json:get_value(<<"featurecode">>, wh_json:get_value(<<"value">>, JObj)) of
+        case kz_json:get_value(<<"featurecode">>, kz_json:get_value(<<"value">>, JObj)) of
             'undefined' -> Acc;
-            FeatureCode -> maybe_add_featurecode(wh_json:get_value(<<"name">>, FeatureCode), wh_json:get_value(<<"number">>, FeatureCode), Acc)
+            FeatureCode -> maybe_add_featurecode(kz_json:get_value(<<"name">>, FeatureCode), kz_json:get_value(<<"number">>, FeatureCode), Acc)
         end
     end, [], JObjs).
 
@@ -172,7 +172,7 @@ maybe_handle_feature_code(_, _, _) ->
     'ok'.
 
 handle_retrieve(Digit, Slot, EventJObj) ->
-    ParkedCalls = get_parked_calls(wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], EventJObj)),
+    ParkedCalls = get_parked_calls(kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], EventJObj)),
     case retrieve(Slot, ParkedCalls) of
         {'error', 'slot_empty'} -> handle_park(Digit, Slot, EventJObj);
         CallId ->
@@ -193,7 +193,7 @@ handle_retrieve(Digit, Slot, EventJObj) ->
     end.
 
 handle_park(Digit, Slot, EventJObj) ->
-    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
+    CallId = kz_json:get_value(<<"Call-ID">>, EventJObj),
     Call = ami_sm:call(CallId),
     Payload = [{<<"Event">>, <<"ParkedCall">>}
                ,{<<"Privilege">>, <<"call,all">>}
@@ -211,10 +211,10 @@ handle_park(Digit, Slot, EventJObj) ->
     amimulator_event_listener:publish_amqp_event({'publish', Payload}, amimulator_call:account_id(Call)).
 
 get_parked_calls(AccountId) ->
-    get_parked_calls(wh_util:format_account_id(AccountId, 'encoded'), AccountId).
+    get_parked_calls(kz_util:format_account_id(AccountId, 'encoded'), AccountId).
 
 get_parked_calls(AccountDb, AccountId) ->
-    case wh_cache:peek_local(?CALLFLOW_CACHE, ?PARKED_CALLS_KEY(AccountDb)) of
+    case kz_cache:peek_local(?CALLFLOW_CACHE, ?PARKED_CALLS_KEY(AccountDb)) of
         {'ok', JObj} -> JObj;
         {'error', 'not_found'} ->
             fetch_parked_calls(AccountDb, AccountId)
@@ -224,15 +224,15 @@ fetch_parked_calls(AccountDb, AccountId) ->
     case couch_mgr:open_doc(AccountDb, ?DB_DOC_NAME) of
         {'error', 'not_found'} ->
             Timestamp = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
-            Generators = [fun(J) -> wh_json:set_value(<<"_id">>, <<"parked_calls">>, J) end
-                          ,fun(J) -> wh_json:set_value(<<"pvt_type">>, <<"parked_calls">>, J) end
-                          ,fun(J) -> wh_json:set_value(<<"pvt_account_db">>, AccountDb, J) end
-                          ,fun(J) -> wh_json:set_value(<<"pvt_account_id">>, AccountId, J) end
-                          ,fun(J) -> wh_json:set_value(<<"pvt_created">>, Timestamp, J) end
-                          ,fun(J) -> wh_json:set_value(<<"pvt_modified">>, Timestamp, J) end
-                          ,fun(J) -> wh_json:set_value(<<"pvt_vsn">>, <<"1">>, J) end
-                          ,fun(J) -> wh_json:set_value(<<"slots">>, wh_json:new(), J) end],
-            lists:foldr(fun(F, J) -> F(J) end, wh_json:new(), Generators);
+            Generators = [fun(J) -> kz_json:set_value(<<"_id">>, <<"parked_calls">>, J) end
+                          ,fun(J) -> kz_json:set_value(<<"pvt_type">>, <<"parked_calls">>, J) end
+                          ,fun(J) -> kz_json:set_value(<<"pvt_account_db">>, AccountDb, J) end
+                          ,fun(J) -> kz_json:set_value(<<"pvt_account_id">>, AccountId, J) end
+                          ,fun(J) -> kz_json:set_value(<<"pvt_created">>, Timestamp, J) end
+                          ,fun(J) -> kz_json:set_value(<<"pvt_modified">>, Timestamp, J) end
+                          ,fun(J) -> kz_json:set_value(<<"pvt_vsn">>, <<"1">>, J) end
+                          ,fun(J) -> kz_json:set_value(<<"slots">>, kz_json:new(), J) end],
+            lists:foldr(fun(F, J) -> F(J) end, kz_json:new(), Generators);
         {'ok', JObj} ->
             JObj;
         {'error', _R}=E ->
@@ -240,11 +240,11 @@ fetch_parked_calls(AccountDb, AccountId) ->
             E
     end.
 
--spec retrieve(ne_binary(), wh_json:object()) ->
+-spec retrieve(ne_binary(), kz_json:object()) ->
                       ne_binary() |
                       {'error', 'slot_empty'}.
 retrieve(SlotNumber, ParkedCalls) ->
-    case wh_json:get_value([<<"slots">>, SlotNumber], ParkedCalls) of
+    case kz_json:get_value([<<"slots">>, SlotNumber], ParkedCalls) of
         'undefined' -> {'error', 'slot_empty'};
-        Slot -> wh_json:get_ne_value(<<"Call-ID">>, Slot)
+        Slot -> kz_json:get_ne_value(<<"Call-ID">>, Slot)
     end.

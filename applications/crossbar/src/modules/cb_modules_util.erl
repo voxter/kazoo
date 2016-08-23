@@ -460,7 +460,7 @@ is_superduper_admin(Context) ->
 %%--------------------------------------------------------------------
 -spec is_admin(cb_context:context()) -> boolean().
 is_admin(Context) ->
-    AccountDb = wh_util:format_account_id(cb_context:auth_account_id(Context), 'encoded'),
+    AccountDb = kz_util:format_account_id(cb_context:auth_account_id(Context), 'encoded'),
     is_admin(AccountDb, cb_context:auth_user_id(Context)).
 
 -spec is_admin(ne_binary(), ne_binary()) -> boolean().

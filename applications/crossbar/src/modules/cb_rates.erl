@@ -334,9 +334,9 @@ upload_csv(Context) ->
     _ = cb_context:put_reqid(Context),
     Now = kz_util:now(),
     {'ok', {Count, Rates}} = process_upload_file(Context),
-    lager:debug("trying to save ~b rates (took ~b ms to process)", [Count, wh_util:elapsed_ms(Now)]),
+    lager:debug("trying to save ~b rates (took ~b ms to process)", [Count, kz_util:elapsed_ms(Now)]),
     lists:foreach(fun(Rate) -> crossbar_doc:ensure_saved(cb_context:set_doc(Context, Rate), [{'publish_doc', 'false'}]) end, Rates),
-    lager:debug("it took ~b milli to process and save ~b rates", [wh_util:elapsed_ms(Now), Count]).
+    lager:debug("it took ~b milli to process and save ~b rates", [kz_util:elapsed_ms(Now), Count]).
 
 -spec process_upload_file(cb_context:context()) ->
                                  {'ok', {non_neg_integer(), kz_json:objects()}}.

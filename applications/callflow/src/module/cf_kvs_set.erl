@@ -19,10 +19,10 @@
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec handle(wh_json:object(), whapps_call:call()) -> 'ok'.
+-spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
-    Call2 = set_kvs(wh_json:delete_key(<<"kvs_mode">>, Data)
-                    ,set_kvs_mode(wh_json:get_value(<<"kvs_mode">>, Data), Call)
+    Call2 = set_kvs(kz_json:delete_key(<<"kvs_mode">>, Data)
+                    ,set_kvs_mode(kz_json:get_value(<<"kvs_mode">>, Data), Call)
                    ),
     cf_exe:set_call(Call2),
     cf_exe:continue(Call2).
@@ -31,15 +31,15 @@ get_kv(Key, Call) ->
     get_kv(?COLLECTION_KVS, Key, Call).
 
 get_kv(Collection, Key, Call) ->
-    wh_json:get_value(Key, get_collection(Collection, Call)).
+    kz_json:get_value(Key, get_collection(Collection, Call)).
 
 set_kvs(Data, Call) ->
     lists:foldl(fun(Key, Call1) ->
-                        Value = evaluate(wh_json:get_value(Key, Data), Call1),
+                        Value = evaluate(kz_json:get_value(Key, Data), Call1),
                         set_kvs_collection(Key, Value, Call1)
                 end
                 ,Call
-                ,wh_json:get_keys(Data)).
+                ,kz_json:get_keys(Data)).
 
 set_kvs_mode(Mode, Call) -> set_collection(?COLLECTION_MODE, <<"kvs_mode">>, Mode, Call).
 
@@ -47,7 +47,7 @@ evaluate(Key, Call) ->
     case digits_key(Key) of
         {'error', JObj} -> JObj;
         'false' -> evaluate2(Key, Call);
-        CollectionName -> whapps_call:get_dtmf_collection(CollectionName, Call)
+        CollectionName -> kapps_call:get_dtmf_collection(CollectionName, Call)
     end.
 
 evaluate2(<<"$", Key/binary>>, Call) ->
@@ -55,7 +55,7 @@ evaluate2(<<"$", Key/binary>>, Call) ->
 evaluate2(Value, Call) ->
     evaluate_ui(Value, Call).
 
--spec digits_key(ne_binary()) -> ne_binary() | {'error', wh_json:object()} | 'false'.
+-spec digits_key(ne_binary()) -> ne_binary() | {'error', kz_json:object()} | 'false'.
 digits_key(<<"$_digits">>) ->
     <<"default">>;
 digits_key(<<"$_digits[", CollectionName/binary>> = Key) when byte_size(CollectionName) > 0 ->
@@ -67,66 +67,66 @@ digits_key(<<"$_digits[">> = Key) ->
     digit_evaluation_error(Key);
 digits_key(_) -> 'false'.
 
--spec digit_evaluation_error(ne_binary()) -> {'error', wh_json:json_term()}.
+-spec digit_evaluation_error(ne_binary()) -> {'error', kz_json:json_term()}.
 digit_evaluation_error(Key) ->
     Msg = "invalid kv lookup key used",
     lager:info(Msg ++ ": ~s", [Key]),
-    {'error', wh_json:from_list([{<<"error">>, wh_util:to_binary(Msg)}
+    {'error', kz_json:from_list([{<<"error">>, kz_util:to_binary(Msg)}
                                  ,{<<"key">>, Key}
                                 ])}.
 
--spec evaluate_ui(wh_json:json_term() | 'undefined', whapps_call:call()) -> wh_json:json_term() | 'undefined'.
+-spec evaluate_ui(kz_json:json_term() | 'undefined', kapps_call:call()) -> kz_json:json_term() | 'undefined'.
 evaluate_ui(Value, Call) ->
-    case wh_json:is_json_object(Value) of
-        'true' -> evaluate_ui(wh_json:get_keys(Value), Value, Call);
+    case kz_json:is_json_object(Value) of
+        'true' -> evaluate_ui(kz_json:get_keys(Value), Value, Call);
         'false' -> Value
     end.
 
--spec evaluate_ui(wh_json:keys(), wh_json:object(), whapps_call:call()) -> wh_json:json_term() | 'undefined'.
+-spec evaluate_ui(kz_json:keys(), kz_json:object(), kapps_call:call()) -> kz_json:json_term() | 'undefined'.
 evaluate_ui([<<"type">>, <<"value">>], Value, Call) ->
-    KeyToCheck = wh_json:get_value(<<"value">>, Value),
-    wh_json:set_value(<<"value">>, evaluate(KeyToCheck, Call), Value);
+    KeyToCheck = kz_json:get_value(<<"value">>, Value),
+    kz_json:set_value(<<"value">>, evaluate(KeyToCheck, Call), Value);
 evaluate_ui(_, Value, _) ->
     Value.
 
--spec get_kvs_collection(whapps_call:call()) -> api_binary().
+-spec get_kvs_collection(kapps_call:call()) -> api_binary().
 get_kvs_collection(Call) ->
     get_collection(?COLLECTION_KVS, Call).
 
 get_collection(Collection, Call) ->
-    wh_json:get_value(Collection, whapps_call:kvs_fetch(?KVS_DB, wh_json:new(), Call), wh_json:new()).
+    kz_json:get_value(Collection, kapps_call:kvs_fetch(?KVS_DB, kz_json:new(), Call), kz_json:new()).
 
--spec set_kvs_collection(ne_binary(), ne_binary(), whapps_call:call()) -> whapps_call:call().
+-spec set_kvs_collection(ne_binary(), ne_binary(), kapps_call:call()) -> kapps_call:call().
 set_kvs_collection(Key, Value, Call) ->
     set_collection(?COLLECTION_KVS, Key, Value, Call).
     
 set_collection(Collection, Key, Value, Call) ->
-    Collections = whapps_call:kvs_fetch(?KVS_DB, wh_json:new(), Call),
+    Collections = kapps_call:kvs_fetch(?KVS_DB, kz_json:new(), Call),
     OldCollection = get_collection(Collection, Call),
-    NewCollection = wh_json:set_value(Key, Value, OldCollection),
-    whapps_call:kvs_store(
+    NewCollection = kz_json:set_value(Key, Value, OldCollection),
+    kapps_call:kvs_store(
     	?KVS_DB,
-        wh_json:set_value(Collection, NewCollection, Collections),
+        kz_json:set_value(Collection, NewCollection, Collections),
         Call
     ).
     
 add_kvs_to_props(Props, Call) ->
-    case wh_json:get_value(<<"kvs_mode">>, get_collection(?COLLECTION_MODE, Call), undefined) of
+    case kz_json:get_value(<<"kvs_mode">>, get_collection(?COLLECTION_MODE, Call), undefined) of
         <<"json">> ->
             Collection = get_kvs_collection(Call),
-            Keys = wh_json:get_keys(Collection),
+            Keys = kz_json:get_keys(Collection),
             
             lists:foldl(fun(Key, Props2) ->
-                [{Key, list_to_binary(format_json(wh_json:get_value(Key, Collection)))}] ++ Props2
+                [{Key, list_to_binary(format_json(kz_json:get_value(Key, Collection)))}] ++ Props2
                 end, Props, Keys);
         _ ->
             [{<<"Custom-KVS">>, get_kvs_collection(Call)}] ++ Props
     end.
     
 format_json(Data) ->
-    Proplist = case wh_json:is_json_object(Data) of
+    Proplist = case kz_json:is_json_object(Data) of
         true ->
-            wh_json:to_proplist(Data);
+            kz_json:to_proplist(Data);
         _ ->
             Data
     end,
@@ -164,10 +164,10 @@ format_json_rec([Prim|Others], _) ->
     format_type(Prim) ++ "," ++ format_json_rec(Others, [Prim]);
 
 format_json_rec(V, _) ->
-    "\"" ++ wh_util:to_list(V) ++ "\"".
+    "\"" ++ kz_util:to_list(V) ++ "\"".
     
 format_type(Data) when not is_binary(Data) ->
-    wh_util:to_list(Data);
+    kz_util:to_list(Data);
     
 format_type(<<Data/binary>>) ->
     "\"" ++ binary_to_list(Data) ++ "\"".

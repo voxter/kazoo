@@ -39,7 +39,7 @@ handle_status_update(JObj, _Props) ->
 
     case kz_json:get_value(<<"Event-Name">>, JObj) of
         <<"login">> ->
-            'true' = wapi_acdc_agent:login_v(JObj),
+            'true' = kapi_acdc_agent:login_v(JObj),
             login(AccountId, AgentId, JObj);
         <<"logout">> ->
             'true' = kapi_acdc_agent:logout_v(JObj),
@@ -47,8 +47,8 @@ handle_status_update(JObj, _Props) ->
         <<"pause">> ->
             'true' = kapi_acdc_agent:pause_v(JObj),
 
-            Timeout = wh_json:get_integer_value(<<"Time-Limit">>, JObj, ?DEFAULT_PAUSE),
-            Alias = wh_json:get_value(<<"Alias">>, JObj),
+            Timeout = kz_json:get_integer_value(<<"Time-Limit">>, JObj, ?DEFAULT_PAUSE),
+            Alias = kz_json:get_value(<<"Alias">>, JObj),
 
             maybe_pause_agent(AccountId, AgentId, Timeout, Alias, JObj);
         <<"resume">> ->
@@ -60,14 +60,14 @@ handle_status_update(JObj, _Props) ->
                                          )
     end.
 
--spec login(ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
+-spec login(ne_binary(), ne_binary(), kz_json:object()) -> 'ok'.
 login(AccountId, AgentId, JObj) ->
     case maybe_start_agent(AccountId, AgentId, JObj) of
         'fail' -> login_fail(JObj);
         _ -> login_success(JObj)
     end.
 
--spec maybe_agent_queue_change(ne_binary(), ne_binary(), ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
+-spec maybe_agent_queue_change(ne_binary(), ne_binary(), ne_binary(), ne_binary(), kz_json:object()) -> 'ok'.
 maybe_agent_queue_change(AccountId, AgentId, <<"login_queue">>, QueueId, JObj) ->
     lager:debug("queue login for agent ~s into ~s", [AgentId, QueueId]),
     case maybe_start_agent(AccountId, AgentId, JObj) of
@@ -89,7 +89,7 @@ update_agent(Sup, Q, F, JObj) when is_pid(Sup) ->
     maybe_update_presence(Sup, JObj),
     F(APid, Q).
 
--spec maybe_start_agent(ne_binary(), ne_binary(), wh_json:object()) -> pid() | 'fail'.
+-spec maybe_start_agent(ne_binary(), ne_binary(), kz_json:object()) -> pid() | 'fail'.
 maybe_start_agent(AccountId, AgentId, JObj) ->
     try maybe_start_agent(AccountId, AgentId) of
         {'ok', Sup} ->
@@ -145,7 +145,7 @@ maybe_start_agent(AccountId, AgentId) ->
     case acdc_agents_sup:find_agent_supervisor(AccountId, AgentId) of
         'undefined' ->
             lager:debug("agent ~s (~s) not found, starting", [AgentId, AccountId]),
-            case couch_mgr:open_doc(wh_util:format_account_id(AccountId, 'encoded'), AgentId) of
+            case couch_mgr:open_doc(kz_util:format_account_id(AccountId, 'encoded'), AgentId) of
                 {'ok', AgentJObj} -> acdc_agents_sup:new(AgentJObj);
                 {'error', _E}=E ->
                     lager:debug("error opening agent doc: ~p", [_E]),
@@ -243,16 +243,16 @@ handle_new_channel(JObj, AccountId) ->
 -spec handle_new_channel_acct(kz_json:object(), api_binary()) -> 'ok'.
 handle_new_channel_acct(_, 'undefined') -> 'ok';
 handle_new_channel_acct(JObj, AccountId) ->
-    FromUser = hd(binary:split(wh_json:get_value(<<"From">>, JObj), <<"@">>)),
-    ToUser = hd(binary:split(wh_json:get_value(<<"To">>, JObj), <<"@">>)),
-    ReqUser = hd(binary:split(wh_json:get_value(<<"Request">>, JObj), <<"@">>)),
+    FromUser = hd(binary:split(kz_json:get_value(<<"From">>, JObj), <<"@">>)),
+    ToUser = hd(binary:split(kz_json:get_value(<<"To">>, JObj), <<"@">>)),
+    ReqUser = hd(binary:split(kz_json:get_value(<<"Request">>, JObj), <<"@">>)),
 
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
-    MemberCallId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Member-Call-ID">>], JObj),
+    CallId = kz_json:get_value(<<"Call-ID">>, JObj),
+    MemberCallId = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Member-Call-ID">>], JObj),
 
     lager:debug("new channel in acct ~s: from ~s to ~s(~s)", [AccountId, FromUser, ToUser, ReqUser]),
 
-    case wh_json:get_value(<<"Call-Direction">>, JObj) of
+    case kz_json:get_value(<<"Call-Direction">>, JObj) of
         <<"inbound">> -> gproc:send(?NEW_CHANNEL_REG(AccountId, FromUser), ?NEW_CHANNEL_FROM(CallId));
         <<"outbound">> ->
             gproc:send(?NEW_CHANNEL_REG(AccountId, ToUser), ?NEW_CHANNEL_TO(CallId, MemberCallId)),
@@ -273,19 +273,19 @@ handle_originate_resp(JObj, Props) ->
             acdc_agent_fsm:originate_uuid(props:get_value('fsm_pid', Props), JObj)
     end.
 
--spec handle_member_connect_win(wh_json:object(), wh_proplist()) -> 'ok'.
+-spec handle_member_connect_win(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_member_connect_win(JObj, Props) ->
-    'true' = wapi_acdc_queue:member_connect_win_v(JObj),
+    'true' = kapi_acdc_queue:member_connect_win_v(JObj),
     MyId = acdc_util:proc_id(props:get_value('fsm_pid', Props)),
     lager:debug("myid ~p", [MyId]),
-    lager:debug("procid ~p", [wh_json:get_value(<<"Agent-Process-ID">>, JObj)]),
-    case wh_json:get_value(<<"Agent-Process-ID">>, JObj) of
+    lager:debug("procid ~p", [kz_json:get_value(<<"Agent-Process-ID">>, JObj)]),
+    case kz_json:get_value(<<"Agent-Process-ID">>, JObj) of
         MyId -> acdc_agent_fsm:member_connect_win(props:get_value('fsm_pid', Props), JObj, 'same_node');
         _ -> acdc_agent_fsm:member_connect_win(props:get_value('fsm_pid', Props), JObj, 'different_node')
     end.
 
--spec handle_member_message(wh_json:object(), wh_proplist()) -> 'ok'.
--spec handle_member_message(wh_json:object(), wh_proplist(), ne_binary()) -> 'ok'.
+-spec handle_member_message(kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_member_message(kz_json:object(), kz_proplist(), ne_binary()) -> 'ok'.
 handle_member_message(JObj, Props) ->
     handle_member_message(JObj, Props, kz_json:get_value(<<"Event-Name">>, JObj)).
 
@@ -304,10 +304,10 @@ handle_agent_message(JObj, Props, <<"connect_timeout">>) ->
     'true' = kapi_acdc_queue:agent_timeout_v(JObj),
     acdc_agent_fsm:agent_timeout(props:get_value('fsm_pid', Props), JObj);
 handle_agent_message(JObj, Props, <<"shared_failure">>) ->
-    'true' = wapi_acdc_agent:shared_originate_failure_v(JObj),
+    'true' = kapi_acdc_agent:shared_originate_failure_v(JObj),
     acdc_agent_fsm:shared_failure(props:get_value('fsm_pid', Props), JObj);
 handle_agent_message(JObj, Props, <<"shared_call_id">>) ->
-    'true' = wapi_acdc_agent:shared_call_id_v(JObj),
+    'true' = kapi_acdc_agent:shared_call_id_v(JObj),
     acdc_agent_fsm:shared_call_id(props:get_value('fsm_pid', Props), JObj);
 handle_agent_message(_, _, _EvtName) ->
     lager:debug("not handling agent event ~s", [_EvtName]).

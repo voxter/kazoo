@@ -51,7 +51,7 @@ maybe_handle_bridge_failure(Reason, Call) ->
                                  cf_api_bridge_return().
 bridge_to_endpoints(Data, Call) ->
     EndpointId = maybe_use_variable(Data, Call),
-    Params = wh_json:set_value(<<"source">>, ?MODULE, Data),
+    Params = kz_json:set_value(<<"source">>, ?MODULE, Data),
     case cf_endpoint:build(EndpointId, Params, Call) of
         {'error', _}=E -> E;
         {'ok', Endpoints} ->
@@ -70,15 +70,15 @@ bridge_to_endpoints(Data, Call) ->
             kapps_call_command:b_bridge_wait(Timeout, Call)
     end.
 
--spec maybe_use_variable(wh_json:object(), whapps_call:call()) -> api_binary().
+-spec maybe_use_variable(kz_json:object(), kapps_call:call()) -> api_binary().
 maybe_use_variable(Data, Call) ->
-    case wh_json:get_value(<<"var">>, Data) of
+    case kz_json:get_value(<<"var">>, Data) of
         'undefined' ->
-            wh_doc:id(Data);
+            kz_doc:id(Data);
         Variable ->
-            Value = wh_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
-            case couch_mgr:open_cache_doc(whapps_call:account_db(Call), Value) of
+            Value = kz_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
+            case couch_mgr:open_cache_doc(kapps_call:account_db(Call), Value) of
                 {'ok', _} -> Value;
-                _ -> wh_doc:id(Data)
+                _ -> kz_doc:id(Data)
             end
     end.

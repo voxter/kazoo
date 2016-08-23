@@ -24,7 +24,7 @@ close_listen_socket() ->
 init([]) ->
     process_flag('trap_exit', 'true'),
 
-    AMIPort = whapps_config:get_integer(<<"amimulator">>, <<"port">>, 5038),
+    AMIPort = kapps_config:get_integer(<<"amimulator">>, <<"port">>, 5038),
     {'ok', ListenSocket} = gen_tcp:listen(AMIPort, [{'reuseaddr', 'true'}, {'active', 'true'}, {'packet', 'line'}]),
     lager:debug("listening on port ~p", [AMIPort]),
     gen_server:cast(?MODULE, 'start_listeners'),

@@ -295,41 +295,41 @@ maybe_remove_invalid_notify_doc(_Type, _Id, _Doc) -> 'ok'.
 %%--------------------------------------------------------------------
 -spec accounts_config_deprecate_timezone_for_default_timezone() -> 'ok'.
 accounts_config_deprecate_timezone_for_default_timezone() ->
-    case couch_mgr:open_cache_doc(?WH_CONFIG_DB, <<"accounts">>) of
+    case couch_mgr:open_cache_doc(?KZ_CONFIG_DB, <<"accounts">>) of
         {'ok', Doc} ->
-            PublicFields = wh_doc:public_fields(Doc),
-            Keys = wh_json:get_keys(PublicFields),
+            PublicFields = kz_doc:public_fields(Doc),
+            Keys = kz_json:get_keys(PublicFields),
             %% No update if no keys
             case Keys =:= [] of
                 'true' -> 'ok';
                 'false' ->
                     %% Remove timezone key
                     Doc1 = deprecate_timezone_for_default_timezone(
-                             wh_json:get_keys(PublicFields)
+                             kz_json:get_keys(PublicFields)
                              ,PublicFields),
                     %% Overwrite doc with new keys
-                    couch_mgr:save_doc(?WH_CONFIG_DB
-                      ,wh_json:set_values(wh_json:to_proplist(Doc1)
+                    couch_mgr:save_doc(?KZ_CONFIG_DB
+                      ,kz_json:set_values(kz_json:to_proplist(Doc1)
                                           ,Doc))
             end;
         {'error', E} ->
             lager:warning("unable to fetch system_config/accounts: ~p", [E])
     end.
 
--spec deprecate_timezone_for_default_timezone(wh_json:keys(), wh_json:object()) -> 'ok'.
+-spec deprecate_timezone_for_default_timezone(kz_json:keys(), kz_json:object()) -> 'ok'.
 deprecate_timezone_for_default_timezone([], Doc) -> Doc;
 deprecate_timezone_for_default_timezone([Node|Nodes], Doc) ->
-    Timezone = wh_json:get_value([Node, <<"timezone">>], Doc),
-    DefaultTimezone = wh_json:get_value([Node, <<"default_timezone">>], Doc),
+    Timezone = kz_json:get_value([Node, <<"timezone">>], Doc),
+    DefaultTimezone = kz_json:get_value([Node, <<"default_timezone">>], Doc),
     %% If timezone has been set, but not default_timezone, use the former's value
     Doc1 = case Timezone =/= 'undefined'
                andalso DefaultTimezone =:= 'undefined'
            of
-               'true' -> wh_json:set_value(<<"default_timezone">>, Timezone, Doc);
+               'true' -> kz_json:set_value(<<"default_timezone">>, Timezone, Doc);
                'false' -> Doc
            end,
     deprecate_timezone_for_default_timezone(Nodes
-      ,wh_json:delete_key([Node, <<"timezone">>], Doc1)).
+      ,kz_json:delete_key([Node, <<"timezone">>], Doc1)).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -1162,12 +1162,12 @@ handle_module_rename() ->
 -spec handle_module_rename_doc(kz_json:object()) -> boolean().
 handle_module_rename_doc(JObj) ->
     Bin = kz_json:encode(JObj),
-    WHBin = binary:replace(Bin, <<"wh_">>, <<"kz_">>, ['global']),
+    WHBin = binary:replace(Bin, <<"kz_">>, <<"kz_">>, ['global']),
     WNMBin = binary:replace(WHBin, <<"wnm_">>, <<"knm_">>, ['global']),
     case WNMBin of
         Bin -> 'true';
         Replaced ->
-            lager:notice("found wh_ / wnm_ pattern in ~s, replacing.", [kz_doc:id(JObj)]),
+            lager:notice("found kz_ / wnm_ pattern in ~s, replacing.", [kz_doc:id(JObj)]),
             case kz_datamgr:ensure_saved(?KZ_CONFIG_DB, kz_json:decode(Replaced)) of
                 {'ok', _NewDoc} -> 'true';
                 {'error', _Error} -> 'false'

@@ -298,9 +298,9 @@ build_renderer(ContentType, Template) ->
 
 -spec renderer_name(ne_binary()) -> atom().
 renderer_name(ContentType) ->
-    wh_util:to_atom(<<(?TEMPLATE_ID)/binary, ContentType/binary>>, 'true').
+    kz_util:to_atom(<<(?TEMPLATE_ID)/binary, ContentType/binary>>, 'true').
 
--spec render(ne_binary(), wh_proplist()) -> {'ok', iolist()} |
+-spec render(ne_binary(), kz_proplist()) -> {'ok', iolist()} |
                                             {'error', any()}.
 render(ContentType, Macros) ->
     ModuleName = renderer_name(ContentType),
@@ -315,11 +315,11 @@ render(ContentType, Macros) ->
         'error':'undef' ->
             ST = erlang:get_stacktrace(),
             lager:debug("something in the template ~s is undefined", [ModuleName]),
-            wh_util:log_stacktrace(ST),
+            kz_util:log_stacktrace(ST),
             throw({'error', 'template_error'});
         _E:R ->
             ST = erlang:get_stacktrace(),
             lager:debug("crashed rendering template ~s: ~s: ~p", [ModuleName, _E, R]),
-            wh_util:log_stacktrace(ST),
+            kz_util:log_stacktrace(ST),
             throw({'error', 'template_error'})
     end.

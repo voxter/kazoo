@@ -173,7 +173,7 @@ agent_paused(AccountId, AgentId, PauseTime, Alias) ->
               ,{<<"Status">>, <<"paused">>}
               ,{<<"Pause-Time">>, PauseTime}
               ,{<<"Pause-Alias">>, Alias}
-              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     kapps_util:amqp_pool_send(Prop
                                ,fun kapi_acdc_stats:publish_status_paused/1
@@ -224,7 +224,7 @@ handle_status_stat(JObj, Props) ->
                             ,callid=kz_json:get_value(<<"Call-ID">>, JObj)
                             ,wait_time=acdc_stats_util:wait_time(EventName, JObj)
                             ,pause_time=acdc_stats_util:pause_time(EventName, JObj)
-                            ,pause_alias=wh_json:get_value(<<"Pause-Alias">>, JObj)
+                            ,pause_alias=kz_json:get_value(<<"Pause-Alias">>, JObj)
                             ,caller_id_name=acdc_stats_util:caller_id_name(EventName, JObj)
                             ,caller_id_number=acdc_stats_util:caller_id_number(EventName, JObj)
                            }
@@ -247,11 +247,11 @@ handle_status_query(JObj, _Prop) ->
         {'error', Errors} -> publish_status_query_errors(RespQ, MsgId, Errors)
     end.
 
--spec handle_agent_cur_status_req(wh_json:object(), wh_proplist()) -> 'ok'.
+-spec handle_agent_cur_status_req(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_agent_cur_status_req(JObj, _Prop) ->
-    'true' = wapi_acdc_stats:agent_cur_status_req_v(JObj),
-    RespQ = wh_json:get_value(<<"Server-ID">>, JObj),
-    MsgId = wh_json:get_value(<<"Msg-ID">>, JObj),
+    'true' = kapi_acdc_stats:agent_cur_status_req_v(JObj),
+    RespQ = kz_json:get_value(<<"Server-ID">>, JObj),
+    MsgId = kz_json:get_value(<<"Msg-ID">>, JObj),
 
     case cur_status_build_match_spec(JObj) of
         {'ok', Match} -> query_cur_statuses(RespQ, MsgId, Match);
@@ -259,12 +259,12 @@ handle_agent_cur_status_req(JObj, _Prop) ->
     end.
 
 publish_status_query_errors(RespQ, MsgId, Errors) ->
-    publish_query_errors(RespQ, MsgId, Errors, fun wapi_acdc_stats:publish_status_err/2).
+    publish_query_errors(RespQ, MsgId, Errors, fun kapi_acdc_stats:publish_status_err/2).
 
 publish_agent_cur_status_query_errors(RespQ, MsgId, Errors) ->
-    publish_query_errors(RespQ, MsgId, Errors, fun wapi_acdc_stats:publish_agent_cur_status_err/2).
+    publish_query_errors(RespQ, MsgId, Errors, fun kapi_acdc_stats:publish_agent_cur_status_err/2).
 
--spec publish_query_errors(ne_binary(), ne_binary(), wh_json:object(), function()) -> 'ok'.
+-spec publish_query_errors(ne_binary(), ne_binary(), kz_json:object(), function()) -> 'ok'.
 publish_query_errors(RespQ, MsgId, Errors, PubFun) ->
     API = [{<<"Error-Reason">>, Errors}
            ,{<<"Msg-ID">>, MsgId}
@@ -299,12 +299,12 @@ status_match_builder_fold(<<"Agent-ID">>, AgentId, {StatusStat, Contstraints}) -
      ,[{'=:=', '$2', {'const', AgentId}} | Contstraints]
     };
 status_match_builder_fold(<<"Start-Range">>, Start, {StatusStat, Contstraints}) ->
-    Now = wh_util:current_tstamp(),
+    Now = kz_util:current_tstamp(),
     Past = Now - (?CLEANUP_WINDOW + 1),
 
     try kz_util:to_integer(Start) of
         N when N < Past ->
-            {'error', wh_json:from_list([{<<"Start-Range">>, <<"supplied value is too far in the past">>}
+            {'error', kz_json:from_list([{<<"Start-Range">>, <<"supplied value is too far in the past">>}
                                          ,{<<"Window-Size">>, ?CLEANUP_WINDOW + 1}
                                          ,{<<"Current-Timestamp">>, Now}
                                          ,{<<"Past-Timestamp">>, Past}
@@ -323,12 +323,12 @@ status_match_builder_fold(<<"Start-Range">>, Start, {StatusStat, Contstraints}) 
             {'error', kz_json:from_list([{<<"Start-Range">>, <<"supplied value is not an integer">>}])}
     end;
 status_match_builder_fold(<<"End-Range">>, End, {StatusStat, Contstraints}) ->
-    Now = wh_util:current_tstamp(),
+    Now = kz_util:current_tstamp(),
     Past = Now - (?CLEANUP_WINDOW + 1),
 
     try kz_util:to_integer(End) of
         N when N < Past ->
-            {'error', wh_json:from_list([{<<"End-Range">>, <<"supplied value is too far in the past">>}
+            {'error', kz_json:from_list([{<<"End-Range">>, <<"supplied value is too far in the past">>}
                                          ,{<<"Window-Size">>, ?CLEANUP_WINDOW + 1}
                                          ,{<<"Current-Timestamp">>, Now}
                                         ])};
@@ -351,9 +351,9 @@ status_match_builder_fold(<<"Status">>, Status, {StatusStat, Contstraints}) ->
 status_match_builder_fold(_, _, Acc) -> Acc.
 
 cur_status_build_match_spec(JObj) ->
-    case wh_json:get_value(<<"Account-ID">>, JObj) of
+    case kz_json:get_value(<<"Account-ID">>, JObj) of
         'undefined' ->
-            {'error', wh_json:from_list([{<<"Account-ID">>, <<"missing but required">>}])};
+            {'error', kz_json:from_list([{<<"Account-ID">>, <<"missing but required">>}])};
         AccountId ->
             AcctMatch = {#status_stat{account_id='$1', _='_'}
                          ,[{'=:=', '$1', {'const', AccountId}}]
@@ -361,11 +361,11 @@ cur_status_build_match_spec(JObj) ->
             cur_status_build_match_spec(JObj, AcctMatch)
     end.
 
--spec cur_status_build_match_spec(wh_json:object(), {status_stat(), list()}) ->
+-spec cur_status_build_match_spec(kz_json:object(), {status_stat(), list()}) ->
                                      {'ok', ets:match_spec()} |
-                                     {'error', wh_json:object()}.
+                                     {'error', kz_json:object()}.
 cur_status_build_match_spec(JObj, AcctMatch) ->
-    case wh_json:foldl(fun cur_status_match_builder_fold/3, AcctMatch, JObj) of
+    case kz_json:foldl(fun cur_status_match_builder_fold/3, AcctMatch, JObj) of
         {'error', _Errs}=Errors -> Errors;
         {StatusStat, Constraints} -> {'ok', [{StatusStat, Constraints, ['$_']}]}
     end.
@@ -408,19 +408,19 @@ query_cur_statuses(RespQ, MsgId, Match) ->
             lager:debug("no stats found, sorry ~s", [RespQ]),
             Resp = [{<<"Error-Reason">>, <<"No agents found">>}
                     ,{<<"Msg-ID">>, MsgId}
-                    | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                    | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                    ],
-            wapi_acdc_stats:publish_agent_cur_status_err(RespQ, Resp);
+            kapi_acdc_stats:publish_agent_cur_status_err(RespQ, Resp);
         Stats ->
-            QueryResults = lists:foldl(fun query_status_fold/2, wh_json:new(), Stats),
-            Results = wh_json:map(fun(AgentId, {[{_Timestamp, StatusJObj}]}) ->
+            QueryResults = lists:foldl(fun query_status_fold/2, kz_json:new(), Stats),
+            Results = kz_json:map(fun(AgentId, {[{_Timestamp, StatusJObj}]}) ->
                                       {AgentId, StatusJObj}
                                   end, QueryResults),
             Resp = [{<<"Agents">>, Results}
                     ,{<<"Msg-ID">>, MsgId}
-                    | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                    | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                    ],
-            wapi_acdc_stats:publish_agent_cur_status_resp(RespQ, Resp)
+            kapi_acdc_stats:publish_agent_cur_status_resp(RespQ, Resp)
     end.
 
 trim_query_statuses(A, Statuses, Limit) ->

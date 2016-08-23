@@ -475,9 +475,9 @@ handle_cast(_Msg, State) ->
     {'noreply', State}.
 
 stop_if_inactive(Call, Flow, Flows, State) ->
-    try gen_server:call(whapps_call:kvs_fetch('consumer_pid', Call), 'callid', 3000) of
+    try gen_server:call(kapps_call:kvs_fetch('consumer_pid', Call), 'callid', 3000) of
         CallId ->
-            case whapps_call_command:b_channel_status(CallId) of
+            case kapps_call_command:b_channel_status(CallId) of
                 {'error', _E} ->
                     lager:info("channel no longer active, hard stop!"),
                     {'stop', 'normal', State};

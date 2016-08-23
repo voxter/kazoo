@@ -18,7 +18,7 @@
 -include("../src/acdc_queue_manager.hrl").
 
 -define(AGENT_ID, <<"agent_id">>).
--define(QUEUE_JOBJ, wh_json:from_list([{<<"_id">>, <<"0e279b77f708747e91f644df7beaa679">>}
+-define(QUEUE_JOBJ, kz_json:from_list([{<<"_id">>, <<"0e279b77f708747e91f644df7beaa679">>}
                                        %,{<<"_rev">>, <<"20-e2bbc5d2f91d51318f3dee45bb1c9fe1">>}
                                        ,{<<"connection_timeout">>, <<"0">>}
                                        ,{<<"member_timeout">>, <<"5">>}
@@ -118,16 +118,16 @@ teardown_ss_size_session(_) ->
     meck:unload('acdc_queue_manager').
 
 start_deps() ->
-    _ = [wh_util:ensure_started(App) || App <- ['crypto'
+    _ = [kz_util:ensure_started(App) || App <- ['crypto'
                                                 ,'inets'
                                                 ,'lager'
-                                                ,'whistle_amqp'
+                                                ,'kazoo_amqp'
                                                ]],
     'ok'.
 
 %%% Actual test functions
 t_init(Pid) ->
-    ?_assertEqual(wh_json:get_value(<<"agents">>, ?QUEUE_JOBJ), acdc_queue_manager:current_agents(Pid)).
+    ?_assertEqual(kz_json:get_value(<<"agents">>, ?QUEUE_JOBJ), acdc_queue_manager:current_agents(Pid)).
 
 t_ss_size_empty() ->
     SS = #strategy_state{agents=[]},
@@ -146,23 +146,23 @@ t_ss_size_one_busy() ->
 %%% =====
 
 init([Super, QueueJObj]) ->
-    AccountId = wh_doc:account_id(QueueJObj),
-    QueueId = wh_doc:id(QueueJObj),
+    AccountId = kz_doc:account_id(QueueJObj),
+    QueueId = kz_doc:id(QueueJObj),
 
-    wh_util:put_callid(<<"mgr_", QueueId/binary>>),
+    kz_util:put_callid(<<"mgr_", QueueId/binary>>),
 
     acdc_queue_manager:init(Super, AccountId, QueueId, QueueJObj).
 
 init(Super, AccountId, QueueId, QueueJObj) ->
     process_flag('trap_exit', 'false'),
 
-    AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
+    AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
     % couch_mgr:add_to_doc_cache(AccountDb, QueueId, QueueJObj),
 
     % _ = start_secondary_queue(AccountId, QueueId),
 
     % gen_listener:cast(self(), {'start_workers'}),
-    Strategy = acdc_queue_manager:get_strategy(wh_json:get_value(<<"strategy">>, QueueJObj)),
+    Strategy = acdc_queue_manager:get_strategy(kz_json:get_value(<<"strategy">>, QueueJObj)),
     StrategyState = acdc_queue_manager:create_strategy_state(Strategy, #strategy_state{}, AccountDb, QueueId),
 
     _ = acdc_queue_manager:update_strategy_state(self(), Strategy, StrategyState),
@@ -193,6 +193,6 @@ handle_cast(Req, State) -> meck:passthrough([Req, State]).
 create_strategy_state('mi', #strategy_state{agents='undefined'}=SS, AcctDb, QueueId) ->
     create_strategy_state('mi', SS#strategy_state{agents=[]}, AcctDb, QueueId);
 create_strategy_state('mi', SS, _, _) ->
-    SS#strategy_state{agents=wh_json:get_value(<<"agents">>, ?QUEUE_JOBJ)}.
+    SS#strategy_state{agents=kz_json:get_value(<<"agents">>, ?QUEUE_JOBJ)}.
 
 most_recent_status(_, _) -> {'ok', <<"ready">>}.

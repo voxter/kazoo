@@ -27,7 +27,7 @@ responders(_Props) ->
      ,{<<"notification">>, <<"deregister">>}].
 
 handle_event(EventJObj, Props) ->
-    {_EventType, EventName} = wh_util:get_event_type(EventJObj),
+    {_EventType, EventName} = kz_util:get_event_type(EventJObj),
     handle_specific_event(EventName, EventJObj).
 
 %%
@@ -36,11 +36,11 @@ handle_event(EventJObj, Props) ->
 
 handle_specific_event(<<"reg_success">>, EventJObj) ->
     %lager:debug("reg success ~p", [EventJObj]);
-    Realm = wh_json:get_value(<<"Realm">>, EventJObj),
+    Realm = kz_json:get_value(<<"Realm">>, EventJObj),
     case couch_mgr:get_results(<<"accounts">>, <<"accounts/listing_by_realm">>, [{key, Realm}]) of
         {ok, [Result]} ->
-            AccountId = wh_json:get_value([<<"value">>, <<"account_id">>], Result),
-            case wh_json:get_integer_value(<<"Expires">>, EventJObj, 0) of
+            AccountId = kz_json:get_value([<<"value">>, <<"account_id">>], Result),
+            case kz_json:get_integer_value(<<"Expires">>, EventJObj, 0) of
                 %% TODO
                 0 ->
                     %% Manually requested deregister
@@ -54,7 +54,7 @@ handle_specific_event(<<"reg_success">>, EventJObj) ->
     end;
 handle_specific_event(<<"deregister">>, EventJObj) ->
     %lager:debug("deregister ~p", [EventJObj]);
-    AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
+    AccountId = kz_json:get_value(<<"Account-ID">>, EventJObj),
     handle_unregister(AccountId, EventJObj);
 handle_specific_event(_, _EventJObj) ->
     lager:debug("Unhandled event").
@@ -65,19 +65,19 @@ handle_specific_event(_, _EventJObj) ->
 
 get_realm(AccountId) ->
     {ok, AccountDoc} = couch_mgr:open_doc(<<"accounts">>, AccountId),
-    wh_json:get_value(<<"realm">>, AccountDoc).
+    kz_json:get_value(<<"realm">>, AccountDoc).
 
 handle_register(AccountId, EventJObj) ->
-    AccountDb = wh_util:format_account_id(AccountId, encoded),
+    AccountDb = kz_util:format_account_id(AccountId, encoded),
 
-    case couch_mgr:get_results(AccountDb, <<"devices/sip_credentials">>, [{key, wh_json:get_value(<<"Username">>, EventJObj)}]) of
+    case couch_mgr:get_results(AccountDb, <<"devices/sip_credentials">>, [{key, kz_json:get_value(<<"Username">>, EventJObj)}]) of
         {ok, [Result]} ->
-        	EndpointId = wh_json:get_value(<<"id">>, Result),
+        	EndpointId = kz_json:get_value(<<"id">>, Result),
         	{'ok', EndpointDoc} = couch_mgr:open_doc(AccountDb, EndpointId),
             Exten = amimulator_util:endpoint_exten(EndpointDoc),
     		Reg = cb_registrations:normalize_registration(EventJObj),
-    		ContactIP = wh_json:get_value(<<"contact_ip">>, Reg),
-    		ContactPort = wh_json:get_value(<<"contact_port">>, Reg),
+    		ContactIP = kz_json:get_value(<<"contact_ip">>, Reg),
+    		ContactPort = kz_json:get_value(<<"contact_port">>, Reg),
 
     		ami_sm:add_registration(AccountId, EndpointId, ContactIP, ContactPort),
 
@@ -110,12 +110,12 @@ handle_register(AccountId, EventJObj) ->
     end.
 
 handle_unregister(AccountId, EventJObj) ->
-    AccountDb = wh_util:format_account_id(AccountId, encoded),
-    case couch_mgr:get_results(AccountDb, <<"devices/sip_credentials">>, [{key, wh_json:get_value(<<"Username">>, EventJObj)}]) of
+    AccountDb = kz_util:format_account_id(AccountId, encoded),
+    case couch_mgr:get_results(AccountDb, <<"devices/sip_credentials">>, [{key, kz_json:get_value(<<"Username">>, EventJObj)}]) of
         {ok, [Result]} ->
-            {ok, EndpointDoc} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"id">>, Result)),
+            {ok, EndpointDoc} = couch_mgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, Result)),
 
-            ami_sm:delete_registration(wh_json:get_value(<<"id">>, Result)),
+            ami_sm:delete_registration(kz_json:get_value(<<"id">>, Result)),
 
             Exten = amimulator_util:endpoint_exten(EndpointDoc),
 

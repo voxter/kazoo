@@ -221,35 +221,35 @@ process_number(Number, AccountId, Flags) ->
 
 -spec do_process_number(text(), text() | 'undefined', api_list()) -> any().
 do_process_number(Number, 'undefined', Flags) ->
-    JObj = wh_json:from_list(
+    JObj = kz_json:from_list(
              props:filter_undefined([{<<"Flags">>, Flags}])
             ),
     Endpoints = stepswitch_resources:endpoints(
-                  wh_util:to_binary(Number)
-                  ,wapi_offnet_resource:jobj_to_req(JObj)
+                  kz_util:to_binary(Number)
+                  ,kapi_offnet_resource:jobj_to_req(JObj)
                  ),
     pretty_print_endpoints(Endpoints);
 do_process_number(Number, AccountId, Flags) ->
-    JObj = wh_json:from_list(
-             props:filter_undefined([{<<"Account-ID">>, wh_util:to_binary(AccountId)}
-                                     ,{<<"Hunt-Account-ID">>, wh_util:to_binary(AccountId)}
+    JObj = kz_json:from_list(
+             props:filter_undefined([{<<"Account-ID">>, kz_util:to_binary(AccountId)}
+                                     ,{<<"Hunt-Account-ID">>, kz_util:to_binary(AccountId)}
                                      ,{<<"Flags">>, Flags}
                                     ])
             ),
-    Endpoints = stepswitch_resources:endpoints(wh_util:to_binary(Number)
-                                               ,wapi_offnet_resource:jobj_to_req(JObj)
+    Endpoints = stepswitch_resources:endpoints(kz_util:to_binary(Number)
+                                               ,kapi_offnet_resource:jobj_to_req(JObj)
                                               ),
     pretty_print_endpoints(Endpoints).
 
 -spec parse_flags(text()) -> api_list().
 parse_flags(Flags) ->
-    Flags1 = [wh_util:to_binary(string:strip(Flag)) || Flag <- string:tokens(wh_util:to_list(Flags), ",")],
+    Flags1 = [kz_util:to_binary(string:strip(Flag)) || Flag <- string:tokens(kz_util:to_list(Flags), ",")],
     case Flags1 of
         [] -> 'undefined';
         _ -> Flags1
     end.
 
--spec pretty_print_endpoints(wh_json:objects()) -> any().
+-spec pretty_print_endpoints(kz_json:objects()) -> any().
 pretty_print_endpoints([]) -> 'ok';
 pretty_print_endpoints([Endpoint|Endpoints]) ->
     _ = pretty_print_endpoint(kz_json:to_proplist(Endpoint)),

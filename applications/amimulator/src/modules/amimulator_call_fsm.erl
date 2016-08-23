@@ -26,7 +26,7 @@
                 ,call_ids = [] :: list()
                 ,answered :: api_binary()
                 ,conference_call_id :: api_binary()
-                ,early_bridge_payload :: wh_json:object() | 'undefined'
+                ,early_bridge_payload :: kz_json:object() | 'undefined'
                }).
 
 %%
@@ -190,14 +190,14 @@ answered({'answer', CallId}, #state{monitored_channel=Channel}=State) ->
     {'next_state', 'answered', State};
 
 answered({'bridge', EventJObj}, State) ->
-    CallId = wh_json:get_value(<<"Call-ID">>, EventJObj),
-    OtherCallId = wh_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj),
+    CallId = kz_json:get_value(<<"Call-ID">>, EventJObj),
+    OtherCallId = kz_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj),
     Call = ami_sm:call(CallId),
     OtherCall = ami_sm:call(OtherCallId),
 
     %% Sometimes the conferences will appear on the other media server, causing crashes
     %% Duplicate this one so the channel is in ami_sm
-    case wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Is-Conference">>], EventJObj) of
+    case kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Is-Conference">>], EventJObj) of
         <<"true">> ->
             Dupe = amimulator_call:set_call_id(OtherCallId, Call),
             ami_sm:new_call(Dupe),
@@ -541,7 +541,7 @@ new_state(<<"inbound">>, Call) ->
     %         <<"Voicemail">>;
     %     _ ->
     %         maybe_internal_cid(WhappsCall,
-    %             hd(binary:split(wh_json:get_value(<<"To">>, EventJObj), <<"@">>)))
+    %             hd(binary:split(kz_json:get_value(<<"To">>, EventJObj), <<"@">>)))
     % end,
 
     Payload = [
@@ -565,10 +565,10 @@ new_state(<<"outbound">>, Call) ->
     OtherCID = amimulator_call:other_id_name(Call),
     EndpointName = amimulator_call:channel(Call),
 
-    % OtherCallId = whapps_call:other_leg_call_id(WhappsCall),
+    % OtherCallId = kapps_call:other_leg_call_id(WhappsCall),
     % OtherCall = ami_sm:call(OtherCallId),
 
-    % OtherCID = case wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], EventJObj) of
+    % OtherCID = case kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], EventJObj) of
     %     undefined ->
     %         % case OtherCallId of
     %         %     CallId ->
@@ -582,7 +582,7 @@ new_state(<<"outbound">>, Call) ->
     %     QueueId ->
     %         case amimulator_util:find_id_number(
     %             QueueId,
-    %             whapps_call:account_db(WhappsCall)
+    %             kapps_call:account_db(WhappsCall)
     %         ) of
        %          {error, E} ->
        %            lager:debug("Could not find queue extension ~p", [E]),
@@ -613,10 +613,10 @@ busy_state(Call, CallId) ->
     OtherCIDNum = amimulator_call:other_id_number(Call),
     OtherCID = amimulator_call:other_id_name(Call),
 
-    % OtherCallId = whapps_call:other_leg_call_id(WhappsCall),
+    % OtherCallId = kapps_call:other_leg_call_id(WhappsCall),
     % OtherCall = ami_sm:call(OtherCallId),
 
-    % OtherCID = case wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], EventJObj) of
+    % OtherCID = case kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], EventJObj) of
     %     undefined ->
     %         % case OtherCallId of
     %         %     CallId ->
@@ -630,7 +630,7 @@ busy_state(Call, CallId) ->
     %     QueueId ->
     %         {ok, Number} = amimulator_util:find_id_number(
     %             QueueId,
-    %             whapps_call:account_db(WhappsCall)
+    %             kapps_call:account_db(WhappsCall)
     %         ),
     %         <<"Queue ", Number/binary, " Call">>
     % end,
@@ -657,14 +657,14 @@ destroy_channel(Reason, Call) ->
     OtherCID = amimulator_call:other_id_name(Call),
     EndpointName = amimulator_call:channel(Call),
 
-    % DestCID = case wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], EventJObj) of
+    % DestCID = case kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], EventJObj) of
     %     undefined ->
     %         props:get_value(<<"bleg_cid">>, Call);
     %     QueueId ->
-    %         AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], EventJObj),
+    %         AccountId = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], EventJObj),
     %         case amimulator_util:find_id_number(
     %             QueueId,
-    %             wh_util:format_account_id(AccountId, encoded)
+    %             kz_util:format_account_id(AccountId, encoded)
     %         ) of
        %          {error, E} ->
        %            lager:debug("Could not find queue extension ~p", [E]),

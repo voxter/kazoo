@@ -1,11 +1,11 @@
 -ifndef(AMIMULATOR_HRL).
 
 %% Typical includes needed
--include_lib("whistle/include/wh_amqp.hrl").
--include_lib("whistle/include/wh_types.hrl").
--include_lib("whistle/include/wh_log.hrl").
--include_lib("whistle/include/wh_databases.hrl").
--include_lib("whistle_apps/include/wh_hooks.hrl").
+-include_lib("kazoo/include/kz_amqp.hrl").
+-include_lib("kazoo/include/kz_types.hrl").
+-include_lib("kazoo/include/kz_log.hrl").
+-include_lib("kazoo/include/kz_databases.hrl").
+-include_lib("kazoo_apps/include/kz_hooks.hrl").
 
 -define(APP_NAME, <<"amimulator">>).
 -define(APP_VERSION, <<"1.0.0">>).

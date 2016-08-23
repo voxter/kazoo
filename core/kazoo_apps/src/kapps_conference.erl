@@ -114,33 +114,33 @@ from_json(JObj) -> from_json(JObj, #kapps_conference{}).
 
 -spec from_json(kz_json:object(), kapps_conference:conference()) -> kapps_conference:conference().
 from_json(JObj, Conference) ->
-    KVS = orddict:from_list(wh_json:to_proplist(wh_json:get_value(<<"Key-Value-Store">>, JObj, wh_json:new()))),
-    Conference#whapps_conference{
-      id = wh_json:get_ne_value(<<"Conference-ID">>, JObj, id(Conference))
-      ,profile = wh_json:get_ne_value(<<"Profile">>, JObj, profile(Conference))
-      ,focus = wh_json:get_ne_value(<<"Conference-Focus">>, JObj, focus(Conference))
-      ,controller_q = wh_json:get_ne_value(<<"Controller-Queue">>, JObj, controller_queue(Conference))
-      ,bridge_username = wh_json:get_ne_value(<<"Bridge-Username">>, JObj, bridge_username(Conference))
-      ,bridge_password = wh_json:get_ne_value(<<"Bridge-Password">>, JObj, bridge_password(Conference))
-      ,member_pins = wh_json:get_ne_value(<<"Member-Pins">>, JObj, member_pins(Conference))
-      ,moderator_pins = wh_json:get_ne_value(<<"Moderator-Pins">>, JObj, moderator_pins(Conference))
-      ,moderator = wh_json:get_value(<<"Moderator">>, JObj, moderator(Conference))
-      ,member_join_muted = wh_json:is_true(<<"Member-Join-Muted">>, JObj, member_join_muted(Conference))
-      ,member_join_deaf = wh_json:is_true(<<"Member-Join-Deaf">>, JObj, member_join_deaf(Conference))
-      ,moderator_join_muted = wh_json:is_true(<<"Moderator-Join-Muted">>, JObj, moderator_join_muted(Conference))
-      ,moderator_join_deaf = wh_json:is_true(<<"Moderator-Join-Deaf">>, JObj, moderator_join_deaf(Conference))
-      ,max_participants = wh_json:get_integer_value(<<"Max-Participants">>, JObj, max_participants(Conference))
-      ,max_members_media = wh_json:get_ne_value(<<"Max-Members-Media">>, JObj, max_members_media(Conference))
-      ,require_moderator = wh_json:is_true(<<"Require-Moderator">>, JObj, require_moderator(Conference))
-      ,wait_for_moderator = wh_json:is_true(<<"Wait-For-Moderator">>, JObj, wait_for_moderator(Conference))
-      ,play_name_on_join = wh_json:is_true(<<"Play-Name-On-Join">>, JObj, play_name_on_join(Conference))
-      ,play_entry_prompt = wh_json:is_true(<<"Play-Entry-Prompt">>, JObj, play_entry_prompt(Conference))
-      ,play_exit_tone = get_tone(wh_json:get_value(<<"Play-Exit-Tone">>, JObj, play_exit_tone(Conference)))
-      ,play_entry_tone = get_tone(wh_json:get_value(<<"Play-Entry-Tone">>, JObj, play_entry_tone(Conference)))
-      ,play_welcome = wh_json:is_true(<<"Play-Welcome">>, JObj, play_welcome(Conference))
-      ,reuse_pronounced_name = wh_json:is_true(<<"Reuse-Pronounced-Name">>, JObj, reuse_pronounced_name(Conference))
-      ,conference_doc = wh_json:is_true(<<"Conference-Doc">>, JObj, conference_doc(Conference))
-      ,kvs = orddict:merge(fun(_, _, V2) -> V2 end, Conference#whapps_conference.kvs, KVS)
+    KVS = orddict:from_list(kz_json:to_proplist(kz_json:get_value(<<"Key-Value-Store">>, JObj, kz_json:new()))),
+    Conference#kapps_conference{
+      id = kz_json:get_ne_value(<<"Conference-ID">>, JObj, id(Conference))
+      ,profile = kz_json:get_ne_value(<<"Profile">>, JObj, profile(Conference))
+      ,focus = kz_json:get_ne_value(<<"Conference-Focus">>, JObj, focus(Conference))
+      ,controller_q = kz_json:get_ne_value(<<"Controller-Queue">>, JObj, controller_queue(Conference))
+      ,bridge_username = kz_json:get_ne_value(<<"Bridge-Username">>, JObj, bridge_username(Conference))
+      ,bridge_password = kz_json:get_ne_value(<<"Bridge-Password">>, JObj, bridge_password(Conference))
+      ,member_pins = kz_json:get_ne_value(<<"Member-Pins">>, JObj, member_pins(Conference))
+      ,moderator_pins = kz_json:get_ne_value(<<"Moderator-Pins">>, JObj, moderator_pins(Conference))
+      ,moderator = kz_json:get_value(<<"Moderator">>, JObj, moderator(Conference))
+      ,member_join_muted = kz_json:is_true(<<"Member-Join-Muted">>, JObj, member_join_muted(Conference))
+      ,member_join_deaf = kz_json:is_true(<<"Member-Join-Deaf">>, JObj, member_join_deaf(Conference))
+      ,moderator_join_muted = kz_json:is_true(<<"Moderator-Join-Muted">>, JObj, moderator_join_muted(Conference))
+      ,moderator_join_deaf = kz_json:is_true(<<"Moderator-Join-Deaf">>, JObj, moderator_join_deaf(Conference))
+      ,max_participants = kz_json:get_integer_value(<<"Max-Participants">>, JObj, max_participants(Conference))
+      ,max_members_media = kz_json:get_ne_value(<<"Max-Members-Media">>, JObj, max_members_media(Conference))
+      ,require_moderator = kz_json:is_true(<<"Require-Moderator">>, JObj, require_moderator(Conference))
+      ,wait_for_moderator = kz_json:is_true(<<"Wait-For-Moderator">>, JObj, wait_for_moderator(Conference))
+      ,play_name_on_join = kz_json:is_true(<<"Play-Name-On-Join">>, JObj, play_name_on_join(Conference))
+      ,play_entry_prompt = kz_json:is_true(<<"Play-Entry-Prompt">>, JObj, play_entry_prompt(Conference))
+      ,play_exit_tone = get_tone(kz_json:get_value(<<"Play-Exit-Tone">>, JObj, play_exit_tone(Conference)))
+      ,play_entry_tone = get_tone(kz_json:get_value(<<"Play-Entry-Tone">>, JObj, play_entry_tone(Conference)))
+      ,play_welcome = kz_json:is_true(<<"Play-Welcome">>, JObj, play_welcome(Conference))
+      ,reuse_pronounced_name = kz_json:is_true(<<"Reuse-Pronounced-Name">>, JObj, reuse_pronounced_name(Conference))
+      ,conference_doc = kz_json:is_true(<<"Conference-Doc">>, JObj, conference_doc(Conference))
+      ,kvs = orddict:merge(fun(_, _, V2) -> V2 end, Conference#kapps_conference.kvs, KVS)
       ,call = load_call(JObj, call(Conference))
      }.
 
@@ -208,30 +208,30 @@ from_conference_doc(JObj) ->
     from_conference_doc(JObj, #kapps_conference{}).
 
 from_conference_doc(JObj, Conference) ->
-    Member = wh_json:get_value(<<"member">>, JObj),
-    Moderator = wh_json:get_value(<<"moderator">>, JObj),
-    Conference#whapps_conference{
-      id = wh_doc:id(JObj, id(Conference))
-      ,profile = wh_json:get_ne_value(<<"profile">>, JObj, profile(Conference))
-      ,focus = wh_json:get_ne_value(<<"focus">>, JObj, focus(Conference))
-      ,bridge_username = wh_json:get_ne_value(<<"bridge_username">>, JObj, bridge_username(Conference))
-      ,bridge_password = wh_json:get_ne_value(<<"bridge_password">>, JObj, bridge_password(Conference))
-      ,member_pins = wh_json:get_ne_value(<<"pins">>, Member, member_pins(Conference))
-      ,moderator_pins = wh_json:get_ne_value(<<"pins">>, Moderator, moderator_pins(Conference))
-      ,member_join_muted = wh_json:is_true(<<"join_muted">>, Member, member_join_muted(Conference))
-      ,member_join_deaf = wh_json:is_true(<<"join_deaf">>, Member, member_join_deaf(Conference))
-      ,play_name_on_join = wh_json:is_true(<<"play_name">>, JObj, play_name_on_join(Conference))
-      ,play_entry_prompt = wh_json:is_true(<<"play_entry_prompt">>, Member, play_entry_prompt(Conference))
-      ,play_exit_tone = get_tone(wh_json:get_value(<<"play_exit_tone">>, JObj, play_exit_tone(Conference)))
-      ,play_entry_tone = get_tone(wh_json:get_value(<<"play_entry_tone">>, JObj, play_entry_tone(Conference)))
-      ,play_welcome = wh_json:is_true(<<"play_welcome">>, JObj, play_welcome(Conference))
-      ,reuse_pronounced_name = wh_json:is_true(<<"reuse_pronounced_name">>, JObj, reuse_pronounced_name(Conference))
-      ,moderator_join_muted = wh_json:is_true(<<"join_muted">>, Moderator, moderator_join_muted(Conference))
-      ,moderator_join_deaf = wh_json:is_true(<<"join_deaf">>, Moderator, moderator_join_deaf(Conference))
-      ,max_participants = wh_json:get_integer_value(<<"max_participants">>, JObj, max_participants(Conference))
-      ,max_members_media = wh_json:get_ne_value(<<"max_members_media">>, JObj, max_members_media(Conference))
-      ,require_moderator = wh_json:is_true(<<"require_moderator">>, JObj, require_moderator(Conference))
-      ,wait_for_moderator = wh_json:is_true(<<"wait_for_moderator">>, JObj, wait_for_moderator(Conference))
+    Member = kz_json:get_value(<<"member">>, JObj),
+    Moderator = kz_json:get_value(<<"moderator">>, JObj),
+    Conference#kapps_conference{
+      id = kz_doc:id(JObj, id(Conference))
+      ,profile = kz_json:get_ne_value(<<"profile">>, JObj, profile(Conference))
+      ,focus = kz_json:get_ne_value(<<"focus">>, JObj, focus(Conference))
+      ,bridge_username = kz_json:get_ne_value(<<"bridge_username">>, JObj, bridge_username(Conference))
+      ,bridge_password = kz_json:get_ne_value(<<"bridge_password">>, JObj, bridge_password(Conference))
+      ,member_pins = kz_json:get_ne_value(<<"pins">>, Member, member_pins(Conference))
+      ,moderator_pins = kz_json:get_ne_value(<<"pins">>, Moderator, moderator_pins(Conference))
+      ,member_join_muted = kz_json:is_true(<<"join_muted">>, Member, member_join_muted(Conference))
+      ,member_join_deaf = kz_json:is_true(<<"join_deaf">>, Member, member_join_deaf(Conference))
+      ,play_name_on_join = kz_json:is_true(<<"play_name">>, JObj, play_name_on_join(Conference))
+      ,play_entry_prompt = kz_json:is_true(<<"play_entry_prompt">>, Member, play_entry_prompt(Conference))
+      ,play_exit_tone = get_tone(kz_json:get_value(<<"play_exit_tone">>, JObj, play_exit_tone(Conference)))
+      ,play_entry_tone = get_tone(kz_json:get_value(<<"play_entry_tone">>, JObj, play_entry_tone(Conference)))
+      ,play_welcome = kz_json:is_true(<<"play_welcome">>, JObj, play_welcome(Conference))
+      ,reuse_pronounced_name = kz_json:is_true(<<"reuse_pronounced_name">>, JObj, reuse_pronounced_name(Conference))
+      ,moderator_join_muted = kz_json:is_true(<<"join_muted">>, Moderator, moderator_join_muted(Conference))
+      ,moderator_join_deaf = kz_json:is_true(<<"join_deaf">>, Moderator, moderator_join_deaf(Conference))
+      ,max_participants = kz_json:get_integer_value(<<"max_participants">>, JObj, max_participants(Conference))
+      ,max_members_media = kz_json:get_ne_value(<<"max_members_media">>, JObj, max_members_media(Conference))
+      ,require_moderator = kz_json:is_true(<<"require_moderator">>, JObj, require_moderator(Conference))
+      ,wait_for_moderator = kz_json:is_true(<<"wait_for_moderator">>, JObj, wait_for_moderator(Conference))
       ,conference_doc = JObj
      }.
 
@@ -437,17 +437,17 @@ play_welcome(#kapps_conference{play_welcome=ShouldPlay}) ->
 set_play_welcome(ShouldPlay, Conference) when is_boolean(ShouldPlay) ->
     Conference#kapps_conference{play_welcome=ShouldPlay}.
 
--spec reuse_pronounced_name(whapps_conference:conference()) -> api_boolean().
-reuse_pronounced_name(#whapps_conference{reuse_pronounced_name=ReusePronouncedName}) ->
+-spec reuse_pronounced_name(kapps_conference:conference()) -> api_boolean().
+reuse_pronounced_name(#kapps_conference{reuse_pronounced_name=ReusePronouncedName}) ->
     ReusePronouncedName.
--spec set_reuse_pronounced_name(api_boolean(), whapps_conference:conference()) -> whapps_conference:conference().
+-spec set_reuse_pronounced_name(api_boolean(), kapps_conference:conference()) -> kapps_conference:conference().
 set_reuse_pronounced_name(ReusePronouncedName, Conference) when is_atom(ReusePronouncedName) ->
-    Conference#whapps_conference{reuse_pronounced_name=ReusePronouncedName}.
+    Conference#kapps_conference{reuse_pronounced_name=ReusePronouncedName}.
 
--spec conference_doc(whapps_conference:conference()) -> api_object().
-conference_doc(#whapps_conference{conference_doc=JObj}) -> JObj.
+-spec conference_doc(kapps_conference:conference()) -> api_object().
+conference_doc(#kapps_conference{conference_doc=JObj}) -> JObj.
 
--spec set_conference_doc(wh_json:object(), whapps_conference:conference()) -> whapps_conference:conference().
+-spec set_conference_doc(kz_json:object(), kapps_conference:conference()) -> kapps_conference:conference().
 set_conference_doc(JObj, Conference) ->
     Conference#kapps_conference{conference_doc=JObj}.
 

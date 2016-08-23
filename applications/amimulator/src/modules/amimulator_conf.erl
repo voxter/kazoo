@@ -24,8 +24,8 @@ responders(_Props) ->
 
 handle_event(EventJObj, Props) ->
     AccountId = props:get_value(<<"AccountId">>, Props),
-    {_EventType, EventName} = wh_util:get_event_type(EventJObj),
-    handle_specific_event(EventName, wh_json:set_value(<<"Account-ID">>, AccountId, EventJObj)).
+    {_EventType, EventName} = kz_util:get_event_type(EventJObj),
+    handle_specific_event(EventName, kz_json:set_value(<<"Account-ID">>, AccountId, EventJObj)).
 
 %%
 %% Event type handlers
@@ -33,7 +33,7 @@ handle_event(EventJObj, Props) ->
 
 handle_specific_event(<<"participants_event">>, EventJObj) ->
     Payload = participants_cache_change(EventJObj),
-    amimulator_event_listener:publish_amqp_event({publish, Payload}, wh_json:get_value(<<"Account-ID">>, EventJObj));
+    amimulator_event_listener:publish_amqp_event({publish, Payload}, kz_json:get_value(<<"Account-ID">>, EventJObj));
 handle_specific_event(_, EventJObj) ->
     lager:debug("unhandled event ~p", [EventJObj]).
 
@@ -43,10 +43,10 @@ handle_specific_event(_, EventJObj) ->
 
 %% Find all conferences belonging to an account
 account_conferences(AccountId) ->
-    AccountDb = wh_util:format_account_id(AccountId, encoded),
+    AccountDb = kz_util:format_account_id(AccountId, encoded),
     {ok, Conferences} = couch_mgr:get_results(AccountDb, <<"conferences/crossbar_listing">>),
     lists:foldl(fun(Conference, Ids) ->
-        [wh_json:get_value(<<"id">>, Conference) | Ids]
+        [kz_json:get_value(<<"id">>, Conference) | Ids]
     end, [], Conferences).
 
 conference_bindings([], Bindings) ->
@@ -55,13 +55,13 @@ conference_bindings([ConferenceId|Ids], Bindings) ->
     conference_bindings(Ids, [{conference, ConferenceId} | Bindings]).
 
 participants_cache_change(EventJObj) ->
-    AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
-    AccountDb = wh_util:format_account_id(AccountId, encoded),
-    ConferenceId = wh_json:get_value(<<"Conference-ID">>, EventJObj),
+    AccountId = kz_json:get_value(<<"Account-ID">>, EventJObj),
+    AccountDb = kz_util:format_account_id(AccountId, encoded),
+    ConferenceId = kz_json:get_value(<<"Conference-ID">>, EventJObj),
     {ok, ConferenceNumber} = amimulator_util:find_id_number(ConferenceId, AccountDb),
     CachedParticipants = ami_sm:conf_parts(ConferenceId),
 
-    Current = wh_json:get_value(<<"Participants">>, EventJObj, []),
+    Current = kz_json:get_value(<<"Participants">>, EventJObj, []),
     Removed = removed(removed_participants(CachedParticipants, Current), ConferenceNumber),
     Added = added(added_participants(CachedParticipants, Current), ConferenceNumber),
     update_cache(Removed, Added, CachedParticipants, ConferenceId),
@@ -125,7 +125,7 @@ removed(_CallId, _ConferenceNumber) ->
 find_in_current(_First, []) ->
     false;
 find_in_current(First, [H|T]) ->
-    case wh_json:get_value(<<"Call-ID">>, H) of
+    case kz_json:get_value(<<"Call-ID">>, H) of
         First ->
             true;
         _ ->
@@ -140,7 +140,7 @@ added_participants(_Cached, [], Added) ->
 added_participants(Cached, [First|Others], Added) ->
     case find_in_cached(First, Cached) of
         true -> added_participants(Cached, Others, Added);
-        false -> added_participants(Cached, Others, [wh_json:get_value(<<"Call-ID">>, First) | Added])
+        false -> added_participants(Cached, Others, [kz_json:get_value(<<"Call-ID">>, First) | Added])
     end.
 
 added(CallIds, ConferenceNumber) when is_list(CallIds) ->
@@ -169,7 +169,7 @@ added(CallId, ConferenceNumber) ->
 find_in_cached(_First, []) ->
     false;
 find_in_cached(First, [H|T]) ->
-    case wh_json:get_value(<<"Call-ID">>, First) of
+    case kz_json:get_value(<<"Call-ID">>, First) of
         H ->
             true;
         _ ->

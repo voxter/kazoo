@@ -125,8 +125,8 @@ handle(Data, Call) ->
                                    ,takeback_dtmf=kz_json:get_value(<<"takeback_dtmf">>, Data, ?DEFAULT_TAKEBACK_DTMF)
                                    ,ringback=to_tonestream(kz_json:get_value(<<"ringback">>, Data, ?DEFAULT_RINGBACK))
                                    ,moh=find_moh(Data, Call)
-                                   ,extension=get_extension(wh_json:get_first_defined([<<"captures">>, <<"target">>], Data))
-                                   ,transfer_announce=wh_json:is_true(<<"transfer_announce">>, Data, 'false')
+                                   ,extension=get_extension(kz_json:get_first_defined([<<"captures">>, <<"target">>], Data))
+                                   ,transfer_announce=kz_json:is_true(<<"transfer_announce">>, Data, 'false')
                                   }
                           )
     of
@@ -1375,20 +1375,20 @@ to_tonestream('undefined') -> 'undefined';
 to_tonestream(<<"tone_stream://", _/binary>> = TS) -> <<TS/binary, ";loops=-1">>;
 to_tonestream(Ringback) -> <<"tone_stream://", Ringback/binary, ";loops=-1">>.
 
--spec maybe_start_transferor_ringback(whapps_call:call(), ne_binary(), api_binary(), boolean()) -> 'ok'.
+-spec maybe_start_transferor_ringback(kapps_call:call(), ne_binary(), api_binary(), boolean()) -> 'ok'.
 maybe_start_transferor_ringback(_Call, _Transferor, 'undefined', _) -> 'ok';
 maybe_start_transferor_ringback(Call, Transferor, Ringback, TransferAnnounce) ->
     maybe_announce_transfer(Call, Transferor, TransferAnnounce),
-    Command = whapps_call_command:play_command(Ringback, Transferor),
+    Command = kapps_call_command:play_command(Ringback, Transferor),
     lager:debug("playing ringback on ~s to ~s", [Transferor, Ringback]),
     kapps_call_command:send_command(kz_json:set_values([{<<"Insert-At">>, <<"now">>}], Command), Call).
 
 maybe_announce_transfer(_, _, 'false') ->
     'ok';
 maybe_announce_transfer(Call, Transferor, 'true') ->
-    Command = whapps_call_command:play_command(wh_media_util:get_prompt(<<"menu-transferring_call">>, Call), Transferor),
+    Command = kapps_call_command:play_command(kz_media_util:get_prompt(<<"menu-transferring_call">>, Call), Transferor),
     lager:debug("telling transferor that transfer has begun"),
-    whapps_call_command:send_command(Command, Call).
+    kapps_call_command:send_command(Command, Call).
 
 -spec maybe_cancel_timer(api_reference()) -> 'ok'.
 maybe_cancel_timer('undefined') -> 'ok';

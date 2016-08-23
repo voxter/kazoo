@@ -1230,15 +1230,15 @@ fax_detection_v(JObj) -> fax_detection_v(kz_json:to_proplist(JObj)).
 -spec send_display(api_terms()) -> api_formatter_return().
 send_display(Prop) when is_list(Prop) ->
     case send_display_v(Prop) of
-        'true' -> wh_api:build_message(Prop, ?SEND_DISPLAY_REQ_HEADERS, ?OPTIONAL_SEND_DISPLAY_REQ_HEADERS);
+        'true' -> kz_api:build_message(Prop, ?SEND_DISPLAY_REQ_HEADERS, ?OPTIONAL_SEND_DISPLAY_REQ_HEADERS);
         'false' -> {'error', "Proplist failed validation for send_display"}
     end;
-send_display(JObj) -> send_display(wh_json:to_proplist(JObj)).
+send_display(JObj) -> send_display(kz_json:to_proplist(JObj)).
 
 -spec send_display_v(api_terms()) -> boolean().
 send_display_v(Prop) when is_list(Prop) ->
-    wh_api:validate(Prop, ?SEND_DISPLAY_REQ_HEADERS, ?SEND_DISPLAY_REQ_VALUES, ?SEND_DISPLAY_REQ_TYPES);
-send_display_v(JObj) -> send_display_v(wh_json:to_proplist(JObj)).
+    kz_api:validate(Prop, ?SEND_DISPLAY_REQ_HEADERS, ?SEND_DISPLAY_REQ_VALUES, ?SEND_DISPLAY_REQ_TYPES);
+send_display_v(JObj) -> send_display_v(kz_json:to_proplist(JObj)).
 
 -spec store_vm(api_terms()) ->
                    {'ok', kz_proplist()} |

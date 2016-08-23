@@ -149,8 +149,8 @@ validate_faxboxes(Context, ?HTTP_GET) ->
 
 validate(Context, ?DEFAULT_FAX_SMTP_DOMAIN_PATH_TOKEN) ->
     ResellerId = cb_context:reseller_id(Context),
-    Domain = whapps_account_config:get_global(ResellerId, <<"fax">>, <<"default_smtp_domain">>, ?DEFAULT_FAX_SMTP_DOMAIN),
-    crossbar_util:response(wh_json:set_value(<<"default_smtp_domain">>, Domain, wh_json:new()), Context);
+    Domain = kapps_account_config:get_global(ResellerId, <<"fax">>, <<"default_smtp_domain">>, ?DEFAULT_FAX_SMTP_DOMAIN),
+    crossbar_util:response(kz_json:set_value(<<"default_smtp_domain">>, Domain, kz_json:new()), Context);
 validate(Context, Id) ->
     validate_faxbox(Context, Id, cb_context:req_verb(Context)).
 

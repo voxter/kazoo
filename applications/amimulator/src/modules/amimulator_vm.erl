@@ -25,7 +25,7 @@ responders(_Props) ->
     ].
 
 handle_event(EventJObj, Props) ->
-    {_EventType, EventName} = wh_util:get_event_type(EventJObj),
+    {_EventType, EventName} = kz_util:get_event_type(EventJObj),
     handle_specific_event(EventName, EventJObj).
 
 %%
@@ -48,26 +48,26 @@ handle_specific_event(<<"voicemail_saved">>, EventJObj) ->
 handle_specific_event(_, _EventJObj) ->
     lager:debug("unhandled event").
 
--spec new_voicemail(wh_json:object()) -> 'ok'.
+-spec new_voicemail(kz_json:object()) -> 'ok'.
 new_voicemail(JObj) ->
-    AccountDb = wh_json:get_value(<<"Account-DB">>, JObj),
-    case couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"Voicemail-Box">>, JObj)) of
+    AccountDb = kz_json:get_value(<<"Account-DB">>, JObj),
+    case couch_mgr:open_doc(AccountDb, kz_json:get_value(<<"Voicemail-Box">>, JObj)) of
         {'ok', VoicemailBox} ->
-            Mailbox = wh_json:get_value(<<"mailbox">>, VoicemailBox),
+            Mailbox = kz_json:get_value(<<"mailbox">>, VoicemailBox),
 
             case couch_mgr:get_results(AccountDb, <<"vmboxes/crossbar_listing">>, [{'key', Mailbox}]) of
                 {'ok', [Result]} ->
-                    Value = wh_json:get_value(<<"value">>, Result),
+                    Value = kz_json:get_value(<<"value">>, Result),
                     Payload = [
                         {<<"Event">>, <<"MessageWaiting">>},
                         {<<"Privilege">>, <<"call,all">>},
                         {<<"Mailbox">>, <<Mailbox/binary, "@default">>},
                         {<<"Waiting">>, 1},
                         %% Assuming that this will always be behind by 1
-                        {<<"New">>, wh_json:get_value(<<"new_messages">>, Value) + 1},
-                        {<<"Old">>, wh_json:get_value(<<"old_messages">>, Value)}
+                        {<<"New">>, kz_json:get_value(<<"new_messages">>, Value) + 1},
+                        {<<"Old">>, kz_json:get_value(<<"old_messages">>, Value)}
                     ],
-                    amimulator_event_listener:publish_amqp_event({'publish', Payload}, wh_json:get_value(<<"Account-ID">>, JObj));
+                    amimulator_event_listener:publish_amqp_event({'publish', Payload}, kz_json:get_value(<<"Account-ID">>, JObj));
                 _ ->
                     lager:debug("Could not get voicemail count")
             end;

@@ -74,7 +74,7 @@
 %%% API
 %%%===================================================================
 
--spec start_fsm(whapps_call:call(), wh_json:object(), pid()) -> any().
+-spec start_fsm(kapps_call:call(), kz_json:object(), pid()) -> any().
 start_fsm(Call, JObj, KonamiCallPid) ->
     ListenOn = listen_on(Call, JObj),
 
@@ -109,7 +109,7 @@ start_fsm(Call, JObj, KonamiCallPid) ->
 add_endpoint(FSM, EndpointId) ->
     gen_fsm:send_all_state_event(FSM, {'add_endpoint', EndpointId}).
 
--spec event(pid(), ne_binary(), ne_binary(), wh_json:object()) -> 'ok'.
+-spec event(pid(), ne_binary(), ne_binary(), kz_json:object()) -> 'ok'.
 event(FSM, CallId, <<"DTMF">>, JObj) ->
     gen_fsm:send_event(FSM, {'dtmf'
                              ,CallId
@@ -218,7 +218,7 @@ handle_event(?EVENT(CallId, <<"metaflow_exe">>, Metaflow), StateName, #state{cal
 handle_event({'add_endpoint', EndpointId}, StateName, #state{b_endpoint_ids=BEndpointIds}=State) ->
     {'next_state', StateName, State#state{b_endpoint_ids = [EndpointId | BEndpointIds]}};
 % handle_event(?EVENT(CallId, <<"update">>, JObj), StateName, #state{call_id=CallId}=State) ->
-%     NewNumbers = wh_json:get_value(<<"Data">>, JObj),
+%     NewNumbers = kz_json:get_value(<<"Data">>, JObj),
 %     lager:debug("trying to update FSM ~p numbers to ~p", [self(), NewNumbers]),
 %     {'next_state', StateName, State#state{numbers=NewNumbers
 %                                      ,digit_timeout=0
@@ -312,21 +312,21 @@ binding_digit(Call, JObj) ->
             BindingDigit
     end.
 
-% -spec numbers(whapps_call:call(), wh_json:object()) -> wh_json:object().
+% -spec numbers(kapps_call:call(), kz_json:object()) -> kz_json:object().
 % numbers(Call, JObj) ->
-%     case wh_json:get_value(<<"Numbers">>, JObj) of
+%     case kz_json:get_value(<<"Numbers">>, JObj) of
 %         'undefined' ->
 %             lager:debug("loading default account metaflow numbers"),
-%             konami_config:numbers(whapps_call:account_id(Call));
+%             konami_config:numbers(kapps_call:account_id(Call));
 %         Numbers ->
 %             lager:debug("loading numbers from api: ~p", [Numbers]),
 %             Numbers
 %     end.
 
-% -spec patterns(whapps_call:call(), wh_json:object()) -> wh_json:object().
+% -spec patterns(kapps_call:call(), kz_json:object()) -> kz_json:object().
 % patterns(Call, JObj) ->
-%     case wh_json:get_value(<<"Patterns">>, JObj) of
-%         'undefined' -> konami_config:patterns(whapps_call:account_id(Call));
+%     case kz_json:get_value(<<"Patterns">>, JObj) of
+%         'undefined' -> konami_config:patterns(kapps_call:account_id(Call));
 %         Patterns ->
 %             lager:debug("loading patterns from api: ~p", [Patterns]),
 %             Patterns
@@ -337,7 +337,7 @@ numbers(Pid, EndpointId) ->
 patterns(Pid, EndpointId) ->
     konami_call:patterns(Pid, EndpointId).
 
--spec digit_timeout(whapps_call:call(), wh_json:object()) -> pos_integer().
+-spec digit_timeout(kapps_call:call(), kz_json:object()) -> pos_integer().
 digit_timeout(Call, JObj) ->
     case kz_json:get_integer_value(<<"Digit-Timeout">>, JObj) of
         'undefined' -> konami_config:timeout(kapps_call:account_id(Call));
@@ -445,13 +445,13 @@ maybe_handle_aleg_code(#state{konami_call_pid=Pid
                               ,call_id=CallId
                               ,other_leg=OtherLeg
                              }) ->
-    Ns = numbers(Pid, whapps_call:authorizing_id(Call)),
-    Ps = patterns(Pid, whapps_call:authorizing_id(Call)),
+    Ns = numbers(Pid, kapps_call:authorizing_id(Call)),
+    Ps = patterns(Pid, kapps_call:authorizing_id(Call)),
     lager:debug("a DTMF timeout, let's check '~s'", [Collected]),
     case has_metaflow(Collected, Ns, Ps) of
         'false' -> lager:debug("no handler for '~s', unarming", [Collected]);
-        {'number', N} -> handle_number_metaflow(whapps_call:set_other_leg_call_id(OtherLeg, Call), N, CallId);
-        {'pattern', P} -> handle_pattern_metaflow(whapps_call:set_other_leg_call_id(OtherLeg, Call), P, CallId)
+        {'number', N} -> handle_number_metaflow(kapps_call:set_other_leg_call_id(OtherLeg, Call), N, CallId);
+        {'pattern', P} -> handle_pattern_metaflow(kapps_call:set_other_leg_call_id(OtherLeg, Call), P, CallId)
     end.
 
 -spec maybe_handle_bleg_code(state()) -> 'ok'.
@@ -603,7 +603,7 @@ endpoint_answered(#state{call=Call}=State
     lager:debug("yay, our endpoint ~s answered on ~s", [EndpointId, CallId]),
     maybe_add_call_event_bindings(CallId),
     State#state{other_leg=CallId
-                ,call=whapps_call:set_other_leg_call_id(CallId, Call)
+                ,call=kapps_call:set_other_leg_call_id(CallId, Call)
                 ,b_endpoint_ids=[EndpointId]
                }.
 

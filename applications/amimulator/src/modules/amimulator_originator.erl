@@ -65,15 +65,15 @@ dial(Props) ->
     	{<<"Account-ID">>, proplists:get_value(<<"AccountId">>, Props)},
         {<<"Retain-CID">>, <<"true">>},
         {<<"Inherit-Codec">>, <<"false">>},
-        {<<"Authorizing-Type">>, whapps_call:authorizing_type(Call)},
-        {<<"Authorizing-ID">>, whapps_call:authorizing_id(Call)},
+        {<<"Authorizing-Type">>, kapps_call:authorizing_type(Call)},
+        {<<"Authorizing-ID">>, kapps_call:authorizing_id(Call)},
         {<<"Web-Dial">>, <<"true">>},
         {<<"Flip-Direction-On-Bridge">>, <<"true">>}
     ],
 
     Request = [{<<"Application-Name">>, <<"transfer">>}
-               ,{<<"Application-Data">>, wh_json:from_list([{<<"Route">>, DestExten}])}
-               ,{<<"Msg-ID">>, wh_util:rand_hex_binary(16)}
+               ,{<<"Application-Data">>, kz_json:from_list([{<<"Route">>, DestExten}])}
+               ,{<<"Msg-ID">>, kz_util:rand_hex_binary(16)}
                ,{<<"Endpoints">>, get_endpoints(Props, Call)}
                ,{<<"Timeout">>, <<"30">>}
                ,{<<"Ignore-Early-Media">>, <<"true">>}
@@ -86,7 +86,7 @@ dial(Props) ->
                ,{<<"Outbound-Callee-ID-Number">>, <<"context_2">>}
                ,{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
                ,{<<"Continue-On-Fail">>, 'false'}
-               ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
+               ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
                ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>
                										,<<"Retain-CID">>
                										,<<"Authorizing-ID">>
@@ -94,19 +94,19 @@ dial(Props) ->
                										,<<"Web-Dial">>
                										,<<"Flip-Direction-On-Bridge">>
                									   ]}
-               | wh_api:default_headers(<<"resource">>, <<"originate_req">>, ?APP_NAME, ?APP_VERSION)
+               | kz_api:default_headers(<<"resource">>, <<"originate_req">>, ?APP_NAME, ?APP_VERSION)
               ],
               
-    wapi_resource:publish_originate_req(props:filter_undefined(Request)).
+    kapi_resource:publish_originate_req(props:filter_undefined(Request)).
 
-%% Using the props computed from Originate action, establish a whapps_call
+%% Using the props computed from Originate action, establish a kapps_call
 create_call_from_props(Props) ->
     Routines = [
-        fun(C) -> whapps_call:set_account_db(proplists:get_value(<<"AccountDb">>, Props), C) end,
-        fun(C) -> whapps_call:set_account_id(proplists:get_value(<<"AccountId">>, Props), C) end,
+        fun(C) -> kapps_call:set_account_db(proplists:get_value(<<"AccountDb">>, Props), C) end,
+        fun(C) -> kapps_call:set_account_id(proplists:get_value(<<"AccountId">>, Props), C) end,
         fun(C) -> maybe_assign_aleg_props(Props, C) end
     ],
-    lists:foldl(fun(F, C) -> F(C) end, whapps_call:new(), Routines).
+    lists:foldl(fun(F, C) -> F(C) end, kapps_call:new(), Routines).
 
 %% If we can get the authorizing id from the originating channel, set some extra props
 maybe_assign_aleg_props(Props, Call) ->
@@ -123,18 +123,18 @@ aleg_authorizing_id(Props) ->
     ViewOptions = [{'key', proplists:get_value(<<"SourceExten">>, Props)}],
     case couch_mgr:get_results(proplists:get_value(<<"AccountDb">>, Props), <<"users/list_by_username">>, ViewOptions) of
         {'ok', []} -> {'error', 'endpoint_not_found'};
-        {'ok', [Result]} -> {'ok', wh_json:get_value(<<"id">>, Result)}
+        {'ok', [Result]} -> {'ok', kz_json:get_value(<<"id">>, Result)}
     end.
 
 %% Set extra props for originating channel
 assign_aleg_props(AuthorizingId, Props, Call) ->
     To = proplists:get_value(<<"SourceExten">>, Props),
     Routines = [
-        fun(C) -> whapps_call:set_authorizing_id(AuthorizingId, C) end,
-        fun(C) -> whapps_call:set_authorizing_type(<<"user">>, C) end,
-        fun(C) -> whapps_call:set_request(<<To/binary, "@blackholeami">>, C) end,
-        fun(C) -> whapps_call:set_to(<<To/binary, "@blackholeami">>, C) end,
-        fun(C) -> whapps_call:set_resource_type(<<"audio">>, C) end
+        fun(C) -> kapps_call:set_authorizing_id(AuthorizingId, C) end,
+        fun(C) -> kapps_call:set_authorizing_type(<<"user">>, C) end,
+        fun(C) -> kapps_call:set_request(<<To/binary, "@blackholeami">>, C) end,
+        fun(C) -> kapps_call:set_to(<<To/binary, "@blackholeami">>, C) end,
+        fun(C) -> kapps_call:set_resource_type(<<"audio">>, C) end
     ],
     lists:foldl(fun(F, C) -> F(C) end, Call, Routines).
 
@@ -142,7 +142,7 @@ assign_aleg_props(AuthorizingId, Props, Call) ->
 update_props(Props) ->
     Routines = [
         fun(Props2) -> [{<<"AccountDb">>
-        				,wh_util:format_account_id(proplists:get_value(<<"AccountId">>, Props), 'encoded')}
+        				,kz_util:format_account_id(proplists:get_value(<<"AccountId">>, Props), 'encoded')}
         			   ] ++ Props2 end,
         fun(Props2) -> [{<<"SourceExten">>
         				,channel_to_exten(props:get_value(<<"Channel">>, Props))}
@@ -156,9 +156,9 @@ channel_to_exten(Channel) ->
 
 %% Find the endpoints associated with the user placing the originate request
 get_endpoints(Props, Call) ->
-    UserId = whapps_call:authorizing_id(Call),
+    UserId = kapps_call:authorizing_id(Call),
     % Number = proplists:get_value(<<"SourceExten">>, Props),
-    Properties = wh_json:from_list([
+    Properties = kz_json:from_list([
         {<<"can_call_self">>, 'true'}
     ]),
     lists:foldr(fun(EndpointId, Acc) ->
@@ -170,9 +170,9 @@ get_endpoints(Props, Call) ->
 
 %% Caller ID properties for call coming from originate request
 aleg_cid(CID, Call) ->
-    Routines = [fun(C) -> whapps_call:set_custom_channel_var(<<"Retain-CID">>, <<"true">>, C) end
-                ,fun(C) -> whapps_call:set_caller_id_name(wh_util:to_binary(CID), C) end
-                ,fun(C) -> whapps_call:set_caller_id_number(wh_util:to_binary(CID), C) end
+    Routines = [fun(C) -> kapps_call:set_custom_channel_var(<<"Retain-CID">>, <<"true">>, C) end
+                ,fun(C) -> kapps_call:set_caller_id_name(kz_util:to_binary(CID), C) end
+                ,fun(C) -> kapps_call:set_caller_id_number(kz_util:to_binary(CID), C) end
                ],
     lists:foldl(fun(F, C) -> F(C) end, Call, Routines).
 
@@ -187,32 +187,32 @@ control_queue_exec(Props, Function) ->
 	end.
 
 blind_transfer(Props, Call) ->
-    WhappsCall = amimulator_call:to_whapps_call(Call),
-	% whapps_call_command:unbridge(WhappsCall2),
-	whapps_call_command:hangup('true', WhappsCall),
+    WhappsCall = amimulator_call:to_kapps_call(Call),
+	% kapps_call_command:unbridge(WhappsCall2),
+	kapps_call_command:hangup('true', WhappsCall),
 
 	SourceExten = amimulator_call:id_number(Call),
 	SourceCID = amimulator_call:id_name(Call),
 	DestExten = props:get_value(<<"Exten">>, Props),
 	CallId = amimulator_call:call_id(Call),
-	TargetCallId = <<"blind-transfer-", (wh_util:rand_hex_binary(4))/binary>>,
+	TargetCallId = <<"blind-transfer-", (kz_util:rand_hex_binary(4))/binary>>,
 
     CCVs = props:filter_undefined([{<<"Account-ID">>, amimulator_call:account_id(Call)}
 					               ,{<<"Authorizing-ID">>, amimulator_call:authorizing_id(Call)}
 					               ,{<<"Channel-Authorized">>, 'true'}
                                    %% TODO add account realm to amimulator_call
-					               ,{<<"From-URI">>, <<SourceExten/binary, "@", (whapps_call:account_realm(WhappsCall))/binary>>}
+					               ,{<<"From-URI">>, <<SourceExten/binary, "@", (kapps_call:account_realm(WhappsCall))/binary>>}
 					               ,{<<"Ignore-Early-Media">>, 'true'}
 					               % ,{<<"Amimulator-Blind-Transfer">>, <<"true">>}
 					              ]),
 
-    Endpoint = wh_json:from_list(
+    Endpoint = kz_json:from_list(
                  props:filter_undefined(
                    [{<<"Invite-Format">>, <<"loopback">>}
                     ,{<<"Route">>, DestExten}
                     ,{<<"To-DID">>, DestExten}
-                    ,{<<"To-Realm">>, whapps_call:account_realm(WhappsCall)}
-                    ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
+                    ,{<<"To-Realm">>, kapps_call:account_realm(WhappsCall)}
+                    ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
                     ,{<<"Outbound-Call-ID">>, TargetCallId}
                     ,{<<"Ignore-Early-Media">>, 'true'}
                     ,{<<"Existing-Call-ID">>, CallId}
@@ -222,9 +222,9 @@ blind_transfer(Props, Call) ->
                 [{<<"Endpoints">>, [Endpoint]}
                  ,{<<"Outbound-Call-ID">>, TargetCallId}
                  ,{<<"Dial-Endpoint-Method">>, <<"single">>}
-                 ,{<<"Msg-ID">>, wh_util:rand_hex_binary(4)}
+                 ,{<<"Msg-ID">>, kz_util:rand_hex_binary(4)}
                  ,{<<"Continue-On-Fail">>, 'true'}
-                 ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
+                 ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
                  ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>, <<"Retain-CID">>
                                                       ,<<"Authorizing-Type">>, <<"Authorizing-ID">>
                                                       ,<<"Channel-Authorized">>
@@ -242,10 +242,10 @@ blind_transfer(Props, Call) ->
                  ,{<<"Originate-Immediate">>, 'true'}
                  ,{<<"Simplify-Loopback">>, 'true'}
                  ,{<<"Ignore-Early-Media">>, 'true'}
-                 | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                 | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                 ]),
 
-    wapi_resource:publish_originate_req(Request).
+    kapi_resource:publish_originate_req(Request).
 
 attended_transfer(Props) ->
     Call = props:get_value(<<"Call">>, Props),
@@ -255,42 +255,42 @@ attended_transfer(Props) ->
 
     API = [{<<"Call-ID">>, CallId}
            ,{<<"Action">>, <<"transfer">>}
-           ,{<<"Data">>, wh_json:from_list(
+           ,{<<"Data">>, kz_json:from_list(
                            [{<<"target">>, DestExten}
                            ])
             }
-           | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+           | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
 
     lager:debug("Attempting to transfer ~s to ~s", [CallId, DestExten]),
-    wh_amqp_worker:cast(API, fun wapi_metaflow:publish_req/1).
+    kz_amqp_worker:cast(API, fun kapi_metaflow:publish_req/1).
 
 vm_transfer(Props, Call) ->
-    WhappsCall = amimulator_call:to_whapps_call(Call),
-	%whapps_call_command:unbridge(WhappsCall2),
-	whapps_call_command:hangup('true', WhappsCall),
+    WhappsCall = amimulator_call:to_kapps_call(Call),
+	%kapps_call_command:unbridge(WhappsCall2),
+	kapps_call_command:hangup('true', WhappsCall),
 
 	SourceExten = amimulator_call:id_number(Call),
     SourceCID = amimulator_call:id_name(Call),
     DestExten = props:get_value(<<"Exten">>, Props),
 	CallId = amimulator_call:call_id(Call),
-	TargetCallId = <<"vm-transfer-", (wh_util:rand_hex_binary(4))/binary>>,
+	TargetCallId = <<"vm-transfer-", (kz_util:rand_hex_binary(4))/binary>>,
 
     CCVs = props:filter_undefined(
              [{<<"Account-ID">>, amimulator_call:account_id(Call)}
               ,{<<"Authorizing-ID">>, amimulator_call:authorizing_id(Call)}
               ,{<<"Channel-Authorized">>, 'true'}
-              ,{<<"From-URI">>, <<SourceExten/binary, "@", (whapps_call:account_realm(WhappsCall))/binary>>}
+              ,{<<"From-URI">>, <<SourceExten/binary, "@", (kapps_call:account_realm(WhappsCall))/binary>>}
               ,{<<"Ignore-Early-Media">>, 'true'}
              ]),
 
-    Endpoint = wh_json:from_list(
+    Endpoint = kz_json:from_list(
                  props:filter_undefined(
                    [{<<"Invite-Format">>, <<"loopback">>}
                     ,{<<"Route">>, <<"**", DestExten/binary>>}
                     ,{<<"To-DID">>, <<"**", DestExten/binary>>}
-                    ,{<<"To-Realm">>, whapps_call:account_realm(WhappsCall)}
-                    ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
+                    ,{<<"To-Realm">>, kapps_call:account_realm(WhappsCall)}
+                    ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
                     ,{<<"Outbound-Call-ID">>, TargetCallId}
                     ,{<<"Ignore-Early-Media">>, 'true'}
                     ,{<<"Existing-Call-ID">>, CallId}
@@ -300,9 +300,9 @@ vm_transfer(Props, Call) ->
                 [{<<"Endpoints">>, [Endpoint]}
                  ,{<<"Outbound-Call-ID">>, TargetCallId}
                  ,{<<"Dial-Endpoint-Method">>, <<"single">>}
-                 ,{<<"Msg-ID">>, wh_util:rand_hex_binary(4)}
+                 ,{<<"Msg-ID">>, kz_util:rand_hex_binary(4)}
                  ,{<<"Continue-On-Fail">>, 'true'}
-                 ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
+                 ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
                  ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>, <<"Retain-CID">>
                                                       ,<<"Authorizing-Type">>, <<"Authorizing-ID">>
                                                       ,<<"Channel-Authorized">>
@@ -320,10 +320,10 @@ vm_transfer(Props, Call) ->
                  ,{<<"Originate-Immediate">>, 'true'}
                  ,{<<"Simplify-Loopback">>, 'true'}
                  ,{<<"Ignore-Early-Media">>, 'true'}
-                 | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                 | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                 ]),
 
-    wapi_resource:publish_originate_req(Request).
+    kapi_resource:publish_originate_req(Request).
 
 pickup_channel(Props) ->
 	NewCall = create_call_from_props(Props),
@@ -339,8 +339,8 @@ pickup_channel(Props) ->
 	       ],
 
     Request = [{<<"Application-Name">>, <<"transfer">>}
-               ,{<<"Application-Data">>, wh_json:from_list([{<<"Route">>, <<"*2", DestExten/binary>>}])}
-               ,{<<"Msg-ID">>, wh_util:rand_hex_binary(16)}
+               ,{<<"Application-Data">>, kz_json:from_list([{<<"Route">>, <<"*2", DestExten/binary>>}])}
+               ,{<<"Msg-ID">>, kz_util:rand_hex_binary(16)}
                ,{<<"Endpoints">>, get_endpoints(Props, NewCall)}
                ,{<<"Timeout">>, <<"30">>}
                ,{<<"Ignore-Early-Media">>, <<"true">>}
@@ -351,16 +351,16 @@ pickup_channel(Props) ->
                % ,{<<"Outbound-Callee-ID-Number">>, <<"context_2">>}
                ,{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
                ,{<<"Continue-On-Fail">>, 'false'}
-               ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
+               ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
                ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>
                										,<<"Retain-CID">>
                										,<<"Authorizing-ID">>
                										,<<"Authorizing-Type">>
                									   ]}
-               | wh_api:default_headers(<<"resource">>, <<"originate_req">>, ?APP_NAME, ?APP_VERSION)
+               | kz_api:default_headers(<<"resource">>, <<"originate_req">>, ?APP_NAME, ?APP_VERSION)
               ],
               
-    wapi_resource:publish_originate_req(props:filter_undefined(Request)).
+    kapi_resource:publish_originate_req(props:filter_undefined(Request)).
 
 eavesdrop_req(Props) ->
     AccountId = proplists:get_value(<<"AccountId">>, Props),
@@ -382,9 +382,9 @@ eavesdrop_req(Props) ->
 
     SourceEndpoints = get_endpoints(props:delete(<<"SourceExten">>, Props), Call),
 
-    Prop = wh_json:set_values(props:filter_undefined([
-	         {<<"Msg-ID">>, wh_util:rand_hex_binary(16)}
-	         ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
+    Prop = kz_json:set_values(props:filter_undefined([
+	         {<<"Msg-ID">>, kz_util:rand_hex_binary(16)}
+	         ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
 	         ,{<<"Timeout">>, <<"30">>}
 	         ,{<<"Endpoints">>, SourceEndpoints}
 	         ,{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
@@ -403,35 +403,35 @@ eavesdrop_req(Props) ->
 	         ,{<<"Eavesdrop-Call-ID">>, EavesdropCallId}
 	         ,{<<"Eavesdrop-Group-ID">>, 'undefined'}
 	         ,{<<"Eavesdrop-Mode">>, EavesdropMode}
-	         | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-	    	]), wh_json:new()),
+	         | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+	    	]), kz_json:new()),
               
     lager:debug("Eavesdropping on call id ~p", [EavesdropCallId]),
-    case whapps_util:amqp_pool_collect(Prop
-                                       ,fun wapi_resource:publish_originate_req/1
+    case kapps_util:amqp_pool_collect(Prop
+                                       ,fun kapi_resource:publish_originate_req/1
                                        ,fun until_callback/1
                                        ,5000
                                       ) of
         {'ok', [OrigJObj|_]} ->
             lager:debug("Successful originate, executing eavesdrop"),
-            send_originate_execute(OrigJObj, wh_json:get_value(<<"Server-ID">>, OrigJObj));
+            send_originate_execute(OrigJObj, kz_json:get_value(<<"Server-ID">>, OrigJObj));
         {'error', E} ->
             lager:debug("error originating: ~p", [E]);
         {'timeout', _} ->
             lager:debug("error originating: timeout")
     end.
 
--spec until_callback(wh_json:objects()) -> boolean().
+-spec until_callback(kz_json:objects()) -> boolean().
 until_callback([JObj | _]) ->
-    wapi_dialplan:originate_ready_v(JObj).
+    kapi_dialplan:originate_ready_v(JObj).
 
--spec send_originate_execute(wh_json:object(), ne_binary()) -> 'ok'.
+-spec send_originate_execute(kz_json:object(), ne_binary()) -> 'ok'.
 send_originate_execute(JObj, Q) ->
-    Prop = [{<<"Call-ID">>, wh_json:get_value(<<"Call-ID">>, JObj)}
-            ,{<<"Msg-ID">>, wh_json:get_value(<<"Msg-ID">>, JObj)}
-            | wh_api:default_headers(Q, ?APP_NAME, ?APP_VERSION)
+    Prop = [{<<"Call-ID">>, kz_json:get_value(<<"Call-ID">>, JObj)}
+            ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
+            | kz_api:default_headers(Q, ?APP_NAME, ?APP_VERSION)
            ],
-    wapi_dialplan:publish_originate_execute(wh_json:get_value(<<"Server-ID">>, JObj), Prop).
+    kapi_dialplan:publish_originate_execute(kz_json:get_value(<<"Server-ID">>, JObj), Prop).
 
 handle_info(_Info, State) ->
     lager:debug("AMI: unhandled info"),

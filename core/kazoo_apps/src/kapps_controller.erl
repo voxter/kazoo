@@ -144,11 +144,11 @@ app_running(AppName) ->
         _ -> true
     end.
 
--spec initialize_whapps() -> 'ok'.
-initialize_whapps() ->
-    wh_util:put_callid(?LOG_SYSTEM_ID),
-    case couch_mgr:db_exists(?WH_ACCOUNTS_DB) of
-        'false' -> whapps_maintenance:refresh();
+-spec initialize_kapps() -> 'ok'.
+initialize_kapps() ->
+    kz_util:put_callid(?LOG_SYSTEM_ID),
+    case couch_mgr:db_exists(?KZ_ACCOUNTS_DB) of
+        'false' -> kapps_maintenance:refresh();
         'true' -> 'ok'
     end,
     kapps_maintenance:migrate_system(),

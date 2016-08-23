@@ -210,9 +210,9 @@ get_request_did(Data, Call) ->
         'false' -> maybe_use_capture_group(Data, Call)
     end.
 
--spec maybe_use_capture_group(wh_json:object(), whapps_call:call()) -> ne_binary().
+-spec maybe_use_capture_group(kz_json:object(), kapps_call:call()) -> ne_binary().
 maybe_use_capture_group(Data, Call) ->
-    case whapps_call:kvs_fetch('cf_capture_group', Call) of
+    case kapps_call:kvs_fetch('cf_capture_group', Call) of
         'undefined' ->
             case cf_endpoint:get(Call) of
                 {'error', _ } -> maybe_bypass_e164(Data, Call);

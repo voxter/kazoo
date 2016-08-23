@@ -17,14 +17,14 @@
 
 -spec exec(kapps_call:call(), kz_json:object()) -> usurp_return().
 exec(Call, FlowJObj) ->
-    case whapps_call_command:b_channel_status(Call) of
+    case kapps_call_command:b_channel_status(Call) of
         {'error', _E} -> {'channel_down', Call};
         _ ->
-            Prop = [{<<"Call">>, whapps_call:to_json(Call)}
+            Prop = [{<<"Call">>, kapps_call:to_json(Call)}
                     ,{<<"Flow">>, FlowJObj}
-                    | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                    | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                    ],
-            wapi_callflow:publish_resume(Prop),
+            kapi_callflow:publish_resume(Prop),
             {'usurp', Call}
     end.
 
@@ -48,12 +48,12 @@ req_params(Call) ->
                  [_|_]=IDs -> IDs
              end,
              
-    Props = [{<<"Call-ID">>, whapps_call:call_id(Call)}
-       ,{<<"Account-ID">>, whapps_call:account_id(Call)}
-       ,{<<"From">>, whapps_call:from_user(Call)}
-       ,{<<"From-Realm">>, whapps_call:from_realm(Call)}
-       ,{<<"To">>, whapps_call:to_user(Call)}
-       ,{<<"To-Realm">>, whapps_call:to_realm(Call)}
+    Props = [{<<"Call-ID">>, kapps_call:call_id(Call)}
+       ,{<<"Account-ID">>, kapps_call:account_id(Call)}
+       ,{<<"From">>, kapps_call:from_user(Call)}
+       ,{<<"From-Realm">>, kapps_call:from_realm(Call)}
+       ,{<<"To">>, kapps_call:to_user(Call)}
+       ,{<<"To-Realm">>, kapps_call:to_realm(Call)}
        ,{<<"Call-Status">>, kzt_util:get_call_status(Call)}
        ,{<<"Api-Version">>, <<"2015-03-01">>}
        ,{<<"Direction">>, <<"inbound">>}
@@ -69,8 +69,8 @@ req_params(Call) ->
        ,{<<"Transcription-Text">>, kzt_util:get_transcription_text(Call)}
        ,{<<"Transcription-Status">>, kzt_util:get_transcription_status(Call)}
        ,{<<"Transcription-Url">>, kzt_util:get_transcription_url(Call)}
-       ,{<<"Language">>, whapps_call:language(Call)}
-       ,{<<"Callflow-ID">>, whapps_call:kvs_fetch('cf_flow_id', Call)}
+       ,{<<"Language">>, kapps_call:language(Call)}
+       ,{<<"Callflow-ID">>, kapps_call:kvs_fetch('cf_flow_id', Call)}
       ],
              
     props:filter_undefined(cf_kvs_set:add_kvs_to_props(Props, Call)).

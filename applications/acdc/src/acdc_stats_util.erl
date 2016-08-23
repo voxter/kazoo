@@ -53,7 +53,7 @@ get_query_limit(JObj) ->
 
 -spec db_name(ne_binary()) -> ne_binary().
 db_name(Account) ->
-    wh_util:format_account_mod_id(Account).
+    kz_util:format_account_mod_id(Account).
 
 -spec prev_modb(ne_binary()) -> ne_binary().
 prev_modb(Account) ->
@@ -64,7 +64,7 @@ prev_modb(Account) ->
 prev_modb(Account, Year, 0) ->
 	prev_modb(Account, Year-1, 12);
 prev_modb(Account, Year, Month) ->
-	wh_util:format_account_id(Account, Year, Month).
+	kz_util:format_account_id(Account, Year, Month).
 
 -spec cleanup_old_stats() -> 'ok'.
 cleanup_old_stats() ->

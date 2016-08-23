@@ -432,11 +432,11 @@ to_json(#kapps_call{}=Call) ->
     CustomKVs = [KV
                  || {_, V}=KV <- props:get_value(<<"Custom-KVs">>, Props, [])
                         ,V =/= 'undefined'
-                        ,wh_json:is_json_term(V)
+                        ,kz_json:is_json_term(V)
                 ],
-    wh_json:from_list([KV
-                       || {_, V}=KV <- [{<<"Key-Value-Store">>, wh_json:from_list(KVS)},
-                                        {<<"Custom-KVs">>, wh_json:from_list(CustomKVs)} |
+    kz_json:from_list([KV
+                       || {_, V}=KV <- [{<<"Key-Value-Store">>, kz_json:from_list(KVS)},
+                                        {<<"Custom-KVs">>, kz_json:from_list(CustomKVs)} |
                                         proplists:delete(<<"Key-Value-Store">>, Props)
                                        ]
                               ,V =/= 'undefined'
@@ -476,7 +476,7 @@ to_proplist(#kapps_call{}=Call) ->
      ,{<<"Custom-Channel-Vars">>, custom_channel_vars(Call)}
      ,{<<"Custom-SIP-Headers">>, custom_sip_headers(Call)}
      ,{<<"Key-Value-Store">>, kvs_to_proplist(Call)}
-     ,{<<"Custom-KVs">>, wh_json:to_proplist(custom_kvs(Call))}
+     ,{<<"Custom-KVs">>, kz_json:to_proplist(custom_kvs(Call))}
      ,{<<"Other-Leg-Call-ID">>, other_leg_call_id(Call)}
      ,{<<"Resource-Type">>, resource_type(Call)}
      ,{<<"Language">>, language(Call)}
@@ -751,8 +751,8 @@ set_to(To, #kapps_call{}=Call) when is_binary(To) ->
                     }.
 
 -spec set_to_user(ne_binary(), call()) -> call().
-set_to_user(To, #whapps_call{}=Call) when is_binary(To) ->
-	Call#whapps_call{to=To, to_user=To}.
+set_to_user(To, #kapps_call{}=Call) when is_binary(To) ->
+	Call#kapps_call{to=To, to_user=To}.
 
 -spec to(call()) -> ne_binary().
 to(#kapps_call{to=To}) ->
@@ -898,7 +898,7 @@ bridge_id(#kapps_call{bridge_id=BridgeId}) -> BridgeId.
 set_language(Language, #kapps_call{}=Call) when is_binary(Language) ->
     Call#kapps_call{language=Language}.
 
-ccvs(#whapps_call{ccvs=CCVs}) ->
+ccvs(#kapps_call{ccvs=CCVs}) ->
 	CCVs.
 
 -spec language(call()) -> api_binary().
@@ -1120,40 +1120,40 @@ kvs_update_counter(Key, Number, #kapps_call{kvs=Dict}=Call) ->
 -define(COLLECTION_KVS, <<"Custom-KVS">>).
 -define(COLLECTION_MODE, <<"KVS-Mode">>).
 
--spec custom_kv(binary(), call()) -> wh_json:json_term() | 'undefined'.
+-spec custom_kv(binary(), call()) -> kz_json:json_term() | 'undefined'.
 custom_kv(Key, Call) ->
-    wh_json:get_value(Key, custom_kvs_collection(?COLLECTION_KVS, Call)).
+    kz_json:get_value(Key, custom_kvs_collection(?COLLECTION_KVS, Call)).
 
--spec set_custom_kv(binary(), wh_json:json_term(), call()) -> call().
+-spec set_custom_kv(binary(), kz_json:json_term(), call()) -> call().
 set_custom_kv(Key, Value, Call) ->
     set_custom_kvs_collection(?COLLECTION_KVS, Key, Value, Call).
 
--spec set_custom_kvs_collection(binary(), binary(), wh_json:json_term(), call()) -> call().
+-spec set_custom_kvs_collection(binary(), binary(), kz_json:json_term(), call()) -> call().
 set_custom_kvs_collection(Collection, Key, Value, Call) ->
     Collections = custom_kvs_collections(Call),
     OldCollection = custom_kvs_collection(Collection, Call),
-    NewCollection = wh_json:set_value(Key, Value, OldCollection),
-    whapps_call:kvs_store(
+    NewCollection = kz_json:set_value(Key, Value, OldCollection),
+    kapps_call:kvs_store(
         ?KVS_DB,
-        wh_json:set_value(Collection, NewCollection, Collections),
+        kz_json:set_value(Collection, NewCollection, Collections),
         Call
     ).
 
--spec custom_kvs(call()) -> wh_json:object().
+-spec custom_kvs(call()) -> kz_json:object().
 custom_kvs(Call) ->
     custom_kvs_collection(?COLLECTION_KVS, Call).
 
--spec custom_kvs_mode(call()) -> wh_json:json_term().
+-spec custom_kvs_mode(call()) -> kz_json:json_term().
 custom_kvs_mode(Call) ->
-    wh_json:get_value(<<"kvs_mode">>, custom_kvs_collection(?COLLECTION_MODE, Call), <<"props">>).
+    kz_json:get_value(<<"kvs_mode">>, custom_kvs_collection(?COLLECTION_MODE, Call), <<"props">>).
 
--spec custom_kvs_collection(binary(), call()) -> wh_json:object().
+-spec custom_kvs_collection(binary(), call()) -> kz_json:object().
 custom_kvs_collection(Collection, Call) ->
-    wh_json:get_value(Collection, custom_kvs_collections(Call), wh_json:new()).
+    kz_json:get_value(Collection, custom_kvs_collections(Call), kz_json:new()).
 
 -spec custom_kvs_collections(call()) -> any().
 custom_kvs_collections(Call) ->
-    whapps_call:kvs_fetch(?KVS_DB, wh_json:new(), Call).
+    kapps_call:kvs_fetch(?KVS_DB, kz_json:new(), Call).
 
 -spec set_custom_kvs_mode(binary(), call()) -> call().
 set_custom_kvs_mode(Mode, Call) ->

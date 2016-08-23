@@ -497,14 +497,14 @@ ensure_account_has_realm(_AccountId, Context) ->
 -spec ensure_account_has_timezone(api_binary(), cb_context:context()) -> cb_context:context().
 ensure_account_has_timezone(_AccountId, Context) ->
     JObj = cb_context:req_data(Context),
-    Timezone = wh_json:get_value(<<"timezone">>, JObj, get_timezone_from_parent(Context)),
+    Timezone = kz_json:get_value(<<"timezone">>, JObj, get_timezone_from_parent(Context)),
     cb_context:set_req_data(Context, kz_account:set_timezone(JObj, Timezone)).
 
 -spec get_timezone_from_parent(cb_context:context()) -> ne_binary().
 get_timezone_from_parent(Context) ->
     case create_new_tree(Context) of
         [_|_]=Tree -> kz_account:timezone(lists:last(Tree));
-        [] -> whapps_config:get(<<"accounts">>, <<"default_timezone">>, <<"America/Los_Angeles">>)
+        [] -> kapps_config:get(<<"accounts">>, <<"default_timezone">>, <<"America/Los_Angeles">>)
     end.
 
 -spec random_realm() -> ne_binary().
@@ -653,7 +653,7 @@ maybe_disallow_direct_clients(_AccountId, Context, 'false') ->
 
 -spec validate_wnm_allow_additions(api_binary(), cb_context:context()) -> cb_context:context().
 validate_wnm_allow_additions(_, Context) ->
-    AllowAdditions = wh_json:get_value(<<"pvt_wnm_allow_additions">>
+    AllowAdditions = kz_json:get_value(<<"pvt_wnm_allow_additions">>
                                        ,cb_context:doc(Context)
                                        ,'false'
                                       ),
@@ -670,8 +670,8 @@ validate_wnm_allow_additions(Context) ->
         'false' -> cb_context:add_system_error('forbidden', Context);
         'true' ->
             JObj = cb_context:doc(Context),
-            UpdatedJObj = wh_json:set_value(<<"pvt_wnm_allow_additions">>
-                            ,wh_json:get_value(<<"wnm_allow_additions">>, JObj)
+            UpdatedJObj = kz_json:set_value(<<"pvt_wnm_allow_additions">>
+                            ,kz_json:get_value(<<"wnm_allow_additions">>, JObj)
                             ,JObj
                            ),
             unset_wnm_allow_additions(cb_context:set_doc(Context, UpdatedJObj))
@@ -679,7 +679,7 @@ validate_wnm_allow_additions(Context) ->
 
 -spec unset_wnm_allow_additions(cb_context:context()) -> cb_context:context().
 unset_wnm_allow_additions(Context) ->
-    cb_context:set_doc(Context, wh_json:delete_key(<<"wnm_allow_additions">>
+    cb_context:set_doc(Context, kz_json:delete_key(<<"wnm_allow_additions">>
                                                    ,cb_context:doc(Context)
                                                   )).
 

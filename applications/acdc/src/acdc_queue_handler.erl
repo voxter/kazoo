@@ -57,12 +57,12 @@ handle_member_call(JObj, Props, Delivery) ->
     acdc_queue_fsm:member_call(props:get_value('fsm_pid', Props), JObj, Delivery),
     gen_listener:cast(props:get_value('server', Props), {'delivery', Delivery}).
 
--spec handle_member_call_cancel(wh_json:object(), wh_proplist()) -> 'ok'.
+-spec handle_member_call_cancel(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_member_call_cancel(JObj, Props) ->
-    'true' = wapi_acdc_queue:member_call_cancel_v(JObj),
+    'true' = kapi_acdc_queue:member_call_cancel_v(JObj),
     acdc_queue_fsm:member_call_cancel(props:get_value('fsm_pid', Props), JObj).
 
--spec handle_member_resp(wh_json:object(), wh_proplist()) -> 'ok'.
+-spec handle_member_resp(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_member_resp(JObj, Props) ->
     'true' = kapi_acdc_queue:member_connect_resp_v(JObj),
     acdc_queue_fsm:member_connect_resp(props:get_value('fsm_pid', Props), JObj).
@@ -79,15 +79,15 @@ handle_member_retry(JObj, Props) ->
 
 handle_member_callback_reg(JObj, Props) ->
     Srv = props:get_value('server', Props),
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    CallId = kz_json:get_value(<<"Call-ID">>, JObj),
     acdc_util:unbind_from_call_events(CallId, Srv),
     acdc_queue_fsm:register_callback(props:get_value('fsm_pid', Props), JObj).
 
 handle_member_callback_accepted(JObj, Props) ->
-    'true' = wapi_acdc_queue:member_callback_accepted_v(JObj),
+    'true' = kapi_acdc_queue:member_callback_accepted_v(JObj),
     acdc_queue_fsm:member_callback_accepted(props:get_value('fsm_pid', Props), JObj).
 
--spec handle_config_change(wh_json:object(), wh_proplist()) -> any().
+-spec handle_config_change(kz_json:object(), kz_proplist()) -> any().
 handle_config_change(JObj, _Props) ->
     'true' = kapi_conf:doc_update_v(JObj),
 

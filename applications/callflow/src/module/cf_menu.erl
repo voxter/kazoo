@@ -162,7 +162,7 @@ try_match_digits(Digits, Menu, Call) ->
 %% Check if the digits are a exact match for the auto-attendant children
 %% @end
 %%--------------------------------------------------------------------
--spec is_callflow_child(ne_binary(), menu(), whapps_call:call()) -> boolean().
+-spec is_callflow_child(ne_binary(), menu(), kapps_call:call()) -> boolean().
 is_callflow_child(Digits, #cf_menu_data{menu_id=MenuId
                                         ,name=Name
                                        }, Call) ->
@@ -170,7 +170,7 @@ is_callflow_child(Digits, #cf_menu_data{menu_id=MenuId
         {'attempt_resp', 'ok'} ->
             lager:info("selection is a callflow child"),
             lager:info("ivr options account ~s menu ~s ~s option ~s"
-                       ,[whapps_call:account_id(Call)
+                       ,[kapps_call:account_id(Call)
                          ,Name
                          ,MenuId
                          ,Digits
@@ -243,22 +243,22 @@ is_hunt_denied(Digits, #cf_menu_data{hunt_deny=RegEx}, _) ->
 %% Hunt for a callflow with these numbers
 %% @end
 %%--------------------------------------------------------------------
--spec hunt_for_callflow(ne_binary(), menu(), whapps_call:call()) -> boolean().
+-spec hunt_for_callflow(ne_binary(), menu(), kapps_call:call()) -> boolean().
 hunt_for_callflow(Digits, #cf_menu_data{menu_id=MenuId
                                         ,name=Name
                                        }=Menu, Call) ->
-    AccountId = whapps_call:account_id(Call),
+    AccountId = kapps_call:account_id(Call),
     lager:info("hunting for ~s in account ~s", [Digits, AccountId]),
     case cf_util:lookup_callflow(Digits, AccountId) of
         {'ok', Flow, 'false'} ->
             lager:info("callflow hunt succeeded, branching"),
             lager:info("ivr options account ~s menu ~s ~s extension dialed ~s"
-                       ,[whapps_call:account_id(Call)
+                       ,[kapps_call:account_id(Call)
                          ,Name
                          ,MenuId
                          ,Digits
                         ]),
-            _ = whapps_call_command:flush_dtmf(Call),
+            _ = kapps_call_command:flush_dtmf(Call),
             _ = play_transferring_prompt(Menu, Call),
             cf_exe:branch(kz_json:get_value(<<"flow">>, Flow, kz_json:new()), Call),
             'true';
@@ -523,7 +523,7 @@ update_doc(Updates, Id, Call) ->
 -spec get_menu_profile(kz_json:object(), kapps_call:call()) -> menu().
 get_menu_profile(Data, Call) ->
     Id = maybe_use_variable(Data, Call),
-    AccountDb = whapps_call:account_db(Call),
+    AccountDb = kapps_call:account_db(Call),
     case couch_mgr:open_doc(AccountDb, Id) of
         {'ok', JObj} ->
             lager:info("loaded menu route ~s", [Id]),
@@ -570,15 +570,15 @@ get_menu_profile(Data, Call) ->
             #cf_menu_data{}
     end.
 
--spec maybe_use_variable(wh_json:object(), whapps_call:call()) -> api_binary().
+-spec maybe_use_variable(kz_json:object(), kapps_call:call()) -> api_binary().
 maybe_use_variable(Data, Call) ->
-    case wh_json:get_value(<<"var">>, Data) of
+    case kz_json:get_value(<<"var">>, Data) of
         'undefined' ->
-            wh_doc:id(Data);
+            kz_doc:id(Data);
         Variable ->
-            Value = wh_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
-            case couch_mgr:open_cache_doc(whapps_call:account_db(Call), Value) of
+            Value = kz_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
+            case couch_mgr:open_cache_doc(kapps_call:account_db(Call), Value) of
                 {'ok', _} -> Value;
-                _ -> wh_doc:id(Data)
+                _ -> kz_doc:id(Data)
             end
     end.

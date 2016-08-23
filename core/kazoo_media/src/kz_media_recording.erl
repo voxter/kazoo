@@ -31,6 +31,7 @@
          ,get_media_name/2
          ,get_response_media/1
          ,should_store_recording/1
+         ,stop_recording/1
 
          ,update_control_queue/2 %% after transfer, recording can continue, but needs new ctrl Q to store
         ]).
@@ -72,7 +73,7 @@
                 ,is_recording = 'false'    :: boolean()
                 ,retries = 0               :: integer()
                 ,preserve_metadata = 'false' :: boolean()
-                ,extra_metadata            :: wh_proplist() | 'undefined'
+                ,extra_metadata            :: kz_proplist() | 'undefined'
                }).
 -type state() :: #state{}.
 
@@ -155,7 +156,7 @@ handle_call_event(JObj, Props) ->
         {<<"call_event">>, <<"CHANNEL_REPLACED">>} ->
             gen_listener:cast(Pid, {'channel_replaced', kz_call_event:replaced_by(JObj)});
         {<<"call_event">>, <<"CHANNEL_TRANSFEREE">>} ->
-            wh_util:spawn(fun() ->
+            kz_util:spawn(fun() ->
                                   timer:sleep(2000),
                                   gen_listener:cast(Pid, {'update_control_queue', JObj})
                           end);
@@ -180,8 +181,8 @@ init([Call, Data]) ->
     SampleRate = kz_json:get_integer_value(<<"record_sample_rate">>, Data),
     DefaultRecordMinSec = kapps_config:get_integer(?WHM_CONFIG_CAT, <<"record_min_sec">>, 0),
     RecordMinSec = kz_json:get_integer_value(<<"record_min_sec">>, Data, DefaultRecordMinSec),
-    PreserveMetadata = wh_json:is_true(<<"preserve_metadata">>, Data, 'false'),
-    ExtraMetadata = wh_json:get_list_value(<<"extra_metadata">>, Data, []),
+    PreserveMetadata = kz_json:is_true(<<"preserve_metadata">>, Data, 'false'),
+    ExtraMetadata = kz_json:get_list_value(<<"extra_metadata">>, Data, []),
     AccountId = kapps_call:account_id(Call),
     {Year, Month, _} = erlang:date(),
     AccountDb = kz_util:format_account_modb(kazoo_modb:get_modb(AccountId, Year, Month),'encoded'),
@@ -308,15 +309,10 @@ handle_cast('recording_started', #state{should_store='false'}=State) ->
     lager:debug("recording started and we are not storing, exiting"),
     {'stop', 'normal', State};
 handle_cast('stop_call', #state{is_recording='true'
-                                ,media_name=MediaName
-                                ,format=Format
-                                ,call=Call
                                 ,should_store=Store
-                                ,preserve_metadata=PreserveMetadata
-                                ,extra_metadata=ExtraMetadata
                                }=State) ->
     lager:debug("recv stop_call event"),
-    save_recording(Call, MediaName, Format, PreserveMetadata, ExtraMetadata, Store),
+    save_recording(State, Store),
     case Store of
         'false' -> {'stop', 'normal', State};
         _ -> 
@@ -325,42 +321,19 @@ handle_cast('stop_call', #state{is_recording='true'
                                     ,is_recording='false'
                                    }}
     end;
-handle_cast({'store_recording', MediaName}, #state{media_name=MediaName
-                                                   ,format=Format
-                                                   ,call=Call
+handle_cast({'store_recording', MediaName}, #state{media={_, MediaName}
                                                    ,should_store=Store
                                                    ,is_recording='true'
                                                    ,store_attempted='false'
-                                                   ,preserve_metadata=PreserveMetadata
-                                                   ,extra_metadata=ExtraMetadata
                                                   }=State) ->
     lager:debug("recv store_recording event"),
-    save_recording(Call, MediaName, Format, PreserveMetadata, ExtraMetadata, Store),
+    save_recording(State, Store),
     case Store of
         'false' -> {'stop', 'normal', State};
         _ -> {'noreply', State#state{store_attempted='true'
                                      ,is_recording='false'
                                     }}
     end;
-handle_cast({'channel_status',<<"active">>}, #state{channel_status_ref='undefined'}=State) ->
-    {'noreply', State#state{channel_status_ref=start_check_call_timer()}};
-handle_cast({'channel_status', <<"terminated">>}, #state{channel_status_ref='undefined'
-                                                         ,store_attempted='false'
-                                                        }=State) ->
-    lager:debug("channel status appears terminated, we're done here"),
-    {'stop', 'normal', State};
-handle_cast({'channel_status', <<"terminated">>}, #state{channel_status_ref='undefined'
-                                                         ,store_attempted='true'
-                                                        }=State) ->
-    lager:debug("channel terminated, but we've sent a store attempt, so hold on"),
-    {'noreply', State};
-handle_cast({'channel_status', _S}, #state{channel_status_ref='undefined'}=State) ->
-    Ref = start_check_call_timer(),
-    lager:debug("unknown channel status response: ~s, starting timer back up: ~p", [_S, Ref]),
-    {'noreply', State#state{channel_status_ref=Ref}};
-handle_cast({'channel_status', _S}, State) ->
-    {'noreply', State};
-
 handle_cast('store_succeeded', State) ->
     lager:debug("store succeeded"),
     {'stop', 'normal', State};
@@ -373,7 +346,7 @@ handle_cast('store_failed', #state{retries=Retries
                                    ,should_store=Store
                                   }=State) ->
     lager:debug("store failed, retrying ~p times", [Retries]),
-    save_recording(Call, MediaName, Format, PreserveMetadata, ExtraMetadata, Store),
+    save_recording(State, Store),
     {'noreply', State#state{retries=Retries - 1}};
 handle_cast({'gen_listener',{'created_queue', Queue}}, #state{call=Call}=State) ->
     Funs = [{fun kapps_call:kvs_store/3, 'consumer_pid', self()}
@@ -384,27 +357,23 @@ handle_cast({'gen_listener',{'created_queue', Queue}}, #state{call=Call}=State) 
     {'noreply', State#state{call=kapps_call:exec(Funs, Call)}};
 
 handle_cast({'update_control_queue', CtrlQ}, #state{call=Call}=State) when is_binary(CtrlQ) ->
-    Call1 = whapps_call:set_control_queue(CtrlQ, Call),
+    Call1 = kapps_call:set_control_queue(CtrlQ, Call),
     {'noreply', State#state{call=Call1}};
 handle_cast({'update_control_queue', JObj}, #state{call=Call}=State) ->
-    Req = props:filter_undefined([{<<"Call-ID">>, wh_json:get_value(<<"Call-ID">>, JObj)}
-                                  | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+    Req = props:filter_undefined([{<<"Call-ID">>, kz_json:get_value(<<"Call-ID">>, JObj)}
+                                  | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                  ]),
-    case whapps_util:amqp_pool_request(Req
-                                       ,fun wapi_amimulator:publish_control_queue_req/1
-                                       ,fun wapi_amimulator:control_queue_resp_v/1
+    case kapps_util:amqp_pool_request(Req
+                                       ,fun kapi_amimulator:publish_control_queue_req/1
+                                       ,fun kapi_amimulator:control_queue_resp_v/1
                                       ) of
         {'error', 'timeout'} ->
             lager:debug("timed out acquiring new control queue - this recording will probably be lost"),
             {'noreply', State};
         {'ok', Resp} ->
-            Call1 = whapps_call:set_control_queue(wh_json:get_value(<<"Control-Queue">>, Resp), Call),
+            Call1 = kapps_call:set_control_queue(kz_json:get_value(<<"Control-Queue">>, Resp), Call),
             {'noreply', State#state{call=Call1}}
     end;
-
-handle_cast({'gen_listener',{'created_queue',Queue}}, #state{call=Call}=State) ->
-    Call1 = whapps_call:kvs_store('consumer_pid', wh_amqp_channel:consumer_pid(), Call),
-    {'noreply', State#state{call=whapps_call:set_controller_queue(Queue, Call1)}};
 
 handle_cast({'gen_listener',{'is_consuming', 'true'}}, #state{record_on_answer='true'}=State) ->
     lager:debug("waiting for bridge or answer to start recording"),
@@ -542,14 +511,6 @@ maybe_store_recording_meta(#state{doc_db=Db, doc_id=DocId}=State) ->
         {'ok', Rev} -> Rev;
         _ -> store_recording_meta(State)
     end.
-
-
--spec ext_to_mime(ne_binary()) -> ne_binary().
-ext_to_mime(<<"wav">>) -> <<"audio/x-wav">>;
-ext_to_mime(_) -> <<"audio/mp3">>.
-
--spec get_recording_doc_id(ne_binary()) -> ne_binary().
-get_recording_doc_id(CallId) -> <<"call_recording_", (cow_qs:urlencode(CallId))/binary>>.
 
 -spec get_media_name(ne_binary(), api_binary()) -> ne_binary().
 get_media_name(CallId, Ext) ->

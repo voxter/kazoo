@@ -545,11 +545,11 @@ get_fs_app(_Node, _UUID, JObj, <<"fax_detection">>) ->
     end;
 
 get_fs_app(_Node, _UUID, JObj, <<"send_display">>) ->
-    case wapi_dialplan:send_display_v(JObj) of
+    case kapi_dialplan:send_display_v(JObj) of
         'false' -> {'error', <<"send display failed to execute as JObj did not validate">>};
         'true' ->
-            Message = <<(wh_json:get_value(<<"Caller-ID-Name">>, JObj, <<>>))/binary, "|"
-                        ,(wh_json:get_value(<<"Caller-ID-Number">>, JObj, <<>>))/binary
+            Message = <<(kz_json:get_value(<<"Caller-ID-Name">>, JObj, <<>>))/binary, "|"
+                        ,(kz_json:get_value(<<"Caller-ID-Number">>, JObj, <<>>))/binary
                       >>,
             {<<"send_display">>, Message}
     end;
@@ -1348,10 +1348,10 @@ play(Node, UUID, JObj) ->
 -spec playback_vars(api_object()) -> binary().
 playback_vars('undefined') -> <<>>;
 playback_vars(JObj) ->
-    case wh_json:get_value(<<"Variables">>, JObj) of
+    case kz_json:get_value(<<"Variables">>, JObj) of
         'undefined' -> <<>>;
         Vars ->
-            PlaybackVars = wh_json:foldl(fun(K, V, <<>>) ->
+            PlaybackVars = kz_json:foldl(fun(K, V, <<>>) ->
                                                  <<K/binary, "=", V/binary>>;
                                             (K, V, VarStr) ->
                                                  <<VarStr/binary, ",", K/binary, "=", V/binary>>
@@ -1362,7 +1362,7 @@ playback_vars(JObj) ->
             end
     end.
 
--spec play_bridged(ne_binary(), wh_json:object(), ne_binary()) ->
+-spec play_bridged(ne_binary(), kz_json:object(), ne_binary()) ->
                           {ne_binary(), ne_binary()}.
 play_bridged(UUID, JObj, F) ->
     case kz_json:get_value(<<"Leg">>, JObj) of

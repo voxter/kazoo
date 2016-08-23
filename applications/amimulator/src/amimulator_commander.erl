@@ -24,14 +24,14 @@ update_props(Props, AccountId) ->
             <<>> ->
                 Props2;
             _ ->
-                [{<<"AccountDb">>, wh_util:format_account_id(AccountId, encoded)}] ++ Props2
+                [{<<"AccountDb">>, kz_util:format_account_id(AccountId, encoded)}] ++ Props2
         end end
     ],
     lists:foldl(fun(F, Props2) -> F(Props2) end, Props, Routines).
     
 handle_event(Props) ->
     %lager:debug("AMI event params: ~p", [Parameters]),
-    Action = string:to_lower(wh_util:to_list(proplists:get_value(<<"Action">>, Props))),
+    Action = string:to_lower(kz_util:to_list(proplists:get_value(<<"Action">>, Props))),
     handle_event(Action, Props).
     
 % TODO: add AMI username lookup db initialization
@@ -170,15 +170,15 @@ handle_event("mailboxcount", Props) ->
 
     Payload = case couch_mgr:get_results(AccountDb, <<"vmboxes/crossbar_listing">>, [{key, Exten}]) of
         {ok, [Result]} ->
-            Value = wh_json:get_value(<<"value">>, Result),
+            Value = kz_json:get_value(<<"value">>, Result),
             [
                 {<<"Response">>, <<"Success">>},
                 {<<"ActionID">>, ActionId},
                 {<<"Message">>, <<"Mailbox Message Count">>},
                 {<<"Mailbox">>, Mailbox},
                 {<<"UrgMessages">>, 0},
-                {<<"NewMessages">>, wh_json:get_value(<<"new_messages">>, Value)},
-                {<<"OldMessages">>, wh_json:get_value(<<"old_messages">>, Value)}
+                {<<"NewMessages">>, kz_json:get_value(<<"new_messages">>, Value)},
+                {<<"OldMessages">>, kz_json:get_value(<<"old_messages">>, Value)}
             ];
         _ ->
             mailbox_count_error(ActionId, Mailbox)
@@ -241,10 +241,10 @@ handle_event("hangup", Props) ->
     ControlQueue = amimulator_call:control_queue(Call),
     lager:debug("Control queue for call: ~p", [ControlQueue]),
 
-    whapps_call_command:hangup(amimulator_call:to_whapps_call(amimulator_call:set_control_queue(ControlQueue, Call)));
+    kapps_call_command:hangup(amimulator_call:to_kapps_call(amimulator_call:set_control_queue(ControlQueue, Call)));
     % CallId = ami_sm:call_by_channel(EndpointName),
-    % Call = amimulator_util:whapps_call_from_cf_exe(CallId),
-    % whapps_call_command:hangup(Call);
+    % Call = amimulator_util:kapps_call_from_cf_exe(CallId),
+    % kapps_call_command:hangup(Call);
 handle_event("getvar", Props) ->
     case getvar(proplists:get_value(<<"Variable">>, Props), Props) of
         undefined ->
@@ -290,16 +290,16 @@ handle_event(Event, Props) ->
 
 login_secret(Username, Secret, ActionId) ->
     {'ok', AMIDoc} = couch_mgr:open_doc(?AMI_DB, Username),
-    case wh_json:get_value(<<"secret">>, AMIDoc) of
-        Secret -> login_success(wh_json:get_value(<<"account_id">>, AMIDoc), ActionId);
+    case kz_json:get_value(<<"secret">>, AMIDoc) of
+        Secret -> login_success(kz_json:get_value(<<"account_id">>, AMIDoc), ActionId);
         _ -> login_fail(ActionId)
     end.
 
 login_md5(Username, Md5, Challenge, ActionId) ->
     {'ok', AMIDoc} = couch_mgr:open_doc(?AMI_DB, Username),
-    Digest = crypto:hash('md5', <<(wh_util:to_binary(Challenge))/binary, (wh_json:get_value(<<"secret">>, AMIDoc))/binary>>),
-    case wh_util:to_binary(lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest])) of
-        Md5 -> login_success(wh_json:get_value(<<"account_id">>, AMIDoc), ActionId);
+    Digest = crypto:hash('md5', <<(kz_util:to_binary(Challenge))/binary, (kz_json:get_value(<<"secret">>, AMIDoc))/binary>>),
+    case kz_util:to_binary(lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest])) of
+        Md5 -> login_success(kz_json:get_value(<<"account_id">>, AMIDoc), ActionId);
         _ -> login_fail(ActionId)
     end.
 
@@ -386,12 +386,12 @@ dest_exten(Call) ->
 dest_exten(_, _, 'undefined', _, _, Call) ->
     amimulator_call:other_id_number(Call);
 dest_exten('true', <<"inbound">>, QueueId, AccountId, <<"Local", _/binary>>, Call) ->
-    case amimulator_util:queue_number(wh_util:format_account_id(AccountId, 'encoded'), QueueId) of
+    case amimulator_util:queue_number(kz_util:format_account_id(AccountId, 'encoded'), QueueId) of
         'undefined' -> amimulator_call:other_id_number(Call);
         Number -> Number
     end;
 dest_exten('true', <<"outbound">>, QueueId, AccountId, <<"SIP", _/binary>>, Call) ->
-    case amimulator_util:queue_number(wh_util:format_account_id(AccountId, 'encoded'), QueueId) of
+    case amimulator_util:queue_number(kz_util:format_account_id(AccountId, 'encoded'), QueueId) of
         'undefined' -> amimulator_call:other_id_number(Call);
         Number -> Number
     end;
@@ -541,12 +541,12 @@ status_payload(<<"Status">>, Channel, BridgedChannel, CallerIDNum, CallerIDName,
 status_payload(<<"concise">>, Channel, BridgedChannel, _, CallerIDName, _, ConnectedLineName
                ,_, ChannelStateDesc, Application, Context, Extension, Seconds, _, _) ->
     <<Channel/binary, "!", Context/binary, "!", Extension/binary, "!1!", ChannelStateDesc/binary, "!", Application/binary
-      ,"!", ConnectedLineName/binary, "!", CallerIDName/binary, "!!!3!", (wh_util:to_binary(Seconds))/binary
+      ,"!", ConnectedLineName/binary, "!", CallerIDName/binary, "!!!3!", (kz_util:to_binary(Seconds))/binary
       ,"!", BridgedChannel/binary, "\n">>;
 status_payload(<<"verbose">>, Channel, BridgedChannel, _, CallerIDName, _, ConnectedLineName
                ,_, ChannelStateDesc, Application, Context, Extension, Seconds, _, _) ->
     {H, M, S} = {Seconds div 3600, Seconds rem 3600 div 60, Seconds rem 60},
-    TimeString = wh_util:to_binary(if H > 99 ->
+    TimeString = kz_util:to_binary(if H > 99 ->
         io_lib:format("~B:~2..0B:~2..0B", [H, M, S]);
     true ->
         io_lib:format("~2..0B:~2..0B:~2..0B", [H, M, S])
@@ -558,7 +558,7 @@ status_payload(<<"verbose">>, Channel, BridgedChannel, _, CallerIDName, _, Conne
       ,(fit_list(BridgedChannel, 20))/binary, "\n">>.
 
 fit_list(Binary, Size) when is_binary(Binary) ->
-    wh_util:to_binary(fit_list(wh_util:to_list(Binary), Size));
+    kz_util:to_binary(fit_list(kz_util:to_list(Binary), Size));
 fit_list(List, Size) ->
     fit_list(List, length(List), Size).
 
@@ -583,7 +583,7 @@ queues_status(Props) ->
     {'ok', Results} = couch_mgr:get_results(AccountDb, <<"queues/crossbar_listing">>),
 
     lists:foldl(fun(Result, Acc) ->
-        QueueId = wh_json:get_value(<<"id">>, Result),
+        QueueId = kz_json:get_value(<<"id">>, Result),
         case couch_mgr:open_doc(AccountDb, QueueId) of
         	{'error', E} ->
         		lager:debug("Error opening queue doc: ~p", [E]),
@@ -594,7 +594,7 @@ queues_status(Props) ->
         				lager:debug("Could not find queue number for queue ~p (~p)", [QueueId, E]),
         				[] ++ Acc;
         			{'ok', Results2} when length(Results2) =:= 1 ->
-        				Value = wh_json:get_value(<<"value">>, hd(Results2)),
+        				Value = kz_json:get_value(<<"value">>, hd(Results2)),
         				Number = hd(Value),
 
         				RawStats = queue_stats(QueueId, AccountId),
@@ -618,8 +618,8 @@ queues_status(Props) ->
         				[[
         					{<<"Event">>, <<"QueueParams">>},
 					        {<<"Queue">>, Number},
-					        {<<"Max">>, wh_json:get_value(<<"max_queue_size">>, QueueDoc)},
-					        {<<"Strategy">>, wh_json:get_value(<<"strategy">>, QueueDoc)},
+					        {<<"Max">>, kz_json:get_value(<<"max_queue_size">>, QueueDoc)},
+					        {<<"Strategy">>, kz_json:get_value(<<"strategy">>, QueueDoc)},
 					        %% Calls actually represents number of waiting calls
 					        {<<"Calls">>, WaitingCalls},
 					        {<<"Holdtime">>, round(AverageHold)},
@@ -630,7 +630,7 @@ queues_status(Props) ->
 					        {<<"ServiceLevel">>, 60},
 					        {<<"ServicelevelPerf">>, 69.0}
         				]]
-                        ++ queue_entries(QueueId, Number, wh_json:get_value(<<"Waiting">>, element(2, RawStats), []))
+                        ++ queue_entries(QueueId, Number, kz_json:get_value(<<"Waiting">>, element(2, RawStats), []))
         				++ agent_statuses(QueueId, AccountId, Number, AgentStats)
         				++ Acc;
         			{'ok', Results2} ->
@@ -645,30 +645,30 @@ queue_stats(QueueId, AcctId) ->
     Req = props:filter_undefined(
             [{<<"Account-ID">>, AcctId}
              ,{<<"Queue-ID">>, QueueId}
-             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
-    whapps_util:amqp_pool_request(
+    kapps_util:amqp_pool_request(
         Req,
-        fun wapi_acdc_stats:publish_current_calls_req/1,
-        fun wapi_acdc_stats:current_calls_resp_v/1
+        fun kapi_acdc_stats:publish_current_calls_req/1,
+        fun kapi_acdc_stats:current_calls_resp_v/1
     ).
 
 % TODO: may still need to add counting of agents fails
 count_stats(Stats) ->
-    AllStats = wh_json:get_value(<<"Handled">>, Stats, []) ++
-        wh_json:get_value(<<"Abandoned">>, Stats, []) ++
-        wh_json:get_value(<<"Waiting">>, Stats, []) ++
-        wh_json:get_value(<<"Processed">>, Stats, []),
+    AllStats = kz_json:get_value(<<"Handled">>, Stats, []) ++
+        kz_json:get_value(<<"Abandoned">>, Stats, []) ++
+        kz_json:get_value(<<"Waiting">>, Stats, []) ++
+        kz_json:get_value(<<"Processed">>, Stats, []),
     count_stats(AllStats, {0, 0, 0, 0, 0, []}).
     
 count_stats([], {Calls, Holdtime, TalkTime, Completed, Abandoned, AgentStats}) ->
     {Calls, Holdtime, TalkTime, Completed, Abandoned, AgentStats};
 count_stats([Stat|Stats], {Calls, Holdtime, TalkTime, Completed, Abandoned, AgentStats}) ->
-	Status = wh_json:get_value(<<"status">>, Stat),
+	Status = kz_json:get_value(<<"status">>, Stat),
 	AgentStats2 = if (Status =:= <<"handled">>) or (Status =:= <<"processed">>) ->
-		AgentId = wh_json:get_value(<<"agent_id">>, Stat),
+		AgentId = kz_json:get_value(<<"agent_id">>, Stat),
         LastCall = props:get_value(<<"LastCall">>, props:get_value(AgentId, AgentStats, []), 0),
-        StatLastCall = wh_json:get_first_defined([<<"processed_timestamp">>, <<"handled_timestamp">>], Stat, 0) - 62167219200,
+        StatLastCall = kz_json:get_first_defined([<<"processed_timestamp">>, <<"handled_timestamp">>], Stat, 0) - 62167219200,
         NewLastCall = if StatLastCall > LastCall ->
             StatLastCall;
         true ->
@@ -684,29 +684,29 @@ count_stats([Stat|Stats], {Calls, Holdtime, TalkTime, Completed, Abandoned, Agen
 
     case Status of
         <<"abandoned">> ->
-            WaitTime = wh_json:get_value(<<"abandoned_timestamp">>, Stat) -
-                wh_json:get_value(<<"entered_timestamp">>, Stat),
+            WaitTime = kz_json:get_value(<<"abandoned_timestamp">>, Stat) -
+                kz_json:get_value(<<"entered_timestamp">>, Stat),
             count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime, Completed+1, Abandoned+1, AgentStats2});
         <<"waiting">> ->
             % TODO: updated the calculation for wait can call time
-            WaitTime = wh_util:current_tstamp() - wh_json:get_value(<<"entered_timestamp">>, Stat),
+            WaitTime = kz_util:current_tstamp() - kz_json:get_value(<<"entered_timestamp">>, Stat),
             count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime, Completed, Abandoned, AgentStats2});
         <<"handled">> ->
-            WaitTime = wh_json:get_value(<<"handled_timestamp">>, Stat) -
-                wh_json:get_value(<<"entered_timestamp">>, Stat),
-            CallTime = wh_util:current_tstamp() - wh_json:get_value(<<"handled_timestamp">>, Stat),
+            WaitTime = kz_json:get_value(<<"handled_timestamp">>, Stat) -
+                kz_json:get_value(<<"entered_timestamp">>, Stat),
+            CallTime = kz_util:current_tstamp() - kz_json:get_value(<<"handled_timestamp">>, Stat),
             count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime+CallTime, Completed+1, Abandoned, AgentStats2});
         <<"processed">> ->
-            case wh_json:get_value(<<"abandoned_timestamp">>, Stat) of
+            case kz_json:get_value(<<"abandoned_timestamp">>, Stat) of
                 undefined ->
-                    WaitTime = wh_json:get_value(<<"handled_timestamp">>, Stat) -
-                        wh_json:get_value(<<"entered_timestamp">>, Stat),
-                    CallTime = wh_json:get_value(<<"processed_timestamp">>, Stat) -
-                        wh_json:get_value(<<"handled_timestamp">>, Stat),
+                    WaitTime = kz_json:get_value(<<"handled_timestamp">>, Stat) -
+                        kz_json:get_value(<<"entered_timestamp">>, Stat),
+                    CallTime = kz_json:get_value(<<"processed_timestamp">>, Stat) -
+                        kz_json:get_value(<<"handled_timestamp">>, Stat),
                     count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime+CallTime, Completed+1, Abandoned, AgentStats2});
                 _ ->
-                    WaitTime = wh_json:get_value(<<"abandoned_timestamp">>, Stat) -
-                        wh_json:get_value(<<"entered_timestamp">>, Stat),
+                    WaitTime = kz_json:get_value(<<"abandoned_timestamp">>, Stat) -
+                        kz_json:get_value(<<"entered_timestamp">>, Stat),
                     count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime, Completed+1, Abandoned+1, AgentStats2})
             end
     end.
@@ -730,23 +730,23 @@ queue_entry(Call, Number, WaitingCallStat) ->
      ,{<<"Channel">>, amimulator_call:channel(Call)}
      ,{<<"CallerID">>, amimulator_call:id_number(Call)}
      ,{<<"CallerIDName">>, amimulator_call:id_name(Call)}
-     ,{<<"Wait">>, wh_util:current_tstamp() - wh_json:get_value(<<"entered_timestamp">>, WaitingCallStat, 0)}
+     ,{<<"Wait">>, kz_util:current_tstamp() - kz_json:get_value(<<"entered_timestamp">>, WaitingCallStat, 0)}
     ].
 
 waiting_call_stat(CallId, []) ->
     lager:debug("could not find waiting call for id ~p", [CallId]),
     'undefined';
 waiting_call_stat(CallId, [JObj|JObjs]) ->
-    case wh_json:get_value(<<"call_id">>, JObj) of
+    case kz_json:get_value(<<"call_id">>, JObj) of
         CallId -> JObj;
         _ -> waiting_call_stat(CallId, JObjs)
     end.
 
 agent_statuses(QueueId, AccountId, Number, AgentStats) ->
-    AccountDb = wh_util:format_account_id(AccountId, encoded),
+    AccountDb = kz_util:format_account_id(AccountId, encoded),
     {ok, Results} = couch_mgr:get_results(AccountDb, <<"queues/agents_listing">>, [{key, QueueId}]),
     lists:foldl(fun(Result, Acc) ->
-        AgentId = wh_json:get_value(<<"id">>, Result),
+        AgentId = kz_json:get_value(<<"id">>, Result),
         case agent_status(AgentId, AccountId, Number, AgentStats) of
             'logged_out' -> Acc;
             AgentStatus -> [AgentStatus | Acc]
@@ -754,11 +754,11 @@ agent_statuses(QueueId, AccountId, Number, AgentStats) ->
     end, [], Results).
         
 agent_status(AgentId, AccountId, Number, AgentStats) ->
-    AccountDb = wh_util:format_account_id(AccountId, encoded), 
+    AccountDb = kz_util:format_account_id(AccountId, encoded), 
     {ok, UserDoc} = couch_mgr:open_doc(AccountDb, AgentId),
-    FirstName = wh_json:get_value(<<"first_name">>, UserDoc),
-    LastName = wh_json:get_value(<<"last_name">>, UserDoc),
-    Username = wh_json:get_value(<<"username">>, UserDoc),
+    FirstName = kz_json:get_value(<<"first_name">>, UserDoc),
+    LastName = kz_json:get_value(<<"last_name">>, UserDoc),
+    Username = kz_json:get_value(<<"username">>, UserDoc),
 
     {'ok', Status} = acdc_agent_util:most_recent_status(AccountId, AgentId),
 
@@ -817,17 +817,17 @@ sip_peers(Props) ->
 	AccountDb = props:get_value(<<"AccountDb">>, Props),
 	{'ok', Results} = couch_mgr:get_results(AccountDb, <<"devices/listing_by_owner">>),
         lists:foldl(fun(Result, Registrations) ->
-        	Value = wh_json:get_value(<<"value">>, Result),
-        	case wh_json:get_value(<<"key">>, Result) of
+        	Value = kz_json:get_value(<<"value">>, Result),
+        	case kz_json:get_value(<<"key">>, Result) of
         		'null' ->
-        			[reg_entry(AccountId, wh_json:get_value(<<"id">>, Value), wh_json:get_value(<<"name">>, Value))] ++ Registrations;
+        			[reg_entry(AccountId, kz_json:get_value(<<"id">>, Value), kz_json:get_value(<<"name">>, Value))] ++ Registrations;
         		OwnerId ->
         			case couch_mgr:open_doc(AccountDb, OwnerId) of
         				{'error', 'not_found'} ->
-        					lager:debug("Missing owner ~p for endpoint with username ~p", [OwnerId, wh_json:get_value(<<"name">>, Value)]),
+        					lager:debug("Missing owner ~p for endpoint with username ~p", [OwnerId, kz_json:get_value(<<"name">>, Value)]),
         					Registrations;
         				{'ok', Endpoint} ->
-	            			[reg_entry(AccountId, wh_json:get_value(<<"_id">>, Endpoint), wh_json:get_value(<<"username">>, Endpoint))] ++ Registrations
+	            			[reg_entry(AccountId, kz_json:get_value(<<"_id">>, Endpoint), kz_json:get_value(<<"username">>, Endpoint))] ++ Registrations
 	            	end
         	end
         end, [], Results).
@@ -899,9 +899,9 @@ queue_add(Props) ->
     end.
 
 queue_add(AccountId, AccountDb, Result, Props) ->
-    AgentId = wh_json:get_value(<<"id">>, Result),
+    AgentId = kz_json:get_value(<<"id">>, Result),
     {ok, QueueDoc} = amimulator_util:queue_for_number(proplists:get_value(<<"Queue">>, Props), AccountDb),
-    QueueId = wh_json:get_value(<<"_id">>, QueueDoc),
+    QueueId = kz_json:get_value(<<"_id">>, QueueDoc),
 
     {ok, AgentDoc} = couch_mgr:open_doc(AccountDb, AgentId),
     couch_mgr:save_doc(AccountDb, cb_queues:maybe_add_queue_to_agent(QueueId, AgentDoc)),
@@ -910,9 +910,9 @@ queue_add(AccountId, AccountDb, Result, Props) ->
      [{<<"Account-ID">>, AccountId}
       ,{<<"Agent-ID">>, AgentId}
       ,{<<"Queue-ID">>, QueueId}
-      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
      ]),
-    wapi_acdc_agent:publish_login_queue(Prop),
+    kapi_acdc_agent:publish_login_queue(Prop),
 
     Payload = [
         {<<"Response">>, <<"Success">>},
@@ -931,9 +931,9 @@ queue_remove(Props) ->
         <<"users/list_by_username">>,
         [{key, Exten}]
     ),
-    AgentId = wh_json:get_value(<<"id">>, Result),
+    AgentId = kz_json:get_value(<<"id">>, Result),
     {ok, QueueDoc} = amimulator_util:queue_for_number(proplists:get_value(<<"Queue">>, Props), AccountDb),
-    QueueId = wh_json:get_value(<<"_id">>, QueueDoc),
+    QueueId = kz_json:get_value(<<"_id">>, QueueDoc),
 
     {ok, AgentDoc} = couch_mgr:open_doc(AccountDb, AgentId),
     couch_mgr:save_doc(AccountDb, cb_queues:maybe_rm_queue_from_agent(QueueId, AgentDoc)),
@@ -942,9 +942,9 @@ queue_remove(Props) ->
      [{<<"Account-ID">>, AccountId}
       ,{<<"Agent-ID">>, AgentId}
       ,{<<"Queue-ID">>, QueueId}
-      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
      ]),
-    wapi_acdc_agent:publish_logout_queue(Prop),
+    kapi_acdc_agent:publish_logout_queue(Prop),
 
     Payload = [
         {<<"Response">>, <<"Success">>},
@@ -972,16 +972,16 @@ queue_pause(Props) ->
     end.
 
 pause_exten(AccountId, Result, Props) ->
-    AgentId = wh_json:get_value(<<"id">>, Result),
+    AgentId = kz_json:get_value(<<"id">>, Result),
 
     case props:get_value(<<"Paused">>, Props) of
         <<"0">> ->
             Prop = props:filter_undefined(
              [{<<"Account-ID">>, AccountId}
               ,{<<"Agent-ID">>, AgentId}
-              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-            wapi_acdc_agent:publish_resume(Prop),
+            kapi_acdc_agent:publish_resume(Prop),
 
             Payload = [
                 {<<"Response">>, <<"Success">>},
@@ -993,9 +993,9 @@ pause_exten(AccountId, Result, Props) ->
              [{<<"Account-ID">>, AccountId}
               ,{<<"Agent-ID">>, AgentId}
               ,{<<"Time-Limit">>, 600000}
-              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
-            wapi_acdc_agent:publish_pause(Prop),
+            kapi_acdc_agent:publish_pause(Prop),
 
             Payload = [
                 {<<"Response">>, <<"Success">>},
@@ -1031,7 +1031,7 @@ getvar(<<"AGENTBYCALLERID_", _CallerId/binary>>=Variable, _Props) ->
     ], raw};
 getvar(<<"EPOCH">>=Variable, _Props) ->
     {MegaSecs, Secs, _MicroSecs} = os:timestamp(),
-    Timestamp = wh_util:to_binary(MegaSecs * 1000000 + Secs),
+    Timestamp = kz_util:to_binary(MegaSecs * 1000000 + Secs),
     {[
         <<"Response: Success\r\n">>,
         <<"Variable: ", Variable/binary, "\r\nValue: ", Timestamp/binary, "\r\n\r\n">>
@@ -1055,7 +1055,7 @@ command(<<"meetme kick ", MeetMeSpec/binary>>, Props) ->
 command(<<"core show channels ", Verbosity/binary>>, Props) ->
     initial_channel_status(ami_sm:calls(proplists:get_value(<<"AccountId">>, Props)), Props, Verbosity);
 command(<<"database put ", Variable/binary>>, Props) ->
-	[Family, Key, Value] = parse_command(wh_util:to_list(Variable)),
+	[Family, Key, Value] = parse_command(kz_util:to_list(Variable)),
 	ami_sm:db_put(props:get_value(<<"AccountId">>, Props), Family, Key, Value),
 
 	{[
@@ -1064,7 +1064,7 @@ command(<<"database put ", Variable/binary>>, Props) ->
         <<"--END COMMAND--\r\n\r\n">>
     ], raw};
 command(<<"database del ", Variable/binary>>, Props) ->
-	[Family, Key] = parse_command(wh_util:to_list(Variable)),
+	[Family, Key] = parse_command(kz_util:to_list(Variable)),
 	ami_sm:db_del(props:get_value(<<"AccountId">>, Props), Family, Key),
 
 	{[
@@ -1166,8 +1166,8 @@ maybe_list_conf(Number, Props) ->
             case conf_details(ConfId) of
                 {[]} -> 'undefined';
                 ConfDetails ->
-                    participant_payloads(wh_json:get_value(<<"Participants">>, ConfDetails)
-                                         ,wh_json:get_value(<<"Run-Time">>, ConfDetails)
+                    participant_payloads(kz_json:get_value(<<"Participants">>, ConfDetails)
+                                         ,kz_json:get_value(<<"Run-Time">>, ConfDetails)
                                          ,props:get_value(<<"ActionID">>, Props)
                                         )
             end
@@ -1179,10 +1179,10 @@ mute_conf(Number, ParticipantId, Props) ->
     case conf_id_for_number(Number, props:get_value(<<"AccountId">>, Props)) of
         'undefined' -> 'ok';
         ConfId ->
-            Conference = whapps_conference:set_id(ConfId, whapps_conference:new()),
-            whapps_conference_command:mute_participant(ParticipantId, Conference),
+            Conference = kapps_conference:set_id(ConfId, kapps_conference:new()),
+            kapps_conference_command:mute_participant(ParticipantId, Conference),
             ConfDetails = conf_details(ConfId),
-            CallId = participant_call_id(ParticipantId, wh_json:get_value(<<"Participants">>, ConfDetails)),
+            CallId = participant_call_id(ParticipantId, kz_json:get_value(<<"Participants">>, ConfDetails)),
             Call = ami_sm:call(CallId),
             [{<<"Event">>, <<"MeetmeMute">>}
              ,{<<"Privilege">>, <<"call,all">>}
@@ -1199,10 +1199,10 @@ unmute_conf(Number, ParticipantId, Props) ->
     case conf_id_for_number(Number, props:get_value(<<"AccountId">>, Props)) of
         'undefined' -> 'ok';
         ConfId ->
-            Conference = whapps_conference:set_id(ConfId, whapps_conference:new()),
-            whapps_conference_command:unmute_participant(ParticipantId, Conference),
+            Conference = kapps_conference:set_id(ConfId, kapps_conference:new()),
+            kapps_conference_command:unmute_participant(ParticipantId, Conference),
             ConfDetails = conf_details(ConfId),
-            CallId = participant_call_id(ParticipantId, wh_json:get_value(<<"Participants">>, ConfDetails)),
+            CallId = participant_call_id(ParticipantId, kz_json:get_value(<<"Participants">>, ConfDetails)),
             Call = ami_sm:call(CallId),
             [{<<"Event">>, <<"MeetmeMute">>}
              ,{<<"Privilege">>, <<"call,all">>}
@@ -1220,15 +1220,15 @@ kick_conf(Number, ParticipantId, Props) ->
         'undefined' -> 'ok';
         ConfId ->
             ConfDetails = conf_details(ConfId),
-            CallId = participant_call_id(ParticipantId, wh_json:get_value(<<"Participants">>, ConfDetails)),
+            CallId = participant_call_id(ParticipantId, kz_json:get_value(<<"Participants">>, ConfDetails)),
             Payload = amimulator_util:maybe_leave_conference(CallId),
-            Conference = whapps_conference:set_id(ConfId, whapps_conference:new()),
-            whapps_conference_command:kick(ParticipantId, Conference),
+            Conference = kapps_conference:set_id(ConfId, kapps_conference:new()),
+            kapps_conference_command:kick(ParticipantId, Conference),
             Payload
     end.
 
 conf_id_for_number(Number, AccountId) ->
-    case couch_mgr:get_results(wh_util:format_account_id(AccountId, 'encoded'), <<"conferences/conference_map">>) of
+    case couch_mgr:get_results(kz_util:format_account_id(AccountId, 'encoded'), <<"conferences/conference_map">>) of
         {'ok', Results} -> conf_id_for_number(Number, AccountId, Results);
         {'error', E} ->
             lager:debug("couldn't read couch view 'conferences/conference_map' (~p)", [E]),
@@ -1238,10 +1238,10 @@ conf_id_for_number(Number, AccountId) ->
 conf_id_for_number(_, _, []) ->
     'undefined';
 conf_id_for_number(Number, AccountId, [Result|Results]) ->
-    case wh_json:get_value([<<"value">>, <<"numbers">>], Result) of
+    case kz_json:get_value([<<"value">>, <<"numbers">>], Result) of
         [_|_]=Numbers ->
             case lists:member(Number, Numbers) of
-                'true' -> wh_json:get_value(<<"key">>, Result);
+                'true' -> kz_json:get_value(<<"key">>, Result);
                 'false' -> conf_id_for_number(Number, AccountId, Results)
             end;
         _ -> conf_id_for_number(Number, AccountId, Results)
@@ -1250,11 +1250,11 @@ conf_id_for_number(Number, AccountId, [Result|Results]) ->
 conf_details(ConfId) ->
     Req = props:filter_undefined([
         {<<"Conference-ID">>, ConfId}
-        | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+        | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
     ]),
-    case whapps_util:amqp_pool_collect(
+    case kapps_util:amqp_pool_collect(
         Req,
-        fun wapi_conference:publish_search_req/1,
+        fun kapi_conference:publish_search_req/1,
         {'ecallmgr', 'true'}
     ) of
         {'error', E} ->
@@ -1264,19 +1264,19 @@ conf_details(ConfId) ->
     end.
 
 merge_conference_resps(JObjs) ->
-    merge_conference_resps(JObjs, wh_json:new()).
+    merge_conference_resps(JObjs, kz_json:new()).
 
 merge_conference_resps([], Acc) ->
     Acc;
 merge_conference_resps([JObj|JObjs], Acc) ->
-    case wh_json:get_value(<<"Participants">>, JObj) of
+    case kz_json:get_value(<<"Participants">>, JObj) of
         'undefined' -> merge_conference_resps(JObjs, Acc);
         Participants ->
             Participants2 = lists:foldl(fun(Participant, Acc2) ->
-                [Participant | delete_participant(wh_json:get_value(<<"Call-ID">>, Participant), Acc2)]
-            end, wh_json:get_value(<<"Participants">>, Acc, []), Participants),
-            wh_json:set_values([{<<"Participants">>, Participants2}
-                                ,{<<"Run-Time">>, wh_json:get_value(<<"Run-Time">>, JObj, wh_json:get_value(<<"Run-Time">>, Acc))}
+                [Participant | delete_participant(kz_json:get_value(<<"Call-ID">>, Participant), Acc2)]
+            end, kz_json:get_value(<<"Participants">>, Acc, []), Participants),
+            kz_json:set_values([{<<"Participants">>, Participants2}
+                                ,{<<"Run-Time">>, kz_json:get_value(<<"Run-Time">>, JObj, kz_json:get_value(<<"Run-Time">>, Acc))}
                                ], Acc)
     end.
 
@@ -1286,7 +1286,7 @@ delete_participant(CallId, Participants) ->
 delete_participant(_, [], Acc) ->
     Acc;
 delete_participant(CallId, [Participant|Participants], Acc) ->
-    case wh_json:get_value(<<"Call-ID">>, Participant) of
+    case kz_json:get_value(<<"Call-ID">>, Participant) of
         CallId -> delete_participant(CallId, Participants, Acc);
         _ -> delete_participant(CallId, Participants, [Participant | Acc])
     end.
@@ -1294,14 +1294,14 @@ delete_participant(CallId, [Participant|Participants], Acc) ->
 participant_call_id(_, []) ->
     'undefined';
 participant_call_id(ParticipantId, [Participant|Participants]) ->
-    case wh_json:get_value(<<"Participant-ID">>, Participant) of
-        ParticipantId -> wh_json:get_value(<<"Call-ID">>, Participant);
+    case kz_json:get_value(<<"Participant-ID">>, Participant) of
+        ParticipantId -> kz_json:get_value(<<"Call-ID">>, Participant);
         _ -> participant_call_id(ParticipantId, Participants)
     end.
 
 participant_payloads(Participants, RunTime, ActionId) ->
     {H, M, S} = {RunTime div 3600, RunTime rem 3600 div 60, RunTime rem 60},
-    TimeString = wh_util:to_binary(if H > 99 ->
+    TimeString = kz_util:to_binary(if H > 99 ->
         io_lib:format("~B:~2..0B:~2..0B", [H, M, S]);
     true ->
         io_lib:format("~2..0B:~2..0B:~2..0B", [H, M, S])
@@ -1311,10 +1311,10 @@ participant_payloads(Participants, RunTime, ActionId) ->
         <<"Response: Follows\r\nPrivilege: Command\r\n">>,
         <<"ActionID: ", ActionId/binary, "\r\n">>
     ] ++ lists:foldl(fun(Participant, Payloads) ->
-        CallId = wh_json:get_value(<<"Call-ID">>, Participant),
+        CallId = kz_json:get_value(<<"Call-ID">>, Participant),
         Call = ami_sm:call(CallId),
 
-        ParticipantId = wh_util:to_binary(wh_json:get_value(<<"Participant-ID">>, Participant)),
+        ParticipantId = kz_util:to_binary(kz_json:get_value(<<"Participant-ID">>, Participant)),
         %ParticipantId = <<"1">>,
         CallerId = amimulator_call:id_name(Call),
         EndpointName = amimulator_call:channel(Call),

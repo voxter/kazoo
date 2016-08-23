@@ -32,7 +32,7 @@ start_link() ->
     supervisor:start_link({'local', ?MODULE}, ?MODULE, []).
 
 handle_metaflow(JObj, Props) ->
-    CallId = wh_json:get_value([<<"Call">>, <<"Call-ID">>], JObj),
+    CallId = kz_json:get_value([<<"Call">>, <<"Call-ID">>], JObj),
     create_or_update_call(pid_for_callid(CallId), JObj, Props).
 
 %% ===================================================================

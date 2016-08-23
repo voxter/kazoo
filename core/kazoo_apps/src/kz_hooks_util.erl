@@ -147,14 +147,14 @@ maybe_add_binding_to_listener(ServerName, EventName) ->
 
 -spec handle_call_event(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_call_event(JObj, Props) ->
-    'true' = wapi_call:event_v(JObj),
-    HookEvent = wh_json:get_value(<<"Event-Name">>, JObj),
-    AccountId = wh_json:get_first_defined([
+    'true' = kapi_call:event_v(JObj),
+    HookEvent = kz_json:get_value(<<"Event-Name">>, JObj),
+    AccountId = kz_json:get_first_defined([
         [<<"Custom-Channel-Vars">>, <<"Execute-Extension-Original-Account-ID">>],
         [<<"Custom-Channel-Vars">>, <<"Account-ID">>]
         ], JObj),
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
-    wh_util:put_callid(CallId),
+    CallId = kz_json:get_value(<<"Call-ID">>, JObj),
+    kz_util:put_callid(CallId),
     handle_call_event(JObj, AccountId, HookEvent, CallId, props:get_is_true('rr', Props)).
 
 -spec handle_call_event(kz_json:object(), api_binary(), ne_binary(), ne_binary(), boolean()) ->
@@ -178,7 +178,7 @@ handle_call_event(JObj, 'undefined', <<"CHANNEL_DESTROY">>, CallId, RR) ->
             lager:debug("failed to determine account id for 'channel_destroy'", []);
         {'ok', AccountId} ->
             lager:debug("determined account id for 'channel_destroy' is ~s", [AccountId]),
-            J = wh_json:set_value([<<"Custom-Channel-Vars">>
+            J = kz_json:set_value([<<"Custom-Channel-Vars">>
                                    ,<<"Account-ID">>
                                   ], AccountId, JObj),
             handle_call_event(J, AccountId, <<"CHANNEL_DESTROY">>, CallId, RR)

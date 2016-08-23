@@ -119,9 +119,9 @@
 
                 ,member_call :: kapps_call:call()
                 ,member_call_id :: api_binary()
-                ,member_callback_candidates = [] :: wh_proplist()
+                ,member_callback_candidates = [] :: kz_proplist()
                 ,member_callback_flag = 'false' :: boolean()
-                ,member_original_call :: whapps_call:call()
+                ,member_original_call :: kapps_call:call()
                 ,member_original_call_id :: api_binary()
                 ,member_call_queue_id :: api_binary()
                 ,member_call_start :: kz_now()
@@ -129,14 +129,14 @@
                 ,queue_notifications :: api_object()
 
                 ,agent_call_id :: api_binary()
-                ,agent_callback_call = 'undefined' :: whapps_call:call() | 'undefined'
+                ,agent_callback_call = 'undefined' :: kapps_call:call() | 'undefined'
                 %% TODO replace with newer approach
                 ,ambiguous_uuids = [] :: ne_binaries()
                 ,next_status :: api_binary()
                 ,fsm_call_id :: api_binary() % used when no call-ids are available
-                ,endpoints = [] :: wh_json:objects()
+                ,endpoints = [] :: kz_json:objects()
                 ,outbound_call_ids = [] :: ne_binaries()
-                ,max_connect_failures :: wh_timeout()
+                ,max_connect_failures :: kz_timeout()
                 ,connect_failures = 0 :: non_neg_integer()
                 ,agent_state_updates = [] :: list()
                 ,monitoring = 'false' :: boolean()
@@ -164,7 +164,7 @@ member_connect_req(FSM, JObj) ->
 %%   member_connect_resp payload or ignore the request
 %% @end
 %%--------------------------------------------------------------------
--spec member_connect_win(pid(), wh_json:object(), 'same_node' | 'different_node') -> 'ok'.
+-spec member_connect_win(pid(), kz_json:object(), 'same_node' | 'different_node') -> 'ok'.
 member_connect_win(FSM, JObj, Node) ->
     gen_fsm:send_event(FSM, {'member_connect_win', JObj, Node}).
 
@@ -172,11 +172,11 @@ member_connect_win(FSM, JObj, Node) ->
 agent_timeout(FSM, JObj) ->
     gen_fsm:send_event(FSM, {'agent_timeout', JObj}).
 
--spec shared_failure(pid(), wh_json:object()) -> 'ok'.
+-spec shared_failure(pid(), kz_json:object()) -> 'ok'.
 shared_failure(FSM, JObj) ->
     gen_fsm:send_event(FSM, {'shared_failure', JObj}).
 
--spec shared_call_id(pid(), wh_json:object()) -> 'ok'.
+-spec shared_call_id(pid(), kz_json:object()) -> 'ok'.
 shared_call_id(FSM, JObj) ->
     gen_fsm:send_event(FSM, {'shared_call_id', JObj}).
 
@@ -292,7 +292,7 @@ sync_resp(FSM, JObj) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec pause(server_ref(), wh_timeout(), api_binary()) -> 'ok'.
+-spec pause(server_ref(), kz_timeout(), api_binary()) -> 'ok'.
 pause(FSM, Timeout, Alias) ->
     gen_fsm:send_all_state_event(FSM, {'pause', Timeout, Alias}).
 
@@ -407,13 +407,13 @@ init([AccountId, AgentId, Supervisor, Props, IsThief]) ->
     _P = kz_util:spawn(fun wait_for_listener/4, [Supervisor, self(), Props, IsThief]),
     lager:debug("waiting for listener in ~p", [_P]),
 
-    AccountDb = wh_util:format_account_id(AccountId, 'encoded'),
+    AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
     {'ok', UserDoc} = couch_mgr:open_cache_doc(AccountDb, AgentId),
 
     {'ok', 'wait', #state{account_id = AccountId
                           ,account_db = AccountDb
                           ,agent_id = AgentId
-                          ,agent_name = wh_json:get_value(<<"username">>, UserDoc)
+                          ,agent_name = kz_json:get_value(<<"username">>, UserDoc)
                           ,fsm_call_id = FSMCallId
                           ,max_connect_failures = max_failures(AccountId)
                          }}.
@@ -566,8 +566,8 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
                                                         ,agent_id=AgentId
                                                         ,connect_failures=CF
                                                        }=State) ->
-    Call = whapps_call:from_json(wh_json:get_value(<<"Call">>, JObj)),
-    CallId = whapps_call:call_id(Call),
+    Call = kapps_call:from_json(kz_json:get_value(<<"Call">>, JObj)),
+    CallId = kapps_call:call_id(Call),
 
     kz_util:put_callid(CallId),
 
@@ -595,7 +595,7 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
             acdc_util:bind_to_call_events(Call, AgentListener),
 
             %% Need to check if a callback is required to the caller
-            NextState = case wh_json:get_value(<<"Callback-Number">>, JObj) of
+            NextState = case kz_json:get_value(<<"Callback-Number">>, JObj) of
                 'undefined' ->
                     acdc_agent_listener:bridge_to_member(AgentListener, Call, JObj, UpdatedEPs, CDRUrl, RecordingUrl),
                     'ringing';
@@ -608,16 +608,16 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
 
             acdc_agent_stats:agent_connecting(AccountId, AgentId, CallId, CIDName, CIDNumber),
             lager:info("trying to ring agent endpoints(~p)", [length(UpdatedEPs)]),
-            lager:debug("notifications for the queue: ~p", [wh_json:get_value(<<"Notifications">>, JObj)]),
+            lager:debug("notifications for the queue: ~p", [kz_json:get_value(<<"Notifications">>, JObj)]),
 
             {'next_state', NextState, State#state{wrapup_timeout=WrapupTimer
                                                   ,member_call=Call
                                                   ,member_call_id=CallId
-                                                  ,member_call_start=wh_util:now()
+                                                  ,member_call_start=kz_util:now()
                                                   ,member_call_queue_id=QueueId
                                                   ,caller_exit_key=CallerExitKey
                                                   ,endpoints=UpdatedEPs
-                                                  ,queue_notifications=wh_json:get_value(<<"Notifications">>, JObj)
+                                                  ,queue_notifications=kz_json:get_value(<<"Notifications">>, JObj)
                                                  }}
     end;
 ready({'member_connect_win', JObj, 'different_node'}, #state{agent_listener=AgentListener
@@ -625,14 +625,14 @@ ready({'member_connect_win', JObj, 'different_node'}, #state{agent_listener=Agen
                                                              ,agent_id=AgentId
                                                              ,connect_failures=CF
                                                             }=State) ->
-    Call = whapps_call:from_json(wh_json:get_value(<<"Call">>, JObj)),
-    CallId = whapps_call:call_id(Call),
+    Call = kapps_call:from_json(kz_json:get_value(<<"Call">>, JObj)),
+    CallId = kapps_call:call_id(Call),
 
-    wh_util:put_callid(CallId),
+    kz_util:put_callid(CallId),
 
-    WrapupTimer = wh_json:get_integer_value(<<"Wrapup-Timeout">>, JObj, 0),
-    CallerExitKey = wh_json:get_value(<<"Caller-Exit-Key">>, JObj, <<"#">>),
-    QueueId = wh_json:get_value(<<"Queue-ID">>, JObj),
+    WrapupTimer = kz_json:get_integer_value(<<"Wrapup-Timeout">>, JObj, 0),
+    CallerExitKey = kz_json:get_value(<<"Caller-Exit-Key">>, JObj, <<"#">>),
+    QueueId = kz_json:get_value(<<"Queue-ID">>, JObj),
 
     RecordingUrl = recording_url(JObj),
 
@@ -649,7 +649,7 @@ ready({'member_connect_win', JObj, 'different_node'}, #state{agent_listener=Agen
 
             acdc_agent_listener:monitor_call(AgentListener, Call, JObj, RecordingUrl),
             %% Need to check if a callback is required to the caller
-            NextState = case wh_json:get_value(<<"Callback-Number">>, JObj) of
+            NextState = case kz_json:get_value(<<"Callback-Number">>, JObj) of
                 'undefined' -> 'ringing';
                 _Number -> 'ringing_callback'
             end,
@@ -658,11 +658,11 @@ ready({'member_connect_win', JObj, 'different_node'}, #state{agent_listener=Agen
             {'next_state', NextState, State#state{wrapup_timeout=WrapupTimer
                                                   ,member_call=Call
                                                   ,member_call_id=CallId
-                                                  ,member_call_start=wh_util:now()
+                                                  ,member_call_start=kz_util:now()
                                                   ,member_call_queue_id=QueueId
                                                   ,caller_exit_key=CallerExitKey
                                                   ,endpoints=UpdatedEPs
-                                                  ,queue_notifications=wh_json:get_value(<<"Notifications">>, JObj)
+                                                  ,queue_notifications=kz_json:get_value(<<"Notifications">>, JObj)
                                                   ,monitoring = 'true'
                                                  }}
     end;
@@ -787,11 +787,11 @@ ringing({'originate_failed', E}, #state{agent_listener=AgentListener
                                         ,member_call_queue_id=QueueId
                                         ,member_call_id=CallId
                                        }=State) ->
-    ErrReason = missed_reason(wh_json:get_value(<<"Error-Message">>, E)),
+    ErrReason = missed_reason(kz_json:get_value(<<"Error-Message">>, E)),
     lager:debug("originate failed (~s), broadcasting", [ErrReason]),
-    wapi_acdc_agent:publish_shared_originate_failure([{<<"Account-ID">>, AccountId}
+    kapi_acdc_agent:publish_shared_originate_failure([{<<"Account-ID">>, AccountId}
                                                       ,{<<"Agent-ID">>, AgentId}
-                                                      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                                      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                                      ]),
 
     acdc_agent_listener:member_connect_retry(AgentListener, CallId),
@@ -915,10 +915,10 @@ ringing({'originate_resp', ACallId}, #state{agent_listener=AgentListener
                                             ,queue_notifications=Ns
                                            }=State) ->
     lager:debug("originate resp on ~s, broadcasting", [ACallId]),
-    wapi_acdc_agent:publish_shared_call_id([{<<"Account-ID">>, AccountId}
+    kapi_acdc_agent:publish_shared_call_id([{<<"Account-ID">>, AccountId}
                                             ,{<<"Agent-ID">>, AgentId}
                                             ,{<<"Agent-Call-ID">>, ACallId}
-                                            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                            ]),
 
     maybe_notify(Ns, ?NOTIFY_PICKUP, State),
@@ -943,7 +943,7 @@ ringing({'shared_failure', _JObj}, #state{account_id=AccountId
         'ready' -> apply_state_updates(NewFSMState)
     end;
 ringing({'shared_call_id', JObj}, #state{agent_listener=AgentListener}=State) ->
-    ACallId = wh_json:get_value(<<"Agent-Call-ID">>, JObj),
+    ACallId = kz_json:get_value(<<"Agent-Call-ID">>, JObj),
 
     lager:debug("shared call id ~s acquired, connecting to caller", [ACallId]),
 
@@ -1021,10 +1021,10 @@ ringing_callback({'originate_resp', ACallId}, #state{account_id=AccountId
                                                      ,agent_callback_call=ACall
                                                     }=State) ->
     lager:debug("originate resp on ~s, broadcasting", [ACallId]),
-    wapi_acdc_agent:publish_shared_call_id([{<<"Account-ID">>, AccountId}
+    kapi_acdc_agent:publish_shared_call_id([{<<"Account-ID">>, AccountId}
                                             ,{<<"Agent-ID">>, AgentId}
                                             ,{<<"Agent-Call-ID">>, ACallId}
-                                            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                            ]),
 
     maybe_notify(Ns, ?NOTIFY_PICKUP, State),
@@ -1044,13 +1044,13 @@ ringing_callback({'originate_failed', JObj}, #state{agent_listener=AgentListener
                                                     ,member_call_id=CallId
                                                     ,ambiguous_uuids=AmbiguousUUIDs
                                                    }=State) ->
-    case originate_failed_for_this_call(wh_json:get_value([<<"Request">>, <<"Endpoints">>], JObj), AmbiguousUUIDs) of
+    case originate_failed_for_this_call(kz_json:get_value([<<"Request">>, <<"Endpoints">>], JObj), AmbiguousUUIDs) of
         'true' ->
-            ErrReason = missed_reason(wh_json:get_value(<<"Error-Message">>, JObj)),
+            ErrReason = missed_reason(kz_json:get_value(<<"Error-Message">>, JObj)),
             lager:debug("originate failed (~s), broadcasting", [ErrReason]),
-            wapi_acdc_agent:publish_shared_originate_failure([{<<"Account-ID">>, AccountId}
+            kapi_acdc_agent:publish_shared_originate_failure([{<<"Account-ID">>, AccountId}
                                                               ,{<<"Agent-ID">>, AgentId}
-                                                              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                                              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                                              ]),
 
             acdc_agent_listener:member_connect_retry(AgentListener, CallId),
@@ -1077,11 +1077,11 @@ ringing_callback({'shared_failure', _JObj}, #state{account_id=AccountId
     end;
 %% For the monitoring processes, fake the agent_callback_call so playback_stop isn't ignored
 ringing_callback({'shared_call_id', JObj}, #state{agent_callback_call='undefined'}=State) ->
-    ACallId = wh_json:get_value(<<"Agent-Call-ID">>, JObj),
-    ACall = whapps_call:set_call_id(ACallId, whapps_call:new()),
+    ACallId = kz_json:get_value(<<"Agent-Call-ID">>, JObj),
+    ACall = kapps_call:set_call_id(ACallId, kapps_call:new()),
     ringing_callback({'shared_call_id', JObj}, State#state{agent_callback_call=ACall});
 ringing_callback({'shared_call_id', JObj}, #state{agent_listener=AgentListener}=State) ->
-    ACallId = wh_json:get_value(<<"Agent-Call-ID">>, JObj),
+    ACallId = kz_json:get_value(<<"Agent-Call-ID">>, JObj),
 
     lager:debug("shared call id ~s acquired, connecting to caller", [ACallId]),
 
@@ -1094,7 +1094,7 @@ ringing_callback({'shared_call_id', JObj}, #state{agent_listener=AgentListener}=
 ringing_callback({'channel_answered', JObj}, State) ->
     CallId = call_id(JObj),
     lager:debug("agent answered phone on ~s", [CallId]),
-    ACall = whapps_call:set_account_id(wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj), whapps_call:from_json(JObj)),
+    ACall = kapps_call:set_account_id(kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj), kapps_call:from_json(JObj)),
     {'next_state', 'ringing_callback', State#state{agent_call_id=CallId
                                                    ,agent_callback_call=ACall
                                                   }};
@@ -1108,7 +1108,7 @@ ringing_callback({'playback_stop', _JObj}, #state{agent_listener=AgentListener
                                                   ,agent_callback_call=AgentCallbackCall
                                                  }=State) ->
     NewMemberCallId = acdc_agent_listener:originate_callback_return(AgentListener, AgentCallbackCall),
-    wh_util:put_callid(NewMemberCallId),
+    kz_util:put_callid(NewMemberCallId),
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_RED_SOLID),
 
     %% Preserve old call information for sake of stats
@@ -1146,11 +1146,11 @@ awaiting_callback({'originate_failed', JObj}, #state{account_id=AccountId
                                                      ,member_call_queue_id=QueueId
                                                      ,agent_call_id=ACallId
                                                     }=State) ->
-    ErrReason = missed_reason(wh_json:get_value(<<"Error-Message">>, JObj)),
+    ErrReason = missed_reason(kz_json:get_value(<<"Error-Message">>, JObj)),
     lager:debug("originate failed (~s), broadcasting", [ErrReason]),
-    wapi_acdc_agent:publish_shared_originate_failure([{<<"Account-ID">>, AccountId}
+    kapi_acdc_agent:publish_shared_originate_failure([{<<"Account-ID">>, AccountId}
                                                       ,{<<"Agent-ID">>, AgentId}
-                                                      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                                      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                                      ]),
 
     acdc_agent_listener:member_connect_accepted(AgentListener, ACallId, Call),
@@ -1174,11 +1174,11 @@ awaiting_callback({'shared_call_id', JObj}, #state{agent_listener=AgentListener
                                                    ,member_call_id=MemberCallId
                                                    ,member_callback_candidates=Candidates
                                                   }=State) ->
-    NewMemberCallId = wh_json:get_value(<<"Member-Call-ID">>, JObj),
+    NewMemberCallId = kz_json:get_value(<<"Member-Call-ID">>, JObj),
     acdc_util:bind_to_call_events(NewMemberCallId, AgentListener),
-    NewMemberCall = whapps_call:exec([fun(Call) -> whapps_call:set_account_id(whapps_call:account_id(MemberCall), Call) end
-                                      ,fun(Call) -> whapps_call:set_call_id(NewMemberCallId, Call) end
-                                     ], whapps_call:new()),
+    NewMemberCall = kapps_call:exec([fun(Call) -> kapps_call:set_account_id(kapps_call:account_id(MemberCall), Call) end
+                                      ,fun(Call) -> kapps_call:set_call_id(NewMemberCallId, Call) end
+                                     ], kapps_call:new()),
 
     {'next_state', 'answered', State#state{member_call=NewMemberCall
                                            ,member_call_id=NewMemberCallId
@@ -1191,12 +1191,12 @@ awaiting_callback({'channel_answered', JObj}, #state{member_callback_candidates=
     CallId = call_id(JObj),
     lager:debug("member answered phone on ~s", [CallId]),
     CallbackCall = case props:get_value(CallId, Candidates) of
-        'undefined' -> whapps_call:from_json(JObj);
+        'undefined' -> kapps_call:from_json(JObj);
         CtrlQ when is_binary(CtrlQ) ->
-            AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
-            whapps_call:exec([fun(Call) -> whapps_call:set_account_id(AccountId, Call) end
-                              ,fun(Call) -> whapps_call:set_control_queue(CtrlQ, Call) end
-                             ], whapps_call:from_json(JObj));
+            AccountId = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
+            kapps_call:exec([fun(Call) -> kapps_call:set_account_id(AccountId, Call) end
+                              ,fun(Call) -> kapps_call:set_control_queue(CtrlQ, Call) end
+                             ], kapps_call:from_json(JObj));
         Call ->
             lager:debug("extra answers for ~s", [CallId]),
             Call
@@ -1214,21 +1214,21 @@ awaiting_callback({'channel_replaced', JObj}, #state{account_id=AccountId
                                                      ,member_call_queue_id=QueueId
                                                      ,agent_call_id=ACallId
                                                     }=State) ->
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
-    ReplacedBy = wh_json:get_value(<<"Replaced-By">>, JObj),
+    CallId = kz_json:get_value(<<"Call-ID">>, JObj),
+    ReplacedBy = kz_json:get_value(<<"Replaced-By">>, JObj),
     case CallId of
         MemberCallId ->
             acdc_agent_listener:rebind_events(AgentListener, CallId, ReplacedBy),
-            wh_util:put_callid(ReplacedBy),
+            kz_util:put_callid(ReplacedBy),
             lager:info("member channel ~s replaced by ~s", [CallId, ReplacedBy]),
-            wapi_acdc_agent:publish_shared_call_id([{<<"Account-ID">>, AccountId}
+            kapi_acdc_agent:publish_shared_call_id([{<<"Account-ID">>, AccountId}
                                                     ,{<<"Agent-ID">>, AgentId}
                                                     ,{<<"Member-Call-ID">>, ReplacedBy}
-                                                    | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                                    | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                                    ]),
 
             %% Notify the queue_fsm that the call is now fully accepted
-            Call1 = whapps_call:set_call_id(ReplacedBy, props:get_value(CallId, Candidates)),
+            Call1 = kapps_call:set_call_id(ReplacedBy, props:get_value(CallId, Candidates)),
             acdc_agent_listener:member_connect_accepted(AgentListener, ACallId, Call1),
 
             {CIDNumber, CIDName} = acdc_util:caller_id(OriginalCall),
@@ -1298,20 +1298,20 @@ maybe_delay_agent_hungup(ACallId, Cause, #state{member_call_id=MemberCallId
     case props:get_value(MemberCallId, Candidates) of
         'undefined' ->
             FSM = self(),
-            wh_util:spawn(fun() ->
+            kz_util:spawn(fun() ->
                                   timer:sleep(1000),
                                   gen_fsm:send_event(FSM, {'channel_hungup', ACallId, Cause})
                           end),
             {'next_state', 'awaiting_callback', State};
         CtrlQ when is_binary(CtrlQ) ->
-            TempMemberCall = whapps_call:exec([fun(Call) -> whapps_call:set_call_id(MemberCallId, Call) end
-                                               ,fun(Call) -> whapps_call:set_control_queue(CtrlQ, Call) end
-                                              ], whapps_call:new()),
+            TempMemberCall = kapps_call:exec([fun(Call) -> kapps_call:set_call_id(MemberCallId, Call) end
+                                               ,fun(Call) -> kapps_call:set_control_queue(CtrlQ, Call) end
+                                              ], kapps_call:new()),
             agent_hungup_awaiting(ACallId, Cause, TempMemberCall, State);
         Call -> agent_hungup_awaiting(ACallId, Cause, Call, State)
     end.
 
--spec agent_hungup_awaiting(ne_binary(), ne_binary(), whapps_call:call(), fsm_state()) ->
+-spec agent_hungup_awaiting(ne_binary(), ne_binary(), kapps_call:call(), fsm_state()) ->
                                 {'next_state', atom(), fsm_state()}.
 agent_hungup_awaiting(ACallId, Cause, TempMemberCall, #state{account_id=AccountId
                                                              ,agent_id=AgentId
@@ -2190,7 +2190,7 @@ get_endpoints(OrigEPs, AgentListener, Call, AgentId, QueueId) ->
             %% Survive couch connection issue by using last list of valid endpoints
             case OrigEPs of
                 [] -> {'error', 'no_endpoints'};
-                _ -> {'ok', [wh_json:set_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], QueueId, EP) || EP <- OrigEPs]}
+                _ -> {'ok', [kz_json:set_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], QueueId, EP) || EP <- OrigEPs]}
             end;
         [_|_]=EPs ->
             AccountId = kapps_call:account_id(Call),
@@ -2272,19 +2272,19 @@ notify(Url, Method, Key, #state{account_id=AccountId
                                 ,agent_call_id=AgentCallId
                                 ,member_call_queue_id=QueueId
                                }) ->
-    wh_util:put_callid(whapps_call:call_id(MemberCall)),
+    kz_util:put_callid(kapps_call:call_id(MemberCall)),
     {CIDNumber, CIDName} = acdc_util:caller_id(MemberCall),
     Params = props:filter_undefined(
                [{<<"account_id">>, AccountId}
                 ,{<<"agent_id">>, AgentId}
                 ,{<<"agent_call_id">>, AgentCallId}
                 ,{<<"queue_id">>, QueueId}
-                ,{<<"member_call_id">>, whapps_call:call_id(MemberCall)}
+                ,{<<"member_call_id">>, kapps_call:call_id(MemberCall)}
                 ,{<<"caller_id_name">>, CIDName}
                 ,{<<"caller_id_number">>, CIDNumber}
                 ,{<<"call_state">>, Key}
-                ,{<<"now">>, wh_util:current_tstamp()}
-                ,{<<"Custom-KVs">>, whapps_call:custom_kvs(MemberCall)}
+                ,{<<"now">>, kz_util:current_tstamp()}
+                ,{<<"Custom-KVs">>, kapps_call:custom_kvs(MemberCall)}
                 ,{<<"agent_username">>, AgentName}
                ]),
     Headers = case Method of
@@ -2293,15 +2293,15 @@ notify(Url, Method, Key, #state{account_id=AccountId
             %% No params when using application/json content type
             kazoo_oauth_util:maybe_oauth_headers(AccountId, Url, [])
     end,
-    notify_method(Url, Method, Headers, wh_json:from_list(Params)).
+    notify_method(Url, Method, Headers, kz_json:from_list(Params)).
 
--spec notify_method(ne_binary(), 'get' | 'post', wh_proplist(), wh_json:object()) -> 'ok'.
+-spec notify_method(ne_binary(), 'get' | 'post', kz_proplist(), kz_json:object()) -> 'ok'.
 notify_method(Url, 'post', Headers, Data) ->
-    notify(Url, Headers, 'post', wh_json:encode(Data)
+    notify(Url, Headers, 'post', kz_json:encode(Data)
            ,[{'content_type', "application/json"}]
           );
 notify_method(Url, 'get', Headers, Data) ->
-    notify(uri(Url, wh_json:to_querystring(Data))
+    notify(uri(Url, kz_json:to_querystring(Data))
            ,Headers, 'get', <<>>, []
           ).
 
@@ -2456,10 +2456,10 @@ original_call_id(#state{member_call_id=MemberCallId
 original_call_id(#state{member_original_call_id=OriginalCallId}) ->
     OriginalCallId.
 
--spec originate_failed_for_this_call(wh_json:objects(), ne_binaries()) -> boolean().
+-spec originate_failed_for_this_call(kz_json:objects(), ne_binaries()) -> boolean().
 originate_failed_for_this_call([], _) -> 'false';
 originate_failed_for_this_call([EP|EPs], AmbiguousUUIDs) ->
-    OutboundCallId = wh_json:get_value(<<"Outbound-Call-ID">>, EP),
+    OutboundCallId = kz_json:get_value(<<"Outbound-Call-ID">>, EP),
     case lists:member(OutboundCallId, AmbiguousUUIDs) of
         'true' -> 'true';
         'false' -> originate_failed_for_this_call(EPs, AmbiguousUUIDs)

@@ -189,8 +189,8 @@ handle_cast('usurp', #state{call=Call
                             ,requester_queue=RequesterQ
                            }=State) ->
     lager:debug("terminating pivot call because of usurp"),
-    wapi_pivot:publish_succeeded(RequesterQ, [{<<"Call-ID">>, whapps_call:call_id(Call)}
-                                              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+    kapi_pivot:publish_succeeded(RequesterQ, [{<<"Call-ID">>, kapps_call:call_id(Call)}
+                                              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                              ]),
     {'stop', 'normal', State#state{call='undefined'}};
 handle_cast({'request', Uri, Method}, #state{call=Call
@@ -202,7 +202,7 @@ handle_cast({'request', Uri, Method, Params}, #state{call=Call
                                                     ,requester_queue=Q
                                                     }=State) ->
     Call1 = kzt_util:set_voice_uri(Uri, Call),
-    Headers = kazoo_oauth_util:maybe_oauth_headers(whapps_call:account_id(Call), Uri, Params),
+    Headers = kazoo_oauth_util:maybe_oauth_headers(kapps_call:account_id(Call), Uri, Params),
 
 	case send_req(Call1, Uri, Method, Headers, Params, Debug) of
         {'ok', ReqId, Call2} ->
@@ -245,8 +245,8 @@ handle_cast({'cdr', JObj}, #state{cdr_uri=Url
                                   ,call=Call
                                   ,debug=Debug
                                  }=State) ->
-    JObj1 = wh_json:delete_key(<<"Custom-Channel-Vars">>, JObj),
-    Body =  wh_json:to_querystring(wh_api:remove_defaults(JObj1)),
+    JObj1 = kz_json:delete_key(<<"Custom-Channel-Vars">>, JObj),
+    Body =  kz_json:to_querystring(kz_api:remove_defaults(JObj1)),
     Headers = [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "application/xml,application/xhtml+xml,text/html;q=0.9, text/plain;q=0.8,image/png,*/*;q=0.5"}],
 
     maybe_debug_req(Call, Url, 'post', Headers, Body, Debug),
@@ -308,8 +308,8 @@ handle_info({'ibrowse_async_response', ReqId, {'error', 'req_timedout'}}
                     ,requester_queue=_RequesterQ
                    }=State) ->
     lager:debug("request ~p timed out", [ReqId]),
-    % wapi_pivot:publish_failed(RequesterQ, [{<<"Call-ID">>, whapps_call:call_id(Call)}
-    %                                        | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+    % kapi_pivot:publish_failed(RequesterQ, [{<<"Call-ID">>, kapps_call:call_id(Call)}
+    %                                        | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
     %                                       ]),
     % {'stop', 'timeout', State};
     {'noreply', State};
@@ -422,29 +422,29 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-%-spec send_req(whapps_call:call(), ne_binary(), http_method(), wh_json:object() | wh_proplist(), boolean()) ->
+%-spec send_req(kapps_call:call(), ne_binary(), http_method(), kz_json:object() | kz_proplist(), boolean()) ->
 %                      'ok' |
-%                      {'ok', ibrowse_req_id(), whapps_call:call()} |
-%                      {'stop', whapps_call:call()}.
+%                      {'ok', ibrowse_req_id(), kapps_call:call()} |
+%                      {'stop', kapps_call:call()}.
 %send_req(Call, Uri, Method, BaseParams, Debug) when not is_list(BaseParams) ->
-%    send_req(Call, Uri, Method, [], wh_json:to_proplist(BaseParams), Debug).
+%    send_req(Call, Uri, Method, [], kz_json:to_proplist(BaseParams), Debug).
 
 send_req(Call, Uri, Method, Headers, BaseParams, Debug) when not is_list(BaseParams) ->
-    send_req(Call, Uri, Method, Headers, wh_json:to_proplist(BaseParams), Debug);
+    send_req(Call, Uri, Method, Headers, kz_json:to_proplist(BaseParams), Debug);
 send_req(Call, Uri, 'get', Headers, BaseParams, Debug) ->
     UserParams = kzt_translator:get_user_vars(Call),
-    Params = wh_json:set_values(BaseParams, UserParams),
-    UpdatedCall = whapps_call:kvs_erase(<<"digits_collected">>, Call),
-    send(UpdatedCall, uri(Uri, wh_json:to_querystring(Params)), 'get', Headers ++ [{"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}, {"Accept-Language", binary_to_list(whapps_call:language(Call))}], [], Debug);
+    Params = kz_json:set_values(BaseParams, UserParams),
+    UpdatedCall = kapps_call:kvs_erase(<<"digits_collected">>, Call),
+    send(UpdatedCall, uri(Uri, kz_json:to_querystring(Params)), 'get', Headers ++ [{"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}, {"Accept-Language", binary_to_list(kapps_call:language(Call))}], [], Debug);
 send_req(Call, Uri, 'post', Headers, BaseParams, Debug) ->
     UserParams = kzt_translator:get_user_vars(Call),
-    Params = wh_json:set_values(BaseParams, UserParams),
-    UpdatedCall = whapps_call:kvs_erase(<<"digits_collected">>, Call),
+    Params = kz_json:set_values(BaseParams, UserParams),
+    UpdatedCall = kapps_call:kvs_erase(<<"digits_collected">>, Call),
     case Headers of
         [] ->
-            send(UpdatedCall, Uri, 'post', [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}, {"Accept-Language", binary_to_list(whapps_call:language(Call))}], wh_json:to_querystring(Params), Debug);
+            send(UpdatedCall, Uri, 'post', [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}, {"Accept-Language", binary_to_list(kapps_call:language(Call))}], kz_json:to_querystring(Params), Debug);
         _ ->
-            send(UpdatedCall, Uri, 'post', [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "application/json"}, {"Accept-Language", binary_to_list(whapps_call:language(Call))} | Headers], wh_json:to_querystring(Params), Debug)
+            send(UpdatedCall, Uri, 'post', [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "application/json"}, {"Accept-Language", binary_to_list(kapps_call:language(Call))} | Headers], kz_json:to_querystring(Params), Debug)
     end.
 
 -spec send(kapps_call:call(), ne_binary(), http_method(), kz_proplist(), iolist(), boolean()) ->

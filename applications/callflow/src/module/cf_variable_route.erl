@@ -13,9 +13,9 @@
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec handle(wh_json:object(), whapps_call:call()) -> any().
+-spec handle(kz_json:object(), kapps_call:call()) -> any().
 handle(Data, Call) ->
-	ChildId = check_branches(wh_json:get_value(<<"branches">>, Data), Data, Call),
+	ChildId = check_branches(kz_json:get_value(<<"branches">>, Data), Data, Call),
 	cf_exe:continue(ChildId, Call).
 
 %%--------------------------------------------------------------------
@@ -30,7 +30,7 @@ check_branches([H|T], Data, Call) ->
 		'false' ->
 			check_branches(T, Data, Call);
 		'true' ->
-			wh_json:get_value(<<"child_id">>, H)
+			kz_json:get_value(<<"child_id">>, H)
 	end.
 
 %%--------------------------------------------------------------------
@@ -39,11 +39,11 @@ check_branches([H|T], Data, Call) ->
 %% @end
 %%--------------------------------------------------------------------
 evaluate_branch(Branch, _Call) ->
-	case whapps_call:custom_channel_var(wh_json:get_value(<<"variable">>, Branch)) of
+	case kapps_call:custom_channel_var(kz_json:get_value(<<"variable">>, Branch)) of
 		'undefined' ->
 			'false';
 		CallValue ->
-			evaluate_branch(CallValue, wh_json:get_value(<<"operator">>, Branch), wh_json:get_value(<<"value">>, Branch))
+			evaluate_branch(CallValue, kz_json:get_value(<<"operator">>, Branch), kz_json:get_value(<<"value">>, Branch))
 	end.
 
 evaluate_branch(CallValue, <<"<">>, Value) ->

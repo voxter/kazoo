@@ -9,7 +9,7 @@
                ,account_id :: api_binary() | '_'
                ,authorizing_id :: api_binary() | '_'
                ,authorizing_type :: api_binary() | '_'
-               ,custom_channel_vars :: wh_json:object() | '_'
+               ,custom_channel_vars :: kz_json:object() | '_'
                ,control_q :: api_binary() | '_'
                ,acdc_queue_id :: api_binary() | '_'
                ,agent_id :: api_binary | '_'

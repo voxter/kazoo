@@ -442,7 +442,7 @@ validate_unique_vmbox(VMBoxId, Context, _AccountDb) ->
 check_vmbox_schema(VMBoxId, Context) ->
     Context1 = maybe_migrate_notification_emails(Context),
     OnSuccess = fun(C) -> on_successful_validation(VMBoxId, C) end,
-    update_user_creds(VMBoxd, Context),
+    update_user_creds(VMBoxId, Context),
     cb_context:validate_request_data(<<"vmboxes">>, Context1, OnSuccess).
 
 %% Update voicemail PIN at the same time as a password update
@@ -453,7 +453,7 @@ update_user_creds(VMBoxId, #cb_context{db_name=AccountDb, req_data=ReqData}) ->
 		'ok';
 	true ->
 		{'ok', VMJObj} = couch_mgr:open_doc(AccountDb, VMBoxId),
-		OwnerId = wh_json:get_value(<<"owner_id">>, VMJObj),
+		OwnerId = kz_json:get_value(<<"owner_id">>, VMJObj),
 	
 		if OwnerId == 'undefined' ->
 			lager:info("Voicemail does not have an owner"),
@@ -470,11 +470,11 @@ update_user_creds(VMBoxId, #cb_context{db_name=AccountDb, req_data=ReqData}) ->
 						false ->
 							'ok';
 						true ->
-							Username = wh_json:get_value(<<"username">>, UserFullDoc),
-							Pin = wh_json:get_value(<<"pin">>, ReqData),
+							Username = kz_json:get_value(<<"username">>, UserFullDoc),
+							Pin = kz_json:get_value(<<"pin">>, ReqData),
 							{MD5, SHA1} = cb_modules_util:pass_hashes(Username, Pin),
 							couch_mgr:save_doc(AccountDb,
-								wh_json:set_values([{<<"pvt_md5_auth">>, MD5}, {<<"pvt_sha1_auth">>, SHA1}],
+								kz_json:set_values([{<<"pvt_md5_auth">>, MD5}, {<<"pvt_sha1_auth">>, SHA1}],
 								UserFullDoc
 							))
 					end
@@ -484,7 +484,7 @@ update_user_creds(VMBoxId, #cb_context{db_name=AccountDb, req_data=ReqData}) ->
 			
 should_update_user_creds(UserFullDoc) ->
 	try
-		_ = list_to_integer(binary_to_list(wh_json:get_value(<<"username">>, UserFullDoc))),
+		_ = list_to_integer(binary_to_list(kz_json:get_value(<<"username">>, UserFullDoc))),
 		
 		case UserFullDoc of
 			'undefined' -> lager:info("Could not find user"),
@@ -516,21 +516,6 @@ maybe_migrate_notification_emails(Context) ->
                                 ]
                               );
         'false' -> Context
-    end.
-
-validate_unique_vmbox(VMBoxId, Context, 'undefined') ->
-    check_vmbox_schema(VMBoxId, Context);
-validate_unique_vmbox(VMBoxId, Context, _AccountDb) ->
-    case check_uniqueness(VMBoxId, Context) of
-        'true' -> check_vmbox_schema(VMBoxId, Context);
-        'false' ->
-            C = cb_context:add_validation_error(
-                  <<"mailbox">>
-                  ,<<"unique">>
-                  ,wh_json:from_list([{<<"message">>, <<"Invalid mailbox number or already exists">>}])
-                  ,Context
-                 ),
-            check_vmbox_schema(VMBoxId, C)
     end.
 
 %%--------------------------------------------------------------------

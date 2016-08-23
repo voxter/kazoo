@@ -575,7 +575,7 @@ originate_execute(Node, Dialstrings, Timeout) ->
     lager:debug("executing originate on ~s: ~s", [Node, Dialstrings]),
     case freeswitch:api(Node
                         ,'originate'
-                        ,wh_util:to_list(Dialstrings)
+                        ,kz_util:to_list(Dialstrings)
                         ,(Timeout+1)*?MILLISECONDS_IN_SECOND
                        )
     of
