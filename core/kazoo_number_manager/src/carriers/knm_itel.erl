@@ -37,9 +37,13 @@ find_numbers(_Prefix, _Quantity, _Options) ->
 %% Acquire a given number from the carrier
 %% @end
 %%--------------------------------------------------------------------
--spec acquire_number(wnm_number()) -> wnm_number().
-acquire_number(#number{dry_run='true'}=Number) -> Number;
-acquire_number(#number{}=Number) -> Number.
+-spec acquire_number(knm_number:knm_number()) -> knm_number:knm_number().
+acquire_number(Number) ->
+    PhoneNumber = knm_number:phone_number(Number),
+    case knm_phone_number:dry_run(PhoneNumber) of
+        'true' -> Number;
+        'false' -> Number
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -47,11 +51,10 @@ acquire_number(#number{}=Number) -> Number.
 %% Release a number from the routing table
 %% @end
 %%--------------------------------------------------------------------
--spec disconnect_number(wnm_number()) -> wnm_number().
-disconnect_number(#number{}=Number) ->
-    Number#number{state = ?NUMBER_STATE_RELEASED
-                  ,hard_delete='true'
-                 }.
+-spec disconnect_number(knm_number:knm_number()) -> knm_number:knm_number().
+disconnect_number(Number) ->
+    {'ok', Number1} = knm_number:release(Number, [{'should_delete', 'true'}]),
+    Number1.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -61,6 +64,5 @@ disconnect_number(#number{}=Number) ->
 -spec should_lookup_cnam() -> boolean().
 should_lookup_cnam() -> 'true'.
 
--spec is_number_billable(wnm_number()) -> 'true'.
+-spec is_number_billable(knm_number:knm_number()) -> 'true'.
 is_number_billable(_Number) -> 'true'.
-
