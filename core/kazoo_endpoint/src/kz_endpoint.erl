@@ -800,11 +800,13 @@ maybe_create_fwd_endpoint(Endpoint, Properties, Call) ->
                                    kz_json:object() |
                                    {'error', 'call_forward_substitute'}.
 maybe_create_endpoint(Endpoint, Properties, Call) ->
-    case is_call_forward_enabled(Endpoint, Properties)
+    case {is_call_forward_enabled(Endpoint, Properties)
         andalso kz_json:is_true([<<"call_forward">>, <<"substitute">>], Endpoint)
+        ,is_follow_me_on(Endpoint)}
     of
-        'true' -> {'error', 'call_forward_substitute'};
-        'false' ->
+        {'true', _} -> {'error', 'call_forward_substitute'};
+        {'false', false} -> {'error', 'follow_me_not_on'};
+        {'false', _} ->
             EndpointType = get_endpoint_type(Endpoint),
             maybe_create_endpoint(EndpointType, Endpoint, Properties, Call)
     end.
@@ -819,6 +821,17 @@ is_call_forward_enabled(Endpoint, Properties) ->
         andalso (kz_json:is_false(<<"direct_calls_only">>, CallForwarding, 'true')
                  orelse
                    (not lists:member(Source, ?NON_DIRECT_MODULES))).
+    
+-spec is_follow_me_on(wh_json:object()) -> true | false.
+is_follow_me_on(Endpoint) ->
+	% Turns out endpoints are just devices
+    case wh_json:get_value(<<"follow_me">>, Endpoint) of
+		false ->
+			lager:info("Device follow me is off. Not including in routing."),
+			false;
+		_ ->
+			true
+	end.
 
 -spec maybe_create_endpoint(ne_binary(), kz_json:object(), kz_json:object(), kapps_call:call()) ->
                                    kz_json:object() | {'error', ne_binary()}.
@@ -1158,6 +1171,7 @@ create_call_fwd_endpoint(Endpoint, Properties, Call) ->
             ,{<<"Endpoint-Progress-Timeout">>, get_progress_timeout(Endpoint)}
             ,{<<"Endpoint-Timeout">>, get_timeout(Properties)}
             ,{<<"Endpoint-Delay">>, get_delay(Properties)}
+            ,{<<"Endpoint-ID">>, kz_json:get_value(<<"_id">>, Endpoint)}
             ,{<<"Presence-ID">>, kz_attributes:presence_id(Endpoint, Call)}
             ,{<<"Callee-ID-Name">>, Clid#clid.callee_name}
             ,{<<"Callee-ID-Number">>, Clid#clid.callee_number}
@@ -1167,6 +1181,7 @@ create_call_fwd_endpoint(Endpoint, Properties, Call) ->
             ,{<<"Outbound-Caller-ID-Name">>, Clid#clid.caller_name}
             ,{<<"Custom-SIP-Headers">>, generate_sip_headers(Endpoint, Call)}
             ,{<<"Custom-Channel-Vars">>, generate_ccvs(Endpoint, Call, CallForward)}
+            ,{<<"Metaflows">>, kz_json:get_value(<<"metaflows">>, Endpoint)}
            ],
     kz_json:from_list(props:filter_undefined(Prop)).
 
@@ -1270,7 +1285,7 @@ generate_sip_headers(Endpoint, Acc, Call) ->
     Inception = kapps_call:inception(Call),
 
     HeaderFuns = [fun(J) -> maybe_add_sip_headers(J, Endpoint, Call) end
-                  ,fun(J) -> maybe_add_alert_info(J, Endpoint, Inception) end
+                  ,fun(J) -> maybe_add_alert_info(J, Endpoint, Call) end
                   ,fun(J) -> maybe_add_aor(J, Endpoint, Call) end
                   ,fun(J) -> maybe_add_diversion(J, Endpoint, Inception, Call) end
                  ],
@@ -1310,13 +1325,20 @@ merge_custom_sip_headers('undefined', JObj) ->
 merge_custom_sip_headers(CustomHeaders, JObj) ->
     kz_json:merge_jobjs(CustomHeaders, JObj).
 
--spec maybe_add_alert_info(kz_json:object(), kz_json:object(), api_binary()) -> kz_json:object().
-maybe_add_alert_info(JObj, Endpoint, 'undefined') ->
+-spec maybe_add_alert_info(kz_json:object(), kz_json:object(), kapps_call:call()) -> kz_json:object().
+maybe_add_alert_info(JObj, Endpoint, Call) ->
+    case kapps_call:custom_sip_header(<<"Alert-Info">>, Call) of
+        'undefined' -> maybe_inception_alert_info(JObj, Endpoint, kapps_call:inception(Call));
+        Ringtone -> kz_json:set_value(<<"Alert-Info">>, Ringtone, JObj)
+    end.
+
+-spec maybe_inception_alert_info(kz_json:object(), kz_json:object(), api_binary()) -> kz_json:object().
+maybe_inception_alert_info(JObj, Endpoint, 'undefined') ->
     case kz_json:get_value([<<"ringtones">>, <<"internal">>], Endpoint) of
         'undefined' -> JObj;
         Ringtone -> kz_json:set_value(<<"Alert-Info">>, Ringtone, JObj)
     end;
-maybe_add_alert_info(JObj, Endpoint, _Inception) ->
+maybe_inception_alert_info(JObj, Endpoint, _Inception) ->
     case kz_json:get_value([<<"ringtones">>, <<"external">>], Endpoint) of
         'undefined' -> JObj;
         Ringtone -> kz_json:set_value(<<"Alert-Info">>, Ringtone, JObj)
@@ -1360,6 +1382,7 @@ generate_ccvs(Endpoint, Call, CallFwd) ->
                ,fun set_sip_invite_domain/1
                ,fun maybe_set_call_waiting/1
                ,fun maybe_auto_answer/1
+               ,fun maybe_preserve_rewrite_cid/1
               ],
     Acc0 = {Endpoint, Call, CallFwd, kz_json:new()},
     {_Endpoint, _Call, _CallFwd, JObj} = lists:foldr(fun(F, Acc) -> F(Acc) end, Acc0, CCVFuns),
@@ -1395,7 +1418,7 @@ maybe_set_endpoint_id({Endpoint, Call, CallFwd, JObj}) ->
 -spec maybe_set_owner_id(ccv_acc()) -> ccv_acc().
 maybe_set_owner_id({Endpoint, Call, CallFwd, JObj}) ->
     {Endpoint, Call, CallFwd
-     ,case kz_json:get_value(<<"owner_id">>, Endpoint) of
+     ,case kz_device:owner_id(Endpoint) of
           'undefined' -> JObj;
           OwnerId -> kz_json:set_value(<<"Owner-ID">>, OwnerId, JObj)
       end
@@ -1509,6 +1532,17 @@ maybe_set_call_waiting({Endpoint, Call, CallFwd, JObj}) ->
                   'false' -> kz_json:set_value(<<"Call-Waiting-Disabled">>, 'true', JObj)
               end,
     {Endpoint, Call, CallFwd, NewJobj}.
+
+-spec maybe_preserve_rewrite_cid(ccv_acc()) -> ccv_acc().
+maybe_preserve_rewrite_cid({_, _, 'undefined', _}=Acc) ->
+    Acc;
+maybe_preserve_rewrite_cid({Endpoint, Call, CallFwd, JObj}) ->
+    RewriteCIDName = kapps_call:kvs_fetch('rewrite_cid_name', Call),
+    RewriteCIDNumber = kapps_call:kvs_fetch('rewrite_cid_number', Call),
+    NewJObj = kz_json:set_values(props:filter_undefined([{<<"Rewrite-CID-Name">>, RewriteCIDName}
+                                                         ,{<<"Rewrite-CID-Number">>, RewriteCIDNumber}
+                                                        ]), JObj),
+    {Endpoint, Call, CallFwd, NewJObj}.
 
 -spec get_invite_format(kz_json:object()) -> ne_binary().
 get_invite_format(SIPJObj) ->
