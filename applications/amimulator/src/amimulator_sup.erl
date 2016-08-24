@@ -106,9 +106,6 @@ init([]) ->
 %% Private functions
 %%
 
-workers() ->
-    [{WorkerName, Pid} || {WorkerName, Pid, 'worker', _} <- supervisor:which_children(?MODULE), is_pid(Pid)].
-
 -spec event_listeners() -> [{pid(), term()},...] | [].
 event_listeners() -> 
     [{Pid, WorkerName} || {WorkerName, Pid, 'worker', ['amimulator_event_listener']} <- supervisor:which_children(?MODULE)].

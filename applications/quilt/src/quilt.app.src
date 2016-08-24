@@ -2,11 +2,10 @@
  [
   {description, "Asterisk queue_log translator for Kazoo"},
   {vsn, "1"},
+  {modules, []},
   {registered, []},
-  {applications, [
-                  kernel,
-                  stdlib
+  {applications, [ kernel
+                 , stdlib
                  ]},
-  {mod, {quilt_app, []}},
-  {env, []}
+  {mod, {quilt_app, []}}
  ]}.

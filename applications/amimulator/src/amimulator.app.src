@@ -2,10 +2,10 @@
  [
   {description, "AMI event/action translator for Kazoo"},
   {vsn, "1"},
+  {modules, []},
   {registered, []},
-  {applications, [
-                  kernel,
-                  stdlib
+  {applications, [ kernel
+                 , stdlib
                  ]},
   {mod, {amimulator_app, []}},
   {env, []}

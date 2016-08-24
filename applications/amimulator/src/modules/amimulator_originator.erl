@@ -155,7 +155,7 @@ channel_to_exten(Channel) ->
 	binary:replace(hd(binary:split(Channel, <<"@">>)), <<"SIP/">>, <<"">>).
 
 %% Find the endpoints associated with the user placing the originate request
-get_endpoints(Props, Call) ->
+get_endpoints(_Props, Call) ->
     UserId = kapps_call:authorizing_id(Call),
     % Number = proplists:get_value(<<"SourceExten">>, Props),
     Properties = kz_json:from_list([

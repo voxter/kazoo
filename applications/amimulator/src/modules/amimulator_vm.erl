@@ -24,7 +24,7 @@ responders(_Props) ->
         {<<"notification">>, <<"voicemail_saved">>}
     ].
 
-handle_event(EventJObj, Props) ->
+handle_event(EventJObj, _Props) ->
     {_EventType, EventName} = kz_util:get_event_type(EventJObj),
     handle_specific_event(EventName, EventJObj).
 

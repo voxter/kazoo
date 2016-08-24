@@ -129,9 +129,7 @@ handle_info({'tcp_error', _Socket, _}, State) ->
 handle_info(_Info, State) ->
     {'noreply', State}.
 
-terminate('shutdown', #state{accept_socket=AcceptSocket
-                             ,account_id=AccountId
-                            }) ->
+terminate('shutdown', #state{accept_socket=AcceptSocket}) ->
 	% TODO: actually close these accept sockets on restart
     case AcceptSocket of
         'undefined' ->

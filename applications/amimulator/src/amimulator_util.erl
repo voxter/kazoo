@@ -860,17 +860,6 @@ maybe_leave_conference(CallId) ->
 
 
 
-cid_name(AcctDb, Endpoint) ->
-    case kz_json:get_value(<<"owner_id">>, Endpoint) of
-        undefined ->
-            kz_json:get_value(<<"name">>, Endpoint);
-        OwnerId ->
-            {ok, Owner} = couch_mgr:open_doc(AcctDb, OwnerId),
-            <<(kz_json:get_value(<<"username">>, Owner))/binary, " ",
-                (kz_json:get_value(<<"first_name">>, Owner))/binary, " ",
-                (kz_json:get_value(<<"last_name">>, Owner))/binary>>
-    end.
-
 find_id_number(Id, AccountDb) ->
     {ok, Results} = couch_mgr:get_results(AccountDb, <<"callflows/crossbar_listing">>),
     maybe_id_in_callflows(Id, Results, AccountDb).

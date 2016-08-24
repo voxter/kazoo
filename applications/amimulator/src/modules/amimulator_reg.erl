@@ -26,7 +26,7 @@ responders(_Props) ->
     [{<<"directory">>, <<"reg_success">>}
      ,{<<"notification">>, <<"deregister">>}].
 
-handle_event(EventJObj, Props) ->
+handle_event(EventJObj, _Props) ->
     {_EventType, EventName} = kz_util:get_event_type(EventJObj),
     handle_specific_event(EventName, EventJObj).
 
