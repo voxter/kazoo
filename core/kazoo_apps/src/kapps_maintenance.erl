@@ -295,7 +295,7 @@ maybe_remove_invalid_notify_doc(_Type, _Id, _Doc) -> 'ok'.
 %%--------------------------------------------------------------------
 -spec accounts_config_deprecate_timezone_for_default_timezone() -> 'ok'.
 accounts_config_deprecate_timezone_for_default_timezone() ->
-    case couch_mgr:open_cache_doc(?KZ_CONFIG_DB, <<"accounts">>) of
+    case kz_datamgr:open_cache_doc(?KZ_CONFIG_DB, <<"accounts">>) of
         {'ok', Doc} ->
             PublicFields = kz_doc:public_fields(Doc),
             Keys = kz_json:get_keys(PublicFields),
@@ -308,7 +308,7 @@ accounts_config_deprecate_timezone_for_default_timezone() ->
                              kz_json:get_keys(PublicFields)
                              ,PublicFields),
                     %% Overwrite doc with new keys
-                    couch_mgr:save_doc(?KZ_CONFIG_DB
+                    kz_datamgr:save_doc(?KZ_CONFIG_DB
                       ,kz_json:set_values(kz_json:to_proplist(Doc1)
                                           ,Doc))
             end;
