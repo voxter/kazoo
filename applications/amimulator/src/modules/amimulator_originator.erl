@@ -162,11 +162,11 @@ get_endpoints(_Props, Call) ->
         {<<"can_call_self">>, 'true'}
     ]),
     lists:foldr(fun(EndpointId, Acc) ->
-                        case cf_endpoint:build(EndpointId, Properties, aleg_cid("000", Call)) of
+                        case kz_endpoint:build(EndpointId, Properties, aleg_cid("000", Call)) of
                             {'ok', Endpoint} -> Endpoint ++ Acc;
                             {'error', _E} -> Acc
                         end
-                end, [], cf_attributes:owned_by(UserId, <<"device">>, Call)).
+                end, [], kz_attributes:owned_by(UserId, <<"device">>, Call)).
 
 %% Caller ID properties for call coming from originate request
 aleg_cid(CID, Call) ->

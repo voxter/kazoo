@@ -510,7 +510,7 @@ maybe_leave_conference(CallId) ->
 % 					end,
 % 					ALeg ++ BLeg;
 % 				_ ->
-% 					Endpoint = case cf_endpoint:get(WhappsCall) of
+% 					Endpoint = case kz_endpoint:get(WhappsCall) of
 % 						{error, E} ->
 % 							lager:debug("Error when getting endpoint: ~p", [WhappsCall]),
 % 							undefined;
@@ -664,7 +664,7 @@ maybe_leave_conference(CallId) ->
 %         _ ->
 %             ok
 %     end,
-%     case cf_endpoint:get(WhappsCall) of
+%     case kz_endpoint:get(WhappsCall) of
 %         %% An external endpoint
 %         {error, _E} ->
 %         	props:set_value(<<"aleg_cid">>, props:get_value(<<"cid">>, maybe_cellphone_endpoint(Call)), Call);
@@ -675,7 +675,7 @@ maybe_leave_conference(CallId) ->
 
 % aleg_exten(Call, _ChannelJObj, _BC) ->
 %     WhappsCall = props:get_value(<<"call">>, Call),
-%     case cf_endpoint:get(WhappsCall) of
+%     case kz_endpoint:get(WhappsCall) of
 %         %% An external endpoint
 %         {error, _E} ->
 %             case props:get_value(<<"direction">>, Call) of
@@ -691,7 +691,7 @@ maybe_leave_conference(CallId) ->
 
 % aleg_ami_channel(Call, _ChannelJObj, _BC) ->
 %     WhappsCall = props:get_value(<<"call">>, Call),
-%     case cf_endpoint:get(WhappsCall) of
+%     case kz_endpoint:get(WhappsCall) of
 %         %% An external endpoint
 %         {error, _E} ->
 %             props:set_value(<<"aleg_ami_channel">>, props:get_value(<<"channel">>, maybe_cellphone_endpoint(Call)), Call);

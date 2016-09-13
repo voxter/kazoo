@@ -214,7 +214,7 @@ get_request_did(Data, Call) ->
 maybe_use_capture_group(Data, Call) ->
     case kapps_call:kvs_fetch('cf_capture_group', Call) of
         'undefined' ->
-            case cf_endpoint:get(Call) of
+            case kz_endpoint:get(Call) of
                 {'error', _ } -> maybe_bypass_e164(Data, Call);
                 {'ok', Endpoint} -> maybe_apply_dialplan(Endpoint, Data, Call)
             end;

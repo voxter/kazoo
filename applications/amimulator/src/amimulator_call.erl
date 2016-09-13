@@ -429,7 +429,7 @@ set_callee_id_number(CIDNumber, Call) ->
 
 -spec endpoint(call()) -> api_object().
 endpoint(Call) ->
-    case cf_endpoint:get(to_kapps_call(Call)) of
+    case kz_endpoint:get(to_kapps_call(Call)) of
         {'ok', Endpoint} -> Endpoint;
         {'error', _} -> maybe_cellphone_endpoint(Call)
     end.

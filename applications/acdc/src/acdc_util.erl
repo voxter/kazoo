@@ -93,7 +93,7 @@ agents_in_queue(AcctDb, QueueId) ->
 
 -spec agent_devices(ne_binary(), ne_binary()) -> kz_json:objects().
 agent_devices(AcctDb, AgentId) ->
-    case kz_datamgr:get_results(AcctDb, <<"cf_attributes/owned">>, [{'key', [AgentId, <<"device">>]}
+    case kz_datamgr:get_results(AcctDb, <<"kz_attributes/owned">>, [{'key', [AgentId, <<"device">>]}
                                                                    ,'include_docs'
                                                                   ])
     of
@@ -151,4 +151,4 @@ caller_id(Call) ->
                        'undefined' -> <<"internal">>;
                        _Else -> <<"external">>
                    end,
-    cf_attributes:caller_id(CallerIdType, Call).
+    kz_attributes:caller_id(CallerIdType, Call).
