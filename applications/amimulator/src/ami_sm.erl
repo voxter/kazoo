@@ -508,7 +508,7 @@ maybe_purge_queue_call(QueueId, Call) ->
     end.
 
 initial_registrations(AccountId) ->
-	{'ok', AccountDoc} = couch_mgr:open_doc(<<"accounts">>, AccountId),
+	{'ok', AccountDoc} = kz_datamgr:open_doc(<<"accounts">>, AccountId),
     AccountRealm = kz_json:get_value(<<"realm">>, AccountDoc),
 
     Req = [

@@ -754,7 +754,7 @@ update_voicemail_creds(Username, Password, #cb_context{db_name=AccountDb}) ->
 	true ->
 		lager:info("Detected user doc with id: ~p", [kz_json:get_value(<<"id">>, UserJObj)]),
 	
-		{'ok', UserFullDoc} = couch_mgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, UserJObj)),
+		{'ok', UserFullDoc} = kz_datamgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, UserJObj)),
 	
 		VMJObj = try
 			{'ok', VMJObjs} = kz_datamgr:get_results(AccountDb,
@@ -775,14 +775,14 @@ update_voicemail_creds(Username, Password, #cb_context{db_name=AccountDb}) ->
 			lager:info("No voicemail box to update for the user"),
 			'ok';
 		true ->
-			{'ok', VMFullDoc} = couch_mgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, VMJObj)),
+			{'ok', VMFullDoc} = kz_datamgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, VMJObj)),
 	
 			case should_update_voicemail_creds(Username, VMFullDoc, UserFullDoc) of
 				false ->
 					'ok';
 				true ->
 					lager:info("Updating user password"),
-					couch_mgr:save_doc(AccountDb,
+					kz_datamgr:save_doc(AccountDb,
 						kz_json:set_value(<<"pin">>, Password, VMFullDoc))
 			end
 		end

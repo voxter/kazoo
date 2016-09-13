@@ -119,7 +119,7 @@ handle_specific_event(<<"login">>, EventJObj) ->
     AgentId = kz_json:get_value(<<"Agent-ID">>, EventJObj),
     AccountId = kz_json:get_value(<<"Account-ID">>, EventJObj),
     AccountDb = kz_util:format_account_id(AccountId, encoded),
-    {ok, AgentDoc} = couch_mgr:open_doc(AccountDb, AgentId),
+    {ok, AgentDoc} = kz_datamgr:open_doc(AccountDb, AgentId),
     Exten = kz_json:get_value(<<"username">>, AgentDoc),
     AgentName = <<(kz_json:get_value(<<"first_name">>, AgentDoc))/binary, " ", (kz_json:get_value(<<"last_name">>, AgentDoc))/binary>>,
     WholePayload = lists:foldl(fun(QueueId, Payload) ->
@@ -147,7 +147,7 @@ handle_specific_event(<<"logout">>, EventJObj) ->
     AgentId = kz_json:get_value(<<"Agent-ID">>, EventJObj),
     AccountId = kz_json:get_value(<<"Account-ID">>, EventJObj),
     AccountDb = kz_util:format_account_id(AccountId, encoded),
-    {ok, AgentDoc} = couch_mgr:open_doc(AccountDb, AgentId),
+    {ok, AgentDoc} = kz_datamgr:open_doc(AccountDb, AgentId),
     Exten = case amimulator_util:find_id_number(AgentId, AccountDb) of
         {error, not_found} ->
             kz_json:get_value(<<"username">>, AgentDoc);
@@ -174,7 +174,7 @@ handle_specific_event(<<"login_queue">>, EventJObj) ->
     QueueId = kz_json:get_value(<<"Queue-ID">>, EventJObj),
 
     AccountDb = kz_util:format_account_id(AccountId, encoded),
-    {ok, AgentDoc} = couch_mgr:open_doc(AccountDb, AgentId),
+    {ok, AgentDoc} = kz_datamgr:open_doc(AccountDb, AgentId),
     Exten = case amimulator_util:find_id_number(AgentId, AccountDb) of
         {error, not_found} ->
             kz_json:get_value(<<"username">>, AgentDoc);
@@ -206,7 +206,7 @@ handle_specific_event(<<"logout_queue">>, EventJObj) ->
     QueueId = kz_json:get_value(<<"Queue-ID">>, EventJObj),
 
     AccountDb = kz_util:format_account_id(AccountId, encoded),
-    {ok, AgentDoc} = couch_mgr:open_doc(AccountDb, AgentId),
+    {ok, AgentDoc} = kz_datamgr:open_doc(AccountDb, AgentId),
     Exten = case amimulator_util:find_id_number(AgentId, AccountDb) of
         {error, not_found} ->
             kz_json:get_value(<<"username">>, AgentDoc);
@@ -231,7 +231,7 @@ handle_specific_event(<<"pause">>, EventJObj) ->
     AccountDb = kz_util:format_account_id(AccountId, encoded),
     AgentId = kz_json:get_value(<<"Agent-ID">>, EventJObj),
 
-    {ok, AgentDoc} = couch_mgr:open_doc(AccountDb, AgentId),
+    {ok, AgentDoc} = kz_datamgr:open_doc(AccountDb, AgentId),
     Interface = <<"Local/", (kz_json:get_value(<<"username">>, AgentDoc))/binary,
         "@from-queue/n">>,
     AgentName = <<(kz_json:get_value(<<"first_name">>, AgentDoc))/binary, " ",
@@ -256,7 +256,7 @@ handle_specific_event(<<"resume">>, EventJObj) ->
     AccountDb = kz_util:format_account_id(AccountId, encoded),
     AgentId = kz_json:get_value(<<"Agent-ID">>, EventJObj),
 
-    {ok, AgentDoc} = couch_mgr:open_doc(AccountDb, AgentId),
+    {ok, AgentDoc} = kz_datamgr:open_doc(AccountDb, AgentId),
     Interface = <<"Local/", (kz_json:get_value(<<"username">>, AgentDoc))/binary,
         "@from-queue/n">>,
     AgentName = <<(kz_json:get_value(<<"first_name">>, AgentDoc))/binary, " ",
@@ -283,7 +283,7 @@ handle_status_event(EventName, EventJObj) ->
     maybe_agent_called(EventName, EventJObj),
     AccountDb = kz_util:format_account_id(kz_json:get_value(<<"Account-ID">>, EventJObj), 'encoded'),
     AgentId = kz_json:get_value(<<"Agent-ID">>, EventJObj),
-    case couch_mgr:open_doc(AccountDb, AgentId) of
+    case kz_datamgr:open_doc(AccountDb, AgentId) of
         {'error', E} -> lager:debug("error getting agent ~p user doc (~p)", [AgentId, E]);
         {'ok', AgentDoc} -> publish_status_events(translate_status(EventName), AgentDoc, get_queues(AgentDoc))
     end.
@@ -294,7 +294,7 @@ maybe_agent_called(<<"connecting">>, EventJObj) ->
     CallId = kz_json:get_value(<<"Call-ID">>, EventJObj),
     AgentId = kz_json:get_value(<<"Agent-ID">>, EventJObj),
 
-    {'ok', Owner} = couch_mgr:open_doc(AccountDb, AgentId),
+    {'ok', Owner} = kz_datamgr:open_doc(AccountDb, AgentId),
     Call = ami_sm:call(CallId),
     Payload = [
         {<<"Event">>, <<"AgentCalled">>},
@@ -330,7 +330,7 @@ publish_status_events(Status, AgentDoc, Queues) ->
     LastName = kz_json:get_value(<<"last_name">>, AgentDoc),
 
     Payload = lists:foldl(fun(QueueId, Acc) ->
-        case couch_mgr:get_results(AccountDb, <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
+        case kz_datamgr:get_results(AccountDb, <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
             {'error', _E} -> Acc;
             {'ok', []} -> Acc;
             {'ok', Results} ->

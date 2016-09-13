@@ -270,7 +270,7 @@ refresh_token(#oauth_app{name=ClientId
 
 -spec maybe_oauth_headers(ne_binary(), ne_binary(), kz_proplist()) -> kz_proplist().
 maybe_oauth_headers(AccountId, URL, Params) ->
-    {'ok', AccountDoc} = couch_mgr:open_cache_doc(<<"accounts">>, AccountId),
+    {'ok', AccountDoc} = kz_datamgr:open_cache_doc(<<"accounts">>, AccountId),
 
     case kz_json:get_value(<<"pvt_oauth">>, AccountDoc) of
         'undefined' ->

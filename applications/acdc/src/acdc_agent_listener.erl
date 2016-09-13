@@ -1519,8 +1519,8 @@ maybe_start_recording(_Call, _, _, 'false', _, _) ->
     lager:debug("not recording this call");
 maybe_start_recording(Call, QueueId, AgentId, 'true', PreserveMetadata, Url) ->
     AccountDb = kapps_call:account_db(Call),
-    {'ok', QueueJObj} = couch_mgr:open_cache_doc(AccountDb, QueueId),
-    {'ok', AgentJObj} = couch_mgr:open_cache_doc(AccountDb, AgentId),
+    {'ok', QueueJObj} = kz_datamgr:open_cache_doc(AccountDb, QueueId),
+    {'ok', AgentJObj} = kz_datamgr:open_cache_doc(AccountDb, AgentId),
     QueueName = kz_json:get_value(<<"name">>, QueueJObj),
     AgentName = kz_json:get_value(<<"username">>, AgentJObj),
     RecordingJObj =

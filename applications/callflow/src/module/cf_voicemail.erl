@@ -1369,7 +1369,7 @@ change_pin(#mailbox{mailbox_id=Id
                 JObj1 = kz_json:merge_jobjs(PrivJObj, PublicJObj),
                 
                 % Start of Daniel's code
-				{'ok', UserObj} = couch_mgr:open_doc(AccountDb, kz_json:get_value(<<"owner_id">>, JObj1)),
+				{'ok', UserObj} = kz_datamgr:open_doc(AccountDb, kz_json:get_value(<<"owner_id">>, JObj1)),
 				PrivLevel = kz_json:get_value(<<"priv_level">>, UserObj),
 		
 				UsernameIsInteger = try
@@ -1383,7 +1383,7 @@ change_pin(#mailbox{mailbox_id=Id
 					{<<"user">>, true} ->
 						Username = kz_json:get_value(<<"username">>, UserObj),
 						{MD5, SHA1} = cb_modules_util:pass_hashes(Username, Pin),
-						couch_mgr:save_doc(AccountDb,
+						kz_datamgr:save_doc(AccountDb,
 							kz_json:set_values([{<<"pvt_md5_auth">>, MD5}, {<<"pvt_sha1_auth">>, SHA1}],
 							UserObj
 						));
@@ -1604,7 +1604,7 @@ maybe_use_variable(Data, Call) ->
             kz_doc:id(Data);
         Variable ->
             Value = kz_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
-            case couch_mgr:open_cache_doc(kapps_call:account_db(Call), Value) of
+            case kz_datamgr:open_cache_doc(kapps_call:account_db(Call), Value) of
                 {'ok', _} -> Value;
                 _ -> kz_doc:id(Data)
             end
@@ -1884,7 +1884,7 @@ maybe_remove_attachments(AccountDb, MediaId, JObj) ->
                     Removed
             end,
     %% Undelete a possibly deleted media file
-    couch_mgr:save_doc(AccountDb, kz_doc:set_soft_deleted(JObj1, 'false')).
+    kz_datamgr:save_doc(AccountDb, kz_doc:set_soft_deleted(JObj1, 'false')).
 
 %%--------------------------------------------------------------------
 %% @private

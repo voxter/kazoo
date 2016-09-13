@@ -29,7 +29,7 @@ responders(_Props) ->
     [{<<"dialplan">>, <<"route_req">>}].
 
 get_extra_props(AccountId) ->
-    case couch_mgr:get_results(kz_util:format_account_id(AccountId, 'encoded'), <<"callflows/crossbar_listing">>) of
+    case kz_datamgr:get_results(kz_util:format_account_id(AccountId, 'encoded'), <<"callflows/crossbar_listing">>) of
         {'ok', JObjs} -> extract_featurecodes(JObjs);
         {'error', E} -> lager:debug("could not open callflows/crossbar_listing to get featurecodes (~p)", [E])
     end.
@@ -105,7 +105,7 @@ handle_specific_event(EventName, _EventJObj, _) ->
 %%
 
 get_realm(AccountId) ->
-    {ok, AccountDoc} = couch_mgr:open_doc(<<"accounts">>, AccountId),
+    {ok, AccountDoc} = kz_datamgr:open_doc(<<"accounts">>, AccountId),
     kz_json:get_value(<<"realm">>, AccountDoc).
 
 -spec extract_featurecodes(kz_json:objects()) -> proplist().
@@ -221,7 +221,7 @@ get_parked_calls(AccountDb, AccountId) ->
     end.
 
 fetch_parked_calls(AccountDb, AccountId) ->
-    case couch_mgr:open_doc(AccountDb, ?DB_DOC_NAME) of
+    case kz_datamgr:open_doc(AccountDb, ?DB_DOC_NAME) of
         {'error', 'not_found'} ->
             Timestamp = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
             Generators = [fun(J) -> kz_json:set_value(<<"_id">>, <<"parked_calls">>, J) end

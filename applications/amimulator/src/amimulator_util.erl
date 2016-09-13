@@ -370,7 +370,7 @@ endpoint_exten('undefined', Endpoint) ->
         Name -> Name
     end;
 endpoint_exten(OwnerId, Endpoint) ->
-    case couch_mgr:open_doc(kz_json:get_value(<<"pvt_account_db">>, Endpoint), OwnerId) of
+    case kz_datamgr:open_doc(kz_json:get_value(<<"pvt_account_db">>, Endpoint), OwnerId) of
         {'ok', UserDoc} -> <<(kz_json:get_value(<<"username">>, UserDoc))/binary>>;
         _ ->
             lager:debug("could not find owner doc for device ~p (~p)", [kz_json:get_value(<<"_id">>, Endpoint)
@@ -380,7 +380,7 @@ endpoint_exten(OwnerId, Endpoint) ->
 
 -spec queue_number(ne_binary(), ne_binary()) -> kz_json:json_term() | 'undefined'.
 queue_number(AccountDb, QueueId) ->
-    case couch_mgr:get_results(AccountDb, <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
+    case kz_datamgr:get_results(AccountDb, <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
         {'error', E} ->
             lager:debug("could not load queue callflows (~p)", [E]),
             'undefined';
@@ -496,7 +496,7 @@ maybe_leave_conference(CallId) ->
 % 								{<<"aleg_ami_channel">>, endpoint_channel(Endpoint, AccountDb, CallId)}
 % 							]
 % 					end,
-% 					BLeg = case couch_mgr:open_doc(AccountDb,
+% 					BLeg = case kz_datamgr:open_doc(AccountDb,
 % 						kz_json:get_value(<<"authorizing_id">>,
 % 							props:get_value(kapps_call:other_leg_call_id(WhappsCall), Lookup))) of
 % 						{error, empty_doc_id} ->
@@ -549,7 +549,7 @@ maybe_leave_conference(CallId) ->
 %     props:set_value(<<"call">>, WhappsCall, Call).
 
 % maybe_cellphone_endpoint2(To, Direction, CallId, PresenceId, AccountDb) ->
-%     {ok, Results} = couch_mgr:get_results(AccountDb, <<"devices/call_forwards">>),
+%     {ok, Results} = kz_datamgr:get_results(AccountDb, <<"devices/call_forwards">>),
 
 %     Number = case Direction of
 %     	<<"inbound">> ->
@@ -576,7 +576,7 @@ maybe_leave_conference(CallId) ->
 % 	case wnm_util:to_e164(kz_json:get_value(<<"key">>, Result)) of
 % 		E164 ->
 % 			Value = kz_json:get_value(<<"value">>, Result),
-% 			{ok, Device} = couch_mgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, Value)),
+% 			{ok, Device} = kz_datamgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, Value)),
 % 			Device;
 % 		_ ->
 % 			find_call_forward(E164, AccountDb, Others)
@@ -703,12 +703,12 @@ maybe_leave_conference(CallId) ->
 % maybe_cellphone_endpoint(Call) ->
 %     WhappsCall = props:get_value(<<"call">>, Call),
 %     AccountDb = kz_util:format_account_id(kapps_call:account_id(WhappsCall), encoded),
-%     {ok, Results} = couch_mgr:get_results(AccountDb, <<"devices/call_forwards">>),
+%     {ok, Results} = kz_datamgr:get_results(AccountDb, <<"devices/call_forwards">>),
 %     E164 = wnm_util:to_e164(kapps_call:to_user(WhappsCall)),
 %     case lists:foldl(fun(Result, Found) ->
 %         case Found of
 %             false ->
-%                 {ok, Device} = couch_mgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, Result)),
+%                 {ok, Device} = kz_datamgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, Result)),
 %                 case {wnm_util:to_e164(kz_json:get_value([<<"call_forward">>, <<"number">>], Device)),
 %                     kz_json:get_value(<<"owner_id">>, Device)} of
 %                     {_, undefined} ->
@@ -726,7 +726,7 @@ maybe_leave_conference(CallId) ->
 %     end, false, Results) of
 %         false ->
 %             %if length(Results) > 0 ->
-%             %    {ok, Device} = couch_mgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, hd(Results))),
+%             %    {ok, Device} = kz_datamgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, hd(Results))),
 %             %    props:set_value(<<"aleg_ami_channel">>,
 %             %        endpoint_channel(Device, AccountDb, kapps_call:call_id(WhappsCall)), Call);
 %             %true ->
@@ -861,7 +861,7 @@ maybe_leave_conference(CallId) ->
 
 
 find_id_number(Id, AccountDb) ->
-    {ok, Results} = couch_mgr:get_results(AccountDb, <<"callflows/crossbar_listing">>),
+    {ok, Results} = kz_datamgr:get_results(AccountDb, <<"callflows/crossbar_listing">>),
     maybe_id_in_callflows(Id, Results, AccountDb).
 
 maybe_id_in_callflows(_, [], _) ->
@@ -876,7 +876,7 @@ maybe_id_in_callflows(Id, [Result|Results], AccountDb) ->
     end.
 
 maybe_id_in_callflow(Id, CFId, AccountDb) ->
-    {ok, CFDoc} = couch_mgr:open_doc(AccountDb, CFId),
+    {ok, CFDoc} = kz_datamgr:open_doc(AccountDb, CFId),
     case maybe_id_in_callflow(Id, kz_json:get_value(<<"flow">>, CFDoc)) of
         false ->
             false;
@@ -911,16 +911,16 @@ recurse_to_child_callflow(Id, Flow) ->
 
 
 queue_for_number(Number, AccountDb) ->
-    case couch_mgr:get_results(AccountDb, <<"callflow/listing_by_number">>, [{key, Number}]) of
+    case kz_datamgr:get_results(AccountDb, <<"callflow/listing_by_number">>, [{key, Number}]) of
         {ok, []} ->
             {error, number_not_found};
         {ok, [Result]} ->
-            {ok, CFDoc} = couch_mgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, Result)),
+            {ok, CFDoc} = kz_datamgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, Result)),
             case maybe_queue_in_flow(kz_json:get_value(<<"flow">>, CFDoc)) of
                 {error, E} ->
                     {error, E};
                 {ok, QueueId} ->
-                    couch_mgr:open_doc(AccountDb, QueueId)
+                    kz_datamgr:open_doc(AccountDb, QueueId)
             end
     end.
     

@@ -44,7 +44,7 @@ handle_specific_event(_, EventJObj) ->
 %% Find all conferences belonging to an account
 account_conferences(AccountId) ->
     AccountDb = kz_util:format_account_id(AccountId, encoded),
-    {ok, Conferences} = couch_mgr:get_results(AccountDb, <<"conferences/crossbar_listing">>),
+    {ok, Conferences} = kz_datamgr:get_results(AccountDb, <<"conferences/crossbar_listing">>),
     lists:foldl(fun(Conference, Ids) ->
         [kz_json:get_value(<<"id">>, Conference) | Ids]
     end, [], Conferences).

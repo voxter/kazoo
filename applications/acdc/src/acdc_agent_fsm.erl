@@ -408,7 +408,7 @@ init([AccountId, AgentId, Supervisor, Props, IsThief]) ->
     lager:debug("waiting for listener in ~p", [_P]),
 
     AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
-    {'ok', UserDoc} = couch_mgr:open_cache_doc(AccountDb, AgentId),
+    {'ok', UserDoc} = kz_datamgr:open_cache_doc(AccountDb, AgentId),
 
     {'ok', 'wait', #state{account_id = AccountId
                           ,account_db = AccountDb

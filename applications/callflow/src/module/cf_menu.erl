@@ -524,7 +524,7 @@ update_doc(Updates, Id, Call) ->
 get_menu_profile(Data, Call) ->
     Id = maybe_use_variable(Data, Call),
     AccountDb = kapps_call:account_db(Call),
-    case couch_mgr:open_doc(AccountDb, Id) of
+    case kz_datamgr:open_doc(AccountDb, Id) of
         {'ok', JObj} ->
             lager:info("loaded menu route ~s", [Id]),
             Default = #cf_menu_data{},
@@ -577,7 +577,7 @@ maybe_use_variable(Data, Call) ->
             kz_doc:id(Data);
         Variable ->
             Value = kz_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
-            case couch_mgr:open_cache_doc(kapps_call:account_db(Call), Value) of
+            case kz_datamgr:open_cache_doc(kapps_call:account_db(Call), Value) of
                 {'ok', _} -> Value;
                 _ -> kz_doc:id(Data)
             end

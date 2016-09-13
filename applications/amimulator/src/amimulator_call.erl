@@ -546,7 +546,7 @@ endpoint_caller_id(Endpoint, Call) ->
     case kz_json:get_value(<<"owner_id">>, Endpoint) of
         'undefined' -> 'undefined';%{kz_json:get_value(<<"name">>, Endpoint), }
         OwnerId ->
-            {'ok', Owner} = couch_mgr:open_doc(account_db(Call), OwnerId),
+            {'ok', Owner} = kz_datamgr:open_doc(account_db(Call), OwnerId),
             {<<(kz_json:get_value(<<"username">>, Owner))/binary, " ",
                (kz_json:get_value(<<"first_name">>, Owner))/binary, " ",
                (kz_json:get_value(<<"last_name">>, Owner))/binary>>
@@ -572,7 +572,7 @@ maybe_cellphone_endpoint(Call) ->
         <<"outbound">> -> wnm_util:to_e164(to_user(Call))
     end,
 
-    Results1 = case couch_mgr:get_results(AccountDb, <<"devices/call_forwards">>) of
+    Results1 = case kz_datamgr:get_results(AccountDb, <<"devices/call_forwards">>) of
         {'ok', Results} -> Results;
         {'error', _} -> []
     end,
@@ -582,9 +582,9 @@ maybe_cellphone_endpoint(Call) ->
 find_cellphone_endpoint_fold(_, _, []) ->
     'undefined';
 find_cellphone_endpoint_fold(AccountDb, E164, [Result|Results]) ->
-    find_cellphone_endpoint_fold(AccountDb, E164, couch_mgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, Result)), Results).
+    find_cellphone_endpoint_fold(AccountDb, E164, kz_datamgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, Result)), Results).
 
--spec find_cellphone_endpoint_fold(api_binary(), ne_binary(), {'ok', kz_json:object()} | couch_mgr:couchbeam_error() | {'error', 'not_found'}, kz_json:objects()) -> api_object().
+-spec find_cellphone_endpoint_fold(api_binary(), ne_binary(), {'ok', kz_json:object()} | kz_datamgr:couchbeam_error() | {'error', 'not_found'}, kz_json:objects()) -> api_object().
 find_cellphone_endpoint_fold(AccountDb, E164, {'error', 'req_timedout'}, Results) ->
     find_cellphone_endpoint_fold(AccountDb, E164, Results);
 find_cellphone_endpoint_fold(AccountDb, E164, {'ok', Device}, Results) ->
@@ -601,7 +601,7 @@ maybe_endpoint_owner(Endpoint) ->
     case kz_json:get_value(<<"owner_id">>, Endpoint) of
         'undefined' -> 'undefined';
         OwnerId ->
-            case couch_mgr:open_doc(kz_json:get_value(<<"account_db">>, Endpoint), OwnerId) of
+            case kz_datamgr:open_doc(kz_json:get_value(<<"account_db">>, Endpoint), OwnerId) of
                 {'ok', UserDoc} -> UserDoc;
                 _ -> 'undefined'
             end

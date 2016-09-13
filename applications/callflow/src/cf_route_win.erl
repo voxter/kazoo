@@ -234,7 +234,7 @@ set_language(Call) ->
     Default = kz_media_util:prompt_language(kapps_call:account_id(Call)),
     case kapps_call:language(Call) of
         Default ->
-            case cf_endpoint:get(Call) of
+            case kz_endpoint:get(Call) of
                 {'ok', Endpoint} ->
                     Language = kz_device:language(Endpoint, Default),
                     lager:debug("setting language '~s' for this call", [Language]),

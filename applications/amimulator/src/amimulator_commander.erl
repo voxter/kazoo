@@ -168,7 +168,7 @@ handle_event("mailboxcount", Props) ->
     ActionId = proplists:get_value(<<"ActionID">>, Props),
     Exten = hd(binary:split(Mailbox, <<"@">>)),
 
-    Payload = case couch_mgr:get_results(AccountDb, <<"vmboxes/crossbar_listing">>, [{key, Exten}]) of
+    Payload = case kz_datamgr:get_results(AccountDb, <<"vmboxes/crossbar_listing">>, [{key, Exten}]) of
         {ok, [Result]} ->
             Value = kz_json:get_value(<<"value">>, Result),
             [
@@ -289,14 +289,14 @@ handle_event(Event, Props) ->
     {error, no_action}.
 
 login_secret(Username, Secret, ActionId) ->
-    {'ok', AMIDoc} = couch_mgr:open_doc(?AMI_DB, Username),
+    {'ok', AMIDoc} = kz_datamgr:open_doc(?AMI_DB, Username),
     case kz_json:get_value(<<"secret">>, AMIDoc) of
         Secret -> login_success(kz_json:get_value(<<"account_id">>, AMIDoc), ActionId);
         _ -> login_fail(ActionId)
     end.
 
 login_md5(Username, Md5, Challenge, ActionId) ->
-    {'ok', AMIDoc} = couch_mgr:open_doc(?AMI_DB, Username),
+    {'ok', AMIDoc} = kz_datamgr:open_doc(?AMI_DB, Username),
     Digest = crypto:hash('md5', <<(kz_util:to_binary(Challenge))/binary, (kz_json:get_value(<<"secret">>, AMIDoc))/binary>>),
     case kz_util:to_binary(lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest])) of
         Md5 -> login_success(kz_json:get_value(<<"account_id">>, AMIDoc), ActionId);
@@ -580,16 +580,16 @@ append_space(RevList, Count, Index) ->
 queues_status(Props) ->
     AccountId = proplists:get_value(<<"AccountId">>, Props),
     AccountDb = proplists:get_value(<<"AccountDb">>, Props),
-    {'ok', Results} = couch_mgr:get_results(AccountDb, <<"queues/crossbar_listing">>),
+    {'ok', Results} = kz_datamgr:get_results(AccountDb, <<"queues/crossbar_listing">>),
 
     lists:foldl(fun(Result, Acc) ->
         QueueId = kz_json:get_value(<<"id">>, Result),
-        case couch_mgr:open_doc(AccountDb, QueueId) of
+        case kz_datamgr:open_doc(AccountDb, QueueId) of
         	{'error', E} ->
         		lager:debug("Error opening queue doc: ~p", [E]),
         		[] ++ Acc;
         	{'ok', QueueDoc} ->
-        		case couch_mgr:get_results(AccountDb, <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
+        		case kz_datamgr:get_results(AccountDb, <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
         			{'error', E} ->
         				lager:debug("Could not find queue number for queue ~p (~p)", [QueueId, E]),
         				[] ++ Acc;
@@ -744,7 +744,7 @@ waiting_call_stat(CallId, [JObj|JObjs]) ->
 
 agent_statuses(QueueId, AccountId, Number, AgentStats) ->
     AccountDb = kz_util:format_account_id(AccountId, encoded),
-    {ok, Results} = couch_mgr:get_results(AccountDb, <<"queues/agents_listing">>, [{key, QueueId}]),
+    {ok, Results} = kz_datamgr:get_results(AccountDb, <<"queues/agents_listing">>, [{key, QueueId}]),
     lists:foldl(fun(Result, Acc) ->
         AgentId = kz_json:get_value(<<"id">>, Result),
         case agent_status(AgentId, AccountId, Number, AgentStats) of
@@ -755,7 +755,7 @@ agent_statuses(QueueId, AccountId, Number, AgentStats) ->
         
 agent_status(AgentId, AccountId, Number, AgentStats) ->
     AccountDb = kz_util:format_account_id(AccountId, encoded), 
-    {ok, UserDoc} = couch_mgr:open_doc(AccountDb, AgentId),
+    {ok, UserDoc} = kz_datamgr:open_doc(AccountDb, AgentId),
     FirstName = kz_json:get_value(<<"first_name">>, UserDoc),
     LastName = kz_json:get_value(<<"last_name">>, UserDoc),
     Username = kz_json:get_value(<<"username">>, UserDoc),
@@ -815,14 +815,14 @@ translate_status(Status) ->
 sip_peers(Props) ->
 	AccountId = props:get_value(<<"AccountId">>, Props),
 	AccountDb = props:get_value(<<"AccountDb">>, Props),
-	{'ok', Results} = couch_mgr:get_results(AccountDb, <<"devices/listing_by_owner">>),
+	{'ok', Results} = kz_datamgr:get_results(AccountDb, <<"devices/listing_by_owner">>),
         lists:foldl(fun(Result, Registrations) ->
         	Value = kz_json:get_value(<<"value">>, Result),
         	case kz_json:get_value(<<"key">>, Result) of
         		'null' ->
         			[reg_entry(AccountId, kz_json:get_value(<<"id">>, Value), kz_json:get_value(<<"name">>, Value))] ++ Registrations;
         		OwnerId ->
-        			case couch_mgr:open_doc(AccountDb, OwnerId) of
+        			case kz_datamgr:open_doc(AccountDb, OwnerId) of
         				{'error', 'not_found'} ->
         					lager:debug("Missing owner ~p for endpoint with username ~p", [OwnerId, kz_json:get_value(<<"name">>, Value)]),
         					Registrations;
@@ -886,7 +886,7 @@ queue_add(Props) ->
     AccountDb = proplists:get_value(<<"AccountDb">>, Props),
 
     %% Load agent doc having the Exten given as name
-    case couch_mgr:get_results(
+    case kz_datamgr:get_results(
         AccountDb,
         <<"users/list_by_username">>,
         [{key, Exten}]
@@ -903,8 +903,8 @@ queue_add(AccountId, AccountDb, Result, Props) ->
     {ok, QueueDoc} = amimulator_util:queue_for_number(proplists:get_value(<<"Queue">>, Props), AccountDb),
     QueueId = kz_json:get_value(<<"_id">>, QueueDoc),
 
-    {ok, AgentDoc} = couch_mgr:open_doc(AccountDb, AgentId),
-    couch_mgr:save_doc(AccountDb, cb_queues:maybe_add_queue_to_agent(QueueId, AgentDoc)),
+    {ok, AgentDoc} = kz_datamgr:open_doc(AccountDb, AgentId),
+    kz_datamgr:save_doc(AccountDb, cb_queues:maybe_add_queue_to_agent(QueueId, AgentDoc)),
 
     Prop = props:filter_undefined(
      [{<<"Account-ID">>, AccountId}
@@ -927,7 +927,7 @@ queue_remove(Props) ->
     AccountDb = proplists:get_value(<<"AccountDb">>, Props),
 
     %% Load agent doc having the Exten given as name
-    {ok, [Result]} = couch_mgr:get_results(AccountDb,
+    {ok, [Result]} = kz_datamgr:get_results(AccountDb,
         <<"users/list_by_username">>,
         [{key, Exten}]
     ),
@@ -935,8 +935,8 @@ queue_remove(Props) ->
     {ok, QueueDoc} = amimulator_util:queue_for_number(proplists:get_value(<<"Queue">>, Props), AccountDb),
     QueueId = kz_json:get_value(<<"_id">>, QueueDoc),
 
-    {ok, AgentDoc} = couch_mgr:open_doc(AccountDb, AgentId),
-    couch_mgr:save_doc(AccountDb, cb_queues:maybe_rm_queue_from_agent(QueueId, AgentDoc)),
+    {ok, AgentDoc} = kz_datamgr:open_doc(AccountDb, AgentId),
+    kz_datamgr:save_doc(AccountDb, cb_queues:maybe_rm_queue_from_agent(QueueId, AgentDoc)),
 
     Prop = props:filter_undefined(
      [{<<"Account-ID">>, AccountId}
@@ -959,7 +959,7 @@ queue_pause(Props) ->
     AccountDb = proplists:get_value(<<"AccountDb">>, Props),
 
     %% Load agent doc having the Exten given as name
-    case couch_mgr:get_results(
+    case kz_datamgr:get_results(
         AccountDb,
         <<"users/list_by_username">>,
         [{key, Exten}]
@@ -1228,7 +1228,7 @@ kick_conf(Number, ParticipantId, Props) ->
     end.
 
 conf_id_for_number(Number, AccountId) ->
-    case couch_mgr:get_results(kz_util:format_account_id(AccountId, 'encoded'), <<"conferences/conference_map">>) of
+    case kz_datamgr:get_results(kz_util:format_account_id(AccountId, 'encoded'), <<"conferences/conference_map">>) of
         {'ok', Results} -> conf_id_for_number(Number, AccountId, Results);
         {'error', E} ->
             lager:debug("couldn't read couch view 'conferences/conference_map' (~p)", [E]),

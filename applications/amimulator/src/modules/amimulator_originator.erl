@@ -121,7 +121,7 @@ maybe_assign_aleg_props(Props, Call) ->
 %% _id from couch for destination endpoint
 aleg_authorizing_id(Props) ->
     ViewOptions = [{'key', proplists:get_value(<<"SourceExten">>, Props)}],
-    case couch_mgr:get_results(proplists:get_value(<<"AccountDb">>, Props), <<"users/list_by_username">>, ViewOptions) of
+    case kz_datamgr:get_results(proplists:get_value(<<"AccountDb">>, Props), <<"users/list_by_username">>, ViewOptions) of
         {'ok', []} -> {'error', 'endpoint_not_found'};
         {'ok', [Result]} -> {'ok', kz_json:get_value(<<"id">>, Result)}
     end.

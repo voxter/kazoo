@@ -465,7 +465,7 @@ is_admin(Context) ->
 
 -spec is_admin(ne_binary(), ne_binary()) -> boolean().
 is_admin(AccountDb, UserId) ->
-    {'ok', JObj} = couch_mgr:open_cache_doc(AccountDb, UserId),
+    {'ok', JObj} = kz_datamgr:open_cache_doc(AccountDb, UserId),
     kzd_user:is_admin(JObj).
 
 %%--------------------------------------------------------------------

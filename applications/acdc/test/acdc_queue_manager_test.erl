@@ -157,7 +157,7 @@ init(Super, AccountId, QueueId, QueueJObj) ->
     process_flag('trap_exit', 'false'),
 
     AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
-    % couch_mgr:add_to_doc_cache(AccountDb, QueueId, QueueJObj),
+    % kz_datamgr:add_to_doc_cache(AccountDb, QueueId, QueueJObj),
 
     % _ = start_secondary_queue(AccountId, QueueId),
 

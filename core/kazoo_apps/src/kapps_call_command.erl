@@ -1269,7 +1269,7 @@ play(Media, Terminators, Call) ->
 play(Media, Terminators, Leg, Call) ->
     play(Media, Terminators, Leg, 'undefined', Call).
 play(Media, Terminators, Leg, Variables, Call) ->
-    NoopId = couch_mgr:get_uuid(),
+    NoopId = kz_datamgr:get_uuid(),
     Commands = [kz_json:from_list([{<<"Application-Name">>, <<"noop">>}
                                    ,{<<"Call-ID">>, kapps_call:call_id(Call)}
                                    ,{<<"Msg-ID">>, NoopId}

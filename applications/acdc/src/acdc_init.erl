@@ -77,13 +77,13 @@ init_acct_agents(Account) ->
 -spec init_acct_queues(ne_binary(), ne_binary()) -> any().
 init_acct_queues(AccountDb, AccountId) ->
     init_queues(AccountId
-                ,couch_mgr:get_results(AccountDb, <<"queues/crossbar_listing">>, [])
+                ,kz_datamgr:get_results(AccountDb, <<"queues/crossbar_listing">>, [])
                ).
 
 -spec init_acct_agents(ne_binary(), ne_binary()) -> any().
 init_acct_agents(AccountDb, AccountId) ->
     init_agents(AccountId
-                ,couch_mgr:get_results(AccountDb, <<"queues/agents_listing">>, [])
+                ,kz_datamgr:get_results(AccountDb, <<"queues/agents_listing">>, [])
                ).
 
 -spec init_queues(ne_binary(), kz_datamgr:get_results_return()) -> any().

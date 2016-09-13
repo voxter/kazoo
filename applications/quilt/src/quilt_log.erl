@@ -250,21 +250,21 @@ get_agent_login_timestamp(AccountId, AgentId, Default) ->
     end.
 
 get_queue_list_by_agent_id(AccountId, AgentId) ->
-    {'ok', Result} = couch_mgr:get_results(kz_util:format_account_id(AccountId, 'encoded'), <<"agents/crossbar_listing">>, [{'key', AgentId}]),
+    {'ok', Result} = kz_datamgr:get_results(kz_util:format_account_id(AccountId, 'encoded'), <<"agents/crossbar_listing">>, [{'key', AgentId}]),
     kz_json:get_value([<<"value">>, <<"queues">>], hd(Result)).
 
 % lookup_agent_name(AccountId, AgentId) ->
 %     AccountDb = kz_util:format_account_id(AccountId, encoded),
-%     {ok, Result} = couch_mgr:open_doc(AccountDb, AgentId),
+%     {ok, Result} = kz_datamgr:open_doc(AccountDb, AgentId),
 %     <<"Local/", (kz_json:get_value(<<"username">>, Result))/binary, "@from-queue/n">>.
 
 lookup_agent_name(AccountId, AgentId) ->
     AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
-    {'ok', Result} = couch_mgr:open_doc(AccountDb, AgentId),
+    {'ok', Result} = kz_datamgr:open_doc(AccountDb, AgentId),
     <<(kz_json:get_value(<<"first_name">>, Result))/binary, " ", (kz_json:get_value(<<"last_name">>, Result))/binary>>.
 
 lookup_queue_name(AccountId, QueueId) ->
-    case couch_mgr:get_results(kz_util:format_account_id(AccountId, 'encoded'), <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
+    case kz_datamgr:get_results(kz_util:format_account_id(AccountId, 'encoded'), <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
         {'error', E} ->
             lager:debug("could not find queue number for queue ~p (~p)", [QueueId, E]),
             "NONE";

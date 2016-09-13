@@ -22,7 +22,7 @@
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     Id = maybe_use_variable(Data, Call),
-    case couch_mgr:open_cache_doc(kapps_call:account_db(Call), Id) of
+    case kz_datamgr:open_cache_doc(kapps_call:account_db(Call), Id) of
         {'error', R} ->
             lager:info("could not branch to callflow ~s, ~p", [Id, R]),
             cf_exe:continue(Call);
@@ -40,7 +40,7 @@ maybe_use_variable(Data, Call) ->
             kz_doc:id(Data);
         Variable ->
             Value = kz_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
-            case couch_mgr:open_cache_doc(kapps_call:account_db(Call), Value) of
+            case kz_datamgr:open_cache_doc(kapps_call:account_db(Call), Value) of
                 {'ok', _} -> Value;
                 _ -> kz_doc:id(Data)
             end

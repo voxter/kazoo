@@ -952,7 +952,7 @@ create_strategy_state(Strategy, AcctDb, QueueId) ->
 create_strategy_state('rr', #strategy_state{agents='undefined'}=SS, AcctDb, QueueId) ->
     create_strategy_state('rr', SS#strategy_state{agents=queue:new()}, AcctDb, QueueId);
 create_strategy_state('rr', #strategy_state{agents=AgentQ}=SS, AcctDb, QueueId) ->
-    case couch_mgr:get_results(AcctDb, <<"queues/agents_listing">>, [{'key', QueueId}]) of
+    case kz_datamgr:get_results(AcctDb, <<"queues/agents_listing">>, [{'key', QueueId}]) of
         {'ok', []} -> lager:debug("no agents around"), SS;
         {'ok', JObjs} ->
             Q = queue:from_list([Id || JObj <- JObjs,
@@ -969,7 +969,7 @@ create_strategy_state('rr', #strategy_state{agents=AgentQ}=SS, AcctDb, QueueId) 
 create_strategy_state('mi', #strategy_state{agents='undefined'}=SS, AcctDb, QueueId) ->
     create_strategy_state('mi', SS#strategy_state{agents=[]}, AcctDb, QueueId);
 create_strategy_state('mi', #strategy_state{agents=AgentL}=SS, AcctDb, QueueId) ->
-    case couch_mgr:get_results(AcctDb, <<"queues/agents_listing">>, [{key, QueueId}]) of
+    case kz_datamgr:get_results(AcctDb, <<"queues/agents_listing">>, [{key, QueueId}]) of
         {'ok', []} -> lager:debug("no agents around"), SS;
         {'ok', JObjs} ->
             AgentL1 = lists:foldl(fun(JObj, Acc) ->
@@ -1190,7 +1190,7 @@ maybe_cancel_position_announcements(Call, Pids) ->
         {_, Pid} ->
             erlang:exit(Pid, 'call_done'),
             %% Attempt to skip remaining announcement media, but don't flush hangups
-            NoopId = couch_mgr:get_uuid(),
+            NoopId = kz_datamgr:get_uuid(),
             Command = [{<<"Application-Name">>, <<"noop">>}
                        ,{<<"Msg-ID">>, NoopId}
                        ,{<<"Insert-At">>, <<"now">>}

@@ -51,11 +51,11 @@ handle_specific_event(_, _EventJObj) ->
 -spec new_voicemail(kz_json:object()) -> 'ok'.
 new_voicemail(JObj) ->
     AccountDb = kz_json:get_value(<<"Account-DB">>, JObj),
-    case couch_mgr:open_doc(AccountDb, kz_json:get_value(<<"Voicemail-Box">>, JObj)) of
+    case kz_datamgr:open_doc(AccountDb, kz_json:get_value(<<"Voicemail-Box">>, JObj)) of
         {'ok', VoicemailBox} ->
             Mailbox = kz_json:get_value(<<"mailbox">>, VoicemailBox),
 
-            case couch_mgr:get_results(AccountDb, <<"vmboxes/crossbar_listing">>, [{'key', Mailbox}]) of
+            case kz_datamgr:get_results(AccountDb, <<"vmboxes/crossbar_listing">>, [{'key', Mailbox}]) of
                 {'ok', [Result]} ->
                     Value = kz_json:get_value(<<"value">>, Result),
                     Payload = [
