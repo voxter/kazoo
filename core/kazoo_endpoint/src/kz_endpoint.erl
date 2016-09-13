@@ -825,7 +825,7 @@ is_call_forward_enabled(Endpoint, Properties) ->
 -spec is_follow_me_on(wh_json:object()) -> true | false.
 is_follow_me_on(Endpoint) ->
 	% Turns out endpoints are just devices
-    case wh_json:get_value(<<"follow_me">>, Endpoint) of
+    case kz_json:get_value(<<"follow_me">>, Endpoint) of
 		false ->
 			lager:info("Device follow me is off. Not including in routing."),
 			false;
