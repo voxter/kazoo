@@ -269,4 +269,3 @@ request_macros(DataJObj) ->
                           ,DataJObj
                          )
      ).
-

@@ -503,7 +503,6 @@ stop_if_inactive(Call, Flow, Flows, State) ->
 handle_info({'DOWN', Ref, 'process', Pid, 'normal'}, #state{cf_module_pid={Pid, Ref}
                                                             ,call=Call
                                                            }=State) ->
-
     erlang:demonitor(Ref, ['flush']),
     lager:debug("cf module ~s down normally", [kapps_call:kvs_fetch('cf_last_action', Call)]),
     {'noreply', State#state{cf_module_pid='undefined'}};

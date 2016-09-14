@@ -767,7 +767,8 @@ create_resource(JObj, Resources) ->
                             ,AvailableClassifiers
                             ,JObj
                             ,Resources
-                           )    end.
+                           )
+    end.
 
 -spec create_resource(kz_proplist(), kz_proplist(), kz_json:object(), resources()) -> resources().
 create_resource([], _ConfigClassifiers, _Resource, Resources) -> Resources;

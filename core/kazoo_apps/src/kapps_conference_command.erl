@@ -32,7 +32,7 @@
 -export([send_command/2]).
 -export([macro/2]).
 
--spec search(kapps_conference:conference() | api_binary() | string()) ->
+-spec search(kapps_conference:conference()) ->
                     {'ok', kz_json:object()} |
                     {'error', any()}.
 search(Conference) ->

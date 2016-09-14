@@ -78,8 +78,6 @@ handle_bridge_failure(Cause, Code, Call) ->
 build_offnet_request(Data, Call) ->
     {ECIDNum, ECIDName} = kz_attributes:caller_id(<<"emergency">>, Call),
     {CIDNumber, CIDName} = get_caller_id(Data, Call),
-    TODid = get_to_did(Data, Call),
-    lager:info("You are trying to call DID ~s", [TODid]),
     props:filter_undefined(
       [{?KEY_ACCOUNT_ID, kapps_call:account_id(Call)}
        ,{?KEY_ACCOUNT_REALM, kapps_call:from_realm(Call)}

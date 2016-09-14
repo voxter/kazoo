@@ -512,6 +512,7 @@ maybe_store_recording_meta(#state{doc_db=Db, doc_id=DocId}=State) ->
         _ -> store_recording_meta(State)
     end.
 
+
 -spec get_media_name(ne_binary(), api_binary()) -> ne_binary().
 get_media_name(CallId, Ext) ->
     <<CallId/binary, ".", Ext/binary>>.

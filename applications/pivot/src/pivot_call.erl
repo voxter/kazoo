@@ -140,7 +140,7 @@ init([Call, JObj]) ->
     ReqFormat = kz_json:get_value(<<"Request-Format">>, JObj, <<"twiml">>),
     BaseParams = kz_json:from_list(req_params(ReqFormat, Call)),
 
-    lager:debug("starting pivot req to ~s to ~s with Request-Format ~s", [Method, VoiceUri, ReqFormat]),
+    lager:debug("starting pivot req to ~s to ~s", [Method, VoiceUri]),
 
     ?MODULE:new_request(self(), VoiceUri, Method, BaseParams),
 

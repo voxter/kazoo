@@ -66,8 +66,8 @@ handle(Data, Call) ->
     MaxQueueSize = max_queue_size(kz_json:get_integer_value(<<"max_queue_size">>, QueueJObj, 0)),
 
     Call1 = kapps_call:kvs_store_proplist([{'caller_exit_key', kz_json:get_value(<<"caller_exit_key">>, QueueJObj)}
-                                            ,{'breakout_key', kz_json:get_value([<<"breakout">>, <<"dtmf">>], QueueJObj)}
-                                           ], Call),
+                                           ,{'breakout_key', kz_json:get_value([<<"breakout">>, <<"dtmf">>], QueueJObj)}
+                                          ], Call),
 
     CurrQueueSize = kapi_acdc_queue:queue_size(kapps_call:account_id(Call1), QueueId),
 

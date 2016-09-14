@@ -638,18 +638,8 @@ generic_call_event_props(Props) ->
      ,{<<"Raw-Application-Name">>, get_raw_application_name(Props)}
      ,{<<"Channel-Moving">>, get_channel_moving(Props)}
      ,{<<"Call-Direction">>, kzd_freeswitch:call_direction(Props)}
-     ,{<<"Caller-ID-Number">>, props:get_first_defined([<<"variable_effective_caller_id_number">>
-                                                        ,<<"Caller-Caller-ID-Number">>
-                                                       ], Props)}
-     ,{<<"Caller-ID-Name">>, props:get_first_defined([<<"variable_effective_caller_id_name">>
-                                                      ,<<"Caller-Caller-ID-Name">>
-                                                     ], Props)}
-     ,{<<"Callee-ID-Number">>, props:get_first_defined([<<"variable_effective_callee_id_number">>
-                                                        ,<<"Caller-Callee-ID-Number">>
-                                                       ], Props)}
-     ,{<<"Callee-ID-Name">>, props:get_first_defined([<<"variable_effective_callee_id_name">>
-                                                      ,<<"Caller-Callee-ID-Name">>
-                                                     ], Props)}
+     ,{<<"Caller-ID-Number">>, kzd_freeswitch:caller_id_number(Props)}
+     ,{<<"Caller-ID-Name">>, kzd_freeswitch:caller_id_name(Props)}
      ,{<<"Other-Leg-Direction">>, props:get_value(<<"Other-Leg-Direction">>, Props)}
      ,{<<"Other-Leg-Caller-ID-Name">>, props:get_value(<<"Other-Leg-Caller-ID-Name">>, Props)}
      ,{<<"Other-Leg-Caller-ID-Number">>, props:get_value(<<"Other-Leg-Caller-ID-Number">>, Props)}
