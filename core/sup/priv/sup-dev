@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-ROOT=$(pwd -P)
+ROOT=$(dirname $(readlink -f $0))
 KAZOO_ROOT=$ROOT/../../..
 ERL_LIBS=$KAZOO_ROOT/applications:$KAZOO_ROOT/core:$KAZOO_ROOT/deps
 export ERL_LIBS
