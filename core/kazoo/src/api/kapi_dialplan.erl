@@ -57,7 +57,6 @@
         ,conference/1, conference_v/1
         ,originate_ready/1, originate_ready_v/1
         ,originate_execute/1, originate_execute_v/1
-        ,metaflow/1, metaflow_v/1
         ,fax_detection/1, fax_detection_v/1
         ,send_display/1, send_display_v/1
         ,store_vm/1, store_vm_v/1

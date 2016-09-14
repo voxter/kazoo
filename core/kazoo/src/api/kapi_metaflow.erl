@@ -168,12 +168,12 @@ bind_q(Queue, Props, ['bind_req' | T]) ->
     AccountId = props:get_value('account_id', Props, <<"*">>),
     Leg = props:get_value('leg', Props, <<"*">>),
     amqp_util:bind_q_to_exchange(Queue, ?METAFLOW_BIND_REQ_ROUTING_KEY(AccountId, Leg), ?METAFLOW_EXCHANGE),
-    amqp_util:bind_q_to_kapps(Queue, ?METAFLOW_UPDATE_ROUTING_KEY(CallId)),
     bind_q(Queue, Props, T);
 bind_q(Queue, Props, ['action' | T]) ->
     CallId = props:get_value('callid', Props, <<"*">>),
     Action = props:get_value('action', Props, <<"*">>),
     amqp_util:bind_q_to_exchange(Queue, ?METAFLOW_ACTION_ROUTING_KEY(CallId, Action), ?METAFLOW_EXCHANGE),
+    amqp_util:bind_q_to_kapps(Queue, ?METAFLOW_UPDATE_ROUTING_KEY(CallId)),
     bind_q(Queue, Props, T);
 bind_q(Queue, Props, ['bindings' | T]) ->
     AccountId = props:get_value('account_id', Props, <<"*">>),
@@ -192,12 +192,19 @@ unbind_q(Queue, Props, ['bind_req' | T]) ->
     AccountId = props:get_value('account_id', Props, <<"*">>),
     Leg = props:get_value('leg', Props, <<"*">>),
     amqp_util:unbind_q_from_exchange(Queue, ?METAFLOW_BIND_REQ_ROUTING_KEY(AccountId, Leg), ?METAFLOW_EXCHANGE),
-    amqp_util:unbind_q_from_kapps(Queue, ?METAFLOW_UPDATE_ROUTING_KEY(CallId)),
     unbind_q(Queue, Props, T);
 unbind_q(Queue, Props, ['action' | T]) ->
     CallId = props:get_value('callid', Props, <<"*">>),
     Action = props:get_value('action', Props, <<"*">>),
-    amqp_util:unbind_q_from_kapps(Queue, ?METAFLOW_REQ_ROUTING_KEY(CallId, Action)).
+    amqp_util:unbind_q_from_exchange(Queue, ?METAFLOW_ACTION_ROUTING_KEY(CallId, Action), ?METAFLOW_EXCHANGE),
+    amqp_util:unbind_q_from_kapps(Queue, ?METAFLOW_UPDATE_ROUTING_KEY(CallId)),
+    unbind_q(Queue, Props, T);
+unbind_q(Queue, Props, ['bindings' | T]) ->
+    AccountId = props:get_value('account_id', Props, <<"*">>),
+    CallId = props:get_value('callid', Props, <<"*">>),
+    amqp_util:unbind_q_from_exchange(Queue, ?METAFLOW_BIND_ROUTING_KEY(AccountId, CallId), ?METAFLOW_EXCHANGE),
+    unbind_q(Queue, Props, T);
+unbind_q(_, _, []) -> 'ok'.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -217,7 +224,16 @@ publish_action(Req, ContentType) ->
     RK = ?METAFLOW_ACTION_ROUTING_KEY(rk_call_id(Req), rk_action(Req)),
     amqp_util:basic_publish(?METAFLOW_EXCHANGE, RK, Payload, ContentType).
 
-action([_|_]=API) ->
+-spec publish_bind_req(api_terms()) -> 'ok'.
+-spec publish_bind_req(api_terms(), ne_binary()) -> 'ok'.
+publish_bind_req(JObj) ->
+    publish_bind_req(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_bind_req(Req, ContentType) ->
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?METAFLOW_BIND_REQ_VALUES, fun bind_req/1),
+    RK = ?METAFLOW_BIND_REQ_ROUTING_KEY(rk_account_id(Req), rk_binding_leg(Req)),
+    amqp_util:basic_publish(?METAFLOW_EXCHANGE, RK, Payload, ContentType).
+
+rk_action([_|_]=API) ->
     props:get_value(<<"Action">>, API);
 rk_action(JObj) ->
     kz_json:get_value(<<"Action">>, JObj).
@@ -295,3 +311,11 @@ binding_v(JObj) -> binding_v(kz_json:to_proplist(JObj)).
 -spec binding_digit_timeout_v(any()) -> boolean().
 binding_digit_timeout_v(X) ->
     is_integer(kz_util:to_integer(X)).
+
+-spec publish_update(api_terms()) -> 'ok'.
+-spec publish_update(api_terms(), ne_binary()) -> 'ok'.
+publish_update(JObj) ->
+    publish_update(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_update(Req, ContentType) ->
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?METAFLOW_UPDATE_VALUES, fun ?MODULE:update/1),
+    amqp_util:kapps_publish(?METAFLOW_UPDATE_ROUTING_KEY(callid(Req)), Payload, ContentType).

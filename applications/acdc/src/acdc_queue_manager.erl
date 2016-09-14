@@ -403,7 +403,7 @@ handle_call('enter_when_empty', _, #state{enter_when_empty=EnterWhenEmpty}=State
 handle_call('next_winner', _, #state{strategy='mi'}=State) ->
     {'reply', 'undefined', State};
 handle_call('next_winner', _, #state{strategy='rr'
-                                     ,strategy_state=SS
+                                     ,strategy_state=#strategy_state{agents=Agents}=SS
                                     }=State) ->
     case queue:out(Agents) of
         {{'value', Winner}, Agents1} ->
@@ -478,7 +478,7 @@ handle_cast({'member_call_cancel', K, JObj}, #state{ignored_member_calls=Dict}=S
         _ ->
             {'noreply', State#state{ignored_member_calls=dict:store(K, 'true', Dict)}}
     end;
-    
+
 handle_cast({'monitor_call', Call}, State) ->
     CallId = kapps_call:call_id(Call),
     gen_listener:add_binding(self(), 'call', [{'callid', CallId}
@@ -1136,7 +1136,7 @@ time_prompts(Time, _, Media, Language) ->
     {Time, [{'prompt', props:get_value(<<"estimated_wait_time_media">>, Media), Language, <<"A">>}
             | time_prompts2(Time, Language)
            ]}.
-    
+
 time_prompts2({0, 0, _}, Language) ->
     [{'prompt', <<"queue-less_than_1_minute">>, Language, <<"A">>}];
 time_prompts2({0, Min, _}, Language) when Min =< 5 ->

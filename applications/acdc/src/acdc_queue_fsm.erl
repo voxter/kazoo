@@ -23,7 +23,6 @@
         ,refresh/2
         ,current_call/1
         ,status/1
-        ,finish_member_call/1
 
          %% Accessors
         ,cdr_url/1

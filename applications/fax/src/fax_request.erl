@@ -29,10 +29,6 @@
         ,handle_execute_complete/2
         ]).
 
--export([handle_fax_event/2
-        ,handle_execute_complete/2
-        ]).
-
 -include("fax.hrl").
 
 -define(SERVER, ?MODULE).

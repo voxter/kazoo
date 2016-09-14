@@ -565,7 +565,6 @@ ready({'sync_req', JObj}, #state{agent_listener=AgentListener}=State) ->
     {'next_state', 'ready', State};
 ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentListener
                                                        ,endpoints=OrigEPs
-                                                       ,agent_listener_id=MyId
                                                        ,account_id=AccountId
                                                        ,agent_id=AgentId
                                                        ,connect_failures=CF
@@ -866,6 +865,7 @@ ringing({'channel_hungup', AgentCallId, _Cause}, #state{agent_listener=AgentList
 ringing({'channel_hungup', MemberCallId, _Cause}, #state{agent_listener=AgentListener
                                                         ,account_id=AccountId
                                                         ,member_call_id=MemberCallId
+                                                        ,member_call_queue_id=QueueId
                                                         }=State) ->
     lager:debug("caller's channel (~s) has gone down, stop agent's call: ~s", [MemberCallId, _Cause]),
     acdc_agent_listener:channel_hungup(AgentListener, MemberCallId),

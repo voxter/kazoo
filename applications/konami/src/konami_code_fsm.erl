@@ -86,7 +86,7 @@
 %%% API
 %%%===================================================================
 
--spec start_fsm(kapps_call:call(), kz_json:object()) -> any().
+-spec start_fsm(kapps_call:call(), kz_json:object(), pid()) -> any().
 start_fsm(Call, JObj, KonamiCallPid) ->
     gen_fsm:start_link(?MODULE, {Call, JObj, KonamiCallPid}, []).
 
@@ -113,7 +113,7 @@ add_endpoint(FSM, EndpointId) ->
 %%%===================================================================
 
 -spec init({kapps_call:call(), kz_json:object(), pid()}) -> {'ok', 'unarmed', state()}.
-init({Call, JObj, KonamiCallPid}) ->
+init({Call, JObj, Pid}) ->
     ListenOn = listen_on(Call, JObj),
 
     kapps_call:put_callid(Call),

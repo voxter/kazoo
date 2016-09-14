@@ -52,7 +52,7 @@
         ,publish_member_call_cancel/1, publish_member_call_cancel/2
         ,publish_member_connect_req/1, publish_member_connect_req/2
         ,publish_member_connect_resp/2, publish_member_connect_resp/3
-        ,publish_member_connect_win/2, publish_member_connect_win/3
+        ,publish_member_connect_win/1, publish_member_connect_win/2
         ,publish_agent_timeout/2, publish_agent_timeout/3
         ,publish_member_connect_retry/2, publish_member_connect_retry/3
         ,publish_member_connect_accepted/2, publish_member_connect_accepted/3

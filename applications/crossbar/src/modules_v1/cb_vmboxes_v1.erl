@@ -420,7 +420,7 @@ update_user_creds(VMBoxId, #cb_context{db_name=AccountDb, req_data=ReqData}) ->
                             Pin = kz_json:get_value(<<"pin">>, ReqData),
                             {MD5, SHA1} = cb_modules_util:pass_hashes(Username, Pin),
                             kz_datamgr:save_doc(AccountDb
-                                               ,kz_json:set_values([{<<"pvt_md5_auth">>, MD5}, {<<"pvt_sha1_auth">>, SHA1}],
+                                               ,kz_json:set_values([{<<"pvt_md5_auth">>, MD5}, {<<"pvt_sha1_auth">>, SHA1}]
                                                                   ,UserFullDoc
                                                                   ))
                     end
