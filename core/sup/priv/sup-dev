@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+ROOT=$(pwd -P)
+KAZOO_ROOT=$ROOT/../../..
+ERL_LIBS=$KAZOO_ROOT/applications:$KAZOO_ROOT/core:$KAZOO_ROOT/deps
+export ERL_LIBS
+
+escript $KAZOO_ROOT/core/sup/priv/sup.escript $@
+
