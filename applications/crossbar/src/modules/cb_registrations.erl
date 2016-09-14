@@ -23,6 +23,7 @@
         ,validate/1, validate/2
         ,lookup_regs/1
         ,delete/1, delete/2
+        ,normalize_registration/1
         ]).
 
 -include("crossbar.hrl").
@@ -197,7 +198,7 @@ merge_response(JObj, Regs) ->
 			'undefined' -> R;
 			Contact -> dict:store(<<Contact/binary, Username/binary>>, J, R)
 		end
-			
+
 	end, Regs, kz_json:get_value(<<"Fields">>, JObj, [])).
 
 -spec normalize_registration(kz_json:object()) -> kz_json:object().

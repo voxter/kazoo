@@ -38,8 +38,8 @@ check_branches([H|T], Data, Call) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
-evaluate_branch(Branch, _Call) ->
-	case kapps_call:custom_channel_var(kz_json:get_value(<<"variable">>, Branch)) of
+evaluate_branch(Branch, Call) ->
+	case kapps_call:custom_channel_var(kz_json:get_value(<<"variable">>, Branch), Call) of
 		'undefined' ->
 			'false';
 		CallValue ->

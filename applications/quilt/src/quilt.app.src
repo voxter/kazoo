@@ -6,6 +6,15 @@
   {registered, []},
   {applications, [ kernel
                  , stdlib
+                 , crypto
+                 , inets
+
+                 , kazoo
+                 , kazoo_amqp
+                 , kazoo_bindings
+                 , kazoo_data
+
+                 , lager
                  ]},
   {mod, {quilt_app, []}}
  ]}.

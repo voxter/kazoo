@@ -36,11 +36,11 @@ get_extra_props(AccountId) ->
 
 handle_event(EventJObj) ->
     handle_event(EventJObj, []).
-    
+
 handle_event(EventJObj, Props) ->
     {_EventType, EventName} = kz_util:get_event_type(EventJObj),
     handle_specific_event(EventName, EventJObj, Props).
-    
+
 handle_specific_event(<<"CHANNEL_CREATE">>, EventJObj, _) ->
 	lager:debug("new channel with id ~p", [kz_json:get_value(<<"Call-ID">>, EventJObj)]),
 
@@ -73,7 +73,7 @@ handle_specific_event(<<"CHANNEL_DESTROY">>, EventJObj, _) ->
     amimulator_call_sup:relay_destroy(HangupCause, CallId),
     amimulator_call_sup:relay_destroy(HangupCause, <<CallId/binary, "-queue;1">>),
     amimulator_call_sup:relay_destroy(HangupCause, <<CallId/binary, "-queue;2">>);
-    
+
 handle_specific_event(<<"DTMF">>, EventJObj, _) ->
     CallId = kz_json:get_value(<<"Call-ID">>, EventJObj),
     Digit = kz_json:get_value(<<"DTMF-Digit">>, EventJObj),
@@ -89,8 +89,8 @@ handle_specific_event(<<"DTMF">>, EventJObj, _) ->
         {<<"End">>, <<"No">>}
     ],
     % TODO: Also need to do this with begin/end reversed
-    
-    amimulator_event_listener:publish_amqp_event({publish, Payload});
+
+    amimulator_event_listener:publish_amqp_event({publish, Payload}, kz_json:get_value(<<"Account-ID">>, EventJObj));
 
 handle_specific_event(<<"route_req">>, EventJObj, Props) ->
     % lager:debug("route_req ~p", [EventJObj]),

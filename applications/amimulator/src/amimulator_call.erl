@@ -568,8 +568,8 @@ parse_user_at_realm('user', Data) ->
 maybe_cellphone_endpoint(Call) ->
     AccountDb = account_db(Call),
     E164 = case direction(Call) of
-        <<"inbound">> -> wnm_util:to_e164(from_user(Call));
-        <<"outbound">> -> wnm_util:to_e164(to_user(Call))
+        <<"inbound">> -> knm_converter_regex:to_e164(from_user(Call));
+        <<"outbound">> -> knm_converter_regex:to_e164(to_user(Call))
     end,
 
     Results1 = case kz_datamgr:get_results(AccountDb, <<"devices/call_forwards">>) of
@@ -588,7 +588,7 @@ find_cellphone_endpoint_fold(AccountDb, E164, [Result|Results]) ->
 find_cellphone_endpoint_fold(AccountDb, E164, {'error', 'req_timedout'}, Results) ->
     find_cellphone_endpoint_fold(AccountDb, E164, Results);
 find_cellphone_endpoint_fold(AccountDb, E164, {'ok', Device}, Results) ->
-    case {wnm_util:to_e164(kz_json:get_value([<<"call_forward">>, <<"number">>], Device)), kz_json:get_value(<<"owner_id">>, Device)} of
+    case {knm_converter_regex:to_e164(kz_json:get_value([<<"call_forward">>, <<"number">>], Device)), kz_json:get_value(<<"owner_id">>, Device)} of
         {_, 'undefined'} -> find_cellphone_endpoint_fold(AccountDb, E164, Results);
         {E164, _} -> Device;
         _ -> find_cellphone_endpoint_fold(AccountDb, E164, Results)

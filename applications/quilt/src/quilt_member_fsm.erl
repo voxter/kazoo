@@ -45,7 +45,7 @@ handle_sync_event({'connected', JObj}, _From, 'waiting', State) ->
     quilt_log:handle_event(JObj),
     {'reply', 'ok', 'incall', State};
 handle_sync_event({'exitqueue', JObj}, _From, 'waiting', State) ->
-    _ = kz_util:spawn('quilt_log', 'handle_event', [JObj]),
+    _ = kz_util:spawn(fun quilt_log:handle_event/1, [JObj]),
     {'reply', 'ok', 'hangup', State};
 handle_sync_event({'abandon', JObj}, _From, 'waiting', State) ->
     quilt_log:handle_event(JObj),
@@ -54,7 +54,7 @@ handle_sync_event({'exitqueue', JObj}, _From, 'connected', State) ->
     quilt_log:handle_event(JObj),
     {'reply', 'ok', 'incall', State};
 handle_sync_event({'exitqueue', JObj}, _From, 'abandoned', State) ->
-    _ = kz_util:spawn('quilt_log', 'handle_event', [JObj]),
+    _ = kz_util:spawn(fun quilt_log:handle_event/1, [JObj]),
     {'reply', 'ok', 'hangup', State};
 handle_sync_event(Event, _From, StateName, State) ->
     lager:debug("unhandled sync event in state ~s: ~p", [StateName, Event]),

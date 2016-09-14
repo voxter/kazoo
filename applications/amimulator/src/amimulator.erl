@@ -20,7 +20,6 @@
 %%--------------------------------------------------------------------
 -spec start_link() -> startlink_ret().
 start_link() ->
-    _ = start_deps(),
     amimulator_supersup:start_link().
 
 %%--------------------------------------------------------------------
@@ -43,27 +42,4 @@ before_stop() ->
 %%--------------------------------------------------------------------
 -spec stop() -> 'ok'.
 stop() ->
-    'ok'.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Ensures that all dependencies for this app are already running
-%% @end
-%%--------------------------------------------------------------------
--spec start_deps() -> 'ok'.
-start_deps() ->
-    kazoo_apps_deps:ensure(?MODULE), % if started by the kazoo_controller, this will exist
-    _ = [kz_util:ensure_started(App) || App <- ['crypto'
-                                               ,'inets'
-                                               ,'lager'
-                                               ,'kazoo_amqp'
-                                               ,'kazoo_couch'
-                                               ,'kazoo_bindings'
-                                               ,'ranch'
-                                               ,'cowboy'
-                                               ,'public_key'
-                                               ,'ssl'
-                                               ,'socketio'
-                                               ]],
     'ok'.

@@ -23,7 +23,6 @@
 %%--------------------------------------------------------------------
 -spec start_link() -> startlink_ret().
 start_link() ->
-    _ = start_deps(),
     quilt_sup:start_link().
 
 %%--------------------------------------------------------------------
@@ -43,24 +42,6 @@ start() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec stop() -> 'ok'.
-stop() -> 
+stop() ->
     exit(whereis('quilt_listener'), 'shutdown'),
-    'ok'.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Ensures that all dependencies for this app are already running
-%% @end
-%%--------------------------------------------------------------------
--spec start_deps() -> 'ok'.
-start_deps() ->
-    kazoo_apps_deps:ensure(?MODULE), % if started by the kazoo_controller, this will exist
-    _ = [kz_util:ensure_started(App) || App <- ['crypto'
-                                               ,'inets'
-                                               ,'lager'
-                                               ,'kazoo_amqp'
-                                               ,'kazoo_couch'
-                                               ,'kazoo_bindings'
-                                               ]],
     'ok'.

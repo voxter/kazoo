@@ -96,7 +96,7 @@ dial(Props) ->
                									   ]}
                | kz_api:default_headers(<<"resource">>, <<"originate_req">>, ?APP_NAME, ?APP_VERSION)
               ],
-              
+
     kapi_resource:publish_originate_req(props:filter_undefined(Request)).
 
 %% Using the props computed from Originate action, establish a kapps_call
@@ -263,7 +263,7 @@ attended_transfer(Props) ->
           ],
 
     lager:debug("Attempting to transfer ~s to ~s", [CallId, DestExten]),
-    kz_amqp_worker:cast(API, fun kapi_metaflow:publish_req/1).
+    kz_amqp_worker:cast(API, fun kapi_metaflow:publish_action/1).
 
 vm_transfer(Props, Call) ->
     WhappsCall = amimulator_call:to_kapps_call(Call),
@@ -359,7 +359,7 @@ pickup_channel(Props) ->
                									   ]}
                | kz_api:default_headers(<<"resource">>, <<"originate_req">>, ?APP_NAME, ?APP_VERSION)
               ],
-              
+
     kapi_resource:publish_originate_req(props:filter_undefined(Request)).
 
 eavesdrop_req(Props) ->
@@ -405,7 +405,7 @@ eavesdrop_req(Props) ->
 	         ,{<<"Eavesdrop-Mode">>, EavesdropMode}
 	         | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
 	    	]), kz_json:new()),
-              
+
     lager:debug("Eavesdropping on call id ~p", [EavesdropCallId]),
     case kapps_util:amqp_pool_collect(Prop
                                        ,fun kapi_resource:publish_originate_req/1

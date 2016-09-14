@@ -6,6 +6,20 @@
   {registered, []},
   {applications, [ kernel
                  , stdlib
+                 , crypto
+                 , inets
+                 , public_key
+                 , socketio
+                 , ssl
+
+                 , kazoo
+                 , kazoo_amqp
+                 , kazoo_bindings
+                 , kazoo_data
+
+                 , cowboy
+                 , lager
+                 , ranch
                  ]},
   {mod, {amimulator_app, []}},
   {env, []}

@@ -429,7 +429,7 @@ play_instructions(#mailbox{skip_instructions='false'}, Call) ->
 %% @doc
 %%
 %% @end
-%%--------------------------------------------------------------------  
+%%--------------------------------------------------------------------
 -spec maybe_hunt(mailbox(), kapps_call:call()) ->
                                'ok' | {'branch', _} |
                                {'error', 'channel_hungup'}.
@@ -605,7 +605,7 @@ is_hunt_denied(Digits, #mailbox{hunt_deny=RegEx}, _) ->
 hunt_for_callflow(Digits, _, Call) ->
     AccountId = kapps_call:account_id(Call),
     lager:info("hunting for ~s in account ~s", [Digits, AccountId]),
-    case cf_util:lookup_callflow(Digits, AccountId) of
+    case cf_flow:lookup(Digits, AccountId) of
         {'ok', Flow, 'false'} ->
             lager:info("callflow hunt succeeded, will branch callflow"),
             kz_json:get_value(<<"flow">>, Flow, kz_json:new());
