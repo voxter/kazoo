@@ -44,6 +44,7 @@
 -export([play_exit_tone/1, set_play_exit_tone/2]).
 -export([play_entry_tone/1, set_play_entry_tone/2]).
 -export([play_welcome/1, set_play_welcome/2]).
+-export([reuse_pronounced_name/1, set_reuse_pronounced_name/2]).
 -export([conference_doc/1, set_conference_doc/2]).
 -export([call/1, set_call/2]).
 
@@ -96,6 +97,7 @@
 %%  play_exit_tone           Play tone telling caller they have left the conference
 %%  play_entry_tone          Play tone telling caller they have entered the conference
 %%  play_welcome             Play prompt welcoming caller to the conference
+%%  reuse_pronounced_name    Whether we should use the previous name recording for the extension calling in
 %%  conference_doc           the complete conference doc used to create the record (when and if)
 %%  app_name                 The application name used during kapps_conference_command
 %%  app_version              The application version used during kapps_conference_command
@@ -128,6 +130,7 @@
                           ,play_exit_tone = 'true' :: tone()
                           ,play_entry_tone = 'true' :: tone()
                           ,play_welcome = 'true' :: boolean()
+                          ,reuse_pronounced_name :: api_boolean()
                           ,conference_doc :: kz_json:object()
                           ,app_name = <<"kapps_conference">> :: ne_binary()
                           ,app_version = <<"1.0.0">> :: ne_binary()
@@ -176,6 +179,7 @@ from_json(JObj, Conference) ->
                                ,play_exit_tone = get_tone(kz_json:get_value(<<"Play-Exit-Tone">>, JObj, play_exit_tone(Conference)))
                                ,play_entry_tone = get_tone(kz_json:get_value(<<"Play-Entry-Tone">>, JObj, play_entry_tone(Conference)))
                                ,play_welcome = kz_json:is_true(<<"Play-Welcome">>, JObj, play_welcome(Conference))
+                               ,reuse_pronounced_name = kz_json:is_true(<<"Reuse-Pronounced-Name">>, JObj, reuse_pronounced_name(Conference))
                                ,conference_doc = kz_json:is_true(<<"Conference-Doc">>, JObj, conference_doc(Conference))
                                ,kvs = orddict:merge(fun(_, _, V2) -> V2 end, Conference#kapps_conference.kvs, KVS)
                                ,call = load_call(JObj, call(Conference))
@@ -231,6 +235,7 @@ to_proplist(#kapps_conference{}=Conference) ->
     ,{<<"Play-Exit-Tone">>, play_exit_tone(Conference)}
     ,{<<"Play-Entry-Tone">>, play_entry_tone(Conference)}
     ,{<<"Play-Welcome">>, play_welcome(Conference)}
+    ,{<<"Reuse-Pronounced-Name">>, reuse_pronounced_name(Conference)}
     ,{<<"Conference-Doc">>, conference_doc(Conference)}
     ,{<<"Key-Value-Store">>, kvs_to_proplist(Conference)}
     ,{<<"Call">>, kapps_call:to_json(call(Conference))}
@@ -267,6 +272,7 @@ from_conference_doc(JObj, Conference) ->
                                ,play_exit_tone = get_tone(kz_json:get_value(<<"play_exit_tone">>, JObj, play_exit_tone(Conference)))
                                ,play_entry_tone = get_tone(kz_json:get_value(<<"play_entry_tone">>, JObj, play_entry_tone(Conference)))
                                ,play_welcome = kz_json:is_true(<<"play_welcome">>, JObj, play_welcome(Conference))
+                               ,reuse_pronounced_name = kz_json:is_true(<<"reuse_pronounced_name">>, JObj, reuse_pronounced_name(Conference))
                                ,moderator_join_muted = kz_json:is_true(<<"join_muted">>, Moderator, moderator_join_muted(Conference))
                                ,moderator_join_deaf = kz_json:is_true(<<"join_deaf">>, Moderator, moderator_join_deaf(Conference))
                                ,max_participants = kz_json:get_integer_value(<<"max_participants">>, JObj, max_participants(Conference))
@@ -502,6 +508,13 @@ play_welcome(#kapps_conference{play_welcome=ShouldPlay}) ->
 -spec set_play_welcome(boolean(), conference()) -> conference().
 set_play_welcome(ShouldPlay, Conference) when is_boolean(ShouldPlay) ->
     Conference#kapps_conference{play_welcome=ShouldPlay}.
+
+-spec reuse_pronounced_name(conference()) -> api_boolean().
+reuse_pronounced_name(#kapps_conference{reuse_pronounced_name=ReusePronouncedName}) ->
+    ReusePronouncedName.
+-spec set_reuse_pronounced_name(api_boolean(), conference()) -> conference().
+set_reuse_pronounced_name(ReusePronouncedName, Conference) when is_atom(ReusePronouncedName) ->
+    Conference#kapps_conference{reuse_pronounced_name=ReusePronouncedName}.
 
 -spec conference_doc(conference()) -> api_object().
 conference_doc(#kapps_conference{conference_doc=JObj}) -> JObj.
