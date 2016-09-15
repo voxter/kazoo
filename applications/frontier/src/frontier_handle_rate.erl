@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2013, 2600Hz
+%%% @copyright (C) 2010-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -9,9 +9,9 @@
 -module(frontier_handle_rate).
 
 -export([handle_rate_req/2
-         ,lookup_rate_limit_records/1
-         ,names/0
-         ,name_to_method/1
+        ,lookup_rate_limit_records/1
+        ,names/0
+        ,name_to_method/1
         ]).
 
 -include("frontier.hrl").
@@ -26,20 +26,21 @@ is_device_defaults(JObj) ->
                          [?DEVICE_DEFAULT_RATES, _] -> 'true';
                          _ -> 'false'
                      end,
-    frontier_utils:is_device(JObj) andalso IsDefaultRates.
+    frontier_utils:is_device(JObj)
+        andalso IsDefaultRates.
 
 -spec names() -> ne_binaries().
 names() ->
     [<<"registrations">>
-     ,<<"invites">>
-     ,<<"total_packets">>
+    ,<<"invites">>
+    ,<<"total_packets">>
     ].
 
 -spec methods() -> ne_binaries().
 methods() ->
     [<<"REGISTER">>
-     ,<<"INVITE">>
-     ,<<"TOTAL">>
+    ,<<"INVITE">>
+    ,<<"TOTAL">>
     ].
 
 -spec name_to_method(ne_binary()) -> ne_binary().
@@ -69,7 +70,7 @@ lookup_methods(JObj) ->
                  end,
     Methods = kz_json:get_value(<<"Method-List">>, JObj),
     MethodNames = case is_list(Methods) of
-                      'true' -> lists:map(fun resolve_method/1, Methods);
+                      'true' -> [resolve_method(M) || M <- Methods];
                       'false' -> []
                   end,
     case is_list(MethodName) of
@@ -80,8 +81,8 @@ lookup_methods(JObj) ->
 -spec send_response(kz_json:object(), kz_json:object()) -> 'ok'.
 send_response(Limits, Reqest) ->
     RespStub = kz_json:from_list([{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, Reqest)}
-                                   | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-                                  ]),
+                                  | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                 ]),
     Srv = kz_json:get_value(<<"Server-ID">>, Reqest),
     kapi_frontier:publish_ratelimits_resp(Srv, kz_json:merge_jobjs(Limits, RespStub)).
 
@@ -112,9 +113,11 @@ build_list_of_querynames(Entity, IncludeRealm) ->
                     'true' -> Username;
                     'false' -> Realm
                 end,
-    case IncludeRealm andalso Realm =/= Entity of
+    case IncludeRealm
+        andalso Realm =/= Entity
+    of
         'true' -> [Realm, Username];
-    'false' -> [QueryName]
+        'false' -> [QueryName]
     end.
 
 -spec run_rate_limits_query(ne_binary(), ne_binary(), boolean(), ne_binaries()) -> kz_json:objects().
@@ -122,14 +125,17 @@ run_rate_limits_query(Entity, AccountDB, IncludeRealm, MethodList) ->
     EntityList = build_list_of_querynames(Entity, IncludeRealm),
     Rates = fetch_rates(EntityList, IncludeRealm, MethodList, AccountDB),
     Realm = frontier_utils:extract_realm(Entity),
-    FromSysCOnfig = case Realm =/= EntityList andalso IncludeRealm of
-                        'true' ->
-                            fetch_rates_from_sys_config(Realm, <<"realm">>, MethodList)
-                                ++ fetch_rates_from_sys_config(Entity, <<"device">>, MethodList);
-                        'false' ->
-                            Type = frontier_utils:get_entity_type(Entity),
-                            fetch_rates_from_sys_config(Entity, Type, MethodList)
-                    end,
+    FromSysCOnfig =
+        case Realm =/= EntityList
+            andalso IncludeRealm
+        of
+            'true' ->
+                fetch_rates_from_sys_config(Realm, <<"realm">>, MethodList)
+                    ++ fetch_rates_from_sys_config(Entity, <<"device">>, MethodList);
+            'false' ->
+                Type = frontier_utils:get_entity_type(Entity),
+                fetch_rates_from_sys_config(Entity, Type, MethodList)
+        end,
     Rates ++ FromSysCOnfig.
 
 -spec to_json_key(ne_binary()) -> ne_binary().
@@ -145,11 +151,15 @@ fold_responses(Record, Acc) ->
     RPM = kz_json:get_value([<<"value">>, ?MINUTE], Record),
     RPS = kz_json:get_value([<<"value">>, ?SECOND], Record),
     Section = kz_json:get_value(Type, Acc, kz_json:new()),
-    S1 = case RPM =/= 'undefined' andalso kz_json:get_value([<<"Minute">>, JsonMethod], Section) of
+    S1 = case RPM =/= 'undefined'
+             andalso kz_json:get_value([<<"Minute">>, JsonMethod], Section)
+         of
              'undefined' -> kz_json:set_value([<<"Minute">>, JsonMethod], RPM, Section);
              _ -> Section
          end,
-    S2 = case RPS =/= 'undefined' andalso kz_json:get_value([<<"Second">>, JsonMethod], Section) of
+    S2 = case RPS =/= 'undefined'
+             andalso kz_json:get_value([<<"Second">>, JsonMethod], Section)
+         of
              'undefined' -> kz_json:set_value([<<"Second">>, JsonMethod], RPS, S1);
              _ -> S1
          end,
@@ -164,7 +174,7 @@ make_deny_rates(Entity, IncludeRealm, MethodList) ->
     Rates = deny_rates_for_entity(Entity, MethodList),
     Realm = frontier_utils:extract_realm(Entity),
     case Entity =/= Realm
-         andalso IncludeRealm
+        andalso IncludeRealm
     of
         'true' -> Rates ++ deny_rates_for_entity(Realm, MethodList);
         'false' -> Rates
@@ -176,7 +186,7 @@ deny_rates_for_entity(Entity, MethodList) ->
     lists:flatmap(fun(Method) ->
                           construct_records(Method, Entity, -1, -1)
                   end
-                  ,MethodList
+                 ,MethodList
                  ).
 
 -spec construct_records(ne_binary(), ne_binary(), ne_binary() | integer(), ne_binary() | integer()) ->
@@ -187,19 +197,16 @@ construct_records(Method, Entity, RPM, RPS) ->
                        [Realm] -> {Realm, <<"realm">>}
                    end,
     RPMObject = kz_json:from_list([{<<"type">>, Type}
-                                   ,{?MINUTE, RPM}
+                                  ,{?MINUTE, RPM}
                                   ]),
     RPSObject = kz_json:from_list([{<<"type">>, Type}
-                                   ,{?SECOND, RPS}
+                                  ,{?SECOND, RPS}
                                   ]),
     Record = kz_json:from_list([{<<"id">>, 'undefined'}
-                                ,{<<"key">>, [Name, Method]}
+                               ,{<<"key">>, [Name, Method]}
                                ]),
-    lists:map(fun(JObj) ->
-                      kz_json:set_value(<<"value">>, JObj, Record)
-              end
-              ,[RPMObject, RPSObject]
-             ).
+    [kz_json:set_value(<<"value">>, JObj, Record)
+     || JObj <- [RPMObject, RPSObject]].
 
 -spec section_type(ne_binary()) -> ne_binary().
 section_type(<<"realm">>) -> <<"account">>;
@@ -218,10 +225,12 @@ fetch_rates_from_sys_config(<<_/binary>> = Entity, Type, MethodList) ->
     lists:foldl(fun(Method, Acc) ->
                         RPM = kz_json:get_value([?MINUTE, Method], TargetRates),
                         RPS = kz_json:get_value([?SECOND, Method], TargetRates),
-                        case RPM =:= 'undefined' orelse RPS =:= 'undefined' of
+                        case RPM =:= 'undefined'
+                            orelse RPS =:= 'undefined'
+                        of
                             'true' -> Acc;
                             'false' -> construct_records(Method, Entity, RPM, RPS) ++ Acc
-                         end
+                        end
                 end, [], MethodList).
 
 -spec fetch_rates(ne_binaries(), boolean(), ne_binaries(), ne_binary()) -> kz_json:objects().
@@ -298,7 +307,9 @@ build_results({'ok', JObj}, MethodList, Realm) ->
 build(Method, Acc, JObj, Realm) ->
     PerMinute = kz_json:get_value([?MINUTE, Method], JObj),
     PerSecond = kz_json:get_value([?SECOND, Method], JObj),
-    case PerMinute =:= 'undefined' orelse PerSecond =:= 'undefined' of
+    case PerMinute =:= 'undefined'
+        orelse PerSecond =:= 'undefined'
+    of
         'true' -> Acc;
         'false' -> construct_records(Method, Realm, PerMinute, PerSecond)
     end.

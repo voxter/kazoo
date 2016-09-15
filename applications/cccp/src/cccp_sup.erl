@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright
+%%% @copyright (C) 2012-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -19,8 +19,8 @@
 
 %% Helper macro for declaring children of supervisor
 -define(CHILDREN, [?SUPER('cccp_platform_sup')
-                   ,?SUPER('cccp_callback_sup')
-                   ,?WORKER('cccp_listener')
+                  ,?SUPER('cccp_callback_sup')
+                  ,?WORKER('cccp_listener')
                   ]).
 
 %% ===================================================================

@@ -22,7 +22,7 @@
 sup.bash
 
 _rel/
-rel/relx.config	
+rel/relx.config
 rel/dev-vm.args
 rel/vm.args
 
@@ -36,4 +36,14 @@ core/kazoo/mime.types
 
 applications/*/priv/archive_data/*
 applications/*/priv/ssl
+applications/registrar/c_src/env.mk
+
+core/sup/sup
+.rebar/
+
+core/kazoo_number_manager/dialcodes.json
+core/kazoo_number_manager/src/knm_iso3166a2_itu.erl
+
+make/erlang-formatter-master/
+/TAGS
 

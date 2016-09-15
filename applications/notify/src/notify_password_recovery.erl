@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%% Renders a custom account email template, or the system default,
 %%% and sends the email with voicemail attachment to the user.
@@ -42,7 +42,7 @@ init() ->
 %%--------------------------------------------------------------------
 -spec handle_req(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_req(JObj, _Props) ->
-    'true' = kapi_notifications:pwd_recovery_v(JObj),
+    'true' = kapi_notifications:password_recovery_v(JObj),
     kz_util:put_callid(JObj),
 
     lager:debug("request for password reset taken into account, sending email notification"),
@@ -77,9 +77,9 @@ create_template_props(Event, Account) ->
     User = kz_json:delete_key(<<"Request">>, Event),
     Request = kz_json:get_value(<<"Request">>, Event, kz_json:new()),
     [{<<"user">>, notify_util:json_to_template_props(User)}
-     ,{<<"request">>, notify_util:json_to_template_props(Request)}
-     ,{<<"account">>, notify_util:json_to_template_props(Account)}
-     ,{<<"service">>, notify_util:get_service_props(Request, Account, ?MOD_CONFIG_CAT)}
+    ,{<<"request">>, notify_util:json_to_template_props(Request)}
+    ,{<<"account">>, notify_util:json_to_template_props(Account)}
+    ,{<<"service">>, notify_util:get_service_props(Request, Account, ?MOD_CONFIG_CAT)}
     ].
 
 %%--------------------------------------------------------------------
@@ -102,26 +102,26 @@ build_and_send_email(TxtBody, HTMLBody, Subject, To, Props) ->
 
     %% Content Type, Subtype, Headers, Parameters, Body
     Email = {<<"multipart">>, <<"mixed">>
-                 ,[{<<"From">>, From}
-                   ,{<<"To">>, To}
-                   ,{<<"Subject">>, Subject}
-                  ]
-             ,ContentTypeParams
-             ,[{<<"multipart">>, <<"alternative">>, [], []
-                ,[{<<"text">>, <<"plain">>
-                       ,props:filter_undefined(
-                          [{<<"Content-Type">>, iolist_to_binary([<<"text/plain">>, CharsetString])}
-                           ,{<<"Content-Transfer-Encoding">>, PlainTransferEncoding}
-                          ])
-                   ,[], iolist_to_binary(TxtBody)}
-                  ,{<<"text">>, <<"html">>
-                        ,props:filter_undefined(
-                           [{<<"Content-Type">>, iolist_to_binary([<<"text/html">>, CharsetString])}
-                            ,{<<"Content-Transfer-Encoding">>, HTMLTransferEncoding}
-                           ])
-                    ,[], iolist_to_binary(HTMLBody)}
-                 ]
-               }
-              ]
+            ,[{<<"From">>, From}
+             ,{<<"To">>, To}
+             ,{<<"Subject">>, Subject}
+             ]
+            ,ContentTypeParams
+            ,[{<<"multipart">>, <<"alternative">>, [], []
+              ,[{<<"text">>, <<"plain">>
+                ,props:filter_undefined(
+                   [{<<"Content-Type">>, iolist_to_binary([<<"text/plain">>, CharsetString])}
+                   ,{<<"Content-Transfer-Encoding">>, PlainTransferEncoding}
+                   ])
+                ,[], iolist_to_binary(TxtBody)}
+               ,{<<"text">>, <<"html">>
+                ,props:filter_undefined(
+                   [{<<"Content-Type">>, iolist_to_binary([<<"text/html">>, CharsetString])}
+                   ,{<<"Content-Transfer-Encoding">>, HTMLTransferEncoding}
+                   ])
+                ,[], iolist_to_binary(HTMLBody)}
+               ]
+              }
+             ]
             },
     notify_util:send_email(From, To, Email).

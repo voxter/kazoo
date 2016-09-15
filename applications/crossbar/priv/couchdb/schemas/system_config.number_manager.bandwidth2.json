@@ -1,0 +1,34 @@
+{
+    "$schema": "http://json-schema.org/draft-03/schema#",
+    "_id": "system_config.number_manager.bandwidth2",
+    "description": "Schema for number_manager.bandwidth2 system_config",
+    "properties": {
+        "account_id": {
+            "default": "",
+            "description": "number_manager.bandwidth2 account id",
+            "type": "string"
+        },
+        "debug": {
+            "default": false,
+            "description": "number_manager.bandwidth2 debug",
+            "type": "boolean"
+        },
+        "enable_provisioning": {
+            "default": true,
+            "description": "number_manager.bandwidth2 enable provisioning",
+            "type": "boolean"
+        },
+        "order_name_prefix": {
+            "default": "Kazoo",
+            "description": "number_manager.bandwidth2 order name prefix",
+            "type": "string"
+        },
+        "sandbox_provisioning": {
+            "default": true,
+            "description": "number_manager.bandwidth2 sandbox provisioning",
+            "type": "boolean"
+        }
+    },
+    "required": true,
+    "type": "object"
+}

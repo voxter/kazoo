@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2014, 2600Hz INC
+%%% @copyright (C) 2016, 2600Hz INC
 %%% @doc
 %%% "data":{
 %%%   "digits":"#123" // what sequence to send
@@ -9,6 +9,8 @@
 %%% @contributors
 %%%-------------------------------------------------------------------
 -module(cf_send_dtmf).
+
+-behaviour(gen_cf_action).
 
 -include("callflow.hrl").
 

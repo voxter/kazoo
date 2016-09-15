@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2013, 2600Hz
+%%% @copyright (C) 2011-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -21,7 +21,7 @@
 -define(SERVER, ?MODULE).
 
 -define(CHILDREN, [?CACHE(?CACHE_NAME)
-                   ,?WORKER('hotornot_listener')
+                  ,?WORKER('hotornot_listener')
                   ]).
 
 %% ===================================================================

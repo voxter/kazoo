@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz
+%%% @copyright (C) 2011-2016, 2600Hz
 %%% @doc
 %%%
 %%% Handle CRUD operations for Directories
@@ -11,15 +11,15 @@
 -module(cb_directories).
 
 -export([init/0
-         ,allowed_methods/0, allowed_methods/1
-         ,resource_exists/0, resource_exists/1
-         ,content_types_provided/2
-         ,to_pdf/1
-         ,validate/1, validate/2
-         ,put/1
-         ,post/2
-         ,patch/2
-         ,delete/2
+        ,allowed_methods/0, allowed_methods/1
+        ,resource_exists/0, resource_exists/1
+        ,content_types_provided/2
+        ,to_pdf/1
+        ,validate/1, validate/2
+        ,put/1
+        ,post/2
+        ,patch/2
+        ,delete/2
         ]).
 
 -include("crossbar.hrl").
@@ -58,7 +58,7 @@ init() ->
 -spec allowed_methods(path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
-allowed_methods(_) ->
+allowed_methods(_DirectoryId) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_PATCH, ?HTTP_DELETE].
 
 %%--------------------------------------------------------------------
@@ -103,7 +103,7 @@ to_pdf({Req, Context}) ->
     Nouns = cb_context:req_nouns(Context),
     case props:get_value(<<"directories">>, Nouns, []) of
         [] -> {Req, Context};
-        [Id|_] ->
+        [Id] ->
             Context1 = read(Id, Context),
             case cb_context:resp_status(Context1) of
                 'success' -> {Req, get_pdf(Context1)};
@@ -225,15 +225,14 @@ pdf_props(Context) ->
 
     Directory = kz_json:to_proplist(kz_json:delete_key(<<"users">>, RespData)),
     Users =
-        pdf_users(
-            AccountId
-            ,props:get_binary_value(<<"sort_by">>, Directory, <<"last_name">>)
-            ,kz_json:get_value(<<"users">>, RespData, [])
-        ),
+        pdf_users(AccountId
+                 ,props:get_binary_value(<<"sort_by">>, Directory, <<"last_name">>)
+                 ,kz_json:get_value(<<"users">>, RespData, [])
+                 ),
 
     [{<<"type">>, <<"directory">>}
-     ,{<<"users">>, Users}
-     ,{<<"directory">>, Directory}
+    ,{<<"users">>, Users}
+    ,{<<"directory">>, Directory}
     ].
 
 %%--------------------------------------------------------------------
@@ -249,14 +248,13 @@ pdf_users(AccountId, SortBy, Users) ->
 
 pdf_users(_AccountDb, SortBy, [], Acc) ->
     Users = [{props:get_value([<<"user">>, SortBy], U), U} || U <- Acc],
-    [U || {_, U} <- lists:keysort(1, Users)];
+    [U || {_SortCriterion, U} <- lists:keysort(1, Users)];
 pdf_users(AccountDb, SortBy, [JObj|Users], Acc) ->
     UserId = kz_json:get_value(<<"user_id">>, JObj),
     CallflowId = kz_json:get_value(<<"callflow_id">>, JObj),
-    Props = [
-        {<<"user">>, pdf_user(AccountDb, UserId)}
-        ,{<<"callflow">>, pdf_callflow(AccountDb, CallflowId)}
-    ],
+    Props = [{<<"user">>, pdf_user(AccountDb, UserId)}
+            ,{<<"callflow">>, pdf_callflow(AccountDb, CallflowId)}
+            ],
     pdf_users(AccountDb, SortBy, Users, [Props|Acc]).
 
 %%--------------------------------------------------------------------
@@ -266,7 +264,7 @@ pdf_users(AccountDb, SortBy, [JObj|Users], Acc) ->
 %%--------------------------------------------------------------------
 -spec pdf_user(ne_binary(), ne_binary()) -> kz_proplist().
 pdf_user(AccountDb, UserId) ->
-    case kz_datamgr:open_doc(AccountDb, UserId) of
+    case kz_datamgr:open_cache_doc(AccountDb, UserId) of
         {'error', _R} ->
             lager:error("failed to fetch user ~s in ~s: ~p", [UserId, AccountDb, _R]),
             [];
@@ -281,7 +279,7 @@ pdf_user(AccountDb, UserId) ->
 %%--------------------------------------------------------------------
 -spec pdf_callflow(ne_binary(), ne_binary()) -> kz_proplist().
 pdf_callflow(AccountDb, CallflowId) ->
-    case kz_datamgr:open_doc(AccountDb, CallflowId) of
+    case kz_datamgr:open_cache_doc(AccountDb, CallflowId) of
         {'error', _R} ->
             lager:error("failed to fetch callflow ~s in ~s: ~p", [CallflowId, AccountDb, _R]),
             [];
@@ -318,9 +316,9 @@ read(Id, Context) ->
 -spec load_directory_users(ne_binary(), cb_context:context()) -> cb_context:context().
 load_directory_users(Id, Context) ->
     Context1 = crossbar_doc:load_view(?CB_USERS_LIST
-                                      ,[{<<"key">>, Id}]
-                                      ,Context
-                                      ,fun normalize_users_results/2
+                                     ,[{'key', Id}]
+                                     ,Context
+                                     ,fun normalize_users_results/2
                                      ),
     case cb_context:resp_status(Context1) of
         'success' ->
@@ -329,8 +327,6 @@ load_directory_users(Id, Context) ->
             cb_context:set_resp_data(Context, kz_json:set_value(<<"users">>, Users, Directory));
         _Status -> Context
     end.
-
-
 
 %%--------------------------------------------------------------------
 %% @private
@@ -364,7 +360,7 @@ validate_patch(DocId, Context) ->
 -spec on_successful_validation(api_binary(), cb_context:context()) -> cb_context:context().
 on_successful_validation('undefined', Context) ->
     cb_context:set_doc(Context
-                       ,kz_doc:set_type(cb_context:doc(Context), <<"directory">>)
+                      ,kz_doc:set_type(cb_context:doc(Context), <<"directory">>)
                       );
 on_successful_validation(DocId, Context) ->
     crossbar_doc:load_merge(DocId, Context, ?TYPE_CHECK_OPTION(<<"directory">>)).
@@ -393,7 +389,7 @@ normalize_view_results(JObj, Acc) ->
 -spec normalize_users_results(kz_json:object(), kz_json:objects()) -> kz_json:objects().
 normalize_users_results(JObj, Acc) ->
     [kz_json:from_list([{<<"user_id">>, kz_doc:id(JObj)}
-                        ,{<<"callflow_id">>, kz_json:get_value(<<"value">>, JObj)}
+                       ,{<<"callflow_id">>, kz_json:get_value(<<"value">>, JObj)}
                        ])
      | Acc
     ].

@@ -48,35 +48,42 @@
 -define(KEY_MSG_REPLY_ID, <<"Msg-Reply-ID">>).
 -define(KEY_NODE, <<"Node">>).
 -define(KEY_SERVER_ID, <<"Server-ID">>).
+-define(KEY_QUEUE_ID, <<"Server-Queue-ID">>).
 -define(KEY_LOG_ID, <<"System-Log-ID">>).
+-define(KEY_MSG_ACCOUNT_ID, <<"Account-ID">>).
+-define(KEY_MSG_CALL_ID, <<"Call-ID">>).
+
+-define(KEY_AMQP_BROKER, <<"AMQP-Broker">>).
+-define(KEY_AMQP_ZONE, <<"AMQP-Broker-Zone">>).
 
 %% Default Headers
 %% All messages MUST include the DEFAULT_HEADERS list.
 -define(DEFAULT_HEADERS, [?KEY_APP_NAME
-                          ,?KEY_APP_VERSION
-                          ,?KEY_EVENT_CATEGORY
-                          ,?KEY_EVENT_NAME
-                          ,?KEY_MSG_ID
+                         ,?KEY_APP_VERSION
+                         ,?KEY_EVENT_CATEGORY
+                         ,?KEY_EVENT_NAME
+                         ,?KEY_MSG_ID
                          ]).
 -define(OPTIONAL_DEFAULT_HEADERS, [<<"Raw-Headers">>, <<"Destination-Server">>
-                                   ,<<"Geo-Location">>, <<"Access-Group">>
-                                   ,?KEY_NODE, ?KEY_SERVER_ID
-                                   ,<<"Defer-Response">>, ?KEY_LOG_ID
+                                  ,<<"Geo-Location">>, <<"Access-Group">>
+                                  ,?KEY_NODE, ?KEY_SERVER_ID, ?KEY_QUEUE_ID
+                                  ,<<"Defer-Response">>, ?KEY_LOG_ID
+                                  ,?KEY_MSG_ACCOUNT_ID, ?KEY_MSG_CALL_ID
                                   ]).
 -define(DEFAULT_VALUES, [{?KEY_NODE, kz_util:to_binary(node())}
-                         ,{?KEY_MSG_ID, kz_util:rand_hex_binary(16)}
+                        ,{?KEY_MSG_ID, kz_util:rand_hex_binary(16)}
                         ]).
 -define(DEFAULT_TYPES, [{?KEY_SERVER_ID, fun is_binary/1}
-                        ,{?KEY_EVENT_CATEGORY, fun is_binary/1}
-                        ,{?KEY_EVENT_NAME, fun is_binary/1}
-                        ,{?KEY_APP_NAME, fun is_binary/1}
-                        ,{?KEY_APP_VERSION, fun is_binary/1}
-                        ,{<<"Raw-Headers">>, fun is_binary/1}
-                        ,{<<"Destination-Server">>, fun is_binary/1}
-                        ,{<<"Geo-Location">>, fun is_binary/1}
-                        ,{<<"Access-Group">>, fun is_binary/1}
-                        ,{<<"Tenant-ID">>, fun is_binary/1}
-                        ,{?KEY_MSG_ID, fun is_binary/1}
+                       ,{?KEY_EVENT_CATEGORY, fun is_binary/1}
+                       ,{?KEY_EVENT_NAME, fun is_binary/1}
+                       ,{?KEY_APP_NAME, fun is_binary/1}
+                       ,{?KEY_APP_VERSION, fun is_binary/1}
+                       ,{<<"Raw-Headers">>, fun is_binary/1}
+                       ,{<<"Destination-Server">>, fun is_binary/1}
+                       ,{<<"Geo-Location">>, fun is_binary/1}
+                       ,{<<"Access-Group">>, fun is_binary/1}
+                       ,{<<"Tenant-ID">>, fun is_binary/1}
+                       ,{?KEY_MSG_ID, fun is_binary/1}
                        ]).
 
 %% Error Responses

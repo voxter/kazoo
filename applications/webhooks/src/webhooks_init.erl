@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2015, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -8,9 +8,9 @@
 -module(webhooks_init).
 
 -export([start_link/0
-         ,init_modules/0
-         ,existing_modules/0
-         ,maybe_init_account/2
+        ,init_modules/0
+        ,existing_modules/0
+        ,maybe_init_account/2
         ]).
 
 -include("webhooks.hrl").
@@ -55,16 +55,14 @@ init_master_account_db() ->
 
 init_master_account_db(MasterAccountDb) ->
     _ = kz_datamgr:revise_doc_from_file(MasterAccountDb
-                                      ,'webhooks'
-                                      ,<<"webhooks.json">>
-                                      ),
+                                       ,'webhooks'
+                                       ,<<"webhooks.json">>
+                                       ),
     lager:debug("loaded view into master db ~s", [MasterAccountDb]).
 
 -spec init_modules() -> 'ok'.
 init_modules() ->
-    _ = [init_module(Mod)
-         || Mod <- existing_modules()
-        ],
+    lists:foreach(fun init_module/1, existing_modules()),
     lager:debug("finished initializing modules").
 
 -spec init_module(atom()) -> 'ok'.
@@ -88,15 +86,15 @@ existing_modules(WebhooksRoot) ->
     ModulesDirectory = filename:join(WebhooksRoot, "ebin"),
     Extension = ".beam",
     Utils = ["webhooks_app"
-             ,"webhooks_channel_util"
-             ,"webhooks_disabler"
-             ,"webhooks_init"
-             ,"webhooks_listener"
-             ,"webhooks_maintenance"
-             ,"webhooks_shared_listener"
-             ,"webhooks_skel"
-             ,"webhooks_sup"
-             ,"webhooks_util"
+            ,"webhooks_channel_util"
+            ,"webhooks_disabler"
+            ,"webhooks_init"
+            ,"webhooks_listener"
+            ,"webhooks_maintenance"
+            ,"webhooks_shared_listener"
+            ,"webhooks_skel"
+            ,"webhooks_sup"
+            ,"webhooks_util"
             ],
     Pattern = filename:join(ModulesDirectory, "*"++Extension),
     [kz_util:to_atom(Module, 'true')

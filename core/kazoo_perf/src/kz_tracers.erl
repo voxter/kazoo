@@ -5,14 +5,16 @@
 %% cat /path/to/eflame.trace.out | grep -v 'SLEEP' | ./flamegraph.riak-color.pl > /var/www/html/flame.svg
 
 -export([add_trace/1, add_trace/2
-         ,gen_load/1, gen_load/2
+        ,gen_load/1, gen_load/2
         ]).
 
 -include_lib("kazoo_data/src/kz_data.hrl").
 
+-spec add_trace(pid()) -> 'ok'.
 add_trace(Pid) ->
     add_trace(Pid, 100*1000).
 
+-spec add_trace(pid(), pos_integer()) -> 'ok'.
 add_trace(Pid, CollectFor) ->
     spawn(fun() ->
                   io:format("started trace for ~p in ~p~n", [Pid, self()]),
@@ -29,11 +31,13 @@ add_trace(Pid, CollectFor) ->
           end),
     'ok'.
 
+-spec gen_load(non_neg_integer()) -> 'ok'.
+-spec gen_load(non_neg_integer(), non_neg_integer()) -> 'ok'.
 gen_load(N) ->
     gen_load(N, 1000).
 gen_load(N, D) ->
-    {A1, A2, A3} = Start = os:timestamp(),
-    _ = random:seed(A1, A2, A3),
+    Start = os:timestamp(),
+    _ = rand:seed('exsplus', Start),
 
     {PointerTab, MonitorTab} = gen_listener:call(?CACHE_NAME, {'tables'}),
     Tables = [?CACHE_NAME, PointerTab, MonitorTab],
@@ -54,18 +58,18 @@ wait_for_refs(Start, MaxMailbox, Tables, []) ->
         _ -> timer:sleep(1000),
              wait_for_refs(Start, MaxMailbox, Tables, [])
     end;
-wait_for_refs(Start, {M, G}, Tables, [{Pid, Ref}|R]=PRs) ->
+wait_for_refs(Start, {M,_G}=MG, Tables, [{Pid, Ref}|R]=PRs) ->
     receive
         {'DOWN', Ref, 'process', Pid, _Reason} ->
-            wait_for_refs(Start, {M, G}, Tables, R)
+            wait_for_refs(Start, MG, Tables, R)
     after 1000 ->
             case cache_data() of
-                {N, F} when N > M ->
+                {N, F}=NF when N > M ->
                     io:format("new max message queue size ~p (~p)~n", [N, F]),
                     table_status(Tables),
-                    wait_for_refs(Start, {N, F}, Tables, PRs);
+                    wait_for_refs(Start, NF, Tables, PRs);
                 _ ->
-                    wait_for_refs(Start, {M, G}, Tables, PRs)
+                    wait_for_refs(Start, MG, Tables, PRs)
             end
     end.
 
@@ -81,10 +85,10 @@ do_load_gen(Ds) ->
 
     Docs = [new_doc(AccountDb, Doc) || Doc <- lists:seq(1,Ds)],
 
-    {A1, A2, A3} = Start = os:timestamp(),
-    _ = random:seed(A1, A2, A3),
+    Start = os:timestamp(),
+    _ = rand:seed('exsplus', Start),
 
-    case random:uniform(100) of
+    case rand:uniform(100) of
         42 ->
             io:format("unlucky account ~s getting deleted early: ", [AccountDb]);
         _N ->
@@ -106,10 +110,10 @@ verify_no_docs(Docs) ->
 
 verify_no_doc(Doc) ->
     case kz_cache:peek_local(?CACHE_NAME
-                             ,{'couch_util'
-                               ,kz_doc:account_db(Doc)
-                               ,kz_doc:id(Doc)
-                              }
+                            ,{'couch_util'
+                             ,kz_doc:account_db(Doc)
+                             ,kz_doc:id(Doc)
+                             }
                             )
     of
         {'error', 'not_found'} -> 'true';
@@ -150,7 +154,7 @@ perform_ops(Start, AccountDb, Ops) ->
 
 cache_data() ->
     [{'message_queue_len', N}
-     ,{'current_function', F}
+    ,{'current_function', F}
     ] = erlang:process_info(whereis(?CACHE_NAME)
                            ,['message_queue_len', 'current_function']
                            ),
@@ -159,17 +163,17 @@ cache_data() ->
 wait_for_cache(Start) ->
     wait_for_cache(Start, {0, 'ok'}).
 
-wait_for_cache(Start, {N, F}) ->
+wait_for_cache(Start, {N, _}=NF) ->
     case cache_data() of
-        {M, G} when M > N ->
+        {M, G}=MG when M > N ->
             io:format("~p new max msg queue size ~p (~p)~n", [Start, M, G]),
             timer:sleep(1000),
-            wait_for_cache(Start, {M, G});
+            wait_for_cache(Start, MG);
         {0, _F} ->
             io:format("~pms done (in ~p)~n", [kz_util:elapsed_ms(Start), _F]);
         _ ->
             timer:sleep(1000),
-            wait_for_cache(Start, {N, F})
+            wait_for_cache(Start, NF)
     end.
 
 perform_op({'edit', Doc}, Acc, AccountDb) ->
@@ -185,7 +189,7 @@ perform_op({'noop', Doc}, Acc, _AccountDb) ->
     [Doc | Acc].
 
 op() ->
-    case random:uniform(3) of
+    case rand:uniform(3) of
         1 -> 'edit';
         2 -> 'delete';
         3 -> 'noop'

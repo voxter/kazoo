@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz
+%%% @copyright (C) 2011-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -26,14 +26,12 @@
 -export([json_to_record/1]).
 -export([record_to_json/1]).
 
--import('kz_util', [get_xml_value/2]).
-
--include_lib("braintree/include/braintree.hrl").
+-include("bt.hrl").
 
 -type customer() :: #bt_customer{}.
 -type customers() :: [customer()].
 -export_type([customer/0
-              ,customers/0
+             ,customers/0
              ]).
 
 %%--------------------------------------------------------------------
@@ -214,10 +212,10 @@ update_card(Customer, Card) ->
     %% NewCard = Card with updated fields
     {[NewCard], OldCards} =
         lists:partition(fun(CC) -> braintree_card:payment_token(CC) =:= NewPaymentToken end
-                        ,get_cards(UpdatedCustomer)
+                       ,get_cards(UpdatedCustomer)
                        ),
 
-    NewSubscriptions =
+    _NewSubscriptions =
         [braintree_subscription:update(
            braintree_subscription:update_payment_token(Sub, NewPaymentToken)
           )
@@ -228,17 +226,29 @@ update_card(Customer, Card) ->
     %% Make card as default /after/ updating subscriptions: this way
     %%  subscriptions are not attached to a deleted card and thus do not
     %%  get cancelled before we can update their payment token.
-    NewCards = [braintree_card:update(
-                  braintree_card:make_default(NewCard, 'true')
-                 )
-               ],
+    NewCard1 = braintree_card:update(
+                 braintree_card:make_default(NewCard, 'true')
+                ),
 
-    %% Delete previous cards /after/ changing subscriptions' payment token.
-    lists:foreach(fun braintree_card:delete/1, OldCards),
+    %% Delete previous cards and addresses /after/ changing subscriptions' payment token.
+    delete_old_cards_and_addresses(OldCards, NewCard1),
 
-    UpdatedCustomer#bt_customer{credit_cards = NewCards
-                                ,subscriptions = NewSubscriptions
-                               }.
+    %%get all the new user info
+    find(UpdatedCustomer).
+
+-spec delete_old_cards_and_addresses(bt_cards(), bt_card()) -> ok.
+delete_old_cards_and_addresses(OldCards, #bt_card{billing_address_id=NewAddressId}) ->
+    lists:foreach(
+      fun(#bt_card{billing_address_id='undefined'}=OldCard) ->
+              braintree_card:delete(OldCard);
+         (#bt_card{billing_address_id=OldAddressId}=OldCard) when OldAddressId =:= NewAddressId ->
+              braintree_card:delete(OldCard);
+         (#bt_card{billing_address=OldAddress}=OldCard) ->
+              braintree_card:delete(OldCard),
+              braintree_address:delete(OldAddress)
+      end
+                 ,OldCards
+     ).
 
 -spec do_update(bt_customer()) -> bt_customer().
 do_update(#bt_customer{id=CustomerId}=Customer) ->
@@ -277,25 +287,25 @@ xml_to_record(Xml, Base) ->
     CreditCardPath = lists:flatten([Base, "/credit-cards/credit-card"]),
     AddressPath = lists:flatten([Base, "/addresses/address"]),
     SubscriptionPath = lists:flatten([Base, "/credit-cards/credit-card/subscriptions/subscription"]),
-    #bt_customer{id = get_xml_value([Base, "/id/text()"], Xml)
-                 ,first_name = get_xml_value([Base, "/first-name/text()"], Xml)
-                 ,last_name = get_xml_value([Base, "/last-name/text()"], Xml)
-                 ,company = get_xml_value([Base, "/company/text()"], Xml)
-                 ,email = get_xml_value([Base, "/email/text()"], Xml)
-                 ,phone = get_xml_value([Base, "/phone/text()"], Xml)
-                 ,fax = get_xml_value([Base, "/fax/text()"], Xml)
-                 ,website = get_xml_value([Base, "/website/text()"], Xml)
-                 ,created_at = get_xml_value([Base, "/created-at/text()"], Xml)
-                 ,updated_at = get_xml_value([Base, "/updated-at/text()"], Xml)
-                 ,credit_cards = [braintree_card:xml_to_record(Card)
-                                  || Card <- xmerl_xpath:string(CreditCardPath, Xml)
+    #bt_customer{id = kz_util:get_xml_value([Base, "/id/text()"], Xml)
+                ,first_name = kz_util:get_xml_value([Base, "/first-name/text()"], Xml)
+                ,last_name = kz_util:get_xml_value([Base, "/last-name/text()"], Xml)
+                ,company = kz_util:get_xml_value([Base, "/company/text()"], Xml)
+                ,email = kz_util:get_xml_value([Base, "/email/text()"], Xml)
+                ,phone = kz_util:get_xml_value([Base, "/phone/text()"], Xml)
+                ,fax = kz_util:get_xml_value([Base, "/fax/text()"], Xml)
+                ,website = kz_util:get_xml_value([Base, "/website/text()"], Xml)
+                ,created_at = kz_util:get_xml_value([Base, "/created-at/text()"], Xml)
+                ,updated_at = kz_util:get_xml_value([Base, "/updated-at/text()"], Xml)
+                ,credit_cards = [braintree_card:xml_to_record(Card)
+                                 || Card <- xmerl_xpath:string(CreditCardPath, Xml)
+                                ]
+                ,addresses = [braintree_address:xml_to_record(Address)
+                              || Address <- xmerl_xpath:string(AddressPath, Xml)
+                             ]
+                ,subscriptions = [braintree_subscription:xml_to_record(Subscription)
+                                  || Subscription <- xmerl_xpath:string(SubscriptionPath, Xml)
                                  ]
-                 ,addresses = [braintree_address:xml_to_record(Address)
-                               || Address <- xmerl_xpath:string(AddressPath, Xml)
-                              ]
-                 ,subscriptions = [braintree_subscription:xml_to_record(Subscription)
-                                   || Subscription <- xmerl_xpath:string(SubscriptionPath, Xml)
-                                  ]
                 }.
 
 %%--------------------------------------------------------------------
@@ -312,13 +322,13 @@ record_to_xml(Customer) ->
 
 record_to_xml(Customer, ToString) ->
     Props = [{'id', Customer#bt_customer.id}
-             ,{'first-name', Customer#bt_customer.first_name}
-             ,{'last-name', Customer#bt_customer.last_name}
-             ,{'company', Customer#bt_customer.company}
-             ,{'email', Customer#bt_customer.email}
-             ,{'phone', Customer#bt_customer.phone}
-             ,{'fax', Customer#bt_customer.fax}
-             ,{'website', Customer#bt_customer.website}
+            ,{'first-name', Customer#bt_customer.first_name}
+            ,{'last-name', Customer#bt_customer.last_name}
+            ,{'company', Customer#bt_customer.company}
+            ,{'email', Customer#bt_customer.email}
+            ,{'phone', Customer#bt_customer.phone}
+            ,{'fax', Customer#bt_customer.fax}
+            ,{'website', Customer#bt_customer.website}
              |
              [{'credit-card', braintree_card:record_to_xml(Card)}
               || Card <- Customer#bt_customer.credit_cards, Card =/= 'undefined'
@@ -339,14 +349,14 @@ record_to_xml(Customer, ToString) ->
 json_to_record('undefined') -> #bt_customer{};
 json_to_record(JObj) ->
     #bt_customer{id = kz_doc:id(JObj)
-                 ,first_name = kz_json:get_binary_value(<<"first_name">>, JObj)
-                 ,last_name = kz_json:get_binary_value(<<"last_name">>, JObj)
-                 ,company = kz_json:get_binary_value(<<"company">>, JObj)
-                 ,email = kz_json:get_binary_value(<<"email">>, JObj)
-                 ,phone = kz_json:get_binary_value(<<"phone">>, JObj)
-                 ,fax = kz_json:get_binary_value(<<"fax">>, JObj)
-                 ,website = kz_json:get_binary_value(<<"website">>, JObj)
-                 ,credit_cards = [braintree_card:json_to_record(kz_json:get_value(<<"credit_card">>, JObj))]
+                ,first_name = kz_json:get_binary_value(<<"first_name">>, JObj)
+                ,last_name = kz_json:get_binary_value(<<"last_name">>, JObj)
+                ,company = kz_json:get_binary_value(<<"company">>, JObj)
+                ,email = kz_json:get_binary_value(<<"email">>, JObj)
+                ,phone = kz_json:get_binary_value(<<"phone">>, JObj)
+                ,fax = kz_json:get_binary_value(<<"fax">>, JObj)
+                ,website = kz_json:get_binary_value(<<"website">>, JObj)
+                ,credit_cards = [braintree_card:json_to_record(kz_json:get_value(<<"credit_card">>, JObj))]
                 }.
 
 %%--------------------------------------------------------------------
@@ -358,20 +368,20 @@ json_to_record(JObj) ->
 -spec record_to_json(customer()) -> kz_json:object().
 record_to_json(Customer) ->
     Props = [{<<"id">>, Customer#bt_customer.id}
-             ,{<<"first_name">>, Customer#bt_customer.first_name}
-             ,{<<"last_name">>, Customer#bt_customer.last_name}
-             ,{<<"company">>, Customer#bt_customer.company}
-             ,{<<"email">>, Customer#bt_customer.email}
-             ,{<<"phone">>, Customer#bt_customer.phone}
-             ,{<<"fax">>, Customer#bt_customer.fax}
-             ,{<<"website">>, Customer#bt_customer.website}
-             ,{<<"created_at">>, Customer#bt_customer.created_at}
-             ,{<<"updated_at">>, Customer#bt_customer.updated_at}
-             ,{<<"credit_cards">>, [braintree_card:record_to_json(Card)
-                                    || Card <- Customer#bt_customer.credit_cards
-                                   ]}
-             ,{<<"addresses">>, [braintree_address:record_to_json(Address)
-                                 || Address <- Customer#bt_customer.addresses
-                                ]}
+            ,{<<"first_name">>, Customer#bt_customer.first_name}
+            ,{<<"last_name">>, Customer#bt_customer.last_name}
+            ,{<<"company">>, Customer#bt_customer.company}
+            ,{<<"email">>, Customer#bt_customer.email}
+            ,{<<"phone">>, Customer#bt_customer.phone}
+            ,{<<"fax">>, Customer#bt_customer.fax}
+            ,{<<"website">>, Customer#bt_customer.website}
+            ,{<<"created_at">>, Customer#bt_customer.created_at}
+            ,{<<"updated_at">>, Customer#bt_customer.updated_at}
+            ,{<<"credit_cards">>, [braintree_card:record_to_json(Card)
+                                   || Card <- Customer#bt_customer.credit_cards
+                                  ]}
+            ,{<<"addresses">>, [braintree_address:record_to_json(Address)
+                                || Address <- Customer#bt_customer.addresses
+                               ]}
             ],
     kz_json:from_list(props:filter_undefined(Props)).

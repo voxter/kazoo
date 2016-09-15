@@ -10,7 +10,7 @@
 -module(teletype_customer_update).
 
 -export([init/0
-         ,handle_req/2
+        ,handle_req/2
         ]).
 
 -include("teletype.hrl").
@@ -22,15 +22,13 @@
 -define(ACC_USERS_LIST, <<"users/crossbar_listing">>).
 
 -define(TEMPLATE_MACROS
-        ,kz_json:from_list(
-           [?MACRO_VALUE(<<"user.first_name">>, <<"first_name">>, <<"First Name">>, <<"First Name">>)
-            ,?MACRO_VALUE(<<"user.last_name">>, <<"last_name">>, <<"Last Name">>, <<"Last Name">>)
-            | ?USER_MACROS
-           ])
+       ,kz_json:from_list(
+          [?MACRO_VALUE(<<"user.first_name">>, <<"first_name">>, <<"First Name">>, <<"First Name">>)
+          ,?MACRO_VALUE(<<"user.last_name">>, <<"last_name">>, <<"Last Name">>, <<"Last Name">>)
+           | ?USER_MACROS
+          ])
        ).
 
--define(TEMPLATE_TEXT, <<"Dear {{user.first_name}} {{user.last_name}}.\n\nHere are some news that we have selected for you.\n\nBest regards,">>).
--define(TEMPLATE_HTML, <<"<p>Dear {{user.first_name}} {{user.last_name}}.</p><p>Here are some news that we have selected for you.</p><p>Best regards,</p>">>).
 -define(TEMPLATE_SUBJECT, <<"Customer update">>).
 -define(TEMPLATE_CATEGORY, <<"user">>).
 -define(TEMPLATE_NAME, <<"Customer update">>).
@@ -45,16 +43,14 @@
 init() ->
     kz_util:put_callid(?MODULE),
     teletype_templates:init(?TEMPLATE_ID, [{'macros', ?TEMPLATE_MACROS}
-                                           ,{'text', ?TEMPLATE_TEXT}
-                                           ,{'html', ?TEMPLATE_HTML}
-                                           ,{'subject', ?TEMPLATE_SUBJECT}
-                                           ,{'category', ?TEMPLATE_CATEGORY}
-                                           ,{'friendly_name', ?TEMPLATE_NAME}
-                                           ,{'to', ?TEMPLATE_TO}
-                                           ,{'from', ?TEMPLATE_FROM}
-                                           ,{'cc', ?TEMPLATE_CC}
-                                           ,{'bcc', ?TEMPLATE_BCC}
-                                           ,{'reply_to', ?TEMPLATE_REPLY_TO}
+                                          ,{'subject', ?TEMPLATE_SUBJECT}
+                                          ,{'category', ?TEMPLATE_CATEGORY}
+                                          ,{'friendly_name', ?TEMPLATE_NAME}
+                                          ,{'to', ?TEMPLATE_TO}
+                                          ,{'from', ?TEMPLATE_FROM}
+                                          ,{'cc', ?TEMPLATE_CC}
+                                          ,{'bcc', ?TEMPLATE_BCC}
+                                          ,{'reply_to', ?TEMPLATE_REPLY_TO}
                                           ]).
 
 -spec handle_req(kz_json:object(), kz_proplist()) -> kz_proplist()|'ok'.
@@ -82,7 +78,7 @@ process_accounts(DataJObj) ->
                ],
     case kz_datamgr:get_results(?KZ_ACCOUNTS_DB, ?ACC_CHILDREN_LIST, ViewOpts) of
         {'ok', Accounts} ->
-            [process_account(kz_json:get_value(<<"id">>, Account), DataJObj) || Account <- Accounts];
+            [process_account(kz_doc:id(Account), DataJObj) || Account <- Accounts];
         {'error', _Reason} = E ->
             lager:info("failed to load children. error: ~p", [E])
     end.
@@ -96,7 +92,7 @@ process_account(AccountId, DataJObj) ->
         _ ->
             AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
             {'ok', Users} = kz_datamgr:get_results(AccountDb, ?ACC_USERS_LIST, []),
-            select_users_to_update(lists:map(fun(User) -> kz_json:get_value(<<"value">>, User) end, Users), DataJObj)
+            select_users_to_update([kz_json:get_value(<<"value">>, User) || User <- Users], DataJObj)
     end.
 
 -spec select_users_to_update(kz_proplist(), kz_json:object()) -> kz_proplist().
@@ -111,7 +107,7 @@ select_users_to_update(Users, DataJObj) ->
 -spec send_update_to_user(kz_json:object(), kz_json:object()) -> 'ok'.
 send_update_to_user(UserJObj, DataJObj) ->
     Macros = [{<<"system">>, teletype_util:system_params()}
-              ,{<<"account">>, teletype_util:account_params(DataJObj)}
+             ,{<<"account">>, teletype_util:account_params(DataJObj)}
               | build_macro_data(UserJObj)
              ],
 
@@ -120,7 +116,7 @@ send_update_to_user(UserJObj, DataJObj) ->
 
     Subject = teletype_util:render_subject(
                 kz_json:find(<<"subject">>, [DataJObj, TemplateMetaJObj])
-                ,Macros
+                                          ,Macros
                ),
     Emails = teletype_util:find_addresses(DataJObj, TemplateMetaJObj, ?MOD_CONFIG_CAT),
     To = [kz_json:get_value(<<"email">>, UserJObj)],
@@ -134,8 +130,8 @@ build_macro_data(UserJObj) ->
     kz_json:foldl(fun(MacroKey, _V, Acc) ->
                           maybe_add_macro_key(MacroKey, Acc, UserJObj)
                   end
-                  ,[]
-                  ,?TEMPLATE_MACROS
+                 ,[]
+                 ,?TEMPLATE_MACROS
                  ).
 
 -spec maybe_add_macro_key(kz_json:key(), kz_proplist(), kz_json:object()) -> kz_proplist().

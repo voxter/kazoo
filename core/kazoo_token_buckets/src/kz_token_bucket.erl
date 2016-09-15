@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2015, 2600Hz
+%%% @copyright (C) 2013-2016, 2600Hz
 %%% @doc
 %%% Implementation of a token bucket as gen_server
 %%%   https://en.wikipedia.org/wiki/Token_bucket#The_token_bucket_algorithm
@@ -15,27 +15,26 @@
 %%%   James Aimonetti
 %%%-------------------------------------------------------------------
 -module(kz_token_bucket).
-
 -behaviour(gen_server).
 
 %% API
 -export([start_link/2, start_link/3, start_link/4, start_link/5
-         ,stop/1
-         ,consume/2
-         ,consume_until/2
-         ,credit/2
-         ,tokens/1
-         ,set_name/2
-         ,default_fill_time/0, default_fill_time/1
+        ,stop/1
+        ,consume/2
+        ,consume_until/2
+        ,credit/2
+        ,tokens/1
+        ,set_name/2
+        ,default_fill_time/0, default_fill_time/1
         ]).
 
 %% gen_server callbacks
 -export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,terminate/2
-         ,code_change/3
+        ,handle_call/3
+        ,handle_cast/2
+        ,handle_info/2
+        ,terminate/2
+        ,code_change/3
         ]).
 
 -include("kz_buckets.hrl").
@@ -44,7 +43,9 @@
 
 -ifdef(TEST).
 -define(FILL_TIME, <<"second">>).
--define(FILL_TIME(App), is_binary(App) andalso ?FILL_TIME).
+-define(FILL_TIME(App), is_binary(App)
+        andalso ?FILL_TIME
+       ).
 -else.
 -define(FILL_TIME, kapps_config:get_binary(?APP_NAME, <<"tokens_fill_time">>, <<"second">>)).
 -define(FILL_TIME(App), kapps_config:get(?APP_NAME, [App, <<"tokens_fill_time">>], ?FILL_TIME)).
@@ -57,12 +58,13 @@
 -export_type([fill_rate_time/0]).
 
 -record(state, {max_tokens = 100 :: pos_integer() % max size of bucket
-                ,tokens = 0 :: non_neg_integer() % current count
-                ,fill_rate = 1 :: pos_integer() % tokens/fill_rate_time() added
-                ,fill_rate_time = 'second' :: fill_rate_time()
-                ,fill_ref :: reference()
-                ,fill_as_block = 'true' :: boolean()
+               ,tokens = 0 :: non_neg_integer() % current count
+               ,fill_rate = 1 :: pos_integer() % tokens/fill_rate_time() added
+               ,fill_rate_time = 'second' :: fill_rate_time()
+               ,fill_ref :: reference()
+               ,fill_as_block = 'true' :: boolean()
                }).
+-type state() :: #state{}.
 
 %%%===================================================================
 %%% API
@@ -73,20 +75,23 @@
 %%--------------------------------------------------------------------
 -spec start_link(pos_integer(), pos_integer()) -> startlink_ret().
 -spec start_link(pos_integer(), pos_integer(), boolean()) -> startlink_ret().
+-spec start_link(pos_integer(), pos_integer(), boolean(), fill_rate_time()) -> startlink_ret().
 start_link(Max, FillRate) -> start_link(Max, FillRate, 'true').
 start_link(Max, FillRate, FillAsBlock) ->
     start_link(Max, FillRate, FillAsBlock, default_fill_time()).
-start_link(Max, FillRate, FillAsBlock, FillTime) when is_integer(FillRate), FillRate > 0,
-                                                    is_integer(Max), Max > 0,
-                                                    is_boolean(FillAsBlock),
-                                                    (FillTime =:= 'second'
-                                                     orelse FillTime =:= 'minute'
-                                                     orelse FillTime =:= 'hour'
-                                                     orelse FillTime =:= 'day'
-                                                    )
-                                                    ->
+start_link(Max, FillRate, FillAsBlock, FillTime)
+  when is_integer(FillRate), FillRate > 0,
+       is_integer(Max), Max > 0,
+       is_boolean(FillAsBlock),
+       (FillTime =:= 'second'
+        orelse FillTime =:= 'minute'
+        orelse FillTime =:= 'hour'
+        orelse FillTime =:= 'day'
+       )
+       ->
     gen_server:start_link(?SERVER, [Max, FillRate, FillAsBlock, FillTime], []).
 
+-spec start_link(atom(), pos_integer(), pos_integer(), boolean(), fill_rate_time()) -> startlink_ret().
 start_link(Name, Max, FillRate, FillAsBlock, FillTime)
   when is_integer(FillRate), FillRate > 0,
        is_integer(Max), Max > 0,
@@ -98,9 +103,9 @@ start_link(Name, Max, FillRate, FillAsBlock, FillTime)
        )
        ->
     gen_server:start_link({'local', Name}
-                          ,?MODULE
-                          ,[Max, FillRate, FillAsBlock, FillTime]
-                          ,[]
+                         ,?MODULE
+                         ,[Max, FillRate, FillAsBlock, FillTime]
+                         ,[]
                          ).
 
 -spec stop(pid()) -> 'ok'.
@@ -108,19 +113,24 @@ stop(Srv) ->
     gen_server:cast(Srv, 'stop').
 
 -spec consume(pid(), non_neg_integer()) -> boolean().
-consume(_Srv, Tokens) when is_integer(Tokens) andalso Tokens =< 0 ->
+consume(_Srv, Tokens) when is_integer(Tokens)
+                           andalso Tokens =< 0 ->
     'true';
-consume(Srv, Tokens) when is_integer(Tokens) andalso Tokens > 0 ->
+consume(Srv, Tokens) when is_integer(Tokens)
+                          andalso Tokens > 0 ->
     gen_server:call(Srv, {'consume', Tokens}).
 
 -spec consume_until(pid(), non_neg_integer()) -> boolean().
-consume_until(_Srv, Tokens) when is_integer(Tokens) andalso Tokens =< 0 ->
+consume_until(_Srv, Tokens) when is_integer(Tokens)
+                                 andalso Tokens =< 0 ->
     'true';
-consume_until(Srv, Tokens) when is_integer(Tokens) andalso Tokens > 0 ->
+consume_until(Srv, Tokens) when is_integer(Tokens)
+                                andalso Tokens > 0 ->
     gen_server:call(Srv, {'consume_until', Tokens}).
 
 -spec credit(pid(), pos_integer()) -> 'ok'.
-credit(Srv, Tokens) when is_integer(Tokens) andalso Tokens > 0 ->
+credit(Srv, Tokens) when is_integer(Tokens)
+                         andalso Tokens > 0 ->
     gen_server:cast(Srv, {'credit', Tokens}).
 
 -spec tokens(pid()) -> non_neg_integer().
@@ -157,17 +167,18 @@ normalize_fill_time(_) -> 'second'.
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
+-spec init(list()) -> {'ok', state()}.
 init([Max, FillRate, FillAsBlock, FillTime]) ->
     kz_util:put_callid(?MODULE),
     lager:debug("starting token bucket with ~b max, filling at ~b/~s, in a block: ~s"
-                ,[Max, FillRate,FillTime, FillAsBlock]
+               ,[Max, FillRate,FillTime, FillAsBlock]
                ),
     {'ok', #state{max_tokens=Max
-                  ,fill_rate=FillRate
-                  ,fill_rate_time=FillTime
-                  ,fill_ref=start_fill_timer(FillRate, FillAsBlock, FillTime)
-                  ,fill_as_block=FillAsBlock
-                  ,tokens=Max
+                 ,fill_rate=FillRate
+                 ,fill_rate_time=FillTime
+                 ,fill_ref=start_fill_timer(FillRate, FillAsBlock, FillTime)
+                 ,fill_as_block=FillAsBlock
+                 ,tokens=Max
                  }
     }.
 
@@ -185,6 +196,7 @@ init([Max, FillRate, FillAsBlock, FillTime]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call({'consume', Req}, _From, #state{tokens=Current}=State) ->
     case Current - Req of
         N when N >= 0 ->
@@ -219,8 +231,9 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast({'credit', Req}, #state{tokens=Current
-                                    ,max_tokens=Max
+                                   ,max_tokens=Max
                                    }=State) ->
     case Current + Req of
         N when N > Max ->
@@ -251,17 +264,18 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info({'timeout', Ref, ?TOKEN_FILL_TIME}, #state{max_tokens=Max
-                                                       ,tokens=Current
-                                                       ,fill_rate=FillRate
-                                                       ,fill_rate_time=FillTime
-                                                       ,fill_ref=Ref
-                                                       ,fill_as_block=FillAsBlock
-                                                     }=State) ->
+                                                      ,tokens=Current
+                                                      ,fill_rate=FillRate
+                                                      ,fill_rate_time=FillTime
+                                                      ,fill_ref=Ref
+                                                      ,fill_as_block=FillAsBlock
+                                                      }=State) ->
     {'noreply'
-     ,State#state{tokens=add_tokens(Max, Current, FillRate, FillAsBlock, FillTime)
-                  ,fill_ref=start_fill_timer(FillRate, FillAsBlock, FillTime)
-                 }
+    ,State#state{tokens=add_tokens(Max, Current, FillRate, FillAsBlock, FillTime)
+                ,fill_ref=start_fill_timer(FillRate, FillAsBlock, FillTime)
+                }
     };
 handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
@@ -278,6 +292,7 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     lager:debug("token bucket going down: ~p", [_Reason]).
 
@@ -289,6 +304,7 @@ terminate(_Reason, _State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 

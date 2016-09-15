@@ -9,17 +9,17 @@ Key | Description | Type | Default | Required
 `conference_numbers` | Defines conference numbers that can be used by members or moderators | `array(string)` | `[]` | `false`
 `conference_numbers.[]` |   | `string` |   | `false`
 `focus` | This is a read-only property indicating the media server hosting the conference | `string` |   | `false`
-`member` | Defines the discovery properties for a member | `object` | `{}` | `false`
+`member` | Defines the discovery (call in) properties for a member | `object` | `{}` | `false`
 `member.join_deaf` | Determines if a member will join deaf | `boolean` | `false` | `false`
 `member.join_muted` | Determines if a member will join muted | `boolean` | `true` | `false`
-`member.numbers` | Defines the conference number(s) for members | `array(string)` | `[]` | `false`
+`member.numbers` | Defines the conference (call in) number(s) for members | `array(string)` | `[]` | `false`
 `member.numbers.[]` |   | `string` |   | `false`
 `member.pins` | Defines the pin number(s) for members | `array(string)` | `[]` | `false`
 `member.pins.[]` |   | `string` |   | `false`
-`moderator` | Defines the discovery properties for a moderator | `object` | `{}` | `false`
+`moderator` | Defines the discovery (call in) properties for a moderator | `object` | `{}` | `false`
 `moderator.join_deaf` | Determines if a moderator will join deaf | `boolean` | `false` | `false`
 `moderator.join_muted` | Determines if a moderator will join muted | `boolean` | `false` | `false`
-`moderator.numbers` | Defines the conference number(s) for moderators | `array(string)` | `[]` | `false`
+`moderator.numbers` | Defines the conference (call in) number(s) for moderators | `array(string)` | `[]` | `false`
 `moderator.numbers.[]` |   | `string` |   | `false`
 `moderator.pins` | Defines the pin number(s) for moderators | `array(string)` | `[]` | `false`
 `moderator.pins.[]` |   | `string` |   | `false`
@@ -33,7 +33,7 @@ Key | Description | Type | Default | Required
 
 > GET /v2/accounts/{ACCOUNT_ID}/conferences
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/conferences
@@ -43,7 +43,7 @@ curl -v -X GET \
 
 > PUT /v2/accounts/{ACCOUNT_ID}/conferences
 
-```curl
+```shell
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/conferences
@@ -51,51 +51,91 @@ curl -v -X PUT \
 
 #### Remove
 
-> DELETE /v2/accounts/{ACCOUNT_ID}/conferences/{ID}
+> DELETE /v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}
 
-```curl
+```shell
 curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/conferences/{ID}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}
 ```
 
 #### Fetch
 
-> GET /v2/accounts/{ACCOUNT_ID}/conferences/{ID}
+> GET /v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/conferences/{ID}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}
 ```
 
 #### Patch
 
-> PATCH /v2/accounts/{ACCOUNT_ID}/conferences/{ID}
+> PATCH /v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}
 
-```curl
+```shell
 curl -v -X PATCH \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/conferences/{ID}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}
 ```
 
 #### Change
 
-> POST /v2/accounts/{ACCOUNT_ID}/conferences/{ID}
+> POST /v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}
 
-```curl
+```shell
 curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/conferences/{ID}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}
+```
+
+#### Create
+
+> PUT /v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}
+
+```shell
+curl -v -X PUT \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}
 ```
 
 #### Fetch
 
-> GET /v2/accounts/{ACCOUNT_ID}/conferences/{ID}/details
+> GET /v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}/participants
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/conferences/{ID}/details
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}/participants
+```
+
+#### Create
+
+> PUT /v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}/participants
+
+```shell
+curl -v -X PUT \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}/participants
+```
+
+#### Fetch
+
+> GET /v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}/participants/{PARTICIPANT_ID}
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}/participants/{PARTICIPANT_ID}
+```
+
+#### Create
+
+> PUT /v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}/participants/{PARTICIPANT_ID}
+
+```shell
+curl -v -X PUT \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}/participants/{PARTICIPANT_ID}
 ```
 

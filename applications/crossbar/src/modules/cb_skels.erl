@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% Listing of all expected v1 callbacks
@@ -12,24 +12,24 @@
 -module(cb_skels).
 
 -export([init/0
-         ,authenticate/1
-         ,authorize/1
-         ,allowed_methods/0, allowed_methods/1
-         ,resource_exists/0, resource_exists/1
-         ,content_types_provided/1
-         ,content_types_accepted/1
-         ,languages_provided/1
-         ,charsets_provided/1
-         ,encodings_provided/1
-         ,validate/1, validate/2
-         ,billing/1
-         ,put/1
-         ,post/2
-         ,patch/2
-         ,delete/2
-         ,etag/1
-         ,expires/1
-         ,finish_request/1
+        ,authenticate/1
+        ,authorize/1
+        ,allowed_methods/0, allowed_methods/1
+        ,resource_exists/0, resource_exists/1
+        ,content_types_provided/1
+        ,content_types_accepted/1
+        ,languages_provided/1
+        ,charsets_provided/1
+        ,encodings_provided/1
+        ,validate/1, validate/2
+        ,billing/1
+        ,put/1
+        ,post/2
+        ,patch/2
+        ,delete/2
+        ,etag/1
+        ,expires/1
+        ,finish_request/1
         ]).
 
 -include("crossbar.hrl").
@@ -99,7 +99,7 @@ authorize(_) -> 'false'.
 -spec allowed_methods(path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
-allowed_methods(_) ->
+allowed_methods(_Thing) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_PATCH, ?HTTP_DELETE].
 
 %%--------------------------------------------------------------------

@@ -1,0 +1,71 @@
+{
+    "$schema": "http://json-schema.org/draft-03/schema#",
+    "_id": "system_config.speech",
+    "description": "Schema for speech system_config",
+    "properties": {
+        "asr_content_types": {
+            "default": [
+                "application/mpeg",
+                "application/wav"
+            ],
+            "description": "speech asr content types",
+            "type": "array"
+        },
+        "asr_prefered_content_type": {
+            "default": "application/mpeg",
+            "description": "speech asr prefered content type",
+            "type": "string"
+        },
+        "asr_provider": {
+            "default": "",
+            "description": "speech asr provider",
+            "type": "string"
+        },
+        "asr_url": {
+            "default": "http://api.ispeech.org/api/rest",
+            "description": "speech asr url",
+            "type": "string"
+        },
+        "temporary_storage_path": {
+            "default": "/tmp",
+            "description": "speech temporary storage path",
+            "type": "string"
+        },
+        "tts_api_key": {
+            "description": "speech tts api key",
+            "type": "string"
+        },
+        "tts_args_encode": {
+            "default": "multipart",
+            "description": "speech tts args encode",
+            "type": "string"
+        },
+        "tts_default_voice": {
+            "default": "female/en-US",
+            "description": "speech tts default voice",
+            "type": "string"
+        },
+        "tts_language": {
+            "default": "en-US",
+            "description": "speech tts language",
+            "type": "string"
+        },
+        "tts_provider": {
+            "default": "ispeech",
+            "description": "speech tts provider",
+            "type": "string"
+        },
+        "tts_url": {
+            "default": "http://api.ispeech.org/api/json",
+            "description": "speech tts url",
+            "type": "string"
+        },
+        "tts_voice": {
+            "default": "male",
+            "description": "speech tts voice",
+            "type": "string"
+        }
+    },
+    "required": true,
+    "type": "object"
+}

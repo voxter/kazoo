@@ -9,94 +9,99 @@
 -module(cb_context).
 
 -export([store/3
-         ,fetch/2, fetch/3
-         ,put_reqid/1
-         ,import_errors/1, failed/2
-         ,response/1
-         ,has_errors/1
-         ,add_system_error/2, add_system_error/3, add_system_error/4
-         ,add_validation_error/4
-         ,validate_request_data/2, validate_request_data/3, validate_request_data/4
-         ,add_content_types_provided/2
-         ,add_content_types_accepted/2
-         ,add_attachment_content_type/3
+        ,fetch/2, fetch/3
+        ,put_reqid/1
+        ,import_errors/1, failed/2
+        ,response/1
+        ,has_errors/1
+        ,add_system_error/2, add_system_error/3, add_system_error/4
+        ,add_validation_error/4
+        ,validate_request_data/2, validate_request_data/3, validate_request_data/4
+        ,add_content_types_provided/2
+        ,add_content_types_accepted/2
+        ,add_attachment_content_type/3
 
-         ,is_context/1
+        ,is_context/1
 
-         ,is_authenticated/1
+        ,is_authenticated/1
+
+        ,is_superduper_admin/1
+        ,is_account_admin/1
+
+        ,system_error/2
 
          %% Getters / Setters
-         ,setters/2
-         ,new/0
+        ,setters/2
+        ,new/0
 
-         ,account_id/1, set_account_id/2
-         ,account_name/1, set_account_name/2
-         ,account_db/1, set_account_db/2
-         ,user_id/1, set_user_id/2
-         ,device_id/1, set_device_id/2
-         ,account_modb/1, account_modb/2, account_modb/3
-         ,set_account_modb/3, set_account_modb/4
-         ,reseller_id/1, set_reseller_id/2
-         ,account_realm/1
-         ,account_doc/1
-         ,auth_token_type/1, set_auth_token_type/2
-         ,auth_token/1, set_auth_token/2
-         ,auth_doc/1, set_auth_doc/2
-         ,auth_account_id/1, set_auth_account_id/2
-         ,auth_account_doc/1
-         ,auth_user_id/1
-         ,req_verb/1, set_req_verb/2
-         ,req_data/1, set_req_data/2
-         ,req_id/1, set_req_id/2
-         ,req_files/1, set_req_files/2
-         ,req_nouns/1, set_req_nouns/2
-         ,req_headers/1, set_req_headers/2
-         ,req_header/2
-         ,query_string/1, set_query_string/2
-         ,client_ip/1, set_client_ip/2
-         ,doc/1, set_doc/2, update_doc/2
-         ,load_merge_bypass/1, set_load_merge_bypass/2
-         ,start/1, set_start/2
-         ,resp_file/1, set_resp_file/2
-         ,resp_data/1, set_resp_data/2
-         ,resp_status/1, set_resp_status/2
-         ,resp_expires/1, set_resp_expires/2
-         ,api_version/1, set_api_version/2
-         ,resp_etag/1, set_resp_etag/2
-         ,resp_envelope/1, set_resp_envelope/2
-         ,allow_methods/1, set_allow_methods/2
-         ,allowed_methods/1, set_allowed_methods/2
-         ,method/1, set_method/2
-         ,path_tokens/1
-         ,magic_pathed/1, set_magic_pathed/2
-         ,should_paginate/1, set_should_paginate/2
+        ,account_id/1, set_account_id/2
+        ,account_name/1, set_account_name/2
+        ,account_db/1, set_account_db/2
+        ,user_id/1, set_user_id/2
+        ,device_id/1, set_device_id/2
+        ,account_modb/1, account_modb/2, account_modb/3
+        ,set_account_modb/3, set_account_modb/4
+        ,reseller_id/1, set_reseller_id/2
+        ,account_realm/1
+        ,account_doc/1
+        ,auth_token_type/1, set_auth_token_type/2
+        ,auth_token/1, set_auth_token/2
+        ,auth_doc/1, set_auth_doc/2
+        ,auth_account_id/1, set_auth_account_id/2
+        ,auth_account_doc/1
+        ,auth_user_id/1
+        ,req_verb/1, set_req_verb/2
+        ,req_data/1, set_req_data/2
+        ,req_id/1, set_req_id/2
+        ,req_files/1, set_req_files/2
+        ,req_nouns/1, set_req_nouns/2
+        ,req_headers/1, set_req_headers/2
+        ,req_header/2, set_req_header/3
+        ,query_string/1, set_query_string/2
+        ,client_ip/1, set_client_ip/2
+        ,doc/1, set_doc/2, update_doc/2
+        ,load_merge_bypass/1, set_load_merge_bypass/2
+        ,start/1, set_start/2
+        ,resp_file/1, set_resp_file/2
+        ,resp_data/1, set_resp_data/2
+        ,resp_status/1, set_resp_status/2
+        ,resp_expires/1, set_resp_expires/2
+        ,api_version/1, set_api_version/2
+        ,resp_etag/1, set_resp_etag/2
+        ,resp_envelope/1, set_resp_envelope/2
+        ,allow_methods/1, set_allow_methods/2
+        ,allowed_methods/1, set_allowed_methods/2
+        ,method/1, set_method/2
+        ,path_tokens/1
+        ,magic_pathed/1, set_magic_pathed/2
+        ,should_paginate/1, set_should_paginate/2
 
-         ,req_json/1, set_req_json/2
-         ,resp_error_code/1, set_resp_error_code/2
-         ,resp_error_msg/1, set_resp_error_msg/2
+        ,req_json/1, set_req_json/2
+        ,resp_error_code/1, set_resp_error_code/2
+        ,resp_error_msg/1, set_resp_error_msg/2
 
-         ,resp_headers/1
-         ,set_resp_headers/2, set_resp_header/3
-         ,add_resp_headers/2, add_resp_header/3
+        ,resp_headers/1
+        ,set_resp_headers/2, set_resp_header/3
+        ,add_resp_headers/2, add_resp_header/3
 
-         ,content_types_accepted/1, set_content_types_accepted/2
-         ,content_types_provided/1, set_content_types_provided/2
-         ,languages_provided/1, set_languages_provided/2
-         ,encodings_provided/1, set_encodings_provided/2
+        ,content_types_accepted/1, set_content_types_accepted/2
+        ,content_types_provided/1, set_content_types_provided/2
+        ,languages_provided/1, set_languages_provided/2
+        ,encodings_provided/1, set_encodings_provided/2
 
-         ,validation_errors/1, set_validation_errors/2
+        ,validation_errors/1, set_validation_errors/2
 
-         ,host_url/1, set_host_url/2
-         ,set_raw_host/2
-         ,set_port/2
-         ,set_raw_path/2
-         ,set_raw_qs/2
-         ,profile_id/1 ,set_profile_id/2
+        ,host_url/1, set_host_url/2
+        ,set_raw_host/2
+        ,set_port/2
+        ,set_raw_path/2
+        ,set_raw_qs/2
+        ,profile_id/1 ,set_profile_id/2
 
          %% Special accessors
-         ,req_value/2, req_value/3
-         ,accepting_charges/1, set_accepting_charges/1
-         ,req_param/2, req_param/3
+        ,req_value/2, req_value/3
+        ,accepting_charges/1, set_accepting_charges/1
+        ,req_param/2, req_param/3
         ]).
 
 -include("crossbar.hrl").
@@ -109,10 +114,10 @@
 -type setter_fun_3() :: fun((context(), any(), any()) -> context()).
 -type setter_fun() :: setter_fun_1() | setter_fun_2() | setter_fun_3().
 -export_type([context/0
-              ,setter_fun/0
-              ,setter_fun_1/0
-              ,setter_fun_2/0
-              ,setter_fun_3/0
+             ,setter_fun/0
+             ,setter_fun_1/0
+             ,setter_fun_2/0
+             ,setter_fun_3/0
              ]).
 
 -type setter_kv() :: setter_fun_1() |
@@ -132,11 +137,11 @@ is_context(_) -> 'false'.
 req_value(#cb_context{}=Context, Key) ->
     req_value(Context, Key, 'undefined').
 req_value(#cb_context{req_data=ReqData
-                      ,query_json=QS
-                      ,req_json=JObj
+                     ,query_json=QS
+                     ,req_json=JObj
                      }
-          ,Key
-          ,Default
+         ,Key
+         ,Default
          ) ->
     kz_json:find(Key, [ReqData, QS, JObj], Default).
 
@@ -188,6 +193,37 @@ account_doc(Context) ->
 is_authenticated(#cb_context{auth_doc='undefined'}) -> 'false';
 is_authenticated(#cb_context{}) -> 'true'.
 
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Returns true if the request contains a system admin module.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_superduper_admin(api_ne_binary() | context()) -> boolean().
+is_superduper_admin('undefined') -> 'false';
+is_superduper_admin(AccountId=?NE_BINARY) ->
+    lager:debug("checking for superduper admin: ~s", [AccountId]),
+    case kz_account:fetch(AccountId) of
+        {'ok', JObj} ->
+            case kz_account:is_superduper_admin(JObj) of
+                'true' ->
+                    lager:debug("the requestor is a superduper admin"),
+                    'true';
+                'false' ->
+                    lager:debug("the requestor is not a superduper admin"),
+                    'false'
+            end;
+        {'error', _E} ->
+            lager:debug("not authorizing, error during lookup: ~p", [_E]),
+            'false'
+    end;
+is_superduper_admin(Context) ->
+    is_superduper_admin(auth_account_id(Context)).
+
+-spec is_account_admin(context()) -> boolean().
+is_account_admin(#cb_context{auth_doc=Doc}) ->
+    kzd_user:priv_level(Doc) =:= <<"admin">>.
+
 auth_token_type(#cb_context{auth_token_type=AuthTokenType}) -> AuthTokenType.
 auth_token(#cb_context{auth_token=AuthToken}) -> AuthToken.
 auth_doc(#cb_context{auth_doc=AuthDoc}) -> AuthDoc.
@@ -228,9 +264,13 @@ allow_methods(#cb_context{allow_methods=AMs}) -> AMs.
 allowed_methods(#cb_context{allowed_methods=AMs}) -> AMs.
 method(#cb_context{method=M}) -> M.
 
+-spec path_token(binary()) -> binary().
+path_token(Token) ->
+    kz_util:uri_decode(Token).
+
 -spec path_tokens(context()) -> ne_binaries().
 path_tokens(#cb_context{raw_path=Path}) ->
-    [cow_qs:urldecode(Token) || Token <- binary:split(Path, <<"/">>, ['global', 'trim'])].
+    [ path_token(Token) || Token <- binary:split(Path, <<"/">>, ['global', 'trim'])].
 
 -spec magic_pathed(context()) -> boolean().
 magic_pathed(#cb_context{magic_pathed=MP}) -> MP.
@@ -284,6 +324,7 @@ setters_fold(F, C) when is_function(F, 1) -> F(C).
 -spec set_req_files(context(), req_files()) -> context().
 -spec set_req_nouns(context(), req_nouns()) -> context().
 -spec set_req_headers(context(), cowboy:http_headers()) -> context().
+-spec set_req_header(context(), ne_binary(), iodata()) -> context().
 -spec set_query_string(context(), kz_json:object()) -> context().
 -spec set_req_id(context(), ne_binary()) -> context().
 -spec set_doc(context(), api_object() | kz_json:objects()) -> context().
@@ -354,6 +395,9 @@ set_req_nouns(#cb_context{}=Context, ReqNouns) ->
     Context#cb_context{req_nouns=ReqNouns}.
 set_req_headers(#cb_context{}=Context, ReqHs) ->
     Context#cb_context{req_headers=ReqHs}.
+set_req_header(#cb_context{req_headers=ReqHs}=Context, HKey, HValue) ->
+    NewReqHs = [{HKey,HValue} | ReqHs],
+    Context#cb_context{req_headers=NewReqHs}.
 set_query_string(#cb_context{}=Context, Q) ->
     Context#cb_context{query_json=Q}.
 set_req_id(#cb_context{}=Context, ReqId) ->
@@ -536,7 +580,7 @@ put_reqid(#cb_context{req_id=ReqId}) ->
 %% @end
 %%--------------------------------------------------------------------
 has_errors(#cb_context{validation_errors=JObj
-                       ,resp_status='success'
+                      ,resp_status='success'
                       }) ->
     (not kz_util:is_empty(JObj));
 has_errors(#cb_context{}) -> 'true'.
@@ -552,26 +596,22 @@ import_errors(#cb_context{}=Context) ->
         {'ok', _} -> Context;
         {'error', {ErrorCode, ErrorMsg, Errors}} ->
             Context#cb_context{resp_error_code=ErrorCode
-                               ,resp_error_msg=ErrorMsg
-                               ,resp_data=Errors
-                               ,resp_status='error'
+                              ,resp_error_msg=ErrorMsg
+                              ,resp_data=Errors
+                              ,resp_status='error'
                               }
     end.
 
 response(#cb_context{resp_status='success'
-                     ,resp_data=JObj
+                    ,resp_data=JObj
                     }) ->
     {'ok', JObj};
 response(#cb_context{resp_error_code=Code
-                     ,resp_error_msg=Msg
-                     ,resp_data=DataJObj
-                     ,validation_errors=ValidationJObj
+                    ,resp_error_msg=Msg
+                    ,resp_data=DataJObj
+                    ,validation_errors=ValidationJObj
                     }) ->
-    ErrorCode = try kz_util:to_integer(Code) of
-                    C -> C
-                catch
-                    _:_ -> 500
-                end,
+    ErrorCode = try kz_util:to_integer(Code) catch _:_ -> 500 end,
     ErrorMsg = case kz_util:is_empty(Msg) of
                    'false' -> kz_util:to_binary(Msg);
                    'true' -> <<"generic_error">>
@@ -599,7 +639,12 @@ response(#cb_context{resp_error_code=Code
 validate_request_data('undefined', Context) ->
     passed(Context);
 validate_request_data(<<_/binary>> = Schema, Context) ->
+    DefaultStrict = kapps_config:get_is_true(?CONFIG_CAT, <<"ensure_valid_schema">>, 'true'),
+    Strict = fetch(Context, 'ensure_valid_schema', DefaultStrict),
     case find_schema(Schema) of
+        'undefined' when Strict ->
+            Msg = <<"schema ", Schema/binary, " not found.">>,
+            system_error(Context, Msg);
         'undefined' ->
             passed(set_doc(Context, req_data(Context)));
         SchemaJObj ->
@@ -617,7 +662,7 @@ validate_request_data(SchemaJObj, Context) ->
              );
         {'error', Errors} when Strict ->
             lager:debug("request data did not validate against ~s: ~p", [kz_doc:id(SchemaJObj)
-                                                                         ,Errors
+                                                                        ,Errors
                                                                         ]),
             failed(Context, Errors);
         {'error', Errors} ->
@@ -646,8 +691,7 @@ validate_request_data(Schema, Context, OnSuccess, OnFailure) ->
         Else -> Else
     end.
 
--spec failed(context(), jesse_error:error_reasons()) -> context().
--spec failed_error(jesse_error:error_reason(), context()) -> context().
+-spec failed(context(), [jesse_error:error_reason()]) -> context().
 failed(Context, Errors) ->
     Context1 = setters(Context
                       ,[{fun set_resp_error_code/2, 400}
@@ -655,357 +699,28 @@ failed(Context, Errors) ->
                        ]
                       ),
     lists:foldl(fun failed_error/2
-                ,Context1
-                ,Errors
+               ,Context1
+               ,Errors
                ).
 
-failed_error({'data_invalid'
-              ,FailedSchemaJObj
-              ,'wrong_min_length'
-              ,_FailedValue
-              ,FailedKeyPath
-             }, Context) ->
-    Minimum = kz_json:get_value(<<"minLength">>, FailedSchemaJObj),
-    MinLen = kz_util:to_binary(Minimum),
-
-    add_validation_error(
-      FailedKeyPath
-      ,<<"minLength">>
-      ,kz_json:from_list(
-         [{<<"message">>, <<"String must be at least ", MinLen/binary, " characters">>}
-          ,{<<"target">>, Minimum}
-         ])
-      ,Context
-     );
-failed_error({'data_invalid'
-              ,FailedSchemaJObj
-              ,'wrong_max_length'
-              ,_FailedValue
-              ,FailedKeyPath
-             }, Context) ->
-    Maximum = kz_json:get_value(<<"maxLength">>, FailedSchemaJObj),
-    MaxLen = kz_util:to_binary(Maximum),
-
-    add_validation_error(
-      FailedKeyPath
-      ,<<"maxLength">>
-      ,kz_json:from_list(
-         [{<<"message">>, <<"String must not be more than ", MaxLen/binary, " characters">>}
-          ,{<<"target">>, Maximum}
-         ])
-      ,Context
-     );
-failed_error({'data_invalid'
-              ,FailedSchemaJObj
-              ,'not_in_enum'
-              ,_FailedValue
-              ,FailedKeyPath
-             }, Context) ->
-    add_validation_error(
-      FailedKeyPath
-      ,<<"enum">>
-      ,kz_json:from_list(
-         [{<<"message">>, <<"Value not found in enumerated list of values">>}
-          ,{<<"target">>, kz_json:get_value(<<"enum">>, FailedSchemaJObj, [])}
-         ])
-      ,Context
-     );
-failed_error({'data_invalid'
-              ,FailedSchemaJObj
-              ,'not_minimum'
-              ,_FailedValue
-              ,FailedKeyPath
-             }, Context) ->
-    Minimum = kz_json:get_first_defined([<<"minimum">>, <<"exclusiveMinimum">>], FailedSchemaJObj),
-    Min = kz_util:to_binary(Minimum),
-
-    add_validation_error(
-      FailedKeyPath
-      ,<<"minimum">>
-      ,kz_json:from_list(
-         [{<<"message">>, <<"Value must be at least ", Min/binary>>}
-          ,{<<"target">>, Minimum}
-         ])
-      ,Context
-     );
-failed_error({'data_invalid'
-              ,FailedSchemaJObj
-              ,'not_maximum'
-              ,_FailedValue
-              ,FailedKeyPath
-             }, Context) ->
-    Maximum = kz_json:get_first_defined([<<"maximum">>, <<"exclusiveMaximum">>], FailedSchemaJObj),
-    Max = kz_util:to_binary(Maximum),
-
-    add_validation_error(
-      FailedKeyPath
-      ,<<"maximum">>
-      ,kz_json:from_list(
-         [{<<"message">>, <<"Value must be at most ", Max/binary>>}
-          ,{<<"target">>, Maximum}
-         ])
-      ,Context
-     );
-failed_error({'data_invalid'
-              ,FailedSchemaJObj
-              ,'wrong_size'
-              ,FailedValue
-              ,FailedKeyPath
-             }, Context) ->
-    Minimum = kz_json:get_value(<<"minItems">>, FailedSchemaJObj),
-    Maximum = kz_json:get_value(<<"maxItems">>, FailedSchemaJObj),
-
-    case length(FailedValue) of
-        N when N < Minimum ->
-            failed_error({'data_invalid'
-                          ,FailedSchemaJObj
-                          ,'wrong_min_items'
-                          ,FailedValue
-                          ,FailedKeyPath
-                         }
-                        ,Context
-                        );
-        N when N > Maximum ->
-            failed_error({'data_invalid'
-                          ,FailedSchemaJObj
-                          ,'wrong_max_items'
-                          ,FailedValue
-                          ,FailedKeyPath
-                         }
-                        ,Context
-                        )
-    end;
-failed_error({'data_invalid'
-              ,FailedSchemaJObj
-              ,'wrong_min_items'
-              ,_FailedValue
-              ,FailedKeyPath
-             }, Context) ->
-    Minimum = kz_json:get_value(<<"minItems">>, FailedSchemaJObj),
-    Min = kz_util:to_binary(Minimum),
-
-    add_validation_error(
-      FailedKeyPath
-      ,<<"minItems">>
-      ,kz_json:from_list(
-         [{<<"message">>, <<"The list must have at least ", Min/binary, " items">>}
-          ,{<<"target">>, Minimum}
-         ])
-      ,Context
-     );
-failed_error({'data_invalid'
-              ,FailedSchemaJObj
-              ,'wrong_max_items'
-              ,_FailedValue
-              ,FailedKeyPath
-             }, Context) ->
-    Maximum = kz_json:get_value(<<"maxItems">>, FailedSchemaJObj),
-    Max = kz_util:to_binary(Maximum),
-
-    add_validation_error(
-      FailedKeyPath
-      ,<<"maxItems">>
-      ,kz_json:from_list(
-         [{<<"message">>, <<"The list is more than ", Max/binary, " items">>}
-          ,{<<"target">>, Maximum}
-         ])
-      ,Context
-     );
-failed_error({'data_invalid'
-              ,FailedSchemaJObj
-              ,'wrong_min_properties'
-              ,_FailedValue
-              ,FailedKeyPath
-             }, Context) ->
-    Minimum = kz_json:get_value(<<"minProperties">>, FailedSchemaJObj),
-    Min = kz_util:to_binary(Minimum),
-
-    add_validation_error(
-      FailedKeyPath
-      ,<<"minProperties">>
-      ,kz_json:from_list(
-         [{<<"message">>, <<"The object must have at least ", Min/binary, " keys">>}
-          ,{<<"target">>, Minimum}
-         ])
-      ,Context
-     );
-failed_error({'data_invalid'
-              ,FailedSchemaJObj
-              ,{'not_unique', _Item}
-              ,_FailedValue
-              ,FailedKeyPath
-             }, Context) ->
-    lager:debug("item ~p is not unique", [_Item]),
-    lager:debug("failed schema: ~p", [FailedSchemaJObj]),
-    add_validation_error(
-      FailedKeyPath
-      ,<<"uniqueItems">>
-      ,kz_json:from_list([{<<"message">>, <<"List of items is not unique">>}])
-      ,Context
-     );
-failed_error({'data_invalid'
-              ,_FailedSchemaJObj
-              ,'no_extra_properties_allowed'
-              ,_FailedValue
-              ,FailedKeyPath
-             }, Context) ->
-    add_validation_error(
-      FailedKeyPath
-      ,<<"additionalProperties">>
-      ,kz_json:from_list(
-         [{<<"message">>, <<"Strict checking of data is enabled; only include schema-defined properties">>}]
-        )
-      ,Context
-     );
-failed_error({'data_invalid'
-              ,_FailedSchemaJObj
-              ,'no_extra_items_allowed'
-              ,_FailedValue
-              ,FailedKeyPath
-             }, Context) ->
-    add_validation_error(
-      FailedKeyPath
-      ,<<"additionalItems">>
-      ,kz_json:from_list(
-         [{<<"message">>, <<"Strict checking of data is enabled; only include schema-defined items">>}]
-        )
-      ,Context
-     );
-failed_error({'data_invalid'
-              ,FailedSchemaJObj
-              ,'no_match'
-              ,_FailedValue
-              ,FailedKeyPath
-             }, Context) ->
-    Pattern = kz_json:get_value(<<"pattern">>, FailedSchemaJObj),
-    add_validation_error(
-      FailedKeyPath
-      ,<<"pattern">>
-      ,kz_json:from_list(
-         [{<<"message">>, <<"Failed to match pattern '", Pattern/binary, "'">>}
-          ,{<<"target">>, Pattern}
-         ])
-      ,Context
-     );
-failed_error({'data_invalid'
-              ,_FailedSchemaJObj
-              ,'missing_required_property'
-              ,_FailedValue
-              ,FailedKeyPath
-             }, Context) ->
-    add_validation_error(
-      FailedKeyPath
-      ,<<"required">>
-      ,kz_json:from_list(
-         [{<<"message">>, <<"Field is required but missing">>}]
-        )
-      ,Context
-     );
-failed_error({'data_invalid'
-              ,_FailedSchemaJObj
-              ,'missing_dependency'
-              ,_FailedValue
-              ,FailedKeyPath
-             }, Context) ->
-    add_validation_error(
-      FailedKeyPath
-      ,<<"dependencies">>
-      ,kz_json:from_list([{<<"message">>, <<"Dependencies were not validated">>}])
-      ,Context
-     );
-failed_error({'data_invalid'
-              ,FailedSchemaJObj
-              ,'not_divisible'
-              ,_FailedValue
-              ,FailedKeyPath
-             }, Context) ->
-    DivBy = kz_json:get_binary_value(<<"divisibleBy">>, FailedSchemaJObj),
-    add_validation_error(
-      FailedKeyPath
-      ,<<"divisibleBy">>
-      ,kz_json:from_list(
-         [{<<"message">>, <<"Value not divisible by ", DivBy/binary>>}
-          ,{<<"target">>, DivBy}
-         ])
-      ,Context
-     );
-failed_error({'data_invalid'
-              ,FailedSchemaJObj
-              ,'not_allowed'
-              ,_FailedValue
-              ,FailedKeyPath
-             }, Context) ->
-    Disallow = get_disallow(FailedSchemaJObj),
-    add_validation_error(
-      FailedKeyPath
-      ,<<"disallow">>
-      ,kz_json:from_list(
-         [{<<"message">>, <<"Value is disallowed by ", Disallow/binary>>}
-          ,{<<"target">>, Disallow}
-         ])
-      ,Context
-     );
-failed_error({'data_invalid'
-              ,FailedSchemaJObj
-              ,'wrong_type'
-              ,_FailedValue
-              ,FailedKeyPath
-             }, Context) ->
-    Types = get_types(FailedSchemaJObj),
-    add_validation_error(
-      FailedKeyPath
-      ,<<"type">>
-      ,kz_json:from_list(
-         [{<<"message">>, <<"Value did not match type(s): ", Types/binary>>}
-          ,{<<"target">>, Types}
-         ])
-      ,Context
-     );
-failed_error({'data_invalid'
-              ,_FailedSchemaJObj
-              ,{'missing_required_property', FailKey}
-              ,_FailedValue
-              ,FailedKeyPath
-             }, Context) ->
-    add_validation_error(
-      [FailedKeyPath, FailKey]
-      ,<<"required">>
-      ,kz_json:from_list(
-         [{<<"message">>, <<"Field is required but missing">>}]
-        )
-      ,Context
-     );
-failed_error({'data_invalid'
-              ,_FailedSchemaJObj
-              ,FailMsg
-              ,_FailedValue
-              ,FailedKeyPath
-             }, Context) ->
-    lager:debug("failed message: ~p", [FailMsg]),
-    lager:debug("failed schema: ~p", [_FailedSchemaJObj]),
-    lager:debug("failed value: ~p", [_FailedValue]),
-    lager:debug("failed keypath: ~p", [FailedKeyPath]),
-    add_validation_error(
-      FailedKeyPath
-      ,kz_util:to_binary(FailMsg)
-      ,kz_json:from_list([{<<"message">>, <<"failed to validate">>}])
-      ,Context
-     ).
-
--spec get_disallow(kz_json:object()) -> ne_binary().
-get_disallow(JObj) ->
-    case kz_json:get_value(<<"disallow">>, JObj) of
-        <<_/binary>> = Disallow -> Disallow;
-        Disallows when is_list(Disallows) -> kz_util:join_binary(Disallows)
-    end.
-
--spec get_types(kz_json:object()) -> ne_binary().
-get_types(JObj) ->
-    case kz_json:get_first_defined([<<"type">>, <<"types">>], JObj) of
-        <<_/binary>> = Type -> Type;
-        Types when is_list(Types) -> kz_util:join_binary(Types);
-        _TypeSchema -> <<"type schema">>
-    end.
+-spec failed_error(jesse_error:error_reason(), context()) -> context().
+failed_error(Error, Context) ->
+    {ErrorCode, ErrorMessage, ErrorJObj} =
+        kz_json_schema:error_to_jobj(Error
+                                    ,props:filter_undefined(
+                                       [{'version', api_version(Context)}
+                                       ,{'error_code', resp_error_code(Context)}
+                                       ,{'error_message', resp_error_msg(Context)}
+                                       ]
+                                      )
+                                    ),
+    JObj = validation_errors(Context),
+    Context#cb_context{validation_errors=kz_json:merge_jobjs(ErrorJObj, JObj)
+                      ,resp_status='error'
+                      ,resp_error_code=ErrorCode
+                      ,resp_data=kz_json:new()
+                      ,resp_error_msg=ErrorMessage
+                      }.
 
 -spec passed(context()) -> context().
 -spec passed(context(), crossbar_status()) -> context().
@@ -1020,7 +735,7 @@ passed(#cb_context{req_data=Data}=Context, Status) ->
             Context#cb_context{resp_status = Status};
         Id ->
             Context#cb_context{resp_status = Status
-                               ,doc = kz_doc:set_id(doc(Context), Id)
+                              ,doc = kz_doc:set_id(doc(Context), Id)
                               }
     end.
 
@@ -1134,15 +849,16 @@ add_system_error(Code, Error, JObj, Context) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec build_system_error(integer(), atom() | ne_binary(), ne_binary() | kz_json:object(), cb_context:context()) ->
-                                cb_context:context().
+-spec build_system_error(integer(), atom() | ne_binary(), ne_binary() | kz_json:object(), context()) -> context().
+build_system_error(Code, Error, <<_/binary>> = Message, Context) ->
+    build_system_error(Code, Error, kz_json:from_list([{<<"message">>, Message}]), Context);
 build_system_error(Code, Error, JObj, Context) ->
-    ApiVersion = ?MODULE:api_version(Context),
-    Message = build_error_message(ApiVersion, JObj),
+    ApiVersion = api_version(Context),
+    Message = kz_json_schema:build_error_message(ApiVersion, JObj),
     Context#cb_context{resp_status='error'
-                       ,resp_error_code=Code
-                       ,resp_data=Message
-                       ,resp_error_msg=kz_util:to_binary(Error)
+                      ,resp_error_code=Code
+                      ,resp_data=Message
+                      ,resp_error_msg=kz_util:to_binary(Error)
                       }.
 
 %%--------------------------------------------------------------------
@@ -1151,117 +867,43 @@ build_system_error(Code, Error, JObj, Context) ->
 %% Add a validation error to the list of request errors
 %% @end
 %%--------------------------------------------------------------------
-add_validation_error(Property, <<"type">>=C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-add_validation_error(Property, <<"items">>=C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-add_validation_error(Property, <<"required">>=C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-add_validation_error(Property, <<"minimum">>=C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-add_validation_error(Property, <<"maximum">>=C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-add_validation_error(Property, <<"minItems">>=C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-add_validation_error(Property, <<"maxItems">>=C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-add_validation_error(Property, <<"uniqueItems">>=C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-add_validation_error(Property, <<"pattern">>=C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-add_validation_error(Property, <<"minLength">>=C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-add_validation_error(Property, <<"maxLength">>=C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-add_validation_error(Property, <<"maxSize">>=C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-add_validation_error(Property, <<"enum">>=C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-add_validation_error(Property, <<"format">>=C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-add_validation_error(Property, <<"divisibleBy">>=C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-
-%% Not unique within the datastore
-add_validation_error(Property, <<"unique">> = C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-%% User is not authorized to update the property
-add_validation_error(Property, <<"forbidden">> = C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-%% Date range is invalid, too small, or too large
-add_validation_error(Property, <<"date_range">> = C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-%% Value was required to locate a resource, but failed (like account_name)
-add_validation_error(Property, <<"not_found">> = C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-%% Value's keys didn't match property
-add_validation_error(Property, <<"patternProperties">> = C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-add_validation_error(Property, <<"disabled">> = C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-add_validation_error(Property, <<"expired">> = C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-% Generic
-add_validation_error(Property, <<"invalid">> = C, Message, Context) ->
-    add_depreciated_validation_error(Property, C, Message, Context);
-
+-spec add_validation_error(kz_json:keys(), ne_binary(), ne_binary() | kz_json:object(), context()) ->
+                                  context().
+add_validation_error(<<_/binary>> = Property, Code, Message, Context) ->
+    add_validation_error([Property], Code, Message, Context);
+add_validation_error(Property, Code, <<_/binary>> = Message, Context) ->
+    add_validation_error(Property, Code, kz_json:from_list([{<<"message">>, Message}]), Context);
 add_validation_error(Property, Code, Message, Context) ->
-    lager:warning("UNKNOWN ERROR CODE: ~p", [Code]),
-    add_depreciated_validation_error(Property, Code, Message, Context).
+    {ErrorCode, ErrorMessage, ErrorJObj} =
+        kz_json_schema:validation_error(Property, Code, Message
+                                       ,props:filter_undefined(
+                                          [{'version', api_version(Context)}
+                                          ,{'error_code', resp_error_code(Context)}
+                                          ,{'error_message', resp_error_msg(Context)}
+                                          ]
+                                         )
+                                       ),
+    ErrorsJObj = validation_errors(Context),
 
-add_depreciated_validation_error(<<"account">>, <<"expired">>, Message, Context) ->
-    add_depreciated_validation_error(<<"account">>, <<"expired">>, Message, Context, 423, <<"locked">>);
-add_depreciated_validation_error(<<"account">>, <<"disabled">>, Message, Context) ->
-    add_depreciated_validation_error(<<"account">>, <<"disabled">>, Message, Context, 423, <<"locked">>);
-add_depreciated_validation_error(Property, Code, Message, Context) ->
-    add_depreciated_validation_error(Property, Code, Message, Context, resp_error_code(Context), resp_error_msg(Context)).
-
-add_depreciated_validation_error(Property, Code, Message, Context, 'undefined', ErrMsg) ->
-    add_depreciated_validation_error(Property, Code, Message, Context, 400, ErrMsg);
-add_depreciated_validation_error(Property, Code, Message, Context, ErrorCode, 'undefined') ->
-    add_depreciated_validation_error(Property, Code, Message, Context, ErrorCode, <<"invalid request">>);
-add_depreciated_validation_error(Property, Code, Message, Context, ErrorCode, <<"init failed">>) ->
-    add_depreciated_validation_error(Property, Code, Message, Context, ErrorCode, <<"invalid request">>);
-add_depreciated_validation_error(<<_/binary>> = Property, Code, Message, Context, ErrCode, ErrMsg) ->
-    add_depreciated_validation_error([Property], Code, Message, Context, ErrCode, ErrMsg);
-add_depreciated_validation_error(Property, Code, Message, Context, ErrCode, ErrMsg) ->
-    %% Maintain the same error format we are currently using until we are ready to
-    %% convert to something that makes sense....
-    ApiVersion = ?MODULE:api_version(Context),
-
-    JObj = cb_context:validation_errors(Context),
-    Error = build_error_message(ApiVersion, Message),
-
-    Key = kz_util:join_binary(Property, <<".">>),
-    Context#cb_context{validation_errors=kz_json:set_value([Key, Code], Error, JObj)
-                       ,resp_status='error'
-                       ,resp_error_code=ErrCode
-                       ,resp_data=kz_json:new()
-                       ,resp_error_msg=ErrMsg
+    Context#cb_context{validation_errors=kz_json:merge_jobjs(ErrorJObj, ErrorsJObj)
+                      ,resp_status='error'
+                      ,resp_error_code=ErrorCode
+                      ,resp_data=kz_json:new()
+                      ,resp_error_msg=maybe_update_error_message(resp_error_msg(Context), ErrorMessage)
                       }.
 
--spec build_error_message('v1', ne_binary() | kz_json:object()) ->
-                                 ne_binary();
-                         (ne_binary(), ne_binary() | kz_json:object()) ->
-                                 kz_json:object().
-build_error_message(?VERSION_1, Message) when is_binary(Message) ->
-    Message;
-build_error_message(?VERSION_1, JObj) ->
-    kz_json:get_value(<<"message">>, JObj);
-build_error_message(_Version, Message) when is_binary(Message) ->
-    kz_json:from_list([{<<"message">>, Message}]);
-build_error_message(_Version, JObj) ->
-    JObj.
+-spec maybe_update_error_message(ne_binary(), ne_binary()) -> ne_binary().
+maybe_update_error_message(_Old, <<"init failed">>) -> <<"validation error">>;
+maybe_update_error_message(Msg, Msg) -> Msg;
+maybe_update_error_message(_Old, New) -> New.
 
--spec maybe_fix_js_types(cb_context:context(), kz_json:object(), jesse_error:error_reasons()) ->
-                                cb_context:context().
+-spec maybe_fix_js_types(context(), kz_json:object(), [jesse_error:error_reason()]) -> context().
 maybe_fix_js_types(Context, SchemaJObj, Errors) ->
     JObj = req_data(Context),
     case lists:foldl(fun maybe_fix_js_type/2, JObj, Errors) of
         JObj ->
-            lager:debug("request data did not validate against ~s: ~p", [kz_doc:id(SchemaJObj)
-                                                                         ,Errors
-                                                                        ]),
+            lager:debug("request data did not validate against ~s: ~p"
+                       ,[kz_doc:id(SchemaJObj), Errors]),
             failed(Context, Errors);
         NewJObj ->
             validate_request_data(SchemaJObj, set_req_data(Context, NewJObj))
@@ -1280,7 +922,7 @@ maybe_fix_js_type(_, JObj) -> JObj.
                                   kz_json:object().
 maybe_fix_js_integer(Key, Value, JObj) ->
     try kz_util:to_integer(Value) of
-        V -> kz_json:set_value(Key, V, JObj)
+        V -> kz_json:set_value(maybe_fix_index(Key), V, JObj)
     catch
         _E:_R ->
             lager:debug("error converting value to integer ~p : ~p : ~p"
@@ -1288,3 +930,40 @@ maybe_fix_js_integer(Key, Value, JObj) ->
                        ),
             JObj
     end.
+
+-spec maybe_fix_index(kz_json:key() | kz_json:keys()) -> kz_json:key() | kz_json:keys().
+maybe_fix_index(Keys)
+  when is_list(Keys) ->
+    lists:map(fun(K) when is_integer(K) ->
+                      K + 1;
+                 (K) -> K
+              end, Keys);
+maybe_fix_index(Key) ->
+    Key.
+
+-spec system_error_props(context()) -> kz_proplist().
+system_error_props(Context) ->
+    Extract = [{fun account_id/1, <<"account_id">>}
+              ,{fun account_name/1, <<"account_name">>}
+              ,{fun auth_account_id/1, <<"auth_account_id">>}
+              ,{fun(C) -> kz_json:from_list(req_headers(C)) end, <<"req_headers">>}
+              ,{fun req_json/1, <<"req_json">>}
+              ,{fun req_data/1, <<"req_data">>}
+              ,{fun query_string/1, <<"query_json">>}
+              ,{fun req_id/1, <<"req_id">>}
+              ],
+    Fun = fun({Fun, K}, KVs) -> [{K, Fun(Context)} | KVs] end,
+    Props = lists:foldl(Fun, [], Extract),
+    props:filter_undefined(Props).
+
+-spec system_error(context(), ne_binary()) -> context().
+system_error(Context, Error) ->
+    Notify = props:filter_undefined(
+               [{<<"Subject">>, <<"api error - ", Error/binary>>}
+               ,{<<"Message">>, Error}
+               ,{<<"Details">>, kz_json:from_list(system_error_props(Context))}
+               ,{<<"Account-ID">>, auth_account_id(Context)}
+                | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+               ]),
+    kz_amqp_worker:cast(Notify, fun kapi_notifications:publish_system_alert/1),
+    add_system_error(Error, Context).

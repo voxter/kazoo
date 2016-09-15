@@ -4,11 +4,11 @@
     "description": "Validator for the Lookup callflow element",
     "properties": {
         "lists": {
+            "default": [],
             "description": "Array of list ids",
             "items": {
                 "type": "string"
             },
-            "name": "Array of list ids",
             "required": "true",
             "type": "array"
         }

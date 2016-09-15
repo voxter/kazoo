@@ -7,7 +7,6 @@
 %%%-------------------------------------------------------------------
 -module(kz_datamgr).
 
-
 -export([db_classification/1]).
 
 %% Settings-related
@@ -18,71 +17,75 @@
 
 %% System manipulation
 -export([db_exists/1, db_exists/2, db_exists_all/1
-         ,db_info/0, db_info/1
-         ,db_create/1, db_create/2
-         ,db_compact/1
-         ,db_view_cleanup/1
-         ,db_view_update/2, db_view_update/3
-         ,db_delete/1
-         ,db_replicate/1
-         ,db_archive/1, db_archive/2
-         ,db_list/0, db_list/1
+        ,db_info/0, db_info/1
+        ,db_create/1, db_create/2
+        ,db_compact/1
+        ,db_view_cleanup/1
+        ,db_view_update/2, db_view_update/3
+        ,db_delete/1
+        ,db_replicate/1
+        ,db_archive/1, db_archive/2
+        ,db_import/2
+        ,db_list/0, db_list/1
         ]).
 
 %% Document manipulation
 -export([save_doc/2, save_doc/3
-         ,save_docs/2, save_docs/3
-         ,open_cache_doc/2, open_cache_doc/3
-         ,update_cache_doc/3
-         ,flush_cache_doc/2, flush_cache_doc/3
-         ,flush_cache_docs/0, flush_cache_docs/1
-         ,add_to_doc_cache/3
-         ,open_doc/2,open_doc/3
-         ,del_doc/2, del_docs/2
-         ,del_doc/3, del_docs/3
-         ,lookup_doc_rev/2, lookup_doc_rev/3
-         ,update_doc/3, update_doc/4
-         ,load_doc_from_file/3
-         ,update_doc_from_file/3
-         ,revise_doc_from_file/3
-         ,revise_docs_from_folder/3, revise_docs_from_folder/4
-         ,revise_views_from_folder/2
-         ,ensure_saved/2, ensure_saved/3
-         ,load_fixtures_from_folder/2
-         ,all_docs/1
-         ,all_design_docs/1
-         ,all_docs/2
-         ,all_design_docs/2
-         ,copy_doc/4, copy_doc/5
-         ,move_doc/4, move_doc/5
+        ,save_docs/2, save_docs/3
+        ,open_cache_doc/2, open_cache_doc/3
+        ,update_cache_doc/3
+        ,flush_cache_doc/2, flush_cache_doc/3
+        ,flush_cache_docs/0, flush_cache_docs/1
+        ,add_to_doc_cache/3
+        ,open_doc/2,open_doc/3
+        ,del_doc/2, del_docs/2
+        ,del_doc/3, del_docs/3
+        ,lookup_doc_rev/2, lookup_doc_rev/3
+        ,update_doc/3, update_doc/4
+        ,load_doc_from_file/3
+        ,update_doc_from_file/3
+        ,revise_doc_from_file/3
+        ,revise_docs_from_folder/3, revise_docs_from_folder/4
+        ,revise_views_from_folder/2
+        ,ensure_saved/2, ensure_saved/3
+        ,load_fixtures_from_folder/2
+        ,all_docs/1
+        ,all_design_docs/1
+        ,all_docs/2
+        ,all_design_docs/2
+        ,copy_doc/4, copy_doc/5
+        ,move_doc/4, move_doc/5
         ]).
 
 %% attachments
 -export([fetch_attachment/3, fetch_attachment/4
-         ,stream_attachment/3, stream_attachment/4, stream_attachment/5
-         ,put_attachment/4, put_attachment/5
-         ,delete_attachment/3, delete_attachment/4
-         ,attachment_url/3, attachment_url/4
+        ,stream_attachment/3, stream_attachment/4, stream_attachment/5
+        ,put_attachment/4, put_attachment/5
+        ,delete_attachment/3, delete_attachment/4
+        ,attachment_url/3, attachment_url/4
         ]).
 
 %% Views
 -export([get_all_results/2
-         ,get_results/2, get_results/3
-         ,get_results_count/3
-         ,get_result_keys/1, get_result_keys/3
-         ,design_info/2
-         ,design_compact/2
+        ,get_results/2, get_results/3
+        ,get_results_count/3
+        ,get_result_keys/1, get_result_keys/3
+        ,get_single_result/3
+        ,design_info/2
+        ,design_compact/2
         ]).
 
 -export([get_uuid/0, get_uuid/1
-         ,get_uuids/1, get_uuids/2
+        ,get_uuids/1, get_uuids/2
         ]).
 -export([suppress_change_notice/0
-         ,enable_change_notice/0
-         ,change_notice/0
+        ,enable_change_notice/0
+        ,change_notice/0
         ]).
 
--export_type([view_options/0]).
+-export_type([view_option/0, view_options/0
+             ,view_listing/0, views_listing/0
+             ]).
 
 -include("kz_data.hrl").
 
@@ -191,22 +194,57 @@ revise_docs_from_folder(DbName, App, Folder) ->
     revise_docs_from_folder(DbName, App, Folder, 'true').
 
 revise_docs_from_folder(DbName, App, Folder, Sleep) ->
-    Files = filelib:wildcard([code:priv_dir(App), "/couchdb/", kz_util:to_list(Folder), "/*.json"]),
-    do_revise_docs_from_folder(DbName, Sleep, Files).
+    case code:priv_dir(App) of
+        {'error', 'bad_name'} ->
+            lager:error("tried to revise docs for db ~p for invalid priv directory. app: ~p", [DbName, App]);
+
+        ValidDir ->
+            Files = filelib:wildcard([ValidDir, "/couchdb/", kz_util:to_list(Folder), "/*.json"]),
+            do_revise_docs_from_folder(DbName, Sleep, Files)
+    end.
 
 -spec do_revise_docs_from_folder(ne_binary(), boolean(), ne_binaries()) -> 'ok'.
 do_revise_docs_from_folder(_, _, []) -> 'ok';
 do_revise_docs_from_folder(DbName, Sleep, [H|T]) ->
     try
         {'ok', Bin} = file:read_file(H),
-        JObj = kz_json:decode(Bin),
-        Sleep andalso timer:sleep(250),
+        JObj = maybe_adapt_multilines(kz_json:decode(Bin)),
+        Sleep
+            andalso timer:sleep(250),
         _ = ensure_saved(DbName, JObj),
         do_revise_docs_from_folder(DbName, Sleep, T)
     catch
         _:_ ->
+            kz_util:log_stacktrace(),
             do_revise_docs_from_folder(DbName, Sleep, T)
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Replaces multiline Javascript into single line, on the fly
+%% while loading views from files.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_adapt_multilines(kz_json:object()) -> kz_json:object().
+maybe_adapt_multilines(JObj) ->
+    case kz_json:get_value(<<"views">>, JObj) of
+        'undefined' -> JObj;
+        Views ->
+            NewViews =
+                [{View, kz_json:foldl(fun inline_js_fun/3, kz_json:new(), Pairs)}
+                 || {View, Pairs} <- kz_json:to_proplist(Views)
+                ],
+            kz_json:set_value(<<"views">>, NewViews, JObj)
+    end.
+
+%% @private
+-spec inline_js_fun(ne_binary(), ne_binaries() | kz_json:json_term(), kz_json:object()) ->
+                           kz_json:object().
+inline_js_fun(Type, Code=[<<"function",_/binary>>|_], Acc) ->
+    kz_json:set_value(Type, iolist_to_binary(Code), Acc);
+inline_js_fun(Type, Code, Acc) ->
+    kz_json:set_value(Type, Code, Acc).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -261,7 +299,8 @@ db_exists(DbName) ->
 db_exists(DbName, 'undefined') ->
     db_exists(DbName);
 db_exists(DbName, Type)
-  when ?VALID_DBNAME andalso is_binary(Type) ->
+  when ?VALID_DBNAME
+       andalso is_binary(Type) ->
     case add_doc_type_from_view(Type, []) of
         [] -> db_exists(DbName, [{'doc_type', Type}]);
         Options -> db_exists(DbName, Options)
@@ -354,13 +393,14 @@ db_view_cleanup(DbName) ->
         {'error', _}=E -> E
     end.
 
--spec db_view_update(ne_binary(), kz_proplist()) -> boolean().
--spec db_view_update(ne_binary(), kz_proplist(), boolean()) -> boolean().
+-spec db_view_update(ne_binary(), views_listing()) -> boolean().
+-spec db_view_update(ne_binary(), views_listing(), boolean()) -> boolean().
 
 db_view_update(DbName, Views) ->
     db_view_update(DbName, Views, 'false').
 
-db_view_update(DbName, Views, Remove) when ?VALID_DBNAME ->
+db_view_update(DbName, Views0, Remove) when ?VALID_DBNAME ->
+    Views = lists:keymap(fun maybe_adapt_multilines/1, 2, Views0),
     kzs_db:db_view_update(kzs_plan:plan(DbName), DbName, Views, Remove);
 db_view_update(DbName, Views, Remove) ->
     case maybe_convert_dbname(DbName) of
@@ -469,8 +509,8 @@ db_delete(DbName) ->
 -spec db_archive(ne_binary()) -> 'ok'.
 -spec db_archive(ne_binary(), ne_binary()) -> 'ok'.
 db_archive(DbName) ->
- Folder = kapps_config:get(?CONFIG_CAT, <<"default_archive_folder">>, <<"/tmp">>),
- db_archive(DbName, filename:join([<<Folder/binary, "/", DbName/binary, ".json">>])).
+    Folder = kapps_config:get(?CONFIG_CAT, <<"default_archive_folder">>, <<"/tmp">>),
+    db_archive(DbName, filename:join([<<Folder/binary, "/", DbName/binary, ".json">>])).
 
 db_archive(DbName, Filename) when ?VALID_DBNAME ->
     kzs_db:db_archive(kzs_plan:plan(DbName), DbName, Filename);
@@ -480,6 +520,14 @@ db_archive(DbName, Filename) ->
         {'error', _}=E -> E
     end.
 
+-spec db_import(ne_binary(), file:filename_all()) -> 'ok' | {'error', any()}.
+db_import(DbName, ArchiveFile) when ?VALID_DBNAME ->
+    kzs_db:db_archive(kzs_plan:plan(DbName), DbName, ArchiveFile);
+db_import(DbName, ArchiveFile) ->
+    case maybe_convert_dbname(DbName) of
+        {'ok', Db} -> db_archive(Db, ArchiveFile);
+        {'error', _}=E -> E
+    end.
 
 %%%===================================================================
 %%% Document Functions
@@ -515,6 +563,9 @@ open_cache_doc(DbName, DocId, Options) ->
         {'error', _}=E -> E
     end.
 
+-spec add_to_doc_cache(text(), ne_binary(), kz_json:object()) ->
+                              {'ok', kz_json:objects()} |
+                              data_error().
 add_to_doc_cache(DbName, DocId, Doc) when ?VALID_DBNAME ->
     kzs_cache:add_to_doc_cache(DbName, DocId, Doc);
 add_to_doc_cache(DbName, DocId, Doc) ->
@@ -524,8 +575,8 @@ add_to_doc_cache(DbName, DocId, Doc) ->
     end.
 
 -spec update_cache_doc(text(), ne_binary(), fun((kz_json:object()) -> kz_json:object() | 'skip')) ->
-                      {'ok', kz_json:object()}
-                      | data_error().
+                              {'ok', kz_json:object()}
+                                  | data_error().
 update_cache_doc(DbName, DocId, Fun) when is_function(Fun, 1) ->
     case open_cache_doc(DbName, DocId) of
         {'ok', JObj} ->
@@ -537,8 +588,8 @@ update_cache_doc(DbName, DocId, Fun) when is_function(Fun, 1) ->
     end.
 
 -spec maybe_save_doc(text(), kz_json:object() | 'skip', kz_json:object()) ->
-                      {'ok', kz_json:object() | kz_json:objects()} |
-                      data_error().
+                            {'ok', kz_json:object() | kz_json:objects()} |
+                            data_error().
 maybe_save_doc(_DbName, 'skip', Jobj) ->
     {'ok', Jobj};
 maybe_save_doc(DbName, JObj, _OldJobj) ->
@@ -672,7 +723,7 @@ lookup_doc_rev(DbName, DocId, Options) ->
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
-%% save document to the db
+%% Save document to database
 %% @end
 %%--------------------------------------------------------------------
 -spec save_doc(text(), kz_json:object() | kz_json:objects()) ->
@@ -683,8 +734,13 @@ save_doc(DbName, Docs) when is_list(Docs) ->
 save_doc(DbName, Doc) ->
     save_doc(DbName, Doc, []).
 
-%% save a document; if it fails to save because of conflict, pull the latest revision and try saving again.
-%% any other error is returned
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Save a document. If it fails because of conflict, pulls latest
+%% revision and tries saving again. Otherwise return.
+%% @end
+%%--------------------------------------------------------------------
 -spec ensure_saved(text(), kz_json:object()) ->
                           {'ok', kz_json:object()} |
                           data_error().
@@ -743,7 +799,8 @@ maybe_revert_publish('false') ->
 save_docs(DbName, Docs) when is_list(Docs) ->
     save_docs(DbName, Docs, []).
 
-save_docs(DbName, [Doc|_]=Docs, Options) when is_list(Docs) andalso ?VALID_DBNAME ->
+save_docs(DbName, [Doc|_]=Docs, Options) when is_list(Docs)
+                                              andalso ?VALID_DBNAME ->
     OldSetting = maybe_toggle_publish(Options),
     Result = kzs_doc:save_docs(kzs_plan:plan(DbName, Doc), DbName, Docs, Options),
     maybe_revert_publish(OldSetting),
@@ -824,7 +881,8 @@ del_docs(DbName, Docs) ->
 -spec del_docs(text(), kz_json:objects() | ne_binaries(), kz_proplist()) ->
                       {'ok', kz_json:objects()} |
                       data_error().
-del_docs(DbName, Docs, Options) when is_list(Docs) andalso ?VALID_DBNAME ->
+del_docs(DbName, Docs, Options) when is_list(Docs)
+                                     andalso ?VALID_DBNAME ->
     kzs_doc:del_docs(kzs_plan:plan(DbName), DbName, Docs, Options);
 del_docs(DbName, Docs, Options) when is_list(Docs) ->
     case maybe_convert_dbname(DbName) of
@@ -897,11 +955,11 @@ put_attachment(DbName, {DocType, DocId}, AName, Contents, Options) ->
 put_attachment(DbName, DocId, AName, Contents, Options) when ?VALID_DBNAME ->
     case attachment_options(DbName, DocId, Options) of
         {'ok', NewOptions} -> kzs_attachments:put_attachment(kzs_plan:plan(DbName, NewOptions)
-                                                             ,DbName
-                                                             ,DocId
-                                                             ,AName
-                                                             ,Contents
-                                                             ,NewOptions
+                                                            ,DbName
+                                                            ,DocId
+                                                            ,AName
+                                                            ,Contents
+                                                            ,props:delete('plan_override', NewOptions)
                                                             );
         {'error', _} = Error -> Error
     end;
@@ -928,13 +986,14 @@ delete_attachment(DbName, DocId, AName, Options) ->
         {'error', _}=E -> E
     end.
 
--spec attachment_url(text(), docid(), ne_binary()) -> {'ok', ne_binary()}
-                                                    | {'proxy', tuple()}
-                                                    | {'error', any()}.
--spec attachment_url(text(), docid(), ne_binary(), kz_proplist()) -> {'ok', ne_binary()}
-                                                                   | {'proxy', tuple()}
-                                                                   | {'error', any()}.
-
+-spec attachment_url(text(), docid(), ne_binary()) ->
+                            {'ok', ne_binary()} |
+                            {'proxy', tuple()} |
+                            {'error', any()}.
+-spec attachment_url(text(), docid(), ne_binary(), kz_proplist()) ->
+                            {'ok', ne_binary()} |
+                            {'proxy', tuple()} |
+                            {'error', any()}.
 attachment_url(DbName, DocId, AttachmentId) ->
     attachment_url(DbName, DocId, AttachmentId, []).
 
@@ -942,7 +1001,7 @@ attachment_url(DbName, {DocType, DocId}, AttachmentId, Options) when ?VALID_DBNA
     attachment_url(DbName, DocId, AttachmentId, maybe_add_doc_type(DocType, Options));
 attachment_url(DbName, DocId, AttachmentId, Options) when ?VALID_DBNAME ->
     Plan = kzs_plan:plan(DbName, Options),
-    case kzs_doc:open_doc(Plan, DbName, DocId, Options) of
+    case kzs_doc:open_doc(Plan, DbName, DocId, props:delete('plan_override', Options)) of
         {'ok', JObj} ->
             NewOptions = [{'rev', kz_doc:revision(JObj)}
                           | maybe_add_doc_type(kz_doc:type(JObj), Options)
@@ -962,12 +1021,12 @@ attachment_url(DbName, DocId, AttachmentId, Options) ->
 %%%===================================================================
 attachment_options(DbName, DocId, Options) ->
     RequiredOptions = [{'doc_type', fun kz_doc:type/1}
-                       ,{'rev', fun kz_doc:revision/1}
+                      ,{'rev', fun kz_doc:revision/1}
                       ],
     attachment_options(DbName, DocId, Options, RequiredOptions).
 
 attachment_options(DbName, DocId, Options, RequiredOptions) ->
-    Fun = fun() -> case open_cache_doc(DbName, DocId, Options) of
+    Fun = fun() -> case open_cache_doc(DbName, DocId, props:delete('plan_override', Options)) of
                        {'ok', JObj} -> JObj;
                        _ -> kz_json:new()
                    end
@@ -1014,7 +1073,7 @@ add_required_option({Key, Fun}, {JObj, Options}=Acc) ->
                         V -> V
                     end,
             {JObj, [{Key, Value} | Options]}
-end.
+    end.
 
 %%%===================================================================
 %%% View Functions
@@ -1052,7 +1111,7 @@ get_results_count(DbName, DesignDoc, Options) ->
     kzs_view:get_results_count(kzs_plan:plan(DbName, Opts), DbName, DesignDoc, Options).
 
 -spec get_result_keys(ne_binary(), ne_binary(), view_options()) ->
-          {'ok', ne_binaries()} | data_error().
+                             {'ok', ne_binaries()} | data_error().
 get_result_keys(DbName, DesignDoc, Options) ->
     Opts = maybe_add_doc_type_from_view(DesignDoc, Options),
     case kzs_view:get_results(kzs_plan:plan(DbName, Opts), DbName, DesignDoc, Options) of
@@ -1062,10 +1121,36 @@ get_result_keys(DbName, DesignDoc, Options) ->
 
 -spec get_result_keys(kz_json:objects()) -> kz_json:keys().
 get_result_keys(JObjs) ->
-    lists:map(fun get_keys/1, JObjs).
+    [kz_json:get_value(<<"key">>, JObj)
+     || JObj <- JObjs
+    ].
 
--spec get_keys(kz_json:object()) -> kz_json:key().
-get_keys(JObj) -> kz_json:get_value(<<"key">>, JObj).
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Gets the only result of a view.
+%% If no result is found: returns `{error, not_found}'.
+%% If more than one result is found, either:
+%% - if `Options' contains `first_when_multiple'
+%%     then the first one will be returned;
+%% - otherwise `{error, multiple_results}' is returned.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_single_result(ne_binary(), ne_binary(), view_options()) ->
+                               {'ok', kz_json:object()} |
+                               {'error', 'multiple_results'} |
+                               data_error().
+get_single_result(DbName, DesignDoc, Options) ->
+    case get_results(DbName, DesignDoc, Options) of
+        {'ok', [Result]} -> {'ok', Result};
+        {'ok', []} -> {'error', 'not_found'};
+        {'ok', Results} ->
+            case props:is_true('first_when_multiple', Options, 'false') of
+                'true' -> {'ok', hd(Results)};
+                'false' -> {'error', 'multiple_results'}
+            end;
+        {'error', _}=E -> E
+    end.
 
 -spec get_uuid() -> ne_binary().
 -spec get_uuid(pos_integer()) -> ne_binary().
@@ -1135,9 +1220,9 @@ copy_doc(FromDB, FromId, ToDB, ToId, Options) ->
     Src = kzs_plan:plan(FromDB, Options),
     Dst = kzs_plan:plan(ToDB, Options),
     CopySpec = #copy_doc{source_dbname=FromDB
-                         ,source_doc_id=FromId
-                         ,dest_dbname=ToDB
-                         ,dest_doc_id=ToId
+                        ,source_doc_id=FromId
+                        ,dest_dbname=ToDB
+                        ,dest_doc_id=ToId
                         },
     kzs_doc:copy_doc(Src, Dst, CopySpec, Options).
 
@@ -1158,9 +1243,9 @@ move_doc(FromDB, FromId, ToDB, ToId, Options) ->
     Src = kzs_plan:plan(FromDB, Options),
     Dst = kzs_plan:plan(ToDB, Options),
     CopySpec = #copy_doc{source_dbname=FromDB
-                         ,source_doc_id=FromId
-                         ,dest_dbname=ToDB
-                         ,dest_doc_id=ToId
+                        ,source_doc_id=FromId
+                        ,dest_dbname=ToDB
+                        ,dest_doc_id=ToId
                         },
     kzs_doc:move_doc(Src, Dst, CopySpec, Options).
 

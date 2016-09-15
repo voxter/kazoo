@@ -1,0 +1,36 @@
+{
+    "$schema": "http://json-schema.org/draft-03/schema#",
+    "_id": "groups",
+    "description": "Validator for the group",
+    "properties": {
+        "endpoints": {
+            "default": {},
+            "description": "Endpoints included into group",
+            "required": true,
+            "type": "object"
+        },
+        "music_on_hold": {
+            "default": {},
+            "description": "The music on hold parameters",
+            "properties": {
+                "media_id": {
+                    "description": "The ID of a media object that should be used as music on hold",
+                    "maxLength": 128,
+                    "required": false,
+                    "type": "string"
+                }
+            },
+            "required": false,
+            "type": "object"
+        },
+        "name": {
+            "description": "A friendly name for the group",
+            "maxLength": 128,
+            "minLength": 1,
+            "required": true,
+            "type": "string"
+        }
+    },
+    "required": true,
+    "type": "object"
+}

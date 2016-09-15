@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2015, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -9,8 +9,8 @@
 -module(teletype_fax_util).
 
 -export([convert/3
-         ,get_fax_doc/1
-         ,get_attachments/2
+        ,get_fax_doc/1
+        ,get_attachments/2
         ]).
 
 -include("teletype.hrl").
@@ -105,7 +105,7 @@ maybe_convert_attachment(Macros, ContentType, Bin) ->
     FromFormat = from_format_from_content_type(ContentType),
     lager:debug("converting from ~s to ~s", [FromFormat, ToFormat]),
 
-    case ?MODULE:convert(FromFormat, ToFormat, Bin) of
+    case convert(FromFormat, ToFormat, Bin) of
         {'ok', Converted} ->
             Filename = get_file_name(Macros, ToFormat),
             lager:debug("adding attachment as ~s", [Filename]),
@@ -135,7 +135,7 @@ get_file_name(Macros, Ext) ->
     CallerIdMacros = props:get_value(<<"caller_id">>, Macros),
     CallerID =
         case {props:get_value(<<"name">>, CallerIdMacros)
-              ,props:get_value(<<"number">>, CallerIdMacros)
+             ,props:get_value(<<"number">>, CallerIdMacros)
              }
         of
             {'undefined', 'undefined'} -> <<"Unknown">>;

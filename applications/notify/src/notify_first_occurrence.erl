@@ -1,18 +1,20 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012, VoIP INC
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
-%%% Craws accounts and triggers 'first' registration and call emails
+%%% Notification for 'first' registration and call
 %%% @end
 %%% @contributors
 %%%   Karl Anderson <karl@2600hz.org>
+%%%   Hesaam Farhang
 %%%-------------------------------------------------------------------
 -module(notify_first_occurrence).
 
 -include("notify.hrl").
 -include_lib("kazoo/include/kz_databases.hrl").
 
--export([init/0]).
--export([send/2]).
+-export([init/0, send/2
+        ,handle_req/2
+        ]).
 
 -define(SERVER, ?MODULE).
 
@@ -37,12 +39,21 @@ init() ->
     {ok, _} = notify_util:compile_default_subject_template(?DEFAULT_SUBJ_TMPL, ?MOD_CONFIG_CAT),
     lager:debug("init done for ~s", [?MODULE]).
 
+-spec handle_req(kz_json:object(), kz_proplist()) -> any().
+handle_req(JObj, _Props) ->
+    'true' = kapi_notifications:first_occurrence_v(JObj),
+    {'ok', Account} = kz_account:fetch(kz_json:get_value(<<"Account-ID">>, JObj)),
+    send(kz_json:get_integer_value(<<"Occurrence">>, JObj)
+        ,Account
+        ).
+
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
 %% Send an email notifying that a first occurrence event has happened.
 %% @end
 %%--------------------------------------------------------------------
+-spec send(ne_binary(), kz_json:object()) -> any().
 send(Occurrence, Account) ->
     lager:debug("creating first occurrence notice"),
 
@@ -58,7 +69,7 @@ send(Occurrence, Account) ->
     {ok, Subject} = notify_util:render_template(CustomSubjectTemplate, ?DEFAULT_SUBJ_TMPL, Props),
 
     To = kz_json:get_value([<<"notifications">>, <<"first_occurrence">>, <<"send_to">>], Account
-                           ,kapps_config:get(?MOD_CONFIG_CAT, <<"default_to">>, <<"">>)),
+                          ,kapps_config:get(?MOD_CONFIG_CAT, <<"default_to">>, <<"">>)),
     RepEmail = notify_util:get_rep_email(Account),
 
     _ = build_and_send_email(TxtBody, HTMLBody, Subject, To, Props),
@@ -74,9 +85,9 @@ send(Occurrence, Account) ->
 create_template_props(Account, Occurrence) ->
     Admin = notify_util:find_admin(Account),
     [{<<"event">>, Occurrence}
-     ,{<<"account">>, notify_util:json_to_template_props(Account)}
-     ,{<<"admin">>, notify_util:json_to_template_props(Admin)}
-     ,{<<"service">>, notify_util:get_service_props(kz_json:new(), Account, ?MOD_CONFIG_CAT)}
+    ,{<<"account">>, notify_util:json_to_template_props(Account)}
+    ,{<<"admin">>, notify_util:json_to_template_props(Admin)}
+    ,{<<"service">>, notify_util:get_service_props(kz_json:new(), Account, ?MOD_CONFIG_CAT)}
     ].
 
 %%--------------------------------------------------------------------
@@ -98,26 +109,26 @@ build_and_send_email(TxtBody, HTMLBody, Subject, To, Props) ->
 
     %% Content Type, Subtype, Headers, Parameters, Body
     Email = {<<"multipart">>, <<"mixed">>
-                 ,[{<<"From">>, From}
-                   ,{<<"To">>, To}
-                   ,{<<"Subject">>, Subject}
-                  ]
-             ,ContentTypeParams
-             ,[{<<"multipart">>, <<"alternative">>, [], []
-                ,[{<<"text">>, <<"plain">>
-                   ,props:filter_undefined(
-                      [{<<"Content-Type">>, iolist_to_binary([<<"text/plain">>, CharsetString])}
-                       ,{<<"Content-Transfer-Encoding">>, PlainTransferEncoding}
-                      ])
-                   ,[], iolist_to_binary(TxtBody)}
-                  ,{<<"text">>, <<"html">>
-                    ,props:filter_undefined(
-                       [{<<"Content-Type">>, iolist_to_binary([<<"text/html">>, CharsetString])}
-                        ,{<<"Content-Transfer-Encoding">>, HTMLTransferEncoding}
-                       ])
-                    ,[], iolist_to_binary(HTMLBody)}
-                 ]
-               }
-              ]
+            ,[{<<"From">>, From}
+             ,{<<"To">>, To}
+             ,{<<"Subject">>, Subject}
+             ]
+            ,ContentTypeParams
+            ,[{<<"multipart">>, <<"alternative">>, [], []
+              ,[{<<"text">>, <<"plain">>
+                ,props:filter_undefined(
+                   [{<<"Content-Type">>, iolist_to_binary([<<"text/plain">>, CharsetString])}
+                   ,{<<"Content-Transfer-Encoding">>, PlainTransferEncoding}
+                   ])
+                ,[], iolist_to_binary(TxtBody)}
+               ,{<<"text">>, <<"html">>
+                ,props:filter_undefined(
+                   [{<<"Content-Type">>, iolist_to_binary([<<"text/html">>, CharsetString])}
+                   ,{<<"Content-Transfer-Encoding">>, HTMLTransferEncoding}
+                   ])
+                ,[], iolist_to_binary(HTMLBody)}
+               ]
+              }
+             ]
             },
     notify_util:send_email(From, To, Email).

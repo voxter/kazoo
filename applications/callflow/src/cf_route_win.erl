@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%% handler for route wins, bootstraps callflow execution
 %%% @end
@@ -16,15 +16,15 @@
 -define(JSON(L), kz_json:from_list(L)).
 
 -define(DEFAULT_SERVICES
-        ,?JSON([{<<"audio">>, ?JSON([{<<"enabled">>, 'true'}])}
-                ,{<<"video">>,?JSON([{<<"enabled">>, 'true'}])}
-                ,{<<"sms">>,  ?JSON([{<<"enabled">>, 'true'}])}
-               ]
-              )
+       ,?JSON([{<<"audio">>, ?JSON([{<<"enabled">>, 'true'}])}
+              ,{<<"video">>,?JSON([{<<"enabled">>, 'true'}])}
+              ,{<<"sms">>,  ?JSON([{<<"enabled">>, 'true'}])}
+              ]
+             )
        ).
 
 -spec execute_callflow(kz_json:object(), kapps_call:call()) ->
-                                 'ok' | {'ok', pid()}.
+                              'ok' | {'ok', pid()}.
 execute_callflow(JObj, Call) ->
     case should_restrict_call(Call) of
         'true' ->
@@ -40,9 +40,9 @@ execute_callflow(JObj, Call) ->
 
 -spec should_restrict_call(kapps_call:call()) -> boolean().
 should_restrict_call(Call) ->
-	DefaultEndpointId = kapps_call:authorizing_id(Call),
-	EndpointId = kapps_call:kvs_fetch(?RESTRICTED_ENDPOINT_KEY, DefaultEndpointId, Call),
-	should_restrict_call(EndpointId, Call).
+    DefaultEndpointId = kapps_call:authorizing_id(Call),
+    EndpointId = kapps_call:kvs_fetch(?RESTRICTED_ENDPOINT_KEY, DefaultEndpointId, Call),
+    should_restrict_call(EndpointId, Call).
 
 -spec should_restrict_call(api_binary(), kapps_call:call()) -> boolean().
 should_restrict_call('undefined', _Call) -> 'false';
@@ -98,7 +98,7 @@ maybe_classification_restriction(JObj, Call) ->
     Number = knm_converters:normalize(Request, AccountId, DialPlan),
     Classification = knm_converters:classify(Number),
     lager:debug("classified number ~s as ~s, testing for call restrictions"
-                ,[Number, Classification]
+               ,[Number, Classification]
                ),
     kz_json:get_value([<<"call_restriction">>, Classification, <<"action">>], JObj) =:= <<"deny">>.
 
@@ -109,7 +109,7 @@ find_request(Call) ->
             kapps_call:request_user(Call);
         CaptureGroup ->
             lager:debug("capture group ~s being used instead of request ~s"
-                        ,[CaptureGroup, kapps_call:request_user(Call)]
+                       ,[CaptureGroup, kapps_call:request_user(Call)]
                        ),
             CaptureGroup
     end.
@@ -136,15 +136,15 @@ enforce_closed_groups(JObj, Call) ->
 -spec get_caller_groups(kz_json:objects(), kz_json:object(), kapps_call:call()) -> sets:set().
 get_caller_groups(Groups, JObj, Call) ->
     Ids = [kapps_call:authorizing_id(Call)
-           ,kz_json:get_value(<<"owner_id">>, JObj)
+          ,kz_json:get_value(<<"owner_id">>, JObj)
            | kz_json:get_keys([<<"hotdesk">>, <<"users">>], JObj)
           ],
     lists:foldl(fun('undefined', Set) -> Set;
                    (Id, Set) ->
                         get_group_associations(Id, Groups, Set)
                 end
-                ,sets:new()
-                ,Ids
+               ,sets:new()
+               ,Ids
                ).
 
 -spec maybe_device_groups_intersect(ne_binary(), sets:set(), kz_json:objects(), kapps_call:call()) -> boolean().
@@ -159,8 +159,8 @@ maybe_device_groups_intersect(CalleeId, CallerGroups, Groups, Call) ->
             UsersGroups = lists:foldl(fun(UserId, Set) ->
                                               get_group_associations(UserId, Groups, Set)
                                       end
-                                      ,sets:new()
-                                      ,UserIds
+                                     ,sets:new()
+                                     ,UserIds
                                      ),
             sets:size(sets:intersection(CallerGroups, UsersGroups)) =:= 0
     end.
@@ -184,11 +184,13 @@ get_callee_extension_info(Call) ->
     FirstModule = kz_json:get_value(<<"module">>, Flow),
     FirstId = kz_json:get_value([<<"data">>, <<"id">>], Flow),
     SecondModule = kz_json:get_value([<<"_">>, <<"module">>], Flow),
-    case (FirstModule =:= <<"device">> orelse FirstModule =:= <<"user">>)
-        andalso
-        (SecondModule =:= <<"voicemail">> orelse SecondModule =:= 'undefined')
-        andalso
-        FirstId =/= 'undefined'
+    case (FirstModule =:= <<"device">>
+              orelse FirstModule =:= <<"user">>
+         )
+        andalso (SecondModule =:= <<"voicemail">>
+                     orelse SecondModule =:= 'undefined'
+                )
+        andalso FirstId =/= 'undefined'
     of
         'true' -> {FirstModule, FirstId};
         'false' -> 'undefined'
@@ -203,14 +205,13 @@ get_callee_extension_info(Call) ->
 -spec bootstrap_callflow_executer(kz_json:object(), kapps_call:call()) -> {'ok', pid()}.
 bootstrap_callflow_executer(_JObj, Call) ->
     Routines = [fun store_owner_id/1
-                ,fun set_language/1
-                ,fun update_ccvs/1
-                ,fun maybe_start_recording/1
-                %% all funs above here return kapps_call:call()
-                ,fun execute_callflow/1
-                ,fun maybe_start_metaflow/1
+               ,fun set_language/1
+               ,fun update_ccvs/1
+               ,fun maybe_start_recording/1
+               ,fun execute_callflow/1
+               ,fun maybe_start_metaflow/1
                ],
-    lists:foldl(fun(F, C) -> F(C) end, Call, Routines).
+    kapps_call:exec(Routines, Call).
 
 %%-----------------------------------------------------------------------------
 %% @private
@@ -258,18 +259,20 @@ update_ccvs(Call) ->
                        'undefined' -> <<"internal">>;
                        _Else -> <<"external">>
                    end,
+
     {CIDNumber, CIDName} =
-        kz_attributes:caller_id(
-          CallerIdType
-          ,Call
-         ),
+        kz_attributes:caller_id(CallerIdType
+                               ,Call
+                               ),
+
     lager:info("bootstrapping with caller id type ~s: \"~s\" ~s"
-               ,[CallerIdType, CIDName, CIDNumber]
+              ,[CallerIdType, CIDName, CIDNumber]
               ),
+
     Props = props:filter_undefined(
               [{<<"Hold-Media">>, kz_attributes:moh_attributes(<<"media_id">>, Call)}
-               ,{<<"Caller-ID-Name">>, CIDName}
-               ,{<<"Caller-ID-Number">>, CIDNumber}
+              ,{<<"Caller-ID-Name">>, CIDName}
+              ,{<<"Caller-ID-Number">>, CIDNumber}
                | get_incoming_security(Call)
               ]),
     Call1 = kapps_call:kvs_erase(['prepend_cid_name', 'prepend_cid_number'], Call),
@@ -303,12 +306,19 @@ maybe_start_recording(Call) ->
     case kz_endpoint:get(Call) of
         {'ok', Endpoint} ->
             Data = kz_json:get_value(<<"record_call">>, Endpoint, kz_json:new()),
-            kz_endpoint:maybe_start_call_recording(Data, Call);
+            maybe_start_call_recording(Data, Call);
         {'error', _} -> Call
     end.
 
+-spec maybe_start_call_recording(kz_json:object(), kapps_call:call()) -> kapps_call:call().
+maybe_start_call_recording(RecordCall, Call) ->
+    case kz_util:is_empty(RecordCall) of
+        'true' -> Call;
+        'false' -> kapps_call:start_recording(RecordCall, Call)
+    end.
+
 -spec get_incoming_security(kapps_call:call()) -> kz_proplist().
- get_incoming_security(Call) ->
+get_incoming_security(Call) ->
     case kz_endpoint:get(Call) of
         {'error', _R} -> [];
         {'ok', JObj} ->

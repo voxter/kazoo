@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2015, 2600Hz, INC
+%%% @copyright (C) 2013-2016, 2600Hz, INC
 %%% @doc
 %%%
 %%% @end
@@ -16,7 +16,9 @@
 
 -define(APP_NAME, <<"milliwatt">>).
 -define(APP_VERSION, <<"4.0.0">>).
--define(CONFIG_CAT, <<"milliwatt">>).
+-define(CONFIG_CAT, ?APP_NAME).
+
+-define(RESOURCE_TYPES_HANDLED, [<<"audio">>, <<"video">>]).
 
 -define(MILLIWATT_HRL, 'true').
 -endif.

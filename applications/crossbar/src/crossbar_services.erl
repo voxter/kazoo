@@ -9,10 +9,12 @@
 -module(crossbar_services).
 
 -export([maybe_dry_run/2, maybe_dry_run/3
-         ,reconcile/1
+        ,reconcile/1
         ]).
 
 -include("crossbar.hrl").
+-include_lib("kazoo_number_manager/include/knm_phone_number.hrl"). %% PVT_FEATURES
+-include_lib("kazoo_number_manager/include/knm_port_request.hrl"). %% PORT_KEY
 
 %%--------------------------------------------------------------------
 %% @public
@@ -83,7 +85,7 @@ commit_transactions(Context, Transactions, Services, Callback) ->
     case kz_services:commit_transactions(Services, Transactions) of
         'ok' -> save_an_audit_log(Context, Services),
                 Callback();
-        'error' -> cb_context:add_system_error('datasore_fault', Context)
+        'error' -> cb_context:add_system_error('datastore_fault', Context)
     end.
 
 %%--------------------------------------------------------------------
@@ -97,13 +99,16 @@ extract_items(JObj) ->
 
 -spec extract_items_from_category(kz_json:key(), kz_json:object(), kz_json:objects()) ->
                                          kz_json:objects().
-extract_items_from_category(_, CategoryJObj, Acc) ->
-    kz_json:foldl(fun extract_item_from_category/3, Acc, CategoryJObj).
+extract_items_from_category(CategoryKey, CategoryJObj, Acc) ->
+    Fun = fun(K, V, Acc1) -> extract_item_from_category(CategoryKey, K, V, Acc1) end,
+    kz_json:foldl(Fun, Acc, CategoryJObj).
 
--spec extract_item_from_category(kz_json:key(), kz_json:object(), kz_json:objects()) ->
+-spec extract_item_from_category(kz_json:key(), kz_json:key(), kz_json:object(), kz_json:objects()) ->
                                          kz_json:objects().
-extract_item_from_category(_, ItemJObj, Acc) ->
-    [ItemJObj|Acc].
+extract_item_from_category(CategoryKey, ItemKey, ItemJObj, Acc) ->
+    [kz_json:set_values([{<<"category">>, CategoryKey}
+                         ,{<<"item">>, ItemKey}
+                        ], ItemJObj)|Acc].
 
 %%--------------------------------------------------------------------
 %% @private
@@ -125,7 +130,7 @@ create_transactions(_Context, _Item, Acc, 0) -> Acc;
 create_transactions(Context, Item, Acc, Quantity) ->
     AccountId = cb_context:account_id(Context),
     Amount = kz_json:get_integer_value(<<"activation_charges">>, Item, 0),
-    Units = wht_util:dollars_to_units(Amount),
+    Units = wht_util:dollars_to_units(Amount * Quantity),
     Routines = [fun set_meta_data/3
                 ,fun set_event/3
                ],
@@ -135,7 +140,7 @@ create_transactions(Context, Item, Acc, Quantity) ->
           ,kz_transaction:debit(AccountId, Units)
           ,Routines
          ),
-    create_transactions(Context, Item, [Transaction|Acc], Quantity-1).
+    [Transaction|Acc].
 
 -spec set_meta_data(cb_context:context()
                     ,kz_json:object()
@@ -197,11 +202,13 @@ calc_service_updates(Context, <<"port_request">>) ->
     JObj = cb_context:doc(Context),
     Numbers = kz_json:get_value(<<"numbers">>, JObj),
     PhoneNumbers =
-        kz_json:foldl(
-          fun port_request_foldl/3
-          ,kz_json:new()
-          ,Numbers
-         ),
+        [kz_doc:set_id(
+           kz_json:set_value(?PVT_FEATURES, [?PORT_KEY
+                                             | kz_json:get_list_value(?PVT_FEATURES, NumberJObj, [])
+                                            ], NumberJObj)
+           ,NumberKey
+          )
+         || {NumberKey, NumberJObj} <- kz_json:to_proplist(Numbers)],
     kz_service_phone_numbers:reconcile(Services, PhoneNumbers);
 calc_service_updates(Context, <<"app">>) ->
     [{<<"apps_store">>, [Id]} | _] = cb_context:req_nouns(Context),
@@ -233,23 +240,6 @@ calc_service_updates(Context, Type, []) ->
 calc_service_updates(_Context, _Type, _Props) ->
     lager:warning("unknown type ~p, cannot execute dry run", [_Type]),
     'undefined'.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
--spec port_request_foldl(ne_binary(), kz_json:object(), kz_json:object()) -> kz_json:object().
-port_request_foldl(Number, NumberJObj, JObj) ->
-    kz_json:set_value(
-      Number
-      ,kz_json:set_value(
-         <<"features">>
-         ,[<<"port">>]
-         ,NumberJObj
-        )
-      ,JObj
-     ).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -360,9 +350,9 @@ maybe_notify_reseller(Context, Services, AuditLog) ->
         'true' -> 'ok';
         'false' ->
             Props = [{<<"Account-ID">>, cb_context:account_id(Context)}
-                     ,{<<"Audit-Log">>, AuditLog}
+                    ,{<<"Audit-Log">>, AuditLog}
                      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                     ],
-            kapi_notifications:publish_service_added(Props),
+            kz_amqp_worker:cast(Props, fun kapi_notifications:publish_service_added/1),
             lager:debug("published service_added to reseller account ~s~n", [ResellerId])
   end.

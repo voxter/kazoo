@@ -1,10 +1,11 @@
 ROOT = .
 RELX = $(ROOT)/deps/relx
 ELVIS = $(ROOT)/deps/elvis
+FMT = $(ROOT)/make/erlang-formatter-master/fmt.sh
 
 KAZOODIRS = core/Makefile applications/Makefile
 
-.PHONY: $(KAZOODIRS) deps core apps xref xref_release dialyze dialyze-apps dialyze-core dialyze-kazoo clean clean-test clean-release build-release build-ci-release tar-release release read-release-cookie elvis install
+.PHONY: $(KAZOODIRS) deps core apps xref xref_release dialyze dialyze-it dialyze-apps dialyze-core dialyze-kazoo clean clean-test clean-release build-release build-ci-release tar-release release read-release-cookie elvis install ci diff fmt bump-copyright apis validate-swagger
 
 all: compile rel/dev-vm.args
 
@@ -19,6 +20,7 @@ clean: $(KAZOODIRS)
 	$(if $(wildcard *crash.dump), rm *crash.dump)
 	$(if $(wildcard scripts/log/*), rm -rf scripts/log/*)
 	$(if $(wildcard rel/dev-vm.args), rm rel/dev-vm.args)
+	$(if $(wildcard $(FMT)), rm -r $(dir $(FMT)))
 
 clean-test: ACTION = clean-test
 clean-test: $(KAZOODIRS)
@@ -27,7 +29,7 @@ clean-kazoo: ACTION = clean
 clean-kazoo: $(KAZOODIRS)
 
 compile-test: ACTION = compile-test
-compile-test: $(KAZOODIRS)
+compile-test: deps $(KAZOODIRS)
 
 eunit: ACTION = eunit
 eunit: $(KAZOODIRS)
@@ -77,6 +79,8 @@ clean-release:
 
 build-release: $(RELX) clean-release rel/relx.config rel/vm.args
 	$(RELX) --config rel/relx.config -V 2 release --relname 'kazoo'
+build-dev-release: $(RELX) clean-release rel/relx.config rel/vm.args
+	$(RELX) --dev-mode true --config rel/relx.config -V 2 release --relname 'kazoo'
 build-ci-release: $(RELX) clean-release rel/relx.config rel/vm.args
 	$(RELX) --config rel/relx.config -V 2 release --relname 'kazoo' --sys_config rel/ci-sys.config
 tar-release: $(RELX) rel/relx.config rel/vm.args
@@ -107,6 +111,7 @@ read-release-cookie:
 
 DIALYZER ?= dialyzer
 PLT ?= .kazoo.plt
+
 OTP_APPS ?= erts kernel stdlib crypto public_key ssl asn1 inets
 $(PLT): DEPS_SRCS  ?= $(shell find $(ROOT)/deps -name src )
 # $(PLT): CORE_EBINS ?= $(shell find $(ROOT)/core -name ebin)
@@ -126,9 +131,10 @@ dialyze-apps: dialyze
 dialyze-core:  TO_DIALYZE  = $(shell find $(ROOT)/core         -name ebin)
 dialyze-core: dialyze
 dialyze:       TO_DIALYZE ?= $(shell find $(ROOT)/applications -name ebin)
-dialyze: $(PLT)
-	@$(ROOT)/scripts/check-dialyzer.escript $(ROOT)/.kazoo.plt $(TO_DIALYZE)
+dialyze: dialyze-it
 
+dialyze-it: $(PLT)
+	@if [ -n "$(TO_DIALYZE)" ]; then $(ROOT)/scripts/check-dialyzer.escript $(ROOT)/.kazoo.plt $(TO_DIALYZE); fi;
 
 xref: TO_XREF ?= $(shell find $(ROOT)/applications $(ROOT)/core $(ROOT)/deps -name ebin)
 xref:
@@ -147,8 +153,35 @@ sup_completion: kazoo
 
 
 $(ELVIS):
-	wget 'https://github.com/inaka/elvis/releases/download/0.2.11/elvis' -O $@
+	wget 'https://github.com/inaka/elvis/releases/download/0.2.12/elvis' -O $@
 	chmod +x $@
 
 elvis: $(ELVIS)
 	$(ELVIS) --config make/elvis.config rock
+
+ci: clean compile xref build-plt diff sup_completion build-ci-release compile-test eunit elvis
+
+diff: export TO_DIALYZE = $(shell git diff --name-only master... -- $(ROOT)/applications/ $(ROOT)/core/)
+diff: dialyze-it
+
+bump-copyright:
+	@$(ROOT)/scripts/bump-copyright-year.sh $(shell find applications core -iname '*.erl' -or -iname '*.hrl')
+
+$(FMT):
+	wget -qO - 'https://codeload.github.com/fenollp/erlang-formatter/tar.gz/master' | tar xz -C $(ROOT)/make/
+
+fmt: TO_FMT ?= $(shell find applications core -iname '*.erl' -or -iname '*.hrl' -or -iname '*.app.src')
+fmt: $(FMT)
+	@$(FMT) $(TO_FMT)
+
+code_checks:
+	@ERL_LIBS=deps/:core/:applications/ $(ROOT)/scripts/no_raw_json.escript
+
+apis:
+	@ERL_LIBS=deps/:core/:applications/ $(ROOT)/scripts/generate-schemas.escript
+	@$(ROOT)/scripts/format-json.sh applications/crossbar/priv/couchdb/schemas/*.json
+	@ERL_LIBS=deps/:core/:applications/ $(ROOT)/scripts/generate-api-endpoints.escript
+	@$(ROOT)/scripts/format-json.sh applications/crossbar/priv/api/swagger.json
+
+validate-swagger:
+	$(ROOT)/scripts/validate-swagger.sh

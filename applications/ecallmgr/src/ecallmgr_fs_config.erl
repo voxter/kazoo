@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2015, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%% Send config commands to FS
 %%% @end
@@ -8,18 +8,17 @@
 %%%   James Aimonetti
 %%%-------------------------------------------------------------------
 -module(ecallmgr_fs_config).
-
 -behaviour(gen_server).
 
 %% API
 -export([start_link/1, start_link/2]).
 -export([handle_config_req/4]).
 -export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,terminate/2
-         ,code_change/3
+        ,handle_call/3
+        ,handle_cast/2
+        ,handle_info/2
+        ,terminate/2
+        ,code_change/3
         ]).
 
 -define(SERVER, ?MODULE).
@@ -27,8 +26,9 @@
 -include("ecallmgr.hrl").
 
 -record(state, {node :: atom()
-                ,options = [] :: kz_proplist()
+               ,options = [] :: kz_proplist()
                }).
+-type state() :: #state{}.
 
 %%%===================================================================
 %%% API
@@ -78,6 +78,7 @@ init([Node, Options]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
@@ -91,6 +92,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast('bind_to_configuration', #state{node=Node}=State) ->
     case freeswitch:bind(Node, 'configuration') of
         'ok' -> {'noreply', State};
@@ -111,6 +113,7 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info({'fetch', 'configuration', <<"configuration">>, <<"name">>, Conf, ID, []}, #state{node=Node}=State) ->
     lager:debug("fetch configuration request from ~s: ~s", [Node, ID]),
     _ = kz_util:spawn(fun handle_config_req/4, [Node, ID, Conf, 'undefined']),
@@ -139,6 +142,7 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, #state{node=Node}) ->
     lager:info("config listener for ~s terminating: ~p", [Node, _Reason]).
 
@@ -150,6 +154,7 @@ terminate(_Reason, #state{node=Node}) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
@@ -200,7 +205,7 @@ handle_config_req(Node, Id, <<"sofia.conf">>, _Props) ->
     end;
 handle_config_req(Node, Id, <<"conference.conf">>, Data) ->
     kz_util:put_callid(Id),
-    maybe_fetch_conference_profile(Node, Id, props:get_value(<<"profile_name">>, Data));
+    fetch_conference_config(Node, Id, kzd_freeswitch:event_name(Data), Data);
 handle_config_req(Node, Id, Conf, Data) ->
     kz_util:put_callid(Id),
     handle_config_req(Node, Id, Conf, Data, ecallmgr_config:get(<<"configuration_handlers">>)).
@@ -244,83 +249,83 @@ default_sip_profiles(Node) ->
                        SysconfResp
                end,
     JObj = kz_json:from_list([{kz_util:to_binary(?DEFAULT_FS_PROFILE)
-                               ,kz_json:from_list(default_sip_profile())}
+                              ,kz_json:from_list(default_sip_profile())}
                              ]),
     kz_json:set_value([kz_util:to_binary(?DEFAULT_FS_PROFILE), <<"Gateways">>]
-                      ,Gateways
-                      ,JObj
+                     ,Gateways
+                     ,JObj
                      ).
 
 -spec default_sip_profile() -> kz_proplist().
 default_sip_profile() ->
     [{<<"Settings">>, kz_json:from_list(default_sip_settings())}
-     ,{<<"Gateways">>, kz_json:from_list(default_sip_gateways())}
+    ,{<<"Gateways">>, kz_json:from_list(default_sip_gateways())}
     ].
 
 -spec default_sip_settings() -> kz_proplist().
 default_sip_settings() ->
     [{<<"message-threads">>, <<"10">>}
-     ,{<<"auth-calls">>, <<"true">>}
-     ,{<<"apply-nat-acl">>, <<"rfc1918.auto">>}
-     ,{<<"apply-inbound-acl">>, <<"trusted">>}
-     ,{<<"apply-proxy-acl">>, <<"authoritative">>}
-     ,{<<"local-network-acl">>, <<"localnet.auto">>}
-     ,{<<"challenge-realm">>, <<"auto_from">>}
-     ,{<<"multiple-registrations">>, <<"false">>}
-     ,{<<"accept-blind-reg">>, <<"false">>}
-     ,{<<"accept-blind-auth">>, <<"false">>}
-     ,{<<"nonce-ttl">>, <<"86400">>}
-     ,{<<"disable-register">>, <<"false">>}
-     ,{<<"inbound-reg-force-matching-username">>, <<"true">>}
-     ,{<<"auth-all-packets">>, <<"false">>}
-     ,{<<"context">>, <<"context_2">>}
-     ,{<<"dialplan">>, <<"XML">>}
-     ,{<<"manual-redirect">>, <<"false">>}
-     ,{<<"disable-transfer">>, <<"false">>}
-     ,{<<"sip-ip">>, <<"$${local_ip_v4}">>}
-     ,{<<"ext-sip-ip">>, <<"auto">>}
-     ,{<<"sip-port">>, <<"5060">>}
-     ,{<<"user-agent-string">>, <<"Voxter">>}
-     ,{<<"enable-100rel">>, <<"false">>}
-     ,{<<"max-proceeding">>, <<"1000">>}
-     ,{<<"inbound-use-callid-as-uuid">>, <<"true">>}
-     ,{<<"outbound-use-uuid-as-callid">>, <<"true">>}
-     ,{<<"rtp-ip">>, <<"$${local_ip_v4}">>}
-     ,{<<"ext-rtp-ip">>, <<"auto">>}
-     ,{<<"rtp-timer-name">>, <<"soft">>}
-     ,{<<"rtp-autoflush-during-bridge">>, <<"true">>}
-     ,{<<"rtp-rewrite-timestamps">>, <<"false">>}
-     ,{<<"hold-music">>, <<"local_stream://default">>}
-     ,{<<"record-path">>, <<"$${recordings_dir}">>}
-     ,{<<"record-template">>, <<"${caller_id_number}.${target_domain}.${strftime(%Y-%m-%d-%H-%M-%S)}.wav">>}
-     ,{<<"dtmf-duration">>, <<"960">>}
-     ,{<<"rfc2833-pt">>, <<"101">>}
-     ,{<<"dtmf-type">>, <<"rfc2833">>}
-     ,{<<"pass-rfc2833">>, <<"false">>}
-     ,{<<"inbound-codec-prefs">>, <<"$${codecs}">>}
-     ,{<<"outbound-codec-prefs">>, <<"$${codecs}">>}
-     ,{<<"inbound-codec-negotiation">>, <<"generous">>}
-     ,{<<"inbound-late-negotiation">>, <<"false">>}
-     ,{<<"disable-transcoding">>, <<"false">>}
-     ,{<<"t38-passthru">>, <<"true">>}
-     ,{<<"all-reg-options-ping">>, <<"true">>}
-     ,{<<"enable-timer">>, <<"false">>}
-     ,{<<"rtp-timeout-sec">>, <<"3600">>}
-     ,{<<"rtp-hold-timeout-sec">>, <<"3600">>}
-     ,{<<"minimum-session-expires">>, <<"90">>}
-     ,{<<"manage-presence">>, <<"true">>}
-     ,{<<"send-message-query-on-register">>, <<"false">>}
-     ,{<<"watchdog-enabled">>, <<"false">>}
-     ,{<<"debug">>, <<"info">>}
-     ,{<<"sip-trace">>, <<"true">>}
-     ,{<<"log-auth-failures">>, <<"true">>}
-     ,{<<"log-level">>, <<"info">>}
-     ,{<<"tracelevel">>, <<"debug">>}
-     ,{<<"debug-presence">>, <<"0">>}
-     ,{<<"debug-sla">>, <<"0">>}
-     ,{<<"auto-restart">>, <<"false">>}
-     ,{<<"rtp-enable-zrtp">>, <<"true">>}
-     ,{<<"liberal-dtmf">>, <<"true">>}
+    ,{<<"auth-calls">>, <<"true">>}
+    ,{<<"apply-nat-acl">>, <<"rfc1918.auto">>}
+    ,{<<"apply-inbound-acl">>, <<"trusted">>}
+    ,{<<"apply-proxy-acl">>, <<"authoritative">>}
+    ,{<<"local-network-acl">>, <<"localnet.auto">>}
+    ,{<<"challenge-realm">>, <<"auto_from">>}
+    ,{<<"multiple-registrations">>, <<"false">>}
+    ,{<<"accept-blind-reg">>, <<"false">>}
+    ,{<<"accept-blind-auth">>, <<"false">>}
+    ,{<<"nonce-ttl">>, <<"86400">>}
+    ,{<<"disable-register">>, <<"false">>}
+    ,{<<"inbound-reg-force-matching-username">>, <<"true">>}
+    ,{<<"auth-all-packets">>, <<"false">>}
+    ,{<<"context">>, <<"context_2">>}
+    ,{<<"dialplan">>, <<"XML">>}
+    ,{<<"manual-redirect">>, <<"false">>}
+    ,{<<"disable-transfer">>, <<"false">>}
+    ,{<<"sip-ip">>, <<"$${local_ip_v4}">>}
+    ,{<<"ext-sip-ip">>, <<"auto">>}
+    ,{<<"sip-port">>, <<"5060">>}
+    ,{<<"user-agent-string">>, <<"Voxter">>}
+    ,{<<"enable-100rel">>, <<"false">>}
+    ,{<<"max-proceeding">>, <<"1000">>}
+    ,{<<"inbound-use-callid-as-uuid">>, <<"true">>}
+    ,{<<"outbound-use-uuid-as-callid">>, <<"true">>}
+    ,{<<"rtp-ip">>, <<"$${local_ip_v4}">>}
+    ,{<<"ext-rtp-ip">>, <<"auto">>}
+    ,{<<"rtp-timer-name">>, <<"soft">>}
+    ,{<<"rtp-autoflush-during-bridge">>, <<"true">>}
+    ,{<<"rtp-rewrite-timestamps">>, <<"false">>}
+    ,{<<"hold-music">>, <<"local_stream://default">>}
+    ,{<<"record-path">>, <<"$${recordings_dir}">>}
+    ,{<<"record-template">>, <<"${caller_id_number}.${target_domain}.${strftime(%Y-%m-%d-%H-%M-%S)}.wav">>}
+    ,{<<"dtmf-duration">>, <<"960">>}
+    ,{<<"rfc2833-pt">>, <<"101">>}
+    ,{<<"dtmf-type">>, <<"rfc2833">>}
+    ,{<<"pass-rfc2833">>, <<"false">>}
+    ,{<<"inbound-codec-prefs">>, <<"$${codecs}">>}
+    ,{<<"outbound-codec-prefs">>, <<"$${codecs}">>}
+    ,{<<"inbound-codec-negotiation">>, <<"generous">>}
+    ,{<<"inbound-late-negotiation">>, <<"false">>}
+    ,{<<"disable-transcoding">>, <<"false">>}
+    ,{<<"t38-passthru">>, <<"true">>}
+    ,{<<"all-reg-options-ping">>, <<"true">>}
+    ,{<<"enable-timer">>, <<"false">>}
+    ,{<<"rtp-timeout-sec">>, <<"3600">>}
+    ,{<<"rtp-hold-timeout-sec">>, <<"3600">>}
+    ,{<<"minimum-session-expires">>, <<"90">>}
+    ,{<<"manage-presence">>, <<"true">>}
+    ,{<<"send-message-query-on-register">>, <<"false">>}
+    ,{<<"watchdog-enabled">>, <<"false">>}
+    ,{<<"debug">>, <<"info">>}
+    ,{<<"sip-trace">>, <<"true">>}
+    ,{<<"log-auth-failures">>, <<"true">>}
+    ,{<<"log-level">>, <<"info">>}
+    ,{<<"tracelevel">>, <<"debug">>}
+    ,{<<"debug-presence">>, <<"0">>}
+    ,{<<"debug-sla">>, <<"0">>}
+    ,{<<"auto-restart">>, <<"false">>}
+    ,{<<"rtp-enable-zrtp">>, <<"true">>}
+    ,{<<"liberal-dtmf">>, <<"true">>}
     ].
 
 default_sip_gateways() -> [].
@@ -368,9 +373,9 @@ compare_node_gateways(Running, New) ->
 
 kill_gateway(GatewayName, Node) ->
     Args = ["profile "
-            ,?DEFAULT_FS_PROFILE
-            ," killgw "
-            ,kz_util:to_list(GatewayName)
+           ,?DEFAULT_FS_PROFILE
+           ," killgw "
+           ,kz_util:to_list(GatewayName)
            ],
     freeswitch:api(Node, 'sofia', lists:flatten(Args)).
 
@@ -379,20 +384,77 @@ get_node_gateways(Node) ->
     {Xml, _} = xmerl_scan:string(kz_util:to_list(Response)),
     ecallmgr_fs_xml:sofia_gateways_xml_to_json(Xml).
 
-maybe_fix_conference_tts(Resp) ->
+-spec fix_conference_profile(kz_json:object()) -> kz_json:object().
+fix_conference_profile(Resp) ->
     Ps = kz_json:get_value(<<"Profiles">>, Resp),
-    kz_json:set_value(<<"Profiles">>, kz_json:map(fun maybe_fix_profile_tts/2, Ps), Resp).
+    JObj = kz_json:map(fun fix_conference_profile/2, Ps),
+    kz_json:set_value(<<"Profiles">>, JObj, Resp).
 
-maybe_fix_profile_tts(Name, Profile) ->
-    {Name, case kz_json:get_value(<<"tts-engine">>, Profile) of
-               'undefined' -> Profile;
-               <<"flite">> -> fix_flite_tts(Profile);
-               _ -> Profile
-           end}.
+-spec fix_conference_profile(kz_json:key(), kz_json:object()) -> {kz_json:key(), kz_json:object()}.
+fix_conference_profile(Name, Profile) ->
+    Routines = [fun maybe_fix_profile_tts/1
+               ,fun maybe_set_verbose_events/1
+               ,{fun kz_json:set_value/3, <<"caller-controls">>, <<"caller-controls">>}
+               ,{fun kz_json:set_value/3, <<"moderator-controls">>, <<"moderator-controls">>}
+               ],
+    {Name, kz_json:exec(Routines, Profile)}.
+
+-spec maybe_set_verbose_events(kz_json:object()) -> kz_json:object().
+maybe_set_verbose_events(Profile) ->
+    case ecallmgr_config:is_true(<<"force_conference_verbose_events">>) of
+        'true' -> kz_json:set_value(<<"verbose-events">>, <<"true">>, Profile);
+        'false' -> Profile
+    end.
+
+-spec maybe_fix_profile_tts(kz_json:object()) -> kz_json:object().
+maybe_fix_profile_tts(Profile) ->
+    case kz_json:get_value(<<"tts-engine">>, Profile) of
+        'undefined' -> Profile;
+        <<"flite">> -> fix_flite_tts(Profile);
+        _ -> Profile
+    end.
+
+-spec fix_flite_tts(kz_json:object()) -> kz_json:object().
 fix_flite_tts(Profile) ->
     Voice = kz_json:get_value(<<"tts-voice">>, Profile),
     kz_json:set_value(<<"tts-voice">>, ecallmgr_fs_flite:voice(Voice), Profile).
 
+-spec fetch_conference_config(atom(), ne_binary(), ne_binary(), kz_proplist()) -> fs_sendmsg_ret().
+fetch_conference_config(Node, Id, <<"COMMAND">>, Data) ->
+    maybe_fetch_conference_profile(Node, Id, props:get_value(<<"profile_name">>, Data));
+fetch_conference_config(Node, Id, <<"REQUEST_PARAMS">>, Data) ->
+    Action = props:get_value(<<"Action">>, Data),
+    ConfName = props:get_value(<<"Conf-Name">>, Data),
+    lager:debug("request conference:~p params:~p", [ConfName, Action]),
+    fetch_conference_params(Node, Id, Action, ConfName, Data).
+
+fetch_conference_params(Node, Id, <<"request-controls">>, ConfName, Data) ->
+    Controls = props:get_value(<<"Controls">>, Data),
+    lager:debug("request controls:~p for conference:~p", [Controls, ConfName]),
+    Cmd = [{<<"Request">>, <<"Controls">>}
+           ,{<<"Profile">>, ConfName}
+           ,{<<"Controls">>, Controls} | kz_api:default_headers(?APP_NAME, ?APP_VERSION)],
+    Resp = kz_amqp_worker:call(Cmd
+                               ,fun kapi_conference:publish_config_req/1
+                               ,fun kapi_conference:config_resp_v/1
+                               ,ecallmgr_fs_node:fetch_timeout(Node)
+                               ),
+    {'ok', Xml} = handle_conference_params_response(Resp),
+    send_conference_profile_xml(Node, Id, Xml);
+fetch_conference_params(Node, Id, Action, ConfName, _Data) ->
+    lager:debug("undefined request_params action:~p conference:~p", [Action, ConfName]),
+    {'ok', XmlResp} = ecallmgr_fs_xml:not_found(),
+    send_conference_profile_xml(Node, Id, XmlResp).
+
+handle_conference_params_response({'ok', Resp}) ->
+    lager:debug("replying with xml response for conference params request"),
+    ecallmgr_fs_xml:conference_resp_xml(Resp);
+handle_conference_params_response({'error', 'timeout'}) ->
+    lager:debug("timed out waiting for conference params"),
+    ecallmgr_fs_xml:not_found();
+handle_conference_params_response(_Error) ->
+    lager:debug("failed to lookup conference params, error:~p", [_Error]),
+    ecallmgr_fs_xml:not_found().
 
 -spec maybe_fetch_conference_profile(atom(), ne_binary(), api_binary()) -> fs_sendmsg_ret().
 maybe_fetch_conference_profile(Node, Id, 'undefined') ->
@@ -401,18 +463,19 @@ maybe_fetch_conference_profile(Node, Id, 'undefined') ->
     send_conference_profile_xml(Node, Id, XmlResp);
 
 maybe_fetch_conference_profile(Node, Id, Profile) ->
-    Cmd = [{<<"Profile">>, Profile}
+    Cmd = [{<<"Request">>, <<"Conference">>}
+           ,{<<"Profile">>, Profile}
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     lager:debug("fetching profile '~s'", [Profile]),
     XmlResp = case kz_amqp_worker:call(Cmd
-                                       ,fun kapi_conference:publish_config_req/1
-                                       ,fun kapi_conference:config_resp_v/1
-                                       ,ecallmgr_fs_node:fetch_timeout(Node)
+                                      ,fun kapi_conference:publish_config_req/1
+                                      ,fun kapi_conference:config_resp_v/1
+                                      ,ecallmgr_fs_node:fetch_timeout(Node)
                                       )
               of
                   {'ok', Resp} ->
-                      FixedTTS = maybe_fix_conference_tts(Resp),
+                      FixedTTS = fix_conference_profile(Resp),
                       {'ok', Xml} = ecallmgr_fs_xml:conference_resp_xml(FixedTTS),
                       lager:debug("replying with conference profile ~s", [Profile]),
                       Xml;

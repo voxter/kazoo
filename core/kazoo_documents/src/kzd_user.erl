@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2014-2015, 2600Hz
+%%% @copyright (C) 2014-2016, 2600Hz
 %%% @doc
 %%% Device document manipulation
 %%% @end
@@ -9,28 +9,34 @@
 -module(kzd_user).
 
 -export([email/1, email/2
-         ,voicemail_notification_enabled/1, voicemail_notification_enabled/2
-         ,to_vcard/1
-         ,timezone/1, timezone/2
-         ,presence_id/1, presence_id/2, set_presence_id/2
-         ,is_enabled/1, is_enabled/2
-         ,enable/1, disable/1
-         ,type/0
-         ,devices/1
-         ,fetch/2
-         ,fax_settings/1
-         ,is_admin/1
+        ,voicemail_notification_enabled/1, voicemail_notification_enabled/2
+        ,to_vcard/1
+        ,timezone/1, timezone/2
+        ,presence_id/1, presence_id/2, set_presence_id/2
+        ,is_enabled/1, is_enabled/2
+        ,enable/1, disable/1
+        ,type/0
+        ,devices/1
+        ,fetch/2
+        ,fax_settings/1
+        ,name/1, first_name/1, last_name/1
+        ,priv_level/1, priv_level/2
+        ,is_admin/1
         ]).
 
 -include("kz_documents.hrl").
 
 -type doc() :: kz_json:object().
--export_type([doc/0]).
+-type docs() :: [doc()].
+-export_type([doc/0, docs/0]).
 
 -define(KEY_EMAIL, <<"email">>).
 -define(KEY_TIMEZONE, <<"timezone">>).
 -define(KEY_PRESENCE_ID, <<"presence_id">>).
 -define(KEY_IS_ENABLED, <<"enabled">>).
+-define(KEY_FIRST_NAME, <<"first_name">>).
+-define(KEY_LAST_NAME, <<"last_name">>).
+-define(KEY_PRIV_LEVEL, <<"priv_level">>).
 
 -define(PVT_TYPE, <<"user">>).
 
@@ -52,25 +58,25 @@ voicemail_notification_enabled(User, Default) ->
 to_vcard(JObj) ->
     %% TODO add SOUND, AGENT (X-ASSISTANT), X-MANAGER
     Fields = [<<"BEGIN">>
-              ,<<"VERSION">>
-              ,<<"FN">>
-              ,<<"N">>
-              ,<<"ORG">>
-              ,<<"PHOTO">>
-              ,<<"EMAIL">>
-              ,<<"BDAY">>
-              ,<<"NOTE">>
-              ,<<"TITLE">>
-              ,<<"ROLE">>
-              ,<<"TZ">>
-              ,<<"NICKNAME">>
-              ,<<"TEL">>
-              ,<<"ADR">>
-              ,<<"END">>
+             ,<<"VERSION">>
+             ,<<"FN">>
+             ,<<"N">>
+             ,<<"ORG">>
+             ,<<"PHOTO">>
+             ,<<"EMAIL">>
+             ,<<"BDAY">>
+             ,<<"NOTE">>
+             ,<<"TITLE">>
+             ,<<"ROLE">>
+             ,<<"TZ">>
+             ,<<"NICKNAME">>
+             ,<<"TEL">>
+             ,<<"ADR">>
+             ,<<"END">>
              ],
     NotEmptyFields = lists:foldl(fun vcard_fields_acc/2
-                                 ,[]
-                                 ,[card_field(Key, JObj) || Key <- Fields]
+                                ,[]
+                                ,[card_field(Key, JObj) || Key <- Fields]
                                 ),
     PackedFields = lists:reverse(
                      [kz_util:join_binary([X, Y], <<":">>) ||
@@ -84,8 +90,9 @@ to_vcard(JObj) ->
 
 -spec vcard_escape_chars(binary()) -> binary().
 vcard_escape_chars(Val) ->
-    Val1 = re:replace(Val, "(:|;|,)", "\\\\&", ['global', {'return', 'binary'}]),
-    re:replace(Val1, "\n", "\\\\n", ['global', {'return', 'binary'}]).
+    Opts = ['global', {'return', 'binary'}],
+    Val1 = re:replace(Val, "(:|;|,)", "\\\\&", Opts),
+    re:replace(Val1, "\n", "\\\\n", Opts).
 
 -spec vcard_fields_acc(vcard_field(), [{ne_binary(), binary()}]) -> [{ne_binary(), binary()}].
 vcard_fields_acc({_, Val}, Acc)
@@ -132,11 +139,11 @@ card_field(Key = <<"FN">>, JObj) ->
     LastName = kz_json:get_value(<<"last_name">>, JObj),
     MiddleName = kz_json:get_value(<<"middle_name">>, JObj),
     {Key
-     ,kz_util:join_binary([X || X <- [FirstName, MiddleName, LastName],
-                                not kz_util:is_empty(X)
-                          ]
-                          ,<<" ">>
-                         )
+    ,kz_util:join_binary([X || X <- [FirstName, MiddleName, LastName],
+                               not kz_util:is_empty(X)
+                         ]
+                        ,<<" ">>
+                        )
     };
 card_field(Key = <<"N">>, JObj) ->
     FirstName = kz_json:get_value(<<"first_name">>, JObj),
@@ -155,7 +162,7 @@ card_field(Key = <<"PHOTO">>, JObj) ->
             {[Key, {<<"ENCODING">>, <<"B">>}, {<<"TYPE">>, TypeType}], Data}
     end;
 card_field(Key = <<"ADR">>, JObj) ->
-    Addresses = lists:map(fun normalize_address/1, kz_json:get_value(<<"addresses">>, JObj, [])),
+    Addresses = [normalize_address(A) || A <- kz_json:get_value(<<"addresses">>, JObj, [])],
     [{[Key, {<<"TYPE">>, Type}], Address} || {Type, Address} <- Addresses];
 card_field(Key = <<"TEL">>, JObj) ->
     CallerId = kz_json:get_value(<<"caller_id">>, JObj, kz_json:new()),
@@ -163,7 +170,7 @@ card_field(Key = <<"TEL">>, JObj) ->
     External = kz_json:get_value(<<"external">>, CallerId),
 
     [{Key, Internal}
-     ,{Key, External}
+    ,{Key, External}
     ];
 card_field(Key = <<"EMAIL">>, JObj) ->
     {Key, kz_json:get_value(<<"email">>, JObj)};
@@ -220,11 +227,10 @@ presence_id(UserJObj, Default) ->
 
 -spec set_presence_id(doc(), ne_binary()) -> doc().
 set_presence_id(UserJObj, Id) ->
-    kz_json:set_value(
-      ?KEY_PRESENCE_ID
-      ,kz_util:to_binary(Id)
-      ,UserJObj
-     ).
+    kz_json:set_value(?KEY_PRESENCE_ID
+                     ,kz_util:to_binary(Id)
+                     ,UserJObj
+                     ).
 
 -spec is_enabled(doc()) -> boolean().
 -spec is_enabled(doc(), Default) -> boolean() | Default.
@@ -244,15 +250,16 @@ disable(JObj) ->
 -spec type() -> ne_binary().
 type() -> ?PVT_TYPE.
 
+-spec devices(doc()) -> kz_device:docs().
 devices(UserJObj) ->
     AccountDb = kz_doc:account_db(UserJObj),
     UserId = kz_doc:id(UserJObj),
 
     ViewOptions = [{'startkey', [UserId]}
-                   ,{'endkey', [UserId, kz_json:new()]}
-                   ,'include_docs'
+                  ,{'endkey', [UserId, kz_json:new()]}
+                  ,'include_docs'
                   ],
-    case kz_datamgr:get_results(AccountDb, <<"kz_attributes/owned">>, ViewOptions) of
+    case kz_datamgr:get_results(AccountDb, <<"attributes/owned">>, ViewOptions) of
         {'ok', JObjs} -> [kz_json:get_value(<<"doc">>, JObj) || JObj <- JObjs];
         {'error', _R} ->
             lager:warning("unable to find documents owned by ~s: ~p", [UserId, _R]),
@@ -264,18 +271,48 @@ fetch(<<_/binary>> = AccountId, <<_/binary>> = UserId) ->
     AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
     kz_datamgr:open_cache_doc(AccountDb, UserId);
 fetch(_, _) ->
-    {'error', 'invalid_parametres'}.
+    {'error', 'invalid_parameters'}.
 
 -spec fax_settings(doc()) -> doc().
 fax_settings(JObj) ->
     FaxSettings = kz_json:get_json_value(?FAX_SETTINGS_KEY, JObj, kz_json:new()),
     UserFaxSettings = case kz_json:get_value(?FAX_TIMEZONE_KEY, FaxSettings) of
-        'undefined' -> kz_json:set_value(?FAX_TIMEZONE_KEY, timezone(JObj), FaxSettings);
-        _ -> FaxSettings
-    end,
+                          'undefined' -> kz_json:set_value(?FAX_TIMEZONE_KEY, timezone(JObj), FaxSettings);
+                          _ -> FaxSettings
+                      end,
     AccountFaxSettings = kz_account:fax_settings(kz_doc:account_id(JObj)),
     kz_json:merge_jobjs(UserFaxSettings, AccountFaxSettings).
 
+-spec name(doc()) -> ne_binary().
+name(Doc) ->
+    <<(first_name(Doc, <<>>))/binary
+      ," "
+      ,(last_name(Doc, <<>>))/binary
+    >>.
+
+-spec first_name(doc()) -> api_binary().
+-spec first_name(doc(), Default) -> ne_binary() | Default.
+first_name(Doc) ->
+    first_name(Doc, 'undefined').
+
+first_name(Doc, Default) ->
+    kz_json:get_binary_value(?KEY_FIRST_NAME, Doc, Default).
+
+-spec last_name(doc()) -> api_binary().
+-spec last_name(doc(), Default) -> ne_binary() | Default.
+last_name(Doc) ->
+    last_name(Doc, 'undefined').
+
+last_name(Doc, Default) ->
+    kz_json:get_binary_value(?KEY_LAST_NAME, Doc, Default).
+
+-spec priv_level(doc()) -> api_binary().
+-spec priv_level(doc(), Default) -> ne_binary() | Default.
+priv_level(Doc) ->
+    priv_level(Doc, <<"user">>).
+priv_level(Doc, Default) ->
+    kz_json:get_binary_value(?KEY_PRIV_LEVEL, Doc, Default).
+
 -spec is_admin(doc()) -> boolean().
-is_admin(UserJObj) ->
-    kz_json:get_binary_value(<<"priv_level">>, UserJObj) =:= <<"admin">>.
+is_admin(Doc) ->
+    kz_json:get_binary_value(?KEY_PRIV_LEVEL, Doc) =:= <<"admin">>.

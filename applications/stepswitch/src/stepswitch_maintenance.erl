@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2014, 2600Hz INC
+%%% @copyright (C) 2010-2016, 2600Hz INC
 %%% @doc
 %%% Preforms maintenance operations against the stepswitch dbs
 %%% @end
@@ -11,16 +11,16 @@
 -export([resources/0]).
 -export([reverse_lookup/1]).
 -export([flush/0
-         ,cnam_flush/0
+        ,cnam_flush/0
         ]).
 -export([refresh/0]).
 -export([lookup_number/1
-         ,number_tree/1
+        ,number_tree/1
         ]).
 -export([reload_resources/0, reload_resources/1]).
 -export([process_number/1
-         ,process_number/2
-         ,process_number/3
+        ,process_number/2
+        ,process_number/3
         ]).
 
 -include("stepswitch.hrl").
@@ -36,7 +36,7 @@ reverse_lookup(Thing) when not is_binary(Thing) ->
     reverse_lookup(kz_util:to_binary(Thing));
 reverse_lookup(Thing) ->
     JObj = kz_json:from_list([{<<"From-Network-Addr">>, Thing}
-                              ,{<<"Auth-Realm">>, Thing}
+                             ,{<<"Auth-Realm">>, Thing}
                              ]),
     case stepswitch_resources:reverse_lookup(JObj) of
         {'ok', Props} -> pretty_print_lookup(Props);
@@ -57,7 +57,7 @@ pretty_print_lookup([{Key, Value}|Props]) ->
 %%--------------------------------------------------------------------
 -spec number_tree(ne_binary()) -> 'ok'.
 number_tree(DID) ->
-    case stepswitch_util:lookup_number(DID) of
+    case knm_number:lookup_account(DID) of
         {'error', _} -> io:format("DID ~s was not found~n", [DID]);
         {'ok', AccountId, _Props} ->
             case kz_datamgr:open_doc(?KZ_ACCOUNTS_DB, AccountId) of
@@ -131,7 +131,7 @@ cnam_flush() ->
 -spec refresh() -> 'ok'.
 refresh() ->
     lager:debug("ensuring database ~s exists", [?RESOURCES_DB]),
-    kz_datamgr:db_create(?RESOURCES_DB),
+    kz_datamgr:db_create(?RESOURCES_DB), % RESOURCES_DB = KZ_OFFNET_DB
     Views = [kapps_util:get_view_json('crossbar', <<"views/resources.json">>)
              | kapps_util:get_views_json('stepswitch', "views")
             ],
@@ -160,7 +160,7 @@ refresh() ->
 %%--------------------------------------------------------------------
 -spec lookup_number(text()) -> 'ok'.
 lookup_number(Number) ->
-    case stepswitch_util:lookup_number(Number) of
+    case knm_number:lookup_account(Number) of
         {'ok', AccountId, Props} ->
             io:format("~-19s: ~s~n", [<<"Account-ID">>, AccountId]),
             Classification = knm_converters:classify(Number),
@@ -232,12 +232,12 @@ do_process_number(Number, 'undefined', Flags) ->
 do_process_number(Number, AccountId, Flags) ->
     JObj = kz_json:from_list(
              props:filter_undefined([{<<"Account-ID">>, kz_util:to_binary(AccountId)}
-                                     ,{<<"Hunt-Account-ID">>, kz_util:to_binary(AccountId)}
-                                     ,{<<"Flags">>, Flags}
+                                    ,{<<"Hunt-Account-ID">>, kz_util:to_binary(AccountId)}
+                                    ,{<<"Flags">>, Flags}
                                     ])
             ),
     Endpoints = stepswitch_resources:endpoints(kz_util:to_binary(Number)
-                                               ,kapi_offnet_resource:jobj_to_req(JObj)
+                                              ,kapi_offnet_resource:jobj_to_req(JObj)
                                               ),
     pretty_print_endpoints(Endpoints).
 
@@ -268,7 +268,7 @@ pretty_print_endpoint([{<<"Custom-Channel-Vars">>, JObj}|Props]) ->
     _ = pretty_print_endpoint(Props),
     io:format("Custom-Channel-Vars~n"),
     [io:format("    ~-15s: ~s~n", [Key
-                                   ,kz_util:to_binary(Value)
+                                  ,kz_util:to_binary(Value)
                                   ])
      || {Key, Value} <- kz_json:to_proplist(JObj)
     ];
@@ -285,26 +285,26 @@ pretty_print_endpoint([{Key, Value}|Props]) ->
 -spec print_condensed_list(list()) -> 'ok'.
 print_condensed_list([E1, E2, E3]) ->
     io:format("    | ~-20s | ~-20s | ~-20s|~n"
-              ,[kz_util:to_binary(E1)
-                ,kz_util:to_binary(E2)
-                ,kz_util:to_binary(E3)
-               ]);
+             ,[kz_util:to_binary(E1)
+              ,kz_util:to_binary(E2)
+              ,kz_util:to_binary(E3)
+              ]);
 print_condensed_list([E1, E2]) ->
     io:format("    | ~-20s | ~-20s | ~-20s|~n"
-              ,[kz_util:to_binary(E1)
-                ,kz_util:to_binary(E2)
-                ,<<>>
-               ]);
+             ,[kz_util:to_binary(E1)
+              ,kz_util:to_binary(E2)
+              ,<<>>
+              ]);
 print_condensed_list([E1]) ->
     io:format("    | ~-20s | ~-20s | ~-20s|~n"
-              ,[kz_util:to_binary(E1)
-                ,<<>>
-                ,<<>>
-               ]);
+             ,[kz_util:to_binary(E1)
+              ,<<>>
+              ,<<>>
+              ]);
 print_condensed_list([E1, E2, E3 | Rest]) ->
     io:format("    | ~-20s | ~-20s | ~-20s|~n"
-              ,[kz_util:to_binary(E1)
-                ,kz_util:to_binary(E2)
-                ,kz_util:to_binary(E3)
-               ]),
+             ,[kz_util:to_binary(E1)
+              ,kz_util:to_binary(E2)
+              ,kz_util:to_binary(E3)
+              ]),
     print_condensed_list(Rest).

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2016, 2600HZ, INC
+%%% @copyright (C) 2011-2016, 2600Hz, INC
 %%% @doc
 %%%
 %%% @end
@@ -17,11 +17,19 @@
 -export([maybe_archive_modb/1]).
 -export([refresh_views/1]).
 -export([create/1
-         ,add_routine/1
+        ,add_routine/1
         ]).
 -export([maybe_delete/2]).
 -export([get_range/3, get_range/4]).
 -export([get_year_month_sequence/3, get_year_month_sequence/4]).
+-export([strip_modb_options/1]).
+
+-type view_option() :: {'year', kz_year()} |
+                       {'month', kz_month()} |
+                       kz_datamgr:view_option().
+-type view_options() :: [view_option()].
+
+-export_type([view_options/0]).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -30,10 +38,10 @@
 %% @end
 %%--------------------------------------------------------------------
 
--spec get_results(ne_binary(), ne_binary(), kz_proplist()) ->
+-spec get_results(ne_binary(), ne_binary(), view_options()) ->
                          {'ok', kz_json:objects()} |
                          {'error', atom()}.
--spec get_results(ne_binary(), ne_binary(), kz_proplist(), non_neg_integer()) ->
+-spec get_results(ne_binary(), ne_binary(), view_options(), non_neg_integer()) ->
                          {'ok', kz_json:objects()} |
                          {'error', atom()}.
 get_results(Account, View, ViewOptions) ->
@@ -44,13 +52,24 @@ get_results(_Account, _View, _ViewOptions, Retry) when Retry =< 0 ->
 get_results(Account, View, ViewOptions, Retry) ->
     AccountMODb = get_modb(Account, ViewOptions),
     EncodedMODb = kz_util:format_account_modb(AccountMODb, 'encoded'),
-    case kz_datamgr:get_results(EncodedMODb, View, ViewOptions) of
+    case kz_datamgr:get_results(EncodedMODb, View, strip_modb_options(ViewOptions)) of
         {'error', 'not_found'} ->
             get_results_not_found(Account, View, ViewOptions, Retry);
         Results -> Results
     end.
 
--spec get_results_not_found(ne_binary(), ne_binary(), kz_proplist(), integer()) ->
+-spec strip_modb_options(view_options()) -> kz_datamgr:view_options().
+strip_modb_options(ViewOptions) ->
+    [Option || Option <- ViewOptions,
+               not is_modb_option(Option)
+    ].
+
+-spec is_modb_option(view_option()) -> boolean().
+is_modb_option({'year', _}) -> 'true';
+is_modb_option({'month', _}) -> 'true';
+is_modb_option(_) -> 'false'.
+
+-spec get_results_not_found(ne_binary(), ne_binary(), view_options(), integer()) ->
                                    {'ok', kz_json:objects()}.
 get_results_not_found(Account, View, ViewOptions, Retry) ->
     AccountMODb = get_modb(Account, ViewOptions),
@@ -63,7 +82,7 @@ get_results_not_found(Account, View, ViewOptions, Retry) ->
             get_results_missing_db(Account, View, ViewOptions, Retry)
     end.
 
--spec get_results_missing_db(ne_binary(), ne_binary(), kz_proplist(), integer()) ->
+-spec get_results_missing_db(ne_binary(), ne_binary(), view_options(), integer()) ->
                                     {'ok', kz_json:objects()}.
 get_results_missing_db(Account, View, ViewOptions, Retry) ->
     AccountMODb = get_modb(Account, ViewOptions),
@@ -81,7 +100,7 @@ get_results_missing_db(Account, View, ViewOptions, Retry) ->
 -spec open_doc(ne_binary(), kazoo_data:docid()) ->
                       {'ok', kz_json:object()} |
                       {'error', atom()}.
--spec open_doc(ne_binary(), kazoo_data:docid(), integer() | kz_proplist()) ->
+-spec open_doc(ne_binary(), kazoo_data:docid(), integer() | view_options()) ->
                       {'ok', kz_json:object()} |
                       {'error', atom()}.
 -spec open_doc(ne_binary(), kazoo_data:docid(), kz_year() | ne_binary(), kz_month() | ne_binary()) ->
@@ -99,7 +118,7 @@ open_doc(Account, DocId) ->
 
 open_doc(Account, DocId, Options)
   when is_list(Options) ->
-    AccountMODb = get_modb(Account),
+    AccountMODb = get_modb(Account, Options),
     couch_open(AccountMODb, DocId, Options);
 open_doc(Account, DocId, Timestamp)
   when is_integer(Timestamp) ->
@@ -137,10 +156,10 @@ couch_open(AccountMODb, DocId, Options) ->
 -spec save_doc(ne_binary(), kz_json:object()) ->
                       {'ok', kz_json:object()} |
                       {'error', atom()}.
--spec save_doc(ne_binary(), kz_json:object(), integer()) ->
+-spec save_doc(ne_binary(), kz_json:object(), kz_now()) ->
                       {'ok', kz_json:object()} |
                       {'error', atom()}.
--spec save_doc(ne_binary(), kz_json:object(), integer(), integer()) ->
+-spec save_doc(ne_binary(), kz_json:object(), kz_year() | ne_binary(), kz_month() | ne_binary()) ->
                       {'ok', kz_json:object()} |
                       {'error', atom()}.
 save_doc(Account, Doc) ->
@@ -162,7 +181,7 @@ couch_save(AccountMODb, _Doc, 0) ->
     lager:error("failed to save doc in ~p", AccountMODb),
     {'error', 'doc_save_failed'};
 couch_save(AccountMODb, Doc, Retry) ->
-     EncodedMODb = kz_util:format_account_modb(AccountMODb, 'encoded'),
+    EncodedMODb = kz_util:format_account_modb(AccountMODb, 'encoded'),
     case kz_datamgr:save_doc(EncodedMODb, Doc) of
         {'ok', _}=Ok -> Ok;
         {'error', 'not_found'} ->
@@ -181,7 +200,7 @@ couch_save(AccountMODb, Doc, Retry) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_modb(ne_binary()) -> ne_binary().
--spec get_modb(ne_binary(), kz_proplist() | gregorian_seconds() | kz_now()) ->
+-spec get_modb(ne_binary(), view_options() | gregorian_seconds() | kz_now()) ->
                       ne_binary().
 -spec get_modb(ne_binary(), kz_year() | ne_binary(), kz_month() | ne_binary()) ->
                       ne_binary().
@@ -193,9 +212,9 @@ get_modb(Account) ->
 
 get_modb(?MATCH_MODB_SUFFIX_RAW(_,_,_) = AccountMODb, _) ->
     AccountMODb;
-get_modb(Account, Props) when is_list(Props) ->
-    case {props:get_value('month', Props)
-          ,props:get_value('year', Props)
+get_modb(Account, ViewOptions) when is_list(ViewOptions) ->
+    case {props:get_value('month', ViewOptions)
+         ,props:get_value('year', ViewOptions)
          }
     of
         {'undefined', _Year} -> get_modb(Account);
@@ -222,7 +241,7 @@ get_modb(Account, Year, Month) ->
 maybe_create(?MATCH_MODB_SUFFIX_RAW(AccountId, Year, Month) = AccountMODb) ->
     {Y, M, _} = erlang:date(),
     case is_account_deleted(AccountId) =/= 'true'
-            andalso {kz_util:to_binary(Y), kz_util:pad_month(M)}
+        andalso {kz_util:to_binary(Y), kz_util:pad_month(M)}
     of
         'false' -> 'false';
         {Year, Month} ->
@@ -274,7 +293,7 @@ get_modb_views() ->
         Views -> Views
     end.
 
--spec fetch_modb_views() -> kz_proplist().
+-spec fetch_modb_views() -> [{ne_binary(), kz_json:object()}].
 fetch_modb_views() ->
     kapps_util:get_views_json(?MODULE, "views").
 
@@ -383,8 +402,8 @@ get_range(Type, AccountId, From, To) ->
     {{ToYear,   ToMonth,   _}, _} = calendar:gregorian_seconds_to_datetime(To),
     [MODb
      || MODb <- get_year_month_sequence(AccountId
-                                        ,{FromYear, FromMonth}
-                                        ,{ToYear, ToMonth}
+                                       ,{FromYear, FromMonth}
+                                       ,{ToYear, ToMonth}
                                        ),
         kz_datamgr:db_exists(MODb, Type)
     ].
@@ -406,5 +425,5 @@ get_year_month_sequence(Account, Tuple, Tuple, Range) ->
 get_year_month_sequence(Account, {FromYear,13}, To, Range) ->
     get_year_month_sequence(Account, {FromYear+1,1}, To, Range);
 get_year_month_sequence(Account, {FromYear,FromMonth}=From, {ToYear,ToMonth}=To, Range) ->
-        'true' = (FromYear * 12 + FromMonth) =< (ToYear * 12 + ToMonth),
+    'true' = (FromYear * 12 + FromMonth) =< (ToYear * 12 + ToMonth),
     get_year_month_sequence(Account, {FromYear,FromMonth+1}, To, [From|Range]).

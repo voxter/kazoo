@@ -1,5 +1,5 @@
 %%%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2015, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%% "data":{
 %%%   "pin":"1234"
@@ -13,6 +13,9 @@
 %%%   James Aimonetti
 %%%-------------------------------------------------------------------
 -module(cf_disa).
+
+%% some recursion causes loops in cf_data_usage
+%% -behaviour(gen_cf_action).
 
 -include("callflow.hrl").
 
@@ -60,11 +63,11 @@ try_collect_pin(Call, Pin, Retries, Interdigit) ->
 
     lager:debug("collecting up to ~p digits for pin", [PinLength]),
     case kapps_call_command:collect_digits(PinLength
-                                            ,kapps_call_command:default_collect_timeout()
-                                            ,Interdigit
-                                            ,NoopId
-                                            ,Call
-                                           )
+                                          ,kapps_call_command:default_collect_timeout()
+                                          ,Interdigit
+                                          ,NoopId
+                                          ,Call
+                                          )
     of
         {'ok', Pin} ->
             lager:info("pin matches, permitting"),
@@ -93,10 +96,10 @@ allow_dial(Data, Call, Retries, Interdigit) ->
 
     lager:debug("collecting max ~p digits for destination number", [MaxDigits]),
     {'ok', Digits} = kapps_call_command:collect_digits(MaxDigits
-                                                        ,kapps_call_command:default_collect_timeout()
-                                                        ,Interdigit
-                                                        ,Call
-                                                       ),
+                                                      ,kapps_call_command:default_collect_timeout()
+                                                      ,Interdigit
+                                                      ,Call
+                                                      ),
 
     Number = knm_converters:normalize(Digits),
     lager:info("caller is trying to call '~s'", [Number]),
@@ -106,19 +109,16 @@ allow_dial(Data, Call, Retries, Interdigit) ->
     maybe_route_to_callflow(Data, Call1, Retries, Interdigit, Number).
 
 maybe_route_to_callflow(Data, Call, Retries, Interdigit, Number) ->
-    case cf_util:lookup_callflow(Number, kapps_call:account_id(Call)) of
+    case cf_flow:lookup(Number, kapps_call:account_id(Call)) of
         {'ok', Flow, NoMatch} ->
             lager:info("callflow ~s satisfies request", [kz_doc:id(Flow)]),
             Updates = [{fun kapps_call:set_request/2
-                        ,list_to_binary([Number, "@", kapps_call:request_realm(Call)])
+                       ,list_to_binary([Number, "@", kapps_call:request_realm(Call)])
                        }
-                       ,{fun kapps_call:set_to/2, list_to_binary([Number, "@", kapps_call:to_realm(Call)])}
-                       ,fun(C) when NoMatch ->
-                                {CIDNum, CIDName} = kz_attributes:caller_id(<<"external">>, C),
-                                C1 = kapps_call:set_caller_id_number(CIDNum, C),
-                                kapps_call:set_caller_id_name(CIDName, C1);
-                           (C) -> C
-                        end
+                      ,{fun kapps_call:set_to/2, list_to_binary([Number, "@", kapps_call:to_realm(Call)])}
+                      ,fun(C) when NoMatch -> update_cid(C);
+                          (C) -> C
+                       end
                       ],
             {'ok', C} = cf_exe:get_call(Call),
             cf_exe:set_call(kapps_call:exec(Updates, C)),
@@ -128,6 +128,14 @@ maybe_route_to_callflow(Data, Call, Retries, Interdigit, Number) ->
             _ = kapps_call_command:b_prompt(<<"disa-invalid_extension">>, Call),
             allow_dial(Data, Call, Retries - 1, Interdigit)
     end.
+
+-spec update_cid(kapps_call:call()) -> kapps_call:call().
+update_cid(Call) ->
+    {CIDNum, CIDName} = kz_attributes:caller_id(<<"external">>, Call),
+    Updates = [{fun kapps_call:set_caller_id_number/2, CIDNum}
+              ,{fun kapps_call:set_caller_id_name/2, CIDName}
+              ],
+    kapps_call:exec(Updates, Call).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -174,8 +182,8 @@ start_preconnect_audio(Data, Call) ->
 -spec play_dialtone(kapps_call:call()) -> 'ok'.
 play_dialtone(Call) ->
     Tone = kz_json:from_list([{<<"Frequencies">>, [<<"350">>, <<"440">>]}
-                              ,{<<"Duration-ON">>, <<"10000">>}
-                              ,{<<"Duration-OFF">>, <<"0">>}
+                             ,{<<"Duration-ON">>, <<"10000">>}
+                             ,{<<"Duration-OFF">>, <<"0">>}
                              ]),
     kapps_call_command:tones([Tone], Call).
 
@@ -188,9 +196,9 @@ play_dialtone(Call) ->
 play_ringing(Data, Call) ->
     RingRepeatCount = kz_json:get_integer_value(<<"ring_repeat_count">>, Data, 1),
     Tone = kz_json:from_list([{<<"Frequencies">>, [<<"440">>, <<"480">>]}
-                              ,{<<"Duration-ON">>, <<"2000">>}
-                              ,{<<"Duration-OFF">>, <<"4000">>}
-                              ,{<<"Repeat">>, RingRepeatCount}
+                             ,{<<"Duration-ON">>, <<"2000">>}
+                             ,{<<"Duration-OFF">>, <<"4000">>}
+                             ,{<<"Repeat">>, RingRepeatCount}
                              ]),
     kapps_call_command:tones([Tone], Call).
 
@@ -205,16 +213,16 @@ set_caller_id(Call) ->
     {Number, Name} = maybe_get_account_cid(AccountId, Call),
     lager:info("setting the caller id number to ~s from account ~s", [Number, AccountId]),
     Updates = [fun(C) -> kapps_call:kvs_store('dynamic_cid', Number, C) end
-               ,fun(C) ->
-                    C1 = kapps_call:set_caller_id_number(Number, C),
-                    kapps_call:set_caller_id_name(Name, C1)
-                end
-               ,fun(C) ->
-                    Props = [{<<"Caller-ID-Number">>, Number}
-                             ,{<<"Caller-ID-Name">>, Name}
-                            ],
-                    kapps_call:set_custom_channel_vars(Props, C)
-                end
+              ,fun(C) ->
+                       C1 = kapps_call:set_caller_id_number(Number, C),
+                       kapps_call:set_caller_id_name(Name, C1)
+               end
+              ,fun(C) ->
+                       Props = [{<<"Caller-ID-Number">>, Number}
+                               ,{<<"Caller-ID-Name">>, Name}
+                               ],
+                       kapps_call:set_custom_channel_vars(Props, C)
+               end
               ],
     UpdatedCall = kapps_call:exec(Updates, Call),
     cf_exe:set_call(UpdatedCall),

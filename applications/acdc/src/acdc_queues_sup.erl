@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2015, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -16,12 +16,12 @@
 
 %% API
 -export([start_link/0
-         ,new/2
-         ,workers/0
-         ,find_acct_supervisors/1
-         ,find_queue_supervisor/2
-         ,queues_running/0
-         ,status/0
+        ,new/2
+        ,workers/0
+        ,find_acct_supervisors/1
+        ,find_queue_supervisor/2
+        ,queues_running/0
+        ,status/0
         ]).
 
 %% Supervisor callbacks
@@ -80,7 +80,7 @@ find_queue_supervisor(AcctId, QueueId, [Super|Rest]) ->
 status() ->
     lager:info("ACDc Queues Status"),
     Ws = workers(),
-    _ = kz_util:spawn(fun() -> [acdc_queue_sup:status(Sup) || Sup <- Ws] end),
+    _ = kz_util:spawn(fun() -> lists:foreach(fun acdc_queue_sup:status/1, Ws) end),
     'ok'.
 
 -spec queues_running() -> [{pid(), any()}].

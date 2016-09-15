@@ -9,10 +9,12 @@
 %%%     Karl Anderson
 %%%     Mark Magnusson
 %%%     Pierre Fenoll
+%%%     Luis Azedo
 %%%-------------------------------------------------------------------
 -module(knm_bandwidth2).
 -behaviour(knm_gen_carrier).
 
+-export([is_local/0]).
 -export([find_numbers/3]).
 -export([acquire_number/1]).
 -export([disconnect_number/1]).
@@ -34,12 +36,12 @@
 -define(BW2_DEBUG_FILE, "/tmp/bandwidth2.com.xml").
 
 -define(DEBUG_WRITE(Format, Args),
-        _ = ?BW2_DEBUG andalso
-        file:write_file(?BW2_DEBUG_FILE, io_lib:format(Format, Args))
+        _ = ?BW2_DEBUG
+        andalso file:write_file(?BW2_DEBUG_FILE, io_lib:format(Format, Args))
        ).
 -define(DEBUG_APPEND(Format, Args),
-        _ = ?BW2_DEBUG andalso
-        file:write_file(?BW2_DEBUG_FILE, io_lib:format(Format, Args), ['append'])
+        _ = ?BW2_DEBUG
+        andalso file:write_file(?BW2_DEBUG_FILE, io_lib:format(Format, Args), ['append'])
        ).
 
 -define(BW2_BASE_URL, "https://api.inetwork.com/v1.0").
@@ -62,27 +64,41 @@
 -define(BW2_SITE_ID,
         kapps_config:get_string(?KNM_BW2_CONFIG_CAT, <<"site_id">>, "")).
 
--define(IS_US_TOLLFREE(Prefix),
-    Prefix == <<"800">> orelse
-    Prefix == <<"822">> orelse
-    Prefix == <<"833">> orelse
-    Prefix == <<"844">> orelse
-    Prefix == <<"855">> orelse
-    Prefix == <<"866">> orelse
-    Prefix == <<"877">> orelse
-    Prefix == <<"880">> orelse
-    Prefix == <<"881">> orelse
-    Prefix == <<"882">> orelse
-    Prefix == <<"883">> orelse
-    Prefix == <<"884">> orelse
-    Prefix == <<"885">> orelse
-    Prefix == <<"886">> orelse
-    Prefix == <<"887">> orelse
-    Prefix == <<"888">> orelse
-    Prefix == <<"889">>
-).
+-define(IS_US_TOLLFREE(Prefix)
+       ,Prefix == <<"800">>
+            orelse Prefix == <<"822">>
+            orelse Prefix == <<"833">>
+            orelse Prefix == <<"844">>
+            orelse Prefix == <<"855">>
+            orelse Prefix == <<"866">>
+            orelse Prefix == <<"877">>
+            orelse Prefix == <<"880">>
+            orelse Prefix == <<"881">>
+            orelse Prefix == <<"882">>
+            orelse Prefix == <<"883">>
+            orelse Prefix == <<"884">>
+            orelse Prefix == <<"885">>
+            orelse Prefix == <<"886">>
+            orelse Prefix == <<"887">>
+            orelse Prefix == <<"888">>
+            orelse Prefix == <<"889">>
+       ).
+
+-define(ORDER_NUMBER_XPATH, "ExistingTelephoneNumberOrderType/TelephoneNumberList/TelephoneNumber/text()").
+-define(ORDER_ID_XPATH, "CustomerOrderId/text()").
+-define(ORDER_NAME_XPATH, "Name/text()").
 
 %%% API
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Is this carrier handling numbers local to the system?
+%% Note: a non-local (foreign) carrier module makes HTTP requests.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_local() -> boolean().
+is_local() -> 'false'.
 
 %% @public
 -spec is_number_billable(knm_number:knm_number()) -> 'true'.
@@ -96,7 +112,7 @@ is_number_billable(_Number) -> 'true'.
 %% @end
 %%--------------------------------------------------------------------
 -type search_ret() :: {'ok', knm_number:knm_numbers()} | {'error', any()}.
--spec find_numbers(ne_binary(), pos_integer(), kz_proplist()) -> search_ret().
+-spec find_numbers(ne_binary(), pos_integer(), knm_carriers:options()) -> search_ret().
 find_numbers(<<"+", Rest/binary>>, Quantity, Options) ->
     find_numbers(Rest, Quantity, Options);
 
@@ -104,19 +120,15 @@ find_numbers(<<"1", Rest/binary>>, Quantity, Options) ->
     find_numbers(Rest, Quantity, Options);
 
 find_numbers(<<Prefix:3/binary, _/binary>>=Num, Quantity, Options) when ?IS_US_TOLLFREE(Prefix) ->
-    <<"8", Second:1/binary, _/binary>> = Prefix,
-    ToSearch = case knm_converters:is_reconcilable(Num) of
-                   'true' -> Num;
-                   'false' -> Second
-               end,
-
-    Params = [ "tollFreeWildCardPattern=8", binary_to_list(ToSearch), "*"
+    <<_:1/binary, Wildcard/binary>> = Prefix,
+    Params = [ "tollFreeWildCardPattern=", binary_to_list(Wildcard), "*"
                "&enableTNDetail=true&quantity=", integer_to_list(Quantity)
              ],
-    {'ok', Result} = search(Params),
-    AccountId = props:get_value(<<"account_id">>, Options),
-    {'ok', [tollfree_search_response_to_KNM(X, AccountId)
-            || X <- xmerl_xpath:string("TelephoneNumberList/TelephoneNumber", Result)
+    Result = search(Num, Params),
+    AccountId = knm_carriers:account_id(Options),
+    {'ok', [N
+            || X <- xmerl_xpath:string("TelephoneNumberList/TelephoneNumber", Result),
+               {'ok', N} <- [tollfree_search_response_to_KNM(X, AccountId)]
            ]
     };
 
@@ -124,22 +136,21 @@ find_numbers(<<NPA:3/binary>>, Quantity, Options) ->
     Params = [ "areaCode=", binary_to_list(NPA)
              , "&enableTNDetail=true&quantity=", integer_to_list(Quantity)
              ],
-    {'ok', Result} = search(Params),
-    {'ok', process_search_response(Result, Options)};
+    {'ok', process_search_response(search(NPA, Params), Options)};
 
 find_numbers(Search, Quantity, Options) ->
     NpaNxx = kz_util:truncate_right_binary(Search, 6),
     Params = [ "npaNxx=", binary_to_list(NpaNxx)
              , "&enableTNDetail=true&quantity=", integer_to_list(Quantity)
              ],
-    {'ok', Result} = search(Params),
-    {'ok', process_search_response(Result, Options)}.
+    {'ok', process_search_response(search(Search, Params), Options)}.
 
--spec process_search_response(xml_el(), kz_proplist()) -> knm_number:knm_numbers().
+-spec process_search_response(xml_el(), knm_carriers:options()) -> knm_number:knm_numbers().
 process_search_response(Result, Options) ->
-    AccountId = props:get_value(<<"account_id">>, Options),
-    [search_response_to_KNM(X, AccountId)
-     || X <- xmerl_xpath:string("TelephoneNumberDetailList/TelephoneNumberDetail", Result)
+    AccountId = knm_carriers:account_id(Options),
+    [N
+     || X <- xmerl_xpath:string("TelephoneNumberDetailList/TelephoneNumberDetail", Result),
+        {'ok', N} <- [search_response_to_KNM(X, AccountId)]
     ].
 
 %%--------------------------------------------------------------------
@@ -159,7 +170,7 @@ acquire_number(Number) ->
             knm_errors:unspecified('provisioning_disabled', Number);
         'true' ->
             PhoneNumber = knm_number:phone_number(Number),
-            Num = reformat_number_for_acquire(knm_phone_number:number(PhoneNumber)),
+            Num = to_bandwidth2(knm_phone_number:number(PhoneNumber)),
             ON = lists:flatten([?BW2_ORDER_NAME_PREFIX, "-", integer_to_list(kz_util:current_tstamp())]),
             AuthBy = knm_phone_number:auth_by(PhoneNumber),
 
@@ -176,20 +187,18 @@ acquire_number(Number) ->
             case api_post(url(["orders"]), Body) of
                 {'error', Reason} ->
                     Error = <<"Unable to acquire number: ", (kz_util:to_binary(Reason))/binary>>,
-                    knm_errors:by_carrier(?MODULE, Error, Number);
+                    knm_errors:by_carrier(?MODULE, Error, Num);
                 {'ok', Xml} ->
                     Response = xmerl_xpath:string("Order", Xml),
                     OrderData = number_order_response_to_json(Response),
-                    knm_number:set_phone_number(
-                      Number
-                      ,knm_phone_number:update_carrier_data(PhoneNumber, OrderData)
-                     )
+                    PN = knm_phone_number:update_carrier_data(PhoneNumber, OrderData),
+                    knm_number:set_phone_number(Number, PN)
             end
     end.
 
--spec reformat_number_for_acquire(ne_binary()) -> ne_binary().
- reformat_number_for_acquire(<<"+1", Number/binary>>) -> Number;
- reformat_number_for_acquire(Number) -> Number.
+-spec to_bandwidth2(ne_binary()) -> ne_binary().
+to_bandwidth2(<<"+1", Number/binary>>) -> Number;
+to_bandwidth2(Number) -> Number.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -207,7 +216,7 @@ sites() ->
     {'ok', Xml} = api_get(url(["sites"])),
     io:format("listing all sites for account ~p~n", [?BW2_ACCOUNT_ID]),
     Sites = xmerl_xpath:string("Sites/Site", Xml),
-    _ = [process_site(X) || X <- Sites],
+    lists:foreach(fun process_site/1, Sites),
     io:format("done.~n").
 
 -spec process_site(xml_el()) -> 'ok'.
@@ -222,7 +231,7 @@ peers(SiteId) ->
     {'ok', Xml} = api_get(url(["sippeers"])),
     io:format("listing all peers for account ~p, site ~p~n", [?BW2_ACCOUNT_ID, SiteId]),
     Peers = xmerl_xpath:string("SipPeers/SipPeer", Xml),
-    _ = [process_peer(X) || X <- Peers],
+    lists:foreach(fun process_peer/1, Peers),
     io:format("done.~n").
 
 -spec process_peer(xml_el()) -> 'ok'.
@@ -236,15 +245,19 @@ process_peer(Peer) ->
 -spec url([nonempty_string()]) -> nonempty_string().
 url(RelativePath) ->
     lists:flatten(
-      [ io_lib:format("~s/accounts/~s/", [?BW2_BASE_URL, ?BW2_ACCOUNT_ID])
-        | RelativePath
+      [io_lib:format("~s/accounts/~s/", [?BW2_BASE_URL, ?BW2_ACCOUNT_ID])
+       | RelativePath
       ]).
 
 -type api_res() :: {'ok', xml_el()} | {'error', atom()}.
 
--spec search([nonempty_string()]) -> api_res().
-search(Params) ->
-    api_get(url(["availableNumbers?" | Params])).
+-spec search(ne_binary(), [nonempty_string()]) -> xml_el().
+search(Num, Params) ->
+    case api_get(url(["availableNumbers?" | Params])) of
+        {'ok', Results} -> Results;
+        {'error', Reason} ->
+            knm_errors:by_carrier(?MODULE, Reason, Num)
+    end.
 
 -spec auth() -> {'basic_auth', {ne_binary(), ne_binary()}}.
 auth() ->
@@ -281,7 +294,7 @@ api_post(Url, Body) ->
                   ,{'connect_timeout', 180 * ?MILLISECONDS_IN_SECOND}
                   ,{'body_format', 'string'}
                   ],
-    ?DEBUG_WRITE("Request:~n~s ~s~n~s~n~p~n~s~n", ['post', Url, Headers, HTTPOptions, Body]),
+    ?DEBUG_WRITE("Request:~n~s ~s~n~p~n~p~n~p~p~n", ['post', Url, Headers, HTTPOptions, Body, UnicodeBody]),
     Response = kz_http:post(Url, Headers, UnicodeBody, HTTPOptions),
     handle_response(Response).
 -else.
@@ -299,6 +312,9 @@ api_post("https://api.inetwork.com/v1.0/accounts//orders", Body) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_response(kz_http:ret()) -> api_res().
+handle_response({Result, Code, Props, Response})
+  when is_binary(Response) ->
+    handle_response({Result, Code, Props, kz_util:to_list(Response)});
 handle_response({'ok', 401, _, _Response}) ->
     ?DEBUG_APPEND("Response:~n401~n~s~n", [_Response]),
     lager:debug("bandwidth.com request error: 401 (unauthenticated)"),
@@ -357,34 +373,41 @@ number_order_response_to_json([]) ->
 number_order_response_to_json([Xml]) ->
     number_order_response_to_json(Xml);
 number_order_response_to_json(Xml) ->
+    Num = maybe_add_us_prefix(kz_util:get_xml_value(?ORDER_NUMBER_XPATH, Xml)),
     kz_json:from_list(
       props:filter_empty(
-        [{<<"order_id">>, kz_util:get_xml_value("id/text()", Xml)}
-        ,{<<"order_name">>, kz_util:get_xml_value("Name/text()", Xml)}
-        ,{<<"number">>, kz_util:get_xml_value("TelephoneNumberList/TelephoneNumber/text()", Xml)}
-        ])).
+        [{<<"order_id">>, kz_util:get_xml_value(?ORDER_ID_XPATH, Xml)}
+        ,{<<"order_name">>, kz_util:get_xml_value(?ORDER_NAME_XPATH, Xml)}
+        ,{<<"number">>, Num}
+        ]
+       )
+     ).
 
 %% @private
--spec search_response_to_KNM(xml_els() | xml_el(), ne_binary()) -> knm_number:knm_number().
+-spec search_response_to_KNM(xml_els() | xml_el(), ne_binary()) ->
+                                    knm_number:knm_number_return().
 search_response_to_KNM([Xml], AccountId) ->
     search_response_to_KNM(Xml, AccountId);
 search_response_to_KNM(Xml, AccountId) ->
-    Num = kz_util:get_xml_value("//FullNumber/text()", Xml),
+    Num = maybe_add_us_prefix(kz_util:get_xml_value("//FullNumber/text()", Xml)),
     JObj = kz_json:from_list(
              props:filter_empty(
                [{<<"number">>, Num}
                ,{<<"rate_center">>, rate_center_to_json(Xml)}
                ])
             ),
-    {'ok', PhoneNumber} = knm_phone_number:newly_found(Num, ?MODULE, AccountId, JObj),
-    knm_number:set_phone_number(knm_number:new(), PhoneNumber).
+    knm_carriers:create_found(Num, ?MODULE, AccountId, JObj).
+
+-spec maybe_add_us_prefix(binary()) -> binary().
+maybe_add_us_prefix(<<"+1", _/binary>>=Num) -> Num;
+maybe_add_us_prefix(Num) -> <<"+1", Num/binary>>.
 
 %% @private
--spec tollfree_search_response_to_KNM(xml_el(), ne_binary()) -> knm_number:knm_number().
+-spec tollfree_search_response_to_KNM(xml_el(), ne_binary()) ->
+                                             knm_number:knm_number_return().
 tollfree_search_response_to_KNM(Xml, AccountId) ->
-    Num = kz_util:get_xml_value("//TelephoneNumber/text()", Xml),
-    {'ok', PhoneNumber} = knm_phone_number:newly_found(Num, ?MODULE, AccountId, kz_json:new()),
-    knm_number:set_phone_number(knm_number:new(), PhoneNumber).
+    Num = maybe_add_us_prefix(kz_util:get_xml_value("//TelephoneNumber/text()", Xml)),
+    knm_carriers:create_found(Num, ?MODULE, AccountId, kz_json:new()).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -403,7 +426,9 @@ rate_center_to_json(Xml) ->
         [{<<"name">>, kz_util:get_xml_value("//RateCenter/text()", Xml)}
         ,{<<"lata">>, kz_util:get_xml_value("//LATA/text()", Xml)}
         ,{<<"state">>, kz_util:get_xml_value("//State/text()", Xml)}
-        ])).
+        ]
+       )
+     ).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -418,8 +443,8 @@ verify_response(Xml) ->
     NPAPath = "count(//TelephoneNumberDetailList/TelephoneNumberDetail)",
     TollFreePath = "count(//TelephoneNumberList/TelephoneNumber)",
     case validate_xpath_value(xmerl_xpath:string(NPAPath, Xml))
-             orelse validate_xpath_value(xmerl_xpath:string(TollFreePath, Xml))
-             orelse validate_xpath_value(kz_util:get_xml_value("//OrderStatus/text()", Xml))
+        orelse validate_xpath_value(xmerl_xpath:string(TollFreePath, Xml))
+        orelse validate_xpath_value(kz_util:get_xml_value("//OrderStatus/text()", Xml))
     of
         'true' ->
             lager:debug("request was successful"),
@@ -435,9 +460,9 @@ verify_response(Xml) ->
     end.
 
 -spec validate_xpath_value(api_binary() | {atom(), atom(), non_neg_integer()}) -> boolean().
-validate_xpath_value('undefined') -> false;
-validate_xpath_value(<<>>) -> false;
-validate_xpath_value({xmlObj, number, Num}) -> Num > 0;
+validate_xpath_value('undefined') -> 'false';
+validate_xpath_value(<<>>) -> 'false';
+validate_xpath_value({'xmlObj', 'number', Num}) -> Num > 0;
 validate_xpath_value(_) -> 'true'.
 
 -spec should_lookup_cnam() -> 'true'.

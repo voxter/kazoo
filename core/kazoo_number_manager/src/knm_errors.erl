@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2015, 2600Hz INC
+%%% @copyright (C) 2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -8,27 +8,27 @@
 %%%-------------------------------------------------------------------
 -module(knm_errors).
 
--export([unauthorized/0
-         ,number_exists/1
-         ,invalid_state_transition/3
-         ,no_change_required/1
-         ,service_restriction/1
-         ,carrier_not_specified/1
-         ,unspecified/2
-         ,not_enough_credit/2
-         ,invalid/2
-         ,multiple_choice/2
-         ,assign_failure/2
-         ,database_error/2
-         ,number_is_porting/1
-         ,by_carrier/3
+-export([unspecified/2
+        ,unauthorized/0
+        ,number_exists/1
+        ,invalid_state_transition/3
+        ,no_change_required/1
+        ,service_restriction/1
+        ,carrier_not_specified/1
+        ,not_enough_credit/2
+        ,invalid/2
+        ,multiple_choice/2
+        ,assign_failure/2
+        ,database_error/2
+        ,number_is_porting/1
+        ,by_carrier/3
         ]).
 
 -export([to_json/1, to_json/2, to_json/3
-         ,code/1
-         ,error/1
-         ,cause/1
-         ,message/1
+        ,code/1
+        ,error/1
+        ,cause/1
+        ,message/1
         ]).
 
 -include("knm.hrl").
@@ -44,7 +44,17 @@
 -type kn() :: knm_number:knm_number().
 -type kpn() :: knm_phone_number:knm_phone_number().
 
--export_type([error/0]).
+-type thrown_error() :: {'error', atom()} |
+                        {'error', atom(), any()} |
+                        {'error', atom(), any(), any()}.
+
+-export_type([error/0
+             ,thrown_error/0
+             ]).
+
+-spec unspecified(any(), kn() | ne_binary()) -> no_return().
+unspecified(Error, Number) ->
+    throw({'error', Error, Number}).
 
 -spec unauthorized() -> no_return().
 unauthorized() ->
@@ -58,11 +68,11 @@ number_exists(DID) ->
                                       no_return().
 invalid_state_transition(Number, FromState, ToState) ->
     throw({'error'
-           ,'invalid_state_transition'
-           ,Number
-           ,iolist_to_binary(["from ", FromState
-                              ," to ", ToState
-                             ])
+          ,'invalid_state_transition'
+          ,Number
+          ,iolist_to_binary(["from ", FromState
+                            ," to ", ToState
+                            ])
           }).
 
 -spec no_change_required(kn()) -> no_return().
@@ -76,11 +86,6 @@ service_restriction(Message) ->
 -spec carrier_not_specified(kn()) -> no_return().
 carrier_not_specified(Number) ->
     throw({'error', 'carrier_not_specified', Number}).
-
--spec unspecified(any(), kn() | ne_binary()) ->
-                         no_return().
-unspecified(Error, Number) ->
-    throw({'error', Error, Number}).
 
 -spec not_enough_credit(kn(), integer()) ->
                                no_return().
@@ -106,18 +111,21 @@ assign_failure(PhoneNumber, E) ->
                             no_return().
 database_error(E, PhoneNumber) ->
     throw({'error'
-           ,'database_error'
-           ,PhoneNumber
-           ,E
+          ,'database_error'
+          ,PhoneNumber
+          ,E
           }).
 
 -spec number_is_porting(ne_binary()) -> no_return().
 number_is_porting(Num) ->
     throw({'error', 'number_is_porting', Num}).
 
--spec by_carrier(module(), ne_binary() | atom(), kn()) -> no_return().
+-spec by_carrier(module(), ne_binary() | atom(), ne_binary() | kn()) -> no_return().
+by_carrier(Carrier, E, Num=?NE_BINARY) ->
+    throw({'error', 'by_carrier', Num, {Carrier,E}});
 by_carrier(Carrier, E, Number) ->
-    throw({'error', 'by_carrier', Number, {Carrier,E}}).
+    Num = knm_phone_number:number(knm_number:phone_number(Number)),
+    by_carrier(Carrier, E, Num).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -141,13 +149,13 @@ to_json('number_is_porting', Num=?NE_BINARY, _) ->
     build_error(400, 'number_is_porting', Message, Num);
 to_json('number_exists', Num=?NE_BINARY, _) ->
     Message = <<"number ", Num/binary, " already exists">>,
-     build_error(409, 'number_exists', Message, Num);
+    build_error(409, 'number_exists', Message, Num);
 to_json('not_found', Num=?NE_BINARY, _) ->
     Message = <<"number ", Num/binary, " not found">>,
     build_error(404, 'not_found', Message, Num);
 to_json('not_reconcilable', Num=?NE_BINARY, _) ->
     Message = <<"number ", Num/binary, " is not reconcilable">>,
-    build_error(404, 'not_found', Message, Num);
+    build_error(404, 'not_reconcilable', Message, Num);
 to_json('unauthorized', _, Cause) ->
     Message = <<"requestor is unauthorized to perform operation">>,
     build_error(403, 'forbidden', Message, Cause);
@@ -158,7 +166,7 @@ to_json('invalid_state_transition', _, Cause) ->
     Message = <<"invalid state transition">>,
     build_error(400, 'invalid_state_transition', Message, Cause);
 to_json('by_carrier', Num, {_Carrier,_Cause}) ->
-    lager:debug("carrier ~s fault: ~p", [_Carrier, _Cause]),
+    lager:error("carrier ~s fault: ~p", [_Carrier, _Cause]),
     build_error(500, 'unspecified_fault', <<"fault by carrier">>, Num);
 to_json(Reason, _, Cause) ->
     build_error(500, 'unspecified_fault', Reason, Cause).
@@ -176,15 +184,14 @@ to_json(Reason, _, Cause) ->
                          error().
 build_error(Code, Error, Message, Cause) ->
     kz_json:from_list(
-      [{?CODE, kz_util:to_integer(Code)}
-       | [{K, kz_util:to_binary(V)}
+      [{?CODE, Code}]
+      ++ [{K, kz_util:to_binary(V)}
           || {K, V} <- [{?ERROR, Error}
-                        ,{?CAUSE, Cause}
-                        ,{?MESSAGE, Message}
+                       ,{?CAUSE, Cause}
+                       ,{?MESSAGE, Message}
                        ],
              V =/= 'undefined'
          ]
-      ]
      ).
 
 -spec code(error()) -> api_integer().

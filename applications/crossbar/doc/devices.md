@@ -82,7 +82,7 @@ Key | Description | Type | Default | Required
 
 > GET /v2/accounts/{ACCOUNT_ID}/devices
 
-```curl
+```shell
 curl -v -X GET \
     -X "X-Auth-Token: {AUTH_TOKEN} \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/devices
@@ -110,7 +110,7 @@ See the schema for available fields to include in the data portion
 
 > PUT /v2/accounts/{ACCOUNT_ID}/devices
 
-```curl
+```shell
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN} \
     -H "Content-Type: application/json" \
@@ -162,7 +162,7 @@ curl -v -X PUT \
 
 > DELETE /v2/accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}
 
-```curl
+```shell
 curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}
@@ -213,7 +213,7 @@ curl -v -X DELETE \
 
 > GET /v2/accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}
@@ -265,7 +265,7 @@ Including `"sync":true` in the "data" will attempt to reboot the phone. See the 
 
 > POST /v2/accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}
 
-```curl
+```shell
 curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     -H "Content-Type: application/json" \
@@ -313,13 +313,67 @@ curl -v -X POST \
 }
 ```
 
+#### Patch a device
+
+> PATCH /v2/accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}
+
+```shell
+curl -v -X PATCH \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    -d '{"data":{"presence_id":"dis_my_device"}}' \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": {
+        "call_restriction": {},
+        "caller_id": {},
+        "contact_list": {},
+        "dial_plan": {},
+        "enabled": true,
+        "exclude_from_queues": false,
+        "id": "{DEVICE_ID}",
+        "media": {
+            "audio": {
+                "codecs": [
+                    "PCMU"
+                ]
+            },
+            "encryption": {
+                "enforce_security": false,
+                "methods": []
+            },
+            "video": {
+                "codecs": []
+            }
+        },
+        "music_on_hold": {},
+        "mwi_unsolicitated_updates": true,
+        "name": "new device",
+        "presence_id":"dis_my_device",
+        "register_overwrite_notify": false,
+        "ringtones": {},
+        "sip": {
+            "invite_format": "username",
+            "method": "password",
+            "registration_expiration": 300
+        },
+        "suppress_unregister_notifications": false
+    },
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
+    "status": "success"
+}
+
+```
+
+
 #### Fetch registration statuses of all devices
 
 This will fetch the current registrations of any devices. If no devices are registered, an empty list will be returned.
 
 > GET /v2/accounts/{ACCOUNT_ID}/devices/status
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/devices/status
@@ -332,7 +386,7 @@ curl -v -X GET \
         }
     ],
     "request_id": "{REQUEST_ID}",
-    "revision": "undefined",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -343,7 +397,7 @@ Some devices support receiving SIP NOTIFY packets with `event` = `check-sync`. T
 
 > POST /v2/accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}/sync
 
-```curl
+```shell
 curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}/sync
@@ -358,9 +412,9 @@ curl -v -X POST \
 
 #### Execute a quick call
 
-Ring the device; once answered, connect to `{NUMBER}`
+Ring the device; once answered, connect to `{PHONE_NUMBER}`
 
-In this scenario, the device is considered the `callee` while the `{NUMBER}` side is considered the caller (helpful to know when debugging a call!).
+In this scenario, the device is considered the `callee` while the `{PHONE_NUMBER}` side is considered the caller (helpful to know when debugging a call!).
 
 Query string options:
 
@@ -368,18 +422,18 @@ Key | Type | Description
 --- | ---- | -----------
 `auto_answer` | `boolean()` | Tells the SIP phone to auto-answer the call, if supported
 `cid-name` | `string()` | Set the caller ID name (defaults to "Device QuickCall")
-`cid-number` | `string()` | Set the caller ID number (defaults to the `{NUMBER}`)
+`cid-number` | `string()` | Set the caller ID number (defaults to the `{PHONE_NUMBER}`)
 `ignore-early-media` | `boolean()` | Toggle whether to ignore [early media](https://freeswitch.org/confluence/display/FREESWITCH/Early+Media)
 `media` | `string('bypass', 'process')` | Toggle whether to go peer-to-peer([bypass](https://freeswitch.org/confluence/display/FREESWITCH/Bypass+Media+Overview) with the RTP
 `number_filter` | `boolean()`, `regex()` | If true, remove non-alphanumeric characters. If a regex, use the first capture group as the "number" to dial.
 `timeout` | `integer(3..)` | In seconds, how long to ring the device(s) (defaults to 30)
 
-> GET /v2/accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}/quickcall/{NUMBER}
+> GET /v2/accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}/quickcall/{PHONE_NUMBER}
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}/quickcall/{NUMBER}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}/quickcall/{PHONE_NUMBER}
 {
   "auth_token": "{AUTH_TOKEN}",
   "data": {
@@ -433,7 +487,7 @@ curl -v -X GET \
       }
     ],
     "application_data": {
-      "route": "{NUMBER}"
+      "route": "{PHONE_NUMBER}"
     },
     "application_name": "transfer"
   },
@@ -467,7 +521,7 @@ Notice that the first device, `{DEVICE_ID_1}` is owned by `{USER_ID}` but the se
 
 > GET /v2/accounts/{ACCOUNT_ID}/users/{USER_ID}/devices
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/users/{USER_ID}/devices
@@ -504,7 +558,7 @@ Here is a minimal API request that creates a device that will authenticate by IP
 
 > PUT /v2/accounts/{ACCOUNT_ID}/devices
 
-```curl
+```shell
     curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     -H "Content-Type: application/json" \

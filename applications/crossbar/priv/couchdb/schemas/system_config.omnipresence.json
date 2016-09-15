@@ -1,0 +1,29 @@
+{
+    "$schema": "http://json-schema.org/draft-03/schema#",
+    "_id": "system_config.omnipresence",
+    "description": "Schema for omnipresence system_config",
+    "properties": {
+        "expire_check_ms": {
+            "default": 1000,
+            "description": "omnipresence expire check in milliseconds",
+            "type": "integer"
+        },
+        "expires_fudge_s": {
+            "default": 20,
+            "description": "omnipresence expires fudge in seconds",
+            "type": "integer"
+        },
+        "subscriptions_sync_enabled": {
+            "default": false,
+            "description": "omnipresence subscriptions sync enabled",
+            "type": "boolean"
+        },
+        "use_fast_pickup_cookies": {
+            "default": true,
+            "description": "omnipresence use fast pickup cookies",
+            "type": "boolean"
+        }
+    },
+    "required": true,
+    "type": "object"
+}

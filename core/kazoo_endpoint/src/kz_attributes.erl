@@ -16,7 +16,7 @@
 -export([owner_id/1, owner_id/2]).
 -export([presence_id/1, presence_id/2]).
 -export([owned_by/2, owned_by/3
-         ,owned_by_docs/2, owned_by_docs/3
+        ,owned_by_docs/2, owned_by_docs/3
         ]).
 -export([owner_ids/2]).
 -export([maybe_get_assigned_number/3]).
@@ -38,7 +38,7 @@
 -spec temporal_rules(kapps_call:call()) -> kz_json:objects().
 temporal_rules(Call) ->
     AccountDb = kapps_call:account_db(Call),
-    case kz_datamgr:get_results(AccountDb, <<"kz_attributes/temporal_rules">>, ['include_docs']) of
+    case kz_datamgr:get_results(AccountDb, <<"attributes/temporal_rules">>, ['include_docs']) of
         {'ok', JObjs} -> JObjs;
         {'error', _E} ->
             lager:debug("failed to find temporal rules: ~p", [_E]),
@@ -56,7 +56,7 @@ groups(Call) ->
     groups(Call, []).
 groups(Call, ViewOptions) ->
     AccountDb = kapps_call:account_db(Call),
-    case kz_datamgr:get_results(AccountDb, <<"kz_attributes/groups">>, ViewOptions) of
+    case kz_datamgr:get_results(AccountDb, <<"attributes/groups">>, ViewOptions) of
         {'ok', JObjs} -> JObjs;
         {'error', _} -> []
     end.
@@ -72,7 +72,8 @@ caller_id(Attribute, Call) ->
     CCVs = kapps_call:custom_channel_vars(Call),
     Inception = kapps_call:inception(Call),
     case (Inception =/= 'undefined'
-          andalso not kz_json:is_true(<<"Call-Forward">>, CCVs))
+          andalso not kz_json:is_true(<<"Call-Forward">>, CCVs)
+         )
         orelse kz_json:is_true(<<"Retain-CID">>, CCVs)
     of
         'true' ->
@@ -119,7 +120,7 @@ log_configured_endpoint_cid(Attribute, Name, Number) ->
     lager:debug("endpoint configured with ~s caller id <~s> ~s", [Attribute, Name, Number]).
 
 -spec maybe_use_presence_number(api_binary(), api_binary(), kz_json:object(), boolean(), ne_binary(), kapps_call:call()) ->
-                                 {api_binary(), api_binary()}.
+                                       {api_binary(), api_binary()}.
 maybe_use_presence_number('undefined', Name, Endpoint, Validate, <<"internal">> = Attribute, Call) ->
     case maybe_get_presence_number(Endpoint, Call) of
         'undefined' -> maybe_normalize_cid('undefined', Name, Validate, Attribute, Call);
@@ -166,7 +167,7 @@ maybe_prefix_cid_name(Number, Name, Validate, Attribute, Call) ->
     end.
 
 -spec maybe_rewrite_cid_number(ne_binary(), ne_binary(), boolean(), ne_binary(), kapps_call:call()) ->
-                                     {api_binary(), api_binary()}.
+                                      {api_binary(), api_binary()}.
 maybe_rewrite_cid_number(Number, Name, Validate, Attribute, Call) ->
     case rewrite_cid_number(Call) of
         'undefined' -> maybe_rewrite_cid_name(Number, Name, Validate, Attribute, Call);
@@ -176,7 +177,7 @@ maybe_rewrite_cid_number(Number, Name, Validate, Attribute, Call) ->
     end.
 
 -spec maybe_rewrite_cid_name(ne_binary(), ne_binary(), boolean(), ne_binary(), kapps_call:call()) ->
-                                   {api_binary(), api_binary()}.
+                                    {api_binary(), api_binary()}.
 maybe_rewrite_cid_name(Number, Name, Validate, Attribute, Call) ->
     case rewrite_cid_name(Call) of
         'undefined' -> maybe_ensure_cid_valid(Number, Name, Validate, Attribute, Call);
@@ -224,13 +225,13 @@ maybe_cid_privacy(Number, Name, Call) ->
         'true' ->
             lager:info("overriding caller id to maintain privacy"),
             {kapps_config:get_non_empty(<<"callflow">>
-                                        ,<<"privacy_number">>
-                                        ,kz_util:anonymous_caller_id_number()
-                                        )
+                                       ,<<"privacy_number">>
+                                       ,kz_util:anonymous_caller_id_number()
+                                       )
             ,kapps_config:get_non_empty(<<"callflow">>
-                                        ,<<"privacy_name">>
-                                        ,kz_util:anonymous_caller_id_name()
-                                        )
+                                       ,<<"privacy_name">>
+                                       ,kz_util:anonymous_caller_id_name()
+                                       )
             };
         'false' -> {Number, Name}
     end.
@@ -279,33 +280,36 @@ maybe_get_account_default_number(Number, Name, Account, Call) ->
             maybe_get_assigned_number(Number, Name, Call)
     end.
 
--spec maybe_get_assigned_number(ne_binary(), ne_binary(), kapps_call:call()) ->
+-spec maybe_get_assigned_number(ne_binary(), ne_binary(), ne_binary()|kapps_call:call()) ->
                                        {api_binary(), api_binary()}.
-maybe_get_assigned_number(_, Name, Call) ->
-    AccountDb = kapps_call:account_db(Call),
-    case kz_datamgr:open_cache_doc(AccountDb, ?KNM_PHONE_NUMBERS_DOC) of
-        {'error', _R} ->
-            Number = default_cid_number(),
-            lager:warning("could not open ~s doc <~s> ~s: ~p", [?KNM_PHONE_NUMBERS_DOC, Name, Number, _R]),
-            {Number, Name};
-        {'ok', JObj} ->
-            PublicJObj = kz_json:public_fields(JObj),
+maybe_get_assigned_number(CandidateNumber, Name, ?MATCH_ACCOUNT_ENCODED(_)=AccountDb) ->
+    case knm_numbers:account_listing(AccountDb) of
+        [_|_] = NumbersList ->
             Numbers = [Num
-                       || Num <- kz_json:get_keys(PublicJObj)
-                              ,Num =/= <<"id">>
-                              ,(not kz_json:is_true([Num, <<"on_subaccount">>], JObj))
-                              ,(kz_json:get_value([Num, <<"state">>], JObj) =:= ?NUMBER_STATE_IN_SERVICE)
+                       || {Num,JObj} <- NumbersList,
+                          kz_json:get_value(<<"state">>, JObj) =:= ?NUMBER_STATE_IN_SERVICE
                       ],
-            maybe_get_assigned_numbers(Numbers, Name, Call)
-    end.
+            case lists:member(CandidateNumber, Numbers) of
+                'true' ->
+                    {CandidateNumber, Name};
+                'false' ->
+                    maybe_get_assigned_numbers(Numbers, Name)
+            end;
+        _ ->
+            Number = default_cid_number(),
+            lager:warning("no numbers available, proceed with <~s> ~s", [Name, Number]),
+            {Number, Name}
+    end;
+maybe_get_assigned_number(CandidateNumber, Name, Call) ->
+    AccountDb = kapps_call:account_db(Call),
+    maybe_get_assigned_number(CandidateNumber, Name, AccountDb).
 
--spec maybe_get_assigned_numbers(ne_binaries(), ne_binary(), kapps_call:call()) ->
-                                        {api_binary(), api_binary()}.
-maybe_get_assigned_numbers([], Name, _) ->
+-spec maybe_get_assigned_numbers(ne_binaries(), ne_binary()) -> {api_binary(), api_binary()}.
+maybe_get_assigned_numbers([], Name) ->
     Number = default_cid_number(),
     lager:info("failed to find any in-service numbers, using default <~s> ~s", [Name, Number]),
     {Number, Name};
-maybe_get_assigned_numbers([Number|_], Name, _) ->
+maybe_get_assigned_numbers([Number|_], Name) ->
     %% This could optionally cycle all found numbers and ensure they valid
     %% but that could be a lot of wasted db lookups...
     lager:info("using first assigned number caller id <~s> ~s", [Name, Number]),
@@ -429,7 +433,7 @@ owner_id('undefined', _Call) -> 'undefined';
 owner_id(ObjectId, Call) ->
     AccountDb = kapps_call:account_db(Call),
     ViewOptions = [{'key', ObjectId}],
-    case kz_datamgr:get_results(AccountDb, <<"kz_attributes/owner">>, ViewOptions) of
+    case kz_datamgr:get_results(AccountDb, <<"attributes/owner">>, ViewOptions) of
         {'ok', [JObj]} -> kz_json:get_value(<<"value">>, JObj);
         {'ok', []} -> 'undefined';
         {'ok', [_|_]=JObjs} ->
@@ -441,11 +445,12 @@ owner_id(ObjectId, Call) ->
             'undefined'
     end.
 
+-spec owner_ids(api_binary(), kapps_call:call()) -> ne_binaries().
 owner_ids('undefined', _Call) -> [];
 owner_ids(ObjectId, Call) ->
     AccountDb = kapps_call:account_db(Call),
     ViewOptions = [{'key', ObjectId}],
-    case kz_datamgr:get_results(AccountDb, <<"kz_attributes/owner">>, ViewOptions) of
+    case kz_datamgr:get_results(AccountDb, <<"attributes/owner">>, ViewOptions) of
         {'ok', []} -> [];
         {'ok', [JObj]} -> [kz_json:get_value(<<"value">>, JObj)];
         {'ok', [_|_]=JObjs} ->
@@ -507,9 +512,9 @@ owned_by('undefined', _) -> [];
 owned_by(OwnerId, Call) ->
     AccountDb = kapps_call:account_db(Call),
     ViewOptions = [{'startkey', [OwnerId]}
-                   ,{'endkey', [OwnerId, kz_json:new()]}
+                  ,{'endkey', [OwnerId, kz_json:new()]}
                   ],
-    case kz_datamgr:get_results(AccountDb, <<"kz_attributes/owned">>, ViewOptions) of
+    case kz_datamgr:get_results(AccountDb, <<"attributes/owned">>, ViewOptions) of
         {'ok', JObjs} -> [kz_json:get_value(<<"value">>, JObj) || JObj <- JObjs];
         {'error', _R} ->
             lager:warning("unable to find documents owned by ~s: ~p", [OwnerId, _R]),
@@ -530,10 +535,10 @@ owned_by_docs('undefined', _) -> [];
 owned_by_docs(OwnerId, Call) ->
     AccountDb = kapps_call:account_db(Call),
     ViewOptions = [{'startkey', [OwnerId]}
-                   ,{'endkey', [OwnerId, kz_json:new()]}
-                   ,'include_docs'
+                  ,{'endkey', [OwnerId, kz_json:new()]}
+                  ,'include_docs'
                   ],
-    case kz_datamgr:get_results(AccountDb, <<"kz_attributes/owned">>, ViewOptions) of
+    case kz_datamgr:get_results(AccountDb, <<"attributes/owned">>, ViewOptions) of
         {'ok', JObjs} -> [kz_json:get_value(<<"doc">>, JObj) || JObj <- JObjs];
         {'error', _R} ->
             lager:warning("unable to find documents owned by ~s: ~p", [OwnerId, _R]),
@@ -553,7 +558,7 @@ owned_by_query(ViewOptions, Call) ->
     owned_by_query(ViewOptions, Call, <<"value">>).
 owned_by_query(ViewOptions, Call, ViewKey) ->
     AccountDb = kapps_call:account_db(Call),
-    case kz_datamgr:get_results(AccountDb, <<"kz_attributes/owned">>, ViewOptions) of
+    case kz_datamgr:get_results(AccountDb, <<"attributes/owned">>, ViewOptions) of
         {'ok', JObjs} -> [kz_json:get_value(ViewKey, JObj) || JObj <- JObjs];
         {'error', _R} ->
             lager:warning("unable to find owned documents (~p) using ~p", [_R, ViewOptions]),

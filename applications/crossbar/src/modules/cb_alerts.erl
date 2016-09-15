@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% Listing of all expected v1 callbacks
@@ -11,11 +11,11 @@
 -module(cb_alerts).
 
 -export([init/0
-         ,allowed_methods/0, allowed_methods/1
-         ,resource_exists/0, resource_exists/1
-         ,validate/1, validate/2
-         ,put/1
-         ,delete/2
+        ,allowed_methods/0, allowed_methods/1
+        ,resource_exists/0, resource_exists/1
+        ,validate/1, validate/2
+        ,put/1
+        ,delete/2
         ]).
 
 -include("crossbar.hrl").
@@ -41,7 +41,6 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.execute.put.alerts">>, ?MODULE, 'put'),
     _ = crossbar_bindings:bind(<<"*.execute.delete.alerts">>, ?MODULE, 'delete').
 
-
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
@@ -53,7 +52,7 @@ init() ->
 -spec allowed_methods(path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
-allowed_methods(_) ->
+allowed_methods(_AlertId) ->
     [?HTTP_GET, ?HTTP_DELETE].
 
 %%--------------------------------------------------------------------
@@ -121,8 +120,8 @@ delete(Context, _) ->
 validate_alerts(Context, ?HTTP_GET) ->
     summary(Context);
 validate_alerts(Context, ?HTTP_PUT) ->
-    case cb_modules_util:is_superduper_admin(Context) of
-         'true' -> create(Context);
+    case cb_context:is_superduper_admin(Context) of
+        'true' -> create(Context);
         'false' ->
             cb_context:add_system_error('forbidden', Context)
     end.
@@ -155,19 +154,17 @@ create(Context) ->
 
     case kapps_alert:create(Title, Msg, From, To, Props) of
         {'required', Item} ->
-            cb_context:add_validation_error(
-                Item
-                ,<<"required">>
-                ,<<"missing property">>
-                ,Context
-            );
+            cb_context:add_validation_error(Item
+                                           ,<<"required">>
+                                           ,<<"missing property">>
+                                           ,Context
+                                           );
         {'error', 'disabled'} ->
             cb_context:add_system_error('disabled', Context);
         {'ok', JObj} ->
-            Setters = [
-                {fun cb_context:set_resp_status/2, 'success'}
-                ,{fun cb_context:set_doc/2, JObj}
-            ],
+            Setters = [{fun cb_context:set_resp_status/2, 'success'}
+                      ,{fun cb_context:set_doc/2, JObj}
+                      ],
             cb_context:setters(Context, Setters)
     end.
 
@@ -208,12 +205,11 @@ summary(Context) ->
 -spec load_summary(cb_context:context()) -> cb_context:context().
 load_summary(Context) ->
     Context1 = cb_context:set_account_db(Context, ?KZ_ALERTS_DB),
-    crossbar_doc:load_view(
-        ?AVAILABLE_LIST
-        ,[{'keys', view_keys(Context1)}]
-        ,Context1
-        ,fun normalize_view_results/2
-    ).
+    crossbar_doc:load_view(?AVAILABLE_LIST
+                          ,[{'keys', view_keys(Context1)}]
+                          ,Context1
+                          ,fun normalize_view_results/2
+                          ).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -227,13 +223,12 @@ fix_envelope(Context) ->
 
     Alerts = filter_alerts(RespData),
 
-    Setters = [
-        {fun cb_context:set_resp_data/2, Alerts}
-        ,{fun cb_context:set_resp_envelope/2
-          ,kz_json:set_value(<<"page_size">>, erlang:length(Alerts), RespEnv)}
-    ],
+    Setters = [{fun cb_context:set_resp_data/2, Alerts}
+              ,{fun cb_context:set_resp_envelope/2
+               ,kz_json:set_value(<<"page_size">>, erlang:length(Alerts), RespEnv)
+               }
+              ],
     cb_context:setters(Context, Setters).
-
 
 %%--------------------------------------------------------------------
 %% @private
@@ -242,17 +237,18 @@ fix_envelope(Context) ->
 %%--------------------------------------------------------------------
 -spec filter_alerts(kz_json:objects()) -> kz_json:objects().
 filter_alerts(Alerts) ->
-    lists:filter(
-        fun(Alert) ->
-            case kzd_alert:expired(Alert) of
-                'false' -> 'true';
-                'true' ->
-                    _ = kz_util:spawn(fun kapps_alert:delete/1, [kzd_alert:id(Alert)]),
-                    'false'
-            end
-        end
-        ,lists:usort(Alerts)
-    ).
+    [Alert || Alert <- lists:usort(Alerts),
+              should_filter_alert(Alert)
+    ].
+
+-spec should_filter_alert(kzd_alert:doc()) -> boolean().
+should_filter_alert(Alert) ->
+    case kzd_alert:expired(Alert) of
+        'false' -> 'true';
+        'true' ->
+            _ = kz_util:spawn(fun kapps_alert:delete/1, [kzd_alert:id(Alert)]),
+            'false'
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -270,42 +266,39 @@ view_keys(Context) ->
 
     IsAdmin = is_user_admin(AccountId, OwnerId),
 
-    Routines = [
-        fun(K) -> [[<<"all">>, <<"all">>], [<<"all">>, <<"users">>]|K] end
-        ,fun(K) -> [[AccountId, <<"all">>], [AccountId, <<"users">>]|K] end
-        ,fun(K) ->
-            case OwnerId of
-                'undefined' -> K;
-                UserId -> [[AccountId, UserId]|K]
-            end
-        end
-        ,fun(K) ->
-            case kz_services:is_reseller(AccountId) of
-                'false' -> K;
-                'true' -> [[<<"resellers">>, <<"all">>], [<<"resellers">>, <<"users">>]|K]
-            end
-        end
-        ,fun(K) ->
-            case IsAdmin of
-                'false' -> K;
-                'true' ->
-                    [[<<"all">>, <<"admins">>]
-                     ,[AccountId, <<"admins">>]
-                     ,[<<"resellers">>, <<"admins">>]
-                     |K
-                    ]
-            end
-        end
-        ,fun(K) ->
-            lists:foldl(
-                fun(Descendant, Acc) ->
-                    add_descendants(Descendant, IsAdmin, Acc)
+    Routines = [fun(K) ->
+                        [[<<"all">>, <<"all">>]
+                        ,[<<"all">>, <<"users">>]
+                         |K
+                        ]
                 end
-                ,K
-                ,crossbar_util:get_descendants(AccountId)
-            )
-        end
-    ],
+               ,fun(K) -> [[AccountId, <<"all">>], [AccountId, <<"users">>]|K] end
+               ,fun(K) when OwnerId =:= 'undefined' -> K;
+                   (K) -> [[AccountId, OwnerId]|K]
+                end
+               ,fun(K) ->
+                        case kz_services:is_reseller(AccountId) of
+                            'false' -> K;
+                            'true' -> [[<<"resellers">>, <<"all">>], [<<"resellers">>, <<"users">>]|K]
+                        end
+                end
+               ,fun(K) when IsAdmin ->
+                        [[<<"all">>, <<"admins">>]
+                        ,[AccountId, <<"admins">>]
+                        ,[<<"resellers">>, <<"admins">>]
+                         |K
+                        ];
+                   (K) -> K
+                end
+               ,fun(K) ->
+                        lists:foldl(fun(Descendant, Acc) ->
+                                            add_descendants(Descendant, IsAdmin, Acc)
+                                    end
+                                   ,K
+                                   ,crossbar_util:get_descendants(AccountId)
+                                   )
+                end
+               ],
     lists:foldl(fun(F, Keys) -> F(Keys) end, [], Routines).
 
 %%--------------------------------------------------------------------
@@ -336,13 +329,15 @@ is_user_admin(Account, UserId) ->
 -spec add_descendants(ne_binary(), boolean(), list()) -> list().
 add_descendants(Descendant, 'false', Keys) ->
     [[<<"descendants">>, [Descendant, <<"all">>]]
-     ,[<<"descendants">>, [Descendant, <<"users">>]]
-     | Keys];
+    ,[<<"descendants">>, [Descendant, <<"users">>]]
+     | Keys
+    ];
 add_descendants(Descendant, 'true', Keys) ->
     [[<<"descendants">>, [Descendant, <<"all">>]]
-     ,[<<"descendants">>, [Descendant, <<"users">>]]
-     ,[<<"descendants">>, [Descendant, <<"admins">>]]
-     | Keys].
+    ,[<<"descendants">>, [Descendant, <<"users">>]]
+    ,[<<"descendants">>, [Descendant, <<"admins">>]]
+     | Keys
+    ].
 
 %%--------------------------------------------------------------------
 %% @private

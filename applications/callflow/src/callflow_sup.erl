@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz
+%%% @copyright (C) 2011-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -23,22 +23,22 @@
 -define(SERVER, ?MODULE).
 
 -define(ORIGIN_BINDINGS, [[{'type', <<"account">>}]
-                          ,[{'type', <<"user">>}]
-                          ,[{'type', <<"device">>}]
-                          ,[{'type', <<"parked_calls">>}]
-                          ,[{'doc_id', ?MANUAL_PRESENCE_DOC}]
+                         ,[{'type', <<"user">>}]
+                         ,[{'type', <<"device">>}]
+                         ,[{'type', <<"parked_calls">>}]
+                         ,[{'doc_id', ?MANUAL_PRESENCE_DOC}]
                          ]).
 
 -define(CACHE_PROPS, [{'origin_bindings', ?ORIGIN_BINDINGS}
-                      ,'new_node_flush'
-                      ,'channel_reconnect_flush'
+                     ,'new_node_flush'
+                     ,'channel_reconnect_flush'
                      ]).
 
 -define(CHILDREN, [?CACHE_ARGS(?CACHE_NAME, ?CACHE_PROPS)
-                   ,?WORKER('cf_shared_listener')
-                   ,?WORKER('cf_listener')
-                   ,?SUPER('cf_event_handler_sup')
-                   ,?SUPER('cf_exe_sup')
+                  ,?WORKER('cf_shared_listener')
+                  ,?WORKER('cf_listener')
+                  ,?SUPER('cf_event_handler_sup')
+                  ,?SUPER('cf_exe_sup')
                   ]).
 
 %% ===================================================================

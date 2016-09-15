@@ -1,22 +1,21 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2014, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
 %%% @contributors
 %%%-------------------------------------------------------------------
 -module(omnip_message_summary_amqp).
-
 -behaviour(gen_server).
 
 -export([start_link/0]).
 -export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,handle_event/2
-         ,terminate/2
-         ,code_change/3
+        ,handle_call/3
+        ,handle_cast/2
+        ,handle_info/2
+        ,handle_event/2
+        ,terminate/2
+        ,code_change/3
         ]).
 
 -include("omnipresence.hrl").
@@ -24,6 +23,7 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {}).
+-type state() :: #state{}.
 
 %%%===================================================================
 %%% API
@@ -70,6 +70,7 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
@@ -88,13 +89,13 @@ handle_cast({'gen_listener',{'created_queue',_Queue}}, State) ->
     {'noreply', State};
 handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
     {'noreply', State};
-handle_cast({'omnipresence',{'subscribe_notify', <<"message-summary">>, User,
+handle_cast({'omnipresence',{'probe', <<"message-summary">>, User,
                              #omnip_subscription{call_id=CallId}=_Subscription
                             }}, State) ->
     kz_util:put_callid(CallId),
     [Username, Realm] = binary:split(User, <<"@">>),
     Query = [{<<"Username">>, Username}
-             ,{<<"Realm">>, Realm}
+            ,{<<"Realm">>, Realm}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ],
     kz_amqp_worker:cast(Query, fun kapi_presence:publish_mwi_query/1),
@@ -123,6 +124,7 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info(_Info, State) ->
     lager:debug("unhandled info: ~p", [_Info]),
     {'noreply', State}.
@@ -135,6 +137,7 @@ handle_info(_Info, State) ->
 %% @spec handle_event(JObj, State) -> {reply, Options}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_event(kz_json:object(), kz_proplist()) -> handle_event_ret().
 handle_event(_JObj, _State) ->
     {'reply', []}.
 
@@ -149,6 +152,7 @@ handle_event(_JObj, _State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     lager:debug("listener terminating: ~p", [_Reason]).
 
@@ -160,6 +164,7 @@ terminate(_Reason, _State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
@@ -188,20 +193,20 @@ handle_update(JObj, To) ->
     MessagesWaiting = case MessagesNew of 0 -> <<"no">>; _ -> <<"yes">> end,
     Update = props:filter_undefined(
                [{<<"To">>, <<"sip:", To/binary>>}
-                ,{<<"To-User">>, ToUsername}
-                ,{<<"To-Realm">>, ToRealm}
-                ,{<<"From">>, <<"sip:", To/binary>>}
-                ,{<<"From-User">>, ToUsername}
-                ,{<<"From-Realm">>, ToRealm}
-                ,{<<"Call-ID">>, ?FAKE_CALLID(To)}
-                ,{<<"Message-Account">>, <<"sip:", To/binary>>}
-                ,{<<"Messages-Waiting">>, MessagesWaiting}
-                ,{<<"Messages-New">>, MessagesNew}
-                ,{<<"Messages-Saved">>, MessagesSaved}
-                ,{<<"Messages-Urgent">>, MessagesUrgent}
-                ,{<<"Messages-Urgent-Saved">>, MessagesUrgentSaved}
-                ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
-                ,{<<"Event-Package">>, <<"message-summary">>}
+               ,{<<"To-User">>, ToUsername}
+               ,{<<"To-Realm">>, ToRealm}
+               ,{<<"From">>, <<"sip:", To/binary>>}
+               ,{<<"From-User">>, ToUsername}
+               ,{<<"From-Realm">>, ToRealm}
+               ,{<<"Call-ID">>, ?FAKE_CALLID(To)}
+               ,{<<"Message-Account">>, <<"sip:", To/binary>>}
+               ,{<<"Messages-Waiting">>, MessagesWaiting}
+               ,{<<"Messages-New">>, MessagesNew}
+               ,{<<"Messages-Saved">>, MessagesSaved}
+               ,{<<"Messages-Urgent">>, MessagesUrgent}
+               ,{<<"Messages-Urgent-Saved">>, MessagesUrgentSaved}
+               ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
+               ,{<<"Event-Package">>, <<"message-summary">>}
                 | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                ]),
     maybe_send_update(To, Update).
@@ -219,8 +224,8 @@ maybe_send_update(User, Props) ->
 send_update(Stalkers, Props) ->
     {'ok', Worker} = kz_amqp_worker:checkout_worker(),
     _ = [kz_amqp_worker:cast(Props
-                             ,fun(P) -> kapi_omnipresence:publish_update(S, P) end
-                             ,Worker
+                            ,fun(P) -> kapi_omnipresence:publish_update(S, P) end
+                            ,Worker
                             )
          || S <- Stalkers
         ],
@@ -231,7 +236,7 @@ presence_reset(JObj) ->
     Username = kz_json:get_value(<<"Username">>, JObj),
     Realm = kz_json:get_value(<<"Realm">>, JObj),
     Query = [{<<"Username">>, Username}
-             ,{<<"Realm">>, Realm}
+            ,{<<"Realm">>, Realm}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ],
     kz_amqp_worker:cast(Query, fun kapi_presence:publish_mwi_query/1).

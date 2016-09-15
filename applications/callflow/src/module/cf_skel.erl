@@ -1,11 +1,13 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2014, 2600Hz INC
+%%% @copyright (C) 2016, 2600Hz INC
 %%% @doc
 %%% Base module for callflow action
 %%% @end
 %%% @contributors
 %%%-------------------------------------------------------------------
 -module(cf_skel).
+
+-behaviour(gen_cf_action).
 
 -include("callflow.hrl").
 

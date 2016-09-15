@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2015, 2600Hz
+%%% @copyright (C) 2012-2016, 2600Hz
 %%% @doc
 %%% Notify-type requests, like MWI updates, received and processed here
 %%% @end
@@ -7,7 +7,6 @@
 %%%    Karl Anderson
 %%%-------------------------------------------------------------------
 -module(ecallmgr_fs_notify).
-
 -behaviour(gen_listener).
 
 -export([start_link/1, start_link/2]).
@@ -16,41 +15,41 @@
 -export([mwi_update/2]).
 -export([register_overwrite/2]).
 -export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,handle_event/2
-         ,terminate/2
-         ,code_change/3
+        ,handle_call/3
+        ,handle_cast/2
+        ,handle_info/2
+        ,handle_event/2
+        ,terminate/2
+        ,code_change/3
         ]).
 
--record(state, {
-          node :: atom()
-          ,options :: kz_proplist()
-         }).
+-record(state, {node :: atom()
+               ,options :: kz_proplist()
+               }).
+-type state() :: #state{}.
 
 -define(MWI_BODY, "Messages-Waiting: ~s\r\nMessage-Account: ~s\r\nVoice-Message: ~b/~b (~b/~b)\r\n\r\n").
 
--define(BINDINGS, [{'presence', [{'restrict_to', ['mwi_update'
-                                                  ,'register_overwrite'
-                                                  ,'probe'
+-define(BINDINGS, [{'presence', [{'restrict_to', ['mwi_unsolicited_update'
+                                                 ,'register_overwrite'
+                                                 ,'probe'
                                                  ]}
-                                 ,{'probe_type', <<"presence">>}
+                                ,{'probe_type', <<"presence">>}
                                 ]}
-                   ,{'switch', [{'restrict_to', ['check_sync']}]}
+                  ,{'switch', [{'restrict_to', ['check_sync']}]}
                   ]).
 -define(RESPONDERS, [{{?MODULE, 'presence_probe'}
-                      ,[{<<"presence">>, <<"probe">>}]
+                     ,[{<<"presence">>, <<"probe">>}]
                      }
-                     ,{{?MODULE, 'mwi_update'}
-                       ,[{<<"presence">>, <<"mwi_update">>}]
-                      }
-                     ,{{?MODULE, 'register_overwrite'}
-                       ,[{<<"presence">>, <<"register_overwrite">>}]
-                      }
-                     ,{{?MODULE, 'check_sync_api'}
-                       ,[{<<"switch_event">>, <<"check_sync">>}]
-                      }
+                    ,{{?MODULE, 'mwi_update'}
+                     ,[{<<"presence">>, <<"mwi_unsolicited_update">>}]
+                     }
+                    ,{{?MODULE, 'register_overwrite'}
+                     ,[{<<"presence">>, <<"register_overwrite">>}]
+                     }
+                    ,{{?MODULE, 'check_sync_api'}
+                     ,[{<<"switch_event">>, <<"check_sync">>}]
+                     }
                     ]).
 -define(QUEUE_NAME, <<"ecallmgr_fs_notify">>).
 -define(QUEUE_OPTIONS, [{'exclusive', 'false'}]).
@@ -73,13 +72,13 @@
 start_link(Node) -> start_link(Node, []).
 start_link(Node, Options) ->
     gen_listener:start_link(?SERVER
-                            ,[{'responders', ?RESPONDERS}
-                              ,{'bindings', ?BINDINGS}
-                              ,{'queue_name', ?QUEUE_NAME}
-                              ,{'queue_options', ?QUEUE_OPTIONS}
-                              ,{'consume_options', ?CONSUME_OPTIONS}
-                             ]
-                            ,[Node, Options]).
+                           ,[{'responders', ?RESPONDERS}
+                            ,{'bindings', ?BINDINGS}
+                            ,{'queue_name', ?QUEUE_NAME}
+                            ,{'queue_options', ?QUEUE_OPTIONS}
+                            ,{'consume_options', ?CONSUME_OPTIONS}
+                            ]
+                           ,[Node, Options]).
 
 -spec presence_probe(kz_json:object(), kz_proplist()) -> 'ok'.
 presence_probe(JObj, _Props) ->
@@ -97,8 +96,8 @@ presence_probe(JObj, _Props) ->
 resp_to_probe(State, User, Realm) ->
     PresenceId = <<User/binary, "@", Realm/binary>>,
     PresenceUpdate = [{<<"Presence-ID">>, PresenceId}
-                      ,{<<"State">>, State}
-                      ,{<<"Call-ID">>, kz_util:to_hex_binary(crypto:hash(md5, PresenceId))}
+                     ,{<<"State">>, State}
+                     ,{<<"Call-ID">>, kz_util:to_hex_binary(crypto:hash(md5, PresenceId))}
                       | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                      ],
     kz_amqp_worker:cast(PresenceUpdate, fun kapi_presence:publish_update/1).
@@ -108,7 +107,7 @@ check_sync_api(JObj, _Props) ->
     'true' = kapi_switch:check_sync_v(JObj),
     kz_util:put_callid(JObj),
     check_sync(kapi_switch:check_sync_username(JObj)
-               ,kapi_switch:check_sync_realm(JObj)
+              ,kapi_switch:check_sync_realm(JObj)
               ).
 
 -spec check_sync(ne_binary(), ne_binary()) -> 'ok'.
@@ -135,11 +134,11 @@ send_check_sync(Node, Username, Realm, Contact) ->
     AOR = kzsip_uri:ruri(#uri{user=Username, domain=Realm}),
     SIPHeaders = <<"X-KAZOO-AOR : ", AOR/binary, "\r\n">>,
     Headers = [{"profile", ?DEFAULT_FS_PROFILE}
-               ,{"contact-uri", Contact}
-               ,{"extra-headers", SIPHeaders}
-               ,{"to-uri", To}
-               ,{"from-uri", From}
-               ,{"event-string", "check-sync"}
+              ,{"contact-uri", Contact}
+              ,{"extra-headers", SIPHeaders}
+              ,{"to-uri", To}
+              ,{"from-uri", From}
+              ,{"event-string", "check-sync"}
               ],
     Resp = freeswitch:sendevent(Node, 'NOTIFY', Headers),
     lager:info("send check-sync to '~s@~s' via ~s: ~p", [Username, Realm, Node, Resp]).
@@ -147,7 +146,7 @@ send_check_sync(Node, Username, Realm, Contact) ->
 -spec mwi_update(kz_json:object(), kz_proplist()) -> no_return().
 mwi_update(JObj, Props) ->
     _ = kz_util:put_callid(JObj),
-    'true' = kapi_presence:mwi_update_v(JObj),
+    'true' = kapi_presence:mwi_unsolicited_update_v(JObj),
     [Username, Realm] = binary:split(kz_json:get_value(<<"To">>, JObj), <<"@">>),
     case ecallmgr_registrar:lookup_registration(Realm, Username) of
         {'error', 'not_found'} ->
@@ -160,20 +159,20 @@ mwi_update(JObj, Props) ->
 -spec send_mwi_update(kz_json:object(), ne_binary(), ne_binary(), atom(), kz_json:object()) -> 'ok'.
 send_mwi_update(JObj, Username, Realm, Node, Registration) ->
     ToURI = #uri{user=kz_json:get_value(<<"To-User">>, Registration, Username)
-                 ,domain=kz_json:get_value(<<"To-Host">>, Registration, Realm)
+                ,domain=kz_json:get_value(<<"To-Host">>, Registration, Realm)
                 },
     To = kzsip_uri:uri(ToURI),
     ToAccount = kzsip_uri:ruri(ToURI),
     From = kzsip_uri:uri(#uri{user=kz_json:get_value(<<"From-User">>, Registration, Username)
-                                  ,domain=kz_json:get_value(<<"From-Host">>, Registration, Realm)
-                                 }),
+                             ,domain=kz_json:get_value(<<"From-Host">>, Registration, Realm)
+                             }),
     NewMessages = kz_json:get_integer_value(<<"Messages-New">>, JObj, 0),
     Body = io_lib:format(?MWI_BODY, [case NewMessages of 0 -> "no"; _ -> "yes" end
-                                     ,ToAccount
-                                     ,NewMessages
-                                     ,kz_json:get_integer_value(<<"Messages-Saved">>, JObj, 0)
-                                     ,kz_json:get_integer_value(<<"Messages-Urgent">>, JObj, 0)
-                                     ,kz_json:get_integer_value(<<"Messages-Urgent-Saved">>, JObj, 0)
+                                    ,ToAccount
+                                    ,NewMessages
+                                    ,kz_json:get_integer_value(<<"Messages-Saved">>, JObj, 0)
+                                    ,kz_json:get_integer_value(<<"Messages-Urgent">>, JObj, 0)
+                                    ,kz_json:get_integer_value(<<"Messages-Urgent-Saved">>, JObj, 0)
                                     ]),
     RegistrationContact = kz_json:get_first_defined([<<"Bridge-RURI">>, <<"Contact">>], Registration),
     case ensure_contact_user(RegistrationContact, Username, Realm) of
@@ -182,14 +181,14 @@ send_mwi_update(JObj, Username, Realm, Node, Registration) ->
         Contact ->
             SIPHeaders = <<"X-KAZOO-AOR : ", ToAccount/binary, "\r\n">>,
             Headers = [{"profile", ?DEFAULT_FS_PROFILE}
-                       ,{"contact-uri", Contact}
-                       ,{"extra-headers", SIPHeaders}
-                       ,{"to-uri", To}
-                       ,{"from-uri", From}
-                       ,{"event-string", "message-summary"}
-                       ,{"content-type", "application/simple-message-summary"}
-                       ,{"content-length", kz_util:to_list(length(Body))}
-                       ,{"body", lists:flatten(Body)}
+                      ,{"contact-uri", Contact}
+                      ,{"extra-headers", SIPHeaders}
+                      ,{"to-uri", To}
+                      ,{"from-uri", From}
+                      ,{"event-string", "message-summary"}
+                      ,{"content-type", "application/simple-message-summary"}
+                      ,{"content-length", kz_util:to_list(length(Body))}
+                      ,{"body", lists:flatten(Body)}
                       ],
             Resp = freeswitch:sendevent(Node, 'NOTIFY', Headers),
             lager:debug("sent MWI update to '~s' via ~s: ~p", [Contact, Node, Resp])
@@ -202,36 +201,36 @@ register_overwrite(JObj, Props) ->
     Realm = kz_json:get_binary_value(<<"Realm">>, JObj, <<"unknown">>),
     PrevContact = ensure_contact_user(
                     kz_json:get_value(<<"Previous-Contact">>, JObj)
-                    ,Username
-                    ,Realm
+                                     ,Username
+                                     ,Realm
                    ),
     NewContact = ensure_contact_user(
                    kz_json:get_value(<<"Contact">>, JObj)
-                   ,Username
-                   ,Realm
+                                    ,Username
+                                    ,Realm
                   ),
     SipUri = kzsip_uri:uri(#uri{user=Username, domain=Realm}),
     PrevBody = kz_util:to_list(<<"Replaced-By:", (kz_util:to_binary(NewContact))/binary>>),
     NewBody = kz_util:to_list(<<"Overwrote:", (kz_util:to_binary(PrevContact))/binary>>),
     PrevContactHeaders = [{"profile", ?DEFAULT_FS_PROFILE}
-                          ,{"contact", PrevContact}
-                          ,{"contact-uri", PrevContact}
-                          ,{"to-uri", SipUri}
-                          ,{"from-uri", SipUri}
-                          ,{"event-str", "registration-overwrite"}
-                          ,{"content-type", "text/plain"}
-                          ,{"content-length", kz_util:to_list(length(PrevBody))}
-                          ,{"body", PrevBody}
-                         ],
-    NewContactHeaders = [{"profile", ?DEFAULT_FS_PROFILE}
-                         ,{"contact", NewContact}
-                         ,{"contact-uri", NewContact}
+                         ,{"contact", PrevContact}
+                         ,{"contact-uri", PrevContact}
                          ,{"to-uri", SipUri}
                          ,{"from-uri", SipUri}
                          ,{"event-str", "registration-overwrite"}
                          ,{"content-type", "text/plain"}
-                         ,{"content-length", kz_util:to_list(length(NewBody))}
-                         ,{"body", NewBody}
+                         ,{"content-length", kz_util:to_list(length(PrevBody))}
+                         ,{"body", PrevBody}
+                         ],
+    NewContactHeaders = [{"profile", ?DEFAULT_FS_PROFILE}
+                        ,{"contact", NewContact}
+                        ,{"contact-uri", NewContact}
+                        ,{"to-uri", SipUri}
+                        ,{"from-uri", SipUri}
+                        ,{"event-str", "registration-overwrite"}
+                        ,{"content-type", "text/plain"}
+                        ,{"content-length", kz_util:to_list(length(NewBody))}
+                        ,{"body", NewBody}
                         ],
     case PrevContact of
         'undefined' ->
@@ -246,10 +245,10 @@ register_overwrite(JObj, Props) ->
             freeswitch:sendevent(Node, 'NOTIFY', NewContactHeaders)
     end,
     lager:debug("sent registration overwrite update of old '~s' new '~s' via '~s'"
-                ,[PrevContact
-                  ,NewContact
-                  ,Node
-                 ]).
+               ,[PrevContact
+                ,NewContact
+                ,Node
+                ]).
 
 -spec ensure_contact_user(ne_binary(), ne_binary(), ne_binary()) -> api_binary().
 ensure_contact_user(OriginalContact, Username, Realm) ->
@@ -285,6 +284,7 @@ init([Node, Options]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
@@ -298,6 +298,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast(_Msg, State) ->
     {'noreply', State}.
 
@@ -311,6 +312,7 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State}.
@@ -323,6 +325,7 @@ handle_info(_Info, State) ->
 %% @spec handle_event(JObj, State) -> {reply, Options}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_event(kz_json:object(), state()) -> handle_event_ret().
 handle_event(_JObj, #state{node=Node}) ->
     {'reply', [{'node', Node}]}.
 
@@ -337,6 +340,7 @@ handle_event(_JObj, #state{node=Node}) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, #state{node=Node}) ->
     lager:info("notify listener for ~s terminating: ~p", [Node, _Reason]).
 
@@ -348,6 +352,7 @@ terminate(_Reason, #state{node=Node}) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 

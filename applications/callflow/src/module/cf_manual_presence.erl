@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%% "data":{
 %%%   "presence_id":"foo" // for "foo@bar.com"
@@ -10,6 +10,8 @@
 %%%   Karl Anderson
 %%%-------------------------------------------------------------------
 -module(cf_manual_presence).
+
+-behaviour(gen_cf_action).
 
 -export([handle/2]).
 

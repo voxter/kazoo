@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2013, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%% Utility functions for AMQP listeners to use to add/remove responders
 %%% @end
@@ -9,19 +9,15 @@
 -module(listener_utils).
 
 -export([add_responder/3
-         ,rm_responder/3
+        ,rm_responder/3
         ]).
 
--include_lib("kazoo/include/kz_log.hrl").
+-include("listener_types.hrl").
 
 -define(DEFAULT_CALLBACK, 'handle_req').
 
-%% { {Event-Category, Event-Name}, CallbackModule | {CallbackModule, Function} }
--type responder_callback() :: {atom(), atom()}.
--type responder() :: {{binary(), binary()}, responder_callback()}.
--type responders() :: [responder()].
 -export_type([responder/0
-              ,responders/0
+             ,responders/0
              ]).
 
 -spec add_responder(responders(), responder_callback(), kz_json:json_proplist()) -> responders().
@@ -40,7 +36,12 @@ rm_responder(Responders, Responder, []) ->
 %% remove events in Keys for module Responder
 rm_responder(Responders, Responder, Keys) ->
     %% if Evt is in the list of Keys and Module =:= Responder, remove it from the list of Responders
-    [ N || {Evt, Module}=N <- Responders, (not (Module =:= Responder andalso lists:member(Evt, Keys))) ].
+    [ N || {Evt, Module}=N <- Responders,
+           (not (Module =:= Responder
+                 andalso lists:member(Evt, Keys)
+                )
+           )
+    ].
 
 %%--------------------------------------------------------------------
 %% Internal functions
@@ -49,8 +50,10 @@ rm_responder(Responders, Responder, Keys) ->
 -spec is_responder_known(responders(), responder_callback()) -> boolean().
 is_responder_known(Responders, {Responder,_}=Callback) ->
     _ = maybe_load_responder(Responder),
-    erlang:function_exported(Responder, 'init', 0) andalso
-        kz_util:is_false(lists:keyfind(Callback, 2, Responders)).
+    erlang:function_exported(Responder, 'init', 0)
+        andalso kz_util:is_false(lists:keyfind(Callback, 2, Responders));
+is_responder_known(_Responders, Callback)
+  when is_function(Callback) -> 'false'.
 
 maybe_load_responder(Responder) ->
     case erlang:module_loaded(Responder) of
@@ -81,4 +84,4 @@ maybe_init_responder({Responder, _Fun}, 'true') when is_atom(Responder) ->
             lager:debug("responder ~s crashed: ~s: ~p", [Responder, _E, _R]),
             kz_util:log_stacktrace(ST)
     end;
-maybe_init_responder({_Responder, _Fun}, 'false') -> 'ok'.
+maybe_init_responder(_, 'false') -> 'ok'.

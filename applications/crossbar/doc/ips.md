@@ -36,10 +36,13 @@ Key | Description | Type | Default | Required
 
 This can take an optional query string parameter `zone` to filter the results.
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ips
+```
+
+```json
 {
     "auth_token": "{AUTH_TOKEN}",
     "data": [
@@ -49,7 +52,7 @@ curl -v -X GET \
         }
     ],
     "request_id": "{REQUEST_ID}",
-    "revision": "undefined",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -58,11 +61,14 @@ curl -v -X GET \
 
 > POST /v2/accounts/{ACCOUNT_ID}/ips
 
-```curl
+```shell
 curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     -d '{"data":["1.2.3.4"]}' \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ips
+```
+
+```json
 {
     "auth_token": "{AUTH_TOKEN}",
     "data": [
@@ -77,82 +83,91 @@ curl -v -X POST \
         }
     ],
     "request_id": "{REQUEST_ID}",
-    "revision": "undefined",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
 
 #### Remove an IP assignment
 
-> DELETE /v2/accounts/{ACCOUNT_ID}/ips/{IP}
+> DELETE /v2/accounts/{ACCOUNT_ID}/ips/{IP_ADDRESS}
 
-```curl
+```shell
 curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ips/1.2.3.4
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ips/{IP_ADDRESS}
+```
+
+```json
 {
     "auth_token": "{AUTH_TOKEN}",
     "data": {
         "host": "proxy1.us-east.myswitch.com",
         "id": "1.2.3.4",
-        "ip": "1.2.3.4",
+        "ip": "{IP_ADDRESS}",
         "status": "available",
         "type": "dedicated_ip",
         "zone": "us-east"
     },
     "request_id": "{REQUEST_ID}",
-    "revision": "undefined",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
 
 #### Fetch details of the assignment
 
-> GET /v2/accounts/{ACCOUNT_ID}/ips/{IP}
+> GET /v2/accounts/{ACCOUNT_ID}/ips/{IP_ADDRESS}
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ips/{IP}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ips/{IP_ADDRESS}
+```
+
+```json
 {
     "auth_token": "{AUTH_TOKEN}",
     "data": {
         "assigned_to": "{ACCOUNT_ID}",
         "host": "proxy1.us-east.myswitch.com",
-        "id": "1.2.3.4",
-        "ip": "1.2.3.4",
+        "id": "{IP_ADDRESS}",
+        "ip": "{IP_ADDRESS}",
         "status": "assigned",
         "type": "dedicated_ip",
         "zone": "us-east"
     },
     "request_id":"{REQUEST_ID}",
-    "revision":"undefined",
+    "revision":"{REVISION}",
     "status":"success"
 }
 ```
 
 #### Assign a single IP to the account
 
-> POST /v2/accounts/{ACCOUNT_ID}/ips/{IP}
+> POST /v2/accounts/{ACCOUNT_ID}/ips/{IP_ADDRESS}
 
-```curl
+```shell
 curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    -d '{"data":{}}' \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ips/{IP}
+    -d '{"data": {}}' \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ips/{IP_ADDRESS}
+```
+
+```json
 {
     "auth_token": "{AUTH_TOKEN}",
     "data": {
         "assigned_to": "{ACCOUNT_ID}",
         "host": "proxy1.us-east.myswitch.com",
-        "id": "1.2.3.4",
-        "ip": "1.2.3.4",
+        "id": "{IP_ADDRESS}",
+        "ip": "{IP_ADDRESS}",
         "status": "assigned",
         "type": "dedicated_ip",
         "zone": "us-east"
     },
     "request_id":"{REQUEST_ID}",
-    "revision":"undefined",
+    "revision":"{REVISION}",
     "status":"success"
 }
 ```
@@ -161,17 +176,20 @@ curl -v -X POST \
 
 > GET /v2/accounts/{ACCOUNT_ID}/ips/hosts
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ips/hosts
+```
+
+```json
 {
     "auth_token": "{AUTH_TOKEN}",
     "data": [
         "proxy1.us-east.myswitch.com"
     ],
     "request_id": "{REQUEST_ID}",
-    "revision": "undefined",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -180,17 +198,20 @@ curl -v -X GET \
 
 > GET /v2/accounts/{ACCOUNT_ID}/ips/zones
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ips/zones
+```
+
+```json
 {
     "auth_token": "{AUTH_TOKEN}",
     "data": [
         "us-east"
     ],
     "request_id": "{REQUEST_ID}",
-    "revision": "undefined",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -199,10 +220,13 @@ curl -v -X GET \
 
 > GET /v2/accounts/{ACCOUNT_ID}/ips/assigned
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ips/assigned
+```
+
+```json
 {
     "auth_token": "{AUTH_TOKEN}",
     "data": [
@@ -212,7 +236,7 @@ curl -v -X GET \
         }
     ],
     "request_id": "{REQUEST_ID}",
-    "revision": "undefined",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```

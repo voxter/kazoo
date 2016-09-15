@@ -1,24 +1,23 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2014, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
 %%% @contributors
 %%%-------------------------------------------------------------------
 -module(omnip_presence_amqp).
-
 -behaviour(gen_server).
 
 -export([start_link/0
-         ,set_presence_state/2
+        ,set_presence_state/2
         ]).
 -export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,handle_event/2
-         ,terminate/2
-         ,code_change/3
+        ,handle_call/3
+        ,handle_cast/2
+        ,handle_info/2
+        ,handle_event/2
+        ,terminate/2
+        ,code_change/3
         ]).
 
 -include("omnipresence.hrl").
@@ -26,6 +25,7 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {}).
+-type state() :: #state{}.
 
 %%%===================================================================
 %%% API
@@ -72,6 +72,7 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
@@ -90,10 +91,11 @@ handle_cast({'gen_listener',{'created_queue',_Queue}}, State) ->
     {'noreply', State};
 handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
     {'noreply', State};
-handle_cast({'omnipresence',{'subscribe_notify', <<"presence">>, _User,
+handle_cast({'omnipresence',{'probe', <<"presence">> = Package, User,
                              #omnip_subscription{call_id=CallId}=_Subscription
                             }}, State) ->
     kz_util:put_callid(CallId),
+    omnip_util:request_probe(Package, User),
     {'noreply', State};
 handle_cast({'omnipresence',{'presence_update', JObj}}, State) ->
     kz_util:put_callid(JObj),
@@ -137,6 +139,7 @@ handle_info(_Info, State) ->
 %% @spec handle_event(JObj, State) -> {reply, Options}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_event(kz_json:object(), kz_proplist()) -> handle_event_ret().
 handle_event(_JObj, _State) ->
     {'reply', []}.
 
@@ -151,6 +154,7 @@ handle_event(_JObj, _State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     lager:debug("listener terminating: ~p", [_Reason]).
 
@@ -162,6 +166,7 @@ terminate(_Reason, _State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
@@ -252,43 +257,43 @@ handle_update(JObj, State, From, To, Expires) ->
             'true' ->
                 {From, props:filter_undefined(
                          [{<<"From">>, <<"sip:", From/binary>>}
-                          ,{<<"From-User">>, FromUsername}
-                          ,{<<"From-Realm">>, FromRealm}
-                          ,{<<"To">>, <<"sip:", To/binary>>}
-                          ,{<<"To-User">>, ToUsername}
-                          ,{<<"To-Realm">>, ToRealm}
-                          ,{<<"State">>, State}
-                          ,{<<"Expires">>, Expires}
-                          ,{<<"Direction">>, <<"initiator">>}
-                          ,{<<"Call-ID">>, ?FAKE_CALLID(From)}
-                          ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
-                          ,{<<"Event-Package">>, <<"presence">>}
-                          ,{<<"destination">>, ToUsername}
-                          ,{<<"uuid">>, kz_json:get_value(<<"Call-ID">>, JObj)}
-                          ,{<<"user">>, FromUsername}
-                          ,{<<"realm">>, FromRealm}
+                         ,{<<"From-User">>, FromUsername}
+                         ,{<<"From-Realm">>, FromRealm}
+                         ,{<<"To">>, <<"sip:", To/binary>>}
+                         ,{<<"To-User">>, ToUsername}
+                         ,{<<"To-Realm">>, ToRealm}
+                         ,{<<"State">>, State}
+                         ,{<<"Expires">>, Expires}
+                         ,{<<"Direction">>, <<"initiator">>}
+                         ,{<<"Call-ID">>, ?FAKE_CALLID(From)}
+                         ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
+                         ,{<<"Event-Package">>, <<"presence">>}
+                         ,{<<"destination">>, ToUsername}
+                         ,{<<"uuid">>, kz_json:get_value(<<"Call-ID">>, JObj)}
+                         ,{<<"user">>, FromUsername}
+                         ,{<<"realm">>, FromRealm}
                           | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                          ])
                 };
             'false' ->
                 {To, props:filter_undefined(
                        [{<<"From">>, <<"sip:", To/binary>>}
-                        ,{<<"From-User">>, ToUsername}
-                        ,{<<"From-Realm">>, ToRealm}
-                        ,{<<"To">>, <<"sip:", From/binary>>}
-                        ,{<<"To-User">>, FromUsername}
-                        ,{<<"To-Realm">>, FromRealm}
-                        ,{<<"To">>, <<"sip:", From/binary>>}
-                        ,{<<"State">>, State}
-                        ,{<<"Expires">>, Expires}
-                        ,{<<"Direction">>, <<"recipient">>}
-                        ,{<<"Call-ID">>, ?FAKE_CALLID(To)}
-                        ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
-                        ,{<<"Event-Package">>, <<"presence">>}
-                        ,{<<"destination">>, FromUsername}
-                        ,{<<"uuid">>, kz_json:get_value(<<"Call-ID">>, JObj)}
-                        ,{<<"user">>, ToUsername}
-                        ,{<<"realm">>, ToRealm}
+                       ,{<<"From-User">>, ToUsername}
+                       ,{<<"From-Realm">>, ToRealm}
+                       ,{<<"To">>, <<"sip:", From/binary>>}
+                       ,{<<"To-User">>, FromUsername}
+                       ,{<<"To-Realm">>, FromRealm}
+                       ,{<<"To">>, <<"sip:", From/binary>>}
+                       ,{<<"State">>, State}
+                       ,{<<"Expires">>, Expires}
+                       ,{<<"Direction">>, <<"recipient">>}
+                       ,{<<"Call-ID">>, ?FAKE_CALLID(To)}
+                       ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
+                       ,{<<"Event-Package">>, <<"presence">>}
+                       ,{<<"destination">>, FromUsername}
+                       ,{<<"uuid">>, kz_json:get_value(<<"Call-ID">>, JObj)}
+                       ,{<<"user">>, ToUsername}
+                       ,{<<"realm">>, ToRealm}
                         | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                        ])
                 }
@@ -308,8 +313,8 @@ maybe_send_update(User, Props) ->
 send_update(Stalkers, Props) ->
     {'ok', Worker} = kz_amqp_worker:checkout_worker(),
     _ = [kz_amqp_worker:cast(Props
-                             ,fun(P) -> kapi_omnipresence:publish_update(S, P) end
-                             ,Worker
+                            ,fun(P) -> kapi_omnipresence:publish_update(S, P) end
+                            ,Worker
                             )
          || S <- Stalkers
         ],

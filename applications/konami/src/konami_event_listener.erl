@@ -1,40 +1,39 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2014, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
 %%% @contributors
 %%%-------------------------------------------------------------------
 -module(konami_event_listener).
-
 -behaviour(gen_listener).
 
 -export([start_link/0
-         ,add_call_binding/1, add_call_binding/2
-         ,rm_call_binding/1, rm_call_binding/2
-         ,add_konami_binding/1, rm_konami_binding/1
-         ,handle_call_event/2
-         ,handle_originate_event/2
-         ,handle_metaflow_req/2
-         ,handle_metaflow_update/2
-         ,handle_konami/2
-         ,queue_name/0
-         ,bindings/0, bindings/1
-         ,originate/1
+        ,add_call_binding/1, add_call_binding/2
+        ,rm_call_binding/1, rm_call_binding/2
+        ,add_konami_binding/1, rm_konami_binding/1
+        ,handle_call_event/2
+        ,handle_originate_event/2
+        ,handle_metaflow_req/2
+        ,handle_metaflow_update/2
+        ,handle_konami/2
+        ,queue_name/0
+        ,bindings/0, bindings/1
+        ,originate/1
 
-         ,fsms_for_callid/1
-         ,fsms/0, metaflows/0
+        ,fsms_for_callid/1
+        ,fsms/0, metaflows/0
         ]).
 
 -export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,handle_event/2
-         ,terminate/2
-         ,code_change/3
+        ,handle_call/3
+        ,handle_cast/2
+        ,handle_info/2
+        ,handle_event/2
+        ,terminate/2
+        ,code_change/3
 
-         ,cleanup_bindings/1
+        ,cleanup_bindings/1
         ]).
 
 -include("konami.hrl").
@@ -42,58 +41,61 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {cleanup_ref :: reference()}).
+-record(state, {cleanup_ref :: reference()
+               }).
+-type state() :: #state{}.
 
 -define(CLEANUP_TIMEOUT
-        ,kapps_config:get_integer(?APP_NAME, <<"event_cleanup_timeout_ms">>, ?MILLISECONDS_IN_HOUR)
+       ,kapps_config:get_integer(?APP_NAME, <<"event_cleanup_timeout_ms">>, ?MILLISECONDS_IN_HOUR)
        ).
 
 %% By convention, we put the options here in macros, but not required.
 -define(BINDINGS, [{'self', []}]).
 -define(RESPONDERS, [{{?MODULE, 'handle_call_event'}
-                      ,[{<<"call_event">>, <<"*">>}
-                        ,{<<"error">>, <<"*">>}
-                       ]
+                     ,[{<<"call_event">>, <<"*">>}
+                      ,{<<"error">>, <<"*">>}
+                      ]
                      }
-                     ,{{?MODULE, 'handle_originate_event'}
-                       ,[{<<"resource">>, <<"*">>}
-                         ,{<<"error">>, <<"*">>}
-                        ]
-                      }
-                     ,{{?MODULE, 'handle_metaflow_req'}
-                       ,[{<<"metaflow">>, <<"req">>}]
-                      }
-                     ,{{?MODULE, 'handle_metaflow_update'}
-                       ,[{<<"metaflow">>, <<"update">>}]
-                      }
-                     ,{{?MODULE, 'handle_konami'}
-                       ,[{?APP_NAME, <<"*">>}]
-                      }
+                    ,{{?MODULE, 'handle_originate_event'}
+                     ,[{<<"resource">>, <<"*">>}
+                      ,{<<"error">>, <<"*">>}
+                      ]
+                     }
+                    ,{{?MODULE, 'handle_metaflow_req'}
+                     ,[{<<"metaflow">>, <<"action">>}]
+                     }
+                    ,{{?MODULE, 'handle_metaflow_update'}
+                      ,[{<<"metaflow">>, <<"update">>}]
+                     }
+                    ,{{?MODULE, 'handle_konami'}
+                     ,[{?APP_NAME, <<"*">>}]
+                     }
                     ]).
 -define(QUEUE_NAME, <<>>).
 -define(QUEUE_OPTIONS, []).
 -define(CONSUME_OPTIONS, []).
 
 -define(TRACKED_CALL_EVENTS, [<<"DTMF">>, <<"CHANNEL_ANSWER">>
-                              ,<<"CHANNEL_BRIDGE">>, <<"CHANNEL_DESTROY">>
-                              ,<<"CHANNEL_TRANSFEREE">>, <<"CHANNEL_REPLACED">>
+                             ,<<"CHANNEL_BRIDGE">>, <<"CHANNEL_DESTROY">>
+                             ,<<"CHANNEL_TRANSFEREE">>, <<"CHANNEL_REPLACED">>
                              ]).
 
 -define(DYN_BINDINGS(CallId), {'call', [{'restrict_to', ?TRACKED_CALL_EVENTS}
-                                        ,{'callid', CallId}
+                                       ,{'callid', CallId}
                                        ]
                               }).
 -define(DYN_BINDINGS(CallId, Events), {'call', [{'restrict_to', Events}
-                                                ,{'callid', CallId}
+                                               ,{'callid', CallId}
                                                ]
                                       }).
 -define(META_BINDINGS(CallId), {'metaflow', [{'callid', CallId}
-                                             ,{'action', <<"*">>}
-                                             ,'federate'
+                                            ,{'action', <<"*">>}
+                                            ,{'restrict_to', ['action']}
+                                            ,'federate'
                                             ]
                                }).
 -define(KONAMI_BINDINGS(CallId), {'konami', [{'callid', CallId}
-                                             ,{'restrict_to', ['transferred']}
+                                            ,{'restrict_to', ['transferred']}
                                             ]
                                  }).
 -define(KONAMI_REG(CallId), {'p', 'l', {'konami_event', CallId}}).
@@ -108,14 +110,14 @@
 -spec start_link() -> startlink_ret().
 start_link() ->
     gen_listener:start_link({'local', ?SERVER}
-                            ,?MODULE
-                            ,[{'bindings', ?BINDINGS}
-                              ,{'responders', ?RESPONDERS}
-                              ,{'queue_name', ?QUEUE_NAME}       % optional to include
-                              ,{'queue_options', ?QUEUE_OPTIONS} % optional to include
-                              ,{'consume_options', ?CONSUME_OPTIONS} % optional to include
-                             ]
-                            ,[]
+                           ,?MODULE
+                           ,[{'bindings', ?BINDINGS}
+                            ,{'responders', ?RESPONDERS}
+                            ,{'queue_name', ?QUEUE_NAME}       % optional to include
+                            ,{'queue_options', ?QUEUE_OPTIONS} % optional to include
+                            ,{'consume_options', ?CONSUME_OPTIONS} % optional to include
+                            ]
+                           ,[]
                            ).
 
 -spec bindings() -> [{ne_binary(), atoms() | ne_binaries()}].
@@ -228,16 +230,16 @@ handle_originate_event(JObj, _Props) ->
 
 -spec handle_metaflow_req(kz_json:object(), kz_proplist()) -> any().
 handle_metaflow_req(JObj, _Props) ->
-    'true' = kapi_metaflow:req_v(JObj),
+    'true' = kapi_metaflow:action_v(JObj),
 
     CallId = kz_call_event:call_id(JObj),
     Evt = kz_json:from_list(
             [{<<"module">>, kz_json:get_value(<<"Action">>, JObj)}
-             ,{<<"data">>, kz_json:set_value(<<"dtmf_leg">>
-                                             ,CallId
-                                             ,kz_json:get_value(<<"Data">>, JObj, kz_json:new())
-                                            )
-              }
+            ,{<<"data">>, kz_json:set_value(<<"dtmf_leg">>
+                                           ,CallId
+                                           ,kz_json:get_value(<<"Data">>, JObj, kz_json:new())
+                                           )
+             }
             ]),
     relay_to_fsm(CallId, <<"metaflow_exe">>, Evt).
 
@@ -345,6 +347,7 @@ cleanup_timer() ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
@@ -358,6 +361,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast({'originate', Req}, State) ->
     catch kapi_resource:publish_originate_req(Req),
     {'noreply', State};
@@ -383,6 +387,7 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info(?HOOK_EVT(AccountId, <<"CHANNEL_ANSWER">> = EventName, Event), State) ->
     _ = relay_to_fsms(AccountId, EventName, Event),
     {'noreply', State};
@@ -400,6 +405,7 @@ handle_info(_Info, State) ->
 %% @spec handle_event(JObj, State) -> {reply, Options}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_event(kz_json:object(), kz_proplist()) -> handle_event_ret().
 handle_event(_JObj, _State) ->
     {'reply', []}.
 
@@ -414,6 +420,7 @@ handle_event(_JObj, _State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     lager:debug("listener terminating: ~p", [_Reason]).
 
@@ -425,6 +432,7 @@ terminate(_Reason, _State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 

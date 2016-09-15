@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2015, 2600Hz INC
+%%% @copyright (C) 2010-2016, 2600Hz INC
 %%% @doc
 %%% Various utilities - a veritable cornicopia
 %%% @end
@@ -15,12 +15,12 @@
         ,is_ip/1
         ]).
 -export([to_cidr/1
-         ,to_cidr/2
-         ,verify_cidr/2
-         ,expand_cidr/1
+        ,to_cidr/2
+        ,verify_cidr/2
+%%        ,expand_cidr/1
         ]).
 -export([find_nameservers/1
-         ,find_nameservers/2
+        ,find_nameservers/2
         ]).
 -export([resolve/1
         ,resolve/2
@@ -34,21 +34,21 @@
 -export([pretty_print_bytes/1]).
 
 -export([lookup_dns/2
-         ,lookup_dns/3
+        ,lookup_dns/3
         ]).
 
 -export([lookup_timeout/0]).
 -export([new_options/0
-         ,default_options/0
-         ,set_option_alt_nameservers/2
-         ,set_option_edns/2
-         ,set_option_inet6/2
-         ,set_option_nameservers/2
-         ,set_option_recurse/2
-         ,set_option_retry/2
-         ,set_option_timeout/2
-         ,set_option_udp_payload_size/2
-         ,set_option_usevc/2
+        ,default_options/0
+        ,set_option_alt_nameservers/2
+        ,set_option_edns/2
+        ,set_option_inet6/2
+        ,set_option_nameservers/2
+        ,set_option_recurse/2
+        ,set_option_retry/2
+        ,set_option_timeout/2
+        ,set_option_udp_payload_size/2
+        ,set_option_usevc/2
         ]).
 
 -include_lib("kernel/include/inet.hrl").
@@ -65,9 +65,9 @@
 -type mxtuple() :: {integer(), string()}.
 -type options() :: [inet_res:req_option()].
 -export_type([srvtuple/0
-              ,naptrtuple/0
-              ,mxtuple/0
-              ,options/0
+             ,naptrtuple/0
+             ,mxtuple/0
+             ,options/0
              ]).
 
 %%--------------------------------------------------------------------
@@ -117,7 +117,8 @@ is_ipv6(Address) when is_list(Address) ->
 
 -spec is_ip(text()) -> boolean().
 is_ip(Address) ->
-    is_ipv4(Address) orelse is_ipv6(Address).
+    is_ipv4(Address)
+        orelse is_ipv6(Address).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -134,8 +135,8 @@ to_cidr(IP, Prefix) when not is_binary(IP) ->
 to_cidr(IP, Prefix) when not is_binary(Prefix) ->
     to_cidr(IP, kz_util:to_binary(Prefix));
 to_cidr(IP, Prefix) ->
-    case ?MODULE:is_ipv4(IP)
-        andalso  kz_util:to_integer(Prefix) =< 32
+    case is_ipv4(IP)
+        andalso kz_util:to_integer(Prefix) =< 32
     of
         'true' ->
             lager:debug("adjusting ip from ~s to ~s/~s~n", [IP, IP, Prefix]),
@@ -150,35 +151,38 @@ verify_cidr(IP, CIDR) when is_binary(IP) ->
 verify_cidr(IP, CIDR) when is_binary(CIDR) ->
     verify_cidr(IP, kz_util:to_list(CIDR));
 verify_cidr(IP, CIDR) ->
-    %% As per the docs... "This operation should only be used for test purposes"
-    %% so, ummm ya, but probably cheaper then my expand bellow followed by a list
-    %% test.  Just be aware this should only be used where performance is not
-    %% critical
-    case orber_acl:verify(IP, CIDR, 'inet') of
-        'true' -> 'true';
-        {'false', _, _} -> 'false';
-        {'error', _} -> 'false'
-    end.
+    Block = inet_cidr:parse(CIDR),
+    inet_cidr:contains(Block, inet:parse_address(IP)).
 
--spec expand_cidr(text()) -> ne_binaries().
-expand_cidr(CIDR) when is_binary(CIDR) ->
-    expand_cidr(kz_util:to_list(CIDR));
-expand_cidr(CIDR) ->
-    %% EXTREMELY wastefull/naive approach, should never be used, but if you
-    %% must we keep it in a class C
-    case orber_acl:range(CIDR, 'inet') of
-        {'error', _} -> [];
-        {'ok', Start, End} ->
-            [A1, B1, C1, D1] = lists:map(fun kz_util:to_integer/1, string:tokens(Start, ".")),
-            [A2, B2, C2, D2] = lists:map(fun kz_util:to_integer/1, string:tokens(End, ".")),
-            'true' = ((A2 + B2 + C2 + D2) - (A1 + B1 + C1 + D1)) =< 510,
-            [iptuple_to_binary({A,B,C,D})
-             || A <- lists:seq(A1, A2),
-                B <- lists:seq(B1, B2),
-                C <- lists:seq(C1, C2),
-                D <- lists:seq(D1, D2)
-            ]
-    end.
+%%     %% As per the docs... "This operation should only be used for test purposes"
+%%     %% so, ummm ya, but probably cheaper then my expand bellow followed by a list
+%%     %% test.  Just be aware this should only be used where performance is not
+%%     %% critical
+%%     case orber_acl:verify(IP, CIDR, 'inet') of
+%%         'true' -> 'true';
+%%         {'false', _, _} -> 'false';
+%%         {'error', _} -> 'false'
+%%     end.
+
+%% -spec expand_cidr(text()) -> ne_binaries().
+%% expand_cidr(CIDR) when is_binary(CIDR) ->
+%%     expand_cidr(kz_util:to_list(CIDR));
+%% expand_cidr(CIDR) ->
+%%     %% EXTREMELY wastefull/naive approach, should never be used, but if you
+%%     %% must we keep it in a class C
+%%     case orber_acl:range(CIDR, 'inet') of
+%%         {'error', _} -> [];
+%%         {'ok', Start, End} ->
+%%             [A1, B1, C1, D1] = lists:map(fun kz_util:to_integer/1, string:tokens(Start, ".")),
+%%             [A2, B2, C2, D2] = lists:map(fun kz_util:to_integer/1, string:tokens(End, ".")),
+%%             'true' = ((A2 + B2 + C2 + D2) - (A1 + B1 + C1 + D1)) =< 510,
+%%             [iptuple_to_binary({A,B,C,D})
+%%              || A <- lists:seq(A1, A2),
+%%                 B <- lists:seq(B1, B2),
+%%                 C <- lists:seq(C1, C2),
+%%                 D <- lists:seq(D1, D2)
+%%             ]
+%%     end.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -208,7 +212,7 @@ find_nameservers(Domain, Options) ->
         [] ->
             find_nameservers_parent(
               binary:split(Domain, <<".">>, ['global'])
-              ,Options
+                                   ,Options
              );
         Nameservers -> Nameservers
     end.
@@ -266,7 +270,7 @@ maybe_resolve_srv_records(Address, Options) ->
 -spec maybe_resolve_a_records(ne_binaries(), options()) -> ne_binaries().
 maybe_resolve_a_records(Domains, Options) ->
     lists:foldr(fun(Domain, IPs) ->
-                   maybe_resolve_fold(Domain, IPs, Options)
+                        maybe_resolve_fold(Domain, IPs, Options)
                 end, [], Domains).
 
 -spec maybe_resolve_fold(ne_binary(), ne_binaries(), options()) -> ne_binaries().
@@ -303,16 +307,12 @@ iptuple_to_binary({A,B,C,D}) ->
       ,(kz_util:to_binary(C))/binary, "."
       ,(kz_util:to_binary(D))/binary
     >>;
-iptuple_to_binary({I1, I2, I3, I4, I5, I6, I7, I8}) ->
-    <<(kz_util:to_binary(I1))/binary, ":"
-      ,(kz_util:to_binary(I2))/binary, ":"
-      ,(kz_util:to_binary(I3))/binary, ":"
-      ,(kz_util:to_binary(I4))/binary, ":"
-      ,(kz_util:to_binary(I5))/binary, ":"
-      ,(kz_util:to_binary(I6))/binary, ":"
-      ,(kz_util:to_binary(I7))/binary, ":"
-      ,(kz_util:to_binary(I8))/binary, ":"
-    >>.
+iptuple_to_binary({_I1, _I2, _I3, _I4, _I5, _I6, _I7, _I8}=T) ->
+    kz_util:join_binary([to_hex(I) || I <- tuple_to_list(T)], <<":">>).
+
+-spec to_hex(integer()) -> binary().
+to_hex(I) ->
+    kz_util:to_lower_binary(integer_to_binary(I, 16)).
 
 -spec srvtuple_to_binary(srvtuple()) -> ne_binary().
 srvtuple_to_binary({Priority, Weight, Port, Domain}) ->
@@ -435,6 +435,6 @@ maybe_resolve_nameservers([Domain|Values], Nameservers) ->
         Addresses ->
             maybe_resolve_nameservers(
               Values
-              ,[{Address, 53} || Address <- Addresses] ++ Nameservers
+                                     ,[{Address, 53} || Address <- Addresses] ++ Nameservers
              )
     end.

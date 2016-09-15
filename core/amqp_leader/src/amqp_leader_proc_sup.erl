@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2015, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -20,7 +20,7 @@
 -define(SERVER, ?MODULE).
 
 -define(CHILDREN, [?WORKER_ARGS('amqp_leader_listener', [Name])
-                   ,?WORKER_ARGS('amqp_leader_proc', [Name, Nodes, Opts, Module, [], []])
+                  ,?WORKER_ARGS('amqp_leader_proc', [Name, Nodes, Opts, Module, [], []])
                   ]).
 
 %%%===================================================================

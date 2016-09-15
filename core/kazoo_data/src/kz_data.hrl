@@ -12,12 +12,12 @@
 -define(APP_VERSION, <<"4.0.0">>).
 
 -record(data_connection, {id = {kz_util:current_tstamp(), kz_util:rand_hex_binary(4)}
-                          ,app :: atom() | '$1'
-                          ,props = #{} :: #{} | '_'
-                          ,server :: any() | '$2'
-                          ,connected = 'false' :: boolean() | '_'
-                          ,ready = 'false' :: boolean()
-                          ,tag :: atom()
+                         ,app :: atom() | '$1'
+                         ,props = #{} :: #{} | '_'
+                         ,server :: any() | '$2'
+                         ,connected = 'false' :: boolean() | '_'
+                         ,ready = 'false' :: boolean()
+                         ,tag :: atom()
                          }).
 
 -record(db, {app :: atom()
@@ -32,9 +32,9 @@
 -type db() :: #db{}.
 
 -record(copy_doc, {source_dbname  :: ne_binary()
-                   ,source_doc_id  :: ne_binary()
-                   ,dest_dbname = 'undefined' :: api_binary()
-                   ,dest_doc_id = 'undefined' :: api_binary()
+                  ,source_doc_id  :: ne_binary()
+                  ,dest_dbname = 'undefined' :: api_binary()
+                  ,dest_doc_id = 'undefined' :: api_binary()
                   }).
 -type copy_doc() :: #copy_doc{}.
 
@@ -64,10 +64,11 @@
 
 -type stale() :: 'ok' | 'update_after'.
 
--type key_range() :: binary() | [binary() | kz_json:object()].
+-type key_range() :: integer() | binary() | [integer() | binary() | kz_json:object()].
 
 -type view_option() :: 'conflicts' |
                        'descending' |
+                       'first_when_multiple' |
                        'group' |
                        'include_docs' |
                        'inclusive_end' |
@@ -87,9 +88,12 @@
 
 -type view_options() :: list(view_option()).
 
+-type view_listing() :: {ne_binary(), kz_json:object()}.
+-type views_listing() :: [view_listing()].
+
 -type db_classifications() :: 'account' | 'modb' | 'acdc' |
                               'numbers' | 'aggregate' | 'system' |
-                              'deprecated' | 'undefined'.
+                              'resource_selectors' | 'deprecated' | 'undefined'.
 
 -type db_create_options() :: [{'q',integer()} | {'n',integer()}].
 
@@ -110,18 +114,20 @@
 -define(FIXTURES_FOLDER, "fixtures").
 
 -define(PUBLISH_FIELDS, [<<"_deleted">>
-                         ,<<"pvt_account_id">>
-                         ,<<"pvt_created">>
-                         ,<<"pvt_deleted">>
-                         ,<<"pvt_modified">>
-                         ,<<"pvt_type">>
+                        ,<<"pvt_account_id">>
+                        ,<<"pvt_created">>
+                        ,<<"pvt_deleted">>
+                        ,<<"pvt_modified">>
+                        ,<<"pvt_type">>
                         ]).
 
 -define(DELETE_KEYS, [<<"_rev">>, <<"id">>, <<"_attachments">>, <<"pvt_attachments">>]).
 
 -define(MAX_BULK_INSERT, 2000).
 
--define(VALID_DBNAME, is_binary(DbName) andalso byte_size(DbName) > 0).
+-define(VALID_DBNAME, is_binary(DbName)
+        andalso byte_size(DbName) > 0
+       ).
 
 -define(KZ_DATA_HRL, 'true').
 -endif.

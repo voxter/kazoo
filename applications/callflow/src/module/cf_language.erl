@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2014, 2600Hz INC
+%%% @copyright (C) 2016, 2600Hz INC
 %%% @doc
 %%% "data":{"language":"en"}
 %%%
@@ -9,6 +9,8 @@
 %%% @contributors
 %%%-------------------------------------------------------------------
 -module(cf_language).
+
+-behaviour(gen_cf_action).
 
 -include("callflow.hrl").
 
@@ -26,12 +28,9 @@ handle(Data, Call) ->
     lager:info("setting call's language to '~s'", [Lang]),
     Call1 = kapps_call:set_language(Lang, Call),
 
-    kapps_call_command:set(
-      kz_json:from_list([{<<"default_language">>, Lang}])
-      ,'undefined'
-      ,Call1
-     ),
-
+    kapps_call_command:set(kz_json:from_list([{<<"default_language">>, Lang}])
+                          ,'undefined'
+                          ,Call1
+                          ),
     cf_exe:set_call(Call1),
-
     cf_exe:continue(Call1).

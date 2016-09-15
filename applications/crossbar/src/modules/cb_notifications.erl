@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -10,18 +10,18 @@
 -module(cb_notifications).
 
 -export([init/0
-         ,allowed_methods/0, allowed_methods/1, allowed_methods/2
-         ,resource_exists/0, resource_exists/1, resource_exists/2
-         ,content_types_provided/2
-         ,content_types_accepted/2
-         ,validate/1, validate/2, validate/3
-         ,put/1
-         ,post/2, post/3
-         ,delete/2
+        ,allowed_methods/0, allowed_methods/1, allowed_methods/2
+        ,resource_exists/0, resource_exists/1, resource_exists/2
+        ,content_types_provided/2
+        ,content_types_accepted/2
+        ,validate/1, validate/2, validate/3
+        ,put/1
+        ,post/2, post/3
+        ,delete/2
 
-         ,flush/0
+        ,flush/0
 
-         ,acceptable_content_types/0
+        ,acceptable_content_types/0
         ]).
 
 -ifdef(TEST).
@@ -31,7 +31,7 @@
 -include("crossbar.hrl").
 
 -define(NOTIFICATION_MIME_TYPES, [{<<"text">>, <<"html">>}
-                                  ,{<<"text">>, <<"plain">>}
+                                 ,{<<"text">>, <<"plain">>}
                                  ]).
 -define(CB_LIST, <<"notifications/crossbar_listing">>).
 -define(PREVIEW, <<"preview">>).
@@ -45,8 +45,10 @@
 
 -define(MOD_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".notifications">>).
 -define(NOTIFICATION_TIMEOUT
-        ,kapps_config:get_integer(?MOD_CONFIG_CAT, <<"notification_timeout_ms">>, 5 * ?MILLISECONDS_IN_SECOND)
+       ,kapps_config:get_integer(?MOD_CONFIG_CAT, <<"notification_timeout_ms">>, 5 * ?MILLISECONDS_IN_SECOND)
        ).
+
+-define(PVT_TYPE_SMTPLOG, <<"notify_smtp_log">>).
 
 %%%===================================================================
 %%% API
@@ -85,12 +87,12 @@ allowed_methods() ->
 
 allowed_methods(?SMTP_LOG) ->
     [?HTTP_GET];
-allowed_methods(_) ->
+allowed_methods(_NotificationId) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE].
 
-allowed_methods(_, ?PREVIEW) ->
+allowed_methods(_NotificationId, ?PREVIEW) ->
     [?HTTP_POST];
-allowed_methods(?SMTP_LOG, _Id) ->
+allowed_methods(?SMTP_LOG, _SMTPLogId) ->
     [?HTTP_GET];
 allowed_methods(?CUSTOMER_UPDATE, ?MESSAGE) ->
     [?HTTP_POST].
@@ -132,7 +134,7 @@ acceptable_content_types() ->
 -spec content_types_provided(cb_context:context(), path_token()) ->
                                     cb_context:context().
 -spec content_types_provided_for_notifications(cb_context:context(), path_token(), http_method()) ->
-                                    cb_context:context().
+                                                      cb_context:context().
 content_types_provided(Context, ?SMTP_LOG) ->
     Context;
 content_types_provided(Context, Id) ->
@@ -167,7 +169,7 @@ set_content_types(Context, Attachments) ->
     ContentTypes = content_types_from_attachments(Attachments),
     lager:debug("setting content types for attachments: ~p", [ContentTypes]),
     cb_context:set_content_types_provided(Context, [{'to_json', ?JSON_CONTENT_TYPES}
-                                                    ,{'to_binary', ContentTypes}
+                                                   ,{'to_binary', ContentTypes}
                                                    ]).
 
 -spec content_types_from_attachments(kz_json:object()) -> kz_proplist().
@@ -194,7 +196,7 @@ content_types_accepted(Context, _Id) ->
                                                cb_context:context().
 content_types_accepted_for_upload(Context, ?HTTP_POST) ->
     CTA = [{'from_binary', ?NOTIFICATION_MIME_TYPES}
-           ,{'from_json', ?JSON_CONTENT_TYPES}
+          ,{'from_json', ?JSON_CONTENT_TYPES}
           ],
     cb_context:set_content_types_accepted(Context, CTA);
 content_types_accepted_for_upload(Context, _Verb) ->
@@ -266,7 +268,7 @@ disallow_delete(Context, Id) ->
     lager:debug("deleting the system config template is disallowed"),
     Resp =
         [{<<"target">>, Id}
-         ,{<<"message">>, <<"Top-level notification template cannot be deleted">>}
+        ,{<<"message">>, <<"Top-level notification template cannot be deleted">>}
         ],
     cb_context:add_validation_error(Id, <<"disallow">>, kz_json:from_list(Resp), Context).
 
@@ -289,7 +291,7 @@ validate_recipient_id(RecipientId, Context) ->
                ],
     case kz_datamgr:get_results(?KZ_ACCOUNTS_DB, ?ACC_CHILDREN_LIST, ViewOpts) of
         {'ok', Accounts} ->
-            AccountIds = lists:map(fun(Account) -> kz_json:get_value(<<"id">>, Account) end, Accounts),
+            AccountIds = [kz_json:get_value(<<"id">>, Acc) || Acc <- Accounts],
             case lists:member(RecipientId, AccountIds) of
                 'true' -> cb_context:set_resp_status(Context, 'success');
                 'false' -> Context
@@ -338,7 +340,7 @@ post(Context, Id) ->
             do_post(Context);
         [{_FileName, FileJObj}] ->
             lager:debug("POST is for an attachment on ~s(~s)", [Id, kz_notification:db_id(Id)]),
-            update_template(Context, kz_notification:db_id(Id), FileJObj)
+            update_template(Context, Id, FileJObj)
     end.
 
 -spec do_post(cb_context:context()) -> cb_context:context().
@@ -369,8 +371,8 @@ set_system_macros(Context) ->
 -spec post(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 post(Context, ?CUSTOMER_UPDATE, ?MESSAGE) ->
     case kz_amqp_worker:call(build_customer_update_payload(Context)
-                             ,fun kapi_notifications:publish_customer_update/1
-                             ,fun kapi_notifications:customer_update_v/1
+                            ,fun kapi_notifications:publish_customer_update/1
+                            ,fun kapi_notifications:customer_update_v/1
                             )
     of
         {'ok', _Resp} ->
@@ -385,13 +387,13 @@ post(Context, Id, ?PREVIEW) ->
     Notification = cb_context:doc(Context),
     Preview = build_preview_payload(Context, Notification),
     {API, _} = lists:foldl(fun preview_fold/2
-                           ,{Preview, Notification}
-                           ,headers(Id)
+                          ,{Preview, Notification}
+                          ,headers(Id)
                           ),
     case kz_amqp_worker:call(API
-                             ,publish_fun(Id)
-                             ,fun kapi_notifications:notify_update_v/1
-                             ,?NOTIFICATION_TIMEOUT
+                            ,publish_fun(Id)
+                            ,fun kapi_notifications:notify_update_v/1
+                            ,?NOTIFICATION_TIMEOUT
                             )
     of
         {'ok', Resp} ->
@@ -407,16 +409,16 @@ build_customer_update_payload(Context) ->
     SenderId = sender_account_id(Context),
     props:filter_empty(
       [{<<"Account-ID">>, SenderId}
-       ,{<<"Recipient-ID">>, cb_context:req_value(Context, <<"recipient_id">>)}
-       ,{<<"User-Type">>, cb_context:req_value(Context, <<"user_type">>)}
-       ,{<<"Subject">>, cb_context:req_value(Context, <<"subject">>)}
-       ,{<<"From">>, cb_context:req_value(Context, <<"from">>)}
-       ,{<<"Reply-To">>, cb_context:req_value(Context, <<"reply_to">>)}
-       ,{<<"To">>, cb_context:req_value(Context, <<"to">>)}
-       ,{<<"CC">>, cb_context:req_value(Context, <<"cc">>)}
-       ,{<<"BCC">>, cb_context:req_value(Context, <<"bcc">>)}
-       ,{<<"HTML">>, cb_context:req_value(Context, <<"html">>)}
-       ,{<<"Text">>, cb_context:req_value(Context, <<"plain">>)}
+      ,{<<"Recipient-ID">>, cb_context:req_value(Context, <<"recipient_id">>)}
+      ,{<<"User-Type">>, cb_context:req_value(Context, <<"user_type">>)}
+      ,{<<"Subject">>, cb_context:req_value(Context, <<"subject">>)}
+      ,{<<"From">>, cb_context:req_value(Context, <<"from">>)}
+      ,{<<"Reply-To">>, cb_context:req_value(Context, <<"reply_to">>)}
+      ,{<<"To">>, cb_context:req_value(Context, <<"to">>)}
+      ,{<<"CC">>, cb_context:req_value(Context, <<"cc">>)}
+      ,{<<"BCC">>, cb_context:req_value(Context, <<"bcc">>)}
+      ,{<<"HTML">>, cb_context:req_value(Context, <<"html">>)}
+      ,{<<"Text">>, cb_context:req_value(Context, <<"plain">>)}
        | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
       ]).
 
@@ -424,18 +426,18 @@ build_customer_update_payload(Context) ->
 build_preview_payload(Context, Notification) ->
     props:filter_empty(
       [{<<"To">>, kz_json:get_value(<<"to">>, Notification)}
-       ,{<<"From">>, kz_json:get_value(<<"from">>, Notification)}
-       ,{<<"Cc">>, kz_json:get_value(<<"cc">>, Notification)}
-       ,{<<"Bcc">>, kz_json:get_value(<<"bcc">>, Notification)}
-       ,{<<"Reply-To">>, kz_json:get_value(<<"reply_to">>, Notification)}
-       ,{<<"Subject">>, kz_json:get_value(<<"subject">>, Notification)}
-       ,{<<"HTML">>, kz_json:get_value(<<"html">>, Notification)}
-       ,{<<"Text">>, kz_json:get_value(<<"plain">>, Notification)}
-       ,{<<"Account-ID">>, cb_context:account_id(Context)}
-       ,{<<"Account-DB">>, cb_context:account_db(Context)}
-       ,{<<"Msg-ID">>, cb_context:req_id(Context)}
-       ,{<<"Call-ID">>, cb_context:req_id(Context)}
-       ,{<<"Preview">>, 'true'}
+      ,{<<"From">>, kz_json:get_value(<<"from">>, Notification)}
+      ,{<<"Cc">>, kz_json:get_value(<<"cc">>, Notification)}
+      ,{<<"Bcc">>, kz_json:get_value(<<"bcc">>, Notification)}
+      ,{<<"Reply-To">>, kz_json:get_value(<<"reply_to">>, Notification)}
+      ,{<<"Subject">>, kz_json:get_value(<<"subject">>, Notification)}
+      ,{<<"HTML">>, kz_json:get_value(<<"html">>, Notification)}
+      ,{<<"Text">>, kz_json:get_value(<<"plain">>, Notification)}
+      ,{<<"Account-ID">>, cb_context:account_id(Context)}
+      ,{<<"Account-DB">>, cb_context:account_db(Context)}
+      ,{<<"Msg-ID">>, cb_context:req_id(Context)}
+      ,{<<"Call-ID">>, cb_context:req_id(Context)}
+      ,{<<"Preview">>, 'true'}
        | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
       ]).
 
@@ -483,7 +485,7 @@ publish_fun(<<"deregister">>) ->
 publish_fun(<<"transaction">>) ->
     fun kapi_notifications:publish_transaction/1;
 publish_fun(<<"password_recovery">>) ->
-    fun kapi_notifications:publish_pwd_recovery/1;
+    fun kapi_notifications:publish_password_recovery/1;
 publish_fun(<<"system_alert">>) ->
     fun kapi_notifications:publish_system_alert/1;
 publish_fun(<<"cnam_request">>) ->
@@ -676,14 +678,14 @@ read(Context, Id, LoadFrom) ->
 -spec read_system(cb_context:context(), ne_binary()) -> cb_context:context().
 read_system(Context, Id) ->
     crossbar_doc:load(Id
-                      ,cb_context:set_account_db(Context, ?KZ_CONFIG_DB)
-                      ,?TYPE_CHECK_OPTION(kz_notification:pvt_type())).
+                     ,cb_context:set_account_db(Context, ?KZ_CONFIG_DB)
+                     ,?TYPE_CHECK_OPTION(kz_notification:pvt_type())).
 
 -spec read_account(cb_context:context(), ne_binary(), load_from()) -> cb_context:context().
 read_account(Context, Id, LoadFrom) ->
     Context1 = crossbar_doc:load(Id, Context, ?TYPE_CHECK_OPTION(kz_notification:pvt_type())),
     case {cb_context:resp_error_code(Context1)
-          ,cb_context:resp_status(Context1)
+         ,cb_context:resp_status(Context1)
          }
     of
         {404, 'error'} when LoadFrom =:= 'system'; LoadFrom =:= 'system_migrate' ->
@@ -717,9 +719,9 @@ read_system_for_account(Context, Id, LoadFrom) ->
 -spec revert_context_to_account(cb_context:context(), cb_context:context()) -> cb_context:context().
 revert_context_to_account(AccountContext, SystemContext) ->
     cb_context:setters(SystemContext
-                       ,[{fun cb_context:set_account_db/2, cb_context:account_db(AccountContext)}
-                         ,{fun cb_context:set_account_id/2, cb_context:account_id(AccountContext)}
-                        ]).
+                      ,[{fun cb_context:set_account_db/2, cb_context:account_db(AccountContext)}
+                       ,{fun cb_context:set_account_id/2, cb_context:account_id(AccountContext)}
+                       ]).
 
 -spec migrate_template_to_account(cb_context:context(), path_token()) -> cb_context:context().
 migrate_template_to_account(Context, Id) ->
@@ -730,10 +732,7 @@ migrate_template_to_account(Context, Id) ->
     Context1 =
         crossbar_doc:ensure_saved(
           cb_context:set_doc(Context
-                             ,kz_notification:set_base_properties(
-                                kz_doc:public_fields(Template)
-                                ,Id
-                               )
+                            ,kz_notification:set_base_properties(kz_doc:public_fields(Template), Id)
                             )
          ),
     case cb_context:resp_status(Context1) of
@@ -779,11 +778,12 @@ maybe_note_notification_preference(AccountDb, AccountJObj) ->
 note_notification_preference(AccountDb, AccountJObj) ->
     case kz_datamgr:save_doc(AccountDb
                             ,kz_account:set_notification_preference(AccountJObj
-                                                                    ,<<"teletype">>
+                                                                   ,<<"teletype">>
                                                                    )
-                           )
+                            )
     of
-        {'ok', _AccountJObj} ->
+        {'ok', UpdatedAccountJObj} ->
+            _ = cb_accounts:replicate_account_definition(UpdatedAccountJObj),
             lager:debug("updated pref for account");
         {'error', _E} ->
             lager:debug("failed to note preference: ~p", [_E])
@@ -808,16 +808,12 @@ migrate_template_attachment(MasterAccountDb, Id, AName, AMeta, Context) ->
         {'ok', Bin} ->
             ContentType = kz_json:get_value(<<"content_type">>, AMeta),
             lager:debug("saving attachment for ~s(~s): ~s", [Id, AName, ContentType]),
-            Opts = [{'headers'
-                     ,[{'content_type', kz_util:to_list(ContentType)}]
-                    }
-                    | ?TYPE_CHECK_OPTION(kz_notification:pvt_type())
-                   ],
+            Opts = [{'content_type', kz_util:to_list(ContentType)}],
             crossbar_doc:save_attachment(Id
-                                         ,attachment_name_by_content_type(ContentType)
-                                         ,Bin
-                                         ,Context
-                                         ,Opts
+                                        ,attachment_name_by_content_type(ContentType)
+                                        ,Bin
+                                        ,Context
+                                        ,Opts
                                         );
         {'error', _E} ->
             lager:debug("failed to load attachment ~s for ~s: ~p", [AName, Id, _E]),
@@ -831,7 +827,7 @@ note_account_override(JObj) ->
 -spec read_success(cb_context:context()) -> cb_context:context().
 read_success(Context) ->
     cb_context:setters(Context, [fun leak_attachments/1
-                                 ,fun leak_doc_id/1
+                                ,fun leak_doc_id/1
                                 ]).
 
 -spec maybe_read_template(cb_context:context(), ne_binary(), ne_binary()) -> cb_context:context().
@@ -855,32 +851,32 @@ read_template(Context, Id, Accept) ->
             lager:debug("found attachment ~s in ~s", [AttachmentName, Id]),
             cb_context:add_resp_headers(
               read_account_attachment(Context, Id, AttachmentName)
-              ,[{<<"Content-Disposition">>, attachment_filename(Id, Accept)}
-                ,{<<"Content-Type">>, kz_doc:attachment_content_type(Doc, AttachmentName)}
-                ,{<<"Content-Length">>, kz_doc:attachment_length(Doc, AttachmentName)}
-               ])
+                                       ,[{<<"Content-Disposition">>, attachment_filename(Id, Accept)}
+                                        ,{<<"Content-Type">>, kz_doc:attachment_content_type(Doc, AttachmentName)}
+                                        ,{<<"Content-Length">>, kz_doc:attachment_length(Doc, AttachmentName)}
+                                        ])
     end.
 
 -spec attachment_filename(ne_binary(), ne_binary()) -> iolist().
 attachment_filename(Id, Accept) ->
     [<<"attachment; filename=">>
-     ,kz_notification:resp_id(Id)
-     ,$., kz_mime:to_extension(Accept)
+    ,kz_notification:resp_id(Id)
+    ,$., kz_mime:to_extension(Accept)
     ].
 
 -spec read_system_attachment(cb_context:context(), ne_binary(), ne_binary()) -> cb_context:context().
 read_system_attachment(Context, DocId, Name) ->
     crossbar_doc:load_attachment(DocId
-                                 ,Name
-                                 ,?TYPE_CHECK_OPTION(kz_notification:pvt_type())
-                                 ,cb_context:set_account_db(Context, ?KZ_CONFIG_DB)
+                                ,Name
+                                ,?TYPE_CHECK_OPTION(kz_notification:pvt_type())
+                                ,cb_context:set_account_db(Context, ?KZ_CONFIG_DB)
                                 ).
 
 -spec read_account_attachment(cb_context:context(), ne_binary(), ne_binary()) -> cb_context:context().
 read_account_attachment(Context, DocId, Name) ->
     Context1 = crossbar_doc:load_attachment(DocId, Name, ?TYPE_CHECK_OPTION(kz_notification:pvt_type()), Context),
     case {cb_context:resp_error_code(Context1)
-          ,cb_context:resp_status(Context1)
+         ,cb_context:resp_status(Context1)
          }
     of
         {404, 'error'} ->
@@ -920,21 +916,26 @@ update_notification(Context, Id) ->
 -spec update_template(cb_context:context(), path_token(), kz_json:object()) ->
                              cb_context:context().
 update_template(Context, Id, FileJObj) ->
+    DbId = kz_notification:db_id(Id),
     Contents = kz_json:get_value(<<"contents">>, FileJObj),
     CT = kz_json:get_value([<<"headers">>, <<"content_type">>], FileJObj),
-    lager:debug("file content type for ~s: ~s", [Id, CT]),
+    lager:debug("file content type for ~s: ~s", [DbId, CT]),
 
-    Opts = [{'content_type', kz_util:to_list(CT)} | ?TYPE_CHECK_OPTION(kz_notification:pvt_type())], % Temporary until couchbeam update
+    Opts = [{'content_type', kz_util:to_list(CT)}],
 
-    AttachmentName = attachment_name_by_content_type(CT),
-
-    crossbar_doc:save_attachment(
-      Id
-      ,AttachmentName
-      ,Contents
-      ,Context
-      ,Opts
-     ).
+    case kz_template:render(Contents, template_module_name(Id, Context, CT), []) of
+        {'ok', _} ->
+            AttachmentName = attachment_name_by_content_type(CT),
+            crossbar_doc:save_attachment(DbId
+                                        ,AttachmentName
+                                        ,Contents
+                                        ,Context
+                                        ,Opts
+                                        );
+        {'error', Error} ->
+            lager:warning("failed to compile uploaded ~s template: ~p", [CT, Error]),
+            cb_context:add_system_error('faulty_request', Context)
+    end.
 
 -spec attachment_name_by_content_type(ne_binary()) -> ne_binary().
 attachment_name_by_content_type(CT) ->
@@ -943,6 +944,18 @@ attachment_name_by_content_type(CT) ->
 -spec attachment_name_by_media_type(ne_binary()) -> ne_binary().
 attachment_name_by_media_type(CT) ->
     <<"template.", CT/binary>>.
+
+-spec template_module_name(ne_binary(), cb_context:context(), ne_binary()) -> atom().
+template_module_name(Id, Context, CT) ->
+    AccountId = cb_context:account_id(Context),
+    [_C, Type] = binary:split(CT, <<"/">>),
+    kz_util:to_atom(
+      <<AccountId/binary
+        ,"_"
+        ,Id/binary
+        ,"_"
+        ,Type/binary
+      >>, 'true').
 
 %%--------------------------------------------------------------------
 %% @private
@@ -969,9 +982,9 @@ summary_available(Context) ->
 fetch_summary_available(Context) ->
     Context1 =
         crossbar_doc:load_view(?CB_LIST
-                               ,[]
-                               ,cb_context:set_account_db(Context, ?KZ_CONFIG_DB)
-                               ,select_normalize_fun(Context)
+                              ,[]
+                              ,cb_context:set_account_db(Context, ?KZ_CONFIG_DB)
+                              ,select_normalize_fun(Context)
                               ),
     cache_available(Context1),
     Context1.
@@ -979,9 +992,9 @@ fetch_summary_available(Context) ->
 -spec cache_available(cb_context:context()) -> 'ok'.
 cache_available(Context) ->
     kz_cache:store_local(?CACHE_NAME
-                         ,{?MODULE, 'available'}
-                         ,cb_context:doc(Context)
-                         ,[{'origin', [{'db', cb_context:account_db(Context), kz_notification:pvt_type()}]}]
+                        ,{?MODULE, 'available'}
+                        ,cb_context:doc(Context)
+                        ,[{'origin', [{'db', cb_context:account_db(Context), kz_notification:pvt_type()}]}]
                         ).
 
 -spec flush() -> non_neg_integer().
@@ -1002,9 +1015,9 @@ fetch_available() ->
 summary_account(Context) ->
     Context1 =
         crossbar_doc:load_view(?CB_LIST
-                               ,[]
-                               ,Context
-                               ,select_normalize_fun(Context)
+                              ,[]
+                              ,Context
+                              ,select_normalize_fun(Context)
                               ),
     lager:debug("loaded account's summary"),
     summary_account(Context1, cb_context:doc(Context1)).
@@ -1019,8 +1032,8 @@ summary_account(Context, AccountAvailable) ->
 filter_available(Context) ->
     [A || A <- cb_context:doc(Context),
           crossbar_doc:filtered_doc_by_qs(kz_json:from_list([{<<"doc">>, A}])
-                                          ,'true'
-                                          ,Context
+                                         ,'true'
+                                         ,Context
                                          )
     ].
 
@@ -1086,7 +1099,7 @@ normalize_available_port(Value, Acc, Context) ->
 
         _OtherAccountId ->
             lager:debug("another account ~s manages port requests for ~s, not ~s"
-                        ,[_OtherAccountId, AccountId, AuthAccountId]
+                       ,[_OtherAccountId, AccountId, AuthAccountId]
                        ),
             Acc
     end.
@@ -1128,7 +1141,7 @@ on_successful_validation(Id, Context) ->
     Context1 = crossbar_doc:load_merge(Id, CleanedContext, ?TYPE_CHECK_OPTION(kz_notification:pvt_type())),
 
     case {cb_context:resp_status(Context1)
-          ,cb_context:resp_error_code(Context1)
+         ,cb_context:resp_error_code(Context1)
          }
     of
         {'error', 404} ->
@@ -1159,7 +1172,7 @@ handle_missing_system_config_notification(Context, DocId, ReqTemplate) ->
             create_new_notification(Context, DocId, ReqTemplate);
         _AccountId ->
             lager:debug("doc ~s does not exist in the system config, not letting ~s create it"
-                        ,[DocId, _AccountId]
+                       ,[DocId, _AccountId]
                        ),
             crossbar_util:response_bad_identifier(kz_notification:resp_id(DocId), Context)
     end.
@@ -1170,15 +1183,15 @@ create_new_notification(Context, DocId, ReqTemplate) ->
     lager:debug("this will create a new template in the system config"),
     Doc = kz_notification:set_base_properties(ReqTemplate, DocId),
     cb_context:setters(Context
-                       ,[{fun cb_context:set_doc/2, Doc}
-                         ,{fun cb_context:set_account_db/2, ?KZ_CONFIG_DB}
-                         ,{fun cb_context:set_account_id/2, ?KZ_CONFIG_DB}
-                        ]).
+                      ,[{fun cb_context:set_doc/2, Doc}
+                       ,{fun cb_context:set_account_db/2, ?KZ_CONFIG_DB}
+                       ,{fun cb_context:set_account_id/2, ?KZ_CONFIG_DB}
+                       ]).
 
 -spec clean_req_doc(kz_json:object()) -> kz_json:object().
 clean_req_doc(Doc) ->
     kz_json:delete_keys([?MACROS
-                         ,<<"templates">>
+                        ,<<"templates">>
                         ], Doc).
 
 %%--------------------------------------------------------------------
@@ -1190,10 +1203,10 @@ clean_req_doc(Doc) ->
 leak_doc_id(Context) ->
     RespData = cb_context:resp_data(Context),
     cb_context:set_resp_data(Context
-                             ,kz_json:set_value(<<"id">>
-                                                ,kz_notification:resp_id(RespData)
-                                                ,RespData
-                                               )
+                            ,kz_json:set_value(<<"id">>
+                                              ,kz_notification:resp_id(RespData)
+                                              ,RespData
+                                              )
                             ).
 
 -spec leak_attachments(cb_context:context()) -> cb_context:context().
@@ -1206,8 +1219,8 @@ leak_attachments(Context) ->
 -spec leak_attachments_fold(kz_json:key(), kz_json:json_term(), kz_json:object()) -> kz_json:object().
 leak_attachments_fold(_Attachment, Props, Acc) ->
     kz_json:set_value(kz_json:get_value(<<"content_type">>, Props)
-                      ,kz_json:from_list([{<<"length">>, kz_json:get_integer_value(<<"length">>, Props)}])
-                      ,Acc
+                     ,kz_json:from_list([{<<"length">>, kz_json:get_integer_value(<<"length">>, Props)}])
+                     ,Acc
                      ).
 
 -spec load_smtp_log_doc(ne_binary(), cb_context:context()) -> cb_context:context().
@@ -1215,17 +1228,17 @@ load_smtp_log_doc(?MATCH_MODB_PREFIX(YYYY,MM,_) = Id, Context) ->
     Year  = kz_util:to_integer(YYYY),
     Month = kz_util:to_integer(MM),
     crossbar_doc:load(Id
-                      ,cb_context:set_account_modb(Context, Year, Month)
-                      ,?TYPE_CHECK_OPTION(kz_notification:pvt_type())).
+                     ,cb_context:set_account_modb(Context, Year, Month)
+                     ,?TYPE_CHECK_OPTION(?PVT_TYPE_SMTPLOG)).
 
 -spec load_smtp_log(cb_context:context()) -> cb_context:context().
 load_smtp_log(Context) ->
     case cb_modules_util:range_modb_view_options(Context) of
         {'ok', ViewOptions} ->
             crossbar_doc:load_view(?CB_LIST_SMTP_LOG
-                                   ,ViewOptions
-                                   ,Context
-                                   ,fun normalize_view_results/2
+                                  ,ViewOptions
+                                  ,Context
+                                  ,fun normalize_view_results/2
                                   );
         Ctx -> Ctx
     end.

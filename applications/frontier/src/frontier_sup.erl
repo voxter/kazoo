@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2013, 2600Hz
+%%% @copyright (C) 2010-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -19,7 +19,7 @@
 
 %% Helper macro for declaring children of supervisor
 -define(CHILDREN, [?WORKER('frontier_init')
-                   ,?WORKER('frontier_shared_listener')
+                  ,?WORKER('frontier_shared_listener')
                   ]).
 
 %% ===================================================================

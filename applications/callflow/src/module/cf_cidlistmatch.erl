@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%% Handles inspection of incoming caller id and branching to a child
 %%% callflow node accordingly.
@@ -16,6 +16,8 @@
 %%%   Kozlov Yakov
 %%%-------------------------------------------------------------------
 -module(cf_cidlistmatch).
+
+-behaviour(gen_cf_action).
 
 -export([handle/2]).
 
@@ -34,7 +36,7 @@ handle(Data, Call) ->
     AccountDb = kapps_call:account_db(Call),
     lager:debug("comparing caller id ~s with match list ~s entries in ~s", [CallerIdNumber, ListId, AccountDb]),
     case is_matching_prefix(AccountDb, ListId, CallerIdNumber)
-         orelse is_matching_regexp(AccountDb, ListId, CallerIdNumber)
+        orelse is_matching_regexp(AccountDb, ListId, CallerIdNumber)
     of
         'true' -> handle_match(Call);
         'false' -> handle_no_match(Call)

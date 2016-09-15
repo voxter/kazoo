@@ -35,7 +35,8 @@ main(CommandLineArgs, Loops) ->
             main(CommandLineArgs, Loops + 1);
         {'ok', _} ->
             {'ok', Options, Args} = parse_args(CommandLineArgs),
-            lists:member('help', Options) andalso print_help(),
+            lists:member('help', Options)
+                andalso print_help(),
             Verbose = proplists:get_value('verbose', Options) =/= 'undefined',
             Target = get_target(Options, Verbose),
             Module =
@@ -80,9 +81,10 @@ get_target(Options, Verbose) ->
     Host = get_host(Options),
     Cookie = get_cookie(Options, list_to_atom(Node)),
     Target = list_to_atom(Node ++ "@" ++ Host),
-     case net_adm:ping(Target) of
+    case net_adm:ping(Target) of
         'pong' ->
-            Verbose andalso stdout("Connected to service ~s with cookie ~s", [Target, Cookie]),
+            Verbose
+                andalso stdout("Connected to service ~s with cookie ~s", [Target, Cookie]),
             Target;
         'pang' ->
             stderr("Connection to service failed!", []),
@@ -100,7 +102,6 @@ get_cookie(Options, Node) ->
             {_, [C]} -> C;
             {"", []} -> print_no_setcookie()
         end,
-    lager:debug("cookie found (~p)", [CookieStr]),
     Cookie = kz_util:to_atom(CookieStr, 'true'),
     'true' = erlang:set_cookie(node(), Cookie),
     Cookie.
@@ -193,7 +194,7 @@ option_spec_list() ->
     [{'help', $?, "help", 'undefined', "Show the program options"}
     ,{'host', $h, "host", {'string', localhost()}, "System hostname"}
     ,{'node', $n, "node", {'string', "kazoo_apps"}, "Node name"}
-    ,{'cookie', $c, "cookie", {'string', "monster"}, "Erlang cookie"}
+    ,{'cookie', $c, "cookie", {'string', "change_me"}, "Erlang cookie"}
     ,{'timeout', $t, "timeout", {'integer', 0}, "Command timeout"}
     ,{'verbose', $v, "verbose", 'undefined', "Be verbose"}
     ,{'module', 'undefined', 'undefined', 'string', "The name of the remote module"}

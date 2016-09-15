@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2013, 2600Hz
+%%% @copyright (C) 2011-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -22,8 +22,8 @@
 
 %% Helper macro for declaring children of supervisor
 -define(CHILDREN, [?WORKER('hangups_listener')
-                   ,?WORKER('hangups_query_listener')
-                   ,?WORKER('hangups_monitoring')
+                  ,?WORKER('hangups_query_listener')
+                  ,?WORKER('hangups_monitoring')
                   ]).
 
 %% ===================================================================

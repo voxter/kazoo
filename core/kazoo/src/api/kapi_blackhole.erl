@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%% @end
 %%% @contributors
@@ -8,13 +8,13 @@
 -module(kapi_blackhole).
 
 -export([get_req/1, get_req_v/1
-         ,get_resp/1, get_resp_v/1
+        ,get_resp/1, get_resp_v/1
 
-         ,bind_q/2, unbind_q/2
-         ,declare_exchanges/0
+        ,bind_q/2, unbind_q/2
+        ,declare_exchanges/0
 
-         ,publish_get_req/1, publish_get_req/2
-         ,publish_get_resp/2, publish_get_resp/3
+        ,publish_get_req/1, publish_get_req/2
+        ,publish_get_resp/2, publish_get_resp/3
         ]).
 
 -include_lib("kazoo/include/kz_api.hrl").
@@ -132,7 +132,7 @@ declare_exchanges() ->
 publish_get_req(JObj) ->
     publish_get_req(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_get_req(Api, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Api, ?BLACKHOLE_GET_REQ_VALUES, fun ?MODULE:get_req/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Api, ?BLACKHOLE_GET_REQ_VALUES, fun get_req/1),
     amqp_util:sysconf_publish(routing_key_get(), Payload, ContentType).
 
 %%--------------------------------------------------------------------
@@ -145,8 +145,8 @@ publish_get_req(Api, ContentType) ->
 publish_get_resp(RespQ, JObj) ->
     publish_get_resp(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_get_resp(RespQ, Api, ContentType) ->
-    PrepareOptions = [{'formatter', fun ?MODULE:get_resp/1}
-                      ,{'remove_recursive', 'false'}
+    PrepareOptions = [{'formatter', fun get_resp/1}
+                     ,{'remove_recursive', 'false'}
                      ],
     {'ok', Payload} = kz_api:prepare_api_payload(Api, ?BLACKHOLE_GET_RESP_VALUES, PrepareOptions),
     amqp_util:targeted_publish(RespQ, Payload, ContentType).

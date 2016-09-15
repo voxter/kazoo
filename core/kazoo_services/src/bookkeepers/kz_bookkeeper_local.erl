@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2015, 2600Hz, INC
+%%% @copyright (C) 2012-2016, 2600Hz, INC
 %%% @doc
 %%%
 %%% @end
@@ -20,6 +20,7 @@
 %%
 %% @end
 %%--------------------------------------------------------------------
+-spec sync(any(), any()) -> 'ok'.
 sync(_Items, _AccountId) -> 'ok'.
 
 %%--------------------------------------------------------------------
@@ -78,22 +79,19 @@ handle_topup(BillingId, [Transaction|Transactions]) ->
 -spec send_topup_notification(ne_binary(), kz_transaction:transaction()) -> 'ok'.
 send_topup_notification(BillingId, Transaction) ->
     Props = [{<<"Account-ID">>, BillingId}
-             ,{<<"Amount">>, kz_transaction:amount(Transaction)}
-             ,{<<"Response">>, <<"Authorized">>}
-             ,{<<"Success">>, <<"true">>}
+            ,{<<"Amount">>, kz_transaction:amount(Transaction)}
+            ,{<<"Response">>, <<"Authorized">>}
+            ,{<<"Success">>, <<"true">>}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ],
-    case
-        kapps_util:amqp_pool_send(
-          Props
-          ,fun kapi_notifications:publish_topup/1
-         )
+    case kz_amqp_worker:cast(Props
+                            ,fun kapi_notifications:publish_topup/1
+                            )
     of
         'ok' ->
             lager:debug("topup notification sent for ~s", [BillingId]);
         {'error', _R} ->
-            lager:error(
-              "failed to send topup notification for ~s : ~p"
+            lager:error("failed to send topup notification for ~s : ~p"
                        ,[BillingId, _R]
-             )
+                       )
     end.

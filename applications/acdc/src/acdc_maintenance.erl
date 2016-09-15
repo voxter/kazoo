@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2014, 2600Hz
+%%% @copyright (C) 2013-2016, 2600Hz
 %%% @doc
 %%% Helpers for cli commands
 %%% @end
@@ -9,27 +9,27 @@
 -module(acdc_maintenance).
 
 -export([current_calls/1, current_calls/2
-         ,current_statuses/1
-         ,current_queues/1
-         ,current_agents/1
-         ,logout_agents/1, logout_agent/2
-         ,agent_presence_id/2
-         ,migrate_to_acdc_db/0, migrate_to_acdc_db/1, migrate/0
-         ,refresh/0, refresh_account/1
-         ,flush_call_stat/1
-         ,queues_summary/0, queues_summary/1, queue_summary/2
-         ,queues_detail/0, queues_detail/1, queue_detail/2
-         ,queues_restart/1, queue_restart/2
+        ,current_statuses/1
+        ,current_queues/1
+        ,current_agents/1
+        ,logout_agents/1, logout_agent/2
+        ,agent_presence_id/2
+        ,migrate_to_acdc_db/0, migrate_to_acdc_db/1, migrate/0
+        ,refresh/0, refresh_account/1
+        ,flush_call_stat/1
+        ,queues_summary/0, queues_summary/1, queue_summary/2
+        ,queues_detail/0, queues_detail/1, queue_detail/2
+        ,queues_restart/1, queue_restart/2
 
-         ,agents_summary/0, agents_summary/1, agent_summary/2
-         ,agents_detail/0, agents_detail/1, agent_detail/2
-         ,agent_login/2
-         ,agent_logout/2
-         ,agent_pause/2, agent_pause/3
-         ,agent_resume/2
-         ,agent_queue_login/3
-         ,agent_queue_logout/3
-         ,agent_restart/2
+        ,agents_summary/0, agents_summary/1, agent_summary/2
+        ,agents_detail/0, agents_detail/1, agent_detail/2
+        ,agent_login/2
+        ,agent_logout/2
+        ,agent_pause/2, agent_pause/3
+        ,agent_resume/2
+        ,agent_queue_login/3
+        ,agent_queue_logout/3
+        ,agent_restart/2
         ]).
 
 -include("acdc.hrl").
@@ -47,7 +47,7 @@ logout_agent(AccountId, AgentId) ->
     io:format("Sending notice to log out agent ~s (~s)~n", [AgentId, AccountId]),
     Update = props:filter_undefined(
                [{<<"Account-ID">>, AccountId}
-                ,{<<"Agent-ID">>, AgentId}
+               ,{<<"Agent-ID">>, AgentId}
                 | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                ]),
     kapps_util:amqp_pool_send(Update, fun kapi_acdc_agent:publish_logout/1).
@@ -74,8 +74,8 @@ log_current_statuses([A|As], N) ->
 
 log_current_status(A, N) ->
     io:format("~4b | ~35s | ~12s | ~20s |~n", [N, kz_json:get_value(<<"agent_id">>, A)
-                                               ,kz_json:get_value(<<"status">>, A)
-                                               ,kz_util:pretty_print_datetime(kz_json:get_integer_value(<<"timestamp">>, A))
+                                              ,kz_json:get_value(<<"status">>, A)
+                                              ,kz_util:pretty_print_datetime(kz_json:get_integer_value(<<"timestamp">>, A))
                                               ]).
 
 current_queues(AccountId) ->
@@ -88,12 +88,11 @@ current_queues(AccountId) ->
 
 log_current_queues(Agents) ->
     io:format(" ~35s | ~s~n", [<<"Agent ID">>, <<"Queue IDs">>]),
-    _ = [log_current_queue(Agent) || Agent <- Agents],
-    'ok'.
+    lists:foreach(fun log_current_queue/1, Agents).
 log_current_queue(AgentSup) ->
     AgentL = acdc_agent_sup:listener(AgentSup),
     io:format(" ~35s | ~s~n", [acdc_agent_listener:id(AgentL)
-                               ,kz_util:join_binary(acdc_agent_listener:queues(AgentL))
+                              ,kz_util:join_binary(acdc_agent_listener:queues(AgentL))
                               ]).
 
 current_agents(AccountId) ->
@@ -105,13 +104,12 @@ current_agents(AccountId) ->
     end.
 log_current_agents(Queues) ->
     io:format(" ~35s | ~s~n", [<<"Queue ID">>, <<"Agent IDs">>]),
-    _ = [log_current_agent(Queue) || Queue <- Queues],
-    'ok'.
+    lists:foreach(fun log_current_agent/1, Queues).
 log_current_agent(QueueSup) ->
     QueueM = acdc_queue_sup:manager(QueueSup),
     {_AccountId, QueueId} = acdc_queue_manager:config(QueueM),
     io:format(" ~35s | ~s~n", [QueueId
-                               ,kz_util:join_binary(acdc_queue_manager:current_agents(QueueM))
+                              ,kz_util:join_binary(acdc_queue_manager:current_agents(QueueM))
                               ]).
 
 current_calls(AccountId) ->
@@ -122,7 +120,7 @@ current_calls(AccountId) ->
 
 current_calls(AccountId, QueueId) when is_binary(QueueId) ->
     Req = [{<<"Account-ID">>, AccountId}
-           ,{<<"Queue-ID">>, QueueId}
+          ,{<<"Queue-ID">>, QueueId}
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     get_and_show(AccountId, QueueId, Req);
@@ -135,9 +133,9 @@ current_calls(AccountId, Props) ->
 get_and_show(AccountId, QueueId, Req) ->
     kz_util:put_callid(<<"acdc_maint.", AccountId/binary, ".", QueueId/binary>>),
     case kapps_util:amqp_pool_collect(Req
-                                       ,fun kapi_acdc_stats:publish_current_calls_req/1
-                                       ,'acdc'
-                                      )
+                                     ,fun kapi_acdc_stats:publish_current_calls_req/1
+                                     ,'acdc'
+                                     )
     of
         {_, []} ->
             io:format("no call stats returned for account ~s (queue ~s)~n", [AccountId, QueueId]);
@@ -185,7 +183,7 @@ refresh() ->
             lager:debug("refreshed accounts");
         {'error', 'not_found'} ->
             lager:debug("acdc db not found"),
-            lager:debug("consider running acdc_maintenance:migrate() to enable acdc for already-configured accounts");
+            lager:debug("consider running ~s:migrate() to enable acdc for already-configured accounts", [?MODULE]);
         {'error', _E} ->
             lager:debug("failed to query acdc db: ~p", [_E])
     end.
@@ -210,7 +208,7 @@ migrate_to_acdc_db() ->
     {'ok', Accounts} = kz_datamgr:all_docs(?KZ_ACDC_DB),
     _ = [maybe_remove_acdc_account(kz_doc:id(Account)) || Account <- Accounts],
     io:format("removed any missing accounts from ~s~n", [?KZ_ACDC_DB]),
-    _ = [migrate_to_acdc_db(Acct) || Acct <- kapps_util:get_all_accounts('raw')],
+    lists:foreach(fun migrate_to_acdc_db/1, kapps_util:get_all_accounts('raw')),
     io:format("migration complete~n").
 
 -spec maybe_remove_acdc_account(ne_binary()) -> 'ok'.
@@ -235,7 +233,7 @@ migrate_to_acdc_db(AccountId, Retries) ->
     case kz_datamgr:get_results(?KZ_ACDC_DB
                                ,<<"acdc/accounts_listing">>
                                ,[{'key', AccountId}]
-                              )
+                               )
     of
         {'ok', []} ->
             maybe_migrate(AccountId);
@@ -259,10 +257,10 @@ maybe_migrate(AccountId) ->
         {'ok', [_|_]} ->
             io:format("account ~s has queues, adding to acdc db~n", [AccountId]),
             Doc = kz_doc:update_pvt_parameters(kz_json:from_list([{<<"_id">>, AccountId}])
-                                               ,?KZ_ACDC_DB
-                                               ,[{'account_id', AccountId}
-                                                 ,{'type', <<"acdc_activation">>}
-                                                ]),
+                                              ,?KZ_ACDC_DB
+                                              ,[{'account_id', AccountId}
+                                               ,{'type', <<"acdc_activation">>}
+                                               ]),
             kz_datamgr:ensure_saved(?KZ_ACDC_DB, Doc),
             io:format("saved account ~s to db~n", [AccountId]);
         {'error', _E} ->
@@ -284,9 +282,9 @@ flush_call_stat(CallId) ->
         'undefined' -> io:format("nothing found for call ~s~n", [CallId]);
         Call ->
             acdc_stats:call_abandoned(kz_json:get_value(<<"Account-ID">>, Call)
-                                      ,kz_json:get_value(<<"Queue-ID">>, Call)
-                                      ,CallId
-                                      ,<<"INTERNAL_ERROR">>
+                                     ,kz_json:get_value(<<"Queue-ID">>, Call)
+                                     ,CallId
+                                     ,<<"INTERNAL_ERROR">>
                                      ),
             io:format("setting call to 'abandoned'~n", [])
     end.
@@ -323,10 +321,8 @@ queues_detail() ->
     acdc_queues_sup:status().
 queues_detail(AcctId) ->
     kz_util:put_callid(?MODULE),
-    _ = [acdc_queue_sup:status(S)
-         || S <- acdc_queues_sup:find_acct_supervisors(AcctId)
-        ],
-    'ok'.
+    lists:foreach(fun acdc_queue_sup:status/1
+                 ,acdc_queues_sup:find_acct_supervisors(AcctId)).
 queue_detail(AcctId, QueueId) ->
     case acdc_queues_sup:find_queue_supervisor(AcctId, QueueId) of
         'undefined' -> lager:info("no queue ~s in account ~s", [QueueId, AcctId]);
@@ -411,10 +407,8 @@ agents_detail() ->
     acdc_agents_sup:status().
 agents_detail(AcctId) ->
     kz_util:put_callid(?MODULE),
-    _ = [acdc_agent_sup:status(S)
-         || S <- acdc_agents_sup:find_acct_supervisors(AcctId)
-        ],
-    'ok'.
+    lists:foreach(fun acdc_agent_sup:status/1
+                 ,acdc_agents_sup:find_acct_supervisors(AcctId)).
 agent_detail(AcctId, AgentId) ->
     kz_util:put_callid(?MODULE),
     case acdc_agents_sup:find_agent_supervisor(AcctId, AgentId) of
@@ -426,7 +420,7 @@ agent_login(AcctId, AgentId) ->
     kz_util:put_callid(?MODULE),
     Update = props:filter_undefined(
                [{<<"Account-ID">>, AcctId}
-                ,{<<"Agent-ID">>, AgentId}
+               ,{<<"Agent-ID">>, AgentId}
                 |  kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                ]),
     kapps_util:amqp_pool_send(Update, fun kapi_acdc_agent:publish_login/1),
@@ -436,7 +430,7 @@ agent_logout(AcctId, AgentId) ->
     kz_util:put_callid(?MODULE),
     Update = props:filter_undefined(
                [{<<"Account-ID">>, AcctId}
-                ,{<<"Agent-ID">>, AgentId}
+               ,{<<"Agent-ID">>, AgentId}
                 |  kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                ]),
     kapps_util:amqp_pool_send(Update, fun kapi_acdc_agent:publish_logout/1),
@@ -444,14 +438,14 @@ agent_logout(AcctId, AgentId) ->
 
 agent_pause(AcctId, AgentId) ->
     agent_pause(AcctId, AgentId
-                ,kapps_config:get(<<"acdc">>, <<"default_agent_pause_timeout">>, 600)
+               ,kapps_config:get(?CONFIG_CAT, <<"default_agent_pause_timeout">>, 600)
                ).
 agent_pause(AcctId, AgentId, Timeout) ->
     kz_util:put_callid(?MODULE),
     Update = props:filter_undefined(
                [{<<"Account-ID">>, AcctId}
-                ,{<<"Agent-ID">>, AgentId}
-                ,{<<"Timeout">>, kz_util:to_integer(Timeout)}
+               ,{<<"Agent-ID">>, AgentId}
+               ,{<<"Timeout">>, kz_util:to_integer(Timeout)}
                 | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                ]),
     kapps_util:amqp_pool_send(Update, fun kapi_acdc_agent:publish_pause/1),
@@ -461,7 +455,7 @@ agent_resume(AcctId, AgentId) ->
     kz_util:put_callid(?MODULE),
     Update = props:filter_undefined(
                [{<<"Account-ID">>, AcctId}
-                ,{<<"Agent-ID">>, AgentId}
+               ,{<<"Agent-ID">>, AgentId}
                 |  kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                ]),
     kapps_util:amqp_pool_send(Update, fun kapi_acdc_agent:publish_resume/1),
@@ -472,8 +466,8 @@ agent_queue_login(AcctId, AgentId, QueueId) ->
     kz_util:put_callid(?MODULE),
     Update = props:filter_undefined(
                [{<<"Account-ID">>, AcctId}
-                ,{<<"Agent-ID">>, AgentId}
-                ,{<<"Queue-ID">>, QueueId}
+               ,{<<"Agent-ID">>, AgentId}
+               ,{<<"Queue-ID">>, QueueId}
                 |  kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                ]),
     kapps_util:amqp_pool_send(Update, fun kapi_acdc_agent:publish_login_queue/1),
@@ -483,8 +477,8 @@ agent_queue_logout(AcctId, AgentId, QueueId) ->
     kz_util:put_callid(?MODULE),
     Update = props:filter_undefined(
                [{<<"Account-ID">>, AcctId}
-                ,{<<"Agent-ID">>, AgentId}
-                ,{<<"Queue-ID">>, QueueId}
+               ,{<<"Agent-ID">>, AgentId}
+               ,{<<"Queue-ID">>, QueueId}
                 |  kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                ]),
     kapps_util:amqp_pool_send(Update, fun kapi_acdc_agent:publish_logout_queue/1),

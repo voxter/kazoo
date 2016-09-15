@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -20,7 +20,7 @@
 -define(DIALPLAN_REQ_HEADERS, [<<"Dialplan-Command">>]).
 -define(OPTIONAL_DIALPLAN_REQ_HEADERS, [<<"Conference-ID">>, <<"Participant-ID">>]).
 -define(DIALPLAN_REQ_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                              ,{<<"Event-Name">>, <<"dialplan_req">>}
+                             ,{<<"Event-Name">>, <<"dialplan_req">>}
                              ]).
 -define(DIALPLAN_REQ_TYPES, []).
 
@@ -60,5 +60,5 @@ declare_exchanges() ->
 publish_dialplan_req(Queue, JObj) ->
     publish_dialplan_req(Queue, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_dialplan_req(Queue, Req, ContentType) ->
-    {ok, Payload} = kz_api:prepare_api_payload(Req, ?DIALPLAN_REQ_VALUES, fun ?MODULE:dialplan_req/1),
+    {ok, Payload} = kz_api:prepare_api_payload(Req, ?DIALPLAN_REQ_VALUES, fun dialplan_req/1),
     amqp_util:targeted_publish(Queue, Payload, ContentType).

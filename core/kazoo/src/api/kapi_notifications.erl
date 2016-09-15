@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz
+%%% @copyright (C) 2011-2016, 2600Hz
 %%% @doc
 %%% Notification messages, like voicemail left
 %%% @end
@@ -13,71 +13,75 @@
 -export([declare_exchanges/0]).
 
 -export([voicemail/1, voicemail_v/1
-         ,voicemail_full/1, voicemail_full_v/1
-         ,voicemail_saved/1, voicemail_saved_v/1
-         ,fax_inbound/1, fax_inbound_v/1
-         ,fax_inbound_error/1, fax_inbound_error_v/1
-         ,fax_outbound/1, fax_outbound_v/1
-         ,fax_outbound_error/1, fax_outbound_error_v/1
-         ,register/1, register_v/1
-         ,deregister/1, deregister_v/1
-         ,pwd_recovery/1, pwd_recovery_v/1
-         ,new_account/1, new_account_v/1
-         ,new_user/1, new_user_v/1
-         ,port_request/1, port_request_v/1
-         ,port_pending/1, port_pending_v/1
-         ,port_scheduled/1, port_scheduled_v/1
-         ,port_rejected/1, port_rejected_v/1
-         ,port_cancel/1, port_cancel_v/1
-         ,ported/1, ported_v/1
-         ,port_comment/1, port_comment_v/1
-         ,cnam_request/1, cnam_request_v/1
-         ,low_balance/1, low_balance_v/1
-         ,topup/1, topup_v/1
-         ,transaction/1, transaction_v/1
-         ,system_alert/1, system_alert_v/1
-         ,webhook/1, webhook_v/1
-         ,webhook_disabled/1, webhook_disabled_v/1
-         ,service_added/1, service_added_v/1
+        ,voicemail_full/1, voicemail_full_v/1
+        ,voicemail_saved/1, voicemail_saved_v/1
+        ,fax_inbound/1, fax_inbound_v/1
+        ,fax_inbound_error/1, fax_inbound_error_v/1
+        ,fax_outbound/1, fax_outbound_v/1
+        ,fax_outbound_error/1, fax_outbound_error_v/1
+        ,register/1, register_v/1
+        ,deregister/1, deregister_v/1
+        ,first_occurrence/1, first_occurrence_v/1
+        ,password_recovery/1, password_recovery_v/1
+        ,new_account/1, new_account_v/1
+        ,new_user/1, new_user_v/1
+        ,port_unconfirmed/1, port_unconfirmed_v/1
+        ,port_request/1, port_request_v/1
+        ,port_pending/1, port_pending_v/1
+        ,port_scheduled/1, port_scheduled_v/1
+        ,port_rejected/1, port_rejected_v/1
+        ,port_cancel/1, port_cancel_v/1
+        ,ported/1, ported_v/1
+        ,port_comment/1, port_comment_v/1
+        ,cnam_request/1, cnam_request_v/1
+        ,low_balance/1, low_balance_v/1
+        ,topup/1, topup_v/1
+        ,transaction/1, transaction_v/1
+        ,service_added/1, service_added_v/1
+        ,system_alert/1, system_alert_v/1
+        ,webhook/1, webhook_v/1
+        ,webhook_disabled/1, webhook_disabled_v/1
          %% published on completion of notification
-         ,notify_update/1, notify_update_v/1
-         ,denied_emergency_bridge/1, denied_emergency_bridge_v/1
-         ,customer_update/1, customer_update_v/1
-         ,skel/1, skel_v/1
-         ,headers/1
+        ,notify_update/1, notify_update_v/1
+        ,denied_emergency_bridge/1, denied_emergency_bridge_v/1
+        ,customer_update/1, customer_update_v/1
+        ,skel/1, skel_v/1
+        ,headers/1
         ]).
 
 -export([publish_voicemail/1, publish_voicemail/2
-         ,publish_voicemail_full/1, publish_voicemail_full/2
-         ,publish_voicemail_saved/1, publish_voicemail_saved/2
-         ,publish_fax_inbound/1, publish_fax_inbound/2
-         ,publish_fax_outbound/1, publish_fax_outbound/2
-         ,publish_fax_inbound_error/1, publish_fax_inbound_error/2
-         ,publish_fax_outbound_error/1, publish_fax_outbound_error/2
-         ,publish_register/1, publish_register/2
-         ,publish_deregister/1, publish_deregister/2
-         ,publish_pwd_recovery/1, publish_pwd_recovery/2
-         ,publish_new_account/1, publish_new_account/2
-         ,publish_new_user/1, publish_new_user/2
-         ,publish_port_request/1, publish_port_request/2
-         ,publish_port_pending/1, publish_port_pending/2
-         ,publish_port_scheduled/1, publish_port_scheduled/2
-         ,publish_port_rejected/1, publish_port_rejected/2
-         ,publish_port_cancel/1, publish_port_cancel/2
-         ,publish_ported/1, publish_ported/2
-         ,publish_port_comment/1, publish_port_comment/2
-         ,publish_cnam_request/1, publish_cnam_request/2
-         ,publish_low_balance/1, publish_low_balance/2
-         ,publish_topup/1, publish_topup/2
-         ,publish_transaction/1, publish_transaction/2
-         ,publish_service_added/1, publish_service_added/2
-         ,publish_system_alert/1, publish_system_alert/2
-         ,publish_webhook/1, publish_webhook/2
-         ,publish_webhook_disabled/1, publish_webhook_disabled/2
-         ,publish_notify_update/2, publish_notify_update/3
-         ,publish_denied_emergency_bridge/1, publish_denied_emergency_bridge/2
-         ,publish_customer_update/1, publish_customer_update/2
-         ,publish_skel/1, publish_skel/2
+        ,publish_voicemail_full/1, publish_voicemail_full/2
+        ,publish_voicemail_saved/1, publish_voicemail_saved/2
+        ,publish_fax_inbound/1, publish_fax_inbound/2
+        ,publish_fax_outbound/1, publish_fax_outbound/2
+        ,publish_fax_inbound_error/1, publish_fax_inbound_error/2
+        ,publish_fax_outbound_error/1, publish_fax_outbound_error/2
+        ,publish_register/1, publish_register/2
+        ,publish_deregister/1, publish_deregister/2
+        ,publish_first_occurrence/1, publish_first_occurrence/2
+        ,publish_password_recovery/1, publish_password_recovery/2
+        ,publish_new_account/1, publish_new_account/2
+        ,publish_new_user/1, publish_new_user/2
+        ,publish_port_unconfirmed/1, publish_port_unconfirmed/2
+        ,publish_port_request/1, publish_port_request/2
+        ,publish_port_pending/1, publish_port_pending/2
+        ,publish_port_scheduled/1, publish_port_scheduled/2
+        ,publish_port_rejected/1, publish_port_rejected/2
+        ,publish_port_cancel/1, publish_port_cancel/2
+        ,publish_ported/1, publish_ported/2
+        ,publish_port_comment/1, publish_port_comment/2
+        ,publish_cnam_request/1, publish_cnam_request/2
+        ,publish_low_balance/1, publish_low_balance/2
+        ,publish_topup/1, publish_topup/2
+        ,publish_transaction/1, publish_transaction/2
+        ,publish_service_added/1, publish_service_added/2
+        ,publish_system_alert/1, publish_system_alert/2
+        ,publish_webhook/1, publish_webhook/2
+        ,publish_webhook_disabled/1, publish_webhook_disabled/2
+        ,publish_notify_update/2, publish_notify_update/3
+        ,publish_denied_emergency_bridge/1, publish_denied_emergency_bridge/2
+        ,publish_customer_update/1, publish_customer_update/2
+        ,publish_skel/1, publish_skel/2
         ]).
 
 -include_lib("kazoo/include/kz_api.hrl").
@@ -85,10 +89,10 @@
 
 %% supports preview mode
 -define(DEFAULT_OPTIONAL_HEADERS, [<<"To">>, <<"Cc">>, <<"Bcc">>
-                                   ,<<"From">>, <<"Reply-To">>
-                                   ,<<"Subject">>, <<"HTML">>, <<"Text">>
-                                   ,<<"Account-ID">>, <<"Account-DB">>
-                                   ,<<"Preview">>, <<"Attachment-URL">>
+                                  ,<<"From">>, <<"Reply-To">>
+                                  ,<<"Subject">>, <<"HTML">>, <<"Text">>
+                                  ,<<"Account-ID">>, <<"Account-DB">>
+                                  ,<<"Preview">>, <<"Attachment-URL">>
                                   ]).
 
 -define(NOTIFY_VOICEMAIL_SAVED, <<"notifications.voicemail.saved">>).
@@ -98,12 +102,14 @@
 -define(NOTIFY_FAX_INBOUND_ERROR, <<"notifications.fax.inbound_error">>).
 -define(NOTIFY_FAX_OUTBOUND_ERROR, <<"notifications.fax.outbound_error">>).
 -define(NOTIFY_DEREGISTER, <<"notifications.sip.deregister">>).
+-define(NOTIFY_FIRST_OCCURRENCE, <<"notifications.sip.first_occurrence">>).
 %%-define(NOTIFY_REGISTER_OVERWRITE, <<"notifications.sip.register_overwrite">>).
 -define(NOTIFY_REGISTER, <<"notifications.sip.register">>).
--define(NOTIFY_PWD_RECOVERY, <<"notifications.password.recovery">>).
+-define(NOTIFY_PASSWORD_RECOVERY, <<"notifications.user.password_recovery">>).
 -define(NOTIFY_NEW_ACCOUNT, <<"notifications.account.new">>).
 -define(NOTIFY_NEW_USER, <<"notifications.user.new">>).
 %% -define(NOTIFY_DELETE_ACCOUNT, <<"notifications.account.delete">>).
+-define(NOTIFY_PORT_UNCONFIRMED, <<"notifications.number.port_unconfirmed">>).
 -define(NOTIFY_PORT_REQUEST, <<"notifications.number.port">>).
 -define(NOTIFY_PORT_PENDING, <<"notifications.number.port_pending">>).
 -define(NOTIFY_PORT_SCHEDULED, <<"notifications.number.port_scheduled">>).
@@ -125,148 +131,167 @@
 
 %% Notify New Voicemail or Voicemail Saved
 -define(VOICEMAIL_HEADERS, [<<"From-User">>, <<"From-Realm">>
-                            ,<<"To-User">>, <<"To-Realm">>
-                            ,<<"Account-DB">>
-                            ,<<"Voicemail-Box">>, <<"Voicemail-Name">>
-                            ,<<"Voicemail-Timestamp">>
+                           ,<<"To-User">>, <<"To-Realm">>
+                           ,<<"Account-DB">>
+                           ,<<"Voicemail-Box">>, <<"Voicemail-Name">>
+                           ,<<"Voicemail-Timestamp">>
                            ]).
 -define(OPTIONAL_VOICEMAIL_HEADERS, [<<"Voicemail-Length">>, <<"Call-ID">>
-                                     ,<<"Caller-ID-Number">>, <<"Caller-ID-Name">>
-                                     ,<<"Voicemail-Transcription">>
-                                     | ?DEFAULT_OPTIONAL_HEADERS
+                                    ,<<"Caller-ID-Number">>, <<"Caller-ID-Name">>
+                                    ,<<"Voicemail-Transcription">>
+                                         | ?DEFAULT_OPTIONAL_HEADERS
                                     ]).
 -define(VOICEMAIL_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                           ,{<<"Event-Name">>, <<"voicemail_new">>}
+                          ,{<<"Event-Name">>, <<"voicemail_new">>}
                           ]).
 -define(VOICEMAIL_TYPES, []).
 
 -define(VOICEMAIL_SAVED_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                                 ,{<<"Event-Name">>, <<"voicemail_saved">>}
+                                ,{<<"Event-Name">>, <<"voicemail_saved">>}
                                 ]).
 
 %% Notify Voicemail full
 -define(VOICEMAIL_FULL_HEADERS, [<<"Account-DB">>
-                                 ,<<"Voicemail-Box">> ,<<"Voicemail-Number">>
-                                 ,<<"Max-Message-Count">> ,<<"Message-Count">>
+                                ,<<"Voicemail-Box">> ,<<"Voicemail-Number">>
+                                ,<<"Max-Message-Count">> ,<<"Message-Count">>
                                 ]).
 -define(OPTIONAL_VOICEMAIL_FULL_HEADERS, ?DEFAULT_OPTIONAL_HEADERS).
 -define(VOICEMAIL_FULL_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                                ,{<<"Event-Name">>, <<"voicemail_full">>}
+                               ,{<<"Event-Name">>, <<"voicemail_full">>}
                                ]).
 -define(VOICEMAIL_FULL_TYPES, []).
 
 %% Notify New Fax
 -define(FAX_INBOUND_HEADERS, [<<"From-User">>, <<"From-Realm">>
-                              ,<<"To-User">>, <<"To-Realm">>
-                              ,<<"Account-ID">>, <<"Fax-ID">>
+                             ,<<"To-User">>, <<"To-Realm">>
+                             ,<<"Account-ID">>, <<"Fax-ID">>
                              ]).
 -define(OPTIONAL_FAX_INBOUND_HEADERS, [<<"Caller-ID-Name">>, <<"Caller-ID-Number">>
-                                       ,<<"Callee-ID-Name">>, <<"Callee-ID-Number">>
-                                       ,<<"Call-ID">>, <<"Fax-Info">>
-                                       ,<<"Owner-ID">>, <<"FaxBox-ID">>
-                                       ,<<"Fax-Notifications">>, <<"Fax-Timestamp">>
-                                       | ?DEFAULT_OPTIONAL_HEADERS
+                                      ,<<"Callee-ID-Name">>, <<"Callee-ID-Number">>
+                                      ,<<"Call-ID">>, <<"Fax-Info">>
+                                      ,<<"Owner-ID">>, <<"FaxBox-ID">>
+                                      ,<<"Fax-Notifications">>, <<"Fax-Timestamp">>
+                                           | ?DEFAULT_OPTIONAL_HEADERS
                                       ]).
 -define(FAX_INBOUND_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                             ,{<<"Event-Name">>, <<"inbound_fax">>}
+                            ,{<<"Event-Name">>, <<"inbound_fax">>}
                             ]).
 -define(FAX_INBOUND_TYPES, []).
 
 -define(FAX_INBOUND_ERROR_HEADERS, [<<"From-User">>, <<"From-Realm">>
-                                    ,<<"To-User">>, <<"To-Realm">>
-                                    ,<<"Account-ID">>
+                                   ,<<"To-User">>, <<"To-Realm">>
+                                   ,<<"Account-ID">>
                                    ]).
 -define(OPTIONAL_FAX_INBOUND_ERROR_HEADERS, [<<"Caller-ID-Name">>, <<"Caller-ID-Number">>
-                                             ,<<"Callee-ID-Name">>, <<"Callee-ID-Number">>
-                                             ,<<"Call-ID">>, <<"Fax-Info">>, <<"Fax-ID">>
-                                             ,<<"Owner-ID">>, <<"FaxBox-ID">>
-                                             ,<<"Fax-Notifications">>, <<"Fax-Error">>
-                                             ,<<"Fax-Timestamp">>
-                                             | ?DEFAULT_OPTIONAL_HEADERS
+                                            ,<<"Callee-ID-Name">>, <<"Callee-ID-Number">>
+                                            ,<<"Call-ID">>, <<"Fax-Info">>, <<"Fax-ID">>
+                                            ,<<"Owner-ID">>, <<"FaxBox-ID">>
+                                            ,<<"Fax-Notifications">>, <<"Fax-Error">>
+                                            ,<<"Fax-Timestamp">>
+                                                 | ?DEFAULT_OPTIONAL_HEADERS
                                             ]).
 -define(FAX_INBOUND_ERROR_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                                   ,{<<"Event-Name">>, <<"inbound_fax_error">>}
+                                  ,{<<"Event-Name">>, <<"inbound_fax_error">>}
                                   ]).
 -define(FAX_INBOUND_ERROR_TYPES, []).
 
 -define(FAX_OUTBOUND_HEADERS, [<<"Caller-ID-Number">>, <<"Callee-ID-Number">>
-                               ,<<"Account-ID">>, <<"Fax-JobId">>, <<"Fax-ID">>
+                              ,<<"Account-ID">>, <<"Fax-JobId">>, <<"Fax-ID">>
                               ]).
 -define(OPTIONAL_FAX_OUTBOUND_HEADERS, [<<"Caller-ID-Name">>, <<"Callee-ID-Name">>
-                                        ,<<"Call-ID">>, <<"Fax-Info">>
-                                        ,<<"Owner-ID">>, <<"FaxBox-ID">>
-                                        ,<<"Fax-Notifications">>, <<"Fax-Timestamp">>
-                                        | ?DEFAULT_OPTIONAL_HEADERS
+                                       ,<<"Call-ID">>, <<"Fax-Info">>
+                                       ,<<"Owner-ID">>, <<"FaxBox-ID">>
+                                       ,<<"Fax-Notifications">>, <<"Fax-Timestamp">>
+                                            | ?DEFAULT_OPTIONAL_HEADERS
                                        ]).
 -define(FAX_OUTBOUND_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                              ,{<<"Event-Name">>, <<"outbound_fax">>}
+                             ,{<<"Event-Name">>, <<"outbound_fax">>}
                              ]).
 -define(FAX_OUTBOUND_TYPES, []).
 
 -define(FAX_OUTBOUND_ERROR_HEADERS, [<<"Fax-JobId">>, <<"Fax-ID">>]).
 -define(OPTIONAL_FAX_OUTBOUND_ERROR_HEADERS, [<<"Caller-ID-Name">>, <<"Callee-ID-Name">>
-                                              ,<<"Caller-ID-Number">>, <<"Callee-ID-Number">>
-                                              ,<<"Call-ID">>, <<"Fax-Info">>
-                                              ,<<"Owner-ID">>, <<"FaxBox-ID">>
-                                              ,<<"Fax-Notifications">>, <<"Fax-Error">>
-                                              ,<<"Fax-Timestamp">>
-                                              | ?DEFAULT_OPTIONAL_HEADERS
+                                             ,<<"Caller-ID-Number">>, <<"Callee-ID-Number">>
+                                             ,<<"Call-ID">>, <<"Fax-Info">>
+                                             ,<<"Owner-ID">>, <<"FaxBox-ID">>
+                                             ,<<"Fax-Notifications">>, <<"Fax-Error">>
+                                             ,<<"Fax-Timestamp">>
+                                                  | ?DEFAULT_OPTIONAL_HEADERS
                                              ]).
 -define(FAX_OUTBOUND_ERROR_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                                    ,{<<"Event-Name">>, <<"outbound_fax_error">>}
+                                   ,{<<"Event-Name">>, <<"outbound_fax_error">>}
                                    ]).
 -define(FAX_OUTBOUND_ERROR_TYPES, []).
 
 %% Notify Deregister
 -define(DEREGISTER_HEADERS, [<<"Username">>, <<"Realm">>, <<"Account-ID">>]).
--define(OPTIONAL_DEREGISTER_HEADERS, [<<"Status">>, <<"User-Agent">>, <<"Call-ID">>, <<"Profile-Name">>, <<"Presence-Hosts">>
-                                      ,<<"From-User">>, <<"From-Host">>, <<"FreeSWITCH-Hostname">>, <<"RPid">>
-                                      ,<<"To-User">>, <<"To-Host">>, <<"Network-IP">>, <<"Network-Port">>
-                                      ,<<"Event-Timestamp">>, <<"Contact">>, <<"Expires">>, <<"Account-DB">>
-                                      ,<<"Authorizing-ID">>, <<"Suppress-Unregister-Notify">>
-                                      | ?DEFAULT_OPTIONAL_HEADERS
+-define(OPTIONAL_DEREGISTER_HEADERS, [<<"Account-DB">>, <<"Authorizing-ID">>
+                                     ,<<"Call-ID">>, <<"Contact">>
+                                     ,<<"Event-Timestamp">>, <<"Expires">>
+                                     ,<<"FreeSWITCH-Hostname">>, <<"From-Host">>, <<"From-User">>
+                                     ,<<"Network-IP">>, <<"Network-Port">>
+                                     ,<<"Presence-Hosts">>, <<"Profile-Name">>
+                                     ,<<"RPid">>
+                                     ,<<"Status">>, <<"Suppress-Unregister-Notify">>
+                                     ,<<"To-Host">>, <<"To-User">>
+                                     ,<<"User-Agent">>
+                                          | ?DEFAULT_OPTIONAL_HEADERS
                                      ]).
 -define(DEREGISTER_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                            ,{<<"Event-Name">>, <<"deregister">>}
+                           ,{<<"Event-Name">>, <<"deregister">>}
                            ]).
 -define(DEREGISTER_TYPES, []).
 
 %% Notify Register
 -define(REGISTER_HEADERS, [<<"Username">>, <<"Realm">>, <<"Account-ID">>]).
 -define(OPTIONAL_REGISTER_HEADERS, [<<"Owner-ID">>, <<"User-Agent">>, <<"Call-ID">>
-                                    ,<<"From-User">>, <<"From-Host">>
-                                    ,<<"To-User">>, <<"To-Host">>
-                                    ,<<"Network-IP">>, <<"Network-Port">>
-                                    ,<<"Event-Timestamp">>, <<"Contact">>
-                                    ,<<"Expires">>, <<"Account-DB">>
-                                    ,<<"Authorizing-ID">>, <<"Authorizing-Type">>
-                                    ,<<"Suppress-Unregister-Notify">>
-                                    | ?DEFAULT_OPTIONAL_HEADERS
+                                   ,<<"From-User">>, <<"From-Host">>
+                                   ,<<"To-User">>, <<"To-Host">>
+                                   ,<<"Network-IP">>, <<"Network-Port">>
+                                   ,<<"Event-Timestamp">>, <<"Contact">>
+                                   ,<<"Expires">>, <<"Account-DB">>
+                                   ,<<"Authorizing-ID">>, <<"Authorizing-Type">>
+                                   ,<<"Suppress-Unregister-Notify">>
+                                        | ?DEFAULT_OPTIONAL_HEADERS
                                    ]).
 -define(REGISTER_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                          ,{<<"Event-Name">>, <<"register">>}
+                         ,{<<"Event-Name">>, <<"register">>}
                          ]).
 -define(REGISTER_TYPES, []).
 
+%% Notify First Occurrence
+-define(FIRST_OCCURRENCE_HEADERS, [<<"Account-ID">>, <<"Occurrence">>]).
+-define(OPTIONAL_FIRST_OCCURRENCE_HEADERS, ?DEFAULT_OPTIONAL_HEADERS).
+-define(FIRST_OCCURRENCE_VALUES, [{<<"Event-Category">>, <<"notification">>}
+                                 ,{<<"Event-Name">>, <<"first_occurrence">>}
+                                 ]).
+-define(FIRST_OCCURRENCE_TYPES, []).
+
 %% Notify Password Recovery
--define(PWD_RECOVERY_HEADERS, [<<"Email">>, <<"Account-ID">>, <<"Password-Reset-Link">>]).
--define(OPTIONAL_PWD_RECOVERY_HEADERS, [<<"First-Name">>, <<"Last-Name">>
-                                        ,<<"Account-DB">>, <<"Request">>
-                                        | ?DEFAULT_OPTIONAL_HEADERS
-                                       ]).
--define(PWD_RECOVERY_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                              ,{<<"Event-Name">>, <<"password_recovery">>}
-                             ]).
--define(PWD_RECOVERY_TYPES, []).
+-define(PASSWORD_RECOVERY_HEADERS, [<<"Account-ID">>
+                                   ,<<"Email">>
+                                   ,<<"Password-Reset-Link">>
+                                   ]).
+-define(OPTIONAL_PASSWORD_RECOVERY_HEADERS, [<<"Account-DB">>
+                                            ,<<"First-Name">>
+                                            ,<<"Last-Name">>
+                                                 | ?DEFAULT_OPTIONAL_HEADERS
+                                            ]).
+-define(PASSWORD_RECOVERY_VALUES, [{<<"Event-Category">>, <<"notification">>}
+                                  ,{<<"Event-Name">>, <<"password_recovery">>}
+                                  ]).
+-define(PASSWORD_RECOVERY_TYPES, []).
 
 %% Notify New Account
 -define(NEW_ACCOUNT_HEADERS, [<<"Account-ID">>]).
--define(OPTIONAL_NEW_ACCOUNT_HEADERS, [<<"Account-DB">>, <<"Account-Name">>
-                                       ,<<"Account-API-Key">>, <<"Account-Realm">>
-                                       | ?DEFAULT_OPTIONAL_HEADERS
+-define(OPTIONAL_NEW_ACCOUNT_HEADERS, [<<"Account-DB">>
+                                      ,<<"Account-Name">>
+                                      ,<<"Account-API-Key">>
+                                      ,<<"Account-Realm">>
+                                           | ?DEFAULT_OPTIONAL_HEADERS
                                       ]).
 -define(NEW_ACCOUNT_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                             ,{<<"Event-Name">>, <<"new_account">>}
+                            ,{<<"Event-Name">>, <<"new_account">>}
                             ]).
 -define(NEW_ACCOUNT_TYPES, []).
 
@@ -274,99 +299,111 @@
 -define(NEW_USER_HEADERS, [<<"Account-ID">>, <<"User-ID">>, <<"Password">>]).
 -define(OPTIONAL_NEW_USER_HEADERS, ?DEFAULT_OPTIONAL_HEADERS).
 -define(NEW_USER_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                          ,{<<"Event-Name">>, <<"new_user">>}
+                         ,{<<"Event-Name">>, <<"new_user">>}
                          ]).
 -define(NEW_USER_TYPES, []).
+
+%% Notify Port Unconfirmed
+-define(PORT_UNCONFIRMED_HEADERS, [<<"Account-ID">>]).
+-define(OPTIONAL_PORT_UNCONFIRMED_HEADERS, [<<"Authorized-By">>, <<"Port-Request-ID">>
+                                           ,<<"Number-State">>, <<"Local-Number">>
+                                           ,<<"Number">>, <<"Port">>, <<"Version">>
+                                                | ?DEFAULT_OPTIONAL_HEADERS
+                                           ]).
+-define(PORT_UNCONFIRMED_VALUES, [{<<"Event-Category">>, <<"notification">>}
+                                 ,{<<"Event-Name">>, <<"port_unconfirmed">>}
+                                 ]).
+-define(PORT_UNCONFIRMED_TYPES, []).
 
 %% Notify Port Request
 -define(PORT_REQUEST_HEADERS, [<<"Account-ID">>]).
 -define(OPTIONAL_PORT_REQUEST_HEADERS, [<<"Authorized-By">>, <<"Port-Request-ID">>
-                                        ,<<"Number-State">>, <<"Local-Number">>
-                                        ,<<"Number">>, <<"Port">>, <<"Version">>
-                                        | ?DEFAULT_OPTIONAL_HEADERS
+                                       ,<<"Number-State">>, <<"Local-Number">>
+                                       ,<<"Number">>, <<"Port">>, <<"Version">>
+                                            | ?DEFAULT_OPTIONAL_HEADERS
                                        ]).
 -define(PORT_REQUEST_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                              ,{<<"Event-Name">>, <<"port_request">>}
+                             ,{<<"Event-Name">>, <<"port_request">>}
                              ]).
 -define(PORT_REQUEST_TYPES, []).
 
 %% Notify Port Pending
 -define(PORT_PENDING_HEADERS, [<<"Account-ID">>]).
 -define(OPTIONAL_PORT_PENDING_HEADERS, [<<"Authorized-By">>, <<"Port-Request-ID">>
-                                        ,<<"Number-State">>, <<"Local-Number">>
-                                        ,<<"Number">>, <<"Port">>, <<"Version">>
-                                        | ?DEFAULT_OPTIONAL_HEADERS
+                                       ,<<"Number-State">>, <<"Local-Number">>
+                                       ,<<"Number">>, <<"Port">>, <<"Version">>
+                                            | ?DEFAULT_OPTIONAL_HEADERS
                                        ]).
 -define(PORT_PENDING_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                              ,{<<"Event-Name">>, <<"port_pending">>}
+                             ,{<<"Event-Name">>, <<"port_pending">>}
                              ]).
 -define(PORT_PENDING_TYPES, []).
 
 %% Notify Port Scheduled
 -define(PORT_SCHEDULED_HEADERS, [<<"Account-ID">>]).
 -define(OPTIONAL_PORT_SCHEDULED_HEADERS, [<<"Authorized-By">>, <<"Port-Request-ID">>
-                                          ,<<"Number-State">>, <<"Local-Number">>
-                                          ,<<"Number">>, <<"Port">>, <<"Version">>
-                                          | ?DEFAULT_OPTIONAL_HEADERS
+                                         ,<<"Number-State">>, <<"Local-Number">>
+                                         ,<<"Number">>, <<"Port">>, <<"Version">>
+                                              | ?DEFAULT_OPTIONAL_HEADERS
                                          ]).
 -define(PORT_SCHEDULED_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                                ,{<<"Event-Name">>, <<"port_scheduled">>}
+                               ,{<<"Event-Name">>, <<"port_scheduled">>}
                                ]).
 -define(PORT_SCHEDULED_TYPES, []).
 
-% Notify Port Rejected
+                                                % Notify Port Rejected
 -define(PORT_REJECTED_HEADERS, [<<"Account-ID">>]).
 -define(OPTIONAL_PORT_REJECTED_HEADERS, [<<"Authorized-By">>, <<"Port-Request-ID">>
-                                         ,<<"Number-State">>, <<"Local-Number">>
-                                         ,<<"Number">>, <<"Port">>
-                                         | ?DEFAULT_OPTIONAL_HEADERS
+                                        ,<<"Number-State">>, <<"Local-Number">>
+                                        ,<<"Number">>, <<"Port">>
+                                             | ?DEFAULT_OPTIONAL_HEADERS
                                         ]).
 -define(PORT_REJECTED_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                               ,{<<"Event-Name">>, <<"port_rejected">>}
+                              ,{<<"Event-Name">>, <<"port_rejected">>}
                               ]).
 -define(PORT_REJECTED_TYPES, []).
 
-% Notify Port Cancel
+                                                % Notify Port Cancel
 -define(PORT_CANCEL_HEADERS, [<<"Account-ID">>]).
 -define(OPTIONAL_PORT_CANCEL_HEADERS, [<<"Authorized-By">>, <<"Port-Request-ID">>
-                                       ,<<"Number-State">>, <<"Local-Number">>
-                                       ,<<"Number">>, <<"Port">>
-                                       | ?DEFAULT_OPTIONAL_HEADERS
+                                      ,<<"Number-State">>, <<"Local-Number">>
+                                      ,<<"Number">>, <<"Port">>
+                                           | ?DEFAULT_OPTIONAL_HEADERS
                                       ]).
 -define(PORT_CANCEL_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                             ,{<<"Event-Name">>, <<"port_cancel">>}
+                            ,{<<"Event-Name">>, <<"port_cancel">>}
                             ]).
 -define(PORT_CANCEL_TYPES, []).
 
 %% Notify Ported Request
 -define(PORTED_HEADERS, [<<"Account-ID">>]).
 -define(OPTIONAL_PORTED_HEADERS, [<<"Number-State">>, <<"Local-Number">>, <<"Authorized-By">>, <<"Request">>
-                                  ,<<"Port-Request-ID">>, <<"Number">>, <<"Port">>
-                                  | ?DEFAULT_OPTIONAL_HEADERS
+                                 ,<<"Port-Request-ID">>, <<"Number">>, <<"Port">>
+                                      | ?DEFAULT_OPTIONAL_HEADERS
                                  ]).
 -define(PORTED_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                        ,{<<"Event-Name">>, <<"ported">>}
+                       ,{<<"Event-Name">>, <<"ported">>}
                        ]).
 -define(PORTED_TYPES, []).
 
 %% Notify Ported Request
 -define(PORT_COMMENT_HEADERS, [<<"Account-ID">>]).
 -define(OPTIONAL_PORT_COMMENT_HEADERS, [<<"Number-State">>, <<"Local-Number">>, <<"Authorized-By">>, <<"Request">>
-                                        ,<<"Port-Request-ID">>, <<"Number">>, <<"Port">>
-                                        | ?DEFAULT_OPTIONAL_HEADERS
+                                       ,<<"Port-Request-ID">>, <<"Number">>, <<"Port">>
+                                            | ?DEFAULT_OPTIONAL_HEADERS
                                        ]).
 -define(PORT_COMMENT_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                              ,{<<"Event-Name">>, <<"port_comment">>}
+                             ,{<<"Event-Name">>, <<"port_comment">>}
                              ]).
 -define(PORT_COMMENT_TYPES, []).
 
 %% Notify Cnam Request
 -define(CNAM_REQUEST_HEADERS, [<<"Account-ID">>, <<"Number">>, <<"Cnam">>]).
 -define(OPTIONAL_CNAM_REQUEST_HEADERS, [<<"Number-State">>, <<"Local-Number">>, <<"Acquired-For">>, <<"Request">>
-                                        | ?DEFAULT_OPTIONAL_HEADERS
+                                            | ?DEFAULT_OPTIONAL_HEADERS
                                        ]).
 -define(CNAM_REQUEST_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                              ,{<<"Event-Name">>, <<"cnam_request">>}
+                             ,{<<"Event-Name">>, <<"cnam_request">>}
                              ]).
 -define(CNAM_REQUEST_TYPES, []).
 
@@ -374,27 +411,30 @@
 -define(LOW_BALANCE_HEADERS, [<<"Account-ID">>, <<"Current-Balance">>]).
 -define(OPTIONAL_LOW_BALANCE_HEADERS, ?DEFAULT_OPTIONAL_HEADERS).
 -define(LOW_BALANCE_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                             ,{<<"Event-Name">>, <<"low_balance">>}
+                            ,{<<"Event-Name">>, <<"low_balance">>}
                             ]).
 -define(LOW_BALANCE_TYPES, []).
 
 %% Notify Top Up
 -define(TOPUP_HEADERS, [<<"Account-ID">>]).
--define(OPTIONAL_TOPUP_HEADERS, [<<"Amount">>, <<"Response">>, <<"Success">>
-                                 | ?DEFAULT_OPTIONAL_HEADERS
+-define(OPTIONAL_TOPUP_HEADERS, [<<"Amount">>
+                                ,<<"Response">>
+                                ,<<"Success">>
+                                     | ?DEFAULT_OPTIONAL_HEADERS
                                 ]).
 -define(TOPUP_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                       ,{<<"Event-Name">>, <<"topup">>}
+                      ,{<<"Event-Name">>, <<"topup">>}
                       ]).
 -define(TOPUP_TYPES, []).
 
 %% Notify Transaction
 -define(TRANSACTION_HEADERS, [<<"Account-ID">>, <<"Transaction">>]).
--define(OPTIONAL_TRANSACTION_HEADERS, [<<"Service-Plan">>, <<"Billing-ID">>
-                                       | ?DEFAULT_OPTIONAL_HEADERS
+-define(OPTIONAL_TRANSACTION_HEADERS, [<<"Billing-ID">>
+                                      ,<<"Service-Plan">>
+                                           | ?DEFAULT_OPTIONAL_HEADERS
                                       ]).
 -define(TRANSACTION_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                             ,{<<"Event-Name">>, <<"transaction">>}
+                            ,{<<"Event-Name">>, <<"transaction">>}
                             ]).
 -define(TRANSACTION_TYPES, []).
 
@@ -402,28 +442,33 @@
 -define(SERVICE_ADDED_HEADERS, [<<"Account-ID">>, <<"Audit-Log">>]).
 -define(OPTIONAL_SERVICE_ADDED_HEADERS, ?DEFAULT_OPTIONAL_HEADERS).
 -define(SERVICE_ADDED_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                               ,{<<"Event-Name">>, <<"service_added">>}
+                              ,{<<"Event-Name">>, <<"service_added">>}
                               ]).
 -define(SERVICE_ADDED_TYPES, []).
 
 %% Notify System Alert
 -define(SYSTEM_ALERT_HEADERS, [<<"Subject">>, <<"Message">>]).
--define(OPTIONAL_SYSTEM_ALERT_HEADERS, [<<"Pid">>, <<"Module">>, <<"Line">>, <<"Request-ID">>, <<"Section">>
-                                        ,<<"Node">>, <<"Details">>
-                                        | ?DEFAULT_OPTIONAL_HEADERS
+-define(OPTIONAL_SYSTEM_ALERT_HEADERS, [<<"Details">>
+                                       ,<<"Line">>
+                                       ,<<"Module">>
+                                       ,<<"Node">>
+                                       ,<<"Pid">>
+                                       ,<<"Request-ID">>
+                                       ,<<"Section">>
+                                            | ?DEFAULT_OPTIONAL_HEADERS
                                        ]).
 -define(SYSTEM_ALERT_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                              ,{<<"Event-Name">>, <<"system_alert">>}
+                             ,{<<"Event-Name">>, <<"system_alert">>}
                              ]).
 -define(SYSTEM_ALERT_TYPES, []).
 
 %% Notify webhook
 -define(WEBHOOK_HEADERS, [<<"Hook">>, <<"Data">>]).
 -define(OPTIONAL_WEBHOOK_HEADERS, [<<"Timestamp">>
-                                   | ?DEFAULT_OPTIONAL_HEADERS
+                                       | ?DEFAULT_OPTIONAL_HEADERS
                                   ]).
 -define(WEBHOOK_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                         ,{<<"Event-Name">>, <<"webhook">>}
+                        ,{<<"Event-Name">>, <<"webhook">>}
                         ]).
 -define(WEBHOOK_TYPES, []).
 
@@ -431,38 +476,38 @@
 -define(WEBHOOK_DISABLED_HEADERS, [<<"Hook-ID">>, <<"Account-ID">>]).
 -define(OPTIONAL_WEBHOOK_DISABLED_HEADERS, ?DEFAULT_OPTIONAL_HEADERS).
 -define(WEBHOOK_DISABLED_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                                  ,{<<"Event-Name">>, <<"webhook_disabled">>}
+                                 ,{<<"Event-Name">>, <<"webhook_disabled">>}
                                  ]).
 -define(WEBHOOK_DISABLED_TYPES, []).
 
 -define(NOTIFY_UPDATE_HEADERS, [<<"Status">>]).
 -define(OPTIONAL_NOTIFY_UPDATE_HEADERS, [<<"Failure-Message">>
-                                         | ?DEFAULT_OPTIONAL_HEADERS
+                                             | ?DEFAULT_OPTIONAL_HEADERS
                                         ]).
 -define(NOTIFY_UPDATE_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                               ,{<<"Event-Name">>, <<"update">>}
-                               ,{<<"Status">>, [<<"completed">>, <<"failed">>, <<"pending">>]}
+                              ,{<<"Event-Name">>, <<"update">>}
+                              ,{<<"Status">>, [<<"completed">>, <<"failed">>, <<"pending">>]}
                               ]).
 -define(NOTIFY_UPDATE_TYPES, []).
 
 %% Denied Emergency Bridge
 -define(DENIED_EMERGENCY_BRIDGE_HEADERS, [<<"Account-ID">>, <<"Call-ID">>]).
 -define(OPTIONAL_DENIED_EMERGENCY_BRIDGE_HEADERS, [<<"Emergency-Caller-ID-Number">>
-                                                   ,<<"Emergency-Caller-ID-Name">>
-                                                   ,<<"Outbound-Caller-ID-Number">>
-                                                   ,<<"Outbound-Caller-ID-Name">>
-                                                   | ?DEFAULT_OPTIONAL_HEADERS
+                                                  ,<<"Emergency-Caller-ID-Name">>
+                                                  ,<<"Outbound-Caller-ID-Number">>
+                                                  ,<<"Outbound-Caller-ID-Name">>
+                                                       | ?DEFAULT_OPTIONAL_HEADERS
                                                   ]).
 -define(DENIED_EMERGENCY_BRIDGE_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                                         ,{<<"Event-Name">>, <<"denied_emergency_bridge">>}
+                                        ,{<<"Event-Name">>, <<"denied_emergency_bridge">>}
                                         ]).
 -define(DENIED_EMERGENCY_BRIDGE_TYPES, []).
 
 %% Customer update
 -define(CUSTOMER_UPDATE_HEADERS, [<<"Account-ID">>]).
 -define(OPTIONAL_CUSTOMER_UPDATE_HEADERS, [<<"Recipient-ID">>
-                                           ,<<"User-Type">>
-                                           | ?DEFAULT_OPTIONAL_HEADERS
+                                          ,<<"User-Type">>
+                                               | ?DEFAULT_OPTIONAL_HEADERS
                                           ]).
 -define(CUSTOMER_UPDATE_VALUES, [{<<"Event-Category">>, <<"notification">>}
                                 ,{<<"Event-Name">>, <<"customer_update">>}
@@ -473,7 +518,7 @@
 -define(SKEL_HEADERS, [<<"Account-ID">>, <<"User-ID">>]).
 -define(OPTIONAL_SKEL_HEADERS, ?DEFAULT_OPTIONAL_HEADERS).
 -define(SKEL_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                      ,{<<"Event-Name">>, <<"skel">>}
+                     ,{<<"Event-Name">>, <<"skel">>}
                      ]).
 -define(SKEL_TYPES, []).
 
@@ -498,18 +543,22 @@ headers(<<"new_user">>) ->
     ?NEW_USER_HEADERS ++ ?OPTIONAL_NEW_USER_HEADERS;
 headers(<<"deregister">>) ->
     ?DEREGISTER_HEADERS ++ ?OPTIONAL_DEREGISTER_HEADERS;
+headers(<<"first_occurrence">>) ->
+    ?FIRST_OCCURRENCE_HEADERS ++ ?OPTIONAL_FIRST_OCCURRENCE_HEADERS;
 headers(<<"transaction">>) ->
     ?TRANSACTION_HEADERS ++ ?OPTIONAL_TRANSACTION_HEADERS;
 headers(<<"service_added">>) ->
     ?SERVICE_ADDED_HEADERS ++ ?OPTIONAL_SERVICE_ADDED_HEADERS;
 headers(<<"password_recovery">>) ->
-    ?PWD_RECOVERY_HEADERS ++ ?OPTIONAL_PWD_RECOVERY_HEADERS;
+    ?PASSWORD_RECOVERY_HEADERS ++ ?OPTIONAL_PASSWORD_RECOVERY_HEADERS;
 headers(<<"system_alert">>) ->
     ?SYSTEM_ALERT_HEADERS ++ ?OPTIONAL_SYSTEM_ALERT_HEADERS;
 headers(<<"cnam_request">>) ->
     ?CNAM_REQUEST_HEADERS ++ ?OPTIONAL_CNAM_REQUEST_HEADERS;
 headers(<<"topup">>) ->
     ?TOPUP_HEADERS ++ ?OPTIONAL_TOPUP_HEADERS;
+headers(<<"port_unconfirmed">>) ->
+    ?PORT_UNCONFIRMED_HEADERS ++ ?OPTIONAL_PORT_UNCONFIRMED_HEADERS;
 headers(<<"port_request">>) ->
     ?PORT_REQUEST_HEADERS ++ ?OPTIONAL_PORT_REQUEST_HEADERS;
 headers(<<"port_pending">>) ->
@@ -549,6 +598,7 @@ voicemail_routing_key(JObj) ->
     AcctId = kz_json:get_value(<<"Account-ID">>, JObj, <<"*">>),
     <<"notifications.voicemail.new.", AcctId/binary>>.
 
+-spec voicemail(api_terms()) -> api_formatter_return().
 voicemail(Prop) when is_list(Prop) ->
     case voicemail_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?VOICEMAIL_HEADERS, ?OPTIONAL_VOICEMAIL_HEADERS);
@@ -566,6 +616,7 @@ voicemail_v(JObj) -> voicemail_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec voicemail_saved(api_terms()) -> api_formatter_return().
 voicemail_saved(Prop) when is_list(Prop) ->
     case voicemail_saved_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?VOICEMAIL_HEADERS, ?OPTIONAL_VOICEMAIL_HEADERS);
@@ -583,6 +634,7 @@ voicemail_saved_v(JObj) -> voicemail_saved_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec voicemail_full(api_terms()) -> api_formatter_return().
 voicemail_full(Prop) when is_list(Prop) ->
     case voicemail_full_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?VOICEMAIL_FULL_HEADERS, ?OPTIONAL_VOICEMAIL_FULL_HEADERS);
@@ -600,6 +652,7 @@ voicemail_full_v(JObj) -> voicemail_full_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec fax_inbound(api_terms()) -> api_formatter_return().
 fax_inbound(Prop) when is_list(Prop) ->
     case fax_inbound_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?FAX_INBOUND_HEADERS, ?OPTIONAL_FAX_INBOUND_HEADERS);
@@ -617,6 +670,7 @@ fax_inbound_v(JObj) -> fax_inbound_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec fax_outbound(api_terms()) -> api_formatter_return().
 fax_outbound(Prop) when is_list(Prop) ->
     case fax_outbound_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?FAX_OUTBOUND_HEADERS, ?OPTIONAL_FAX_OUTBOUND_HEADERS);
@@ -634,6 +688,7 @@ fax_outbound_v(JObj) -> fax_outbound_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec fax_inbound_error(api_terms()) -> api_formatter_return().
 fax_inbound_error(Prop) when is_list(Prop) ->
     case fax_inbound_error_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?FAX_INBOUND_ERROR_HEADERS, ?OPTIONAL_FAX_INBOUND_ERROR_HEADERS);
@@ -651,6 +706,7 @@ fax_inbound_error_v(JObj) -> fax_inbound_error_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec fax_outbound_error(api_terms()) -> api_formatter_return().
 fax_outbound_error(Prop) when is_list(Prop) ->
     case fax_outbound_error_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?FAX_OUTBOUND_ERROR_HEADERS, ?OPTIONAL_FAX_OUTBOUND_ERROR_HEADERS);
@@ -668,6 +724,7 @@ fax_outbound_error_v(JObj) -> fax_outbound_error_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec register(api_terms()) -> api_formatter_return().
 register(Prop) when is_list(Prop) ->
     case register_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?REGISTER_HEADERS, ?OPTIONAL_REGISTER_HEADERS);
@@ -685,6 +742,7 @@ register_v(JObj) -> register_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec deregister(api_terms()) -> api_formatter_return().
 deregister(Prop) when is_list(Prop) ->
     case deregister_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?DEREGISTER_HEADERS, ?OPTIONAL_DEREGISTER_HEADERS);
@@ -698,27 +756,47 @@ deregister_v(Prop) when is_list(Prop) ->
 deregister_v(JObj) -> deregister_v(kz_json:to_proplist(JObj)).
 
 %%--------------------------------------------------------------------
-%% @doc Pwd_Recovery (unregister is a key word) - see wiki
+%% @doc First Call or registration notification - see wiki
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
-pwd_recovery(Prop) when is_list(Prop) ->
-    case pwd_recovery_v(Prop) of
-        'true' -> kz_api:build_message(Prop, ?PWD_RECOVERY_HEADERS, ?OPTIONAL_PWD_RECOVERY_HEADERS);
-        'false' -> {'error', "Proplist failed validation for pwd_recovery"}
+-spec first_occurrence(api_terms()) -> api_formatter_return().
+first_occurrence(Prop) when is_list(Prop) ->
+    case first_occurrence_v(Prop) of
+        'true' -> kz_api:build_message(Prop, ?FIRST_OCCURRENCE_HEADERS, ?OPTIONAL_FIRST_OCCURRENCE_HEADERS);
+        'false' -> {'error', "Proplist failed validation for first_occurrence"}
     end;
-pwd_recovery(JObj) -> pwd_recovery(kz_json:to_proplist(JObj)).
+first_occurrence(JObj) -> first_occurrence(kz_json:to_proplist(JObj)).
 
--spec pwd_recovery_v(api_terms()) -> boolean().
-pwd_recovery_v(Prop) when is_list(Prop) ->
-    kz_api:validate(Prop, ?PWD_RECOVERY_HEADERS, ?PWD_RECOVERY_VALUES, ?PWD_RECOVERY_TYPES);
-pwd_recovery_v(JObj) -> pwd_recovery_v(kz_json:to_proplist(JObj)).
+-spec first_occurrence_v(api_terms()) -> boolean().
+first_occurrence_v(Prop) when is_list(Prop) ->
+    kz_api:validate(Prop, ?FIRST_OCCURRENCE_HEADERS, ?FIRST_OCCURRENCE_VALUES, ?FIRST_OCCURRENCE_TYPES);
+first_occurrence_v(JObj) -> first_occurrence_v(kz_json:to_proplist(JObj)).
+
+%%--------------------------------------------------------------------
+%% @doc Password_Recovery (unregister is a key word) - see wiki
+%% Takes proplist, creates JSON string or error
+%% @end
+%%--------------------------------------------------------------------
+-spec password_recovery(api_terms()) -> api_formatter_return().
+password_recovery(Prop) when is_list(Prop) ->
+    case password_recovery_v(Prop) of
+        'true' -> kz_api:build_message(Prop, ?PASSWORD_RECOVERY_HEADERS, ?OPTIONAL_PASSWORD_RECOVERY_HEADERS);
+        'false' -> {'error', "Proplist failed validation for password_recovery"}
+    end;
+password_recovery(JObj) -> password_recovery(kz_json:to_proplist(JObj)).
+
+-spec password_recovery_v(api_terms()) -> boolean().
+password_recovery_v(Prop) when is_list(Prop) ->
+    kz_api:validate(Prop, ?PASSWORD_RECOVERY_HEADERS, ?PASSWORD_RECOVERY_VALUES, ?PASSWORD_RECOVERY_TYPES);
+password_recovery_v(JObj) -> password_recovery_v(kz_json:to_proplist(JObj)).
 
 %%--------------------------------------------------------------------
 %% @doc New account notification - see wiki
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec new_account(api_terms()) -> api_formatter_return().
 new_account(Prop) when is_list(Prop) ->
     case new_account_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?NEW_ACCOUNT_HEADERS, ?OPTIONAL_NEW_ACCOUNT_HEADERS);
@@ -736,6 +814,7 @@ new_account_v(JObj) -> new_account_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec new_user(api_terms()) -> api_formatter_return().
 new_user(Prop) when is_list(Prop) ->
     case new_user_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?NEW_USER_HEADERS, ?OPTIONAL_NEW_USER_HEADERS);
@@ -749,10 +828,29 @@ new_user_v(Prop) when is_list(Prop) ->
 new_user_v(JObj) -> new_user_v(kz_json:to_proplist(JObj)).
 
 %%--------------------------------------------------------------------
+%% @doc Port unconfirmed notification - see wiki
+%% Takes proplist, creates JSON string or error
+%% @end
+%%--------------------------------------------------------------------
+-spec port_unconfirmed(api_terms()) -> api_formatter_return().
+port_unconfirmed(Prop) when is_list(Prop) ->
+    case port_unconfirmed_v(Prop) of
+        'true' -> kz_api:build_message(Prop, ?PORT_UNCONFIRMED_HEADERS, ?OPTIONAL_PORT_UNCONFIRMED_HEADERS);
+        'false' -> {'error', "Proplist failed validation for port_unconfirmed"}
+    end;
+port_unconfirmed(JObj) -> port_unconfirmed(kz_json:to_proplist(JObj)).
+
+-spec port_unconfirmed_v(api_terms()) -> boolean().
+port_unconfirmed_v(Prop) when is_list(Prop) ->
+    kz_api:validate(Prop, ?PORT_UNCONFIRMED_HEADERS, ?PORT_UNCONFIRMED_VALUES, ?PORT_UNCONFIRMED_TYPES);
+port_unconfirmed_v(JObj) -> port_unconfirmed_v(kz_json:to_proplist(JObj)).
+
+%%--------------------------------------------------------------------
 %% @doc Port request notification - see wiki
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec port_request(api_terms()) -> api_formatter_return().
 port_request(Prop) when is_list(Prop) ->
     case port_request_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?PORT_REQUEST_HEADERS, ?OPTIONAL_PORT_REQUEST_HEADERS);
@@ -770,6 +868,7 @@ port_request_v(JObj) -> port_request_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec port_pending(api_terms()) -> api_formatter_return().
 port_pending(Prop) when is_list(Prop) ->
     case port_pending_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?PORT_PENDING_HEADERS, ?OPTIONAL_PORT_PENDING_HEADERS);
@@ -787,6 +886,7 @@ port_pending_v(JObj) -> port_pending_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec port_scheduled(api_terms()) -> api_formatter_return().
 port_scheduled(Prop) when is_list(Prop) ->
     case port_scheduled_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?PORT_SCHEDULED_HEADERS, ?OPTIONAL_PORT_SCHEDULED_HEADERS);
@@ -804,6 +904,7 @@ port_scheduled_v(JObj) -> port_scheduled_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec port_rejected(api_terms()) -> api_formatter_return().
 port_rejected(Prop) when is_list(Prop) ->
     case port_rejected_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?PORT_REJECTED_HEADERS, ?OPTIONAL_PORT_REJECTED_HEADERS);
@@ -821,6 +922,7 @@ port_rejected_v(JObj) -> port_rejected_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec port_cancel(api_terms()) -> api_formatter_return().
 port_cancel(Prop) when is_list(Prop) ->
     case port_cancel_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?PORT_CANCEL_HEADERS, ?OPTIONAL_PORT_CANCEL_HEADERS);
@@ -838,6 +940,7 @@ port_cancel_v(JObj) -> port_cancel_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec ported(api_terms()) -> api_formatter_return().
 ported(Prop) when is_list(Prop) ->
     case ported_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?PORTED_HEADERS, ?OPTIONAL_PORTED_HEADERS);
@@ -855,6 +958,7 @@ ported_v(JObj) -> ported_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec port_comment(api_terms()) -> api_formatter_return().
 port_comment(Prop) when is_list(Prop) ->
     case port_comment_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?PORT_COMMENT_HEADERS, ?OPTIONAL_PORT_COMMENT_HEADERS);
@@ -872,6 +976,7 @@ port_comment_v(JObj) -> port_comment_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec cnam_request(api_terms()) -> api_formatter_return().
 cnam_request(Prop) when is_list(Prop) ->
     case cnam_request_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?CNAM_REQUEST_HEADERS, ?OPTIONAL_CNAM_REQUEST_HEADERS);
@@ -889,6 +994,7 @@ cnam_request_v(JObj) -> cnam_request_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec low_balance(api_terms()) -> api_formatter_return().
 low_balance(Prop) when is_list(Prop) ->
     case low_balance_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?LOW_BALANCE_HEADERS, ?OPTIONAL_LOW_BALANCE_HEADERS);
@@ -907,6 +1013,7 @@ low_balance_v(JObj) -> low_balance_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec topup(api_terms()) -> api_formatter_return().
 topup(Prop) when is_list(Prop) ->
     case topup_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?TOPUP_HEADERS, ?OPTIONAL_TOPUP_HEADERS);
@@ -924,6 +1031,7 @@ topup_v(JObj) -> topup_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec transaction(api_terms()) -> api_formatter_return().
 transaction(Prop) when is_list(Prop) ->
     case transaction_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?TRANSACTION_HEADERS, ?OPTIONAL_TRANSACTION_HEADERS);
@@ -941,6 +1049,7 @@ transaction_v(JObj) -> transaction_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec service_added(api_terms()) -> api_formatter_return().
 service_added(Prop) when is_list(Prop) ->
     case service_added_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?SERVICE_ADDED_HEADERS, ?OPTIONAL_SERVICE_ADDED_HEADERS);
@@ -958,6 +1067,7 @@ service_added_v(JObj) -> service_added_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec system_alert(api_terms()) -> api_formatter_return().
 system_alert(Prop) when is_list(Prop) ->
     case system_alert_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?SYSTEM_ALERT_HEADERS, ?OPTIONAL_SYSTEM_ALERT_HEADERS);
@@ -975,6 +1085,7 @@ system_alert_v(JObj) -> system_alert_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec webhook(api_terms()) -> api_formatter_return().
 webhook(Prop) when is_list(Prop) ->
     case webhook_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?WEBHOOK_HEADERS, ?OPTIONAL_WEBHOOK_HEADERS);
@@ -992,6 +1103,7 @@ webhook_v(JObj) -> webhook_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec webhook_disabled(api_terms()) -> api_formatter_return().
 webhook_disabled(Prop) when is_list(Prop) ->
     case webhook_disabled_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?WEBHOOK_DISABLED_HEADERS, ?OPTIONAL_WEBHOOK_DISABLED_HEADERS);
@@ -1009,6 +1121,7 @@ webhook_disabled_v(JObj) -> webhook_disabled_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec notify_update(api_terms()) -> api_formatter_return().
 notify_update(Prop) when is_list(Prop) ->
     case notify_update_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?NOTIFY_UPDATE_HEADERS, ?OPTIONAL_NOTIFY_UPDATE_HEADERS);
@@ -1026,6 +1139,7 @@ notify_update_v(JObj) -> notify_update_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec denied_emergency_bridge(api_terms()) -> api_formatter_return().
 denied_emergency_bridge(Prop) when is_list(Prop) ->
     case denied_emergency_bridge_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?DENIED_EMERGENCY_BRIDGE_HEADERS, ?OPTIONAL_DENIED_EMERGENCY_BRIDGE_HEADERS);
@@ -1042,7 +1156,8 @@ denied_emergency_bridge_v(JObj) -> denied_emergency_bridge_v(kz_json:to_proplist
 %% @doc customer_update notification - see wiki
 %% Takes proplist, creates JSON string or error
 %% @end
-%%--------------------------------------------------------------------
+%%-------------------------------------------------------------------
+-spec customer_update(api_terms()) -> api_formatter_return().
 customer_update(Prop) when is_list(Prop) ->
     case customer_update_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?CUSTOMER_UPDATE_HEADERS, ?OPTIONAL_CUSTOMER_UPDATE_HEADERS);
@@ -1060,6 +1175,7 @@ customer_update_v(JObj) -> customer_update_v(kz_json:to_proplist(JObj)).
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
+-spec skel(api_terms()) -> api_formatter_return().
 skel(Prop) when is_list(Prop) ->
     case skel_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?SKEL_HEADERS, ?OPTIONAL_SKEL_HEADERS);
@@ -1083,9 +1199,11 @@ skel_v(JObj) -> skel_v(kz_json:to_proplist(JObj)).
                        'fax_error' |
                        'register' |
                        'deregister' |
-                       'pwd_recovery' |
+                       'password_recovery' |
+                       'first_occurrence' |
                        'new_account' |
                        'new_user' |
+                       'port_unconfirmed' |
                        'port_request' |
                        'port_pending' |
                        'port_scheduled' |
@@ -1150,14 +1268,20 @@ bind_to_q(Q, ['register'|T], Props) ->
 bind_to_q(Q, ['deregister'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_DEREGISTER),
     bind_to_q(Q, T, Props);
-bind_to_q(Q, ['pwd_recovery'|T], Props) ->
-    'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_PWD_RECOVERY),
+bind_to_q(Q, ['password_recovery'|T], Props) ->
+    'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_PASSWORD_RECOVERY),
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['first_occurrence'|T], Props) ->
+    'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_FIRST_OCCURRENCE),
     bind_to_q(Q, T, Props);
 bind_to_q(Q, ['new_account'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_NEW_ACCOUNT),
     bind_to_q(Q, T, Props);
 bind_to_q(Q, ['new_user'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_NEW_USER),
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['port_unconfirmed'|T], Props) ->
+    'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_PORT_UNCONFIRMED),
     bind_to_q(Q, T, Props);
 bind_to_q(Q, ['port_request'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_PORT_REQUEST),
@@ -1255,14 +1379,20 @@ unbind_q_from(Q, ['register'|T], Props) ->
 unbind_q_from(Q, ['deregister'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_DEREGISTER),
     unbind_q_from(Q, T, Props);
-unbind_q_from(Q, ['pwd_recovery'|T], Props) ->
-    'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_PWD_RECOVERY),
+unbind_q_from(Q, ['password_recovery'|T], Props) ->
+    'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_PASSWORD_RECOVERY),
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['first_occurrence'|T], Props) ->
+    'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_FIRST_OCCURRENCE),
     unbind_q_from(Q, T, Props);
 unbind_q_from(Q, ['new_account'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_NEW_ACCOUNT),
     unbind_q_from(Q, T, Props);
 unbind_q_from(Q, ['new_user'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_NEW_USER),
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['port_unconfirmed'|T], Props) ->
+    'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_PORT_UNCONFIRMED),
     unbind_q_from(Q, T, Props);
 unbind_q_from(Q, ['port_request'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_PORT_REQUEST),
@@ -1334,215 +1464,229 @@ declare_exchanges() ->
 -spec publish_voicemail_saved(api_terms(), ne_binary()) -> 'ok'.
 publish_voicemail_saved(JObj) -> publish_voicemail_saved(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_voicemail_saved(Voicemail, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Voicemail, ?VOICEMAIL_SAVED_VALUES, fun ?MODULE:voicemail_saved/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Voicemail, ?VOICEMAIL_SAVED_VALUES, fun voicemail_saved/1),
     amqp_util:notifications_publish(?NOTIFY_VOICEMAIL_SAVED, Payload, ContentType).
 
 -spec publish_voicemail(api_terms()) -> 'ok'.
 -spec publish_voicemail(api_terms(), ne_binary()) -> 'ok'.
 publish_voicemail(JObj) -> publish_voicemail(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_voicemail(Voicemail, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Voicemail, ?VOICEMAIL_VALUES, fun ?MODULE:voicemail/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Voicemail, ?VOICEMAIL_VALUES, fun voicemail/1),
     amqp_util:notifications_publish(voicemail_routing_key(Voicemail), Payload, ContentType).
 
 -spec publish_voicemail_full(api_terms()) -> 'ok'.
 -spec publish_voicemail_full(api_terms(), ne_binary()) -> 'ok'.
 publish_voicemail_full(JObj) -> publish_voicemail_full(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_voicemail_full(Voicemail, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Voicemail, ?VOICEMAIL_FULL_VALUES, fun ?MODULE:voicemail_full/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Voicemail, ?VOICEMAIL_FULL_VALUES, fun voicemail_full/1),
     amqp_util:notifications_publish(?NOTIFY_VOICEMAIL_FULL, Payload, ContentType).
 
 -spec publish_fax_inbound(api_terms()) -> 'ok'.
 -spec publish_fax_inbound(api_terms(), ne_binary()) -> 'ok'.
 publish_fax_inbound(JObj) -> publish_fax_inbound(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_fax_inbound(Fax, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Fax,?FAX_INBOUND_VALUES, fun ?MODULE:fax_inbound/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Fax,?FAX_INBOUND_VALUES, fun fax_inbound/1),
     amqp_util:notifications_publish(?NOTIFY_FAX_INBOUND, Payload, ContentType).
 
 -spec publish_fax_outbound(api_terms()) -> 'ok'.
 -spec publish_fax_outbound(api_terms(), ne_binary()) -> 'ok'.
 publish_fax_outbound(JObj) -> publish_fax_outbound(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_fax_outbound(Fax, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Fax, ?FAX_OUTBOUND_VALUES, fun ?MODULE:fax_outbound/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Fax, ?FAX_OUTBOUND_VALUES, fun fax_outbound/1),
     amqp_util:notifications_publish(?NOTIFY_FAX_OUTBOUND, Payload, ContentType).
 
 -spec publish_fax_inbound_error(api_terms()) -> 'ok'.
 -spec publish_fax_inbound_error(api_terms(), ne_binary()) -> 'ok'.
 publish_fax_inbound_error(JObj) -> publish_fax_inbound_error(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_fax_inbound_error(Fax, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Fax, ?FAX_INBOUND_ERROR_VALUES, fun ?MODULE:fax_inbound_error/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Fax, ?FAX_INBOUND_ERROR_VALUES, fun fax_inbound_error/1),
     amqp_util:notifications_publish(?NOTIFY_FAX_INBOUND_ERROR, Payload, ContentType).
 
 -spec publish_fax_outbound_error(api_terms()) -> 'ok'.
 -spec publish_fax_outbound_error(api_terms(), ne_binary()) -> 'ok'.
 publish_fax_outbound_error(JObj) -> publish_fax_outbound_error(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_fax_outbound_error(Fax, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Fax, ?FAX_OUTBOUND_ERROR_VALUES, fun ?MODULE:fax_outbound_error/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Fax, ?FAX_OUTBOUND_ERROR_VALUES, fun fax_outbound_error/1),
     amqp_util:notifications_publish(?NOTIFY_FAX_OUTBOUND_ERROR, Payload, ContentType).
 
 -spec publish_register(api_terms()) -> 'ok'.
 -spec publish_register(api_terms(), ne_binary()) -> 'ok'.
 publish_register(JObj) -> publish_register(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_register(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?REGISTER_VALUES, fun ?MODULE:register/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?REGISTER_VALUES, fun register/1),
     amqp_util:notifications_publish(?NOTIFY_REGISTER, Payload, ContentType).
 
 -spec publish_deregister(api_terms()) -> 'ok'.
 -spec publish_deregister(api_terms(), ne_binary()) -> 'ok'.
 publish_deregister(JObj) -> publish_deregister(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_deregister(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?DEREGISTER_VALUES, fun ?MODULE:deregister/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?DEREGISTER_VALUES, fun deregister/1),
     amqp_util:notifications_publish(?NOTIFY_DEREGISTER, Payload, ContentType).
 
--spec publish_pwd_recovery(api_terms()) -> 'ok'.
--spec publish_pwd_recovery(api_terms(), ne_binary()) -> 'ok'.
-publish_pwd_recovery(JObj) -> publish_pwd_recovery(JObj, ?DEFAULT_CONTENT_TYPE).
-publish_pwd_recovery(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?PWD_RECOVERY_VALUES, fun ?MODULE:pwd_recovery/1),
-    amqp_util:notifications_publish(?NOTIFY_PWD_RECOVERY, Payload, ContentType).
+-spec publish_password_recovery(api_terms()) -> 'ok'.
+-spec publish_password_recovery(api_terms(), ne_binary()) -> 'ok'.
+publish_password_recovery(JObj) -> publish_password_recovery(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_password_recovery(API, ContentType) ->
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?PASSWORD_RECOVERY_VALUES, fun password_recovery/1),
+    amqp_util:notifications_publish(?NOTIFY_PASSWORD_RECOVERY, Payload, ContentType).
+
+-spec publish_first_occurrence(api_terms()) -> 'ok'.
+-spec publish_first_occurrence(api_terms(), ne_binary()) -> 'ok'.
+publish_first_occurrence(JObj) -> publish_first_occurrence(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_first_occurrence(API, ContentType) ->
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?FIRST_OCCURRENCE_VALUES, fun first_occurrence/1),
+    amqp_util:notifications_publish(?NOTIFY_FIRST_OCCURRENCE, Payload, ContentType).
 
 -spec publish_new_account(api_terms()) -> 'ok'.
 -spec publish_new_account(api_terms(), ne_binary()) -> 'ok'.
 publish_new_account(JObj) -> publish_new_account(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_new_account(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?NEW_ACCOUNT_VALUES, fun ?MODULE:new_account/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?NEW_ACCOUNT_VALUES, fun new_account/1),
     amqp_util:notifications_publish(?NOTIFY_NEW_ACCOUNT, Payload, ContentType).
 
 -spec publish_new_user(api_terms()) -> 'ok'.
 -spec publish_new_user(api_terms(), ne_binary()) -> 'ok'.
 publish_new_user(JObj) -> publish_new_user(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_new_user(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?NEW_USER_VALUES, fun ?MODULE:new_user/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?NEW_USER_VALUES, fun new_user/1),
     amqp_util:notifications_publish(?NOTIFY_NEW_USER, Payload, ContentType).
+
+-spec publish_port_unconfirmed(api_terms()) -> 'ok'.
+-spec publish_port_unconfirmed(api_terms(), ne_binary()) -> 'ok'.
+publish_port_unconfirmed(JObj) -> publish_port_unconfirmed(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_port_unconfirmed(API, ContentType) ->
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?PORT_UNCONFIRMED_VALUES, fun port_unconfirmed/1),
+    amqp_util:notifications_publish(?NOTIFY_PORT_UNCONFIRMED, Payload, ContentType).
 
 -spec publish_port_request(api_terms()) -> 'ok'.
 -spec publish_port_request(api_terms(), ne_binary()) -> 'ok'.
 publish_port_request(JObj) -> publish_port_request(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_port_request(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?PORT_REQUEST_VALUES, fun ?MODULE:port_request/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?PORT_REQUEST_VALUES, fun port_request/1),
     amqp_util:notifications_publish(?NOTIFY_PORT_REQUEST, Payload, ContentType).
 
 -spec publish_port_pending(api_terms()) -> 'ok'.
 -spec publish_port_pending(api_terms(), ne_binary()) -> 'ok'.
 publish_port_pending(JObj) -> publish_port_pending(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_port_pending(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?PORT_PENDING_VALUES, fun ?MODULE:port_pending/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?PORT_PENDING_VALUES, fun port_pending/1),
     amqp_util:notifications_publish(?NOTIFY_PORT_PENDING, Payload, ContentType).
 
 -spec publish_port_scheduled(api_terms()) -> 'ok'.
 -spec publish_port_scheduled(api_terms(), ne_binary()) -> 'ok'.
 publish_port_scheduled(JObj) -> publish_port_scheduled(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_port_scheduled(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?PORT_SCHEDULED_VALUES, fun ?MODULE:port_scheduled/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?PORT_SCHEDULED_VALUES, fun port_scheduled/1),
     amqp_util:notifications_publish(?NOTIFY_PORT_SCHEDULED, Payload, ContentType).
 
 -spec publish_port_rejected(api_terms()) -> 'ok'.
 -spec publish_port_rejected(api_terms(), ne_binary()) -> 'ok'.
 publish_port_rejected(JObj) -> publish_port_rejected(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_port_rejected(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?PORT_REJECTED_VALUES, fun ?MODULE:port_rejected/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?PORT_REJECTED_VALUES, fun port_rejected/1),
     amqp_util:notifications_publish(?NOTIFY_PORT_REJECTED, Payload, ContentType).
 
 -spec publish_port_cancel(api_terms()) -> 'ok'.
 -spec publish_port_cancel(api_terms(), ne_binary()) -> 'ok'.
 publish_port_cancel(JObj) -> publish_port_cancel(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_port_cancel(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?PORT_CANCEL_VALUES, fun ?MODULE:port_cancel/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?PORT_CANCEL_VALUES, fun port_cancel/1),
     amqp_util:notifications_publish(?NOTIFY_PORT_CANCEL, Payload, ContentType).
 
 -spec publish_ported(api_terms()) -> 'ok'.
 -spec publish_ported(api_terms(), ne_binary()) -> 'ok'.
 publish_ported(JObj) -> publish_ported(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_ported(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?PORTED_VALUES, fun ?MODULE:ported/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?PORTED_VALUES, fun ported/1),
     amqp_util:notifications_publish(?NOTIFY_PORTED, Payload, ContentType).
 
 -spec publish_port_comment(api_terms()) -> 'ok'.
 -spec publish_port_comment(api_terms(), ne_binary()) -> 'ok'.
 publish_port_comment(JObj) -> publish_port_comment(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_port_comment(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?PORT_COMMENT_VALUES, fun ?MODULE:port_comment/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?PORT_COMMENT_VALUES, fun port_comment/1),
     amqp_util:notifications_publish(?NOTIFY_PORT_COMMENT, Payload, ContentType).
 
 -spec publish_cnam_request(api_terms()) -> 'ok'.
 -spec publish_cnam_request(api_terms(), ne_binary()) -> 'ok'.
 publish_cnam_request(JObj) -> publish_cnam_request(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_cnam_request(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?CNAM_REQUEST_VALUES, fun ?MODULE:cnam_request/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?CNAM_REQUEST_VALUES, fun cnam_request/1),
     amqp_util:notifications_publish(?NOTIFY_CNAM_REQUEST, Payload, ContentType).
 
 -spec publish_low_balance(api_terms()) -> 'ok'.
 -spec publish_low_balance(api_terms(), ne_binary()) -> 'ok'.
 publish_low_balance(JObj) -> publish_low_balance(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_low_balance(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?LOW_BALANCE_VALUES, fun ?MODULE:low_balance/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?LOW_BALANCE_VALUES, fun low_balance/1),
     amqp_util:notifications_publish(?NOTIFY_LOW_BALANCE, Payload, ContentType).
 
 -spec publish_topup(api_terms()) -> 'ok'.
 -spec publish_topup(api_terms(), ne_binary()) -> 'ok'.
 publish_topup(JObj) -> publish_topup(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_topup(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?TOPUP_VALUES, fun ?MODULE:topup/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?TOPUP_VALUES, fun topup/1),
     amqp_util:notifications_publish(?NOTIFY_TOPUP, Payload, ContentType).
 
 -spec publish_transaction(api_terms()) -> 'ok'.
 -spec publish_transaction(api_terms(), ne_binary()) -> 'ok'.
 publish_transaction(JObj) -> publish_transaction(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_transaction(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?TRANSACTION_VALUES, fun ?MODULE:transaction/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?TRANSACTION_VALUES, fun transaction/1),
     amqp_util:notifications_publish(?NOTIFY_TRANSACTION, Payload, ContentType).
 
 -spec publish_service_added(api_terms()) -> 'ok'.
 -spec publish_service_added(api_terms(), ne_binary()) -> 'ok'.
 publish_service_added(JObj) -> publish_service_added(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_service_added(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?SERVICE_ADDED_VALUES, fun ?MODULE:service_added/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?SERVICE_ADDED_VALUES, fun service_added/1),
     amqp_util:notifications_publish(?NOTIFY_SERVICE_ADDED, Payload, ContentType).
 
 -spec publish_system_alert(api_terms()) -> 'ok'.
 -spec publish_system_alert(api_terms(), ne_binary()) -> 'ok'.
 publish_system_alert(JObj) -> publish_system_alert(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_system_alert(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?SYSTEM_ALERT_VALUES, fun ?MODULE:system_alert/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?SYSTEM_ALERT_VALUES, fun system_alert/1),
     amqp_util:notifications_publish(?NOTIFY_SYSTEM_ALERT, Payload, ContentType).
 
 -spec publish_webhook(api_terms()) -> 'ok'.
 -spec publish_webhook(api_terms(), ne_binary()) -> 'ok'.
 publish_webhook(JObj) -> publish_webhook(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_webhook(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?WEBHOOK_VALUES, fun ?MODULE:webhook/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?WEBHOOK_VALUES, fun webhook/1),
     amqp_util:notifications_publish(?NOTIFY_WEBHOOK_CALLFLOW, Payload, ContentType).
 
 -spec publish_webhook_disabled(api_terms()) -> 'ok'.
 -spec publish_webhook_disabled(api_terms(), ne_binary()) -> 'ok'.
 publish_webhook_disabled(JObj) -> publish_webhook_disabled(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_webhook_disabled(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?WEBHOOK_DISABLED_VALUES, fun ?MODULE:webhook_disabled/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?WEBHOOK_DISABLED_VALUES, fun webhook_disabled/1),
     amqp_util:notifications_publish(?NOTIFY_WEBHOOK_DISABLED, Payload, ContentType).
 
 -spec publish_notify_update(ne_binary(), api_terms()) -> 'ok'.
 -spec publish_notify_update(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
 publish_notify_update(RespQ, JObj) -> publish_notify_update(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_notify_update(RespQ, API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?NOTIFY_UPDATE_VALUES, fun ?MODULE:notify_update/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?NOTIFY_UPDATE_VALUES, fun notify_update/1),
     amqp_util:targeted_publish(RespQ, Payload, ContentType).
 
 -spec publish_denied_emergency_bridge(api_terms()) -> 'ok'.
 -spec publish_denied_emergency_bridge(api_terms(), ne_binary()) -> 'ok'.
 publish_denied_emergency_bridge(JObj) -> publish_denied_emergency_bridge(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_denied_emergency_bridge(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?DENIED_EMERGENCY_BRIDGE_VALUES, fun ?MODULE:denied_emergency_bridge/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?DENIED_EMERGENCY_BRIDGE_VALUES, fun denied_emergency_bridge/1),
     amqp_util:notifications_publish(?NOTIFY_DENIED_EMERGENCY_BRIDGE, Payload, ContentType).
 
 -spec publish_customer_update(api_terms()) -> 'ok'.
 -spec publish_customer_update(api_terms(), ne_binary()) -> 'ok'.
 publish_customer_update(JObj) -> publish_customer_update(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_customer_update(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?CUSTOMER_UPDATE_VALUES, fun ?MODULE:customer_update/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?CUSTOMER_UPDATE_VALUES, fun customer_update/1),
     amqp_util:notifications_publish(?NOTIFY_CUSTOMER_UPDATE, Payload, ContentType).
 
 -spec publish_skel(api_terms()) -> 'ok'.
 -spec publish_skel(api_terms(), ne_binary()) -> 'ok'.
 publish_skel(JObj) -> publish_skel(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_skel(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?SKEL_VALUES, fun ?MODULE:skel/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?SKEL_VALUES, fun skel/1),
     amqp_util:notifications_publish(?NOTIFY_SKEL, Payload, ContentType).

@@ -9,13 +9,13 @@
 -module('cb_presence').
 
 -export([init/0
-         ,authenticate/1
-         ,authorize/1
-         ,allowed_methods/0, allowed_methods/1
-         ,resource_exists/0, resource_exists/1
-         ,content_types_provided/2
-         ,validate/1, validate/2
-         ,post/1, post/2
+        ,authenticate/1
+        ,authorize/1
+        ,allowed_methods/0, allowed_methods/1
+        ,resource_exists/0, resource_exists/1
+        ,content_types_provided/2
+        ,validate/1, validate/2
+        ,post/1, post/2
         ]).
 
 -include("crossbar.hrl").
@@ -28,14 +28,14 @@
 -define(PRESENCE_QUERY_TIMEOUT_KEY, <<"query_presence_timeout">>).
 -define(PRESENCE_QUERY_DEFAULT_TIMEOUT, 1000).
 -define(PRESENCE_QUERY_TIMEOUT, kapps_config:get_integer(?MOD_CONFIG_CAT
-                                                          ,?PRESENCE_QUERY_TIMEOUT_KEY
-                                                          ,?PRESENCE_QUERY_DEFAULT_TIMEOUT
-                                                         )
+                                                        ,?PRESENCE_QUERY_TIMEOUT_KEY
+                                                        ,?PRESENCE_QUERY_DEFAULT_TIMEOUT
+                                                        )
        ).
--define(REPORT_CONTENT_TYPE, [{'to_binary', [{<<"application">>, <<"json">>}]}]).
+-define(REPORT_CONTENT_TYPE, [{'send_file', [{<<"application">>, <<"json">>}]}]).
 -define(REPORT_PREFIX, "report-").
--define(MATCH_REPORT_PREFIX(A), <<?REPORT_PREFIX, A/binary>>).
--define(MATCH_REPORT_PREFIX, <<?REPORT_PREFIX, _/binary>>).
+-define(MATCH_REPORT_PREFIX(ReportId), <<?REPORT_PREFIX, ReportId/binary>>).
+-define(MATCH_REPORT_PREFIX, <<?REPORT_PREFIX, _ReportId/binary>>).
 
 %%%===================================================================
 %%% API
@@ -43,11 +43,11 @@
 init() ->
     Bindings = [{<<"*.allowed_methods.presence">>, 'allowed_methods'}
                ,{<<"*.authenticate">>, 'authenticate'}
-                ,{<<"*.authorize">>, 'authorize'}
-                ,{<<"*.resource_exists.presence">>, 'resource_exists'}
-                ,{<<"*.content_types_provided.presence">>, 'content_types_provided'}
-                ,{<<"*.validate.presence">>, 'validate'}
-                ,{<<"*.execute.post.presence">>, 'post'}
+               ,{<<"*.authorize">>, 'authorize'}
+               ,{<<"*.resource_exists.presence">>, 'resource_exists'}
+               ,{<<"*.content_types_provided.presence">>, 'content_types_provided'}
+               ,{<<"*.validate.presence">>, 'validate'}
+               ,{<<"*.execute.post.presence">>, 'post'}
                ],
     cb_modules_util:bind(?MODULE, Bindings).
 
@@ -187,9 +187,9 @@ search_spawn(Pid, Fun, Context) ->
 -spec search_collect(cb_context:context(), kz_json:object(), integer()) -> cb_context:context().
 search_collect(Context, JObj, 0) ->
     cb_context:setters(Context
-                       ,[{fun cb_context:set_resp_data/2, JObj}
-                          ,{fun cb_context:set_resp_status/2, 'success'}
-                        ]
+                      ,[{fun cb_context:set_resp_data/2, JObj}
+                       ,{fun cb_context:set_resp_status/2, 'success'}
+                       ]
                       );
 search_collect(Context, JObj, N) ->
     receive
@@ -198,8 +198,8 @@ search_collect(Context, JObj, N) ->
             lager:debug("error collecting responses from presence : ~p", [Reason]),
             search_collect(Context, JObj, N - 1)
     after ?PRESENCE_QUERY_TIMEOUT ->
-        lager:debug("timeout (~B) collecting responses from presence", [?PRESENCE_QUERY_TIMEOUT]),
-        search_collect(Context, JObj, N - 1)
+            lager:debug("timeout (~B) collecting responses from presence", [?PRESENCE_QUERY_TIMEOUT]),
+            search_collect(Context, JObj, N - 1)
     end.
 
 -spec search_req(cb_context:context()) ->
@@ -207,13 +207,13 @@ search_collect(Context, JObj, N) ->
                         {'error', any()}.
 search_req(Context) ->
     Req = [{<<"Realm">>, cb_context:account_realm(Context)}
-           ,{<<"Event-Package">>, cb_context:req_param(Context, <<"event">>)}
-           ,{<<"Msg-ID">>, cb_context:req_id(Context)}
+          ,{<<"Event-Package">>, cb_context:req_param(Context, <<"event">>)}
+          ,{<<"Msg-ID">>, cb_context:req_id(Context)}
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     case kz_amqp_worker:call_collect(Req
-                                     ,fun kapi_presence:publish_search_req/1
-                                     ,{'omnipresence', 'true', 'true'}
+                                    ,fun kapi_presence:publish_search_req/1
+                                    ,{'omnipresence', 'true', 'true'}
                                     )
     of
         {'error', _R}=Err -> Err;
@@ -233,13 +233,13 @@ process_search_responses(JObjs) ->
 process_search_responses(JObjs, Timeout) ->
     Subscriptions = extract_subscriptions_from_results(JObjs),
     {'ok'
-     ,kz_json:from_list(
-        props:filter_undefined(
-          [{<<"subscriptions">>, Subscriptions}
-           ,{<<"timeout">>, Timeout}
-          ]
-         )
-       )
+    ,kz_json:from_list(
+       props:filter_undefined(
+         [{<<"subscriptions">>, Subscriptions}
+         ,{<<"timeout">>, Timeout}
+         ]
+        )
+      )
     }.
 
 -spec extract_subscriptions_from_results(kz_json:objects()) ->
@@ -257,8 +257,8 @@ extract_subscriptions_from_result(JObj, Acc) ->
                                   kz_json:object().
 extract_subscription(Subscription, Acc) ->
     Key = [kz_json:get_value(<<"username">>, Subscription)
-           ,kz_json:get_value(<<"event">>, Subscription)
-           ,kz_json:get_value(<<"call_id">>, Subscription)
+          ,kz_json:get_value(<<"event">>, Subscription)
+          ,kz_json:get_value(<<"call_id">>, Subscription)
           ],
     case kz_json:get_value(Key, Acc) of
         'undefined' ->
@@ -266,22 +266,21 @@ extract_subscription(Subscription, Acc) ->
         _Sub -> Acc
     end.
 
--spec add_subscription(kz_json:object(), kz_json:object(), kz_json:key()) ->
+-spec add_subscription(kz_json:object(), kz_json:object(), kz_json:keys()) ->
                               kz_json:object().
 add_subscription(Subscription, Acc, Key) ->
     kz_json:set_value(Key
-                      ,kz_json:delete_keys(
-                         [<<"username">>
-                          ,<<"user">>
-                          ,<<"event">>
-                          ,<<"realm">>
-                          ,<<"protocol">>
-                          ,<<"contact">>
-                          ,<<"call_id">>
-                         ]
-                         ,Subscription
-                        )
-                      ,Acc
+                     ,kz_json:delete_keys([<<"username">>
+                                          ,<<"user">>
+                                          ,<<"event">>
+                                          ,<<"realm">>
+                                          ,<<"protocol">>
+                                          ,<<"contact">>
+                                          ,<<"call_id">>
+                                          ]
+                                         ,Subscription
+                                         )
+                     ,Acc
                      ).
 
 -spec presentity_search_req(cb_context:context()) ->
@@ -289,9 +288,9 @@ add_subscription(Subscription, Acc, Key) ->
                                    {'error', any()}.
 presentity_search_req(Context) ->
     Req = [{<<"Realm">>, cb_context:account_realm(Context)}
-           ,{<<"Event-Package">>, cb_context:req_param(Context, <<"event">>)}
-           ,{<<"Scope">>, <<"presentity">>}
-           ,{<<"Msg-ID">>, cb_context:req_id(Context)}
+          ,{<<"Event-Package">>, cb_context:req_param(Context, <<"event">>)}
+          ,{<<"Scope">>, <<"presentity">>}
+          ,{<<"Msg-ID">>, cb_context:req_id(Context)}
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     Count = kz_nodes:whapp_count(<<"kamailio">>, 'true'),
@@ -299,8 +298,8 @@ presentity_search_req(Context) ->
     lager:debug("attempting presentity search from ~p servers", [Count]),
 
     case kz_amqp_worker:call_collect(Req
-                                     ,fun kapi_omnipresence:publish_search_req/1
-                                     ,{fun collect_presentities/2, {0, Count}}
+                                    ,fun kapi_omnipresence:publish_search_req/1
+                                    ,{fun collect_presentities/2, {0, Count}}
                                     )
     of
         {'error', _E}=Err -> Err;
@@ -336,13 +335,13 @@ process_presentity_responses(JObjs) ->
 process_presentity_responses(JObjs, Timeout) ->
     Presentities = extract_presentities_from_responses(JObjs),
     {'ok'
-     ,kz_json:from_list(
-        props:filter_undefined(
-          [{<<"presentities">>, Presentities}
-           ,{<<"timeout">>, Timeout}
-          ]
-         )
-       )
+    ,kz_json:from_list(
+       props:filter_undefined(
+         [{<<"presentities">>, Presentities}
+         ,{<<"timeout">>, Timeout}
+         ]
+        )
+      )
     }.
 
 extract_presentities_from_responses(JObjs) ->
@@ -362,26 +361,26 @@ process_partial_response(JObj, Acc) ->
     lists:foldl(fun(Key, Acc1) ->
                         process_partial_response(Key, Acc1, JObj, Node)
                 end
-                ,Acc
-                ,SubscriptionKeys
+               ,Acc
+               ,SubscriptionKeys
                ).
 
 process_partial_response(Key, Acc, JObj, Node) ->
     kz_json:set_value([Key, Node]
-                      ,kz_json:get_value([<<"Subscriptions">>, Key], JObj)
-                      ,Acc
+                     ,kz_json:get_value([<<"Subscriptions">>, Key], JObj)
+                     ,Acc
                      ).
 
 -spec validate_thing_reset(cb_context:context(), req_nouns()) ->
                                   cb_context:context().
 validate_thing_reset(Context, [{<<"presence">>, []}
-                               ,{<<"devices">>, [DeviceId]}
-                               ,{<<"accounts">>, [_AccountId]}
+                              ,{<<"devices">>, [DeviceId]}
+                              ,{<<"accounts">>, [_AccountId]}
                               ]) ->
     maybe_load_thing(Context, DeviceId);
 validate_thing_reset(Context, [{<<"presence">>, []}
-                               ,{<<"users">>, [UserId]}
-                               ,{<<"accounts">>, [_AccountId]}
+                              ,{<<"users">>, [UserId]}
+                              ,{<<"accounts">>, [_AccountId]}
                               ]) ->
     case is_reset_request(Context) of
         'true' -> validate_user_reset(Context, UserId);
@@ -430,13 +429,13 @@ is_reset_request(Context) ->
 -spec reset_validation_error(cb_context:context()) -> cb_context:context().
 reset_validation_error(Context) ->
     cb_context:add_validation_error(<<"reset">>
-                                    ,<<"required">>
-                                    ,kz_json:from_list(
-                                       [{<<"message">>, <<"Field must be set to true">>}
-                                        ,{<<"target">>, <<"required">>}
-                                       ]
-                                      )
-                                    ,Context
+                                   ,<<"required">>
+                                   ,kz_json:from_list(
+                                      [{<<"message">>, <<"Field must be set to true">>}
+                                      ,{<<"target">>, <<"required">>}
+                                      ]
+                                     )
+                                   ,Context
                                    ).
 
 -spec post(cb_context:context()) -> cb_context:context().
@@ -464,23 +463,21 @@ send_reset(Context, Thing) ->
 
 -spec publish_reset(ne_binary(), kz_json:objects()) -> 'ok'.
 publish_reset(Realm, Things) ->
-    _ = [publish_presence_reset(Realm, find_presence_id(Thing))
-         || Thing <- Things
-        ],
-    'ok'.
+    F = fun (Thing) -> publish_presence_reset(Realm, find_presence_id(Thing)) end,
+    lists:foreach(F, Things).
 
 -spec publish_presence_reset(ne_binary(), api_binary()) -> 'ok'.
 publish_presence_reset(_Realm, 'undefined') -> 'ok';
 publish_presence_reset(Realm, PresenceId) ->
     lager:debug("resetting ~s @ ~s", [PresenceId, Realm]),
     API = [{<<"Realm">>, Realm}
-           ,{<<"Username">>, PresenceId}
-           ,{<<"Msg-ID">>, kz_util:get_callid()}
+          ,{<<"Username">>, PresenceId}
+          ,{<<"Msg-ID">>, kz_util:get_callid()}
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     kz_amqp_worker:cast(API, fun kapi_presence:publish_reset/1).
 
--spec find_presence_id(kz_json:object()) -> ne_binary().
+-spec find_presence_id(kz_json:object()) -> api_binary().
 find_presence_id(JObj) ->
     case kz_device:is_device(JObj) of
         'true' -> kz_device:presence_id(JObj);
@@ -490,25 +487,23 @@ find_presence_id(JObj) ->
 -spec load_report(cb_context:context(), path_token()) -> cb_context:context().
 load_report(Context, Report) ->
     File = <<"/tmp/", Report/binary, ".json">>,
-    case file:read_file(File) of
-        {'ok', Bin} -> set_report_binary(Context, File, Bin);
-        {'error', _Error} ->
-            lager:error("error ~p while fetching report file ~s", [_Error, File]),
+    case filelib:is_file(File) of
+        'true' -> set_report(Context, File);
+        'false' ->
+            lager:error("invalid file while fetching report file ~s", [File]),
             cb_context:add_system_error('bad_identifier', kz_json:from_list([{<<"cause">>, Report}]), Context)
     end.
 
--spec set_report_binary(cb_context:context(), ne_binary(), ne_binary()) -> cb_context:context().
-set_report_binary(Context, File, Bin) ->
-    _ = file:delete(File),
+-spec set_report(cb_context:context(), ne_binary()) -> cb_context:context().
+set_report(Context, File) ->
     Name = kz_util:to_binary(filename:basename(File)),
+    Headers = [{<<"Content-Disposition">>, <<"attachment; filename=", Name/binary>>}],
     cb_context:setters(Context,
-                       [{fun cb_context:set_resp_data/2, Bin}
+                       [{fun cb_context:set_resp_file/2, File}
                        ,{fun cb_context:set_resp_etag/2, 'undefined'}
-                       ,{fun cb_context:add_resp_headers/2
-                           ,[{<<"Content-Disposition">>, <<"attachment; filename=", Name/binary>>}]
-                        }
+                       ,{fun cb_context:add_resp_headers/2, Headers}
                        ,{fun cb_context:set_resp_status/2, 'success'}
-                        ]
+                       ]
                       ).
 
 -spec collect_report(cb_context:context(), ne_binary() | kz_json:object() | kz_json:objects()) -> any().
@@ -536,7 +531,7 @@ send_report(Context, Thing) ->
     Msg = io_lib:format(Format, [kz_doc:type(Thing), kz_doc:id(Thing)]),
     format_and_send_report(Context, Msg).
 
--spec format_and_send_report(cb_context:context(), ne_binary()) -> 'ok'.
+-spec format_and_send_report(cb_context:context(), iodata()) -> 'ok'.
 format_and_send_report(Context, Msg) ->
     {ReportId, URL} = save_report(Context),
     Subject = io_lib:format("presence reset for account ~s", [cb_context:account_id(Context)]),
@@ -554,7 +549,7 @@ save_report(Context) ->
     JObj = kz_json:encode(cb_context:resp_data(Context)),
     Report = kz_util:rand_hex_binary(16),
     File = <<"/tmp/", Report/binary, ".json">>,
-    file:write_file(File, JObj),
+    'ok' = file:write_file(File, JObj),
     Args = [cb_context:api_version(Context)
            ,cb_context:account_id(Context)
            ,?MATCH_REPORT_PREFIX(Report)

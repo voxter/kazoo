@@ -1,30 +1,29 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz
+%%% @copyright (C) 2011-2016, 2600Hz
 %%% @doc
 %%% S3 Storage for attachments
 %%% @end
 %%% @contributors
 %%%   Luis Azedo
 %%%-----------------------------------------------------------------------------
-
-
 -module(kz_att_s3).
 
 -include("kz_att.hrl").
-
-%% ====================================================================
-%% API functions
-%% ====================================================================
 
 -export([put_attachment/6]).
 -export([fetch_attachment/4]).
 
 
+%% ====================================================================
+%% API functions
+%% ====================================================================
+
+-spec put_attachment(kz_data:connection(), ne_binary(), ne_binary(), ne_binary(), ne_binary(), kz_data:options()) -> any().
 put_attachment(Params, DbName, DocId, AName, Contents, _Options) ->
     #{bucket := Bucket
-      ,key := Key
-      ,secret := Secret
-      ,path := Path
+     ,key := Key
+     ,secret := Secret
+     ,path := Path
      } = Params,
     FilePath = kz_util:to_list(list_to_binary([Path, "/", DbName, "/", DocId, "_", AName])),
     Config = kz_aws_s3:new(kz_util:to_list(Key), kz_util:to_list(Secret)),
@@ -39,6 +38,7 @@ put_attachment(Params, DbName, DocId, AName, Contents, _Options) ->
         _E -> _E
     end.
 
+-spec fetch_attachment(kz_data:connection(), ne_binary(), ne_binary(), ne_binary()) -> any().
 fetch_attachment(HandlerProps, DbName, DocId, AName) ->
     case kz_json:get_value(<<"S3">>, HandlerProps) of
         'undefined' -> {'error', 'invalid_data'};

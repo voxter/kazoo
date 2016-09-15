@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%% Instructs the switch to receive a fax from the caller
 %%% Stores the fax in the database and optionally emails a configured
@@ -10,6 +10,8 @@
 %%%   Ben Wann
 %%%-------------------------------------------------------------------
 -module(cf_receive_fax).
+
+-behaviour(gen_cf_action).
 
 -include("callflow.hrl").
 
@@ -27,9 +29,9 @@ handle(Data, Call) ->
     Props = props:filter_undefined(
               props:filter_empty(
                 [{<<"Call">>, kapps_call:to_json(Call)}
-                 ,{<<"Action">>, <<"receive">>}
-                 ,{<<"Owner-ID">>, kz_json:get_value(<<"owner_id">>, Data)}
-                 ,{<<"Fax-T38-Option">>, kz_json:get_value([<<"media">>, <<"fax_option">>], Data)}
+                ,{<<"Action">>, <<"receive">>}
+                ,{<<"Owner-ID">>, kz_json:get_value(<<"owner_id">>, Data)}
+                ,{<<"Fax-T38-Option">>, kz_json:get_value([<<"media">>, <<"fax_option">>], Data)}
                  | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                 ])),
     kapi_fax:publish_req(Props),

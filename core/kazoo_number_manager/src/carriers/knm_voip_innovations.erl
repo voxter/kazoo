@@ -11,6 +11,7 @@
 -module(knm_voip_innovations).
 -behaviour(knm_gen_carrier).
 
+-export([is_local/0]).
 -export([find_numbers/3]).
 -export([acquire_number/1]).
 -export([disconnect_number/1]).
@@ -28,18 +29,18 @@
 -define(VI_DEBUG, kapps_config:get_is_true(?KNM_VI_CONFIG_CAT, <<"debug">>, 'false')).
 -define(VI_DEBUG_FILE, "/tmp/voipinnovations.xml").
 -define(DEBUG_WRITE(Format, Args),
-        _ = ?VI_DEBUG andalso
-            file:write_file(?VI_DEBUG_FILE, io_lib:format(Format, Args))
+        _ = ?VI_DEBUG
+        andalso file:write_file(?VI_DEBUG_FILE, io_lib:format(Format, Args))
        ).
 -define(DEBUG_APPEND(Format, Args),
-        _ = ?VI_DEBUG andalso
-            file:write_file(?VI_DEBUG_FILE, io_lib:format(Format, Args), ['append'])
+        _ = ?VI_DEBUG
+        andalso file:write_file(?VI_DEBUG_FILE, io_lib:format(Format, Args), ['append'])
        ).
 
 -define(VI_DEFAULT_NAMESPACE, "http://tempuri.org/").
 
 -define(IS_SANDBOX_PROVISIONING_TRUE,
-       kapps_config:get_is_true(?KNM_VI_CONFIG_CAT, <<"sandbox_provisioning">>, 'false')).
+        kapps_config:get_is_true(?KNM_VI_CONFIG_CAT, <<"sandbox_provisioning">>, 'false')).
 -define(IS_PROVISIONING_ENABLED,
         kapps_config:get_is_true(?KNM_VI_CONFIG_CAT, <<"enable_provisioning">>, 'true')).
 
@@ -50,7 +51,7 @@
 -define(VI_URL_V3_SANDBOX,
         "http://dev.voipinnovations.com/VOIP/Services/APIService.asmx").
 -define(URL_IN_USE,
-       case ?IS_SANDBOX_PROVISIONING_TRUE of 'true' -> ?VI_URL_V3_SANDBOX; 'false' -> ?VI_URL_V3 end).
+        case ?IS_SANDBOX_PROVISIONING_TRUE of 'true' -> ?VI_URL_V3_SANDBOX; 'false' -> ?VI_URL_V3 end).
 
 -define(VI_LOGIN, kapps_config:get_string(?KNM_VI_CONFIG_CAT, <<"login">>, <<>>)).
 -define(VI_PASSWORD, kapps_config:get_string(?KNM_VI_CONFIG_CAT, <<"password">>, <<>>)).
@@ -61,6 +62,16 @@
 -type to_json_ret() :: {'ok', kz_json:object()} | {'error', any()}.
 
 %%% API
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Is this carrier handling numbers local to the system?
+%% Note: a non-local (foreign) carrier module makes HTTP requests.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_local() -> boolean().
+is_local() -> 'false'.
 
 %% @public
 -spec is_number_billable(knm_number:knm_number()) -> boolean().
@@ -73,7 +84,7 @@ is_number_billable(_Number) -> 'true'.
 %% Query the system for a quantity of available numbers in a rate center
 %% @end
 %%--------------------------------------------------------------------
--spec find_numbers(ne_binary(), pos_integer(), kz_proplist()) ->
+-spec find_numbers(ne_binary(), pos_integer(), knm_carriers:options()) ->
                           {'ok', knm_number:knm_numbers()} |
                           {'error', any()}.
 find_numbers(<<"+", Rest/binary>>, Quantity, Options) ->
@@ -83,11 +94,11 @@ find_numbers(<<"1", Rest/binary>>, Quantity, Options) ->
 find_numbers(<<NPA:3/binary>>, Quantity, Options) ->
     Resp = soap("getDIDs", [{"npa", NPA}]),
     MaybeJson = to_json('find_numbers', Quantity, Resp),
-    to_numbers(MaybeJson, props:get_value(<<"account_id">>, Options));
+    to_numbers(MaybeJson, knm_carriers:account_id(Options));
 find_numbers(<<NXX:6/binary,_/binary>>, Quantity, Options) ->
     Resp = soap("getDIDs", [{"nxx", NXX}]),
     MaybeJson = to_json('find_numbers', Quantity, Resp),
-    to_numbers(MaybeJson, props:get_value(<<"account_id">>, Options)).
+    to_numbers(MaybeJson, knm_carriers:account_id(Options)).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -127,7 +138,7 @@ disconnect_number(Number) ->
         'false' when Debug ->
             lager:debug("allowing sandbox provisioning"),
             Number;
-       'false' ->
+        'false' ->
             knm_errors:unspecified('provisioning_disabled', Number);
         'true' ->
             N = 'remove +1'(
@@ -159,15 +170,17 @@ should_lookup_cnam() -> 'true'.
 to_numbers({'error',_R}=Error, _) ->
     Error;
 to_numbers({'ok',JObjs}, AccountId) ->
-    {'ok',
-     [ begin
-           Num = kz_json:get_value(<<"e164">>, JObj),
-           {'ok', PhoneNumber} =
-               knm_phone_number:newly_found(Num, ?MODULE, AccountId, JObj),
-           knm_number:set_phone_number(knm_number:new(), PhoneNumber)
-       end
-       || JObj <- JObjs ]
-    }.
+    Numbers =
+        [N || JObj <- JObjs,
+              {'ok', N} <-
+                  [knm_carriers:create_found(kz_json:get_value(<<"e164">>, JObj)
+                                            ,?MODULE
+                                            ,AccountId
+                                            ,JObj
+                                            )
+                  ]
+        ],
+    {'ok', Numbers}.
 
 -spec maybe_return(to_json_ret(), knm_number:knm_number()) ->
                           knm_number:knm_number().
@@ -190,10 +203,10 @@ to_json('find_numbers', Quantity, {'ok', Xml}) ->
     {'ok',
      [ kz_json:from_list(
          [{<<"e164">>, knm_converters:normalize(kz_util:get_xml_value("//tn/text()", DID))}
-          ,{<<"rate_center">>, kz_util:get_xml_value("//rateCenter/text()", DID)}
-          ,{<<"state">>, kz_util:get_xml_value("//state/text()", DID)}
-          ,{<<"cnam">>, kz_util:is_true(kz_util:get_xml_value("//outboundCNAM/text()", DID))}
-          ,{<<"t38">>, kz_util:is_true(kz_util:get_xml_value("//t38/text()", DID))}
+         ,{<<"rate_center">>, kz_util:get_xml_value("//rateCenter/text()", DID)}
+         ,{<<"state">>, kz_util:get_xml_value("//state/text()", DID)}
+         ,{<<"cnam">>, kz_util:is_true(kz_util:get_xml_value("//outboundCNAM/text()", DID))}
+         ,{<<"t38">>, kz_util:is_true(kz_util:get_xml_value("//t38/text()", DID))}
          ])
        || DID=#xmlElement{} <- lists:sublist(DIDs, Quantity)
      ]
@@ -224,8 +237,8 @@ to_json('disconnect_number', _Numbers, {'ok', Xml}) ->
                    lager:debug("disconnect ~s: ~s:~s", [N, Code, Msg]),
                    kz_json:from_list(
                      [{<<"code">>, Code}
-                      ,{<<"msg">>, Msg}
-                      ,{<<"e164">>, knm_converters:normalize(N)}
+                     ,{<<"msg">>, Msg}
+                     ,{<<"e164">>, knm_converters:normalize(N)}
                      ])
                end
                || DID=#xmlElement{name = 'DID'}
@@ -289,14 +302,14 @@ body("getDIDs", Props) ->
                    ,"t38"
                    ,"tier"
                    ],
-     [case props:get_value(Key, Props) of
-          'undefined' ->
-              ["<tns:", Key, " xsi:nil='true'/>"];
-          Value ->
-              ["<tns:", Key, ">", Value, "</tns:", Key, ">"]
-      end
-      || Key <- PossibleKeys
-     ];
+    [case props:get_value(Key, Props) of
+         'undefined' ->
+             ["<tns:", Key, " xsi:nil='true'/>"];
+         Value ->
+             ["<tns:", Key, ">", Value, "</tns:", Key, ">"]
+     end
+     || Key <- PossibleKeys
+    ];
 
 body("assignDID", Numbers=[_|_]) ->
     ["<tns:didParams>",
@@ -321,9 +334,9 @@ body("releaseDID", Numbers=[_|_]) ->
 soap_request(Action, Body) ->
     Url = ?URL_IN_USE,
     Headers = [{"SOAPAction", ?VI_DEFAULT_NAMESPACE++Action}
-               ,{"Accept", "*/*"}
-               ,{"User-Agent", ?KNM_USER_AGENT}
-               ,{"Content-Type", "text/xml;charset=UTF-8"}
+              ,{"Accept", "*/*"}
+              ,{"User-Agent", ?KNM_USER_AGENT}
+              ,{"Content-Type", "text/xml;charset=UTF-8"}
               ],
     HTTPOptions = [{'ssl', [{'verify', 'verify_none'}]}
                   ,{'timeout', 180 * ?MILLISECONDS_IN_SECOND}

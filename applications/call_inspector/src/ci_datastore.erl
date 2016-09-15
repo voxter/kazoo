@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -21,25 +21,25 @@
 -export([lookup_callid/1]).
 -export([callid_exists/1]).
 -export([flush/0
-         ,flush/1
+        ,flush/1
         ]).
 
 %% gen_server callbacks
 -export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,terminate/2
-         ,code_change/3
+        ,handle_call/3
+        ,handle_cast/2
+        ,handle_info/2
+        ,terminate/2
+        ,code_change/3
         ]).
 
 -record(state, {}).
 -type state() :: #state{}.
 
 -record(object, {call_id
-                 ,timestamp
-                 ,type
-                 ,value
+                ,timestamp
+                ,type
+                ,value
                 }).
 -type object() :: #object{}.
 
@@ -82,10 +82,10 @@ callid_exists(CallId) ->
 -spec lookup_callid(ne_binary()) -> data().
 lookup_callid(CallId) ->
     Props = lists:foldl(fun lookup_callid_fold/2
-                        ,[{'chunks', []}
-                          ,{'analysis', []}
-                         ]
-                        ,lookup_objects(CallId)
+                       ,[{'chunks', []}
+                        ,{'analysis', []}
+                        ]
+                       ,lookup_objects(CallId)
                        ),
     Chunks = ci_chunk:reorder_dialog(props:get_value('chunks', Props)),
     props:set_value('chunks', Chunks, Props).
@@ -148,6 +148,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast({'store_chunk', CallId, Chunk}, State) ->
     Object = #object{call_id=CallId
                     ,timestamp=kz_util:current_tstamp()
@@ -185,6 +186,7 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State}.
@@ -200,6 +202,7 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, #state{}=_State) ->
     lager:debug("call inspector datastore terminated: ~p", [_Reason]),
     'ok'.
@@ -212,6 +215,7 @@ terminate(_Reason, #state{}=_State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 

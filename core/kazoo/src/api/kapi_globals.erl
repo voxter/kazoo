@@ -12,7 +12,9 @@
 -export([message/1, reply/1, reason/1]).
 -export([encode/1, encode_req/1, decode/1]).
 -export([state/1]).
--export([is_pending/1]).
+-export([is_pending/1
+        ,is_none/1
+        ]).
 -export([timestamp/1]).
 -export([node/1]).
 
@@ -42,25 +44,25 @@
 -include_lib("kazoo/include/kz_api.hrl").
 
 %% Types & Accessors
--type state() :: 'none' | 'local' | 'pending' | 'remote'.
+-type state() :: 'none' | 'local' | 'pending' | 'remote' | 'registered'.
 -export_type([state/0]).
 
--spec encode(term()) -> ne_binary().
+-spec encode(any()) -> ne_binary().
 encode(Term) ->
     base64:encode(term_to_binary(Term)).
 
--spec decode(api_binary()) -> term().
+-spec decode(api_binary()) -> any().
 decode('undefined') -> 'undefined';
 decode(Bin) ->
     binary_to_term(base64:decode(Bin)).
 
--spec maybe_encode(term()) -> term().
+-spec maybe_encode(any()) -> any().
 maybe_encode(<<131, _/binary>>=Encoded) ->
     base64:encode(Encoded);
 maybe_encode(Term) ->
     encode(Term).
 
--spec maybe_decode(term()) -> term().
+-spec maybe_decode(any()) -> any().
 maybe_decode(<<131, _/binary>>=Encoded) ->
     binary_to_term(Encoded);
 maybe_decode(MaybeEncoded) ->
@@ -73,17 +75,18 @@ maybe_decode(MaybeEncoded) ->
         'error':{'badarg', _} -> MaybeEncoded
     end.
 
+-spec encode_req(kz_json:object() | kz_proplist()) -> any().
 encode_req(Req) ->
     set_name(Req, name(Req)).
 
--spec name(kz_json:object() | kz_proplist()) -> term().
+-spec name(kz_json:object() | kz_proplist()) -> any().
 name(Props)
   when is_list(Props) ->
     maybe_decode(props:get_value(<<"Name">>, Props));
 name(JObj) ->
     maybe_decode(kz_json:get_value(<<"Name">>, JObj)).
 
--spec set_name(api_terms(), term()) -> api_terms().
+-spec set_name(api_terms(), any()) -> api_terms().
 set_name(Req, 'undefined') -> Req;
 set_name(Props, Name)
   when is_list(Props) ->
@@ -103,13 +106,17 @@ reply(JObj) ->
 state(JObj) ->
     kz_json:get_atom_value(<<"State">>, JObj).
 
--spec reason(kz_json:object()) -> term().
+-spec reason(kz_json:object()) -> any().
 reason(JObj) ->
     maybe_decode(kz_json:get_value(<<"Reason">>, JObj)).
 
 -spec is_pending(kz_json:object()) -> boolean().
 is_pending(JObj) ->
     state(JObj) =:= 'pending'.
+
+-spec is_none(kz_json:object()) -> boolean().
+is_none(JObj) ->
+    state(JObj) =:= 'none'.
 
 -spec timestamp(kz_json:object()) -> integer().
 timestamp(JObj) ->
@@ -137,7 +144,7 @@ routing_key(Event, Name) ->
 
 %% Globals Events
 -define(GLOBALS_EVENT_ROUTING_KEY(Event, Name)
-        ,routing_key(Event, Name)
+       ,routing_key(Event, Name)
        ).
 
 -define(QUERY_REQ_HEADERS, [<<"Name">>]).
@@ -165,7 +172,7 @@ routing_key(Event, Name) ->
 -define(OPTIONAL_REGISTER_RESP_HEADERS, [<<"State">>, <<"Timestamp">>]).
 -define(REGISTER_RESP_VALUES, [{<<"Event-Category">>, <<"globals">>}
                               ,{<<"Event-Name">>, <<"register_resp">>}
-                           ]).
+                              ]).
 -define(REGISTER_RESP_TYPES, [{<<"Timestamp">>, fun is_integer/1}]).
 
 -define(UNREGISTER_REQ_HEADERS, [<<"Name">>]).
@@ -330,7 +337,7 @@ declare_exchanges() ->
 publish_targeted_call(ServerId, JObj) ->
     publish_targeted_call(ServerId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_targeted_call(ServerId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(encode_req(Req), ?CALL_REQ_VALUES, fun ?MODULE:call/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(encode_req(Req), ?CALL_REQ_VALUES, fun call/1),
     amqp_util:targeted_publish(ServerId, Payload, ContentType).
 
 -spec publish_call(api_terms()) -> 'ok'.
@@ -338,7 +345,7 @@ publish_targeted_call(ServerId, Req, ContentType) ->
 publish_call(JObj) ->
     publish_call(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_call(Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(encode_req(Req), ?CALL_REQ_VALUES, fun ?MODULE:call/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(encode_req(Req), ?CALL_REQ_VALUES, fun call/1),
     Name = name(Req),
     RoutingKey = ?GLOBALS_EVENT_ROUTING_KEY(<<"call">>, Name),
     publish(RoutingKey, Payload, ContentType).
@@ -348,7 +355,7 @@ publish_call(Req, ContentType) ->
 publish_targeted_send(ServerId, JObj) ->
     publish_targeted_send(ServerId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_targeted_send(ServerId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(encode_req(Req), ?SEND_REQ_VALUES, fun ?MODULE:send/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(encode_req(Req), ?SEND_REQ_VALUES, fun send/1),
     amqp_util:targeted_publish(ServerId, Payload, ContentType).
 
 -spec publish_send(api_terms()) -> 'ok'.
@@ -356,7 +363,7 @@ publish_targeted_send(ServerId, Req, ContentType) ->
 publish_send(JObj) ->
     publish_send(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_send(Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(encode_req(Req), ?SEND_REQ_VALUES, fun ?MODULE:send/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(encode_req(Req), ?SEND_REQ_VALUES, fun send/1),
     Name = name(Req),
     RoutingKey = ?GLOBALS_EVENT_ROUTING_KEY(<<"send">>, Name),
     publish(RoutingKey, Payload, ContentType).
@@ -366,7 +373,7 @@ publish_send(Req, ContentType) ->
 publish_reply(ServerId, JObj) ->
     publish_reply(ServerId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_reply(ServerId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(encode_req(Req), ?REPLY_REQ_VALUES, fun ?MODULE:reply_msg/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(encode_req(Req), ?REPLY_REQ_VALUES, fun reply_msg/1),
     amqp_util:targeted_publish(ServerId, Payload, ContentType).
 
 -spec publish_register(api_terms()) -> 'ok'.
@@ -374,7 +381,7 @@ publish_reply(ServerId, Req, ContentType) ->
 publish_register(Req) ->
     publish_register(Req, ?DEFAULT_CONTENT_TYPE).
 publish_register(Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(encode_req(Req), ?REGISTER_REQ_VALUES, fun ?MODULE:register/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(encode_req(Req), ?REGISTER_REQ_VALUES, fun register/1),
     RoutingKey = ?GLOBALS_EVENT_ROUTING_KEY(<<"register">>, name(Req)),
     publish(RoutingKey, Payload, ContentType).
 
@@ -383,7 +390,7 @@ publish_register(Req, ContentType) ->
 publish_register_resp(ServerId, JObj) ->
     publish_register_resp(ServerId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_register_resp(ServerId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(encode_req(Req), ?REGISTER_RESP_VALUES, fun ?MODULE:register_resp/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(encode_req(Req), ?REGISTER_RESP_VALUES, fun register_resp/1),
     amqp_util:targeted_publish(ServerId, Payload, ContentType).
 
 -spec publish_unregister(api_terms()) -> 'ok'.
@@ -391,7 +398,7 @@ publish_register_resp(ServerId, Req, ContentType) ->
 publish_unregister(Req) ->
     publish_unregister(Req, ?DEFAULT_CONTENT_TYPE).
 publish_unregister(Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(encode_req(Req), ?UNREGISTER_REQ_VALUES, fun ?MODULE:unregister/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(encode_req(Req), ?UNREGISTER_REQ_VALUES, fun unregister/1),
     RoutingKey = ?GLOBALS_EVENT_ROUTING_KEY(<<"unregister">>, name(Req)),
     publish(RoutingKey, Payload, ContentType).
 
@@ -400,7 +407,7 @@ publish_unregister(Req, ContentType) ->
 publish_query_resp(ServerId, JObj) ->
     publish_query_resp(ServerId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_query_resp(ServerId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(encode_req(Req), ?QUERY_RESP_VALUES, fun ?MODULE:query_resp/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(encode_req(Req), ?QUERY_RESP_VALUES, fun query_resp/1),
     amqp_util:targeted_publish(ServerId, Payload, ContentType).
 
 -spec publish_query(api_terms()) -> 'ok'.
@@ -408,7 +415,7 @@ publish_query_resp(ServerId, Req, ContentType) ->
 publish_query(JObj) ->
     publish_query(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_query(Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(encode_req(Req), ?QUERY_REQ_VALUES, fun ?MODULE:query/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(encode_req(Req), ?QUERY_REQ_VALUES, fun query/1),
     Name = name(Req),
     RoutingKey = ?GLOBALS_EVENT_ROUTING_KEY(<<"query">>, Name),
     publish(RoutingKey, Payload, ContentType).

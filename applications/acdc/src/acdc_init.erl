@@ -10,11 +10,11 @@
 -module(acdc_init).
 
 -export([start_link/0
-         ,init_db/0
-         ,init_acdc/0
-         ,init_acct/1
-         ,init_acct_queues/1
-         ,init_acct_agents/1
+        ,init_db/0
+        ,init_acdc/0
+        ,init_acct/1
+        ,init_acct_queues/1
+        ,init_acct_agents/1
         ]).
 
 -include("acdc.hrl").
@@ -77,13 +77,13 @@ init_acct_agents(Account) ->
 -spec init_acct_queues(ne_binary(), ne_binary()) -> any().
 init_acct_queues(AccountDb, AccountId) ->
     init_queues(AccountId
-                ,kz_datamgr:get_results(AccountDb, <<"queues/crossbar_listing">>, [])
+               ,kz_datamgr:get_results(AccountDb, <<"queues/crossbar_listing">>, [])
                ).
 
 -spec init_acct_agents(ne_binary(), ne_binary()) -> any().
 init_acct_agents(AccountDb, AccountId) ->
     init_agents(AccountId
-                ,kz_datamgr:get_results(AccountDb, <<"queues/agents_listing">>, [])
+               ,kz_datamgr:get_results(AccountDb, <<"queues/agents_listing">>, [])
                ).
 
 -spec init_queues(ne_binary(), kz_datamgr:get_results_return()) -> any().
@@ -121,7 +121,7 @@ init_agents(AccountId, {'error', _E}) ->
 init_agents(AccountId, {'ok', As}) ->
     [spawn_previously_logged_in_agent(AccountId, kz_doc:id(A)) || A <- As].
 
-wait_a_bit() -> timer:sleep(1000 + random:uniform(500)).
+wait_a_bit() -> timer:sleep(1000 + rand:uniform(500)).
 
 try_queues_again(AccountId) ->
     try_again(AccountId, fun init_acct_queues/2).

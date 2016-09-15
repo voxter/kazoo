@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -9,31 +9,31 @@
 -module(acdc_util).
 
 -export([get_endpoints/2
-         ,bind_to_call_events/1, bind_to_call_events/2
-         ,b_bind_to_call_events/2
-         ,unbind_from_call_events/1
-         ,unbind_from_call_events/2
-         ,agents_in_queue/2
-         ,agent_devices/2
-         ,proc_id/0, proc_id/1, proc_id/2
-         ,queue_presence_update/2
-         ,agent_presence_update/2
-         ,presence_update/3, presence_update/4
-         ,send_cdr/2
-         ,caller_id/1
+        ,bind_to_call_events/1, bind_to_call_events/2
+        ,b_bind_to_call_events/2
+        ,unbind_from_call_events/1
+        ,unbind_from_call_events/2
+        ,agents_in_queue/2
+        ,agent_devices/2
+        ,proc_id/0, proc_id/1, proc_id/2
+        ,queue_presence_update/2
+        ,agent_presence_update/2
+        ,presence_update/3, presence_update/4
+        ,send_cdr/2
+        ,caller_id/1
         ]).
 
 -include("acdc.hrl").
 
 -define(CALL_EVENT_RESTRICTIONS, ['CHANNEL_CREATE'
-                                  ,'CHANNEL_ANSWER'
-                                  ,'CHANNEL_BRIDGE', 'CHANNEL_UNBRIDGE'
-                                  ,'LEG_CREATED', 'LEG_DESTROYED'
-                                  ,'CHANNEL_DESTROY'
-                                  ,'DTMF'
-                                  ,'CHANNEL_EXECUTE_COMPLETE'
-                                  ,'PLAYBACK_STOP'
-                                  ,'usurp_control'
+                                 ,'CHANNEL_ANSWER'
+                                 ,'CHANNEL_BRIDGE', 'CHANNEL_UNBRIDGE'
+                                 ,'LEG_CREATED', 'LEG_DESTROYED'
+                                 ,'CHANNEL_DESTROY'
+                                 ,'DTMF'
+                                 ,'CHANNEL_EXECUTE_COMPLETE'
+                                 ,'PLAYBACK_STOP'
+                                 ,'usurp_control'
                                  ]).
 
 -spec queue_presence_update(ne_binary(), ne_binary()) -> 'ok'.
@@ -74,7 +74,7 @@ send_cdr(Url, JObj, Retries) ->
                      ,[{"Content-Type", "application/json"}]
                      , kz_json:encode(JObj)
                      ,[{'timeout', 1000}]
-                    ) of
+                     ) of
         {'ok', _StatusCode, _RespHeaders, _RespBody} ->
             lager:debug("cdr server at ~s responded with a ~p: ~s", [Url, _StatusCode, _RespBody]);
         _Else ->
@@ -93,9 +93,9 @@ agents_in_queue(AcctDb, QueueId) ->
 
 -spec agent_devices(ne_binary(), ne_binary()) -> kz_json:objects().
 agent_devices(AcctDb, AgentId) ->
-    case kz_datamgr:get_results(AcctDb, <<"kz_attributes/owned">>, [{'key', [AgentId, <<"device">>]}
-                                                                   ,'include_docs'
-                                                                  ])
+    case kz_datamgr:get_results(AcctDb, <<"attributes/owned">>, [{'key', [AgentId, <<"device">>]}
+                                                                ,'include_docs'
+                                                                ])
     of
         {'ok', Devices} -> [kz_json:get_value(<<"doc">>, Dev) || Dev <- Devices];
         {'error', _} -> []
@@ -104,8 +104,10 @@ agent_devices(AcctDb, AgentId) ->
 -spec get_endpoints(kapps_call:call(), ne_binary() | kz_datamgr:get_results_return()) ->
                            kz_json:objects().
 get_endpoints(Call, ?NE_BINARY = AgentId) ->
-    %% can_call_self allows attended transfer to successfully ring the transferring agent
-    cf_user:get_endpoints(AgentId, kz_json:set_value(<<"can_call_self">>, 'true', kz_json:new()), Call).
+    Params = kz_json:from_list([{<<"source">>, ?MODULE}
+                               ,{<<"can_call_self">>, 'true'}
+                               ]),
+    kz_endpoints:by_owner_id(AgentId, Params, Call).
 
 %% Handles subscribing/unsubscribing from call events
 -spec bind_to_call_events(api_binary() | {api_binary(), any()} | kapps_call:call()) -> 'ok'.
@@ -133,7 +135,7 @@ unbind_from_call_events('undefined', _Pid) -> 'ok';
 unbind_from_call_events(?NE_BINARY = CallId, Pid) ->
     gen_listener:rm_binding(Pid, 'call', [{'callid', CallId}]),
     gen_listener:rm_binding(Pid, 'acdc_agent', [{'callid', CallId}
-                                                ,{'restrict_to', ['stats_req']}
+                                               ,{'restrict_to', ['stats_req']}
                                                ]);
 unbind_from_call_events({CallId, _}, Pid) -> unbind_from_call_events(CallId, Pid);
 unbind_from_call_events(Call, Pid) -> unbind_from_call_events(kapps_call:call_id(Call), Pid).

@@ -10,7 +10,7 @@
 
 > DELETE /v2/accounts/{ACCOUNT_ID}/registrations
 
-```curl
+```shell
 curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/registrations
@@ -20,7 +20,7 @@ curl -v -X DELETE \
 
 > GET /v2/accounts/{ACCOUNT_ID}/registrations
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/registrations
@@ -28,19 +28,19 @@ curl -v -X GET \
 
 #### Remove
 
-> DELETE /v2/accounts/{ACCOUNT_ID}/registrations/{ID}
+> DELETE /v2/accounts/{ACCOUNT_ID}/registrations/{USERNAME}
 
-```curl
+```shell
 curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/registrations/{ID}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/registrations/{USERNAME}
 ```
 
 #### Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/registrations/count
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/registrations/count

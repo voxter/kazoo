@@ -32,7 +32,7 @@ Key | Description | Type | Default | Required
 `servers.[].auth.auth_method` | What type of auth mechanism to use | `string('password', 'Password', 'IP', 'ip')` | `password` | `true`
 `servers.[].auth.auth_password` | Password of the user@auth_realm | `string(1..)` |   | `false`
 `servers.[].auth.auth_user` | Username for authentication | `string(1..)` |   | `false`
-`servers.[].auth.ip` | IP address for this device | `string` |   | `false`
+`servers.[].auth.ip` | IP (sip) address for this device | `string` |   | `false`
 `servers.[].auth.port` | Port to send SIP traffic for the remote device | `integer` |   | `false`
 `servers.[].name` | Human-friendly name of the server | `string(1..)` |   | `false`
 `servers.[].options` |   | `object` |   | `false`
@@ -42,7 +42,7 @@ Key | Description | Type | Default | Required
 
 > GET /v2/accounts/{ACCOUNT_ID}/connectivity
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/connectivity
@@ -52,7 +52,7 @@ curl -v -X GET \
 
 > PUT /v2/accounts/{ACCOUNT_ID}/connectivity
 
-```curl
+```shell
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/connectivity
@@ -60,41 +60,41 @@ curl -v -X PUT \
 
 #### Remove
 
-> DELETE /v2/accounts/{ACCOUNT_ID}/connectivity/{ID}
+> DELETE /v2/accounts/{ACCOUNT_ID}/connectivity/{CONNECTIVITY_ID}
 
-```curl
+```shell
 curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/connectivity/{ID}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/connectivity/{CONNECTIVITY_ID}
 ```
 
 #### Fetch
 
-> GET /v2/accounts/{ACCOUNT_ID}/connectivity/{ID}
+> GET /v2/accounts/{ACCOUNT_ID}/connectivity/{CONNECTIVITY_ID}
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/connectivity/{ID}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/connectivity/{CONNECTIVITY_ID}
 ```
 
 #### Patch
 
-> PATCH /v2/accounts/{ACCOUNT_ID}/connectivity/{ID}
+> PATCH /v2/accounts/{ACCOUNT_ID}/connectivity/{CONNECTIVITY_ID}
 
-```curl
+```shell
 curl -v -X PATCH \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/connectivity/{ID}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/connectivity/{CONNECTIVITY_ID}
 ```
 
 #### Change
 
-> POST /v2/accounts/{ACCOUNT_ID}/connectivity/{ID}
+> POST /v2/accounts/{ACCOUNT_ID}/connectivity/{CONNECTIVITY_ID}
 
-```curl
+```shell
 curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/connectivity/{ID}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/connectivity/{CONNECTIVITY_ID}
 ```
 

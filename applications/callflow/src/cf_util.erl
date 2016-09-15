@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz
+%%% @copyright (C) 2011-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -30,27 +30,26 @@
 -export([sip_users_from_device_ids/2]).
 
 -export([caller_belongs_to_group/2
-         ,maybe_belongs_to_group/3
-         ,caller_belongs_to_user/2
-         ,find_endpoints/3
-         ,find_channels/2
-         ,find_user_endpoints/3
-         ,find_group_endpoints/2
-         ,check_value_of_fields/4
-         ,get_timezone/2, account_timezone/1
+        ,maybe_belongs_to_group/3
+        ,caller_belongs_to_user/2
+        ,find_endpoints/3
+        ,find_channels/2
+        ,find_user_endpoints/3
+        ,find_group_endpoints/2
+        ,check_value_of_fields/4
+        ,get_timezone/2, account_timezone/1
         ]).
 
 -export([wait_for_noop/2]).
 -export([start_task/3]).
 -export([start_event_listener/3
-         ,event_listener_name/2
+        ,event_listener_name/2
         ]).
 
 -include("callflow.hrl").
 -include_lib("kazoo/src/kz_json.hrl").
 
 -define(OWNER_KEY(Db, User), {?MODULE, 'owner_id', Db, User}).
--define(CF_FLOW_CACHE_KEY(Number, Db), {'cf_flow', Number, Db}).
 -define(SIP_USER_OWNERS_KEY(Db, User), {?MODULE, 'sip_user_owners', Db, User}).
 -define(SIP_ENDPOINT_ID_KEY(Db, User), {?MODULE, 'sip_endpoint_id', Db, User}).
 -define(PARKING_PRESENCE_KEY(Db, Request), {?MODULE, 'parking_callflow', Db, Request}).
@@ -71,7 +70,7 @@ presence_probe(JObj, _Props) ->
     Username = kz_json:get_value(<<"Username">>, JObj),
     Realm = kz_json:get_value(<<"Realm">>, JObj),
     ProbeRepliers = [fun manual_presence/2
-                     ,fun presence_parking_slot/2
+                    ,fun presence_parking_slot/2
                     ],
     lists:takewhile(fun(Fun) ->
                             Fun(Username, Realm) =:= 'not_found'
@@ -98,7 +97,7 @@ maybe_presence_parking_slot_resp(Username, Realm, AccountDb) ->
 -spec maybe_presence_parking_flow(ne_binary(), ne_binary(), ne_binary()) -> 'ok' | 'not_found'.
 maybe_presence_parking_flow(Username, Realm, AccountDb) ->
     AccountId = kz_util:format_account_id(AccountDb, 'raw'),
-    _ = lookup_callflow(Username, AccountId),
+    _ = cf_flow:lookup(Username, AccountId),
     case kz_cache:fetch_local(?CACHE_NAME, ?CF_FLOW_CACHE_KEY(Username, AccountDb)) of
         {'error', 'not_found'} -> 'not_found';
         {'ok', Flow} ->
@@ -151,8 +150,8 @@ manual_presence_resp(Username, Realm, JObj) ->
         'undefined' -> 'not_found';
         State ->
             PresenceUpdate = [{<<"Presence-ID">>, PresenceId}
-                              ,{<<"State">>, State}
-                              ,{<<"Call-ID">>, kz_util:to_hex_binary(crypto:hash(md5, PresenceId))}
+                             ,{<<"State">>, State}
+                             ,{<<"Call-ID">>, kz_util:to_hex_binary(crypto:hash(md5, PresenceId))}
                               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                              ],
             kapps_util:amqp_pool_send(PresenceUpdate, fun kapi_presence:publish_update/1)
@@ -215,8 +214,8 @@ mwi_resp(Username, Realm, OwnerId, AccountDb, JObj) ->
 
 -spec is_unsolicited_mwi_enabled(ne_binary()) -> boolean().
 is_unsolicited_mwi_enabled(AccountId) ->
-    kapps_config:get_is_true(?CF_CONFIG_CAT, ?MWI_SEND_UNSOLICITATED_UPDATES, 'true') andalso
-    kz_util:is_true(kapps_account_config:get(AccountId, ?CF_CONFIG_CAT, ?MWI_SEND_UNSOLICITATED_UPDATES, 'true')).
+    kapps_config:get_is_true(?CF_CONFIG_CAT, ?MWI_SEND_UNSOLICITATED_UPDATES, 'true')
+        andalso kz_util:is_true(kapps_account_config:get(AccountId, ?CF_CONFIG_CAT, ?MWI_SEND_UNSOLICITATED_UPDATES, 'true')).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -245,15 +244,15 @@ unsolicited_owner_mwi_update(_AccountDb, _OwnerId, 'false') ->
     lager:debug("unsolicitated mwi updated disabled : ~s", [_AccountDb]);
 unsolicited_owner_mwi_update(AccountDb, OwnerId, 'true') ->
     ViewOptions = [{'key', [OwnerId, <<"device">>]}
-                   ,'include_docs'
+                  ,'include_docs'
                   ],
-    case kz_datamgr:get_results(AccountDb, <<"kz_attributes/owned">>, ViewOptions) of
+    case kz_datamgr:get_results(AccountDb, <<"attributes/owned">>, ViewOptions) of
         {'ok', JObjs} ->
             {New, Saved} = vm_count_by_owner(AccountDb, OwnerId),
             AccountId = kz_util:format_account_id(AccountDb, 'raw'),
             lists:foreach(
               fun(JObj) -> maybe_send_mwi_update(JObj, AccountId, New, Saved) end
-              ,JObjs
+                         ,JObjs
              );
         {'error', _R}=E ->
             lager:warning("failed to find devices owned by ~s: ~p", [OwnerId, _R]),
@@ -336,13 +335,13 @@ send_mwi_update(New, Saved, Username, Realm) ->
 -spec send_mwi_update(vm_count(), vm_count(), ne_binary(), ne_binary(), kz_json:object()) -> 'ok'.
 send_mwi_update(New, Saved, Username, Realm, JObj) ->
     Command = [{<<"To">>, <<Username/binary, "@", Realm/binary>>}
-               ,{<<"Messages-New">>, New}
-               ,{<<"Messages-Saved">>, Saved}
-               ,{<<"Call-ID">>, kz_json:get_value(<<"Call-ID">>, JObj)}
+              ,{<<"Messages-New">>, New}
+              ,{<<"Messages-Saved">>, Saved}
+              ,{<<"Call-ID">>, kz_json:get_value(<<"Call-ID">>, JObj)}
                | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
               ],
-    lager:debug("updating MWI for ~s@~s (~b/~b)", [Username, Realm, New, Saved]),
-    kapps_util:amqp_pool_send(Command, fun kapi_presence:publish_mwi_update/1).
+    lager:debug("updating MWI for ~s@~s (~p/~p)", [Username, Realm, New, Saved]),
+    kapps_util:amqp_pool_send(Command, fun kapi_presence:publish_unsolicited_mwi_update/1).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -362,7 +361,8 @@ alpha_to_dialpad(Value) ->
 %%--------------------------------------------------------------------
 -spec is_alpha(char()) -> boolean().
 is_alpha(Char) ->
-    Char =< $z andalso Char >= $a.
+    Char =< $z
+        andalso Char >= $a.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -371,14 +371,32 @@ is_alpha(Char) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec dialpad_digit(97..122) -> 50..57.
-dialpad_digit(ABC) when ABC =:= $a orelse ABC =:= $b orelse ABC =:= $c -> $2;
-dialpad_digit(DEF) when DEF =:= $d orelse DEF =:= $e orelse DEF =:= $f -> $3;
-dialpad_digit(GHI) when GHI =:= $g orelse GHI =:= $h orelse GHI =:= $i -> $4;
-dialpad_digit(JKL) when JKL =:= $j orelse JKL =:= $k orelse JKL =:= $l -> $5;
-dialpad_digit(MNO) when MNO =:= $m orelse MNO =:= $n orelse MNO =:= $o -> $6;
-dialpad_digit(PQRS) when PQRS =:= $p orelse PQRS =:= $q orelse PQRS =:= $r orelse PQRS =:= $s -> $7;
-dialpad_digit(TUV) when TUV =:= $t orelse TUV =:= $u orelse TUV =:= $v -> $8;
-dialpad_digit(WXYZ) when WXYZ =:= $w orelse WXYZ =:= $x orelse WXYZ =:= $y orelse WXYZ =:= $z -> $9.
+dialpad_digit(ABC) when ABC =:= $a
+                        orelse ABC =:= $b
+                        orelse ABC =:= $c -> $2;
+dialpad_digit(DEF) when DEF =:= $d
+                        orelse DEF =:= $e
+                        orelse DEF =:= $f -> $3;
+dialpad_digit(GHI) when GHI =:= $g
+                        orelse GHI =:= $h
+                        orelse GHI =:= $i -> $4;
+dialpad_digit(JKL) when JKL =:= $j
+                        orelse JKL =:= $k
+                        orelse JKL =:= $l -> $5;
+dialpad_digit(MNO) when MNO =:= $m
+                        orelse MNO =:= $n
+                        orelse MNO =:= $o -> $6;
+dialpad_digit(PQRS) when PQRS =:= $p
+                         orelse PQRS =:= $q
+                         orelse PQRS =:= $r
+                         orelse PQRS =:= $s -> $7;
+dialpad_digit(TUV) when TUV =:= $t
+                        orelse TUV =:= $u
+                        orelse TUV =:= $v -> $8;
+dialpad_digit(WXYZ) when WXYZ =:= $w
+                         orelse WXYZ =:= $x
+                         orelse WXYZ =:= $y
+                         orelse WXYZ =:= $z -> $9.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -418,16 +436,13 @@ owner_ids_by_sip_username(AccountDb, Username) ->
                                            {'error', any()}.
 get_owner_ids_by_sip_username(AccountDb, Username) ->
     ViewOptions = [{'key', Username}],
-    case kz_datamgr:get_results(AccountDb, <<"kz_attributes/sip_username">>, ViewOptions) of
-        {'ok', [JObj]} ->
+    case kz_datamgr:get_single_result(AccountDb, <<"attributes/sip_username">>, ViewOptions) of
+        {'ok', JObj} ->
             EndpointId = kz_doc:id(JObj),
             OwnerIds = kz_json:get_value(<<"value">>, JObj, []),
             CacheProps = [{'origin', {'db', AccountDb, EndpointId}}],
             kz_cache:store_local(?CACHE_NAME, ?SIP_USER_OWNERS_KEY(AccountDb, Username), OwnerIds, CacheProps),
             {'ok', OwnerIds};
-        {'ok', []} ->
-            lager:debug("sip username ~s not in account db ~s", [Username, AccountDb]),
-            {'error', 'not_found'};
         {'error', _R}=E ->
             lager:warning("unable to lookup sip username ~s for owner ids: ~p", [Username, _R]),
             E
@@ -446,7 +461,7 @@ endpoint_id_by_sip_username(AccountDb, Username) ->
     case kz_cache:peek_local(?CACHE_NAME, ?SIP_ENDPOINT_ID_KEY(AccountDb, Username)) of
         {'ok', _}=Ok -> Ok;
         {'error', 'not_found'} ->
-           get_endpoint_id_by_sip_username(AccountDb, Username)
+            get_endpoint_id_by_sip_username(AccountDb, Username)
     end.
 
 -spec get_endpoint_id_by_sip_username(ne_binary(), ne_binary()) ->
@@ -454,17 +469,14 @@ endpoint_id_by_sip_username(AccountDb, Username) ->
                                              {'error', 'not_found'}.
 get_endpoint_id_by_sip_username(AccountDb, Username) ->
     ViewOptions = [{'key', Username}],
-    case kz_datamgr:get_results(AccountDb, <<"kz_attributes/sip_username">>, ViewOptions) of
-        {'ok', [JObj]} ->
+    case kz_datamgr:get_single_result(AccountDb, <<"attributes/sip_username">>, ViewOptions) of
+        {'ok', JObj} ->
             EndpointId = kz_doc:id(JObj),
             CacheProps = [{'origin', {'db', AccountDb, EndpointId}}],
             kz_cache:store_local(?CACHE_NAME, ?SIP_ENDPOINT_ID_KEY(AccountDb, Username), EndpointId, CacheProps),
             {'ok', EndpointId};
-        {'ok', []} ->
-            lager:debug("sip username ~s not in account db ~s", [Username, AccountDb]),
-            {'error', 'not_found'};
         {'error', _R} ->
-            lager:warning("unable to lookup sip username ~s for owner ids: ~p", [Username, _R]),
+            lager:warning("lookup sip username ~s for owner ids failed: ~p", [Username, _R]),
             {'error', 'not_found'}
     end.
 
@@ -477,11 +489,13 @@ get_endpoint_id_by_sip_username(AccountDb, Username) ->
 -spec get_operator_callflow(ne_binary()) -> {'ok', kz_json:object()} |
                                             kz_data:data_error().
 get_operator_callflow(Account) ->
-    AccountDb = kz_util:format_account_id(Account, 'encoded'),
-    Options = [{'key', ?OPERATOR_KEY}, 'include_docs'],
-    case kz_datamgr:get_results(AccountDb, ?LIST_BY_NUMBER, Options) of
-        {'ok', []} -> {'error', 'not_found'};
-        {'ok', [JObj|_]} ->
+    AccountDb = kz_util:format_account_db(Account),
+    Options = [{'key', ?OPERATOR_KEY}
+              ,'include_docs'
+              ,'first_when_multiple'
+              ],
+    case kz_datamgr:get_single_result(AccountDb, ?LIST_BY_NUMBER, Options) of
+        {'ok', JObj} ->
             {'ok', kz_json:get_value([<<"doc">>, <<"flow">>], JObj, kz_json:new())};
         {'error', _R}=E ->
             lager:warning("unable to find operator callflow in ~s: ~p", [Account, _R]),
@@ -516,7 +530,8 @@ handle_bridge_failure(Failure, Call) ->
 handle_bridge_failure(Cause, Code, Call) ->
     lager:info("attempting to find failure branch for ~s:~s", [Code, Cause]),
     case (handle_bridge_failure(Cause, Call) =:= 'ok')
-        orelse (handle_bridge_failure(Code, Call) =:= 'ok') of
+        orelse (handle_bridge_failure(Code, Call) =:= 'ok')
+    of
         'true' -> 'ok';
         'false' -> 'not_found'
     end.
@@ -740,9 +755,9 @@ load_system_dialplans(Names) ->
                                    fun(({ne_binary(), kz_json:object()}, kz_json:object()) -> kz_json:object()).
 fold_system_dialplans(Names) ->
     fun({Key, Val}, Acc) when is_list(Val) ->
-        lists:foldl(fun(ValElem, A) -> maybe_dialplan_suits({Key, ValElem}, A, Names) end, Acc, Val);
+            lists:foldl(fun(ValElem, A) -> maybe_dialplan_suits({Key, ValElem}, A, Names) end, Acc, Val);
        ({Key, Val}, Acc) ->
-        maybe_dialplan_suits({Key, Val}, Acc, Names)
+            maybe_dialplan_suits({Key, Val}, Acc, Names)
     end.
 
 -spec maybe_dialplan_suits({ne_binary(), kz_json:object()} ,kz_json:object(), ne_binaries()) -> kz_json:object().
@@ -765,24 +780,24 @@ maybe_system_dialplan_name({Key, Val}, Acc, Names) ->
 
 -spec index_of(ne_binary(), list()) -> api_integer().
 index_of(Value, List) ->
-   Map = lists:zip(List, lists:seq(1, length(List))),
-   case dict:find(Value, dict:from_list(Map)) of
-      {ok, Index} -> Index;
-      error -> 'undefined'
-   end.
+    Map = lists:zip(List, lists:seq(1, length(List))),
+    case dict:find(Value, dict:from_list(Map)) of
+        {ok, Index} -> Index;
+        error -> 'undefined'
+    end.
 
 -spec start_event_listener(kapps_call:call(), atom(), list()) ->
-          {'ok', pid()} | {'error', any()}.
+                                  {'ok', pid()} | {'error', any()}.
 start_event_listener(Call, Mod, Args) ->
-    lager:debug("starting evt listener ~s", [Mod]),
+    lager:debug("starting evt listener ~p", [Mod]),
     Name = event_listener_name(Call, Mod),
     try cf_event_handler_sup:new(Name, Mod, [kapps_call:clear_helpers(Call) | Args]) of
         {'ok', P} -> {'ok', P};
-        _E -> lager:debug("error starting event listener ~s: ~p", [Mod, _E]),
+        _E -> lager:debug("error starting event listener ~p: ~p", [Mod, _E]),
               {'error', _E}
     catch
         _:_R ->
-            lager:info("failed to spawn ~s: ~p", [Mod, _R]),
+            lager:info("failed to spawn ~p: ~p", [Mod, _R]),
             {'error', _R}
     end.
 
@@ -835,15 +850,15 @@ find_user_endpoints(UserIds, DeviceIds, Call) ->
 -spec find_channels(ne_binaries(), kapps_call:call()) -> kz_json:objects().
 find_channels(Usernames, Call) ->
     Realm = kz_util:get_account_realm(kapps_call:account_id(Call)),
-    lager:debug("finding channels for realm ~s, usernames ~p", [Realm, Usernames]),
+    lager:debug("finding channels for realm ~p, usernames ~p", [Realm, Usernames]),
     Req = [{<<"Realm">>, Realm}
-           ,{<<"Usernames">>, Usernames}
+          ,{<<"Usernames">>, Usernames}
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     case kapps_util:amqp_pool_request(Req
-                                       ,fun kapi_call:publish_query_user_channels_req/1
-                                       ,fun kapi_call:query_user_channels_resp_v/1
-                                      )
+                                     ,fun kapi_call:publish_query_user_channels_req/1
+                                     ,fun kapi_call:query_user_channels_resp_v/1
+                                     )
     of
         {'ok', Resp} -> kz_json:get_value(<<"Channels">>, Resp, []);
         {'error', _E} ->
@@ -857,7 +872,7 @@ check_value_of_fields(Perms, Def, Data, Call) ->
     case lists:dropwhile(fun({K, _F}) ->
                                  kz_json:get_value(K, Data) =:= 'undefined'
                          end
-                         ,Perms
+                        ,Perms
                         )
     of
         [] -> Def;
@@ -867,8 +882,8 @@ check_value_of_fields(Perms, Def, Data, Call) ->
 -spec sip_users_from_device_ids(ne_binaries(), kapps_call:call()) -> ne_binaries().
 sip_users_from_device_ids(EndpointIds, Call) ->
     lists:foldl(fun(EID, Acc) -> sip_users_from_device_id(EID, Acc, Call) end
-                ,[]
-                ,EndpointIds
+               ,[]
+               ,EndpointIds
                ).
 
 -spec sip_users_from_device_id(ne_binary(), ne_binaries(), kapps_call:call()) ->
@@ -967,20 +982,18 @@ maybe_cached_mailbox(AccountDb, VMNumber) ->
                                              {'error', any()}.
 get_mailbox(AccountDb, VMNumber) ->
     ViewOptions = [{'key', VMNumber}, 'include_docs'],
-    case kz_datamgr:get_results(AccountDb, <<"vmboxes/listing_by_mailbox">>, ViewOptions) of
-        {'ok', [JObj]} ->
+    case kz_datamgr:get_single_result(AccountDb, <<"vmboxes/listing_by_mailbox">>, ViewOptions) of
+        {'ok', JObj} ->
             Doc = kz_json:get_value(<<"doc">>, JObj),
             EndpointId = kz_doc:id(Doc),
             CacheProps = [{'origin', {'db', AccountDb, EndpointId}}],
             kz_cache:store_local(?CACHE_NAME, ?VM_CACHE_KEY(AccountDb, VMNumber), Doc, CacheProps),
             {'ok', Doc};
-        {'ok', [_JObj1, _JObj2 | _]} ->
-            lager:debug("multiple voicemail boxes with same number (~s)  in account db ~s", [VMNumber, AccountDb]),
-            {'error', 'not_found'};
-        {'ok', []} ->
+        {'error', 'multiple_results'} ->
+            lager:debug("multiple voicemail boxes with same number (~b)  in account db ~s", [VMNumber, AccountDb]),
             {'error', 'not_found'};
         {'error', _R}=E ->
-            lager:warning("unable to lookup voicemail number ~s in account ~s: ~p", [VMNumber, AccountDb, _R]),
+            lager:warning("unable to lookup voicemail number ~b in account ~s: ~p", [VMNumber, AccountDb, _R]),
             E
     end.
 
@@ -993,7 +1006,7 @@ vm_count(JObj) ->
     New = kzd_box_message:count_folder(Messages, ?VM_FOLDER_NEW),
     Saved = kzd_box_message:count_folder(Messages, ?VM_FOLDER_SAVED),
 
-    kz_vm_message:count_modb_messages(AccountId, BoxId, {New, Saved}).
+    kvm_messages:count_from_modb(AccountId, BoxId, {New, Saved}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1003,4 +1016,4 @@ vm_count(JObj) ->
 -spec vm_count_by_owner(ne_binary(), api_binary()) -> {non_neg_integer(), non_neg_integer()}.
 vm_count_by_owner(_AccountDb, 'undefined') -> {0, 0};
 vm_count_by_owner(<<_/binary>> = AccountDb, <<_/binary>> = OwnerId) ->
-    kz_vm_message:count_by_owner(AccountDb, OwnerId).
+    kvm_messages:count_by_owner(AccountDb, OwnerId).

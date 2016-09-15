@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2015, 2600Hz
+%%% @copyright (C) 2010-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -12,7 +12,7 @@
 
 %% API
 -export([maybe_add_queue/2, maybe_add_queue/3
-         ,maybe_rm_queue/2, maybe_rm_queue/3
+        ,maybe_rm_queue/2, maybe_rm_queue/3
         ]).
 
 -spec maybe_add_queue(kz_json:object(), ne_binary()) -> kz_json:object().

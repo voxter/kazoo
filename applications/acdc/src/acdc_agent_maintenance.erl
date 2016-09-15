@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013, 2600Hz
+%%% @copyright (C) 2013-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -9,11 +9,11 @@
 -module(acdc_agent_maintenance).
 
 -export([acct_restart/1
-         ,agent_restart/2
+        ,agent_restart/2
 
-         ,status/0
-         ,acct_status/1
-         ,agent_status/2
+        ,status/0
+        ,acct_status/1
+        ,agent_status/2
         ]).
 
 -include("acdc.hrl").
@@ -26,11 +26,11 @@ acct_status(AcctId) ->
         [] -> lager:info("no agents with account id ~s available", [AcctId]);
         As ->
             lager:info("Agent Statuses in ~s", [AcctId]),
-            _ = [acdc_agent_sup:status(Sup) || Sup <- As],
-            'ok'
+            lists:foreach(fun acdc_agent_sup:status/1, As)
     end.
 
-agent_status(AcctId, AgentId) when (not is_binary(AcctId)) orelse (not is_binary(AgentId)) ->
+agent_status(AcctId, AgentId) when (not is_binary(AcctId))
+                                   orelse (not is_binary(AgentId)) ->
     agent_status(kz_util:to_binary(AcctId), kz_util:to_binary(AgentId));
 agent_status(AcctId, AgentId) ->
     case acdc_agents_sup:find_agent_supervisor(AcctId, AgentId) of
@@ -51,7 +51,8 @@ acct_restart(AcctId) ->
             'ok'
     end.
 
-agent_restart(AcctId, AgentId) when (not is_binary(AcctId)) orelse (not is_binary(AgentId)) ->
+agent_restart(AcctId, AgentId) when (not is_binary(AcctId))
+                                    orelse (not is_binary(AgentId)) ->
     agent_restart(kz_util:to_binary(AcctId), kz_util:to_binary(AgentId));
 agent_restart(AcctId, AgentId) ->
     case acdc_agents_sup:find_agent_supervisor(AcctId, AgentId) of

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -10,11 +10,11 @@
 -module(cb_ledgers).
 
 -export([init/0
-         ,allowed_methods/0, allowed_methods/1, allowed_methods/2
-         ,resource_exists/0, resource_exists/1, resource_exists/2
-         ,authorize/1, authorize/2, authorize/3
-         ,validate/1, validate/2, validate/3
-         ,put/2
+        ,allowed_methods/0, allowed_methods/1, allowed_methods/2
+        ,resource_exists/0, resource_exists/1, resource_exists/2
+        ,authorize/1, authorize/2, authorize/3
+        ,validate/1, validate/2, validate/3
+        ,put/2
         ]).
 
 -include("crossbar.hrl").
@@ -68,7 +68,7 @@ allowed_methods(?DEBIT) ->
 allowed_methods(_LedgerId) ->
     [?HTTP_GET].
 
-allowed_methods(_LedgerId, _Id) ->
+allowed_methods(_LedgerId, _LedgerEntryId) ->
     [?HTTP_GET].
 
 %%--------------------------------------------------------------------
@@ -117,9 +117,13 @@ authorize_request(Context, _, ?HTTP_GET) ->
 -spec authorize_create(cb_context:context()) -> boolean().
 authorize_create(Context) ->
     IsAuthenticated = cb_context:is_authenticated(Context),
-    IsSuperDuperAdmin = cb_modules_util:is_superduper_admin(Context),
+    IsSuperDuperAdmin = cb_context:is_superduper_admin(Context),
     IsReseller = cb_context:reseller_id(Context) =:= cb_context:auth_account_id(Context),
-    case IsAuthenticated andalso (IsSuperDuperAdmin orelse IsReseller) of
+    case IsAuthenticated
+        andalso (IsSuperDuperAdmin
+                 orelse IsReseller
+                )
+    of
         'true' -> 'true';
         'false' -> {'halt', cb_context:add_system_error('forbidden', Context)}
     end.
@@ -227,13 +231,13 @@ credit_or_debit(Context, Action) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec process_action(ne_binary(), ne_binary(), ne_binary()
-                     ,ne_binary(), kz_proplist(), kz_proplist()) ->
+                    ,ne_binary(), kz_proplist(), kz_proplist()) ->
                             {'ok', kz_json:object()} |
                             {'error', any()}.
-process_action(?CREDIT, SrcService, SrcId, Account, Usage, Props) ->
-    kz_ledger:credit(SrcService, SrcId, Account, Usage, Props);
-process_action(?DEBIT, SrcService, SrcId, Account, Usage, Props) ->
-    kz_ledger:debit(SrcService, SrcId, Account, Usage, Props).
+process_action(?CREDIT, SrcService, SrcId, AccountId, Usage, Props) ->
+    kz_ledger:credit(AccountId, SrcService, SrcId, Usage, Props);
+process_action(?DEBIT, SrcService, SrcId, AccountId, Usage, Props) ->
+    kz_ledger:debit(AccountId, SrcService, SrcId, Usage, Props).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -244,8 +248,8 @@ process_action(?DEBIT, SrcService, SrcId, Account, Usage, Props) ->
 -spec maybe_impact_reseller(cb_context:context(), kz_json:object()) -> cb_context:context().
 maybe_impact_reseller(Context, Ledger) ->
     ResellerId = cb_context:reseller_id(Context),
-    ImpactReseller = kz_json:is_true(<<"impact_reseller">>, cb_context:req_json(Context)) andalso
-                         ResellerId =/= cb_context:account_id(Context),
+    ImpactReseller = kz_json:is_true(<<"impact_reseller">>, cb_context:req_json(Context))
+        andalso ResellerId =/= cb_context:account_id(Context),
     maybe_impact_reseller(Context, Ledger, ImpactReseller, ResellerId).
 
 -spec maybe_impact_reseller(cb_context:context(), kz_json:object(), boolean(), api_binary()) -> cb_context:context().
@@ -274,8 +278,12 @@ read_ledgers(Context) ->
         {'error', Reason} ->
             crossbar_util:response('error', Reason, Context);
         {'ok', Ledgers} ->
-            crossbar_util:response(Ledgers, Context)
+            crossbar_util:response(kz_json:map(fun ledger_resume_to_dollars/2, Ledgers), Context)
     end.
+
+-spec ledger_resume_to_dollars(kz_json:key(), kz_json:json_term()) -> kz_json:json_term().
+ledger_resume_to_dollars(K, V) ->
+    {K, wht_util:units_to_dollars(V)}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -332,7 +340,9 @@ normalize_view_result(Context, JObj) ->
 
 -spec normalize_view_result(cb_context:context(), ne_binary(), kz_json:object()) -> kz_json:object().
 normalize_view_result(_Context, <<"ledger">>, JObj) ->
-    kz_json:public_fields(maybe_set_doc_modb_prefix(JObj));
+    Value = wht_util:units_to_dollars(kazoo_ledger:amount(JObj)),
+    Ledger = kazoo_ledger:set_amount(JObj, Value),
+    kz_json:public_fields(maybe_set_doc_modb_prefix(Ledger));
 %% Legacy, this would be debit or credit from per-minute transactions
 normalize_view_result(Context, _DocType, JObj) ->
     Transaction = kz_transaction:from_json(JObj),
@@ -356,7 +366,7 @@ normalize_view_result(Context, _DocType, JObj) ->
                                        ,{<<"unit">>, <<"sec">>}
                                        ,{<<"quantity">>, kz_json:get_integer_value(<<"duration">>, kz_transaction:metadata(Transaction), 0)}
                                        ])}
-      ,{<<"amount">>, kz_transaction:amount(Transaction)}
+      ,{<<"amount">>, wht_util:units_to_dollars(kz_transaction:amount(Transaction))}
       ,{<<"description">>, kz_transaction:description(Transaction)}
       ,{<<"period">>, kz_json:from_list([{<<"start">>, kz_transaction:created(Transaction)}])}
       ,{<<"metadata">>, kz_transaction:metadata(Transaction)}
@@ -392,7 +402,8 @@ read_ledger_doc(Context, Ledger, ?MATCH_MODB_PREFIX(YYYY, MM, SimpleId) = Id) ->
     case cb_context:resp_status(Ctx) =:= 'success'
         andalso validate_returned_ledger_doc(Ledger, Ctx)
     of
-        'false' -> read_ledger_doc(cb_context:set_account_modb(Context, Year, Month), Ledger, SimpleId);
+        'false' ->
+            read_ledger_doc(cb_context:set_account_modb(Context, Year, Month), Ledger, SimpleId);
         Ctx1 -> Ctx1
     end;
 read_ledger_doc(Context, Ledger, Id) ->
@@ -410,19 +421,16 @@ validate_returned_ledger_doc(Ledger, Context) ->
     JObj = cb_context:doc(Context),
     TransactionTypes = [?DEBIT, ?CREDIT],
     case (kz_doc:type(JObj) =:= <<"ledger">>
-         andalso kazoo_ledger:source_service(JObj) =:= Ledger
+              andalso kazoo_ledger:source_service(JObj) =:= Ledger
          )
-        orelse
-             (lists:member(kz_doc:type(JObj), TransactionTypes) andalso
-                  Ledger =:= <<"per-minute-voip">> andalso
-                  kz_transaction:is_per_minute(kz_transaction:from_json(JObj))
-             )
+        orelse (lists:member(kz_doc:type(JObj), TransactionTypes)
+                andalso Ledger =:= <<"per-minute-voip">>
+                    andalso kz_transaction:is_per_minute(kz_transaction:from_json(JObj))
+               )
     of
         'true' -> cb_context:set_resp_data(Context, normalize_view_result(Context, JObj));
         'false' ->
-            cb_context:add_validation_error(<<"Id">>
-                                           ,<<"invalid">>
-                                           ,kz_json:from_list([{<<"message">>, <<"document does not belong to ledger">>}])
-                                           ,Context
-                                           )
+            Msg = kz_json:from_list([{<<"message">>, <<"document does not belong to ledger">>}
+                                    ]),
+            cb_context:add_validation_error(<<"Id">>, <<"invalid">>, Msg, Context)
     end.

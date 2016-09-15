@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2012, VoIP INC
+%%% @copyright (C) 2011-2016, 2600Hz
 %%% @doc
 %%% Builder and validator, much like kz_api.erl, of the AMQP APIs
 %%% exposed by this WhApp
@@ -21,7 +21,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec blacklist_req(api_terms()) -> {'ok', iolist()} |
-                                          {'error', string()}.
+                                    {'error', string()}.
 blacklist_req(Prop) when is_list(Prop) ->
     case blacklist_req_v(Prop) of
         true -> kz_api:build_message(Prop, ?DTH_BLACKLIST_REQ_HEADERS, ?OPTIONAL_DTH_BLACKLIST_REQ_HEADERS);
@@ -42,7 +42,7 @@ blacklist_req_v(JObj) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec blacklist_resp(api_terms()) -> {'ok', iolist()} |
-                                           {'error', string()}.
+                                     {'error', string()}.
 blacklist_resp(Prop) when is_list(Prop) ->
     case blacklist_resp_v(Prop) of
         true -> kz_api:build_message(Prop, ?DTH_BLACKLIST_RESP_HEADERS, ?OPTIONAL_DTH_BLACKLIST_RESP_HEADERS);

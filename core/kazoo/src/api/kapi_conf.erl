@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz
+%%% @copyright (C) 2011-2016, 2600Hz
 %%% @doc
 %%% Configuration updates (like DB doc changes) can be communicated across
 %%% the AMQP bus so WhApps can flush cache entries, update settings, etc.
@@ -10,20 +10,20 @@
 -module(kapi_conf).
 
 -export([doc_update/1, doc_update_v/1
-         ,doc_type_update/1, doc_type_update_v/1
+        ,doc_type_update/1, doc_type_update_v/1
 
-         ,bind_q/2, unbind_q/2
-         ,declare_exchanges/0
+        ,bind_q/2, unbind_q/2
+        ,declare_exchanges/0
 
-         ,publish_doc_update/5, publish_doc_update/6
-         ,publish_doc_type_update/1, publish_doc_type_update/2
+        ,publish_doc_update/5, publish_doc_update/6
+        ,publish_doc_type_update/1, publish_doc_type_update/2
 
-         ,publish_db_update/3, publish_db_update/4
+        ,publish_db_update/3, publish_db_update/4
 
-         ,get_database/1
-         ,get_account_id/1, get_account_db/1
-         ,get_type/1, get_doc/1, get_id/1
-         ,get_action/1, get_is_soft_deleted/1
+        ,get_database/1
+        ,get_account_id/1, get_account_db/1
+        ,get_type/1, get_doc/1, get_id/1
+        ,get_action/1, get_is_soft_deleted/1
         ]).
 
 -type action() :: 'created' | 'edited' | 'deleted'.
@@ -35,36 +35,37 @@
 
 -define(CONF_DOC_UPDATE_HEADERS, [<<"ID">>, <<"Database">>]).
 -define(OPTIONAL_CONF_DOC_UPDATE_HEADERS, [<<"Account-ID">>
-                                           ,<<"Date-Created">>
-                                           ,<<"Date-Modified">>
-                                           ,<<"Doc">>
-                                           ,<<"Is-Soft-Deleted">>
-                                           ,<<"Rev">>
-                                           ,<<"Type">>
-                                           ,<<"Version">>
-                                           ,<<"Origin-Cache">>
+                                          ,<<"Date-Created">>
+                                          ,<<"Date-Modified">>
+                                          ,<<"Doc">>
+                                          ,<<"Is-Soft-Deleted">>
+                                          ,<<"Rev">>
+                                          ,<<"Type">>
+                                          ,<<"Version">>
+                                          ,<<"Origin-Cache">>
                                           ]).
 -define(CONF_DOC_UPDATE_VALUES, [{<<"Event-Category">>, ?KAPI_CONF_CATEGORY}
-                                 ,{<<"Event-Name">>, [?DOC_EDITED
-                                                      ,?DOC_CREATED
-                                                      ,?DOC_DELETED
-                                                      ,?DB_CREATED
-                                                      ,?DB_DELETED
-                                                     ]}
+                                ,{<<"Event-Name">>, [?DOC_EDITED
+                                                    ,?DOC_CREATED
+                                                    ,?DOC_DELETED
+                                                    ,?DB_EDITED
+                                                    ,?DB_CREATED
+                                                    ,?DB_DELETED
+                                                    ]}
                                 ]).
 -define(CONF_DOC_UPDATE_TYPES, [{<<"ID">>, fun is_binary/1}
-                                ,{<<"Rev">>, fun is_binary/1}
-                                ,{<<"Is-Soft-Deleted">>, fun kz_util:is_boolean/1}
+                               ,{<<"Rev">>, fun is_binary/1}
+                               ,{<<"Is-Soft-Deleted">>, fun kz_util:is_boolean/1}
                                ]).
 
 -define(DOC_TYPE_UPDATE_HEADERS, [<<"Type">>]).
 -define(OPTIONAL_DOC_TYPE_UPDATE_HEADERS
-        ,[<<"Action">>
-          ,<<"Account-ID">>
-         ]
+       ,[<<"Action">>
+        ,<<"Account-ID">>
+        ]
        ).
 -define(DOC_TYPE_UPDATE_VALUES, [{<<"Event-Category">>, ?KAPI_CONF_CATEGORY}
-                                 ,{<<"Event-Name">>, <<"doc_type_update">>}
+                                ,{<<"Event-Name">>, <<"doc_type_update">>}
                                 ]).
 -define(DOC_TYPE_UPDATE_TYPES, []).
 
@@ -136,8 +137,8 @@ doc_update_v(JObj) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec doc_type_update(api_terms()) ->
-                        {'ok', iolist()} |
-                        {'error', string()}.
+                             {'ok', iolist()} |
+                             {'error', string()}.
 doc_type_update(Prop) when is_list(Prop) ->
     case doc_type_update_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?DOC_TYPE_UPDATE_HEADERS, ?OPTIONAL_DOC_TYPE_UPDATE_HEADERS);
@@ -262,10 +263,10 @@ get_routing_key(Props) ->
     Action = props:get_binary_value('action', Props, <<"*">>),
     Db = props:get_binary_value('db', Props, <<"*">>),
     Type = props:get_binary_value('doc_type', Props
-                                  ,props:get_value('type', Props, <<"*">>)
+                                 ,props:get_value('type', Props, <<"*">>)
                                  ),
     Id = props:get_binary_value('doc_id', Props
-                                ,props:get_value('id', Props, <<"*">>)
+                               ,props:get_value('id', Props, <<"*">>)
                                ),
     amqp_util:document_routing_key(Action, Db, Type, Id).
 
@@ -274,7 +275,7 @@ get_routing_key(Props) ->
 publish_doc_update(Action, Db, Type, Id, JObj) ->
     publish_doc_update(Action, Db, Type, Id, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_doc_update(Action, Db, Type, Id, Change, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Change, ?CONF_DOC_UPDATE_VALUES, fun ?MODULE:doc_update/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Change, ?CONF_DOC_UPDATE_VALUES, fun doc_update/1),
     amqp_util:document_change_publish(Action, Db, Type, Id, Payload, ContentType).
 
 -spec publish_db_update(action(), ne_binary(), api_terms()) -> 'ok'.
@@ -282,7 +283,7 @@ publish_doc_update(Action, Db, Type, Id, Change, ContentType) ->
 publish_db_update(Action, Db, JObj) ->
     publish_db_update(Action, Db, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_db_update(Action, Db, Change, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Change, ?CONF_DOC_UPDATE_VALUES, fun ?MODULE:doc_update/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Change, ?CONF_DOC_UPDATE_VALUES, fun doc_update/1),
     amqp_util:document_change_publish(Action, Db, <<"database">>, Db, Payload, ContentType).
 
 -spec publish_doc_type_update(api_terms()) -> 'ok'.
@@ -290,7 +291,7 @@ publish_db_update(Action, Db, Change, ContentType) ->
 publish_doc_type_update(JObj) ->
     publish_doc_type_update(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_doc_type_update(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?DOC_TYPE_UPDATE_VALUES, fun ?MODULE:doc_type_update/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?DOC_TYPE_UPDATE_VALUES, fun doc_type_update/1),
     amqp_util:configuration_publish(doc_type_update_routing_key(API), Payload, ContentType, [{'mandatory', 'true'}]).
 
 -spec doc_type_update_routing_key(api_terms() | ne_binary()) -> ne_binary().

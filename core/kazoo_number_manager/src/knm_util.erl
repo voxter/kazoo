@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%%
 %%%
@@ -12,15 +12,20 @@
 -export([get_all_number_dbs/0]).
 
 -export([pretty_print/1, pretty_print/2
-         ,fixture/1
+        ,fixture/1
+        ,prefix_for_country/1
         ]).
 
 -include("knm.hrl").
 
+-type country_iso3166a2() :: <<_:(8*2)>>.
+-export_type([country_iso3166a2/0]).
+
+
 -spec get_all_number_dbs() -> ne_binaries().
 get_all_number_dbs() ->
-    ViewOptions = [{'startkey', ?KNM_DB_PREFIX}
-                   ,{'endkey', <<?KNM_DB_PREFIX_L, "\ufff0">>}
+    ViewOptions = [{'startkey', <<?KNM_DB_PREFIX>>}
+                  ,{'endkey', <<?KNM_DB_PREFIX "\ufff0">>}
                   ],
     {'ok', Dbs} = kz_datamgr:db_list(ViewOptions),
     [kz_http_util:urlencode(Db) || Db <- Dbs].
@@ -57,8 +62,8 @@ pretty_print(<<"S", Format/binary>>, Number, Acc) ->
     pretty_print(Format, binary_tail(Number), Acc);
 pretty_print(<<"#", Format/binary>>, Number, Acc) ->
     pretty_print(Format
-                 ,binary_tail(Number)
-                 ,<<Acc/binary, (binary_head(Number))/binary>>
+                ,binary_tail(Number)
+                ,<<Acc/binary, (binary_head(Number))/binary>>
                 );
 pretty_print(<<"*", Format/binary>>, Number, Acc) ->
     pretty_print(Format, <<>>, <<Acc/binary, Number/binary>>);
@@ -126,3 +131,10 @@ read_fixture({'ok', Contents}, _F) ->
     kz_util:to_list(Contents);
 read_fixture({'error', 'enoent'}, F) ->
     throw({'error', 'missing_fixture', F}).
+
+%% TODO
+%% This should be replaced with a call to elibphonenumber
+%% when/if we integrate that lib or do it ourselves
+-spec prefix_for_country(country_iso3166a2()) -> ne_binary().
+prefix_for_country(Country) ->
+    knm_iso3166a2_itu:to_itu(kz_util:to_upper_binary(Country)).

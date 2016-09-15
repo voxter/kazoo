@@ -10,14 +10,15 @@
 -module(kz_config).
 
 -export([get/1, get/2, get/3
-         ,get_atom/2, get_atom/3
-         ,get_integer/2, get_integer/3
-         ,get_string/2, get_string/3
-         ,get_raw_string/2, get_raw_string/3
-         ,get_node_section_name/0
-         ,set/3, unset/2
-         ,get_section/1
-         ,zone/0, zone/1
+        ,get_atom/2, get_atom/3
+        ,get_boolean/2, get_boolean/3
+        ,get_integer/2, get_integer/3
+        ,get_string/2, get_string/3
+        ,get_raw_string/2, get_raw_string/3
+        ,get_node_section_name/0
+        ,set/3, unset/2
+        ,get_section/1
+        ,zone/0, zone/1
         ]).
 
 -include("kazoo_config.hrl").
@@ -55,12 +56,23 @@ get_atom(Section, Key) ->
 
 -spec get_atom(section(), atom(), Default) -> [atom(),...] | Default.
 get_atom(Section, Key, Default) ->
-    case ?MODULE:get(Section, Key, Default) of
+    case get(Section, Key, Default) of
         Default -> Default;
         [_|_]=Values ->
             [kz_util:to_atom(Value, 'true') || Value <- Values];
         Value ->
             [kz_util:to_atom(Value, 'true')]
+    end.
+
+-spec get_boolean(section(), atom()) -> boolean().
+get_boolean(Section, Key) ->
+    get_boolean(Section, Key, 'false').
+
+-spec get_boolean(section(), atom(), boolean()) -> boolean().
+get_boolean(Section, Key, Default) ->
+    case get(Section, Key, Default) of
+        Default -> Default;
+        [Value] -> kz_util:is_true(Value)
     end.
 
 %%--------------------------------------------------------------------
@@ -75,7 +87,7 @@ get_integer(Section, Key) ->
 
 -spec get_integer(section(), atom(), Default) -> [integer(),...] | Default.
 get_integer(Section, Key, Default) ->
-    case ?MODULE:get(Section, Key, Default) of
+    case get(Section, Key, Default) of
         Default -> Default;
         [_|_]=Values -> [kz_util:to_integer(Value) || Value <- Values];
         Value -> [kz_util:to_integer(Value)]
@@ -93,7 +105,7 @@ get_string(Section, Key) ->
 
 -spec get_string(section(), atom(), Default) -> [string(),...] | Default.
 get_string(Section, Key, Default) ->
-    case ?MODULE:get(Section, Key, Default) of
+    case get(Section, Key, Default) of
         Default -> Default;
         [_|_]=Values -> [kz_util:to_lower_string(Value) || Value <- Values];
         Value -> [kz_util:to_lower_string(Value)]
@@ -105,7 +117,7 @@ get_raw_string(Section, Key) ->
 
 -spec get_raw_string(section(), atom(), Default) -> [string(),...] | Default.
 get_raw_string(Section, Key, Default) ->
-    case ?MODULE:get(Section, Key, Default) of
+    case get(Section, Key, Default) of
         Default -> Default;
         [_|_]=Values -> Values;
         Value -> Value
@@ -146,16 +158,16 @@ set(Section, Key, Value) ->
 
 set(NewSection, Props) ->
     NewProps = props:insert_value(NewSection, Props),
-    application:set_env(?APP_NAME_ATOM, 'kz_config', NewProps).
+    application:set_env(?APP_NAME_ATOM, ?MODULE, NewProps).
 
 -spec unset(section(), atom()) -> 'ok'.
 unset(Section, Key) ->
     Props = load(),
     case props:get_value(Section, Props) of
-      'undefined' -> 'ok';
-      Val ->
-          NewSection = props:delete(Key, Val),
-          set({Section, NewSection}, props:delete(Section, Props))
+        'undefined' -> 'ok';
+        Val ->
+            NewSection = props:delete(Key, Val),
+            set({Section, NewSection}, props:delete(Section, Props))
     end.
 
 %%--------------------------------------------------------------------
@@ -298,7 +310,7 @@ get_values([{_, Values} | T], Key, Acc) ->
 load() ->
     case erlang:get(?SETTINGS_KEY) of
         'undefined' ->
-            case application:get_env(?APP_NAME_ATOM, 'kz_config') of
+            case application:get_env(?APP_NAME_ATOM, ?MODULE) of
                 'undefined' -> ?SECTION_DEFAULTS;
                 {'ok', Settings} -> Settings
             end;

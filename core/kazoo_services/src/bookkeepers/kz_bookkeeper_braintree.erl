@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2015, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -22,12 +22,12 @@
 -define(TR_DESCRIPTION, <<"braintree transaction">>).
 
 -record(kz_service_update, {bt_subscription :: braintree_subscription:subscription()
-                            ,plan_id :: ne_binary()
+                           ,plan_id :: ne_binary()
                            }).
 
 -record(kz_service_updates, {bt_subscriptions = [] :: [update()]
-                             ,account_id :: api_binary()
-                             ,bt_customer :: braintree_customer:customer()
+                            ,account_id :: api_binary()
+                            ,bt_customer :: braintree_customer:customer()
                             }).
 
 -type update() :: #kz_service_update{}.
@@ -163,8 +163,8 @@ commit_transactions(BillingId, Transactions, Try) when Try > 0 ->
             NewTransactions = kz_json:get_value(<<"transactions">>, JObj, [])
                 ++ kz_transactions:to_json(Transactions),
             JObj1 = kz_json:set_values([{<<"pvt_dirty">>, 'true'}
-                                        ,{<<"pvt_modified">>, kz_util:current_tstamp()}
-                                        ,{<<"transactions">>, NewTransactions}
+                                       ,{<<"pvt_modified">>, kz_util:current_tstamp()}
+                                       ,{<<"transactions">>, NewTransactions}
                                        ], JObj),
             case kz_datamgr:save_doc(?KZ_SERVICES_DB, JObj1) of
                 {'error', _E} ->
@@ -201,14 +201,14 @@ charge_transactions(BillingId, [], Dict) ->
                   'false' -> JObjs ++ Acc
               end
       end
-      ,[]
-      ,Dict
+             ,[]
+             ,Dict
      );
 charge_transactions(BillingId, [Transaction|Transactions], Dict) ->
     Code = kz_json:get_value(<<"pvt_code">>, Transaction),
     charge_transactions(BillingId
-                        ,Transactions
-                        ,dict:append(Code, Transaction, Dict)
+                       ,Transactions
+                       ,dict:append(Code, Transaction, Dict)
                        ).
 
 -spec handle_charged_transactions(ne_binary(), pos_integer(), kz_json:objects()) -> boolean().
@@ -240,11 +240,10 @@ handle_topup(BillingId, JObjs) ->
 -spec braintree_quick_sale(ne_binary(), number() | ne_binary(), kz_proplist()) ->
                                   {boolean(), bt_transaction() | 'undefined'}.
 braintree_quick_sale(BillingId, Amount, Props) ->
-    try braintree_transaction:quick_sale(
-          BillingId
-          ,wht_util:units_to_dollars(Amount)
-          ,Props
-         )
+    try braintree_transaction:quick_sale(BillingId
+                                        ,wht_util:units_to_dollars(Amount)
+                                        ,Props
+                                        )
     of
         BraintreeTransaction ->
             {handle_quick_sale_response(BraintreeTransaction), BraintreeTransaction}
@@ -274,23 +273,20 @@ send_topup_notification(Success, BillingId, Amount, 'undefined') ->
     send_topup_notification(Success, BillingId, Amount, <<"unknown error">>);
 send_topup_notification(Success, BillingId, Amount, ResponseText) when is_binary(ResponseText) ->
     Props = [{<<"Account-ID">>, BillingId}
-             ,{<<"Amount">>, Amount}
-             ,{<<"Success">>, Success}
-             ,{<<"Response">>, ResponseText}
+            ,{<<"Amount">>, Amount}
+            ,{<<"Success">>, Success}
+            ,{<<"Response">>, ResponseText}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ],
-    _ = case
-            kapps_util:amqp_pool_send(
-              Props
-              ,fun kapi_notifications:publish_topup/1
-             )
+    _ = case kz_amqp_worker:cast(Props
+                                ,fun kapi_notifications:publish_topup/1
+                                )
         of
             'ok' -> lager:debug("topup notification sent for ~s", [BillingId]);
             {'error', _R} ->
-                lager:error(
-                  "failed to send topup notification for ~s : ~p"
+                lager:error("failed to send topup notification for ~s : ~p"
                            ,[BillingId, _R]
-                 )
+                           )
         end,
     Success;
 send_topup_notification(Success, BillingId, Amount, BraintreeTransaction) ->
@@ -311,16 +307,16 @@ convert_transactions(BTTransactions) ->
 -spec convert_transaction(kz_json:object()) -> kz_transaction:transaction().
 convert_transaction(BTTransaction) ->
     Routines = [fun set_description/2
-                ,fun set_bookkeeper_info/2
-                ,fun set_metadata/2
-                ,fun set_reason/2
-                ,fun set_status/2
-                ,fun set_amount/2
-                ,fun set_type/2  %% Make sure type is set /after/ amount
-                ,fun set_created/2
-                ,fun set_modified/2
-                ,fun set_account_id/2
-                ,fun set_account_db/2
+               ,fun set_bookkeeper_info/2
+               ,fun set_metadata/2
+               ,fun set_reason/2
+               ,fun set_status/2
+               ,fun set_amount/2
+               ,fun set_type/2  %% Make sure type is set /after/ amount
+               ,fun set_created/2
+               ,fun set_modified/2
+               ,fun set_account_id/2
+               ,fun set_account_db/2
                ],
     lists:foldl(fun(F, T) -> F(BTTransaction, T) end, kz_transaction:new(), Routines).
 
@@ -337,12 +333,12 @@ set_description(_BTTransaction, Transaction) ->
 -spec set_bookkeeper_info(kz_json:object(), kz_transaction:transaction()) -> kz_transaction:transaction().
 set_bookkeeper_info(BTTransaction, Transaction) ->
     kz_transaction:set_bookkeeper_info(
-        kz_json:from_list([
-            {<<"id">>, kz_doc:id(BTTransaction)}
-            ,{<<"merchant_account_id">>, kz_json:get_value(<<"merchant_account_id">>, BTTransaction)}
-        ])
-        ,Transaction
-    ).
+      kz_json:from_list([
+                         {<<"id">>, kz_doc:id(BTTransaction)}
+                        ,{<<"merchant_account_id">>, kz_json:get_value(<<"merchant_account_id">>, BTTransaction)}
+                        ])
+                                      ,Transaction
+     ).
 
 -spec set_metadata(kz_json:object(), kz_transaction:transaction()) -> kz_transaction:transaction().
 set_metadata(BTTransaction, Transaction) ->
@@ -358,16 +354,16 @@ set_reason(BTTransaction, Transaction, 'undefined') ->
     IsApi = kz_json:is_true(<<"is_api">>, BTTransaction),
     IsRecurring = kz_json:is_true(<<"is_recurring">>, BTTransaction),
     IsProrated = transaction_is_prorated(BTTransaction),
-    if
-        IsProrated, IsRecurring ->
+    case {IsProrated, IsRecurring, IsApi} of
+        {'true', 'true', _} ->
             kz_transaction:set_reason(<<"recurring_prorate">>, Transaction);
-        IsApi, IsRecurring ->
+        {_, 'true', 'true'} ->
             kz_transaction:set_reason(<<"recurring_prorate">>, Transaction);
-        IsRecurring ->
+        {_, 'true', _} ->
             kz_transaction:set_reason(<<"monthly_recurring">>, Transaction);
-        IsApi ->
+        {_, _, 'true'} ->
             kz_transaction:set_reason(<<"manual_addition">>, Transaction);
-        'true' ->
+        _ ->
             kz_transaction:set_reason(<<"unknown">>, Transaction)
     end;
 set_reason(_BTTransaction, Transaction, Code) ->
@@ -467,7 +463,7 @@ utc_to_gregorian_seconds(<<Y:4/binary, "-", M:2/binary, "-", D:2/binary, "T"
                         ) ->
     Date = {
       {kz_util:to_integer(Y), kz_util:to_integer(M), kz_util:to_integer(D)}
-      ,{kz_util:to_integer(H), kz_util:to_integer(Mi), kz_util:to_integer(S)}
+           ,{kz_util:to_integer(H), kz_util:to_integer(Mi), kz_util:to_integer(S)}
      },
     calendar:datetime_to_gregorian_seconds(Date);
 utc_to_gregorian_seconds(UTC) ->
@@ -509,9 +505,9 @@ already_charged(Code, [Transaction|Transactions]) ->
     case
         already_charged_transaction(
           Code
-          ,kz_json:get_value(<<"status">>, Transaction)
-          ,kz_json:get_value(<<"purchase_order">>, Transaction)
-          ,Transaction
+                                   ,kz_json:get_value(<<"status">>, Transaction)
+                                   ,kz_json:get_value(<<"purchase_order">>, Transaction)
+                                   ,Transaction
          )
     of
         'true' -> 'true';
@@ -607,7 +603,7 @@ handle_cumulative_discounts(ServiceItem, Subscription) ->
                                   updates().
 update_subscriptions(PlanId, Subscription, #kz_service_updates{bt_subscriptions=Subscriptions}=Updates) ->
     Update = #kz_service_update{bt_subscription = Subscription
-                                ,plan_id = PlanId
+                               ,plan_id = PlanId
                                },
     Replaced = lists:keystore(PlanId, #kz_service_update.plan_id, Subscriptions, Update),
     Updates#kz_service_updates{bt_subscriptions = Replaced}.
@@ -622,8 +618,7 @@ update_subscriptions(PlanId, Subscription, #kz_service_updates{bt_subscriptions=
                                'undefined' | braintree_customer:customer().
 fetch_bt_customer(AccountId, NewItems) ->
     lager:debug("requesting braintree customer ~s", [AccountId]),
-    try braintree_customer:find(AccountId) of
-        Customer -> Customer
+    try braintree_customer:find(AccountId)
     catch
         'throw':{'not_found', Error} when NewItems ->
             throw({'no_payment_token', kz_json:from_list([{<<"no_payment_token">>, Error}])});
@@ -639,11 +634,11 @@ fetch_bt_customer(AccountId, NewItems) ->
 -spec fetch_or_create_subscription(ne_binary(), updates() | braintree_customer:customer()) ->
                                           braintree_subscription:subscription().
 fetch_or_create_subscription(PlanId, #kz_service_updates{bt_subscriptions=[]
-                                                         ,bt_customer=Customer
+                                                        ,bt_customer=Customer
                                                         }) ->
     fetch_or_create_subscription(PlanId, Customer);
 fetch_or_create_subscription(PlanId, #kz_service_updates{bt_subscriptions=Subscriptions
-                                                         ,bt_customer=Customer
+                                                        ,bt_customer=Customer
                                                         }) ->
     case lists:keyfind(PlanId, #kz_service_update.plan_id, Subscriptions) of
         'false' ->
@@ -654,7 +649,7 @@ fetch_or_create_subscription(PlanId, #bt_customer{}=Customer) ->
     try braintree_customer:get_subscription(PlanId, Customer) of
         Subscription ->
             lager:debug("found subscription ~s for plan id ~s"
-                        ,[braintree_subscription:get_id(Subscription), PlanId]
+                       ,[braintree_subscription:get_id(Subscription), PlanId]
                        ),
             braintree_subscription:reset(Subscription)
     catch

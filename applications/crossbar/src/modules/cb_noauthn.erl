@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011, VoIP INC
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%% NoAuthN module
 %%%
@@ -13,7 +13,7 @@
 -module(cb_noauthn).
 
 -export([init/0
-         ,authenticate/1
+        ,authenticate/1
         ]).
 
 -include("crossbar.hrl").

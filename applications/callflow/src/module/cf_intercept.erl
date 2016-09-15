@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2014, 2600hz, INC
+%%% @copyright (C) 2013-2016, 2600Hz, INC
 %%% @doc
 %%% Intercept a call
 %%%
@@ -21,6 +21,8 @@
 %%%   SIPLABS LLC (Maksim Krzhemenevskiy)
 %%%-------------------------------------------------------------------
 -module(cf_intercept).
+
+-behaviour(gen_cf_action).
 
 -include("callflow.hrl").
 
@@ -110,7 +112,7 @@ is_owner_same_group(Call, DeviceId, OwnerId, GroupId) ->
                       kz_json:get_value(<<"type">>, Endpoint) =:= <<"user">>;
                  ({_EndpointId, _Endpoint}) -> 'false'
               end
-              ,kz_json:get_value(<<"endpoints">>, GroupJObj, kz_json:new())
+                       ,kz_json:get_value(<<"endpoints">>, GroupJObj, kz_json:new())
              );
         {'error', _E} ->
             lager:debug("Error while opening group ~s: ~p", [GroupId, _E]),
@@ -204,9 +206,9 @@ sort_channels(Channels, MyUUID, MyMediaServer) ->
 sort_channels([], _MyUUID, _MyMediaServer, Acc) -> Acc;
 sort_channels([Channel|Channels], MyUUID, MyMediaServer, Acc) ->
     lager:debug("channel: c: ~s a: ~s n: ~s oleg: ~s", [kz_json:get_value(<<"uuid">>, Channel)
-                                                        ,kz_json:is_true(<<"answered">>, Channel)
-                                                        ,kz_json:get_value(<<"node">>, Channel)
-                                                        ,kz_json:get_value(<<"other_leg">>, Channel)
+                                                       ,kz_json:is_true(<<"answered">>, Channel)
+                                                       ,kz_json:get_value(<<"node">>, Channel)
+                                                       ,kz_json:get_value(<<"other_leg">>, Channel)
                                                        ]),
     maybe_add_leg(Channels, MyUUID, MyMediaServer, Acc, Channel).
 
@@ -247,9 +249,9 @@ intercept_call(UUID, Call) ->
 -spec intercept_cmd(ne_binary()) -> kz_proplist().
 intercept_cmd(TargetCallId) ->
     [{<<"Application-Name">>, <<"call_pickup">>}
-     ,{<<"Target-Call-ID">>, TargetCallId}
-     ,{<<"Unbridged-Only">>, 'false'}
-     ,{<<"Unanswered-Only">>, 'false'}
+    ,{<<"Target-Call-ID">>, TargetCallId}
+    ,{<<"Unbridged-Only">>, 'false'}
+    ,{<<"Unanswered-Only">>, 'false'}
     ].
 
 -spec wait_for_intercept(kapps_call:call()) ->
@@ -283,7 +285,7 @@ find_sip_endpoints(Data, Call) ->
     case kz_json:get_value(<<"device_id">>, Data) of
         'undefined' -> find_user_endpoints(Data, Call);
         DeviceId ->
-             cf_util:sip_users_from_device_ids([DeviceId], Call)
+            cf_util:sip_users_from_device_ids([DeviceId], Call)
     end.
 
 -spec find_user_endpoints(kz_json:object(), kapps_call:call()) -> ne_binaries().

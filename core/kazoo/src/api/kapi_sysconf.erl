@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%% Expose system configuration data.
 %%% System configuration data is stored as key/values in a namespace
@@ -12,23 +12,23 @@
 -module(kapi_sysconf).
 
 -export([get_req/1, get_req_v/1
-         ,get_resp/1, get_resp_v/1
-         ,set_req/1, set_req_v/1
-         ,set_resp/1, set_resp_v/1
-         ,flush_req/1, flush_req_v/1
+        ,get_resp/1, get_resp_v/1
+        ,set_req/1, set_req_v/1
+        ,set_resp/1, set_resp_v/1
+        ,flush_req/1, flush_req_v/1
 
-         ,bind_q/2, unbind_q/2
-         ,declare_exchanges/0
+        ,bind_q/2, unbind_q/2
+        ,declare_exchanges/0
 
-         ,publish_get_req/1, publish_get_req/2
-         ,publish_get_resp/2, publish_get_resp/3
-         ,publish_set_req/1, publish_set_req/2
-         ,publish_set_resp/2, publish_set_resp/3
-         ,publish_flush_req/1, publish_flush_req/2
+        ,publish_get_req/1, publish_get_req/2
+        ,publish_get_resp/2, publish_get_resp/3
+        ,publish_set_req/1, publish_set_req/2
+        ,publish_set_resp/2, publish_set_resp/3
+        ,publish_flush_req/1, publish_flush_req/2
 
-         ,get_category/1, get_category/2
-         ,get_key/1, get_key/2
-         ,get_value/1, get_value/2
+        ,get_category/1, get_category/2
+        ,get_key/1, get_key/2
+        ,get_value/1, get_value/2
         ]).
 
 -include_lib("kazoo/include/kz_api.hrl").
@@ -70,8 +70,8 @@
 -define(SYSCONF_SET_RESP_VALUES, [{<<"Event-Name">>, <<"set_resp">>} | ?SYSCONF_VALUES]).
 
 -define(SYSCONF_TYPES, [{?CAT_KEY, fun is_binary/1}
-                        ,{?KEY_KEY, fun is_binary/1}
-                        ,{<<"Node">>, fun is_binary/1}
+                       ,{?KEY_KEY, fun is_binary/1}
+                       ,{<<"Node">>, fun is_binary/1}
                        ]).
 
 %%--------------------------------------------------------------------
@@ -232,7 +232,7 @@ declare_exchanges() ->
 publish_get_req(JObj) ->
     publish_get_req(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_get_req(Api, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Api, ?SYSCONF_GET_REQ_VALUES, fun ?MODULE:get_req/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Api, ?SYSCONF_GET_REQ_VALUES, fun get_req/1),
     amqp_util:sysconf_publish(routing_key_get(), Payload, ContentType).
 
 -spec publish_get_resp(ne_binary(), api_terms()) -> 'ok'.
@@ -240,8 +240,8 @@ publish_get_req(Api, ContentType) ->
 publish_get_resp(RespQ, JObj) ->
     publish_get_resp(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_get_resp(RespQ, Api, ContentType) ->
-    PrepareOptions = [{'formatter', fun ?MODULE:get_resp/1}
-                      ,{'remove_recursive', 'false'}
+    PrepareOptions = [{'formatter', fun get_resp/1}
+                     ,{'remove_recursive', 'false'}
                      ],
     {'ok', Payload} = kz_api:prepare_api_payload(Api, ?SYSCONF_GET_RESP_VALUES, PrepareOptions),
     amqp_util:targeted_publish(RespQ, Payload, ContentType).
@@ -251,7 +251,7 @@ publish_get_resp(RespQ, Api, ContentType) ->
 publish_set_req(JObj) ->
     publish_set_req(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_set_req(Api, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Api, ?SYSCONF_SET_REQ_VALUES, fun ?MODULE:set_req/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Api, ?SYSCONF_SET_REQ_VALUES, fun set_req/1),
     amqp_util:sysconf_publish(routing_key_set(), Payload, ContentType).
 
 -spec publish_set_resp(ne_binary(), api_terms()) -> 'ok'.
@@ -259,7 +259,7 @@ publish_set_req(Api, ContentType) ->
 publish_set_resp(RespQ, JObj) ->
     publish_set_resp(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_set_resp(RespQ, Api, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Api, ?SYSCONF_SET_RESP_VALUES, fun ?MODULE:set_resp/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Api, ?SYSCONF_SET_RESP_VALUES, fun set_resp/1),
     amqp_util:targeted_publish(RespQ, Payload, ContentType).
 
 -spec publish_flush_req(api_terms()) -> 'ok'.
@@ -267,7 +267,7 @@ publish_set_resp(RespQ, Api, ContentType) ->
 publish_flush_req(JObj) ->
     publish_flush_req(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_flush_req(Api, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Api, ?SYSCONF_FLUSH_REQ_VALUES, fun ?MODULE:flush_req/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Api, ?SYSCONF_FLUSH_REQ_VALUES, fun flush_req/1),
     amqp_util:sysconf_publish(routing_key_flush(), Payload, ContentType).
 
 routing_key_get() ->

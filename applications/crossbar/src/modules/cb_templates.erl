@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011, VoIP INC
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%%
 %%% Handle client requests for template documents
@@ -12,12 +12,12 @@
 -module(cb_templates).
 
 -export([init/0
-         ,allowed_methods/0, allowed_methods/1
-         ,resource_exists/0, resource_exists/1
-         ,validate/1, validate/2
-         ,put/2
-         ,delete/2
-         ,account_created/1
+        ,allowed_methods/0, allowed_methods/1
+        ,resource_exists/0, resource_exists/1
+        ,validate/1, validate/2
+        ,put/2
+        ,delete/2
+        ,account_created/1
         ]).
 
 -include("crossbar.hrl").
@@ -48,7 +48,7 @@ init() ->
 allowed_methods() -> [?HTTP_GET].
 
 -spec allowed_methods(path_token()) -> http_methods().
-allowed_methods(_) -> [?HTTP_PUT, ?HTTP_DELETE].
+allowed_methods(_TemplateName) -> [?HTTP_PUT, ?HTTP_DELETE].
 
 %%--------------------------------------------------------------------
 %% @public
@@ -97,6 +97,7 @@ validate_request(Context, ?HTTP_DELETE, [{<<"templates">>, _}], TemplateName) ->
 validate_request(Context, _, _, TemplateName) ->
     load_template_db(TemplateName, Context).
 
+-spec put(cb_context:context(), path_token()) -> cb_context:context().
 put(Context, TemplateName) ->
     create_template_db(TemplateName, Context).
 
@@ -129,7 +130,7 @@ summary(Context) ->
         {'ok', Dbs} ->
             RespData = [format_template_name(Db, 'raw') || <<?DB_PREFIX, _/binary>>=Db <- Dbs],
             cb_context:set_resp_status(cb_context:set_resp_data(Context, RespData)
-                                       ,'success'
+                                      ,'success'
                                       );
         _ -> cb_context:add_system_error('datastore_missing_view', Context)
     end.
@@ -153,8 +154,8 @@ load_template_db(TemplateName, Context) ->
         'true' ->
             lager:debug("check succeeded for template db ~s", [DbName]),
             cb_context:setters(Context, [{fun cb_context:set_resp_status/2, 'success'}
-                                         ,{fun cb_context:set_account_id/2, TemplateName}
-                                         ,{fun cb_context:set_account_db/2, DbName}
+                                        ,{fun cb_context:set_account_id/2, TemplateName}
+                                        ,{fun cb_context:set_account_db/2, DbName}
                                         ])
     end.
 
@@ -238,17 +239,17 @@ is_design_doc_id(_) -> 'true'.
 import_template_docs([], _, _, _) -> 'ok';
 import_template_docs([Id|Ids], TemplateDb, AccountId, AccountDb) ->
     case kz_datamgr:open_doc(TemplateDb, Id) of
+        {'error', _} -> import_template_docs(Ids, TemplateDb, AccountId, AccountDb);
         {'ok', JObj} ->
             Routines = [fun(J) -> kz_doc:set_account_id(J, AccountId) end
-                        ,fun(J) -> kz_doc:set_account_db(J, AccountDb) end
-                        ,fun kz_doc:delete_revision/1
-                        ,fun kz_doc:delete_attachments/1
+                       ,fun(J) -> kz_doc:set_account_db(J, AccountDb) end
+                       ,fun kz_doc:delete_revision/1
+                       ,fun kz_doc:delete_attachments/1
                        ],
             _ = kz_datamgr:ensure_saved(AccountDb, lists:foldr(fun(F, J) -> F(J) end, JObj, Routines)),
             Attachments = kz_doc:attachment_names(JObj),
             _ = import_template_attachments(Attachments, JObj, TemplateDb, AccountDb, Id),
-            import_template_docs(Ids, TemplateDb, AccountId, AccountDb);
-        {'error', _} -> import_template_docs(Ids, TemplateDb, AccountId, AccountDb)
+            import_template_docs(Ids, TemplateDb, AccountId, AccountDb)
     end.
 
 -spec import_template_attachments(ne_binaries(), kz_json:object(), ne_binary(), ne_binary(), ne_binary()) -> 'ok'.

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -12,13 +12,13 @@
 -include_lib("kazoo/include/kz_api.hrl").
 
 -export([originate_req/1, originate_req_v/1
-         ,originate_resp/1, originate_resp_v/1
-         ,originate_ready/1, originate_ready_v/1
-         ,originate_execute/1, originate_execute_v/1
-         ,originate_started/1, originate_started_v/1
-         ,originate_uuid/1, originate_uuid_v/1
-         ,eavesdrop_req/1, eavesdrop_req_v/1
-         ,eavesdrop_resp/1, eavesdrop_resp_v/1
+        ,originate_resp/1, originate_resp_v/1
+        ,originate_ready/1, originate_ready_v/1
+        ,originate_execute/1, originate_execute_v/1
+        ,originate_started/1, originate_started_v/1
+        ,originate_uuid/1, originate_uuid_v/1
+        ,eavesdrop_req/1, eavesdrop_req_v/1
+        ,eavesdrop_resp/1, eavesdrop_resp_v/1
         ]).
 
 -export([is_valid_mode/1]).
@@ -27,17 +27,17 @@
 -export([declare_exchanges/0]).
 
 -export([publish_originate_req/1, publish_originate_req/2
-         ,publish_originate_resp/2, publish_originate_resp/3
-         ,publish_originate_started/2, publish_originate_started/3
-         ,publish_originate_uuid/2, publish_originate_uuid/3
-         ,publish_eavesdrop_req/1, publish_eavesdrop_req/2
-         ,publish_eavesdrop_resp/2, publish_eavesdrop_resp/3
+        ,publish_originate_resp/2, publish_originate_resp/3
+        ,publish_originate_started/2, publish_originate_started/3
+        ,publish_originate_uuid/2, publish_originate_uuid/3
+        ,publish_eavesdrop_req/1, publish_eavesdrop_req/2
+        ,publish_eavesdrop_resp/2, publish_eavesdrop_resp/3
         ]).
 
 %% Eavesdrop: If you set a Group ID, the Call-ID is ignored and "all" is used instead
 -define(EAVESDROP_VALID_MODES, [<<"listen">>   % hear both sides - default
-                                ,<<"whisper">> % talk to one side
-                                ,<<"full">>    % talk to both sides
+                               ,<<"whisper">> % talk to one side
+                               ,<<"full">>    % talk to both sides
                                ]).
 -define(EAVESDROP_MODE, {<<"Eavesdrop-Mode">>, ?EAVESDROP_VALID_MODES}).
 
@@ -45,22 +45,22 @@
 
 -define(EAVESDROP_REQ_HEADERS, [<<"Account-ID">>, <<"Endpoint-ID">>]).
 -define(OPTIONAL_EAVESDROP_REQ_HEADERS, [<<"Eavesdrop-Group-ID">>, <<"Eavesdrop-Mode">>
-                                         ,<<"Eavesdrop-Call-ID">>
-                                         | ?OPTIONAL_ORIGINATE_REQ_HEADERS
+                                        ,<<"Eavesdrop-Call-ID">>
+                                             | ?OPTIONAL_ORIGINATE_REQ_HEADERS
                                         ]).
 -define(EAVESDROP_REQ_VALUES, [{<<"Event-Category">>, <<"resource">>}
-                               ,{<<"Event-Name">>, <<"eavesdrop_req">>}
-                               ,?EAVESDROP_MODE
+                              ,{<<"Event-Name">>, <<"eavesdrop_req">>}
+                              ,?EAVESDROP_MODE
                               ]).
 -define(EAVESDROP_REQ_TYPES, []).
 
 -define(EAVESDROP_RESP_HEADERS, [<<"Status">>]).
 -define(OPTIONAL_EAVESDROP_RESP_HEADERS, [<<"Eavesdropper-Call-ID">>
-                                          ,<<"Error-Msg">>
+                                         ,<<"Error-Msg">>
                                          ]).
 -define(EAVESDROP_RESP_VALUES, [{<<"Event-Category">>, <<"resource">>}
-                                ,{<<"Event-Name">>, <<"eavesdrop_resp">>}
-                                ,{<<"Status">>, [<<"started">>, <<"error">>]}
+                               ,{<<"Event-Name">>, <<"eavesdrop_resp">>}
+                               ,{<<"Status">>, [<<"started">>, <<"error">>]}
                                ]).
 -define(EAVESDROP_RESP_TYPES, []).
 
@@ -69,39 +69,39 @@
 
 -define(ORIGINATE_REQ_HEADERS, [<<"Endpoints">>, <<"Application-Name">>]).
 -define(OPTIONAL_ORIGINATE_REQ_HEADERS, [<<"Application-Data">>
-                                         ,<<"Custom-Channel-Vars">>
-                                         ,<<"Existing-Call-ID">> % If set, use this node, otherwise ignore
-                                         ,<<"Export-Custom-Channel-Vars">>
-                                         ,<<"Originate-Immediate">>
-                                         ,<<"Outbound-Call-ID">>
-                                         %% Eavesdrop
-                                         ,<<"Eavesdrop-Call-ID">>
-                                         ,<<"Eavesdrop-Mode">>
-                                         ,<<"Eavesdrop-Group-ID">>
-                                         ,<<"Fax-Identity-Name">>
-                                         ,<<"Fax-Identity-Number">>
-                                         ,<<"Fax-Timezone">>
-                                         ,<<"Intercept-Unbridged-Only">>
-                                         ,<<"Simplify-Loopback">> %% loopback_bowout flag
-                                         ,<<"Loopback-Bowout">>
-                                         ,<<"Start-Control-Process">>
-                                         | kapi_dialplan:optional_bridge_req_headers()
+                                        ,<<"Custom-Channel-Vars">>
+                                        ,<<"Existing-Call-ID">> % If set, use this node, otherwise ignore
+                                        ,<<"Export-Custom-Channel-Vars">>
+                                        ,<<"Originate-Immediate">>
+                                        ,<<"Outbound-Call-ID">>
+                                             %% Eavesdrop
+                                        ,<<"Eavesdrop-Call-ID">>
+                                        ,<<"Eavesdrop-Mode">>
+                                        ,<<"Eavesdrop-Group-ID">>
+                                        ,<<"Fax-Identity-Name">>
+                                        ,<<"Fax-Identity-Number">>
+                                        ,<<"Fax-Timezone">>
+                                        ,<<"Intercept-Unbridged-Only">>
+                                        ,<<"Simplify-Loopback">> %% loopback_bowout flag
+                                        ,<<"Loopback-Bowout">>
+                                        ,<<"Start-Control-Process">>
+                                             | kapi_dialplan:optional_bridge_req_headers()
                                         ]).
 -define(ORIGINATE_REQ_VALUES, [{<<"Event-Category">>, <<"resource">>}
-                               ,{<<"Event-Name">>, <<"originate_req">>}
-                               ,{<<"Dial-Endpoint-Method">>, [<<"single">>, <<"simultaneous">>]}
-                               ,{<<"Media">>, [<<"process">>, <<"bypass">>, <<"auto">>]}
-                               ,{<<"Application-Name">>, [<<"park">>, <<"bridge">>, <<"transfer">>
-                                                          ,<<"fax">>, <<"eavesdrop">>
-                                                         ]}
+                              ,{<<"Event-Name">>, <<"originate_req">>}
+                              ,{<<"Dial-Endpoint-Method">>, [<<"single">>, <<"simultaneous">>]}
+                              ,{<<"Media">>, [<<"process">>, <<"bypass">>, <<"auto">>]}
+                              ,{<<"Application-Name">>, [<<"park">>, <<"bridge">>, <<"transfer">>
+                                                        ,<<"fax">>, <<"eavesdrop">>
+                                                        ]}
                                %% Eavesdrop
-                               ,?EAVESDROP_MODE
+                              ,?EAVESDROP_MODE
                               ]).
 -define(ORIGINATE_REQ_TYPES, [{<<"Endpoints">>, fun is_list/1}
-                              ,{<<"Custom-SIP-Headers">>, fun kz_json:is_json_object/1}
-                              ,{<<"Custom-Channel-Vars">>, fun kz_json:is_json_object/1}
-                              ,{<<"Continue-On-Fail">>, fun kz_util:is_boolean/1}
-                              ,{<<"Simplify-Bowout">>, fun kz_util:is_boolean/1}
+                             ,{<<"Custom-SIP-Headers">>, fun kz_json:is_json_object/1}
+                             ,{<<"Custom-Channel-Vars">>, fun kz_json:is_json_object/1}
+                             ,{<<"Continue-On-Fail">>, fun kz_util:is_boolean/1}
+                             ,{<<"Simplify-Bowout">>, fun kz_util:is_boolean/1}
                              ]).
 
 %% Originate Endpoints
@@ -110,17 +110,17 @@
 -define(ORIGINATE_REQ_ENDPOINT_VALUES, [{<<"Endpoint-Type">>, [<<"sip">>, <<"freetdm">>]}
                                        ]).
 -define(ORIGINATE_REQ_ENDPOINT_TYPES, [{<<"Custom-SIP-Headers">>, fun kz_json:is_json_object/1}
-                                       ,{<<"Custom-Channel-Vars">>, fun kz_json:is_json_object/1}
-                                       ,{<<"Endpoint-Options">>, fun kz_json:is_json_object/1}
-                                       ,{<<"Ignore-Early-Media">>, fun kz_util:is_boolean/1}
-                                       ,{<<"Bypass-Media">>, fun kz_util:is_boolean/1}
+                                      ,{<<"Custom-Channel-Vars">>, fun kz_json:is_json_object/1}
+                                      ,{<<"Endpoint-Options">>, fun kz_json:is_json_object/1}
+                                      ,{<<"Ignore-Early-Media">>, fun kz_util:is_boolean/1}
+                                      ,{<<"Bypass-Media">>, fun kz_util:is_boolean/1}
                                       ]).
 
 %% Origintate Resp
 -define(ORIGINATE_RESP_HEADERS, [<<"Call-ID">>]).
 -define(OPTIONAL_ORIGINATE_RESP_HEADERS, [<<"Channel-Call-State">> | kapi_call:optional_call_event_headers()]).
 -define(ORIGINATE_RESP_VALUES, [{<<"Event-Category">>, <<"resource">>}
-                                ,{<<"Event-Name">>, <<"originate_resp">>}
+                               ,{<<"Event-Name">>, <<"originate_resp">>}
                                ]).
 -define(ORIGINATE_RESP_TYPES, [{<<"Custom-Channel-Vars">>, fun kz_json:is_json_object/1}]).
 
@@ -128,7 +128,7 @@
 -define(ORIGINATE_STARTED_HEADERS, [<<"Call-ID">>]).
 -define(OPTIONAL_ORIGINATE_STARTED_HEADERS, [<<"Channel-Call-State">> | kapi_call:optional_call_event_headers()]).
 -define(ORIGINATE_STARTED_VALUES, [{<<"Event-Category">>, <<"resource">>}
-                                   ,{<<"Event-Name">>, <<"originate_started">>}
+                                  ,{<<"Event-Name">>, <<"originate_started">>}
                                   ]).
 -define(ORIGINATE_STARTED_TYPES, [{<<"Custom-Channel-Vars">>, fun kz_json:is_json_object/1}]).
 
@@ -136,15 +136,19 @@
 -define(ORIGINATE_UUID_HEADERS, [<<"Outbound-Call-ID">>]).
 -define(OPTIONAL_ORIGINATE_UUID_HEADERS, [<<"Outbound-Call-Control-Queue">>]).
 -define(ORIGINATE_UUID_VALUES, [{<<"Event-Category">>, <<"resource">>}
-                                ,{<<"Event-Name">>, <<"originate_uuid">>}
+                               ,{<<"Event-Name">>, <<"originate_uuid">>}
                                ]).
 -define(ORIGINATE_UUID_TYPES, []).
 
+-spec originate_ready(api_terms()) -> api_formatter_return().
+-spec originate_ready_v(api_terms()) -> boolean().
 originate_ready(API) ->
     kapi_dialplan:originate_ready(API).
 originate_ready_v(API) ->
     kapi_dialplan:originate_ready_v(API).
 
+-spec originate_execute(api_terms()) -> api_formatter_return().
+-spec originate_execute_v(api_terms()) -> boolean().
 originate_execute(API) ->
     kapi_dialplan:originate_execute(API).
 originate_execute_v(API) ->
@@ -155,7 +159,6 @@ originate_execute_v(API) ->
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
-
 -spec originate_req(api_terms()) -> api_formatter_return().
 originate_req(Prop) when is_list(Prop) ->
     EPs = [begin
@@ -178,9 +181,7 @@ originate_req_v(Prop) when is_list(Prop) ->
 originate_req_v(JObj) ->
     originate_req_v(kz_json:to_proplist(JObj)).
 
--spec originate_req_endpoint_headers(api_terms()) ->
-                                     {'ok', kz_proplist()} |
-                                     {'error', string()}.
+-spec originate_req_endpoint_headers(api_terms()) -> api_formatter_return().
 originate_req_endpoint_headers(Prop) when is_list(Prop) ->
     kz_api:build_message_specific_headers(Prop, ?ORIGINATE_REQ_ENDPOINT_HEADERS, ?OPTIONAL_ORIGINATE_REQ_ENDPOINT_HEADERS);
 originate_req_endpoint_headers(JObj) ->
@@ -198,9 +199,7 @@ originate_req_endpoint_v(JObj) ->
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
--spec originate_resp(api_terms()) ->
-                            {'ok', iolist()} |
-                            {'error', string()}.
+-spec originate_resp(api_terms()) -> api_formatter_return().
 originate_resp(Prop) when is_list(Prop) ->
     case originate_resp_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?ORIGINATE_RESP_HEADERS, ?OPTIONAL_ORIGINATE_RESP_HEADERS);
@@ -220,9 +219,7 @@ originate_resp_v(JObj) ->
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
--spec originate_started(api_terms()) ->
-                               {'ok', iolist()} |
-                               {'error', string()}.
+-spec originate_started(api_terms()) -> api_formatter_return().
 originate_started(Prop) when is_list(Prop) ->
     case originate_started_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?ORIGINATE_STARTED_HEADERS, ?OPTIONAL_ORIGINATE_STARTED_HEADERS);
@@ -242,9 +239,7 @@ originate_started_v(JObj) ->
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
--spec originate_uuid(api_terms()) ->
-                            {'ok', iolist()} |
-                            {'error', string()}.
+-spec originate_uuid(api_terms()) -> api_formatter_return().
 originate_uuid(Prop) when is_list(Prop) ->
     case originate_uuid_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?ORIGINATE_UUID_HEADERS, ?OPTIONAL_ORIGINATE_UUID_HEADERS);
@@ -264,9 +259,7 @@ originate_uuid_v(JObj) ->
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
--spec eavesdrop_req(api_terms()) ->
-                           {'ok', iolist()} |
-                           {'error', string()}.
+-spec eavesdrop_req(api_terms()) -> api_formatter_return().
 eavesdrop_req(Prop) when is_list(Prop) ->
     case eavesdrop_req_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?EAVESDROP_REQ_HEADERS, ?OPTIONAL_EAVESDROP_REQ_HEADERS);
@@ -286,9 +279,7 @@ eavesdrop_req_v(JObj) ->
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
--spec eavesdrop_resp(api_terms()) ->
-                            {'ok', iolist()} |
-                            {'error', string()}.
+-spec eavesdrop_resp(api_terms()) -> api_formatter_return().
 eavesdrop_resp(Prop) when is_list(Prop) ->
     case eavesdrop_resp_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?EAVESDROP_RESP_HEADERS, ?OPTIONAL_EAVESDROP_RESP_HEADERS);
@@ -357,7 +348,7 @@ declare_exchanges() ->
 publish_originate_req(JObj) ->
     publish_originate_req(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_originate_req(Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?ORIGINATE_REQ_VALUES, fun ?MODULE:originate_req/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?ORIGINATE_REQ_VALUES, fun originate_req/1),
     amqp_util:callmgr_publish(Payload, ContentType, ?KEY_RESOURCE_REQ, [{'mandatory', 'true'}]).
 
 -spec publish_originate_resp(ne_binary(), api_terms()) -> 'ok'.
@@ -365,7 +356,7 @@ publish_originate_req(Req, ContentType) ->
 publish_originate_resp(TargetQ, JObj) ->
     publish_originate_resp(TargetQ, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_originate_resp(TargetQ, Resp, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?ORIGINATE_RESP_VALUES, fun ?MODULE:originate_resp/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?ORIGINATE_RESP_VALUES, fun originate_resp/1),
     amqp_util:targeted_publish(TargetQ, Payload, ContentType).
 
 -spec publish_originate_started(ne_binary(), api_terms()) -> 'ok'.
@@ -373,7 +364,7 @@ publish_originate_resp(TargetQ, Resp, ContentType) ->
 publish_originate_started(TargetQ, JObj) ->
     publish_originate_started(TargetQ, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_originate_started(TargetQ, Resp, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?ORIGINATE_STARTED_VALUES, fun ?MODULE:originate_started/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?ORIGINATE_STARTED_VALUES, fun originate_started/1),
     amqp_util:targeted_publish(TargetQ, Payload, ContentType).
 
 -spec publish_originate_uuid(ne_binary(), api_terms()) -> 'ok'.
@@ -381,7 +372,7 @@ publish_originate_started(TargetQ, Resp, ContentType) ->
 publish_originate_uuid(TargetQ, JObj) ->
     publish_originate_uuid(TargetQ, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_originate_uuid(TargetQ, Resp, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?ORIGINATE_UUID_VALUES, fun ?MODULE:originate_uuid/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?ORIGINATE_UUID_VALUES, fun originate_uuid/1),
     amqp_util:targeted_publish(TargetQ, Payload, ContentType).
 
 -spec publish_eavesdrop_req(api_terms()) -> 'ok'.
@@ -389,7 +380,7 @@ publish_originate_uuid(TargetQ, Resp, ContentType) ->
 publish_eavesdrop_req(JObj) ->
     publish_eavesdrop_req(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_eavesdrop_req(Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?EAVESDROP_REQ_VALUES, fun ?MODULE:eavesdrop_req/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?EAVESDROP_REQ_VALUES, fun eavesdrop_req/1),
     amqp_util:callmgr_publish(Payload, ContentType, ?KEY_EAVESDROP_REQ).
 
 -spec publish_eavesdrop_resp(ne_binary(), api_terms()) -> 'ok'.
@@ -397,5 +388,5 @@ publish_eavesdrop_req(Req, ContentType) ->
 publish_eavesdrop_resp(TargetQ, JObj) ->
     publish_eavesdrop_resp(TargetQ, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_eavesdrop_resp(TargetQ, Resp, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?EAVESDROP_RESP_VALUES, fun ?MODULE:eavesdrop_resp/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?EAVESDROP_RESP_VALUES, fun eavesdrop_resp/1),
     amqp_util:targeted_publish(TargetQ, Payload, ContentType).

@@ -9,20 +9,20 @@
 -module(kzd_alert).
 
 -export([new/0
-         ,type/0
-         ,id/1
-         ,fetch/1
+        ,type/0
+        ,id/1
+        ,fetch/1
         ]).
 
 -export([title/0, title/1, title/2, set_title/2
-         ,category/0 ,category/1, category/2, set_category/2
-         ,message/0, message/1, message/2, set_message/2
-         ,metadata/0, metadata/1, metadata/2, set_metadata/2
-         ,level/0, level/1, level/2, set_level/2
-         ,from/0, from/1, from/2, set_from/2
-         ,to/0, to/1, to/2, set_to/2
-         ,expiration_date/0, expiration_date/1, expiration_date/2, set_expiration_date/2
-         ,expired/1
+        ,category/0 ,category/1, category/2, set_category/2
+        ,message/0, message/1, message/2, set_message/2
+        ,metadata/0, metadata/1, metadata/2, set_metadata/2
+        ,level/0, level/1, level/2, set_level/2
+        ,from/0, from/1, from/2, set_from/2
+        ,to/0, to/1, to/2, set_to/2
+        ,expiration_date/0, expiration_date/1, expiration_date/2, set_expiration_date/2
+        ,expired/1
         ]).
 
 -define(ID, <<"_id">>).
@@ -74,7 +74,7 @@ id(JObj) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch(api_binary()) -> {'ok', doc()} |
-                            {'error', any()}.
+                             {'error', any()}.
 fetch('undefined') ->
     {'error', 'invalid_db_name'};
 fetch(<<_/binary>> = AlertId) ->
@@ -97,6 +97,7 @@ title(JObj) ->
 title(JObj, Default) ->
     kz_json:get_value(?TITLE, JObj, Default).
 
+-spec set_title(doc(), ne_binary()) -> doc().
 set_title(JObj, Title) ->
     kz_json:set_value(?TITLE, Title, JObj).
 
@@ -117,6 +118,7 @@ category(JObj) ->
 category(JObj, Default) ->
     kz_json:get_value(?CATEGORY, JObj, Default).
 
+-spec set_category(doc(), ne_binary()) -> doc().
 set_category(JObj, Category) ->
     kz_json:set_value(?CATEGORY, Category, JObj).
 
@@ -137,6 +139,7 @@ message(JObj) ->
 message(JObj, Default) ->
     kz_json:get_value(?MESSAGE, JObj, Default).
 
+-spec set_message(doc(), ne_binary()) -> doc().
 set_message(JObj, Message) ->
     kz_json:set_value(?MESSAGE, Message, JObj).
 
@@ -157,6 +160,7 @@ metadata(JObj) ->
 metadata(JObj, Default) ->
     kz_json:get_value(?METADATA, JObj, Default).
 
+-spec set_metadata(doc(), kz_json:object()) -> doc().
 set_metadata(JObj, Metadata) ->
     kz_json:set_value(?METADATA, Metadata, JObj).
 
@@ -177,6 +181,7 @@ level(JObj) ->
 level(JObj, Default) ->
     kz_json:get_value(?LEVEL, JObj, Default).
 
+-spec set_level(doc(), ne_binary()) -> doc().
 set_level(JObj, Level) ->
     kz_json:set_value(?LEVEL, Level, JObj).
 
@@ -197,6 +202,7 @@ from(JObj) ->
 from(JObj, Default) ->
     kz_json:get_value(?FROM, JObj, Default).
 
+-spec set_from(doc(), kz_json:objects()) -> doc().
 set_from(JObj, From) ->
     kz_json:set_value(?FROM, From, JObj).
 
@@ -217,6 +223,7 @@ to(JObj) ->
 to(JObj, Default) ->
     kz_json:get_value(?TO, JObj, Default).
 
+-spec set_to(doc(), kz_json:objects()) -> doc().
 set_to(JObj, To) ->
     kz_json:set_value(?TO, To, JObj).
 
@@ -237,6 +244,7 @@ expiration_date(JObj) ->
 expiration_date(JObj, Default) ->
     kz_json:get_value(?EXPIRATION_DATE, JObj, Default).
 
+-spec set_expiration_date(doc(), kz_json:objects()) -> doc().
 set_expiration_date(JObj, ExpDate) ->
     kz_json:set_value(?EXPIRATION_DATE, ExpDate, JObj).
 

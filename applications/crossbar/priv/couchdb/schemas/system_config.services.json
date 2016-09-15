@@ -1,0 +1,47 @@
+{
+    "$schema": "http://json-schema.org/draft-03/schema#",
+    "_id": "system_config.services",
+    "description": "Schema for services system_config",
+    "properties": {
+        "default_allow_updates": {
+            "default": true,
+            "description": "services default allow updates",
+            "type": "boolean"
+        },
+        "master_account_bookkeeper": {
+            "default": "kz_bookkeeper_local",
+            "description": "services master account bookkeeper",
+            "type": "string"
+        },
+        "modules": {
+            "description": "services modules"
+        },
+        "scan_rate": {
+            "default": 20000,
+            "description": "services scan rate",
+            "type": "integer"
+        },
+        "should_save_master_audit_logs": {
+            "default": false,
+            "description": "services should save master audit logs",
+            "type": "boolean"
+        },
+        "support_billing_id": {
+            "default": true,
+            "description": "services support billing id",
+            "type": "boolean"
+        },
+        "sync_buffer_period": {
+            "default": 600,
+            "description": "services sync buffer period",
+            "type": "integer"
+        },
+        "sync_services": {
+            "default": false,
+            "description": "services sync services",
+            "type": "boolean"
+        }
+    },
+    "required": true,
+    "type": "object"
+}

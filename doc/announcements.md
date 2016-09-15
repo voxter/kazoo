@@ -2,6 +2,16 @@
 
 This file will serve as a reference point for upcoming announcements, both of the temporal nature (this library will be deprecated in 6 months) and version-specific (upgrading from X to Y will require A, B, and C).
 
+## Notices
+
+### Further Module Name Changes in Core
+
+Over the years as the code base grew and new authors joined the team the core module naming has become increasingly inconsistent.  In order to make module names predictable, remove obscure references (such as wht_*) and adhear to stronger coding standars we will be making these consistent.  This will be the last refactor to core and as before the `scripts/wh-to-kz.sh` script will be extended to provide developers with a tool to refactor any modules they have created.
+
+This final refactor has been contentious as we discussed the value a consistent naming scheme in core would bring.  This has delayed the final phase of the renaming initiative but we are now preparing to preform this action.  We feel that the benefits outweigh disadvantages and understand that once 4.0 has been released as stable will not have an oppertunaty to correct this until the next major version.
+
+We hope that you agree and and are not inconvienced by this change.  As always we are here to help or answer any questions!  Thank you for your understaning.
+
 ## Versions
 
 ### 4.0
@@ -51,7 +61,15 @@ The Blackhole application providing websocket support currently utilizes the soc
 
 #### System media has been moved
 
-The media prompts that we used to keep in the code repository for historical reasons has been moved the kazoo-prompts repository.
+The media prompts that we used to keep in the code repository for historical reasons has been moved the [kazoo-sounds](https://github.com/2600hz/kazoo-sounds) repository.
+
+#### Moved `cf_endpoint` to core
+
+The Callflow modules `cf_endpoint` and `cf_attributes` were used by multiple applications creating undesired dependencies between applications.  This was done to avoid copy-pasting common code but is a clear indication that this functionality belongs in core.  We have removed these modules from Callflows and moved them to https://github.com/2600hz/kazoo/tree/master/core/kazoo_endpoint.
+
+#### Moved `knm_sip` to inside `kzsip_uri`
+
+The `knm_sip` module shares a lot of functionality with the `kazoo_sip` core application.  Its innards have thus been moved.
 
 ### 3.22
 
@@ -65,7 +83,7 @@ The enabled Monster UI applications were moved from an object on the account doc
 
 #### Company Directory PDF
 
-If you plan to support the new API to download the company directory as a PDF you will need to install 'htmldoc' on any server running crossbar.
+If you plan to support the new API to download the company directory as a PDF you will need to install `htmldoc` on any server running crossbar.
 
 #### Default WebRTC Port change
 
@@ -82,6 +100,10 @@ Most operations have been moved to the Cowboy or Cowlib projects. We will formal
 #### Deprecating `deps/exmpp`
 
 exmpp library has problems restarting. it will be replaced by `deps/escalus`
+
+#### Deprecating `deps/ejson`
+
+ejson used for json encode, decode will be replaced by `deps/jiffy`
 
 #### Deprecating `deps/ibrowse`
 `ibrowse` will be replaced by `core/kazoo_web/kz_http` which is using Erlang `httpc`. `kz_http` is the new HTTP client module now and the previous `kz_http` module is renamed to `kz_http_util`.

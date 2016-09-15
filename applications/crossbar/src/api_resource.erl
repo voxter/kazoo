@@ -11,33 +11,33 @@
 -module(api_resource).
 
 -export([init/3, rest_init/2
-         ,terminate/2, rest_terminate/2
-         ,known_methods/2
-         ,allowed_methods/2
-         ,malformed_request/2
-         ,is_authorized/2
-         ,forbidden/2
-         ,valid_content_headers/2
-         ,known_content_type/2
-         ,valid_entity_length/2
-         ,options/2
-         ,content_types_provided/2
-         ,content_types_accepted/2
-         ,languages_provided/2
-         ,charsets_provided/2
-         ,resource_exists/2
-         ,moved_temporarily/2
-         ,moved_permanently/2
-         ,previously_existed/2
-         ,allow_missing_post/2
-         ,delete_resource/2
-         ,delete_completed/2
-         ,is_conflict/2
-         ,to_json/2, to_binary/2, to_csv/2, to_pdf/2, send_file/2
-         ,from_json/2, from_binary/2, from_form/2
-         ,multiple_choices/2
-         ,generate_etag/2
-         ,expires/2
+        ,terminate/2, rest_terminate/2
+        ,known_methods/2
+        ,allowed_methods/2
+        ,malformed_request/2
+        ,is_authorized/2
+        ,forbidden/2
+        ,valid_content_headers/2
+        ,known_content_type/2
+        ,valid_entity_length/2
+        ,options/2
+        ,content_types_provided/2
+        ,content_types_accepted/2
+        ,languages_provided/2
+        ,charsets_provided/2
+        ,resource_exists/2
+        ,moved_temporarily/2
+        ,moved_permanently/2
+        ,previously_existed/2
+        ,allow_missing_post/2
+        ,delete_resource/2
+        ,delete_completed/2
+        ,is_conflict/2
+        ,to_json/2, to_binary/2, to_csv/2, to_pdf/2, send_file/2
+        ,from_json/2, from_binary/2, from_form/2
+        ,multiple_choices/2
+        ,generate_etag/2
+        ,expires/2
         ]).
 
 -include("crossbar.hrl").
@@ -52,18 +52,58 @@ init({'tcp', 'http'}, _Req, _Opts) ->
 init({'ssl', 'http'}, _Req, _Opts) ->
     {'upgrade', 'protocol', 'cowboy_rest'}.
 
--spec rest_init(cowboy_req:req(), kz_proplist()) ->
-                       {'ok', cowboy_req:req(), cb_context:context()}.
-rest_init(Req0, Opts) ->
-    ReqId = case cowboy_req:header(<<"x-request-id">>, Req0) of
+-spec get_request_id(cowboy_req:req()) -> ne_binary().
+get_request_id(Req) ->
+    ReqId = case cowboy_req:header(<<"x-request-id">>, Req) of
                 {'undefined', _} -> kz_datamgr:get_uuid();
                 {UserReqId, _} -> kz_util:to_binary(UserReqId)
             end,
     kz_util:put_callid(ReqId),
-    ProfileId = case cowboy_req:header(<<"x-profile-id">>, Req0) of
-                    {'undefined', _} -> 'undefined';
-                    {ProfId, _} -> kz_util:to_binary(ProfId)
-                end,
+    ReqId.
+
+-spec get_profile_id(cowbow_req:req()) -> api_binary().
+get_profile_id(Req) ->
+    case cowboy_req:header(<<"x-profile-id">>, Req) of
+        {'undefined', _} -> 'undefined';
+        {ProfId, _} -> kz_util:to_binary(ProfId)
+    end.
+
+-spec get_client_ip(inet:ip_address(), cowboy_req:req()) ->
+                           ne_binary().
+get_client_ip(Peer, Req) ->
+    case cowboy_req:header(<<"x-forwarded-for">>, Req) of
+        {'undefined', _} -> kz_network_utils:iptuple_to_binary(Peer);
+        {ForwardIP, _} -> maybe_allow_proxy_req(kz_network_utils:iptuple_to_binary(Peer), ForwardIP)
+    end.
+
+-spec maybe_trace(cowboy_req:req()) -> 'ok'.
+-spec maybe_trace(cowboy_req:req(), boolean()) -> 'ok'.
+maybe_trace(Req) ->
+    maybe_trace(Req
+               ,kapps_config:get_is_true(?CONFIG_CAT, <<"allow_tracing">>, 'false')
+               ).
+
+maybe_trace(_Req, 'false') -> 'ok';
+maybe_trace(Req, 'true') ->
+    case cowboy_req:header(<<"x-trace-request">>, Req) of
+        {'undefined', _} -> 'ok';
+        {ShouldTrace, _} ->
+            maybe_start_trace(kz_util:to_boolean(ShouldTrace))
+    end.
+
+-spec maybe_start_trace(boolean()) -> 'ok'.
+maybe_start_trace('false') -> 'ok';
+maybe_start_trace('true') ->
+    'ok' = kz_tracers:add_trace(self(), 5*1000),
+    lager:info("added trace").
+
+-spec rest_init(cowboy_req:req(), kz_proplist()) ->
+                       {'ok', cowboy_req:req(), cb_context:context()}.
+rest_init(Req0, Opts) ->
+    ReqId = get_request_id(Req0),
+    ProfileId = get_profile_id(Req0),
+    maybe_trace(Req0),
+
     {HostUrl, _} = cowboy_req:host_url(Req0),
     {Host, Req1} = cowboy_req:host(Req0),
     {Port, Req2} = cowboy_req:port(Req1),
@@ -74,10 +114,7 @@ rest_init(Req0, Opts) ->
     {{Peer, _PeerPort}, Req6} = cowboy_req:peer(Req5),
     {Version, Req7} = find_version(Path, Req6),
 
-    ClientIP = case cowboy_req:header(<<"x-forwarded-for">>, Req7) of
-                   {'undefined', _} -> kz_network_utils:iptuple_to_binary(Peer);
-                   {ForwardIP, _} -> maybe_allow_proxy_req(kz_network_utils:iptuple_to_binary(Peer), ForwardIP)
-               end,
+    ClientIP = get_client_ip(Peer, Req7),
 
     {Headers, _} = cowboy_req:headers(Req7),
 
@@ -118,11 +155,15 @@ rest_init(Req0, Opts) ->
 metrics() ->
     {kz_util:bin_usage(), kz_util:mem_usage()}.
 
+-spec find_version(ne_binary()) -> ne_binary().
+-spec find_version(ne_binary(), cowboy_req:req()) ->
+                          {ne_binary(), cowboy_req:req()}.
 find_version(Path, Req) ->
     case cowboy_req:binding('version', Req) of
         {'undefined', Req1} -> {find_version(Path), Req1};
         {_Version, _Req1}=Found -> Found
     end.
+
 find_version(Path) ->
     lager:debug("find version in ~s", [Path]),
     case binary:split(Path, <<"/">>, ['global']) of
@@ -134,10 +175,10 @@ find_version(Path) ->
 -spec maybe_allow_proxy_req(ne_binary(), ne_binary()) -> ne_binary().
 maybe_allow_proxy_req(Peer, ForwardIP) ->
     case is_proxied(Peer) of
-        true ->
+        'true' ->
             lager:info("request is from expected reverse proxy: ~s", [ForwardIP]),
             kz_util:to_binary(ForwardIP);
-        false ->
+        'false' ->
             lager:warning("request with \"X-Forwarded-For: ~s\" header, but peer (~s) is not allowed as proxy"
                          ,[ForwardIP, Peer]
                          ),
@@ -152,10 +193,8 @@ is_proxied(Peer) ->
 
 is_proxied(_Peer, []) -> 'false';
 is_proxied(Peer, [Proxy|Rest]) ->
-    case kz_network_utils:verify_cidr(Peer, kz_network_utils:to_cidr(Proxy)) of
-        'true' -> 'true';
-        'false' -> is_proxied(Peer, Rest)
-    end.
+    kz_network_utils:verify_cidr(Peer, kz_network_utils:to_cidr(Proxy))
+        orelse is_proxied(Peer, Rest).
 
 to_version(<<"v", Int/binary>>=Version) ->
     try kz_util:to_integer(Int) of
@@ -181,7 +220,7 @@ rest_terminate(Req, Context) ->
 
 rest_terminate(Req, Context, ?HTTP_OPTIONS) ->
     lager:info("OPTIONS request fulfilled in ~p ms"
-               ,[kz_util:elapsed_ms(cb_context:start(Context))]
+              ,[kz_util:elapsed_ms(cb_context:start(Context))]
               ),
     _ = api_util:finish_request(Req, Context);
 rest_terminate(Req, Context, Verb) ->
@@ -189,10 +228,10 @@ rest_terminate(Req, Context, Verb) ->
     {BBin, BMem} = cb_context:fetch(Context, 'metrics'),
 
     lager:info("~s request fulfilled in ~p ms ~s mem ~s bin"
-               ,[Verb, kz_util:elapsed_ms(cb_context:start(Context))
-                 ,pretty_metric(AMem - BMem)
-                 ,pretty_metric(ABin - BBin)
-                ]
+              ,[Verb, kz_util:elapsed_ms(cb_context:start(Context))
+               ,pretty_metric(AMem - BMem)
+               ,pretty_metric(ABin - BBin)
+               ]
               ),
     _ = api_util:finish_request(Req, Context).
 
@@ -223,11 +262,11 @@ known_methods(Req, Context) ->
         _Status ->
             lager:debug("run: known_methods"),
             {?ALLOWED_METHODS
-             ,Req
-             ,cb_context:set_allowed_methods(
-                cb_context:set_allow_methods(Context, ?ALLOWED_METHODS)
-                ,?ALLOWED_METHODS
-               )
+            ,Req
+            ,cb_context:set_allowed_methods(
+               cb_context:set_allow_methods(Context, ?ALLOWED_METHODS)
+                                           ,?ALLOWED_METHODS
+              )
             }
     end.
 
@@ -271,8 +310,8 @@ find_allowed_methods(Req0, Context) ->
 
     {Method, Req1} = cowboy_req:method(Req0),
     AllowMethods = api_util:allow_methods(Responses
-                                          ,cb_context:req_verb(Context)
-                                          ,kz_util:to_binary(Method)
+                                         ,cb_context:req_verb(Context)
+                                         ,kz_util:to_binary(Method)
                                          ),
     maybe_add_cors_headers(Req1, cb_context:set_allow_methods(Context, AllowMethods)).
 
@@ -337,10 +376,8 @@ malformed_request(Req, Context, _ReqVerb) ->
         [AccountId] ->
             Context1 = cb_accounts:validate_resource(Context, AccountId),
             case cb_context:resp_status(Context1) of
-                'success' ->
-                    {'false', Req, Context1};
-                _RespStatus ->
-                    api_util:halt(Req, Context1)
+                'success' -> {'false', Req, Context1};
+                _RespStatus -> api_util:halt(Req, Context1)
             end;
         _Other ->
             {'false', Req, Context}
@@ -382,8 +419,8 @@ known_content_type(Req, Context, _ReqVerb) ->
     Req2 = case cowboy_req:header(<<"content-type">>, Req) of
                {'undefined', Req1} ->
                    cowboy_req:set_resp_header(<<"X-RFC2616">>
-                                              ,<<"Section 14.17 (Try it, you'll like it)">>
-                                              ,Req1
+                                             ,<<"Section 14.17 (Try it, you'll like it)">>
+                                             ,Req1
                                              );
                {_, Req1} -> Req1
            end,
@@ -410,7 +447,7 @@ options(Req0, Context) ->
 
 -type content_type_callbacks() :: [{{ne_binary(), ne_binary(), kz_proplist()}, atom()} |
                                    {ne_binary(), atom()}
-                                   ].
+                                  ].
 -spec content_types_provided(cowboy_req:req(), cb_context:context()) ->
                                     {content_type_callbacks(), cowboy_req:req(), cb_context:context()}.
 content_types_provided(Req, Context0) ->
@@ -472,7 +509,7 @@ default_content_types_accepted(Req, Context) ->
             || {Fun, L} <- cb_context:content_types_accepted(Context),
                lists:any(fun({Type, SubType}) ->
                                  api_util:content_type_matches(?CROSSBAR_DEFAULT_CONTENT_TYPE
-                                                               ,{Type, SubType, []}
+                                                              ,{Type, SubType, []}
                                                               );
                             ({_,_,_}=ModCT) ->
                                  api_util:content_type_matches(?CROSSBAR_DEFAULT_CONTENT_TYPE, ModCT)
@@ -498,8 +535,8 @@ content_types_accepted(CT, Req, Context, Accepted) ->
     CTA = lists:foldl(fun(I, Acc) ->
                               content_types_accepted_fold(I, Acc, CT)
                       end
-                      ,[]
-                      ,Accepted
+                     ,[]
+                     ,Accepted
                      ),
     lager:debug("cta: ~p", [CTA]),
     {CTA, Req, Context}.
@@ -510,8 +547,8 @@ content_types_accepted_fold({Fun, L}, Acc, CT) ->
     lists:foldl(fun(CTA, Acc1) ->
                         content_type_accepted_fold(CTA, Acc1, Fun, CT)
                 end
-                ,Acc
-                ,L
+               ,Acc
+               ,L
                ).
 
 -spec content_type_accepted_fold(any(), content_type_fun(), atom(), content_type()) ->
@@ -671,9 +708,9 @@ from_form(Req0, Context0) ->
     end.
 
 -spec create_from_response(cowboy_req:req(), cb_context:context()) ->
-                       {boolean(), cowboy_req:req(), cb_context:context()}.
+                                  {boolean(), cowboy_req:req(), cb_context:context()}.
 -spec create_from_response(cowboy_req:req(), cb_context:context(), api_binary()) ->
-                       {boolean(), cowboy_req:req(), cb_context:context()}.
+                                  {boolean(), cowboy_req:req(), cb_context:context()}.
 create_from_response(Req, Context) ->
     create_from_response(Req, Context, cb_context:req_header(Context, <<"accept">>)).
 
@@ -703,8 +740,8 @@ to_json(Req0, Context0, 'undefined') ->
     [{Mod, _Params}|_] = cb_context:req_nouns(Context0),
     Verb = cb_context:req_verb(Context0),
     Event = api_util:create_event_name(Context0, [<<"to_json">>
-                                                      ,kz_util:to_lower_binary(Verb)
-                                                  ,Mod
+                                                 ,kz_util:to_lower_binary(Verb)
+                                                 ,Mod
                                                  ]),
     {Req1, Context1} = crossbar_bindings:fold(Event, {Req0, Context0}),
     case cb_context:fetch(Context1, 'is_chunked') of
@@ -722,7 +759,7 @@ to_json(Req, Context, Accept) ->
         'to_json' -> to_json(Req, Context, 'undefined');
         Fun ->
             lager:debug("calling ~s instead of to_json to render response", [Fun]),
-            apply(?MODULE, Fun, [Req, Context])
+            (?MODULE):Fun(Req, Context)
     end.
 
 -spec to_binary(cowboy_req:req(), cb_context:context()) ->
@@ -742,7 +779,7 @@ to_binary(Req, Context, Accept) ->
         'to_binary' -> to_binary(Req, Context, 'undefined');
         Fun ->
             lager:debug("calling ~s instead of to_binary to render response", [Fun]),
-            apply(?MODULE, Fun, [Req, Context])
+            (?MODULE):Fun(Req, Context)
     end.
 
 -spec send_file(cowboy_req:req(), cb_context:context()) -> api_util:pull_file_response_return().
@@ -784,8 +821,8 @@ to_csv(Req, Context) ->
     [{Mod, _Params}|_] = cb_context:req_nouns(Context),
     Verb = cb_context:req_verb(Context),
     Event = api_util:create_event_name(Context, [<<"to_csv">>
-                                                 ,kz_util:to_lower_binary(Verb)
-                                                 ,Mod
+                                                ,kz_util:to_lower_binary(Verb)
+                                                ,Mod
                                                 ]),
     {Req1, Context1} = crossbar_bindings:fold(Event, {Req, Context}),
     case cb_context:fetch(Context1, 'is_chunked') of
@@ -793,12 +830,12 @@ to_csv(Req, Context) ->
         _ ->
             RespBody = maybe_flatten_jobj(Context1),
             RespHeaders1 = [{<<"Content-Type">>, <<"application/octet-stream">>}
-                            ,{<<"Content-Disposition">>, <<"attachment; filename=\"data.csv\"">>}
+                           ,{<<"Content-Disposition">>, <<"attachment; filename=\"data.csv\"">>}
                             | cb_context:resp_headers(Context1)
                            ],
             {RespBody
-             ,api_util:set_resp_headers(Req1, cb_context:set_resp_headers(Context1, RespHeaders1))
-             ,Context1
+            ,api_util:set_resp_headers(Req1, cb_context:set_resp_headers(Context1, RespHeaders1))
+            ,Context1
             }
     end.
 
@@ -811,8 +848,8 @@ to_pdf(Req, Context) ->
     [{Mod, _Params}|_] = cb_context:req_nouns(Context),
     Verb = cb_context:req_verb(Context),
     Event = api_util:create_event_name(Context, [<<"to_pdf">>
-                                                 ,kz_util:to_lower_binary(Verb)
-                                                 ,Mod
+                                                ,kz_util:to_lower_binary(Verb)
+                                                ,Mod
                                                 ]),
     {Req1, Context1} = crossbar_bindings:fold(Event, {Req, Context}),
     to_pdf(Req1, Context1, cb_context:resp_data(Context1)).
@@ -821,13 +858,13 @@ to_pdf(Req, Context, <<>>) ->
     to_pdf(Req, Context, kz_pdf:error_empty());
 to_pdf(Req, Context, RespData) ->
     RespHeaders = [{<<"Content-Type">>, <<"application/pdf">>}
-                    ,{<<"Content-Length">>, erlang:size(RespData)}
-                    ,{<<"Content-Disposition">>, <<"attachment; filename=\"file.pdf\"">>}
-                    | cb_context:resp_headers(Context)
-                   ],
+                  ,{<<"Content-Length">>, erlang:size(RespData)}
+                  ,{<<"Content-Disposition">>, <<"attachment; filename=\"file.pdf\"">>}
+                   | cb_context:resp_headers(Context)
+                  ],
     {RespData
-     ,api_util:set_resp_headers(Req, cb_context:set_resp_headers(Context, RespHeaders))
-     ,Context
+    ,api_util:set_resp_headers(Req, cb_context:set_resp_headers(Context, RespHeaders))
+    ,Context
     }.
 
 -spec accept_override(cb_context:context()) -> api_binary().
@@ -837,21 +874,21 @@ accept_override(Context) ->
 -spec maybe_flatten_jobj(cb_context:context()) -> iolist().
 maybe_flatten_jobj(Context) ->
     case props:get_all_values(<<"identifier">>
-                              ,kz_json:to_proplist(cb_context:query_string(Context))
+                             ,kz_json:to_proplist(cb_context:query_string(Context))
                              )
     of
         [] ->
             Routines = [fun(J) -> check_integrity(J) end
-                        ,fun(J) -> create_csv_header(J) end
-                        ,fun(J) -> json_objs_to_csv(J) end
+                       ,fun(J) -> create_csv_header(J) end
+                       ,fun(J) -> json_objs_to_csv(J) end
                        ],
             lists:foldl(fun fold_over_funs/2, cb_context:resp_data(Context), Routines);
         Identifier ->
             Depth = kz_json:get_integer_value(<<"depth">>, cb_context:query_string(Context), 1),
             JObj = kz_json:flatten(cb_context:resp_data(Context), Depth, Identifier),
             Routines = [fun(J) -> check_integrity(J) end
-                        ,fun(J) -> create_csv_header(J) end
-                        ,fun(J) -> json_objs_to_csv(J) end
+                       ,fun(J) -> create_csv_header(J) end
+                       ,fun(J) -> json_objs_to_csv(J) end
                        ],
             lists:foldl(fun fold_over_funs/2, JObj, Routines)
     end.
@@ -908,31 +945,21 @@ csv_header(JObj) ->
 -spec csv_ize(kz_json:keys()) -> iolist().
 csv_ize([F|Rest]) ->
     [<<"\"">>, kz_util:to_binary(F), <<"\"">>
-     ,[[<<",\"">>, try_to_binary(V), <<"\"">>] || V <- Rest]
-     ,<<"\n">>
+    ,[[<<",\"">>, try_to_binary(V), <<"\"">>] || V <- Rest]
+    ,<<"\n">>
     ].
 
 -spec try_to_binary(any()) -> binary().
 try_to_binary(Value) ->
-    try kz_util:to_binary(Value) of
-        V -> V
+    try kz_util:to_binary(Value)
     catch
         _E:_R -> <<"">>
-   end.
+    end.
 
 -spec json_to_csv(kz_json:object()) -> iolist().
 json_to_csv(JObj) ->
-    {Vs, _} = kz_json:get_values(correct_jobj(JObj)),
+    {Vs, _} = kz_json:get_values(JObj),
     csv_ize(Vs).
-
--spec correct_jobj(kz_json:object()) -> kz_json:object().
-correct_jobj(JObj) ->
-    Prop = kz_json:to_proplist(JObj),
-    L = lists:map(fun(X) -> correct_proplist(X) end, Prop),
-    kz_json:from_list(L).
-
-correct_proplist({K}) -> {K, <<>>};
-correct_proplist(T) -> T.
 
 -spec multiple_choices(cowboy_req:req(), cb_context:context()) ->
                               {'false', cowboy_req:req(), cb_context:context()}.

@@ -55,17 +55,33 @@ All calls to this callflow will now store debug logs to the account's current MO
 
 > GET /v2/accounts/{ACCOUNT_ID}/pivot/debug
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/pivot/debug
 {
     "auth_token": "{AUTH_TOKEN}"
-     ,"data": [
-         "UUID"
-     ]
+    ,"data": [
+        {
+            "call_id": "{UUID_1}",
+            "created": 63635231906,
+            "iteration": 1,
+            "node": "{PIVOT_SERVER}",
+            "status_code": "404",
+            "has_schema_errors": false,
+            "uri": "http://127.0.0.1/pivot/kazoo_4786.php?Language=en-us&Caller-ID-Number=user_suyt9r93ng&Caller-ID-Name=user_suyt9r93ng&Direction=inbound&Api-Version=2015-03-01&To-Realm={SIP_REALM}&To=4786&From-Realm={SIP_REALM}&From=user_suyt9r93ng&Account-ID={ACCOUNT_ID}&Call-ID={UUID_1}"
+        },
+        {
+            "call_id": "{UUID_2}",
+            "created": 63635230409,
+            "iteration": 1,
+            "node": "{PIVOT_SERVER}",
+            "has_schema_errors": true
+        }
+      ],
+     ,"page_size": 3,
      ,"request_id": "{REQUEST_ID}"
-     ,"revision": "undefined"
+     ,"revision": "{REVISION}"
      ,"status": "success"
 }
 ```
@@ -74,7 +90,7 @@ curl -v -X GET \
 
 > GET /v2/accounts/{ACCOUNT_ID}/pivot/debug/{UUID}
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/pivot/debug/{UUID}
@@ -102,8 +118,8 @@ curl -v -X GET \
                  ,"resp_body": "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\n<html><head>\n<title>404 Not Found</title>\n</head><body>\n<h1>Not Found</h1>\n<p>The requested URL /path/to/callflow.php was not found on this server.</p>\n<hr>\n<address>Apache/2.4.7 (Ubuntu) Server at {PIVOT_SERVER} Port 80</address>\n</body></html>\n"
                  }
                ]
-      ,"request_id": "fb455599cf9f1390c5efa1d948d41d2b"
-      ,"revision": "f231fd438e5ba812cac542bff00e636d"
+      ,"request_id": "{REQUEST_ID}"
+      ,"revision": "{REVISION}"
       ,"status": "success"
      }
 ```

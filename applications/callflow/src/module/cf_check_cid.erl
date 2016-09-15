@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%% Handles inspection of incoming caller id and branching to a child
 %%% callflow node accordingly.
@@ -34,6 +34,8 @@
 %%%   Brian Davis
 %%%-------------------------------------------------------------------
 -module(cf_check_cid).
+
+-behaviour(gen_cf_action).
 
 -export([handle/2]).
 
@@ -130,8 +132,8 @@ update_caller_identity(Data, Call) ->
             lager:info("setting caller id to ~s <~s>", [Number, Name]),
             lager:info("setting owner id to ~s", [UserId]),
             Updates = [fun(C) -> kapps_call:set_caller_id_number(Number, C) end
-                       ,fun(C) -> kapps_call:set_caller_id_name(Name, C) end
-                       ,fun(C) -> kapps_call:kvs_store('owner_id', UserId, C) end
+                      ,fun(C) -> kapps_call:set_caller_id_name(Name, C) end
+                      ,fun(C) -> kapps_call:kvs_store('owner_id', UserId, C) end
                       ],
             {'ok', C} = cf_exe:get_call(Call),
             cf_exe:set_call(kapps_call:exec(Updates, C));

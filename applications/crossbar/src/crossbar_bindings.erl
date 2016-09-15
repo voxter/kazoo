@@ -22,22 +22,22 @@
 
 %% API
 -export([bind/3
-         ,map/2
-         ,fold/2
-         ,flush/0, flush/1, flush_mod/1
-         ,modules_loaded/0
+        ,map/2
+        ,fold/2
+        ,flush/0, flush/1, flush_mod/1
+        ,modules_loaded/0
         ]).
 
 -export([start_link/0
-         ,init/0
+        ,init/0
         ]).
 
 %% Helper Functions for Results of a map/2
 -export([any/1
-         ,all/1
-         ,succeeded/1
-         ,failed/1
-         ,matches/2
+        ,all/1
+        ,succeeded/1
+        ,failed/1
+        ,matches/2
         ]).
 
 -include("crossbar.hrl").
@@ -66,7 +66,7 @@
 -type map_results() :: [boolean() |
                         http_methods() |
                         {boolean() | 'halt', cb_context:context()}
-                        ].
+                       ].
 -spec map(ne_binary(), payload()) -> map_results().
 map(Routing, Payload) ->
     lager:debug("mapping ~s", [Routing]),
@@ -114,10 +114,8 @@ failed(Res) when is_list(Res) ->
 matches([], _) -> 'false';
 matches([R|Restrictions], Tokens) ->
     Restriction = [cow_qs:urldecode(T) || T <- binary:split(R, <<"/">>, ['global', 'trim'])],
-    case kazoo_bindings:matches(Restriction, Tokens) of
-        'true' -> 'true';
-        'false' -> matches(Restrictions, Tokens)
-    end.
+    kazoo_bindings:matches(Restriction, Tokens)
+        orelse matches(Restrictions, Tokens).
 
 %%-------------------------------------------------------------------------
 %% @doc
@@ -169,8 +167,7 @@ bind(Binding, Module, Fun) when is_binary(Binding) ->
 
 -spec flush() -> 'ok'.
 flush() ->
-    _ = [kazoo_bindings:flush_mod(Mod) || Mod <- modules_loaded()],
-    'ok'.
+    lists:foreach(fun kazoo_bindings:flush_mod/1, modules_loaded()).
 
 -spec flush(ne_binary()) -> 'ok'.
 flush(Binding) -> kazoo_bindings:flush(Binding).
@@ -199,35 +196,14 @@ start_link() ->
 -spec init() -> 'ok'.
 init() ->
     lager:debug("initializing bindings"),
-
     kz_util:put_callid(?LOG_SYSTEM_ID),
-    _ = [maybe_init_mod(Mod)
-         || Mod <- crossbar_config:autoload_modules(?DEFAULT_MODULES)
-    ],
-    'ok'.
+    lists:foreach(fun maybe_init_mod/1
+                 ,crossbar_config:autoload_modules(?DEFAULT_MODULES)).
 
 -spec maybe_init_mod(ne_binary() | atom()) -> 'ok'.
 maybe_init_mod(Mod) ->
-    try (kz_util:to_atom(Mod, 'true')):init() of
-        _ -> 'ok'
-    catch
-        _E:_R ->
-            lager:notice("failed to initialize ~s: ~p (trying other versions)", [Mod, _R]),
-            maybe_init_mod_versions(?VERSION_SUPPORTED, Mod)
-    end.
-
--spec maybe_init_mod_versions(ne_binaries(), ne_binary() | atom()) -> 'ok'.
-maybe_init_mod_versions([], _) -> 'ok';
-maybe_init_mod_versions([Version|Versions], Mod) ->
-    Module = <<(kz_util:to_binary(Mod))/binary
-               , "_", (kz_util:to_binary(Version))/binary
-             >>,
-    try (kz_util:to_atom(Module, 'true')):init() of
-        _ ->
-            lager:notice("module ~s version ~s successfully loaded", [Mod, Version]),
-            maybe_init_mod_versions(Versions, Mod)
-    catch
-        _E:_R ->
-            lager:warning("failed to initialize module ~s version ~s: ~p", [Mod, Version, _R]),
-            maybe_init_mod_versions(Versions, Mod)
+    case crossbar_init:start_mod(Mod) of
+        'ok' -> 'ok';
+        {'error', Error} ->
+            lager:notice("failed to initialize ~s: ~p", [Mod, Error])
     end.

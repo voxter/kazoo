@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (c) 2010-2013, 2600Hz
+%%% @copyright (c) 2010-2016, 2600Hz
 %%% @doc
 %%% Utility module for V3 Kazoo Migration
 %%% @end
@@ -15,7 +15,7 @@
 %% API
 -export([json_objs_to_csv/1,
          json_objs_to_csv/2
-         ,test_convert/1
+        ,test_convert/1
         ]).
 
 -define(INCLUDE_HEADERS, 'true').

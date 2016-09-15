@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2013, 2600Hz
+%%% @copyright (C) 2011-2016, 2600Hz
 %%% @doc
 %%% Handle route requests off AMQP
 %%% @end
@@ -9,7 +9,7 @@
 -module(ts_route_req).
 
 -export([init/0
-         ,handle_req/2
+        ,handle_req/2
         ]).
 
 -include("ts.hrl").
@@ -21,16 +21,18 @@ handle_req(ApiJObj, _Options) ->
     kz_util:put_callid(ApiJObj),
     'true' = kapi_route:req_v(ApiJObj),
     CallID = kz_json:get_value(<<"Call-ID">>, ApiJObj),
+    CCVs = kz_json:get_value(<<"Custom-Channel-Vars">>, ApiJObj, kz_json:new()),
     lager:info("received request ~s asking if trunkstore can route this call", [kapi_route:fetch_id(ApiJObj)]),
-    case {kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], ApiJObj)
-          ,kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Authorizing-ID">>], ApiJObj)
+    case {kz_json:get_value(<<"Account-ID">>, CCVs)
+         ,kz_json:get_first_defined([<<"Authorizing-ID">>, <<"Referred-By">>, <<"Redirected-By">>], CCVs)
          }
     of
         {AcctID, 'undefined'} when is_binary(AcctID) ->
             %% Coming from carrier (off-net)
             lager:info("call with fetch-id ~s began from outside the network", [kapi_route:fetch_id(ApiJObj)]),
             ts_offnet_sup:start_handler(<<"offnet-", CallID/binary>>, ApiJObj);
-        {AcctID, AuthID} when is_binary(AcctID) andalso is_binary(AuthID) ->
+        {AcctID, AuthID} when is_binary(AcctID)
+                              andalso is_binary(AuthID) ->
             %% Coming from PBX (on-net); authed by Registrar or ts_auth
             lager:info("call with fetch-id ~s began on the network", [kapi_route:fetch_id(ApiJObj)]),
             ts_onnet_sup:start_handler(<<"onnet-", CallID/binary>>, ApiJObj);

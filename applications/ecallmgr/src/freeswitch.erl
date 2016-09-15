@@ -1,36 +1,40 @@
 -module(freeswitch).
 
 -export([version/1
-         ,version/2
+        ,version/2
         ]).
 -export([noevents/1]).
 -export([close/1]).
 -export([getpid/1
-         ,getpid/2
+        ,getpid/2
         ]).
 -export([bind/2
-         ,bind/3
+        ,bind/3
         ]).
 -export([fetch_reply/4
-         ,fetch_reply/5
+        ,fetch_reply/5
         ]).
 -export([api/2
-         ,api/3
-         ,api/4
+        ,api/3
+        ,api/4
         ]).
 -export([bgapi/3
-         ,bgapi/4
-         ,bgapi/5
-         ,bgapi/6
+        ,bgapi/4
+        ,bgapi/5
+        ,bgapi/6
         ]).
 -export([event/2
-         ,event/3
+        ,event/3
         ]).
 -export([nixevent/2]).
 -export([sendevent/3
-         ,sendevent_custom/3
+        ,sendevent_custom/3
         ]).
 -export([sendmsg/3]).
+
+-export([config/1
+        ,bgapi4/5
+        ]).
 
 -include("ecallmgr.hrl").
 
@@ -48,7 +52,7 @@ version(Node, Timeout) ->
     catch
         _E:_R ->
             lager:info("failed to get mod_kazoo version from ~s: ~p ~p"
-                       ,[Node, _E, _R]),
+                      ,[Node, _E, _R]),
             {'error', 'exception'}
     end.
 
@@ -87,7 +91,7 @@ bind(Node, Type, Timeout) ->
     catch
         _E:_R ->
             lager:info("failed to get bind to ~p on ~s: ~p ~p"
-                       ,[Type, Node, _E, _R]),
+                      ,[Type, Node, _E, _R]),
             {'error', 'exception'}
     end.
 
@@ -106,7 +110,7 @@ fetch_reply(Node, FetchID, Section, Reply, Timeout) ->
     catch
         _E:_R ->
             lager:info("failed to send fetch reply to ~s: ~p ~p"
-                       ,[Node, _E, _R]),
+                      ,[Node, _E, _R]),
             {'error', 'exception'}
     end.
 
@@ -121,7 +125,7 @@ api(Node, Cmd, Args, Timeout) ->
     catch
         _E:_R ->
             lager:info("failed to execute api command ~s on ~s: ~p ~p"
-                       ,[Cmd, Node, _E, _R]),
+                      ,[Cmd, Node, _E, _R]),
             {'error', 'exception'}
     end.
 
@@ -152,7 +156,7 @@ bgapi(Node, Cmd, Args) ->
                   catch
                       _E:_R ->
                           lager:info("failed to execute bgapi command ~s on ~s: ~p ~p"
-                                     ,[Cmd, Node, _E, _R]),
+                                    ,[Cmd, Node, _E, _R]),
                           Self ! {'api', {'error', 'exception'}}
                   end
           end),
@@ -182,7 +186,7 @@ bgapi(Node, Cmd, Args, Fun) when is_function(Fun, 2) ->
                   catch
                       _E:_R ->
                           lager:info("failed to execute bgapi command ~s on ~s: ~p ~p"
-                                     ,[Cmd, Node, _E, _R]),
+                                    ,[Cmd, Node, _E, _R]),
                           Self ! {'api', {'error', 'exception'}}
                   end
           end),
@@ -215,7 +219,7 @@ bgapi(Node, Cmd, Args, Fun, CallBackParams) when is_function(Fun, 3) ->
                   catch
                       _E:_R ->
                           lager:info("failed to execute bgapi command ~s on ~s: ~p ~p"
-                                     ,[Cmd, Node, _E, _R]),
+                                    ,[Cmd, Node, _E, _R]),
                           Self ! {'api', {'error', 'exception'}}
                   end
           end),
@@ -248,7 +252,7 @@ bgapi(Node, UUID, CallBackParams, Cmd, Args, Fun) when is_function(Fun, 6) ->
                   catch
                       _E:_R ->
                           lager:info("failed to execute bgapi command ~s on ~s: ~p ~p"
-                                     ,[Cmd, Node, _E, _R]),
+                                    ,[Cmd, Node, _E, _R]),
                           Self ! {'api', {'error', 'exception'}}
                   end
           end),
@@ -275,7 +279,7 @@ event(Node, [_|_]=Events, Timeout) ->
     catch
         _E:_R ->
             lager:info("failed to bind to events on ~s: ~p ~p"
-                       ,[Node, _E, _R]),
+                      ,[Node, _E, _R]),
             {'error', 'exception'}
     end;
 event(Node, Event, Timeout) ->
@@ -295,3 +299,44 @@ sendevent_custom(Node, SubClassName, Headers) ->
 
 sendmsg(Node, UUID, Headers) ->
     gen_server:call({'mod_kazoo', Node}, {'sendmsg', UUID, Headers}).
+
+config(Node) ->
+    gen_server:cast({'mod_kazoo', Node}, {'config', []}).
+
+-spec bgapi4(atom(), atom(), string() | binary(), fun(), list()) ->
+                   {'ok', binary()} |
+                   {'error', 'timeout' | 'exception' | binary()}.
+bgapi4(Node, Cmd, Args, Fun, CallBackParams) ->
+    Self = self(),
+    _ = kz_util:spawn(
+          fun() ->
+                  try gen_server:call({'mod_kazoo', Node}, {'bgapi4', Cmd, Args}, ?TIMEOUT) of
+                      {'ok', JobId}=JobOk ->
+                          Self ! {'api', JobOk},
+                          receive
+                              {'bgok', JobId, Reply} 
+                                when is_function(Fun, 3) -> Fun('ok', Reply, [JobId | CallBackParams]);
+                              {'bgerror', JobId, Reply}
+                                when is_function(Fun, 3) -> Fun('error', Reply, [JobId | CallBackParams]);
+                              {'bgok', JobId, Reply, Data}
+                                when is_function(Fun, 4) -> Fun('ok', Reply, Data, [JobId | CallBackParams]);
+                              {'bgerror', JobId, Reply, Data}
+                                when is_function(Fun, 4) -> Fun('error', Reply, Data, [JobId | CallBackParams]);
+                              _Other -> lager:debug("unexpected message from freeswitch : ~p", [_Other])
+                          end;
+                      {'error', Reason} ->
+                          Self ! {'api', {'error', Reason}};
+                      'timeout' ->
+                          Self ! {'api', {'error', 'timeout'}}
+                  catch
+                      _E:_R ->
+                          lager:info("failed to execute bgapi command ~s on ~s: ~p ~p"
+                                    ,[Cmd, Node, _E, _R]),
+                          Self ! {'api', {'error', 'exception'}}
+                  end
+          end),
+    %% get the initial result of the command, NOT the asynchronous response, and
+    %% return it
+    receive
+        {'api', Result} -> Result
+    end.

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2015, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -12,8 +12,8 @@
 -export([start_link/0]).
 -export([init/1]).
 -export([start_child/2
-         ,stop_child/1
-         ,children/0
+        ,stop_child/1
+        ,children/0
         ]).
 
 -include("call_inspector.hrl").

@@ -6,14 +6,15 @@
 
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
-`records` | List the rows of input data | `array(object)` |   | `true`
+`file_name` | Human-readable name of a task's input file | `string` |   | `false`
+`records` | List the rows of input data | `array(object)` |   | `false`
 
 
 #### Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/tasks
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/tasks
@@ -23,7 +24,7 @@ curl -v -X GET \
 
 > PUT /v2/accounts/{ACCOUNT_ID}/tasks
 
-```curl
+```shell
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/tasks
@@ -33,7 +34,7 @@ curl -v -X PUT \
 
 > DELETE /v2/accounts/{ACCOUNT_ID}/tasks/{TASK_ID}
 
-```curl
+```shell
 curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/tasks/{TASK_ID}
@@ -43,7 +44,7 @@ curl -v -X DELETE \
 
 > GET /v2/accounts/{ACCOUNT_ID}/tasks/{TASK_ID}
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/tasks/{TASK_ID}
@@ -53,7 +54,7 @@ curl -v -X GET \
 
 > PATCH /v2/accounts/{ACCOUNT_ID}/tasks/{TASK_ID}
 
-```curl
+```shell
 curl -v -X PATCH \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/tasks/{TASK_ID}
@@ -61,9 +62,19 @@ curl -v -X PATCH \
 
 #### Fetch
 
+> GET /v2/accounts/{ACCOUNT_ID}/tasks/{TASK_ID}/input
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/tasks/{TASK_ID}/input
+```
+
+#### Fetch
+
 > GET /v2/accounts/{ACCOUNT_ID}/tasks/{TASK_ID}/output
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/tasks/{TASK_ID}/output

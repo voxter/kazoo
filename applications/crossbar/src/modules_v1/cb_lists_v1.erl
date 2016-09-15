@@ -1,5 +1,5 @@
 %%%----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%% Match list module
 %%%
@@ -13,12 +13,12 @@
 -module(cb_lists_v1).
 
 -export([init/0
-         ,allowed_methods/0, allowed_methods/1, allowed_methods/2
-         ,resource_exists/0, resource_exists/1, resource_exists/2
-         ,validate/1, validate/2, validate/3
-         ,post/1, post/2, post/3
-         ,put/1, put/2
-         ,delete/2, delete/3
+        ,allowed_methods/0, allowed_methods/1, allowed_methods/2
+        ,resource_exists/0, resource_exists/1, resource_exists/2
+        ,validate/1, validate/2, validate/3
+        ,post/1, post/2, post/3
+        ,put/1, put/2
+        ,delete/2, delete/3
         ]).
 
 -include("crossbar.hrl").
@@ -32,11 +32,11 @@
 init() ->
     [crossbar_bindings:bind(Binding, ?MODULE, F)
      || {Binding, F} <- [{<<"v1_resource.allowed_methods.lists">>, 'allowed_methods'}
-                         ,{<<"v1_resource.resource_exists.lists">>, 'resource_exists'}
-                         ,{<<"v1_resource.validate.lists">>, 'validate'}
-                         ,{<<"v1_resource.execute.put.lists">>, 'put'}
-                         ,{<<"v1_resource.execute.post.lists">>, 'post'}
-                         ,{<<"v1_resource.execute.delete.lists">>, 'delete'}
+                        ,{<<"v1_resource.resource_exists.lists">>, 'resource_exists'}
+                        ,{<<"v1_resource.validate.lists">>, 'validate'}
+                        ,{<<"v1_resource.execute.put.lists">>, 'put'}
+                        ,{<<"v1_resource.execute.post.lists">>, 'post'}
+                        ,{<<"v1_resource.execute.delete.lists">>, 'delete'}
                         ]
     ].
 
@@ -123,7 +123,7 @@ check_list_schema(ListId, Context) ->
         'undefined' ->
             OnSuccess = fun(C) -> on_successful_validation(ListId, C) end,
             NewReq = kz_json:filter(fun filter_list_req_data/1
-                                    ,cb_context:req_data(Context)
+                                   ,cb_context:req_data(Context)
                                    ),
             NewContext = cb_context:set_req_data(Context, NewReq),
             cb_context:validate_request_data(<<"lists">>, NewContext, OnSuccess);
@@ -143,7 +143,7 @@ filter_list_req_data(_) -> 'false'.
 on_successful_validation('undefined', Context) ->
     Props = [{<<"pvt_type">>, <<"list">>}],
     cb_context:set_doc(Context
-                       ,kz_json:set_values(Props, cb_context:doc(Context))
+                      ,kz_json:set_values(Props, cb_context:doc(Context))
                       );
 on_successful_validation(ListId, Context) ->
     crossbar_doc:load_merge(ListId, Context, ?TYPE_CHECK_OPTION(<<"list">>)).
@@ -157,30 +157,38 @@ check_list_entry_schema(ListId, EntryId, Context) ->
 -spec entry_schema_success(cb_context:context(), ne_binary(), ne_binary()) -> cb_context:context().
 entry_schema_success(Context, ListId, EntryId) ->
     Pattern = kz_json:get_value(<<"pattern">>, cb_context:doc(Context)),
-    case is_binary(Pattern) andalso re:compile(Pattern) of
+    case is_binary(Pattern)
+        andalso re:compile(Pattern)
+    of
         {'ok', _CompiledRe} ->
             on_entry_successful_validation(ListId, EntryId, Context);
         'false' ->
             on_entry_successful_validation(ListId, EntryId, Context);
         {'error', {Reason0, Pos}} ->
             Reason = io_lib:format("Error: ~s in position ~p", [Reason0, Pos]),
-            cb_context:add_validation_error(
-                <<"pattern">>
-                ,<<"type">>
-                ,kz_json:from_list([
-                    {<<"message">>, iolist_to_binary(Reason)}
-                    ,{<<"cause">>, Pattern}
-                ])
-                ,Context
-            )
+            error_in_pattern(Context, Pattern, Reason)
     end.
+
+-spec error_in_pattern(cb_context:context(), binary(), iolist()) ->
+                              cb_context:context().
+error_in_pattern(Context, Pattern, Reason) ->
+    cb_context:add_validation_error(<<"pattern">>
+                                   ,<<"type">>
+                                   ,kz_json:from_list(
+                                      [{<<"message">>, iolist_to_binary(Reason)}
+                                      ,{<<"cause">>, Pattern}
+                                      ])
+                                   ,Context
+                                   ).
 
 -spec on_entry_successful_validation(path_token(), path_token() | 'undefined', cb_context:context()) ->
                                             cb_context:context().
 on_entry_successful_validation(_ListId, 'undefined', Context) ->
     cb_context:set_doc(Context
-                       ,kz_json:set_values([{<<"pvt_type">>, <<"list_entry">>}]
-                                           ,cb_context:doc(Context)));
+                      ,kz_json:set_values([{<<"pvt_type">>, <<"list_entry">>}]
+                                         ,cb_context:doc(Context)
+                                         )
+                      );
 on_entry_successful_validation(_ListId, EntryId, Context) ->
     crossbar_doc:load_merge(EntryId, Context, ?TYPE_CHECK_OPTION(<<"list_entry">>)).
 
@@ -226,13 +234,13 @@ normalize_view_results(JObj, Acc) ->
 -spec load_lists(cb_context:context()) -> cb_context:context().
 load_lists(Context) ->
     Entries = cb_context:doc(crossbar_doc:load_view(<<"lists/entries">>
-                                                    ,[]
-                                                    ,cb_context:set_query_string(Context, kz_json:new())
-                                                    ,fun normalize_view_results/2)),
+                                                   ,[]
+                                                   ,cb_context:set_query_string(Context, kz_json:new())
+                                                   ,fun normalize_view_results/2)),
     crossbar_doc:load_view(?CB_LIST
-                           ,[]
-                           ,Context
-                           ,load_entries_and_normalize(Entries)).
+                          ,[]
+                          ,Context
+                          ,load_entries_and_normalize(Entries)).
 
 -spec load_entries_and_normalize(kz_json:objects()) -> fun((kz_json:object(), kz_json:objects()) -> boolean()).
 load_entries_and_normalize(AllEntries) ->
@@ -258,9 +266,9 @@ entries_from_list(Entries) ->
 -spec load_list(cb_context:context(), ne_binary()) -> cb_context:context().
 load_list(Context, ListId) ->
     Entries = cb_context:doc(crossbar_doc:load_view(<<"lists/entries">>
-                                                    ,[{'key', ListId}]
-                                                    ,Context
-                                                    ,fun normalize_view_results/2)),
+                                                   ,[{'key', ListId}]
+                                                   ,Context
+                                                   ,fun normalize_view_results/2)),
     Context1 = crossbar_doc:load(ListId, Context, ?TYPE_CHECK_OPTION(<<"list">>)),
     Doc = cb_context:doc(Context1),
     Doc1 = kz_json:public_fields(kz_json:set_value(<<"entries">>, entries_from_list(Entries), Doc)),

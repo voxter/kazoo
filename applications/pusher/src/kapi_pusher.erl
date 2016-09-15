@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2015, 2600Hz
+%%% @copyright (C) 2013-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -23,24 +23,24 @@
 -define(PUSH_EXCHANGE, <<"pushes">>).
 
 -define(PUSH_REQ_HEADERS, [<<"Token-ID">>
-                           ,<<"Token-Type">>, <<"Token-App">>
-                           ,[<<"Alert-Body">>,[<<"Alert-Key">>,<<"Alert-Params">>]]
+                          ,<<"Token-Type">>, <<"Token-App">>
+                          ,[<<"Alert-Body">>,[<<"Alert-Key">>,<<"Alert-Params">>]]
                           ]).
 -define(OPTIONAL_PUSH_REQ_HEADERS, [<<"Queue">>, <<"Call-ID">>
-                                    ,<<"Badge">>, <<"Sound">>
-                                    ,<<"Account-ID">>, <<"Endpoint-ID">>
-                                    ,<<"Expires">>
-                                    ,<<"Token-Reg">>
+                                   ,<<"Badge">>, <<"Sound">>
+                                   ,<<"Account-ID">>, <<"Endpoint-ID">>
+                                   ,<<"Expires">>
+                                   ,<<"Token-Reg">>
                                    ]).
 -define(PUSH_REQ_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                          ,{<<"Event-Name">>, <<"push_req">>}
+                         ,{<<"Event-Name">>, <<"push_req">>}
                          ]).
 -define(PUSH_REQ_TYPES, [{<<"Expires">>, fun(V) -> is_integer(kz_util:to_integer(V)) end}]).
 
 -define(PUSH_RESP_HEADERS, [<<"Token-ID">>]).
 -define(OPTIONAL_PUSH_RESP_HEADERS, []).
 -define(PUSH_RESP_VALUES, [{<<"Event-Category">>, <<"notification">>}
-                           ,{<<"Event-Name">>, <<"push_resp">>}
+                          ,{<<"Event-Name">>, <<"push_resp">>}
                           ]).
 -define(PUSH_RESP_TYPES, []).
 
@@ -81,7 +81,7 @@ push_resp_v(JObj) ->
 publish_push_req(JObj) ->
     publish_push_req(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_push_req(Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?PUSH_REQ_VALUES, fun ?MODULE:push_req/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?PUSH_REQ_VALUES, fun push_req/1),
     amqp_util:basic_publish(?PUSH_EXCHANGE, push_routing_key(Req), Payload, ContentType).
 
 -spec publish_push_resp(api_terms()) -> 'ok'.
@@ -89,7 +89,7 @@ publish_push_req(Req, ContentType) ->
 publish_push_resp(JObj) ->
     publish_push_resp(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_push_resp(Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?PUSH_RESP_VALUES, fun ?MODULE:push_resp/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?PUSH_RESP_VALUES, fun push_resp/1),
     amqp_util:basic_publish(?PUSH_EXCHANGE, push_routing_key(Req), Payload, ContentType).
 
 -spec publish_targeted_push_resp(ne_binary(), api_terms()) -> 'ok'.

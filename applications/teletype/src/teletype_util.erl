@@ -9,40 +9,41 @@
 -module(teletype_util).
 
 -export([send_email/3, send_email/4
-         ,render_subject/2
-         ,render/3
-         ,system_params/0
-         ,account_params/1
-         ,send_update/2, send_update/3
-         ,find_addresses/3
-         ,find_account_rep_email/1
-         ,find_account_admin_email/1
-         ,find_account_admin/1
-         ,find_account_id/1
-         ,find_account_db/1, find_account_db/2
-         ,is_notice_enabled/3, is_notice_enabled_default/1
-         ,should_handle_notification/1
+        ,render_subject/2
+        ,render/3
+        ,system_params/0
+        ,account_params/1
+        ,user_params/1
+        ,send_update/2, send_update/3
+        ,find_addresses/3
+        ,find_account_rep_email/1
+        ,find_account_admin_email/1
+        ,find_account_admin/1
+        ,find_account_id/1
+        ,find_account_db/1, find_account_db/2
+        ,is_notice_enabled/3, is_notice_enabled_default/1
+        ,should_handle_notification/1
 
-         ,get_parent_account_id/1
+        ,get_parent_account_id/1
 
-         ,default_from_address/1
-         ,default_reply_to/1
+        ,default_from_address/1
+        ,default_reply_to/1
 
-         ,open_doc/3
-         ,is_preview/1
+        ,open_doc/3
+        ,is_preview/1
 
-         ,public_proplist/2
+        ,public_proplist/2
 
-         ,stop_processing/2
+        ,stop_processing/2
 
-         ,maybe_get_attachments/1
-         ,fetch_attachment_from_url/1
+        ,maybe_get_attachments/1
+        ,fetch_attachment_from_url/1
         ]).
 
 -include("teletype.hrl").
 
 -define(TEMPLATE_RENDERING_ORDER, [{?TEXT_PLAIN, 3}
-                                   ,{?TEXT_HTML, 2}
+                                  ,{?TEXT_HTML, 2}
                                   ]).
 
 -spec send_email(email_map(), ne_binary(), rendered_templates()) ->
@@ -56,21 +57,21 @@ send_email(Emails, Subject, RenderedTemplates, Attachments) ->
     To = props:get_value(<<"to">>, Emails),
     From = props:get_value(<<"from">>, Emails),
     Email = {<<"multipart">>
-             ,<<"mixed">>
-             ,email_parameters(
-                [{<<"To">>, To}
-                 ,{<<"Cc">>, props:get_value(<<"cc">>, Emails)}
-                 ,{<<"Bcc">>, props:get_value(<<"bcc">>, Emails)}
-                ]
-                ,[{<<"From">>, From}
-                  ,{<<"Reply-To">>, props:get_value(<<"reply_to">>, Emails)}
-                  ,{<<"Subject">>, Subject}
-                 ]
-               )
-             ,[{<<"content-type-params">>, [{<<"charset">>, <<"utf-8">>}]}]
-             ,[email_body(RenderedTemplates)
-               | add_attachments(Attachments)
-              ]
+            ,<<"mixed">>
+            ,email_parameters(
+               [{<<"To">>, To}
+               ,{<<"Cc">>, props:get_value(<<"cc">>, Emails)}
+               ,{<<"Bcc">>, props:get_value(<<"bcc">>, Emails)}
+               ]
+                             ,[{<<"From">>, From}
+                              ,{<<"Reply-To">>, props:get_value(<<"reply_to">>, Emails)}
+                              ,{<<"Subject">>, Subject}
+                              ]
+              )
+            ,[{<<"content-type-params">>, [{<<"charset">>, <<"utf-8">>}]}]
+            ,[email_body(RenderedTemplates)
+              | add_attachments(Attachments)
+             ]
             },
     case relay_email(To, From, Email) of
         {'ok', Receipt} ->
@@ -101,17 +102,17 @@ log_smtp(Emails, Subject, RenderedTemplates, Receipt, Error, AccountId) ->
     AccountDb = kazoo_modb:get_modb(AccountId),
     Doc = props:filter_undefined(
             [{<<"rendered_templates">>, kz_json:from_list(RenderedTemplates)}
-             ,{<<"subject">>, Subject}
-             ,{<<"emails">>, kz_json:from_list(props:filter_undefined(Emails))}
-             ,{<<"receipt">>, Receipt}
-             ,{<<"error">>, Error}
-             ,{<<"pvt_type">>, <<"notify_smtp_log">>}
-             ,{<<"account_id">>, AccountId}
-             ,{<<"account_db">>, AccountDb}
-             ,{<<"pvt_created">>, kz_util:current_tstamp()}
-             ,{<<"template_id">>, get('template_id')}
-             ,{<<"template_account_id">>, get('template_account_id')}
-             ,{<<"_id">>, make_smtplog_id(AccountDb)}
+            ,{<<"subject">>, Subject}
+            ,{<<"emails">>, kz_json:from_list(props:filter_undefined(Emails))}
+            ,{<<"receipt">>, Receipt}
+            ,{<<"error">>, Error}
+            ,{<<"pvt_type">>, <<"notify_smtp_log">>}
+            ,{<<"account_id">>, AccountId}
+            ,{<<"account_db">>, AccountDb}
+            ,{<<"pvt_created">>, kz_util:current_tstamp()}
+            ,{<<"template_id">>, get('template_id')}
+            ,{<<"template_account_id">>, get('template_account_id')}
+            ,{<<"_id">>, make_smtplog_id(AccountDb)}
             ]),
     lager:debug("attempting to save notify smtp log"),
     _ = kazoo_modb:save_doc(AccountDb, kz_json:from_list(Doc)),
@@ -124,10 +125,10 @@ make_smtplog_id(?MATCH_MODB_SUFFIX_ENCODED(_Account, Year, Month)) ->
 -spec email_body(rendered_templates()) -> mimemail:mimetuple().
 email_body(RenderedTemplates) ->
     {<<"multipart">>
-     ,<<"alternative">>
-     ,[] %% Headers
-     ,[] %% ContentTypeParams
-     ,add_rendered_templates_to_email(RenderedTemplates)
+    ,<<"alternative">>
+    ,[] %% Headers
+    ,[] %% ContentTypeParams
+    ,add_rendered_templates_to_email(RenderedTemplates)
     }.
 
 -spec email_parameters(kz_proplist(), kz_proplist()) -> kz_proplist().
@@ -143,10 +144,10 @@ email_parameters([{Key, V}|T], Params) ->
 -spec relay_email(api_binaries(), ne_binary(), mimemail:mimetuple()) ->
                          'ok' | {'error', any()}.
 relay_email(To, From, {_Type
-                       ,_SubType
-                       ,Addresses
-                       ,_ContentTypeParams
-                       ,_Body
+                      ,_SubType
+                      ,Addresses
+                      ,_ContentTypeParams
+                      ,_Body
                       }=Email) ->
     try mimemail:encode(Email) of
         Encoded ->
@@ -174,7 +175,7 @@ maybe_relay_to_bcc(From, Encoded, Bcc) ->
     end.
 
 -spec relay_to_bcc(ne_binary(), ne_binary(), ne_binaries() | ne_binary()) ->
-          {'ok', ne_binary()} | {'error', any()}.
+                          {'ok', ne_binary()} | {'error', any()}.
 relay_to_bcc(From, Encoded, Bcc) when is_binary(Bcc) ->
     relay_encoded_email([Bcc], From, Encoded);
 relay_to_bcc(From, Encoded, Bcc) ->
@@ -193,21 +194,21 @@ relay_encoded_email(To, From, Encoded) ->
 
     lager:debug("relaying from ~s to ~p", [From, To]),
     gen_smtp_client:send({From, To, Encoded}
-                         ,smtp_options()
-                         ,fun(X) -> Self ! {'relay_response', X} end
+                        ,smtp_options()
+                        ,fun(X) -> Self ! {'relay_response', X} end
                         ),
     %% The callback will receive either `{ok, Receipt}' where Receipt is the SMTP server's receipt
     %% identifier,  `{error, Type, Message}' or `{exit, ExitReason}', as the single argument.
     receive
         {'relay_response', {'ok', Receipt}} ->
             kz_cache:store_local(?CACHE_NAME
-                                 ,{'receipt', Receipt}
-                                 ,#email_receipt{to=To
-                                                 ,from=From
-                                                 ,timestamp=kz_util:current_tstamp()
-                                                 ,call_id=kz_util:get_callid()
-                                                }
-                                 ,[{'expires', ?MILLISECONDS_IN_HOUR}]
+                                ,{'receipt', Receipt}
+                                ,#email_receipt{to=To
+                                               ,from=From
+                                               ,timestamp=kz_util:current_tstamp()
+                                               ,call_id=kz_util:get_callid()
+                                               }
+                                ,[{'expires', ?MILLISECONDS_IN_HOUR}]
                                 ),
             _ = lager:debug("relayed message: ~p", [Receipt]),
             {'ok', binary:replace(Receipt, <<"\r\n">>, <<>>, ['global'])};
@@ -244,14 +245,14 @@ smtp_options() ->
 
     props:filter_empty(
       [{'relay', Relay}
-       ,{'username', Username}
-       ,{'password', Password}
-       ,{'port', Port}
-       ,{'auth', smtp_auth_option(Auth)}
-       ,{'retries', Retries}
-       ,{'no_mx_lookups', NoMxLookups}
-       ,{'tls', smtp_tls_option(TLS)}
-       ,{'ssl', SSL}
+      ,{'username', Username}
+      ,{'password', Password}
+      ,{'port', Port}
+      ,{'auth', smtp_auth_option(Auth)}
+      ,{'retries', Retries}
+      ,{'no_mx_lookups', NoMxLookups}
+      ,{'tls', smtp_tls_option(TLS)}
+      ,{'ssl', SSL}
       ]).
 
 -spec smtp_auth_option(ne_binary()) -> atom().
@@ -273,13 +274,13 @@ add_attachments([{ContentType, Filename, Content}|As], Acc) ->
     [Type, SubType] = binary:split(ContentType, <<"/">>),
 
     Attachment = {Type
-                  ,SubType
-                  ,[{<<"Content-Disposition">>, <<"attachment; filename=\"", Filename/binary, "\"">>}
-                    ,{<<"Content-Type">>, <<ContentType/binary, "; name=\"", Filename/binary, "\"">>}
-                    ,{<<"Content-Transfer-Encoding">>, <<"base64">>}
-                   ]
-                  ,[]
-                  ,Content
+                 ,SubType
+                 ,[{<<"Content-Disposition">>, <<"attachment; filename=\"", Filename/binary, "\"">>}
+                  ,{<<"Content-Type">>, <<ContentType/binary, "; name=\"", Filename/binary, "\"">>}
+                  ,{<<"Content-Transfer-Encoding">>, <<"base64">>}
+                  ]
+                 ,[]
+                 ,Content
                  },
     lager:debug("adding attachment ~s (~s)", [Filename, ContentType]),
     add_attachments(As, [Attachment | Acc]).
@@ -293,20 +294,20 @@ add_rendered_templates_to_email([], Acc) -> Acc;
 add_rendered_templates_to_email([{ContentType, Content}|Rs], Acc) ->
     [Type, SubType] = binary:split(ContentType, <<"/">>),
     CTEncoding = kapps_config:get_ne_binary(?NOTIFY_CONFIG_CAT,
-                                             [<<"mime-encoding">>
-                                              ,ContentType
-                                              ,<<"content_transfer_encoding">>
-                                             ]
-                                             ,default_content_transfer_encoding(ContentType)
-                                            ),
+                                            [<<"mime-encoding">>
+                                            ,ContentType
+                                            ,<<"content_transfer_encoding">>
+                                            ]
+                                           ,default_content_transfer_encoding(ContentType)
+                                           ),
     Template = {Type
-                ,SubType
-                ,props:filter_undefined(
-                   [{<<"Content-Type">>, iolist_to_binary([ContentType, <<";charset=utf-8">>])}
-                    ,{<<"Content-Transfer-Encoding">>, CTEncoding}
-                   ])
-                ,[]
-                ,iolist_to_binary(Content)
+               ,SubType
+               ,props:filter_undefined(
+                  [{<<"Content-Type">>, iolist_to_binary([ContentType, <<";charset=utf-8">>])}
+                  ,{<<"Content-Transfer-Encoding">>, CTEncoding}
+                  ])
+               ,[]
+               ,iolist_to_binary(Content)
                },
     lager:debug("adding template ~s (encoding ~s)", [ContentType, CTEncoding]),
     add_rendered_templates_to_email(Rs, [Template | Acc]).
@@ -318,6 +319,22 @@ default_content_transfer_encoding(_) -> <<"7BIT">>.
 -spec system_params() -> kz_proplist().
 system_params() ->
     [{<<"hostname">>, kz_util:to_binary(net_adm:localhost())}].
+
+-spec user_params(kzd_user:doc()) -> kz_proplist().
+user_params(UserJObj) ->
+    Ks = [{<<"first_name">>, fun kzd_user:first_name/1}
+         ,{<<"last_name">>, fun kzd_user:last_name/1}
+         ,{<<"email">>, fun kzd_user:email/1}
+         ,{<<"timezone">>, fun kzd_user:timezone/1}
+         ],
+    props:filter_undefined(
+      [user_property(UserJObj, K, F) || {K, F} <- Ks]
+     ).
+
+-spec user_property(kzd_user:doc(), Key, fun((kz_json:object()) -> api_binary())) ->
+                           {Key, api_binary()}.
+user_property(User, <<_/binary>>=Key, Fun) when is_function(Fun, 1) ->
+    {Key, Fun(User)}.
 
 -spec account_params(kz_json:object()) -> kz_proplist().
 account_params(DataJObj) ->
@@ -335,15 +352,29 @@ find_account_params(DataJObj, AccountId) ->
     case open_doc(<<"account">>, AccountId, DataJObj) of
         {'ok', AccountJObj} ->
             props:filter_undefined([{<<"name">>, kz_account:name(AccountJObj)}
-                                    ,{<<"realm">>, kz_account:realm(AccountJObj)}
-                                    ,{<<"id">>, kz_account:id(AccountJObj)}
-                                    ,{<<"language">>, kz_account:language(AccountJObj)}
-                                    ,{<<"timezone">>, kz_account:timezone(AccountJObj)}
+                                   ,{<<"realm">>, kz_account:realm(AccountJObj)}
+                                   ,{<<"id">>, kz_account:id(AccountJObj)}
+                                   ,{<<"language">>, kz_account:language(AccountJObj)}
+                                   ,{<<"timezone">>, kz_account:timezone(AccountJObj)}
+                                    | maybe_add_parent_params(AccountJObj)
                                    ]);
         {'error', _E} ->
             lager:debug("failed to find account doc for ~s: ~p", [AccountId, _E]),
             []
     end.
+
+-spec maybe_add_parent_params(kz_json:object()) -> kz_proplist().
+maybe_add_parent_params(AccountJObj) ->
+    case kz_account:parent_account_id(AccountJObj) of
+        'undefined' -> [];
+        ParentAccountId ->
+            {'ok', ParentAccountJObj} = kz_account:fetch(ParentAccountId),
+            [{<<"parent_name">>, kz_account:name(ParentAccountJObj)}
+            ,{<<"parent_realm">>, kz_account:realm(ParentAccountJObj)}
+            ,{<<"parent_id">>, kz_account:id(ParentAccountJObj)}
+            ]
+    end.
+
 
 -spec default_from_address(ne_binary()) -> ne_binary().
 -spec default_from_address(kz_json:object(), ne_binary()) -> ne_binary().
@@ -351,8 +382,8 @@ default_from_address(ConfigCat) ->
     default_from_address(kz_json:new(), ConfigCat).
 default_from_address(JObj, ConfigCat) ->
     default_system_value(JObj, ConfigCat
-                         ,<<"send_from">>, <<"default_from">>
-                         ,list_to_binary([<<"no_reply@">>, net_adm:localhost()])
+                        ,<<"send_from">>, <<"default_from">>
+                        ,list_to_binary([<<"no_reply@">>, net_adm:localhost()])
                         ).
 
 -spec default_reply_to(ne_binary()) -> api_binary().
@@ -361,8 +392,8 @@ default_reply_to(ConfigCat) ->
     default_reply_to(kz_json:new(), ConfigCat).
 default_reply_to(JObj, ConfigCat) ->
     default_system_value(JObj, ConfigCat
-                         ,<<"reply_to">>, <<"default_reply_to">>
-                         ,'undefined'
+                        ,<<"reply_to">>, <<"default_reply_to">>
+                        ,'undefined'
                         ).
 
 -spec default_system_value(kz_json:object(), ne_binary(), kz_json:key(), kz_json:key(), kz_json:json_term()) ->
@@ -398,13 +429,16 @@ sort_templates({K1, _}, {K2, _}) ->
 -spec find_account_id(kz_json:object()) -> api_binary().
 find_account_id(JObj) ->
     kz_json:get_first_defined([<<"account_id">>
-                               ,[<<"account">>, <<"_id">>]
-                               ,<<"pvt_account_id">>
-                               ,<<"_id">>, <<"id">>
-                               ,<<"Account-ID">>
-                               ,[<<"Details">>, <<"Account-ID">>]
+                              ,[<<"account">>, <<"_id">>]
+                              ,<<"pvt_account_id">>
+                              ,<<"_id">>, <<"id">>
+                              ,<<"Account-ID">>
+                              ,[<<"details">>, <<"account_id">>]
+                              ,[<<"Details">>, <<"Account-ID">>]
+                              ,[<<"details">>, <<"custom_channel_vars">>, <<"account_id">>]
+                              ,[<<"Details">>, <<"Custom-Channel-Vars">>, <<"Account-ID">>]
                               ]
-                              ,JObj
+                             ,JObj
                              ).
 
 -spec find_account_db(ne_binary(), kz_json:object()) -> api_binary().
@@ -437,9 +471,9 @@ send_update(DataJObj, Status) ->
     send_update(DataJObj, Status, 'undefined').
 send_update(DataJObj, Status, Message) ->
     send_update(kz_json:get_first_defined([<<"server_id">>, <<"Server-ID">>], DataJObj)
-                ,kz_json:get_value(<<"msg_id">>, DataJObj)
-                ,Status
-                ,Message
+               ,kz_json:get_value(<<"msg_id">>, DataJObj)
+               ,Status
+               ,Message
                ).
 
 send_update('undefined', _, _, _) ->
@@ -447,8 +481,8 @@ send_update('undefined', _, _, _) ->
 send_update(RespQ, MsgId, Status, Msg) ->
     Prop = props:filter_undefined(
              [{<<"Status">>, Status}
-              ,{<<"Failure-Message">>, Msg}
-              ,{<<"Msg-ID">>, MsgId}
+             ,{<<"Failure-Message">>, Msg}
+             ,{<<"Msg-ID">>, MsgId}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     lager:debug("notification update (~s) sending to ~s", [Status, RespQ]),
@@ -471,17 +505,18 @@ find_account_rep_email(AccountJObj) ->
      ).
 
 -spec find_account_admin_email(api_binary()) -> api_binaries().
--spec find_account_admin_email(ne_binary(), api_binary()) -> api_binaries().
+-spec find_account_admin_email(api_binary(), api_binary()) -> api_binaries().
 find_account_admin_email('undefined') -> 'undefined';
 find_account_admin_email(AccountId) ->
     find_account_admin_email(AccountId, kz_services:find_reseller_id(AccountId)).
 
+find_account_admin_email('undefined', _Id) ->
+    'undefined';
 find_account_admin_email(AccountId, AccountId) ->
     case query_account_for_admin_emails(AccountId) of
         [] -> 'undefined';
         Emails -> Emails
     end;
-
 find_account_admin_email(AccountId, ResellerId) ->
     case query_account_for_admin_emails(AccountId) of
         [] -> find_account_admin_email(get_parent_account_id(AccountId), ResellerId);
@@ -489,25 +524,28 @@ find_account_admin_email(AccountId, ResellerId) ->
     end.
 
 -spec query_account_for_admin_emails(ne_binary()) -> ne_binaries().
-query_account_for_admin_emails(AccountId) ->
-    AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
+query_account_for_admin_emails(<<_/binary>> = AccountId) ->
+    AccountDb = kz_util:format_account_db(AccountId),
     ViewOptions = [{'key', <<"user">>}
-                   ,'include_docs'
+                  ,'include_docs'
                   ],
     case kz_datamgr:get_results(AccountDb, <<"maintenance/listing_by_type">>, ViewOptions) of
         {'ok', []} -> [];
-        {'ok', Users} ->
-            [Email
-             || Admin <- filter_for_admins(Users),
-                (Email = kz_json:get_ne_value([<<"doc">>, <<"email">>], Admin)) =/= 'undefined'
-            ];
+        {'ok', Users} -> extract_admin_emails(Users);
         {'error', _E} ->
             lager:debug("failed to find users in ~s: ~p", [AccountId, _E]),
             []
     end.
 
+-spec extract_admin_emails(kzd_user:docs()) -> ne_binaries().
+extract_admin_emails(Users) ->
+    [Email
+     || Admin <- filter_for_admins(Users),
+        (Email = kzd_user:email(Admin)) =/= 'undefined'
+    ].
+
 -spec find_account_admin(api_binary()) -> api_object().
--spec find_account_admin(ne_binary(), ne_binary()) -> api_object().
+-spec find_account_admin(ne_binary(), ne_binary()) -> 'undefined' | kzd_user:doc().
 find_account_admin('undefined') -> 'undefined';
 find_account_admin(<<_/binary>> = AccountId) ->
     find_account_admin(AccountId, kz_services:find_reseller_id(AccountId)).
@@ -520,11 +558,11 @@ find_account_admin(AccountId, ResellerId) ->
         Admin -> Admin
     end.
 
--spec query_for_account_admin(ne_binary()) -> api_object().
+-spec query_for_account_admin(ne_binary()) -> 'undefined' | kzd_user:doc().
 query_for_account_admin(AccountId) ->
     AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
     ViewOptions = [{'key', <<"user">>}
-                   ,'include_docs'
+                  ,'include_docs'
                   ],
     case kz_datamgr:get_results(AccountDb, <<"maintenance/listing_by_type">>, ViewOptions) of
         {'ok', []} -> 'undefined';
@@ -538,11 +576,11 @@ query_for_account_admin(AccountId) ->
             'undefined'
     end.
 
--spec filter_for_admins(kz_json:objects()) -> kz_json:objects().
+-spec filter_for_admins(kz_json:objects()) -> kzd_user:docs().
 filter_for_admins(Users) ->
-    [User
+    [Doc
      || User <- Users,
-        kz_json:get_value([<<"doc">>, <<"priv_level">>], User) =:= <<"admin">>
+        kzd_user:priv_level(Doc = kz_json:get_value(<<"doc">>, User)) =:= <<"admin">>
     ].
 
 -spec should_handle_notification(kz_json:object()) -> boolean().
@@ -564,43 +602,43 @@ should_handle_notification(JObj, 'false') ->
 should_handle_system() ->
     lager:debug("should system handle notification"),
     kapps_config:get(?NOTIFY_CONFIG_CAT
-                      ,<<"notification_app">>
-                      ,?APP_NAME
-                     )
+                    ,<<"notification_app">>
+                    ,?APP_NAME
+                    )
         =:= ?APP_NAME.
 
 -spec should_handle_account(ne_binary()) -> boolean().
--spec should_handle_account(ne_binary(), api_binary()) -> boolean().
+-spec should_handle_account(api_binary(), api_binary()) -> boolean().
 should_handle_account(Account) ->
     case kz_account:fetch(Account) of
         {'error', _E} ->
             lager:debug("teletype should handle account ~s", [Account]),
             'true';
         {'ok', JObj} ->
-            should_handle_account(
-              Account
-              ,kz_account:notification_preference(JObj)
-             )
+            should_handle_account(Account
+                                 ,kz_account:notification_preference(JObj)
+                                 )
     end.
 
 should_handle_account(_Account, ?APP_NAME) -> 'true';
+should_handle_account('undefined', 'undefined') ->
+    should_handle_system();
 should_handle_account(Account, 'undefined') ->
     should_handle_reseller(Account);
 should_handle_account(_Account, _Preference) ->
-    lager:debug(
-      "not handling notification; unknown notification preference '~s' for '~s'"
-      ,[_Preference, _Account]
-     ).
+    lager:debug("not handling notification;"
+                " unknown notification preference '~s' for '~s'"
+               ,[_Preference, _Account]
+               ).
 
 -spec should_handle_reseller(ne_binary()) -> boolean().
 should_handle_reseller(Account) ->
-    ResellerId = kz_services:find_reseller_id(Account),
-
-    case kz_account:fetch(ResellerId) of
-        {'error', _E} ->
-            'true';
+    case kz_account:fetch(kz_services:find_reseller_id(Account)) of
+        {'error', _E} -> 'true';
         {'ok', ResellerJObj} ->
-            kz_account:notification_preference(ResellerJObj) =:= ?APP_NAME
+            should_handle_account('undefined'
+                                 ,kz_account:notification_preference(ResellerJObj)
+                                 )
     end.
 
 -define(MOD_CONFIG_CAT(Key), <<(?NOTIFY_CONFIG_CAT)/binary, ".", Key/binary>>).
@@ -632,8 +670,8 @@ is_account_notice_enabled(AccountId, TemplateKey, ResellerAccountId) ->
             lager:debug("account ~s is mute, checking parent", [AccountId]),
             is_account_notice_enabled(
               get_parent_account_id(AccountId)
-              ,TemplateId
-              ,ResellerAccountId
+                                     ,TemplateId
+                                     ,ResellerAccountId
              );
         _Otherwise ->
             is_notice_enabled_default(TemplateKey)
@@ -672,10 +710,10 @@ find_addresses(_DataJObj, _TemplateMetaJObj, _ConfigCat, [], Acc) -> Acc;
 find_addresses(DataJObj, TemplateMetaJObj, ConfigCat, [Key|Keys], Acc) ->
     find_addresses(
       DataJObj
-      ,TemplateMetaJObj
-      ,ConfigCat
-      ,Keys
-      ,[find_address(DataJObj, TemplateMetaJObj, ConfigCat, Key)|Acc]
+                  ,TemplateMetaJObj
+                  ,ConfigCat
+                  ,Keys
+                  ,[find_address(DataJObj, TemplateMetaJObj, ConfigCat, Key)|Acc]
      ).
 
 -spec find_address(kz_json:object(), kz_json:object(), ne_binary(), kz_json:key()) ->
@@ -685,12 +723,12 @@ find_addresses(DataJObj, TemplateMetaJObj, ConfigCat, [Key|Keys], Acc) ->
 find_address(DataJObj, TemplateMetaJObj, ConfigCat, Key) ->
     find_address(
       DataJObj
-      ,TemplateMetaJObj
-      ,ConfigCat
-      ,Key
-      ,kz_json:find([Key, <<"type">>]
-                    ,[DataJObj, TemplateMetaJObj]
-                   )
+                ,TemplateMetaJObj
+                ,ConfigCat
+                ,Key
+                ,kz_json:find([Key, <<"type">>]
+                             ,[DataJObj, TemplateMetaJObj]
+                             )
      ).
 
 find_address(DataJObj, TemplateMetaJObj, _ConfigCat, Key, 'undefined') ->
@@ -717,10 +755,7 @@ find_address(Key, DataJObj, TemplateMetaJObj) ->
 -spec find_admin_emails(kz_json:object(), ne_binary(), kz_json:key()) ->
                                api_binaries().
 find_admin_emails(DataJObj, ConfigCat, Key) ->
-    case ?MODULE:find_account_rep_email(
-           ?MODULE:find_account_id(DataJObj)
-          )
-    of
+    case find_account_rep_email(find_account_id(DataJObj)) of
         'undefined' ->
             lager:debug("didn't find account rep for '~s'", [Key]),
             find_default(ConfigCat, Key);

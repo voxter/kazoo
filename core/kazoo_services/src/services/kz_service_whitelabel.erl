@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2015, 2600Hz, INC
+%%% @copyright (C) 2012-2016, 2600Hz, INC
 %%% @doc
 %%%
 %%% @end
@@ -34,11 +34,11 @@ reconcile(Services) ->
             Services;
         {'ok', Count} ->
             kz_services:update(
-                ?CATEGORY
-                ,?ITEM
-                ,Count
-                ,kz_services:reset_category(?CATEGORY, Services)
-            )
+              ?CATEGORY
+                              ,?ITEM
+                              ,Count
+                              ,kz_services:reset_category(?CATEGORY, Services)
+             )
     end.
 
 reconcile(Services0, ?ITEM=Item) ->

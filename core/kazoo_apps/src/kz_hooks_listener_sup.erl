@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -17,7 +17,7 @@
 -define(SERVER, ?MODULE).
 
 -define(CHILDREN, [?WORKER('kz_hooks_listener')
-                   ,?CACHE(?HOOKS_CACHE_NAME)
+                  ,?CACHE(?HOOKS_CACHE_NAME)
                   ]).
 
 %% ===================================================================

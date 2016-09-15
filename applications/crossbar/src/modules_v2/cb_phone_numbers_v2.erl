@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% Handle client requests for phone_number documents
@@ -12,23 +12,24 @@
 -module(cb_phone_numbers_v2).
 
 -export([init/0
-         ,allowed_methods/0, allowed_methods/1, allowed_methods/2
-         ,resource_exists/0, resource_exists/1, resource_exists/2
-         ,billing/1
-         ,validate/1, validate/2, validate/3
-         ,validate_request/1
-         ,authorize/1
-         ,authenticate/1
-         ,put/2, put/3
-         ,post/2
-         ,delete/2
-         ,populate_phone_numbers/1
+        ,allowed_methods/0, allowed_methods/1, allowed_methods/2
+        ,resource_exists/0, resource_exists/1, resource_exists/2
+        ,billing/1
+        ,validate/1, validate/2, validate/3
+        ,validate_request/1
+        ,authorize/1
+        ,authenticate/1
+        ,put/2, put/3
+        ,post/2
+        ,delete/2
         ]).
 
 -include("crossbar.hrl").
 -include_lib("kazoo_number_manager/include/knm_phone_number.hrl").
 
 -define(CB_LIST, <<"phone_numbers/crossbar_listing">>).
+-define(PORT_NUM_LISTING, <<"port_requests/phone_numbers_listing">>).
+-define(PORT_NUMBER_KEY_INDEX, 2).
 
 -define(ACTIVATE, <<"activate">>).
 -define(RESERVE, <<"reserve">>).
@@ -40,14 +41,14 @@
 -define(FIX, <<"fix">>).
 -define(CHANGE_CARRIER, <<"change_carrier">>).
 -define(MIME_TYPES, [{<<"application">>, <<"pdf">>}
-                     ,{<<"application">>, <<"x-gzip">>}
-                     ,{<<"application">>, <<"zip">>}
-                     ,{<<"application">>, <<"x-rar-compressed">>}
-                     ,{<<"application">>, <<"x-tar">>}
-                     ,{<<"image">>, <<"*">>}
-                     ,{<<"text">>, <<"plain">>}
-                     ,{<<"application">>, <<"base64">>}
-                     ,{<<"application">>, <<"x-base64">>}
+                    ,{<<"application">>, <<"x-gzip">>}
+                    ,{<<"application">>, <<"zip">>}
+                    ,{<<"application">>, <<"x-rar-compressed">>}
+                    ,{<<"application">>, <<"x-tar">>}
+                    ,{<<"image">>, <<"*">>}
+                    ,{<<"text">>, <<"plain">>}
+                    ,{<<"application">>, <<"base64">>}
+                    ,{<<"application">>, <<"x-base64">>}
                     ]).
 
 -define(PHONE_NUMBERS_CONFIG_CAT, <<"crossbar.phone_numbers">>).
@@ -55,20 +56,21 @@
 -define(SCHEMA_PHONE_NUMBERS, <<"phone_numbers">>).
 -define(SCHEMA_FIND_NUMBERS, <<"find_numbers">>).
 
--define(DEFAULT_COUNTRY, <<"US">>).
 -define(KEY_PHONEBOOK_FREE_URL, <<"phonebook_url">>).
--define(KEY_PHONEBOOK_PAID_URL, <<"phonebook_url_premium">>).
 -define(PREFIX, <<"prefix">>).
+-define(QUANTITY, <<"quantity">>).
+-define(OFFSET, <<"offset">>).
 -define(LOCALITY, <<"locality">>).
 -define(CHECK, <<"check">>).
+-define(COUNTRY, <<"country">>).
 
 -define(MAX_TOKENS, kapps_config:get_integer(?PHONE_NUMBERS_CONFIG_CAT, <<"activations_per_day">>, 100)).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 init() ->
-    _ = crossbar_bindings:bind(<<"account.created">>, ?MODULE, 'populate_phone_numbers'),
     _ = crossbar_bindings:bind(<<"v2_resource.authenticate">>, ?MODULE, 'authenticate'),
     _ = crossbar_bindings:bind(<<"v2_resource.authorize">>, ?MODULE, 'authorize'),
     _ = crossbar_bindings:bind(<<"v2_resource.billing">>, ?MODULE, 'billing'),
@@ -82,27 +84,6 @@ init() ->
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec populate_phone_numbers(cb_context:context()) -> 'ok'.
-populate_phone_numbers(Context) ->
-    AccountDb = cb_context:account_db(Context),
-    Now = kz_util:current_tstamp(),
-    PVTs = [{<<"_id">>, ?KNM_PHONE_NUMBERS_DOC}
-            ,{<<"pvt_account_db">>, AccountDb}
-            ,{<<"pvt_account_id">>, cb_context:account_id(Context)}
-            ,{<<"pvt_vsn">>, <<"1">>}
-            ,{<<"pvt_type">>, ?KNM_PHONE_NUMBERS_DOC}
-            ,{<<"pvt_modified">>, Now}
-            ,{<<"pvt_created">>, Now}
-           ],
-    _ = kz_datamgr:save_doc(AccountDb, kz_json:from_list(PVTs)),
-    'ok'.
-
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
 %% Authenticates the incoming request, returning true if the requestor is
 %% known, or false if not.
 %% @end
@@ -110,13 +91,13 @@ populate_phone_numbers(Context) ->
 -spec authenticate(cb_context:context()) -> boolean().
 authenticate(Context) ->
     maybe_authenticate(cb_context:req_verb(Context)
-                       ,cb_context:req_nouns(Context)
+                      ,cb_context:req_nouns(Context)
                       ).
 
 -spec maybe_authenticate(http_method(), req_nouns()) -> boolean().
-maybe_authenticate(?HTTP_GET, [{?KNM_PHONE_NUMBERS_DOC, []}]) ->
+maybe_authenticate(?HTTP_GET, [{<<"phone_numbers">>, []}]) ->
     'true';
-maybe_authenticate(?HTTP_GET, [{?KNM_PHONE_NUMBERS_DOC, [?PREFIX]}]) ->
+maybe_authenticate(?HTTP_GET, [{<<"phone_numbers">>, [?PREFIX]}]) ->
     'true';
 maybe_authenticate(_Verb, _Nouns) ->
     'false'.
@@ -131,12 +112,12 @@ maybe_authenticate(_Verb, _Nouns) ->
 -spec authorize(cb_context:context()) -> boolean().
 authorize(Context) ->
     maybe_authorize(cb_context:req_verb(Context)
-                    ,cb_context:req_nouns(Context)
+                   ,cb_context:req_nouns(Context)
                    ).
 
-maybe_authorize(?HTTP_GET, [{?KNM_PHONE_NUMBERS_DOC, []}]) ->
+maybe_authorize(?HTTP_GET, [{<<"phone_numbers">>, []}]) ->
     'true';
-maybe_authorize(?HTTP_GET, [{?KNM_PHONE_NUMBERS_DOC, [?PREFIX]}]) ->
+maybe_authorize(?HTTP_GET, [{<<"phone_numbers">>, [?PREFIX]}]) ->
     'true';
 maybe_authorize(_Verb, _Nouns) ->
     'false'.
@@ -219,9 +200,9 @@ billing(Context) ->
     maybe_allow_updates(Context, cb_context:req_nouns(Context), cb_context:req_verb(Context)).
 
 -spec maybe_allow_updates(cb_context:context(), req_nouns(), http_method()) -> cb_context:context().
-maybe_allow_updates(Context, [{?KNM_PHONE_NUMBERS_DOC, _}|_], ?HTTP_GET) ->
+maybe_allow_updates(Context, [{<<"phone_numbers">>, _}|_], ?HTTP_GET) ->
     Context;
-maybe_allow_updates(Context, [{?KNM_PHONE_NUMBERS_DOC, _}|_], _Verb) ->
+maybe_allow_updates(Context, [{<<"phone_numbers">>, _}|_], _Verb) ->
     try kz_services:allow_updates(cb_context:account_id(Context)) of
         'true' -> Context
     catch
@@ -251,20 +232,22 @@ validate(Context) ->
 validate_phone_numbers(Context, ?HTTP_GET, 'undefined') ->
     find_numbers(Context);
 validate_phone_numbers(Context, ?HTTP_GET, _AccountId) ->
-    summary(Context).
+    case kz_json:get_ne_value(?PREFIX, cb_context:query_string(Context)) of
+        'undefined' -> summary(Context);
+        _Prefix -> find_numbers(Context)
+    end.
 
 validate(Context, ?FIX) ->
-    cb_context:set_resp_data(
-        cb_context:set_resp_status(Context, 'success')
-        ,kz_json:new()
-    );
+    cb_context:set_resp_data(cb_context:set_resp_status(Context, 'success')
+                            ,kz_json:new()
+                            );
 validate(Context, ?PREFIX) ->
     find_prefix(Context);
 validate(Context, ?COLLECTION) ->
     validate_collection_request(Context);
 validate(Context, ?CLASSIFIERS) ->
     cb_context:set_resp_data(cb_context:set_resp_status(Context, 'success')
-                             ,knm_converters:available_classifiers()
+                            ,knm_converters:available_classifiers()
                             );
 validate(Context, ?LOCALITY) ->
     Numbers = cb_context:req_value(Context, ?COLLECTION_NUMBERS),
@@ -314,14 +297,14 @@ classify_number(Context, Number) ->
 unclassified_number(Context, Number) ->
     RespData = base_classified_number(Context, Number),
     cb_context:setters(Context
-                       ,[{fun cb_context:set_resp_data/2, kz_json:from_list(RespData)}
-                         ,{fun cb_context:set_resp_status/2, 'success'}
-                        ]).
+                      ,[{fun cb_context:set_resp_data/2, kz_json:from_list(RespData)}
+                       ,{fun cb_context:set_resp_status/2, 'success'}
+                       ]).
 
 -spec base_classified_number(cb_context:context(), ne_binary()) -> kz_proplist().
 base_classified_number(_Context, Number) ->
     [{<<"number">>, Number}
-     ,{<<"e164">>, knm_converters:normalize(Number)}
+    ,{<<"e164">>, knm_converters:normalize(Number)}
     ].
 
 -spec classified_number(cb_context:context(), path_token(), api_binary()) -> cb_context:context().
@@ -331,12 +314,12 @@ classified_number(Context, Number, Classifier) ->
     RespData = kz_json:set_values([{<<"name">>, Classifier}
                                    | BaseData
                                   ]
-                                  ,ClassifierJObj
+                                 ,ClassifierJObj
                                  ),
     cb_context:setters(Context
-                       ,[{fun cb_context:set_resp_data/2, RespData}
-                         ,{fun cb_context:set_resp_status/2, 'success'}
-                        ]).
+                      ,[{fun cb_context:set_resp_data/2, RespData}
+                       ,{fun cb_context:set_resp_status/2, 'success'}
+                       ]).
 
 -spec post(cb_context:context(), path_token()) -> cb_context:context().
 post(Context, ?FIX) ->
@@ -356,7 +339,7 @@ post(Context, ?LOCALITY) ->
     fetch_locality(Context);
 post(Context, Number) ->
     Options = [{'assign_to', cb_context:account_id(Context)}
-               ,{'auth_by', cb_context:auth_account_id(Context)}
+              ,{'auth_by', cb_context:auth_account_id(Context)}
               ],
     Updaters = [{fun knm_phone_number:update_doc/2, cb_context:doc(Context)}
                ],
@@ -371,9 +354,9 @@ put(Context, ?COLLECTION) ->
     set_response(Results, Context, CB);
 put(Context, Number) ->
     Options = [{'assign_to', cb_context:account_id(Context)}
-               ,{'auth_by', cb_context:auth_account_id(Context)}
-               ,{'dry_run', not cb_context:accepting_charges(Context)}
-               ,{'public_fields', cb_context:doc(Context)}
+              ,{'auth_by', cb_context:auth_account_id(Context)}
+              ,{'dry_run', not cb_context:accepting_charges(Context)}
+              ,{'public_fields', cb_context:doc(Context)}
               ],
     Result = knm_number:create(Number, Options),
     CB = fun() -> ?MODULE:put(cb_context:set_accepting_charges(Context), Number) end,
@@ -385,17 +368,17 @@ put(Context, ?COLLECTION, ?ACTIVATE) ->
     set_response(Results, Context, CB);
 put(Context, Number, ?ACTIVATE) ->
     Options = [{'auth_by', cb_context:auth_account_id(Context)}
-               ,{'dry_run', not cb_context:accepting_charges(Context)}
-               ,{'public_fields', cb_context:doc(Context)}
+              ,{'dry_run', not cb_context:accepting_charges(Context)}
+              ,{'public_fields', cb_context:doc(Context)}
               ],
     Result = knm_number:move(Number, cb_context:account_id(Context), Options),
     CB = fun() -> put(cb_context:set_accepting_charges(Context), Number, ?ACTIVATE) end,
     set_response(Result, Context, CB);
 put(Context, Number, ?RESERVE) ->
     Options = [{'assign_to', cb_context:account_id(Context)}
-               ,{'auth_by', cb_context:auth_account_id(Context)}
-               ,{'dry_run', not cb_context:accepting_charges(Context)}
-               ,{'public_fields', cb_context:doc(Context)}
+              ,{'auth_by', cb_context:auth_account_id(Context)}
+              ,{'dry_run', not cb_context:accepting_charges(Context)}
+              ,{'public_fields', cb_context:doc(Context)}
               ],
     Result = knm_number:reserve(Number, Options),
     CB = fun() -> put(cb_context:set_accepting_charges(Context), Number, ?RESERVE) end,
@@ -408,11 +391,12 @@ delete(Context, ?COLLECTION) ->
 delete(Context, Number) ->
     Options = [{'auth_by', cb_context:auth_account_id(Context)}
               ],
-    case knm_number:release(Number, Options) of
+    Releaser = pick_release_or_delete(Context, Options),
+    case knm_number:Releaser(Number, Options) of
         {'error', Data}=Error ->
-            case kz_json:is_json_object(Data) andalso
-                knm_errors:error(Data) == <<"invalid_state_transition">> andalso
-                knm_errors:cause(Data) == <<"from available to released">>
+            case kz_json:is_json_object(Data)
+                andalso knm_errors:error(Data) == <<"invalid_state_transition">>
+                andalso knm_errors:cause(Data) == <<"from available to released">>
             of
                 'true' -> reply_number_not_found(Context);
                 'false' -> set_response(Error, Context)
@@ -431,17 +415,64 @@ delete(Context, Number) ->
 %%--------------------------------------------------------------------
 -spec summary(cb_context:context(), ne_binary()) -> cb_context:context().
 summary(Context, Number) ->
+    IncludePorts =
+        kz_util:is_true(cb_context:req_value(Context, <<"include_ports">>, 'false')),
     Options = [{'auth_by', cb_context:auth_account_id(Context)}
               ],
     case knm_number:get(Number, Options) of
         {'ok', KNMNumber} ->
             crossbar_util:response(knm_number:to_public_json(KNMNumber), Context);
-        {'error', _JObj} -> reply_number_not_found(Context)
+        {'error', _JObj} ->
+            maybe_find_port_number(Context, Number, IncludePorts)
     end.
+
+
+-spec maybe_find_port_number(cb_context:context(), ne_binary(), boolean()) ->
+                                    cb_context:context().
+maybe_find_port_number(Context, _Number, 'false') ->
+    reply_number_not_found(Context);
+maybe_find_port_number(Context, Number, 'true') ->
+    NormalizeNum = knm_converters:normalize(Number),
+    ViewOption = [{'key', [cb_context:account_id(Context), NormalizeNum]}
+                 ],
+    case kz_datamgr:get_single_result(?KZ_PORT_REQUESTS_DB, ?PORT_NUM_LISTING, ViewOption) of
+        {'error', _} -> reply_number_not_found(Context);
+        {'ok', Result} ->
+            Port = kz_json:get_value(<<"value">>, Result),
+            {'ok', PhoneNumber} = normalize_port_number(Port, NormalizeNum, Context),
+            Values = [{[<<"_read_only">>, <<"port_id">>], kz_json:get_value(<<"port_id">>, Port)}
+                     ,{[<<"_read_only">>, <<"port_state">>], kz_json:get_value(<<"port_state">>, Port)}
+                     ],
+            JObj = kz_json:set_values(Values, knm_phone_number:to_public_json(PhoneNumber)),
+            port_number_summary(JObj, Context, knm_phone_number:is_authorized(PhoneNumber))
+    end.
+
+%% @private
+-spec port_number_summary(kz_json:object(), cb_context:context(), boolean()) -> boolean().
+port_number_summary(PhoneNumber, Context, 'true') ->
+    crossbar_util:response(PhoneNumber, Context);
+port_number_summary(_PhoneNumber, Context, 'false') ->
+    reply_number_not_found(Context).
+
+-spec normalize_port_number(kz_json:object(), ne_binary(), cb_context:context()) ->
+                                   knm_phone_number_return().
+normalize_port_number(JObj, Number, Context) ->
+    Setters = [{fun knm_phone_number:set_number/2, Number}
+              ,{fun knm_phone_number:set_assigned_to/2, kz_json:get_value(<<"assigned_to">>, JObj)}
+              ,{fun knm_phone_number:set_used_by/2, kz_json:get_value(<<"used_by">>, JObj)}
+              ,{fun knm_phone_number:set_state/2, kz_json:get_value(<<"state">>, JObj)}
+              ,{fun knm_phone_number:set_auth_by/2, cb_context:auth_account_id(Context)}
+              ,{fun knm_phone_number:set_modified/2, kz_json:get_value(<<"updated">>, JObj)}
+              ,{fun knm_phone_number:set_created/2, kz_json:get_value(<<"created">>, JObj)}
+               | [{fun knm_phone_number:set_feature/3, Feature, kz_json:new()}
+                  || Feature <- kz_json:get_value(<<"features">>, JObj)
+                 ]
+              ],
+    knm_phone_number:setters(knm_phone_number:new(), Setters).
 
 %%--------------------------------------------------------------------
 %% @private
-%% @doc Lists numbers on GET /v2/accounts/{{ACCOUNT_ID}}/phone_numbers
+%% @doc Lists numbers on GET /v2/accounts/{ACCOUNT_ID}/phone_numbers
 %%--------------------------------------------------------------------
 -spec summary(cb_context:context()) -> cb_context:context().
 summary(Context) ->
@@ -454,21 +485,56 @@ summary(Context) ->
 %% @private
 -spec view_account_phone_numbers(cb_context:context()) -> cb_context:context().
 view_account_phone_numbers(Context) ->
-    Context1 = crossbar_doc:load_view(?CB_LIST, [], rename_qs_filters(Context), fun normalize_view_results/2),
+    Context1 = crossbar_doc:load_view(?CB_LIST
+                                     ,[]
+                                     ,rename_qs_filters(Context)
+                                     ,fun normalize_view_results/2
+                                     ),
     ListOfNumProps = cb_context:resp_data(Context1),
-    NumbersJObj = lists:foldl(fun kz_json:merge_jobjs/2, kz_json:new(), ListOfNumProps),
+    PortNumberJObj = maybe_add_port_request_numbers(Context),
+    NumbersJObj = lists:foldl(fun kz_json:merge_jobjs/2, PortNumberJObj, ListOfNumProps),
     Service = kz_services:fetch(cb_context:account_id(Context)),
-    Quantity = kz_services:cascade_category_quantity(?KNM_PHONE_NUMBERS_DOC, [], Service),
-    NewRespData = kz_json:from_list([ {<<"numbers">>, NumbersJObj}
-                                    , {<<"casquade_quantity">>, Quantity}
+    Quantity = kz_services:cascade_category_quantity(<<"phone_numbers">>, [], Service),
+    NewRespData = kz_json:from_list([{<<"numbers">>, NumbersJObj}
+                                    ,{<<"casquade_quantity">>, Quantity}
                                     ]),
     cb_context:set_resp_data(Context1, NewRespData).
 
 %% @private
+-spec maybe_add_port_request_numbers(cb_context:context()) -> kz_json:object().
+-spec maybe_add_port_request_numbers(cb_context:context(), boolean()) -> kz_json:object().
+maybe_add_port_request_numbers(Context) ->
+    IncludePorts = cb_context:req_value(Context, <<"include_ports">>, 'false'),
+    maybe_add_port_request_numbers(Context, kz_util:is_true(IncludePorts)).
+
+maybe_add_port_request_numbers(_Context, 'false') -> kz_json:new();
+maybe_add_port_request_numbers(Context, 'true') ->
+    AccountId = cb_context:account_id(Context),
+    HasQs = crossbar_doc:has_qs_filter(Context),
+    ViewOptions = [{'startkey', [cb_context:account_id(Context)]}
+                  ,{'endkey', [cb_context:account_id(Context), kz_json:new()]}
+                  ],
+    case kz_datamgr:get_results(?KZ_PORT_REQUESTS_DB, ?PORT_NUM_LISTING, ViewOptions) of
+        {'error', _} -> kz_json:new();
+        {'ok', Ports} ->
+            PortNumberList = [normalize_port_view_result(P)
+                              || P <- Ports,
+                                 maybe_filter_port_number(P, Context, HasQs)
+                             ],
+            lists:foldl(fun kz_json:merge_jobjs/2, kz_json:new(), PortNumberList)
+    end.
+
+%% @private
+-spec maybe_filter_port_number(kz_json:object(), cb_context:context(), boolean()) ->
+                                      boolean().
+maybe_filter_port_number(_Port, _Context, 'false') -> 'false';
+maybe_filter_port_number(Port, Context, 'true') ->
+    crossbar_doc:filtered_doc_by_qs(kz_json:get_value(<<"value">>, Port), Context).
+
+%% @private
 -spec rename_qs_filters(cb_context:context()) -> cb_context:context().
 rename_qs_filters(Context) ->
-    Renamer = fun
-                  (<<"filter_state">>, Value)       -> {<<"filter_pvt_state">>, Value};
+    Renamer = fun (<<"filter_state">>, Value)       -> {<<"filter_pvt_state">>, Value};
                   (<<"filter_assigned_to">>, Value) -> {<<"filter_pvt_assigned_to">>, Value};
                   (<<"filter_locality">>, Value)    -> {<<"filter_pvt_locality">>, Value};
                   (K, V) -> {K, V}
@@ -481,9 +547,16 @@ rename_qs_filters(Context) ->
 normalize_view_results(JObj, Acc) ->
     Number = kz_json:get_value(<<"key">>, JObj),
     Properties = kz_json:get_value(<<"value">>, JObj),
-    [ kz_json:set_value(Number, Properties, kz_json:new())
-      | Acc
+    [kz_json:from_list([{Number, Properties}])
+     | Acc
     ].
+
+%% @private
+-spec normalize_port_view_result(kz_json:object()) -> kz_json:object().
+normalize_port_view_result(JObj) ->
+    Number = kz_json:get_value([<<"key">>, ?PORT_NUMBER_KEY_INDEX], JObj),
+    Properties = kz_json:get_value(<<"value">>, JObj),
+    kz_json:from_list([{Number, Properties}]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -491,28 +564,35 @@ normalize_view_results(JObj, Acc) ->
 %%--------------------------------------------------------------------
 -spec find_numbers(cb_context:context()) -> cb_context:context().
 find_numbers(Context) ->
-    JObj = get_find_numbers_req(Context),
-    Context1 = cb_context:set_req_data(Context, JObj),
-    Prefix = kz_json:get_ne_value(?PREFIX, JObj),
-    Quantity = kz_json:get_value(<<"quantity">>, JObj, 1),
+    Options = get_find_numbers_req(Context),
     OnSuccess =
         fun(C) ->
-                Found = knm_carriers:find(Prefix, Quantity, kz_json:to_proplist(JObj)),
+                lager:debug("carriers find: ~p", [Options]),
+                Prefix = knm_carriers:prefix(Options),
+                Quantity = knm_carriers:quantity(Options),
+                Found = knm_carriers:find(Prefix, Quantity, Options),
                 cb_context:setters(C
                                   ,[{fun cb_context:set_resp_data/2, Found}
-                                    ,{fun cb_context:set_resp_status/2, 'success'}
+                                   ,{fun cb_context:set_resp_status/2, 'success'}
                                    ])
         end,
+    Context1 = cb_context:set_req_data(Context, kz_json:from_list(Options)),
     cb_context:validate_request_data(?SCHEMA_FIND_NUMBERS, Context1, OnSuccess).
 
--spec get_find_numbers_req(cb_context:context()) -> kz_json:object().
+-spec get_find_numbers_req(cb_context:context()) -> knm_carriers:options().
 get_find_numbers_req(Context) ->
-    JObj = cb_context:query_string(Context),
-    AccountId = cb_context:auth_account_id(Context),
-    Quantity = kz_util:to_integer(cb_context:req_value(Context, <<"quantity">>, 1)),
-    kz_json:set_values([{<<"quantity">>, Quantity}
-                       ,{<<"Account-ID">>, AccountId}
-                       ], JObj).
+    AccountId = case cb_context:account_id(Context) of
+                    'undefined' -> cb_context:auth_account_id(Context);
+                    Account -> Account
+                end,
+    QS = cb_context:query_string(Context),
+    [{'quantity', max(1, kz_json:get_integer_value(?QUANTITY, QS, 1))}
+    ,{'prefix', kz_json:get_ne_value(?PREFIX, QS)}
+    ,{'country', kz_json:get_ne_value(?COUNTRY, QS, ?KNM_DEFAULT_COUNTRY)}
+    ,{'offset', kz_json:get_integer_value(?OFFSET, QS, 0)}
+    ,{'account_id', AccountId}
+    ,{'reseller_id', cb_context:reseller_id(Context)}
+    ].
 
 %%--------------------------------------------------------------------
 %% @private
@@ -526,16 +606,16 @@ find_prefix(Context) ->
         'undefined' -> cb_context:add_system_error('bad_identifier', Context);
         City ->
             case get_prefix(City) of
-                {'ok', Data} ->
+                {'ok', JObj} ->
                     cb_context:set_resp_data(
                       cb_context:set_resp_status(Context, 'success')
-                      ,Data
+                                            ,JObj
                      );
                 {'error', Error} ->
-                    lager:error("error while prefix for city: ~p : ~p", [City, Error]),
+                    lager:error("error while prefix for city ~s: ~p", [City, Error]),
                     cb_context:set_resp_data(
                       cb_context:set_resp_status(Context, 'error')
-                      ,Error
+                                            ,Error
                      )
             end
     end.
@@ -560,7 +640,7 @@ validate_collection_request(Context, []) ->
 validate_collection_request(Context, Numbers)
   when is_list(Numbers) ->
     UniqNomalised = lists:usort([knm_converters:normalize(N) || N <- Numbers]),
-    case length(Numbers) == length(UniqNomalised) of
+    case length(Numbers) =:= length(UniqNomalised) of
         'true' -> cb_context:set_resp_status(Context, 'success');
         'false' ->
             Msg = kz_json:from_list([{<<"message">>, <<"some numbers appear twice">>}
@@ -588,8 +668,8 @@ format_carriers_check([{_Module, {'ok', ModuleResults}}|Rest], JObj) ->
           fun ({Number, Status}, Acc) ->
                   kz_json:set_value(Number, Status, Acc)
           end
-          ,JObj
-          ,kz_json:to_proplist(ModuleResults)
+                   ,JObj
+                   ,kz_json:to_proplist(ModuleResults)
          ),
     format_carriers_check(Rest, JObj1);
 format_carriers_check([_|Rest], JObj) ->
@@ -607,20 +687,11 @@ get_prefix(City) ->
         'undefined' ->
             {'error', <<"Unable to acquire numbers missing carrier url">>};
         Url ->
-            Country = kapps_config:get_string(?PHONE_NUMBERS_CONFIG_CAT, <<"default_country">>, ?DEFAULT_COUNTRY),
-            ReqParam = kz_util:uri_encode(City),
-            case kz_http:get(lists:flatten([Url, "/", Country, "/city?pattern=", ReqParam])) of
-                {'ok', 200, _Headers, Body} ->
-                    JObj = kz_json:decode(Body),
-                    case kz_json:get_value(<<"data">>, JObj) of
-                        'undefined' -> {'error', JObj};
-                        Data -> {'ok', Data}
-                    end;
-                {'ok', _Status, _Headers, Body} ->
-                    {'error', kz_json:decode(Body)};
-                {'error', _Reason}=E ->
-                    E
-            end
+            Country = kapps_config:get_string(?PHONE_NUMBERS_CONFIG_CAT
+                                             ,<<"default_country">>
+                                             ,?KNM_DEFAULT_COUNTRY
+                                             ),
+            knm_locality:prefix(Url, Country, City)
     end.
 
 %%--------------------------------------------------------------------
@@ -631,20 +702,19 @@ get_prefix(City) ->
 -spec fetch_locality(cb_context:context()) -> cb_context:context().
 fetch_locality(Context) ->
     Numbers = cb_context:req_value(Context, ?COLLECTION_NUMBERS),
-    Url = get_url(cb_context:req_value(Context, <<"quality">>)),
-    case fetch_locality(Numbers, Url) of
+    case knm_locality:fetch(Numbers) of
         {'ok', Localities} ->
             cb_context:set_resp_data(
               cb_context:set_resp_status(Context, 'success')
-              ,Localities
+                                    ,Localities
              );
-        {'error', E} ->
-            crossbar_util:response('error', E, 500, Context)
+        {'error', 'lookup_failed'} ->
+            Msg = <<"number locality lookup failed">>,
+            crossbar_util:response('error', Msg, 500, Context);
+        {'error', 'missing_url'} ->
+            Msg = <<"could not get locality url">>,
+            crossbar_util:response('error', Msg, 500, Context)
     end.
-
--spec get_url(any()) -> ne_binary().
-get_url(<<"high">>) -> ?KEY_PHONEBOOK_PAID_URL;
-get_url(_) -> ?KEY_PHONEBOOK_FREE_URL.
 
 %% @private
 -spec maybe_update_locality(cb_context:context()) -> cb_context:context().
@@ -662,7 +732,7 @@ maybe_update_locality(Context) ->
                              cb_context:context().
 update_locality(Context, []) -> Context;
 update_locality(Context, Numbers) ->
-    case fetch_locality(Numbers, ?KEY_PHONEBOOK_FREE_URL) of
+    case knm_locality:fetch(Numbers) of
         {'ok', Localities} ->
             _ = kz_util:spawn(fun update_phone_numbers_locality/2, [Context, Localities]),
             update_context_locality(Context, Localities);
@@ -692,7 +762,7 @@ update_context_locality_fold(Key, Value, JObj) ->
                                            {'error', any()}.
 update_phone_numbers_locality(Context, Localities) ->
     AccountDb = cb_context:account_db(Context),
-    DocId = kz_doc:id(cb_context:doc(Context), ?KNM_PHONE_NUMBERS_DOC),
+    DocId = kz_doc:id(cb_context:doc(Context)),
     case kz_datamgr:open_doc(AccountDb, DocId) of
         {'ok', JObj} ->
             J = kz_json:foldl(fun update_phone_numbers_locality_fold/3, JObj, Localities),
@@ -717,41 +787,6 @@ update_phone_numbers_locality_fold(Key, Value, JObj) ->
         _Else -> JObj
     end.
 
-%% @private
--spec fetch_locality(ne_binaries(), ne_binary()) -> {'ok', kz_json:object()} |
-                                                    {'error', any()}.
-fetch_locality(Numbers, PhonebookUrlType) ->
-    case kapps_config:get_string(?PHONE_NUMBERS_CONFIG_CAT, PhonebookUrlType) of
-        'undefined' ->
-            lager:error("could not get locality url ~s", [PhonebookUrlType]),
-            {'error', <<"could not get locality url">>};
-        URL ->
-            ReqBody = kz_json:set_value(<<"data">>, Numbers, kz_json:new()),
-            URI = lists:flatten([URL, $/, "locality", $/, "metadata"]),
-            Headers = [{'content_type', "application/json"}],
-            case kz_http:post(URI, Headers, kz_json:encode(ReqBody)) of
-                {'ok', 200, _Headers, Body} ->
-                    handle_phonebook_resp(kz_json:decode(Body));
-                {'ok', _Status, _, _Body} ->
-                    lager:error("number locality lookup failed: ~p ~p", [_Status, _Body]),
-                    {'error', <<"number locality lookup failed">>};
-                {'error', _Reason} ->
-                    lager:error("number locality lookup failed: ~p", [_Reason]),
-                    {'error', <<"number locality lookup failed">>}
-            end
-    end.
-
-%% @private
--spec handle_phonebook_resp(kz_json:object()) -> 'ok'.
-handle_phonebook_resp(Resp) ->
-    case kz_json:get_value(<<"status">>, Resp) of
-        <<"success">> ->
-            {'ok', kz_json:get_value(<<"data">>, Resp, kz_json:new())};
-        _E ->
-            lager:error("number locality lookup failed, status: ~p", [_E]),
-            {'error', <<"number locality lookup failed">>}
-    end.
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -762,10 +797,16 @@ identify(Context, Number) ->
     case knm_number:lookup_account(Number) of
         {'ok', AccountId, NumberOptions} ->
             JObj = kz_json:from_list(
-                    [ {<<"account_id">>, AccountId}
-                    , {<<"number">>, knm_number_options:number(NumberOptions)}
-                    ]),
+                     [{<<"account_id">>, AccountId}
+                     ,{<<"number">>, knm_number_options:number(NumberOptions)}
+                     ]),
             crossbar_util:response(JObj, Context);
+        {error, {R=not_in_service, _AccountId}} ->
+            lager:debug("~s's account ~p ~s", [Number, _AccountId, R]),
+            set_response({error, R}, Context);
+        {error, {R=account_disabled, _AccountId}} ->
+            lager:debug("~s's account ~p ~s", [Number, _AccountId, R]),
+            set_response({error, R}, Context);
         {'error', _R}=Error ->
             set_response(Error, Context)
     end.
@@ -785,10 +826,9 @@ validate_request(Context) ->
 %%--------------------------------------------------------------------
 -spec validate_delete(cb_context:context()) -> cb_context:context().
 validate_delete(Context) ->
-    cb_context:set_doc(
-      cb_context:set_resp_status(Context, 'success')
-      ,'undefined'
-     ).
+    cb_context:set_doc(cb_context:set_resp_status(Context, 'success')
+                      ,'undefined'
+                      ).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -838,6 +878,11 @@ set_response({'dry_run', Services, _ActivationCharges}, Context, CB) ->
 set_response({'error', 'not_found'}, Context, _) ->
     reply_number_not_found(Context);
 
+set_response({'error', Data}, Context, _)
+  when is_atom(Data) ->
+    lager:debug("error: ~p", [Data]),
+    crossbar_util:response_400(<<"client error">>, Data, Context);
+
 set_response({'error', Data}, Context, _) ->
     case kz_json:is_json_object(Data) of
         'true' ->
@@ -847,7 +892,7 @@ set_response({'error', Data}, Context, _) ->
             cb_context:add_system_error(Code, Msg, Data, Context);
         'false' ->
             lager:debug("error: ~p", [Data]),
-            crossbar_util:response_400(<<"client error">>, Data, Context)
+            crossbar_util:response_400(<<"client error">>, kz_json:new(), Context)
     end;
 
 set_response({'invalid', Reason}, Context, _) ->
@@ -864,8 +909,8 @@ set_response(_Else, Context, _) ->
 
 -spec reply_number_not_found(cb_context:context()) -> cb_context:context().
 reply_number_not_found(Context) ->
-    Msg = kz_json:from_list([ {<<"message">>, <<"bad identifier">>}
-                            , {<<"not_found">>, <<"The number could not be found">>}
+    Msg = kz_json:from_list([{<<"message">>, <<"bad identifier">>}
+                            ,{<<"not_found">>, <<"The number could not be found">>}
                             ]),
     cb_context:add_system_error('bad_identifier', Msg, Context).
 
@@ -876,7 +921,7 @@ reply_number_not_found(Context) ->
 %% @end
 %%--------------------------------------------------------------------
 -type process_result() :: {kz_services:services(), kz_json:object()}.
--spec collection_process(cb_context:context(), ne_binary()) -> process_result().
+-spec collection_process(cb_context:context(), ne_binary()) -> {ne_binary(), kz_services:services(), kz_json:object()}.
 collection_process(Context, Action) ->
     ReqData = cb_context:req_data(Context),
     Numbers = kz_json:get_value(<<"numbers">>, ReqData),
@@ -887,45 +932,43 @@ collection_process(Context, Action) ->
 
 -spec collection_process(cb_context:context(), ne_binary(), ne_binaries()) -> process_result().
 collection_process(Context, Action, Numbers) ->
-    lists:foldl(
-      fun
-          ({Number, {'ok', KNMNumber}}, {ServicesAcc, JObjAcc}) ->
-              JObj = knm_number:to_public_json(KNMNumber),
-              {ServicesAcc
-              ,kz_json:set_value([<<"success">>, Number], JObj, JObjAcc)
-              };
-          ({Number, {'dry_run', Services, ActivationCharges}}, {ServicesAcc, JObjAcc}) ->
-              {[Services | ServicesAcc]
-              ,kz_json:set_value([<<"charges">>, Number], ActivationCharges, JObjAcc)
-              };
-          ({Number, {'error', KNMError}}, {ServicesAcc, JObjAcc}) ->
-              {ServicesAcc
-              ,kz_json:set_value([<<"error">>, Number], KNMError, JObjAcc)
-              }
-      end
-      ,{[], kz_json:new()}
-      ,numbers_action(Context, Action, Numbers)
-     ).
+    lists:foldl(fun ({Number, {'ok', KNMNumber}}, {ServicesAcc, JObjAcc}) ->
+                        JObj = knm_number:to_public_json(KNMNumber),
+                        {ServicesAcc
+                        ,kz_json:set_value([<<"success">>, Number], JObj, JObjAcc)
+                        };
+                    ({Number, {'dry_run', Services, ActivationCharges}}, {ServicesAcc, JObjAcc}) ->
+                        {[Services | ServicesAcc]
+                        ,kz_json:set_value([<<"charges">>, Number], ActivationCharges, JObjAcc)
+                        };
+                    ({Number, {'error', KNMError}}, {ServicesAcc, JObjAcc}) ->
+                        {ServicesAcc
+                        ,kz_json:set_value([<<"error">>, Number], KNMError, JObjAcc)
+                        }
+                end
+               ,{[], kz_json:new()}
+               ,numbers_action(Context, Action, Numbers)
+               ).
 
 %% @private
 -spec numbers_action(cb_context:context(), ne_binary(), ne_binaries()) ->
-                            knm_number_return().
+                            knm_numbers:numbers_return().
 numbers_action(Context, ?ACTIVATE, Numbers) ->
     Options = [{'auth_by', cb_context:auth_account_id(Context)}
-               ,{'dry_run', not cb_context:accepting_charges(Context)}
-               ,{'public_fields', cb_context:req_data(Context)}
+              ,{'dry_run', not cb_context:accepting_charges(Context)}
+              ,{'public_fields', cb_context:req_data(Context)}
               ],
     knm_numbers:move(Numbers, cb_context:account_id(Context), Options);
 numbers_action(Context, ?HTTP_PUT, Numbers) ->
     Options = [{'assign_to', cb_context:account_id(Context)}
-               ,{'auth_by', cb_context:auth_account_id(Context)}
-               ,{'dry_run', not cb_context:accepting_charges(Context)}
-               ,{'public_fields', cb_context:req_data(Context)}
+              ,{'auth_by', cb_context:auth_account_id(Context)}
+              ,{'dry_run', not cb_context:accepting_charges(Context)}
+              ,{'public_fields', cb_context:req_data(Context)}
               ],
     knm_numbers:create(Numbers, Options);
 numbers_action(Context, ?HTTP_POST, Numbers) ->
     Options = [{'assign_to', cb_context:account_id(Context)}
-               ,{'auth_by', cb_context:auth_account_id(Context)}
+              ,{'auth_by', cb_context:auth_account_id(Context)}
               ],
     Routines = [{fun knm_phone_number:update_doc/2, cb_context:req_data(Context)}
                ],
@@ -933,12 +976,26 @@ numbers_action(Context, ?HTTP_POST, Numbers) ->
 numbers_action(Context, ?HTTP_DELETE, Numbers) ->
     Options = [{'auth_by', cb_context:auth_account_id(Context)}
               ],
-    knm_numbers:release(Numbers, Options).
+    Releaser = pick_release_or_delete(Context, Options),
+    knm_numbers:Releaser(Numbers, Options).
 
 -spec fold_dry_runs([kz_services:services(), ...]) -> kz_json:object().
 fold_dry_runs(ServicesList) ->
-    F = fun (Services, _Acc) -> kz_services:dry_run(Services) end,
+    F = fun(Services, _Acc) -> kz_services:dry_run(Services) end,
     lists:foldl(F, [], ServicesList).
+
+%% @private
+-spec pick_release_or_delete(cb_context:context(), knm_number_options:options()) -> 'release' | 'delete'.
+pick_release_or_delete(Context, Options) ->
+    AuthBy = knm_number_options:auth_by(Options),
+    Pick = case kz_util:is_true(cb_context:req_param(Context, <<"hard">>, 'false'))
+               andalso kz_util:is_system_admin(AuthBy)
+           of
+               'false' -> 'release';
+               'true' -> 'delete'
+           end,
+    lager:debug("picked ~s", [Pick]),
+    Pick.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -952,8 +1009,8 @@ has_tokens(Context) -> has_tokens(Context, 1).
 has_tokens(Context, Count) ->
     Name = <<(cb_context:account_id(Context))/binary, "/", ?PHONE_NUMBERS_CONFIG_CAT/binary>>,
     case kz_buckets:consume_tokens(?APP_NAME
-                                   ,Name
-                                   ,cb_modules_util:token_cost(Context, Count)
+                                  ,Name
+                                  ,cb_modules_util:token_cost(Context, Count)
                                   )
     of
         'true' -> 'true';

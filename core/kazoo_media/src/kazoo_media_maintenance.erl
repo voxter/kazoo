@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2014, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -8,23 +8,23 @@
 -module(kazoo_media_maintenance).
 
 -export([remove_empty_media_docs/1
-         ,migrate/0, migrate_prompts/0
-         ,import_prompts/1, import_prompts/2
-         ,import_prompt/1, import_prompt/2
-         ,set_account_language/2
-         ,refresh/0
-         ,fix_media_names/0
+        ,migrate/0, migrate_prompts/0
+        ,import_prompts/1, import_prompts/2
+        ,import_prompt/1, import_prompt/2
+        ,set_account_language/2
+        ,refresh/0
+        ,fix_media_names/0
         ]).
 
 -include("kazoo_media.hrl").
 
 -spec migrate() -> 'no_return'.
 migrate() ->
-    io:format("migrating relevant settings from system_config/callflow to system_config/~s~n", [?WHM_CONFIG_CAT]),
+    io:format("migrating relevant settings from system_config/callflow to system_config/~s~n", [?CONFIG_CAT]),
 
     maybe_migrate_system_config(<<"callflow">>),
 
-    io:format("migrating relevant settings from system_config/media_mgr to system_config/~s~n", [?WHM_CONFIG_CAT]),
+    io:format("migrating relevant settings from system_config/media_mgr to system_config/~s~n", [?CONFIG_CAT]),
     maybe_migrate_system_config(<<"media_mgr">>, 'true'),
 
     'no_return'.
@@ -40,14 +40,14 @@ set_account_language(Account, Language) ->
     OldLang = kz_media_util:prompt_language(AccountId),
 
     try kapps_account_config:set(AccountId
-                                  ,?WHM_CONFIG_CAT
-                                  ,?PROMPT_LANGUAGE_KEY
-                                  ,kz_util:to_lower_binary(Language)
-                                 )
+                                ,?CONFIG_CAT
+                                ,?PROMPT_LANGUAGE_KEY
+                                ,kz_util:to_lower_binary(Language)
+                                )
     of
         _Config ->
             io:format("successfully updated account ~s's language from '~s' to '~s'~n"
-                      ,[AccountId, OldLang, Language]
+                     ,[AccountId, OldLang, Language]
                      )
     catch
         _E:_R -> 'ok'
@@ -85,10 +85,10 @@ import_files(Path, Lang, Files) ->
 -spec import_prompts_from_files([file:filename()], ne_binary()) ->
                                        [{file:filename(), {'error', _}}].
 import_prompts_from_files(Files, Lang) ->
-     [{F, Err}
-      || F <- Files,
-         (Err = (catch import_prompt(F, Lang))) =/= 'ok'
-     ].
+    [{F, Err}
+     || F <- Files,
+        (Err = (catch import_prompt(F, Lang))) =/= 'ok'
+    ].
 
 -spec import_prompt(file:filename()) -> 'ok' | {'error', any()}.
 -spec import_prompt(file:filename(), text()) -> 'ok' | {'error', any()}.
@@ -104,9 +104,9 @@ import_prompt(Path, Lang) ->
         {'ok', Contents} ->
             io:format("importing prompt '~s' with language '~s'~n", [Path, Lang]),
             import_prompt(Path, Lang, Contents);
-        {'error', E} ->
+        {'error', E}=Error ->
             io:format("failed to open path '~s' for importing: ~p~n", [Path, E]),
-            {'error', E}
+            Error
     end.
 
 import_prompt(Path0, Lang0, Contents) ->
@@ -129,34 +129,34 @@ import_prompt(Path0, Lang0, Contents) ->
 
     MetaJObj = kz_json:from_list(
                  [{<<"_id">>, ID}
-                  ,{<<"name">>, ID}
-                  ,{<<"prompt_id">>, PromptName}
-                  ,{<<"description">>, <<"System prompt in ", Lang/binary, " for ", PromptName/binary>>}
-                  ,{<<"content_length">>, ContentLength}
-                  ,{<<"language">>, kz_util:to_lower_binary(Lang)}
-                  ,{<<"content_type">>, ContentType}
-                  ,{<<"source_type">>, ?MODULE}
-                  ,{<<"streamable">>, 'true'}
-                  ,{<<"pvt_type">>, <<"media">>}
-                  ,{<<"pvt_created">>, Now}
-                  ,{<<"pvt_modified">>, Now}
-                  ,{<<"pvt_account_db">>, ?KZ_MEDIA_DB}
+                 ,{<<"name">>, ID}
+                 ,{<<"prompt_id">>, PromptName}
+                 ,{<<"description">>, <<"System prompt in ", Lang/binary, " for ", PromptName/binary>>}
+                 ,{<<"content_length">>, ContentLength}
+                 ,{<<"language">>, kz_util:to_lower_binary(Lang)}
+                 ,{<<"content_type">>, ContentType}
+                 ,{<<"source_type">>, ?MODULE}
+                 ,{<<"streamable">>, 'true'}
+                 ,{<<"pvt_type">>, <<"media">>}
+                 ,{<<"pvt_created">>, Now}
+                 ,{<<"pvt_modified">>, Now}
+                 ,{<<"pvt_account_db">>, ?KZ_MEDIA_DB}
                  ]),
 
     case kz_datamgr:ensure_saved(?KZ_MEDIA_DB, MetaJObj) of
         {'ok', MetaJObj1} ->
             io:format("  saved metadata about '~s'~n", [Path]),
             upload_prompt(ID
-                          ,<<PromptName/binary, (kz_util:to_binary(Extension))/binary>>
-                          ,Contents
-                          ,[{'content_type', kz_util:to_list(ContentType)}
-                            ,{'content_length', ContentLength}
-                            ,{'rev', kz_doc:revision(MetaJObj1)}
-                           ]
+                         ,<<PromptName/binary, (kz_util:to_binary(Extension))/binary>>
+                         ,Contents
+                         ,[{'content_type', kz_util:to_list(ContentType)}
+                          ,{'content_length', ContentLength}
+                          ,{'rev', kz_doc:revision(MetaJObj1)}
+                          ]
                          );
-        {'error', E} ->
+        {'error', E}=Error ->
             io:format("  error saving metadata: ~p~n", [E]),
-            {'error', E}
+            Error
     end.
 
 -spec upload_prompt(ne_binary(), ne_binary(), ne_binary(), kz_proplist()) ->
@@ -190,9 +190,9 @@ maybe_cleanup_metadoc(ID, E) ->
         {'ok', _} ->
             io:format("  removed metadata for ~s~n", [ID]),
             {'error', E};
-        {'error', E1} ->
+        {'error', E1}=Error ->
             io:format("  failed to remove metadata for ~s: ~p~n", [ID, E1]),
-            {'error', E1}
+            Error
     end.
 
 -spec maybe_retry_upload(ne_binary(), ne_binary(), ne_binary(), kz_proplist(), non_neg_integer()) ->
@@ -209,9 +209,9 @@ maybe_retry_upload(ID, AttachmentName, Contents, Options, Retries) ->
                 _Attachment ->
                     io:format("  attachment appears to have uploaded successfully!")
             end;
-        {'error', E} ->
+        {'error', E}=Error ->
             io:format("  failed to open the media doc again: ~p~n", [E]),
-            {'error', E}
+            Error
     end.
 
 -spec refresh() -> 'ok'.
@@ -243,8 +243,8 @@ migrate_system_config(ConfigJObj) ->
     {'ok', MediaJObj} = get_media_config_doc(),
 
     UpdatedMediaJObj = kz_json:foldl(fun migrate_system_config_fold/3
-                                     ,MediaJObj
-                                     ,ConfigJObj
+                                    ,MediaJObj
+                                    ,ConfigJObj
                                     ),
     io:format("saving updated media config~n", []),
     {'ok', _} = kz_datamgr:save_doc(?KZ_CONFIG_DB, UpdatedMediaJObj),
@@ -252,10 +252,10 @@ migrate_system_config(ConfigJObj) ->
 
 -spec get_media_config_doc() -> {'ok', kz_json:object()}.
 get_media_config_doc() ->
-    case kz_datamgr:open_doc(?KZ_CONFIG_DB, ?WHM_CONFIG_CAT) of
+    case kz_datamgr:open_doc(?KZ_CONFIG_DB, ?CONFIG_CAT) of
         {'ok', _MediaJObj}=OK -> OK;
         {'error', 'not_found'} ->
-            {'ok', kz_json:from_list([{<<"_id">>, ?WHM_CONFIG_CAT}])}
+            {'ok', kz_json:from_list([{<<"_id">>, ?CONFIG_CAT}])}
     end.
 
 -spec migrate_system_config_fold(ne_binary(), kz_json:json_term(), kz_json:object()) ->
@@ -375,9 +375,10 @@ fix_media_name(JObj) ->
         {'error', Error} -> lager:info("error renaming media doc from ~s to ~s : ~p", [FromId, ToId, Error])
     end.
 
+-spec fix_media_names() -> any().
 fix_media_names() ->
     {'ok', JObjs} = kz_datamgr:all_docs(?KZ_MEDIA_DB),
     case [ JObj || JObj <- JObjs, filter_media_names(JObj)] of
-        [] -> kapps_config:set(?WHM_CONFIG_CAT, <<"fix_media_names">>, 'false');
+        [] -> kapps_config:set(?CONFIG_CAT, <<"fix_media_names">>, 'false');
         List -> lists:foreach(fun fix_media_name/1, List)
     end.

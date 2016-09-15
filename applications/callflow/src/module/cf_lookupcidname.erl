@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2015, 2600Hz INC
+%%% @copyright (C) 2016, 2600Hz INC
 %%% @doc
 %%% This module looks up the Caller ID Name by matching
 %%% numbers/patters with the provided lists.
@@ -13,6 +13,8 @@
 %%%         implemented by SIPLABS, LLC (Ilya Ashchepkov)
 %%%-------------------------------------------------------------------
 -module(cf_lookupcidname).
+
+-behaviour(gen_cf_action).
 
 -export([handle/2]).
 
@@ -95,7 +97,7 @@ build_keys(<<D:1/binary, Rest/binary>>, Prefix, Acc) ->
 build_keys(<<>>, _, Acc) -> Acc.
 
 -spec match_regexp_in_list(ne_binary(), ne_binary(), ne_binary()) ->
-    'continue' | {'stop', api_binary()}.
+                                  'continue' | {'stop', api_binary()}.
 match_regexp_in_list(AccountDb, Number, ListId) when is_binary(ListId) ->
     case kz_datamgr:get_results(AccountDb
                                ,<<"lists/regexps_in_list">>
@@ -118,7 +120,7 @@ match_regexp_in_lists(_, _, []) ->
     'undefined'.
 
 -spec match_regexp(kz_json:objects(), ne_binary()) ->
-    'continue' | {'stop', api_binary()}.
+                          'continue' | {'stop', api_binary()}.
 match_regexp([Re | Rest], Number) ->
     case re:run(Number, kz_json:get_value(<<"value">>, Re)) of
         'nomatch' -> match_regexp(Rest, Number);

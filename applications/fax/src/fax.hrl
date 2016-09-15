@@ -5,27 +5,26 @@
 -include_lib("kazoo/include/kz_log.hrl").
 -include_lib("kazoo/include/kz_databases.hrl").
 
--define(CONFIG_CAT, <<"fax">>).
-
 -define(APP_NAME, <<"fax">>).
 -define(APP_VERSION, <<"4.0.0">>).
+-define(CONFIG_CAT, ?APP_NAME).
 
 -define(CACHE_NAME, 'fax_cache').
 -define(FAX_WORKER_POOL, 'fax_worker_pool').
 
 -define(FAX_CHANNEL_DESTROY_PROPS, [<<"Ringing-Seconds">>, <<"Billing-Seconds">>
-                                    ,<<"0">>, <<"Duration-Seconds">>
-                                    ,<<"User-Agent">>
-                                    ,<<"Hangup-Code">>, <<"Hangup-Cause">>
-                                    ,{<<"Custom-Channel-Vars">>, [<<"Resource-ID">>, <<"Ecallmgr-Node">>
-                                                                  ,<<"Call-ID">>, <<"Fetch-ID">>
-                                                                 ]}
+                                   ,<<"0">>, <<"Duration-Seconds">>
+                                   ,<<"User-Agent">>
+                                   ,<<"Hangup-Code">>, <<"Hangup-Cause">>
+                                   ,{<<"Custom-Channel-Vars">>, [<<"Resource-ID">>, <<"Ecallmgr-Node">>
+                                                                ,<<"Call-ID">>, <<"Fetch-ID">>
+                                                                ]}
                                    ]).
 
 -record(fax_storage, {
-         id :: api_binary()
-         ,attachment_id :: api_binary()
-         ,db :: api_binary()
+          id :: api_binary()
+                     ,attachment_id :: api_binary()
+                     ,db :: api_binary()
          }).
 -type fax_storage() :: #fax_storage{}.
 
@@ -49,22 +48,25 @@
 
 -define(OPENXML_MIME_PREFIX, "application/vnd.openxmlformats-officedocument.").
 -define(OPENOFFICE_MIME_PREFIX, "application/vnd.oasis.opendocument.").
--define(OPENOFFICE_COMPATIBLE(CT), (
-                                CT =:= <<"application/msword">>
-                                orelse CT =:= <<"application/vnd.ms-excel">>
-                                orelse CT =:= <<"application/vnd.ms-powerpoint">>
-                               )).
+-define(OPENOFFICE_COMPATIBLE(CT)
+       ,(CT =:= <<"application/msword">>
+             orelse CT =:= <<"application/vnd.ms-excel">>
+             orelse CT =:= <<"application/vnd.ms-powerpoint">>
+        )).
 
--define(DEFAULT_ALLOWED_CONTENT_TYPES, [
-                                        <<"application/pdf">>
-                                        ,<<"image/tiff">>
-                                        ,{[{<<"prefix">>, <<"image">>}]}
-                                        ,{[{<<"prefix">>, <<?OPENXML_MIME_PREFIX>>}]}
-                                        ,{[{<<"prefix">>, <<?OPENOFFICE_MIME_PREFIX>>}]}
-                                        ,<<"application/msword">>
-                                        ,<<"application/vnd.ms-excel">>
-                                        ,<<"application/vnd.ms-powerpoint">>
+-define(DEFAULT_ALLOWED_CONTENT_TYPES, [<<"application/pdf">>
+                                       ,<<"image/tiff">>
+                                       ,kz_json:from_list([{<<"prefix">>, <<"image">>}])
+                                       ,kz_json:from_list([{<<"prefix">>, <<?OPENXML_MIME_PREFIX>>}])
+                                       ,kz_json:from_list([{<<"prefix">>, <<?OPENOFFICE_MIME_PREFIX>>}])
+                                       ,<<"application/msword">>
+                                       ,<<"application/vnd.ms-excel">>
+                                       ,<<"application/vnd.ms-powerpoint">>
                                        ]).
+
+-define(DEFAULT_DENIED_CONTENT_TYPES
+       ,[kz_json:from_list([{<<"prefix">>, <<"image/">>}])]
+       ).
 
 -define(SMTP_MSG_MAX_SIZE, kapps_config:get_integer(?CONFIG_CAT, <<"smtp_max_msg_size">>, 10485670)).
 -define(SMTP_EXTENSIONS, [{"SIZE", kz_util:to_list(?SMTP_MSG_MAX_SIZE)}]).

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2015, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% Handle publishing notification events for new port requests
@@ -16,8 +16,7 @@
 -export([has_emergency_services/1]).
 
 -include("knm.hrl").
-
--define(PORT_KEY, <<"port">>).
+-include("knm_port_request.hrl"). %% PORT_KEY
 
 %%--------------------------------------------------------------------
 %% @public
@@ -76,7 +75,7 @@ has_emergency_services(_Number) -> 'false'.
                                 knm_number:knm_number().
 maybe_port_feature(Number) ->
     Doc = knm_phone_number:doc(knm_number:phone_number(Number)),
-    case kz_json:get_ne_value([?PVT_FEATURES, ?PORT_KEY], Doc) of
+    case kz_json:get_ne_value(?PORT_KEY, Doc) of
         'undefined' ->
             knm_services:deactivate_feature(Number, ?PORT_KEY);
         Port ->
@@ -99,7 +98,7 @@ maybe_port_changed(Number, Port, 'false') ->
         'true' -> Number;
         'false' ->
             lager:debug("port information has been changed: ~s"
-                        ,[kz_json:encode(Port)]
+                       ,[kz_json:encode(Port)]
                        ),
             _ = publish_port_update(Number, Port),
             Number
@@ -115,11 +114,11 @@ maybe_port_changed(Number, Port, 'false') ->
 publish_port_update(Number, Port) ->
     PhoneNumber = knm_number:phone_number(Number),
     Notify = [{<<"Account-ID">>,  knm_phone_number:assigned_to(PhoneNumber)}
-              ,{<<"Number-State">>, knm_phone_number:state(PhoneNumber)}
-              ,{<<"Local-Number">>, knm_phone_number:module_name(PhoneNumber) =:= ?CARRIER_LOCAL}
-              ,{<<"Number">>, knm_phone_number:number(PhoneNumber)}
-              ,{<<"Authorized-By">>, knm_phone_number:auth_by(PhoneNumber)}
-              ,{<<"Port">>, Port}
+             ,{<<"Number-State">>, knm_phone_number:state(PhoneNumber)}
+             ,{<<"Local-Number">>, knm_phone_number:module_name(PhoneNumber) =:= ?CARRIER_LOCAL}
+             ,{<<"Number">>, knm_phone_number:number(PhoneNumber)}
+             ,{<<"Authorized-By">>, knm_phone_number:auth_by(PhoneNumber)}
+             ,{<<"Port">>, Port}
               | kz_api:default_headers(?APP_VERSION, ?APP_NAME)
              ],
     kapi_notifications:publish_port_request(Notify).
@@ -133,12 +132,12 @@ publish_port_update(Number, Port) ->
 -spec publish_ported(knm_number:knm_number(), kz_json:object()) -> 'ok'.
 publish_ported(Number, Port) ->
     PhoneNumber = knm_number:phone_number(Number),
-    Notify = [{<<"Account-ID">>,  knm_phone_number:assigned_to(PhoneNumber)}
-              ,{<<"Number-State">>, knm_phone_number:state(PhoneNumber)}
-              ,{<<"Local-Number">>, knm_phone_number:module_name(PhoneNumber) =:= ?CARRIER_LOCAL}
-              ,{<<"Number">>, knm_phone_number:number(PhoneNumber)}
-              ,{<<"Authorized-By">>, knm_phone_number:auth_by(PhoneNumber)}
-              ,{<<"Port">>, Port}
+    Notify = [{<<"Account-ID">>, knm_phone_number:assigned_to(PhoneNumber)}
+             ,{<<"Number-State">>, knm_phone_number:state(PhoneNumber)}
+             ,{<<"Local-Number">>, knm_phone_number:module_name(PhoneNumber) =:= ?CARRIER_LOCAL}
+             ,{<<"Number">>, knm_phone_number:number(PhoneNumber)}
+             ,{<<"Authorized-By">>, knm_phone_number:auth_by(PhoneNumber)}
+             ,{<<"Port">>, Port}
               | kz_api:default_headers(?APP_VERSION, ?APP_NAME)
              ],
     kapi_notifications:publish_ported(Notify).

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2015, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -11,11 +11,11 @@
 
 -export([start_link/3]).
 -export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,terminate/2
-         ,code_change/3
+        ,handle_call/3
+        ,handle_cast/2
+        ,handle_info/2
+        ,terminate/2
+        ,code_change/3
         ]).
 
 -include("ecallmgr.hrl").
@@ -25,15 +25,15 @@
 -type bindings() :: atom() | [atom(),...] | ne_binary() | ne_binaries().
 
 -record(state, {node :: atom()
-                ,bindings :: bindings()
-                ,subclasses :: bindings()
-                ,ip :: inet:ip_address()
-                ,port :: inet:port_number()
-                ,socket :: inet:socket()
-                ,idle_alert = 'infinity' :: kz_timeout()
-                ,switch_url :: api_binary()
-                ,switch_uri :: api_binary()
-                ,switch_info = 'false' :: boolean()
+               ,bindings :: bindings()
+               ,subclasses :: bindings()
+               ,ip :: inet:ip_address()
+               ,port :: inet:port_number()
+               ,socket :: inet:socket()
+               ,idle_alert = 'infinity' :: kz_timeout()
+               ,switch_url :: api_binary()
+               ,switch_uri :: api_binary()
+               ,switch_info = 'false' :: boolean()
                }).
 -type state() :: #state{}.
 
@@ -65,13 +65,13 @@ start_link(Node, Bindings, Subclasses) ->
 %%--------------------------------------------------------------------
 init([Node, Bindings, Subclasses]) ->
     kz_util:put_callid(list_to_binary([kz_util:to_binary(Node)
-                                       ,<<"-eventstream">>
+                                      ,<<"-eventstream">>
                                       ])),
     gen_server:cast(self(), 'request_event_stream'),
     {'ok', #state{node=Node
-                  ,bindings=Bindings
-                  ,subclasses=Subclasses
-                  ,idle_alert=idle_alert_timeout()
+                 ,bindings=Bindings
+                 ,subclasses=Subclasses
+                 ,idle_alert=idle_alert_timeout()
                  }}.
 
 %%--------------------------------------------------------------------
@@ -88,6 +88,7 @@ init([Node, Bindings, Subclasses]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
@@ -101,6 +102,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast('request_event_stream', #state{node=Node}=State) ->
     Bindings = get_event_bindings(State),
     case maybe_bind(Node, Bindings) of
@@ -108,8 +110,8 @@ handle_cast('request_event_stream', #state{node=Node}=State) ->
             {'ok', IPAddress} = inet_parse:address(IP),
             gen_server:cast(self(), 'connect'),
             kz_util:put_callid(list_to_binary([kz_util:to_binary(Node)
-                                               ,$-, kz_util:to_binary(IP)
-                                               ,$:, kz_util:to_binary(Port)
+                                              ,$-, kz_util:to_binary(IP)
+                                              ,$:, kz_util:to_binary(Port)
                                               ])),
             {'noreply', State#state{ip=IPAddress, port=kz_util:to_integer(Port)}};
         {'error', Reason} ->
@@ -119,12 +121,12 @@ handle_cast('request_event_stream', #state{node=Node}=State) ->
 handle_cast('connect', #state{ip=IP, port=Port, idle_alert=Timeout}=State) ->
     PacketType = ecallmgr_config:get_integer(<<"tcp_packet_type">>, 2),
     case gen_tcp:connect(IP, Port, [{'mode', 'binary'}
-                                    ,{'packet', PacketType}
+                                   ,{'packet', PacketType}
                                    ])
     of
         {'ok', Socket} ->
             lager:debug("opened event stream socket to ~p:~p for ~p"
-                        ,[IP, Port, get_event_bindings(State)]),
+                       ,[IP, Port, get_event_bindings(State)]),
             {'noreply', State#state{socket=Socket}, Timeout};
         {'error', Reason} ->
             {'stop', Reason, State}
@@ -146,9 +148,10 @@ handle_cast(_Msg, #state{idle_alert=Timeout}=State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info({'tcp', Socket, Data}, #state{socket=Socket
-                                          ,node=Node
-                                          ,switch_info='false'
+                                         ,node=Node
+                                         ,switch_info='false'
                                          }=State) ->
     try ecallmgr_fs_node:sip_url(Node) of
         'undefined' ->
@@ -158,8 +161,8 @@ handle_info({'tcp', Socket, Data}, #state{socket=Socket
             [_, SwitchURIHost] = binary:split(SwitchURL, <<"@">>),
             SwitchURI = <<"sip:", SwitchURIHost/binary>>,
             handle_info({'tcp', Socket, Data}, State#state{switch_uri=SwitchURI
-                                                           ,switch_url=SwitchURL
-                                                           ,switch_info='true'
+                                                          ,switch_url=SwitchURL
+                                                          ,switch_info='true'
                                                           })
     catch
         _E:_R ->
@@ -167,19 +170,21 @@ handle_info({'tcp', Socket, Data}, #state{socket=Socket
             handle_no_switch({'tcp', Socket, Data}, State)
     end;
 handle_info({'tcp', Socket, Data}, #state{socket=Socket
-                                          ,node=Node
-                                          ,idle_alert=Timeout
-                                          ,switch_uri=SwitchURI
-                                          ,switch_url=SwitchURL
+                                         ,node=Node
+                                         ,idle_alert=Timeout
+                                         ,switch_uri=SwitchURI
+                                         ,switch_url=SwitchURL
                                          }=State) ->
     try binary_to_term(Data) of
-        {'event', [UUID | Props]} when is_binary(UUID) orelse UUID =:= 'undefined' ->
+        {'event', [UUID | Props]} when is_binary(UUID)
+                                       orelse UUID =:= 'undefined' ->
             EventName = props:get_value(<<"Event-Subclass">>, Props, props:get_value(<<"Event-Name">>, Props)),
             EventProps = props:filter_undefined([{<<"Switch-URL">>, SwitchURL}
-                                                 ,{<<"Switch-URI">>, SwitchURI}
-                                                 ,{<<"Switch-Nodename">>, kz_util:to_binary(Node)}
+                                                ,{<<"Switch-URI">>, SwitchURI}
+                                                ,{<<"Switch-Nodename">>, kz_util:to_binary(Node)}
                                                 ]
-                                               ) ++ Props ,
+                                               )
+                ++ Props ,
             _ = kz_util:spawn(fun process_stream/4, [EventName, UUID, EventProps, Node]),
             {'noreply', State, Timeout};
         _Else ->
@@ -193,7 +198,7 @@ handle_info({'tcp', Socket, Data}, #state{socket=Socket
     end;
 handle_info({'tcp_closed', Socket}, #state{socket=Socket, node=Node}=State) ->
     lager:info("event stream for ~p on node ~p closed"
-               ,[get_event_bindings(State), Node]
+              ,[get_event_bindings(State), Node]
               ),
     {'stop', 'normal', State#state{socket='undefined'}};
 handle_info({'tcp_error', Socket, _Reason}, #state{socket=Socket}=State) ->
@@ -233,14 +238,15 @@ handle_no_switch({'tcp', Socket, Data}, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, #state{socket='undefined', node=Node}=State) ->
     lager:debug("event stream for ~p on node ~p terminating: ~p"
-                ,[get_event_bindings(State), Node, _Reason]
+               ,[get_event_bindings(State), Node, _Reason]
                );
 terminate(_Reason, #state{socket=Socket, node=Node}=State) ->
     gen_tcp:close(Socket),
     lager:debug("event stream for ~p on node ~p terminating: ~p"
-                ,[get_event_bindings(State), Node, _Reason]
+               ,[get_event_bindings(State), Node, _Reason]
                ).
 
 %%--------------------------------------------------------------------
@@ -251,6 +257,7 @@ terminate(_Reason, #state{socket=Socket, node=Node}=State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
@@ -273,7 +280,7 @@ get_event_bindings(#state{bindings='undefined'
     ['HEARTBEAT' | Acc];
 get_event_bindings(#state{subclasses=Subclasses}=State, Acc) when is_list(Subclasses) ->
     get_event_bindings(State#state{subclasses='undefined'}
-                       ,[kz_util:to_atom(Subclass, 'true') || Subclass <- Subclasses] ++ Acc
+                      ,[kz_util:to_atom(Subclass, 'true') || Subclass <- Subclasses] ++ Acc
                       );
 get_event_bindings(#state{subclasses=Subclass}=State, Acc)
   when is_atom(Subclass),
@@ -285,7 +292,7 @@ get_event_bindings(#state{subclasses=Subclass}=State, Acc) when is_binary(Subcla
                       );
 get_event_bindings(#state{bindings=Bindings}=State, Acc) when is_list(Bindings) ->
     get_event_bindings(State#state{bindings='undefined'}
-                       ,[kz_util:to_atom(Binding, 'true') || Binding <- Bindings] ++ Acc
+                      ,[kz_util:to_atom(Binding, 'true') || Binding <- Bindings] ++ Acc
                       );
 get_event_bindings(#state{bindings=Binding}=State, Acc)
   when is_atom(Binding),
@@ -293,7 +300,7 @@ get_event_bindings(#state{bindings=Binding}=State, Acc)
     get_event_bindings(State#state{bindings='undefined'}, [Binding | Acc]);
 get_event_bindings(#state{bindings=Binding}=State, Acc) when is_binary(Binding) ->
     get_event_bindings(State#state{bindings='undefined'}
-                       ,[kz_util:to_atom(Binding, 'true') | Acc]
+                      ,[kz_util:to_atom(Binding, 'true') | Acc]
                       ).
 
 -spec maybe_bind(atom(), atoms()) ->
@@ -340,6 +347,22 @@ process_stream(<<"sofia::transferor">> = EventName, UUID, Props, Node) ->
     end,
     maybe_send_event(EventName, UUID, Props, Node),
     process_event(EventName, UUID, Props, Node);
+process_stream(<<"sofia::intercepted">> = EventName, UUID, Props, Node) ->
+    InterceptedBy = props:get_value(<<"intercepted_by">>, Props),
+    case ecallmgr_fs_channel:fetch(UUID, 'record') of
+        {'ok', #channel{interaction_id=InterAction
+                       ,direction=Direction
+                       }
+        } ->
+            lager:debug("sofia::intercepted: channel ~s Intercepted by ~s", [UUID, InterceptedBy]),
+            Vars = [{<<"Application-Logical-Direction">>, Direction}
+                   ,{<<?CALL_INTERACTION_ID>>, InterAction}
+                   ],
+            ecallmgr_fs_command:set(Node, InterceptedBy, Vars);
+        _ -> 'ok'
+    end,
+    maybe_send_event(EventName, UUID, Props, Node),
+    process_event(EventName, UUID, Props, Node);
 process_stream(EventName, UUID, EventProps, Node) ->
     maybe_send_event(EventName, UUID, EventProps, Node),
     process_event(EventName, UUID, EventProps, Node).
@@ -354,13 +377,13 @@ process_event(?CHANNEL_MOVE_RELEASED_EVENT_BIN, _, Props, Node) ->
     UUID = props:get_value(<<"old_node_channel_uuid">>, Props),
     kz_util:put_callid(UUID),
     gproc:send({'p', 'l', ?CHANNEL_MOVE_REG(Node, UUID)}
-               ,?CHANNEL_MOVE_RELEASED_MSG(Node, UUID, Props)
+              ,?CHANNEL_MOVE_RELEASED_MSG(Node, UUID, Props)
               );
 process_event(?CHANNEL_MOVE_COMPLETE_EVENT_BIN, _, Props, Node) ->
     UUID = props:get_value(<<"old_node_channel_uuid">>, Props),
     kz_util:put_callid(UUID),
     gproc:send({'p', 'l', ?CHANNEL_MOVE_REG(Node, UUID)}
-               ,?CHANNEL_MOVE_COMPLETE_MSG(Node, UUID, Props)
+              ,?CHANNEL_MOVE_COMPLETE_MSG(Node, UUID, Props)
               );
 process_event(<<"sofia::register">>, _UUID, Props, Node) ->
     gproc:send({'p', 'l', ?REGISTER_SUCCESS_REG}, ?REGISTER_SUCCESS_MSG(Node, Props));
@@ -368,7 +391,7 @@ process_event(<<"loopback::bowout">>, _UUID, Props, Node) ->
     ResigningUUID = props:get_value(?RESIGNING_UUID, Props),
     kz_util:put_callid(ResigningUUID),
     lager:debug("bowout detected on ~s, transferring to ~s"
-                ,[ResigningUUID, props:get_value(?ACQUIRED_UUID, Props)]
+               ,[ResigningUUID, props:get_value(?ACQUIRED_UUID, Props)]
                ),
     gproc:send({'p', 'l', ?LOOPBACK_BOWOUT_REG(ResigningUUID)}, ?LOOPBACK_BOWOUT_MSG(Node, Props));
 process_event(_, _, _, _) -> 'ok'.
@@ -379,7 +402,7 @@ maybe_send_event(<<"CHANNEL_BRIDGE">>=EventName, UUID, Props, Node) ->
     kz_util:put_callid(UUID),
     BridgeID = props:get_value(<<"variable_bridge_uuid">>, Props),
     DialPlan = props:get_value(<<"Caller-Dialplan">>, Props),
-    Direction = kzd_freeswitch:call_direction(Props),
+    Direction = props:get_value(?GET_CCV(<<"Application-Logical-Direction">>), Props),
     App = props:get_value(<<"variable_current_application">>, Props),
     Destination = props:get_value(<<"Caller-Destination-Number">>, Props),
 
@@ -387,10 +410,21 @@ maybe_send_event(<<"CHANNEL_BRIDGE">>=EventName, UUID, Props, Node) ->
         {'undefined', _, _, _, _} ->
             gproc:send({'p', 'l', ?FS_EVENT_REG_MSG(Node, EventName)}, {'event', [UUID | Props]}),
             maybe_send_call_event(UUID, Props, Node);
-        {BridgeID, <<"inbound">>, <<"inline">>, <<"intercept">>, 'undefined'} ->
-            SwappedProps = ecallmgr_call_events:swap_call_legs(Props),
-            gproc:send({'p', 'l', ?FS_EVENT_REG_MSG(Node, EventName)}, {'event', [BridgeID | SwappedProps]}),
-            maybe_send_call_event(BridgeID, SwappedProps, Node);
+        {BridgeID, <<"outbound">>, <<"inline">>, <<"intercept">>, 'undefined'} ->
+            ALeg = props:get_value(<<"Bridge-A-Unique-ID">>, Props),
+            BLeg = props:get_value(<<"Bridge-B-Unique-ID">>, Props),
+            lager:debug("channel bridge intercept: UUID: ~s, A : ~s, B : ~s", [UUID, ALeg, BLeg]),
+            case ecallmgr_fs_channel:channel_data(Node, BLeg) of
+                {'ok', CData} ->
+                    Data = props:filter_undefined(
+                             [{<<"Event-Subclass">>, props:get_value(<<"Event-Subclass">>, Props)}
+                             ,{<<"Event-Name">>, props:get_value(<<"Event-Name">>, Props)}
+                             ]) ++ CData,
+                    gproc:send({'p', 'l', ?FS_EVENT_REG_MSG(Node, EventName)}, {'event', [BLeg | Data]}),
+                    gproc:send({'p', 'l', ?FS_CALL_EVENT_REG_MSG(Node, BLeg)}, {'event', [BLeg | Data]});
+                _ ->
+                    lager:debug("channel bridge intercept: failed to get channel data for ~s", [BLeg])
+            end;
         _Else ->
             gproc:send({'p', 'l', ?FS_EVENT_REG_MSG(Node, EventName)}, {'event', [UUID | Props]}),
             maybe_send_call_event(UUID, Props, Node)

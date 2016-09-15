@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2014, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -18,9 +18,9 @@
 
 %% Helper macro for declaring children of supervisor
 -define(CHILDREN, [?WORKER('konami_listener')
-                   ,?WORKER('konami_event_listener')
-                   ,?WORKER('konami_init')
-                   ,?SUPER('konami_call_sup')
+                  ,?WORKER('konami_event_listener')
+                  ,?WORKER('konami_init')
+                  ,?SUPER('konami_call_sup')
                   ]).
 
 %% ===================================================================

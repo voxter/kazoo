@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2014, 2600Hz INC
+%%% @copyright (C) 2013-2016, 2600Hz INC
 %%% @doc
 %%% Pickup a call in the specified group
 %%%
@@ -23,6 +23,8 @@
 %%%   James Aimonetti
 %%%-------------------------------------------------------------------
 -module(cf_group_pickup).
+
+-behaviour(gen_cf_action).
 
 -include("callflow.hrl").
 
@@ -60,7 +62,7 @@ maybe_allowed_to_intercept(Data, Call) ->
                 UserId -> maybe_belongs_to_user(UserId, Call)
             end;
         DeviceId ->
-            % Compare approved device_id with calling one
+                                                % Compare approved device_id with calling one
             DeviceId == kapps_call:authorizing_id(Call)
     end.
 
@@ -108,9 +110,9 @@ sort_channels(Channels, MyUUID, MyMediaServer) ->
 sort_channels([], _MyUUID, _MyMediaServer, Acc) -> Acc;
 sort_channels([Channel|Channels], MyUUID, MyMediaServer, Acc) ->
     lager:debug("channel: c: ~s a: ~s n: ~s oleg: ~s", [kz_json:get_value(<<"uuid">>, Channel)
-                                                        ,kz_json:is_true(<<"answered">>, Channel)
-                                                        ,kz_json:get_value(<<"node">>, Channel)
-                                                        ,kz_json:get_value(<<"other_leg">>, Channel)
+                                                       ,kz_json:is_true(<<"answered">>, Channel)
+                                                       ,kz_json:get_value(<<"node">>, Channel)
+                                                       ,kz_json:get_value(<<"other_leg">>, Channel)
                                                        ]),
     case kz_json:is_true(<<"answered">>, Channel) of
         'true' ->
@@ -156,8 +158,8 @@ intercept_call(UUID, Call) ->
 -spec pickup_cmd(ne_binary()) -> kz_proplist().
 pickup_cmd(TargetCallId) ->
     [{<<"Application-Name">>, <<"call_pickup">>}
-     ,{<<"Target-Call-ID">>, TargetCallId}
-     ,{<<"Unbridged-Only">>, 'true'}
+    ,{<<"Target-Call-ID">>, TargetCallId}
+    ,{<<"Unbridged-Only">>, 'true'}
     ].
 
 -spec wait_for_pickup(kapps_call:call()) ->
@@ -189,13 +191,13 @@ pickup_event(Call, _Type, _Evt) ->
 find_channels(DeviceIds) ->
     lager:debug("finding channels for devices ids ~p", [DeviceIds]),
     Req = [{<<"Authorizing-IDs">>, DeviceIds}
-           ,{<<"Active-Only">>, 'false'}
+          ,{<<"Active-Only">>, 'false'}
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     case kapps_util:amqp_pool_collect(Req
-                                       ,fun kapi_call:publish_query_user_channels_req/1
-                                       ,{'ecallmgr', 'true'}
-                                      )
+                                     ,fun kapi_call:publish_query_user_channels_req/1
+                                     ,{'ecallmgr', 'true'}
+                                     )
     of
         {'error', _E} ->
             lager:debug("failed to get channels: ~p", [_E]),

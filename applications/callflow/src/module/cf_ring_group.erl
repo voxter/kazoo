@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -9,6 +9,8 @@
 %%%   SIPLABS LLC (Ilya Ashchepkov)
 %%%-------------------------------------------------------------------
 -module(cf_ring_group).
+
+-behaviour(gen_cf_action).
 
 -include("callflow.hrl").
 -include_lib("kazoo/src/api/kapi_dialplan.hrl").
@@ -61,7 +63,7 @@ repeat(_Data, _Call, _N, 'fail') ->
     'ok'.
 
 -spec attempt_endpoints(kz_json:objects(), kz_json:object(), kapps_call:call()) ->
-    'stop' | 'fail' | 'continue'.
+                               'stop' | 'fail' | 'continue'.
 attempt_endpoints(Endpoints, Data, Call) ->
     FailOnSingleReject = kz_json:get_value(<<"fail_on_single_reject">>, Data, 'undefined'),
     Timeout = kz_json:get_integer_value(<<"timeout">>, Data, ?DEFAULT_TIMEOUT_S),
@@ -70,14 +72,14 @@ attempt_endpoints(Endpoints, Data, Call) ->
     IgnoreForward = kz_json:get_binary_boolean(<<"ignore_forward">>, Data, <<"true">>),
 
     Command = [{<<"Application-Name">>, <<"bridge">>}
-        ,{<<"Endpoints">>, Endpoints}
-        ,{<<"Timeout">>, Timeout}
-        ,{<<"Ignore-Early-Media">>, <<"true">>}
-        ,{<<"Ringback">>, kz_media_util:media_path(Ringback, Call)}
-        ,{<<"Fail-On-Single-Reject">>, FailOnSingleReject}
-        ,{<<"Dial-Endpoint-Method">>, Strategy}
-        ,{<<"Ignore-Forward">>, IgnoreForward}
-    ],
+              ,{<<"Endpoints">>, Endpoints}
+              ,{<<"Timeout">>, Timeout}
+              ,{<<"Ignore-Early-Media">>, <<"true">>}
+              ,{<<"Ringback">>, kz_media_util:media_path(Ringback, Call)}
+              ,{<<"Fail-On-Single-Reject">>, FailOnSingleReject}
+              ,{<<"Dial-Endpoint-Method">>, Strategy}
+              ,{<<"Ignore-Forward">>, IgnoreForward}
+              ],
 
     lager:info("attempting ring group of ~b members with strategy ~s", [length(Endpoints), Strategy]),
     case bridge(Command, Timeout, Call)
@@ -95,15 +97,14 @@ attempt_endpoints(Endpoints, Data, Call) ->
             'continue';
         {'error', _R} ->
             lager:info("error bridging to ring group: ~p"
-                       ,[kz_json:get_value(<<"Error-Message">>, _R)]
+                      ,[kz_json:get_value(<<"Error-Message">>, _R)]
                       ),
             'continue'
     end.
 
 -spec get_endpoints(kz_json:object(), kapps_call:call()) -> kz_json:objects().
 get_endpoints(Data, Call) ->
-    Builders = start_builders(Data, Call),
-    receive_endpoints(Builders).
+    receive_endpoints(start_builders(Data, Call)).
 
 -spec receive_endpoints(pids()) -> kz_json:objects().
 receive_endpoints(Builders) ->
@@ -133,22 +134,29 @@ start_builder(EndpointId, Member, Call) ->
       end
      ).
 
--spec resolve_endpoint_ids(kz_json:object(), kapps_call:call()) -> kz_proplist().
+-type endpoint() :: {ne_binary(), kz_json:object()}.
+-type endpoints() :: [endpoint()].
+
+-type weighted_endpoint() :: {integer(), {ne_binary(), kz_json:object()}}.
+-type weighted_endpoints() :: [weighted_endpoint()].
+
+-spec resolve_endpoint_ids(kz_json:object(), kapps_call:call()) -> endpoints().
 resolve_endpoint_ids(Data, Call) ->
     Members = kz_json:get_value(<<"endpoints">>, Data, []),
     ResolvedEndpoints = resolve_endpoint_ids(Members, [], Data, Call),
+
     FilteredEndpoints = [{Weight, {Id, kz_json:set_value(<<"source">>, ?MODULE, Member)}}
-                         || {Type, Id, Weight, Member} <- ResolvedEndpoints
-                            ,Type =:= <<"device">>
+                         || {Type, Id, Weight, Member} <- ResolvedEndpoints,
+                            Type =:= <<"device">>
                         ],
     Strategy = strategy(Data),
     order_endpoints(Strategy, FilteredEndpoints).
 
--spec order_endpoints(ne_binary(), kz_proplist()) -> kz_proplist().
+-spec order_endpoints(ne_binary(), weighted_endpoints()) -> endpoints().
 order_endpoints(Method, Endpoints)
   when Method =:= ?DIAL_METHOD_SIMUL
        orelse Method =:= ?DIAL_METHOD_SINGLE ->
-    [{Id, Endpoint} || {_, {Id, Endpoint}} <- Endpoints];
+    [{Id, Endpoint} || {_Weight, {Id, Endpoint}} <- Endpoints];
 order_endpoints(<<"weighted_random">>, Endpoints) ->
     weighted_random_sort(Endpoints).
 
@@ -157,8 +165,17 @@ order_endpoints(<<"weighted_random">>, Endpoints) ->
 
 -spec resolve_endpoint_ids(kz_json:objects(), endpoint_intermediates(), kz_json:object(), kapps_call:call()) ->
                                   endpoint_intermediates().
-resolve_endpoint_ids([], EndpointIds, _, _) -> EndpointIds;
-resolve_endpoint_ids([Member|Members], EndpointIds, Data, Call) ->
+resolve_endpoint_ids(Members, EndpointIds, Data, Call) ->
+    lists:foldl(fun(Member, Acc) ->
+                        resolve_endpoint_id(Member, Acc, Data, Call)
+                end
+               ,EndpointIds
+               ,Members
+               ).
+
+-spec resolve_endpoint_id(kz_json:object(), endpoint_intermediates(), kz_json:object(), kapps_call:call()) ->
+                                 endpoint_intermediates().
+resolve_endpoint_id(Member, EndpointIds, Data, Call) ->
     Id = kz_doc:id(Member),
     Type = kz_json:get_value(<<"endpoint_type">>, Member, <<"device">>),
     Weight = group_weight(Member, 20),
@@ -166,19 +183,17 @@ resolve_endpoint_ids([Member|Members], EndpointIds, Data, Call) ->
         orelse lists:keymember(Id, 2, EndpointIds)
         orelse Type
     of
-        'true' ->
-            resolve_endpoint_ids(Members, EndpointIds, Data, Call);
+        'true' -> EndpointIds;
         <<"group">> ->
             lager:info("member ~s is a group, merge the group's members", [Id]),
             GroupMembers = get_group_members(Member, Id, Weight, Data, Call),
             Ids = resolve_endpoint_ids(GroupMembers, EndpointIds, Data, Call),
-            resolve_endpoint_ids(Members, [{Type, Id, 'undefined'}|Ids], Data, Call);
+            [{Type, Id, 'undefined'}|Ids];
         <<"user">> ->
             lager:info("member ~s is a user, get all the user's endpoints", [Id]),
-            Ids = get_user_endpoint_ids(Member, EndpointIds, Id, Weight, Call),
-            resolve_endpoint_ids(Members, Ids, Data, Call);
+            get_user_endpoint_ids(Member, EndpointIds, Id, Weight, Call);
         <<"device">> ->
-            resolve_endpoint_ids(Members, [{Type, Id, Weight, Member}|EndpointIds], Data, Call)
+            [{Type, Id, Weight, Member}|EndpointIds]
     end.
 
 -spec get_user_endpoint_ids(kz_json:object(), endpoint_intermediates(), ne_binary(), group_weight(), kapps_call:call()) ->
@@ -192,8 +207,8 @@ get_user_endpoint_ids(Member, EndpointIds, Id, GroupWeight, Call) ->
                       [{<<"device">>, EndpointId, GroupWeight, Member} | Acc]
               end
       end
-      ,[{<<"user">>, Id, 'undefined'} | EndpointIds]
-      ,kz_attributes:owned_by(Id, <<"device">>, Call)
+               ,[{<<"user">>, Id, 'undefined'} | EndpointIds]
+               ,kz_attributes:owned_by(Id, <<"device">>, Call)
      ).
 
 -spec get_group_members(kz_json:object(), ne_binary(), group_weight(), kz_json:object(), kapps_call:call()) -> kz_json:objects().
@@ -225,8 +240,8 @@ unordered_group_members(Weight, Member, JObj) ->
       fun(Key, Endpoint, Acc) ->
               [create_group_member(Key, Endpoint, Weight, Member) | Acc]
       end
-      ,[]
-      ,Endpoints
+                 ,[]
+                 ,Endpoints
      ).
 
 -spec order_group_members(group_weight(), kz_json:object(), kz_json:object()) -> kz_json:objects().
@@ -237,8 +252,8 @@ order_group_members(GroupWeight, Member, JObj) ->
           fun(Key, Endpoint, Acc) ->
                   order_group_member_fold(Key, Endpoint, Acc, GroupWeight, Member)
           end
-          ,orddict:new()
-          ,Endpoints
+                     ,orddict:new()
+                     ,Endpoints
          ),
     [V || {_, V} <- orddict:to_list(GroupMembers)].
 
@@ -261,38 +276,38 @@ create_group_member(Key, Endpoint, GroupWeight, Member) ->
     DefaultTimeout = kz_json:get_value(<<"timeout">>, Member),
     kz_json:set_values(
       [{<<"endpoint_type">>, kz_json:get_value(<<"type">>, Endpoint)}
-       ,{<<"id">>, Key}
-       ,{<<"delay">>, kz_json:get_integer_value(<<"delay">>, Endpoint, DefaultDelay)}
-       ,{<<"timeout">>, kz_json:get_integer_value(<<"timeout">>, Endpoint, DefaultTimeout)}
-       ,{<<"weight">>, GroupWeight}
+      ,{<<"id">>, Key}
+      ,{<<"delay">>, kz_json:get_integer_value(<<"delay">>, Endpoint, DefaultDelay)}
+      ,{<<"timeout">>, kz_json:get_integer_value(<<"timeout">>, Endpoint, DefaultTimeout)}
+      ,{<<"weight">>, GroupWeight}
       ]
-      ,Member
+                      ,Member
      ).
 
--spec weighted_random_sort(kz_proplist()) -> kz_json:objects().
+-spec weighted_random_sort(weighted_endpoints()) -> endpoints().
 weighted_random_sort(Endpoints) ->
-    _ = random:seed(os:timestamp()),
+    _ = rand:seed('exsplus'),
     WeightSortedEndpoints = lists:sort(Endpoints),
     weighted_random_sort(WeightSortedEndpoints, []).
 
--spec set_intervals_on_weight(kz_proplist(), kz_proplist(), integer()) ->
-                                     kz_proplist().
-set_intervals_on_weight([{Weight, _} =E | Tail], Acc, Sum) ->
+-spec weighted_random_sort(weighted_endpoints(), endpoints()) -> endpoints().
+weighted_random_sort([_ | _] = ListWeight, Acc) ->
+    [{Sum, _} | _] = ListInterval = set_intervals_on_weight(ListWeight, [], 0),
+    Pivot = random_integer(Sum),
+    {_W, {_Id, _Endpoint} = Element} = weighted_random_get_element(ListInterval, Pivot),
+    ListNew = lists:delete(Element, ListWeight),
+    weighted_random_sort(ListNew, [Element | Acc]);
+weighted_random_sort([], Acc) ->
+    Acc.
+
+-spec set_intervals_on_weight(weighted_endpoints(), weighted_endpoints(), integer()) ->
+                                     weighted_endpoints().
+set_intervals_on_weight([{Weight, _}=E | Tail], Acc, Sum) ->
     set_intervals_on_weight(Tail, [{Weight + Sum, E} | Acc], Sum + Weight);
 set_intervals_on_weight([], Acc, _Sum) ->
     Acc.
 
--spec weighted_random_sort(kz_proplist(), kz_proplists()) -> kz_proplists().
-weighted_random_sort([_ | _] = ListWeight, Acc) ->
-    [{Sum, _} | _] = ListInterval = set_intervals_on_weight(ListWeight, [], 0),
-    Pivot = random_integer(Sum),
-    {_, {_, Endpoint} = Element} = weighted_random_get_element(ListInterval, Pivot),
-    ListNew = lists:delete(Element, ListWeight),
-    weighted_random_sort(ListNew, [Endpoint | Acc]);
-weighted_random_sort([], Acc) ->
-    Acc.
-
--spec weighted_random_get_element([{integer(), {integer(), kz_proplist()}},...], integer()) -> {integer(), {integer(), kz_proplist()}}.
+-spec weighted_random_get_element(weighted_endpoints(), integer()) -> weighted_endpoint().
 weighted_random_get_element(List, Pivot) ->
     {_, {Weight, _}} = case [E || E={X, _} <- List, X =< Pivot] of
                            [] -> lists:last(List);
@@ -303,7 +318,7 @@ weighted_random_get_element(List, Pivot) ->
 
 -spec random_integer(integer()) -> integer().
 random_integer(I) ->
-    random:uniform(I).
+    rand:uniform(I).
 
 -spec repeats(kz_json:object()) -> pos_integer().
 repeats(Data) ->

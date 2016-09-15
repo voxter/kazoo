@@ -10,7 +10,7 @@
 
 > GET /v2/accounts/{ACCOUNT_ID}/call_inspector
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/call_inspector
@@ -18,11 +18,11 @@ curl -v -X GET \
 
 #### Fetch
 
-> GET /v2/accounts/{ACCOUNT_ID}/call_inspector/{ID}
+> GET /v2/accounts/{ACCOUNT_ID}/call_inspector/{CALL_ID}
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/call_inspector/{ID}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/call_inspector/{CALL_ID}
 ```
 

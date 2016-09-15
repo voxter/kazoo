@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2015, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -11,9 +11,6 @@
 -export([port_request/1, port_request/2]).
 -export([deregister/1, deregister/2, deregister/3]).
 -export([low_balance/2]).
--export([new_account/2]).
--export([pwd_recovery/2]).
--export([abnormal_hangup/2]).
 -export([first_call/1]).
 -export([first_registration/1]).
 -export([transaction/2, transaction/3]).
@@ -42,7 +39,7 @@ cnam_request(PhoneNumber) ->
 
 cnam_request(PhoneNumber, Account) ->
     Notify = [{<<"Account">>, Account}
-              ,{<<"Phone-Number">>, PhoneNumber}
+             ,{<<"Phone-Number">>, PhoneNumber}
               | kz_api:default_headers(?APP_VERSION, ?APP_NAME)
              ],
     kz_amqp_worker:cast(Notify, fun kapi_notifications:publish_cnam_request/1).
@@ -63,7 +60,7 @@ port_request(PhoneNumber) ->
 
 port_request(PhoneNumber, Account) ->
     Notify = [{<<"Account">>, Account}
-              ,{<<"Phone-Number">>, PhoneNumber}
+             ,{<<"Phone-Number">>, PhoneNumber}
               | kz_api:default_headers(?APP_VERSION, ?APP_NAME)
              ],
     kz_amqp_worker:cast(Notify, fun kapi_notifications:publish_cnam_request/1).
@@ -91,8 +88,8 @@ deregister(LastReg, Endpoint) ->
 
 deregister(LastReg, Endpoint, Account) ->
     Notify = [{<<"Account">>, Account}
-              ,{<<"Endpoint">>, Endpoint}
-              ,{<<"Last-Registration">>, LastReg}
+             ,{<<"Endpoint">>, Endpoint}
+             ,{<<"Last-Registration">>, LastReg}
               | kz_api:default_headers(?APP_VERSION, ?APP_NAME)
              ],
     kz_amqp_worker:cast(Notify, fun kapi_notifications:publish_deregister/1).
@@ -100,25 +97,26 @@ deregister(LastReg, Endpoint, Account) ->
 -spec low_balance(ne_binary(), float() | integer() | ne_binary()) -> 'ok'.
 low_balance(AccountId, Credit) ->
     Req = [{<<"Account-ID">>, AccountId}
-           ,{<<"Current-Balance">>, Credit}
+          ,{<<"Current-Balance">>, Credit}
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     kz_amqp_worker:cast(Req, fun kapi_notifications:publish_low_balance/1).
 
-new_account(_User, _Account) ->
-    'ok'.
+-spec first_call(ne_binary()) -> 'ok'.
+first_call(AccountId) ->
+    Req = [{<<"Account-ID">>, AccountId}
+          ,{<<"Occurrence">>, <<"call">>}
+           | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+          ],
+    kz_amqp_worker:cast(Req, fun kapi_notifications:publish_first_occurrence/1).
 
-pwd_recovery(_User, _Account) ->
-    'ok'.
-
-abnormal_hangup(_CDR, _Account) ->
-    'ok'.
-
-first_call(_Account) ->
-    'ok'.
-
-first_registration(_Account) ->
-    'ok'.
+-spec first_registration(ne_binary()) -> 'ok'.
+first_registration(AccountId) ->
+    Req = [{<<"Account-ID">>, AccountId}
+          ,{<<"Occurrence">>, <<"registration">>}
+           | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+          ],
+    kz_amqp_worker:cast(Req, fun kapi_notifications:publish_first_occurrence/1).
 
 -spec transaction(ne_binary(), kz_json:object()) -> 'ok'.
 -spec transaction(ne_binary(), kz_json:object(), api_object()) -> 'ok'.
@@ -129,8 +127,8 @@ transaction(Account, Transaction) ->
 transaction(Account, Transaction, ServicePlan) ->
     Notify = props:filter_undefined(
                [{<<"Account-ID">>, kz_util:format_account_id(Account, 'raw')}
-                ,{<<"Transaction">>, Transaction}
-                ,{<<"Service-Plan">>, ServicePlan}
+               ,{<<"Transaction">>, Transaction}
+               ,{<<"Service-Plan">>, ServicePlan}
                 | kz_api:default_headers(?APP_VERSION, ?APP_NAME)
                ]),
     kz_amqp_worker:cast(Notify, fun kapi_notifications:publish_transaction/1).
@@ -147,7 +145,7 @@ system_alert(Subject, Msg, Headers)
     system_alert(kz_util:to_binary(Subject), kz_util:to_binary(Msg), Headers);
 system_alert(Subject, Msg, Headers) ->
     Notify= [{<<"Message">>, Msg}
-             ,{<<"Subject">>, <<"KAZOO: ", Subject/binary>>}
+            ,{<<"Subject">>, <<"KAZOO: ", Subject/binary>>}
              | Headers ++ kz_api:default_headers(?APP_VERSION, ?APP_NAME)
             ],
     kz_amqp_worker:cast(Notify, fun kapi_notifications:publish_system_alert/1).
@@ -169,8 +167,8 @@ detailed_alert(Subject, Msg, Props, Headers)
     detailed_alert(kz_util:to_binary(Subject), kz_util:to_binary(Msg), Props, Headers);
 detailed_alert(Subject, Msg, Props, Headers) ->
     Notify = [{<<"Message">>, Msg}
-              ,{<<"Subject">>, <<"KAZOO: ", Subject/binary>>}
-              ,{<<"Details">>, kz_json:from_list(Props)}
+             ,{<<"Subject">>, <<"KAZOO: ", Subject/binary>>}
+             ,{<<"Details">>, kz_json:from_list(Props)}
               | Headers ++ kz_api:default_headers(?APP_VERSION, ?APP_NAME)
              ],
     kz_amqp_worker:cast(Notify, fun kapi_notifications:publish_system_alert/1).
@@ -183,7 +181,7 @@ detailed_alert(Subject, Format, Args, Props, Headers) ->
 -spec generic_alert(atom() | string() | binary(), atom() | string() | binary()) -> 'ok'.
 generic_alert(Subject, Msg) ->
     Notify= [{<<"Message">>, kz_util:to_binary(Msg)}
-             ,{<<"Subject">>, <<"KAZOO: ", (kz_util:to_binary(Subject))/binary>>}
+            ,{<<"Subject">>, <<"KAZOO: ", (kz_util:to_binary(Subject))/binary>>}
              | kz_api:default_headers(?APP_VERSION, ?APP_NAME)
             ],
     kz_amqp_worker:cast(Notify, fun kapi_notifications:publish_system_alert/1).

@@ -1,0 +1,20 @@
+{
+    "$schema": "http://json-schema.org/draft-03/schema#",
+    "_id": "system_config.milliwatt",
+    "description": "Schema for milliwatt system_config",
+    "properties": {
+        "echo": {
+            "description": "milliwatt echo"
+        },
+        "route_win_timeout": {
+            "default": 3000,
+            "description": "milliwatt route win timeout",
+            "type": "integer"
+        },
+        "tone": {
+            "description": "milliwatt tone"
+        }
+    },
+    "required": true,
+    "type": "object"
+}

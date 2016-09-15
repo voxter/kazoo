@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2012, VoIP INC
+%%% @copyright (C) 2011-2016, 2600Hz
 %%% @doc
 %%% Provision template module
 %%%
@@ -21,18 +21,18 @@
 -module(cb_global_provisioner_templates).
 
 -export([init/0
-         ,content_types_provided/3, content_types_accepted/3
-         ,allowed_methods/0, allowed_methods/1, allowed_methods/2
-         ,resource_exists/0, resource_exists/1, resource_exists/2
-         ,validate/1, validate/2, validate/3
-         ,put/1
-         ,post/2
-         ,delete/2
-         ,put/3
-         ,post/3
-         ,delete/3
+        ,content_types_provided/3, content_types_accepted/3
+        ,allowed_methods/0, allowed_methods/1, allowed_methods/2
+        ,resource_exists/0, resource_exists/1, resource_exists/2
+        ,validate/1, validate/2, validate/3
+        ,put/1
+        ,post/2
+        ,delete/2
+        ,put/3
+        ,post/3
+        ,delete/3
 
-         ,acceptable_content_types/0
+        ,acceptable_content_types/0
         ]).
 
 -include("crossbar.hrl").
@@ -42,7 +42,7 @@
 -define(IMAGE_REQ, <<"image">>).
 -define(TEMPLATE_ATTCH, <<"template">>).
 -define(MIME_TYPES, [{<<"image">>, <<"*">>}
-                     ,{<<"application">>, <<"octet-stream">>}
+                    ,{<<"application">>, <<"octet-stream">>}
                      | ?BASE64_CONTENT_TYPES
                     ]).
 
@@ -72,7 +72,7 @@ acceptable_content_types() -> ?MIME_TYPES.
 -spec content_types_provided(cb_context:context(), path_token(), path_token()) ->
                                     cb_context:context().
 -spec content_types_provided_for_provisioner(cb_context:context(), path_token(), path_token(), http_method()) ->
-                                    cb_context:context().
+                                                    cb_context:context().
 content_types_provided(Context, PT1, PT2) ->
     content_types_provided_for_provisioner(Context, PT1, PT2, cb_context:req_verb(Context)).
 
@@ -124,9 +124,9 @@ content_types_accepted(Context, _, ?IMAGE_REQ, _) ->
 -spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
-allowed_methods(_) ->
+allowed_methods(_TemplateId) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE].
-allowed_methods(_, ?IMAGE_REQ) ->
+allowed_methods(_TemplateId, ?IMAGE_REQ) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE].
 
 %%--------------------------------------------------------------------
@@ -279,19 +279,15 @@ upload_template_image(Context) ->
 upload_template_image(Context, []) ->
     Msg = kz_json:from_list([{<<"message">>, <<"Please provide an image file">>}]),
     cb_context:add_validation_error(<<"file">>
-                                    ,<<"required">>
-                                    ,Msg
-                                    ,Context
+                                   ,<<"required">>
+                                   ,Msg
+                                   ,Context
                                    );
 upload_template_image(Context, [{_, _}]) ->
     crossbar_util:response(kz_json:new(), Context);
 upload_template_image(Context, [_|_]) ->
     Msg = kz_json:from_list([{<<"message">>, <<"Please provide a single image file">>}]),
-    cb_context:add_validation_error(<<"file">>
-                                    ,<<"maxItems">>
-                                    ,Msg
-                                    ,Context
-                                   ).
+    cb_context:add_validation_error(<<"file">>, <<"maxItems">>, Msg, Context).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -359,8 +355,8 @@ update_provisioner_template(DocId, Context) ->
 -spec on_successful_validation(api_binary(), cb_context:context()) -> cb_context:context().
 on_successful_validation('undefined', Context) ->
     C = cb_context:set_doc(Context, kz_json:set_values([{<<"pvt_type">>, <<"provisioner_template">>}
-                                                        ,{<<"pvt_provider">>, <<"provisioner.net">>}
-                                                        ,{<<"pvt_provisioner_type">>, <<"global">>}
+                                                       ,{<<"pvt_provider">>, <<"provisioner.net">>}
+                                                       ,{<<"pvt_provisioner_type">>, <<"global">>}
                                                        ], cb_context:doc(Context))),
     provisioner_util:get_provision_defaults(C);
 on_successful_validation(DocId, Context) ->

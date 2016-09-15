@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2013, 2600Hz
+%%% @copyright (C) 2010-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -21,9 +21,9 @@
 -define(SERVER, ?MODULE).
 
 -define(CHILDREN, [?WORKER('camper_init')
-                   ,?WORKER('camper_onnet_handler')
-                   ,?SUPER('camper_offnet_sup')
-                   ,?WORKER('camper_request_listener')
+                  ,?WORKER('camper_onnet_handler')
+                  ,?SUPER('camper_offnet_sup')
+                  ,?WORKER('camper_request_listener')
                   ]).
 
 %%%===================================================================

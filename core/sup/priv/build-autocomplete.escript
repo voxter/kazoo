@@ -12,7 +12,7 @@
 %% as these are automatically added anyway.
 -define(REQUIRED_MODULES, ["crossbar_bindings"
                           ,"ecallmgr_config"
-                          ,"notify_account_crawler"
+                          ,"ananke_account_crawler"
                           ,"kapps_account_config"
                           ,"kapps_config"
                           ,"kapps_controller"
@@ -63,9 +63,9 @@ dump(CompFile) ->
     'ok' = file:write(Dev, case_sup()),
 
     lists:foreach(
-     fun (M) ->
-             'ok' = file:write(Dev, case_prev(M))
-     end, get('modules')),
+      fun (M) ->
+              'ok' = file:write(Dev, case_prev(M))
+      end, get('modules')),
     'ok' = file:write(Dev,  "\n"
                       "        *) args ;;\n"
                       "    esac\n"

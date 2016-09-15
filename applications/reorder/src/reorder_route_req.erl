@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2012, VoIP INC
+%%% @copyright (C) 2011-2016, 2600Hz
 %%% @doc
 %%% handler for route requests, responds if reorder match
 %%% @end
@@ -12,7 +12,7 @@
 
 -export([handle_req/2]).
 
--spec handle_req/2 :: (kz_json:object(), kz_proplist()) -> 'ok'.
+-spec handle_req(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_req(JObj, Props) ->
     AccountId = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
     case kz_util:is_empty(AccountId) of
@@ -36,7 +36,7 @@ maybe_known_number(ControllerQ, JObj) ->
 -spec get_dest_number(kz_json:object()) -> ne_binary().
 get_dest_number(JObj) ->
     {User, _} = kapps_util:get_destination(JObj, ?APP_NAME, <<"inbound_user_field">>),
-    case kapps_config:get_is_true(<<"reorder">>, <<"assume_inbound_e164">>) of
+    case kapps_config:get_is_true(?CONFIG_CAT, <<"assume_inbound_e164">>) of
         'true' ->
             Number = assume_e164(User),
             lager:debug("assuming number is e164, normalizing to ~s", [Number]),
@@ -57,10 +57,10 @@ send_known_number_response(JObj, Q) ->
     ErrorMsg = kapps_config:get_binary(?APP_NAME, <<"known-error-message">>, <<"PEBCAK">>),
     lager:debug("sending known number response: ~s ~s", [ErrorCode, ErrorMsg]),
     Resp = [{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
-            ,{<<"Method">>, <<"error">>}
-            ,{<<"Route-Error-Code">>, ErrorCode}
-            ,{<<"Route-Error-Message">>, ErrorMsg}
-            ,{<<"Defer-Response">>, <<"true">>}
+           ,{<<"Method">>, <<"error">>}
+           ,{<<"Route-Error-Code">>, ErrorCode}
+           ,{<<"Route-Error-Message">>, ErrorMsg}
+           ,{<<"Defer-Response">>, <<"true">>}
             | kz_api:default_headers(Q, ?APP_NAME, ?APP_VERSION)
            ],
     kapi_route:publish_resp(kz_json:get_value(<<"Server-ID">>, JObj), Resp).
@@ -71,10 +71,10 @@ send_unknown_number_response(JObj, Q) ->
     ErrorMsg = kapps_config:get_binary(?APP_NAME, <<"unknown-error-message">>, <<"Nope Nope Nope">>),
     lager:debug("sending unknown number response: ~s ~s", [ErrorCode, ErrorMsg]),
     Resp = [{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
-            ,{<<"Method">>, <<"error">>}
-            ,{<<"Route-Error-Code">>, ErrorCode}
-            ,{<<"Route-Error-Message">>, ErrorMsg}
-            ,{<<"Defer-Response">>, <<"true">>}
+           ,{<<"Method">>, <<"error">>}
+           ,{<<"Route-Error-Code">>, ErrorCode}
+           ,{<<"Route-Error-Message">>, ErrorMsg}
+           ,{<<"Defer-Response">>, <<"true">>}
             | kz_api:default_headers(Q, ?APP_NAME, ?APP_VERSION)
            ],
     kapi_route:publish_resp(kz_json:get_value(<<"Server-ID">>, JObj), Resp).

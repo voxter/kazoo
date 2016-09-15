@@ -1,5 +1,4 @@
 -module(amqp_leader_proc).
-
 -behaviour(gen_server).
 
 -compile({no_auto_import,[node/1]}).
@@ -33,23 +32,23 @@
          code_change/3]).
 
 -record(state, {name                    :: atom()
-                ,leader                 :: sign()
-                ,role                   :: role()
-                ,elected = 0            :: integer()
-                ,restarted = 0          :: integer()
-                ,callback_module        :: atom()
-                ,callback_state         :: any()
-                ,down = []              :: atoms()
-                ,candidates = [node()]  :: atoms()
+               ,leader                 :: sign()
+               ,role                   :: role()
+               ,elected = 0            :: integer()
+               ,restarted = 0          :: integer()
+               ,callback_module        :: atom()
+               ,callback_state         :: any()
+               ,down = []              :: atoms()
+               ,candidates = [node()]  :: atoms()
                }).
 
 -record(sign, {elected                  :: integer()
-               ,restarted               :: integer()
-               ,node = node()           :: atom()
-               ,name                    :: atom()
-               ,sync                    :: any()
-%               ,candidates             :: atoms()
-              }).
+              ,restarted               :: integer()
+              ,node = node()           :: atom()
+              ,name                    :: atom()
+              ,sync                    :: any()
+%              ,candidates             :: atoms()
+             }).
 
 -record(?MODULE, {from, msg}).
 
@@ -73,10 +72,10 @@
 -define(is_leader, State#state.role =:= 'leader').
 -define(from_leader, (State#state.role =/= 'leader')
         andalso
-        (From#sign.node =:= State#state.leader#sign.node
-         andalso From#sign.elected =:= State#state.leader#sign.elected
-         andalso From#sign.restarted =:= State#state.leader#sign.restarted
-        )
+          (From#sign.node =:= State#state.leader#sign.node
+           andalso From#sign.elected =:= State#state.leader#sign.elected
+           andalso From#sign.restarted =:= State#state.leader#sign.restarted
+          )
        ).
 %%%===================================================================
 %%% API functions
@@ -118,7 +117,8 @@ call(Name, Request, Timeout) ->
     gen_server:call(Name, Request, Timeout).
 
 -spec reply({pid(), any()}, any()) -> term().
-reply({Pid, _} = From, Reply) when is_pid(Pid) andalso erlang:node(Pid) =:= node() ->
+reply({Pid, _} = From, Reply) when is_pid(Pid)
+                                   andalso erlang:node(Pid) =:= node() ->
     gen_server:reply(From, Reply);
 reply({From, Tag}, Reply) ->
     send(From, {Tag, Reply}).
@@ -145,6 +145,7 @@ broadcast(Msg, _Nodes, #sign{name = Name} = Sign) ->
 -spec leader_node(sign()) -> atom().
 leader_node(#sign{node = Node}) -> Node.
 
+-spec s(any()) -> {pid(), state()}.
 s(Name) ->
     gen_server:call(Name, s).
 
@@ -300,7 +301,8 @@ handle_info({'leader_call', From, Request}, State) when ?is_leader ->
                ],
     noreply(State, Routines);
 
-handle_info({{Pid, _} = From, Reply}, State) when is_pid(Pid) andalso erlang:node(Pid) =:= node() ->
+handle_info({{Pid, _} = From, Reply}, State) when is_pid(Pid)
+                                                  andalso erlang:node(Pid) =:= node() ->
     gen_server:reply(From, Reply),
     noreply(State, []);
 
@@ -595,7 +597,8 @@ announce_leader(State, {To, #sign{} = From}) ->
 send(Pid, Msg) when is_atom(Pid); node() =:= erlang:node(Pid); node() =:= element(2, Pid) ->
     lager:debug("local message ~p: ~p", [Msg, Pid]),
     Pid ! Msg;
-send({Name, Node}, Msg) when is_atom(Name) andalso is_atom(Node) ->
+send({Name, Node}, Msg) when is_atom(Name)
+                             andalso is_atom(Node) ->
     Route = kapi_leader:route(Name, Node),
     send(Route, Msg);
 send({#state{name = Name}, Node}, Msg) ->

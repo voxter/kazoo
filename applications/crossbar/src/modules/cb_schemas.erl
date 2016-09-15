@@ -9,11 +9,11 @@
 -module(cb_schemas).
 
 -export([init/0
-         ,allowed_methods/0, allowed_methods/1, allowed_methods/2
-         ,resource_exists/0, resource_exists/1, resource_exists/2
-         ,authorize/1
-         ,authenticate/1
-         ,validate/1, validate/2, validate/3
+        ,allowed_methods/0, allowed_methods/1, allowed_methods/2
+        ,resource_exists/0, resource_exists/1, resource_exists/2
+        ,authorize/1
+        ,authenticate/1
+        ,validate/1, validate/2, validate/3
         ]).
 
 -include("crossbar.hrl").
@@ -63,9 +63,9 @@ authenticate_nouns(_) -> 'false'.
 -spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET].
-allowed_methods(_SchemaDoc) ->
+allowed_methods(_SchemaName) ->
     [?HTTP_GET].
-allowed_methods(_SchemaDoc, ?VALIDATION_PATH_TOKEN) ->
+allowed_methods(_SchemaName, ?VALIDATION_PATH_TOKEN) ->
     [?HTTP_PUT].
 
 %%--------------------------------------------------------------------
@@ -135,7 +135,7 @@ summary(Context) ->
     Context1 = crossbar_doc:load_docs(Context, fun normalize_view_results/2),
     cb_context:set_resp_data(
       Context1
-      ,lists:sort(cb_context:resp_data(Context1))
+                            ,lists:sort(cb_context:resp_data(Context1))
      ).
 
 %%--------------------------------------------------------------------

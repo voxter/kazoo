@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2015, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%% Handle failover provisioning
 %%% @end
@@ -72,17 +72,14 @@ has_emergency_services(_Number) -> 'false'.
 %% @end
 %%--------------------------------------------------------------------
 -spec update_failover(knm_number:knm_number()) ->
-                                   knm_number:knm_number().
+                             knm_number:knm_number().
 update_failover(Number) ->
     PhoneNumber = knm_number:phone_number(Number),
     Features = knm_phone_number:features(PhoneNumber),
     CurrentFailover = kz_json:get_ne_value(?FAILOVER_KEY, Features),
-
     Doc = knm_phone_number:doc(PhoneNumber),
-    Failover = kz_json:get_ne_value([?PVT_FEATURES ,?FAILOVER_KEY], Doc),
-
+    Failover = kz_json:get_ne_value(?FAILOVER_KEY, Doc),
     NotChanged = kz_json:are_identical(CurrentFailover, Failover),
-
     case kz_util:is_empty(Failover) of
         'true' ->
             knm_services:deactivate_feature(Number, ?FAILOVER_KEY);

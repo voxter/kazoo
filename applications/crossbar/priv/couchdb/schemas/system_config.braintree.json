@@ -1,0 +1,39 @@
+{
+    "$schema": "http://json-schema.org/draft-03/schema#",
+    "_id": "system_config.braintree",
+    "description": "Schema for braintree system_config",
+    "properties": {
+        "debug": {
+            "default": false,
+            "description": "braintree debug",
+            "type": "boolean"
+        },
+        "default_environment": {
+            "default": [],
+            "description": "braintree default environment",
+            "type": "string"
+        },
+        "default_merchant_id": {
+            "default": [],
+            "description": "braintree default merchant id",
+            "type": "string"
+        },
+        "max_amount": {
+            "default": 200.0,
+            "description": "braintree maximum amount",
+            "type": "number"
+        },
+        "min_amount": {
+            "default": 5.0,
+            "description": "braintree minimum amount",
+            "type": "number"
+        },
+        "should_prorate": {
+            "default": true,
+            "description": "braintree should prorate",
+            "type": "boolean"
+        }
+    },
+    "required": true,
+    "type": "object"
+}

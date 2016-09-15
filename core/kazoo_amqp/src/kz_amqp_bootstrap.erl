@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2015, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%% Karls Hackity Hack....
 %%% We want to block during startup until we have a AMQP connection
@@ -11,16 +11,15 @@
 %%% @contributors
 %%%-------------------------------------------------------------------
 -module(kz_amqp_bootstrap).
-
 -behaviour(gen_server).
 
 -export([start_link/0]).
 -export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,terminate/2
-         ,code_change/3
+        ,handle_call/3
+        ,handle_cast/2
+        ,handle_info/2
+        ,terminate/2
+        ,code_change/3
         ]).
 
 -include("amqp_util.hrl").
@@ -28,6 +27,7 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {}).
+-type state() :: #state{}.
 
 %%%===================================================================
 %%% API
@@ -55,6 +55,7 @@ start_link() ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
+-spec init([]) -> {'ok', state(), timeout()}.
 init([]) ->
     kz_util:put_callid(?LOG_SYSTEM_ID),
     add_zones(get_config()),
@@ -78,6 +79,7 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
@@ -91,6 +93,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast(_Msg, State) ->
     {'noreply', State}.
 
@@ -104,6 +107,7 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info('timeout', State) ->
     _ = kz_amqp_sup:stop_bootstrap(),
     {'noreply', State};
@@ -122,6 +126,7 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     lager:debug("amqp bootstrap terminating: ~p", [_Reason]).
 
@@ -133,6 +138,7 @@ terminate(_Reason, _State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
@@ -196,14 +202,14 @@ import_zone(ZoneName, [{'amqp_uri', URI}|Props], Dict) ->
     case dict:find(ZoneName, Dict) of
         'error' ->
             import_zone(ZoneName, Props, dict:store(ZoneName, [URI], Dict));
-         _ ->
+        _ ->
             import_zone(ZoneName, Props, dict:append(ZoneName, URI, Dict))
     end;
 import_zone(ZoneName, [{'uri', URI}|Props], Dict) ->
     case dict:find(ZoneName, Dict) of
         'error' ->
             import_zone(ZoneName, Props, dict:store(ZoneName, [URI], Dict));
-         _ ->
+        _ ->
             import_zone(ZoneName, Props, dict:append(ZoneName, URI, Dict))
     end;
 import_zone(ZoneName, [_|Props], Dict) -> import_zone(ZoneName, Props, Dict).

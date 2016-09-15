@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2015, 2600Hz, INC
+%%% @copyright (C) 2012-2016, 2600Hz, INC
 %%% @doc
 %%%
 %%% @end
@@ -17,8 +17,8 @@
 -export([init/1]).
 
 -define(CHILDREN, [?SUPER('conf_participant_sup')
-                   ,?WORKER('conference_shared_listener')
-                   ,?WORKER('conference_listener')
+                  ,?WORKER('conference_shared_listener')
+                  ,?WORKER('conference_listener')
                   ]).
 
 %% ===================================================================

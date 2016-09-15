@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2015, 2600Hz, INC
+%%% @copyright (C) 2012-2016, 2600Hz, INC
 %%% @doc
 %%%
 %%% @end
@@ -20,9 +20,9 @@
 -export([init/1]).
 
 -define(CHILDREN, [?SUPER('ecallmgr_fs_pinger_sup')
-                   ,?WORKER('ecallmgr_fs_nodes')
-                   ,?WORKER('ecallmgr_fs_channels')
-                   ,?WORKER('ecallmgr_fs_conferences')
+                  ,?WORKER('ecallmgr_fs_nodes')
+                  ,?WORKER('ecallmgr_fs_channels')
+                  ,?WORKER('ecallmgr_fs_conferences')
                   ]).
 
 %% ===================================================================

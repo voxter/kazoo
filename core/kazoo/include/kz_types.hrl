@@ -20,9 +20,9 @@
 -define(BYTES_T, 1099511627776).
 
 -define(ANY_DIGIT, [<<"1">>, <<"2">>, <<"3">>
-                    ,<<"4">>, <<"5">>, <<"6">>
-                    ,<<"7">>, <<"8">>, <<"9">>
-                    ,<<"*">>, <<"0">>, <<"#">>
+                   ,<<"4">>, <<"5">>, <<"6">>
+                   ,<<"7">>, <<"8">>, <<"9">>
+                   ,<<"*">>, <<"0">>, <<"#">>
                    ]).
 
 -define(DEFAULT_CONTENT_TYPE, <<"application/json">>).
@@ -40,6 +40,8 @@
 
 -type api_terms() :: kz_json:object() | kz_proplist().
 -type api_binary() :: binary() | 'undefined'.
+-type api_ne_binary() :: ne_binary() | 'undefined'.
+-type api_ne_binaries() :: [api_ne_binary()] | 'undefined'.
 -type api_binaries() :: [api_binary()] | 'undefined'.
 -type api_object() :: kz_json:object() | 'undefined'.
 -type api_objects() :: kz_json:objects() | 'undefined'.
@@ -196,7 +198,18 @@
                                       {'stop', any(), State}.
 
 -type handle_event_ret() :: 'ignore' |
-                            {'reply', kz_proplist()}.
+                            {'ignore', any()} |
+                            {'reply', kz_proplist()} |
+                            {'reply', kz_proplist(), any()}.
+
+-type handle_fsm_ret(State) :: {'next_state', atom(), State} |
+                               {'next_state', atom(), State, timeout() | 'hibernate'} |
+                               {'stop', any(), State}.
+
+-type handle_sync_event_ret(State) :: handle_fsm_ret(State) |
+                                      {'reply', any(), atom(), State} |
+                                      {'reply', any(), atom(), State, timeout() | 'hibernate'} |
+                                      {'stop', any(), any(), State}.
 
 -type server_ref() :: atom() |
                       {atom(), atom()} |
@@ -227,22 +240,26 @@
 %% Used by ecallmgr and kapi_dialplan at least
 -define(CALL_EVENTS,
         [<<"CALL_SECURE">>,<<"CALL_UPDATE">>
-         ,<<"CHANNEL_ANSWER">>
-         ,<<"CHANNEL_CREATE">>, <<"CHANNEL_DESTROY">>
-         ,<<"CHANNEL_EXECUTE">>, <<"CHANNEL_EXECUTE_COMPLETE">>,<<"CHANNEL_EXECUTE_ERROR">>
-         ,<<"CHANNEL_FAX_STATUS">>,<<"CHANNEL_INTERCEPTED">>
-         ,<<"CHANNEL_PROGRESS_MEDIA">>,<<"CHANNEL_REPLACED">>
-         ,<<"CHANNEL_TRANSFEREE">>,<<"CHANNEL_TRANSFEROR">>
-         ,<<"CHANNEL_BRIDGE">>, <<"CHANNEL_UNBRIDGE">>
-         ,<<"DETECTED_TONE">>,<<"DTMF">>
-         ,<<"LEG_CREATED">>, <<"LEG_DESTROYED">>
-         ,<<"RECORD_START">>,<<"RECORD_STOP">>
-         ,<<"PLAYBACK_START">>, <<"PLAYBACK_STOP">>
-         ,<<"dialplan">> %% errors are sent with this
+        ,<<"CHANNEL_ANSWER">>
+        ,<<"CHANNEL_CREATE">>, <<"CHANNEL_DESTROY">>
+        ,<<"CHANNEL_EXECUTE">>, <<"CHANNEL_EXECUTE_COMPLETE">>,<<"CHANNEL_EXECUTE_ERROR">>
+        ,<<"CHANNEL_FAX_STATUS">>,<<"CHANNEL_INTERCEPTED">>
+        ,<<"CHANNEL_PROGRESS_MEDIA">>,<<"CHANNEL_REPLACED">>
+        ,<<"CHANNEL_TRANSFEREE">>,<<"CHANNEL_TRANSFEROR">>
+        ,<<"CHANNEL_BRIDGE">>, <<"CHANNEL_UNBRIDGE">>
+        ,<<"DETECTED_TONE">>,<<"DTMF">>
+        ,<<"LEG_CREATED">>, <<"LEG_DESTROYED">>
+        ,<<"RECORD_START">>,<<"RECORD_STOP">>
+        ,<<"PLAYBACK_START">>, <<"PLAYBACK_STOP">>
+        ,<<"dialplan">> %% errors are sent with this
         ]).
 
 -define(CHANNEL_LOOPBACK_HEADER_PREFIX, "Export-Loopback-").
 -define(CALL_INTERACTION_ID, "Call-Interaction-ID").
+-define(CALL_INTERACTION_DEFAULT
+       ,<<(kz_util:to_binary(kz_util:current_tstamp()))/binary
+          ,"-", (kz_util:rand_hex_binary(4))/binary
+        >>).
 
 -type xml_thing() :: xml_el() | xml_text().
 -type xml_things() :: xml_els() | xml_texts().
@@ -314,6 +331,40 @@
         <<(Year):4/binary, (Month):1/binary, "-", (Account)/binary>>  %% FIXME: add missing size
        ).
 
+-define(MATCH_RESOURCE_SELECTORS_RAW(Account),
+        <<(Account):32/binary, "-selectors">>
+       ).
+-define(MATCH_RESOURCE_SELECTORS_UNENCODED(Account),
+        <<"account/", (Account):34/binary, "-selectors">>
+       ).
+-define(MATCH_RESOURCE_SELECTORS_ENCODED(Account),
+        <<"account%2F", (Account):38/binary, "-selectors">>
+       ).
+-define(MATCH_RESOURCE_SELECTORS_encoded(Account),
+        <<"account%2f", (Account):38/binary, "-selectors">>
+       ).
+
+-define(MATCH_RESOURCE_SELECTORS_RAW(A, B, Rest),
+        <<(A):2/binary, (B):2/binary, (Rest):28/binary
+          ,"-selectors"
+        >>
+       ).
+-define(MATCH_RESOURCE_SELECTORS_UNENCODED(A, B, Rest),
+        <<"account/", (A):2/binary, "/", (B):2/binary, "/", (Rest):28/binary
+          ,"-selectors"
+        >>
+       ).
+-define(MATCH_RESOURCE_SELECTORS_ENCODED(A, B, Rest),
+        <<"account%2F", (A):2/binary, "%2F", (B):2/binary, "%2F", (Rest):28/binary
+          ,"-selectors"
+        >>
+       ).
+-define(MATCH_RESOURCE_SELECTORS_encoded(A, B, Rest),
+        <<"account%2f", (A):2/binary, "%2f", (B):2/binary, "%2f", (Rest):28/binary
+          ,"-selectors"
+        >>
+       ).
+
 %% KZ_NODES types
 -record(whapp_info, {startup :: gregorian_seconds()}).
 
@@ -324,25 +375,23 @@
 -type media_servers() :: [media_server()].
 
 -record(kz_node, {node = node() :: atom() | '$1' | '$2' | '_'
-                  ,expires = 0 :: non_neg_integer() | 'undefined' | '$2' | '_'
-                  ,kapps = [] :: kapps_info() | '$1' | '_'
-                  ,media_servers = [] :: media_servers() | '_'
-                  ,last_heartbeat = kz_util:now_ms(kz_util:now()) :: pos_integer() | 'undefined' | '$3' | '_'
-                  ,zone :: atom() | 'undefined' | '$2' | '_'
-                  ,broker :: api_binary() | '_'
-                  ,used_memory = 0 :: non_neg_integer() | '_'
-                  ,processes = 0 :: non_neg_integer() | '_'
-                  ,ports = 0 :: non_neg_integer() | '_'
-                  ,version :: api_binary() | '_'
-                  ,channels = 0 :: non_neg_integer() | '_'
-                  ,registrations = 0 :: non_neg_integer() | '_'
+                 ,expires = 0 :: non_neg_integer() | 'undefined' | '$2' | '_'
+                 ,kapps = [] :: kapps_info() | '$1' | '_'
+                 ,media_servers = [] :: media_servers() | '_'
+                 ,last_heartbeat = kz_util:now_ms() :: pos_integer() | 'undefined' | '$3' | '_'
+                 ,zone :: atom() | 'undefined' | '$2' | '_'
+                 ,broker :: api_binary() | '_'
+                 ,used_memory = 0 :: non_neg_integer() | '_'
+                 ,processes = 0 :: non_neg_integer() | '_'
+                 ,ports = 0 :: non_neg_integer() | '_'
+                 ,version :: api_binary() | '_'
+                 ,channels = 0 :: non_neg_integer() | '_'
+                 ,registrations = 0 :: non_neg_integer() | '_'
                  }).
 
 -type kz_node() :: #kz_node{}.
 -type kz_nodes() :: [kz_node()].
 
--type task_return() :: 'ok' | ne_binary() | kz_csv:row().
--type task_iterator() :: 'init' | 'stop' | {task_return(), any()}.
 
 -define(KAZOO_TYPES_INCLUDED, 'true').
 -endif.

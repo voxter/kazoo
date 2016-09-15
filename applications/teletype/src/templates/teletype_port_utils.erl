@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2015, 2600Hz Inc
+%%% @copyright (C) 2016, 2600Hz Inc
 %%% @doc
 %%%
 %%% @end
@@ -34,8 +34,8 @@ get_attachments(DataJObj, 'false') ->
     Doc = kz_json:get_value(<<"port_request">>, DataJObj),
     lists:foldl(
       fun(Name, Acc) -> get_attachment_fold(Name, Acc, PortReqId, Doc) end
-      ,[]
-      ,kz_doc:attachment_names(Doc)
+               ,[]
+               ,kz_doc:attachment_names(Doc)
      ).
 
 -spec get_attachment_fold(kz_json:key(), attachments(), ne_binary(), kz_json:object()) ->
@@ -76,7 +76,7 @@ get_emails(ReqData, AccountId, 'false') ->
     PortReqEmail = get_port_req_email(ReqData),
 
     case {ResellerEmail, AdminEmails} of
-        {'undefined', 'undefined'} -> [PortReqEmail];
+        {'undefined', 'undefined'} -> PortReqEmail;
         {'undefined', [_|_]} -> AdminEmails ++ PortReqEmail;
         {ResellerEmail, _} -> [ResellerEmail] ++ PortReqEmail
     end.
@@ -89,20 +89,21 @@ find_reseller_port_email(AccountId) ->
             kz_whitelabel:port_email(JObj)
     end.
 
--spec get_port_req_email(kz_json:object()) -> ne_binaries().
+-spec get_port_req_email(kz_json:object()) -> binaries().
 get_port_req_email(ReqData) ->
     Key = [<<"port_request">>, <<"notifications">>, <<"email">>, <<"send_to">>],
     case kz_json:get_value(Key, ReqData) of
         <<_/binary>> =Email -> [Email];
-        [_|_]=Emails -> Emails
+        [_|_]=Emails -> Emails;
+        _ -> []
     end.
 
 -spec fix_port_request_data(kz_json:object()) -> kz_json:object().
 fix_port_request_data(JObj) ->
     Routines = [fun fix_numbers/1
-                ,fun fix_billing/1
-                ,fun fix_comments/1
-                ,fun fix_dates/1
+               ,fun fix_billing/1
+               ,fun fix_comments/1
+               ,fun fix_dates/1
                ],
     lists:foldl(fun(F, J) -> F(J) end, JObj, Routines).
 
@@ -111,8 +112,8 @@ fix_numbers(JObj) ->
     Numbers =
         kz_json:foldl(
           fun fix_number_fold/3
-          ,[]
-          ,kz_json:get_value(<<"numbers">>, JObj, kz_json:new())
+                     ,[]
+                     ,kz_json:get_value(<<"numbers">>, JObj, kz_json:new())
          ),
     kz_json:set_value(<<"numbers">>, Numbers, JObj).
 
@@ -124,8 +125,8 @@ fix_number_fold(Number, _Value, Acc) ->
 fix_billing(JObj) ->
     kz_json:foldl(
       fun fix_billing_fold/3
-      ,kz_json:delete_key(<<"bill">>, JObj)
-      ,kz_json:get_value(<<"bill">>, JObj)
+                 ,kz_json:delete_key(<<"bill">>, JObj)
+                 ,kz_json:get_value(<<"bill">>, JObj)
      ).
 
 -spec fix_billing_fold(kz_json:key(), kz_json:json_term(), kz_json:object()) ->
@@ -149,8 +150,8 @@ fix_comments(JObj) ->
 
             kz_json:set_value(
               <<"comment">>
-              ,kz_json:to_proplist(Comment)
-              ,kz_json:delete_key(<<"comments">>, JObj)
+                             ,kz_json:to_proplist(Comment)
+                             ,kz_json:delete_key(<<"comments">>, JObj)
              )
     end.
 
@@ -158,8 +159,8 @@ fix_comments(JObj) ->
 fix_dates(JObj) ->
     lists:foldl(
       fun fix_date_fold/2
-      ,JObj
-      ,[<<"transfer_date">>, <<"scheduled_date">>]
+               ,JObj
+               ,[<<"transfer_date">>, <<"scheduled_date">>]
      ).
 
 -spec fix_date_fold(kz_json:key(), kz_json:object()) -> kz_json:object().

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2014, 2600Hz
+%%% @copyright (C) 2013-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -11,12 +11,12 @@
 
 -export([start_link/2]).
 -export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,handle_event/2
-         ,terminate/2
-         ,code_change/3
+        ,handle_call/3
+        ,handle_cast/2
+        ,handle_info/2
+        ,handle_event/2
+        ,terminate/2
+        ,code_change/3
         ]).
 
 -include("stepswitch.hrl").
@@ -24,12 +24,13 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {number_props = [] :: knm_number_options:extra_options()
-                ,resource_req :: kapi_offnet_resource:req()
-                ,request_handler :: pid()
-                ,control_queue :: api_binary()
-                ,response_queue :: api_binary()
-                ,queue :: api_binary()
-                ,timeout :: reference()
+               ,resource_req :: kapi_offnet_resource:req()
+               ,request_handler :: pid()
+               ,control_queue :: api_binary()
+               ,response_queue :: api_binary()
+               ,queue :: api_binary()
+               ,timeout :: reference()
+               ,call_id :: api_binary()
                }).
 -type state() :: #state{}.
 
@@ -37,6 +38,18 @@
 -define(QUEUE_NAME, <<>>).
 -define(QUEUE_OPTIONS, []).
 -define(CONSUME_OPTIONS, []).
+
+-define(CALL_BINDING(CallId), {'call', [{'callid', CallId}
+                                       ,{'restrict_to',
+                                         [<<"CHANNEL_DESTROY">>
+                                         ,<<"CHANNEL_REPLACED">>
+                                         ,<<"CHANNEL_TRANSFEROR">>
+                                         ,<<"CHANNEL_EXECUTE_COMPLETE">>
+                                         ,<<"CHANNEL_BRIDGE">>
+                                         ]
+                                        }
+                                       ]
+                              }).
 
 %%%===================================================================
 %%% API
@@ -48,19 +61,14 @@
 -spec start_link(knm_number_options:extra_options(), kapi_offnet_resource:req()) -> startlink_ret().
 start_link(NumberProps, OffnetReq) ->
     CallId = kapi_offnet_resource:call_id(OffnetReq),
-    Bindings = [{'call', [{'callid', CallId}
-                          ,{'restrict_to', [<<"CHANNEL_DESTROY">>
-                                            ,<<"CHANNEL_EXECUTE_COMPLETE">>
-                                            ,<<"CHANNEL_BRIDGE">>
-                                           ]}
-                         ]}
-                ,{'self', []}
+    Bindings = [?CALL_BINDING(CallId)
+               ,{'self', []}
                ],
     gen_listener:start_link(?SERVER, [{'bindings', Bindings}
-                                      ,{'responders', ?RESPONDERS}
-                                      ,{'queue_name', ?QUEUE_NAME}
-                                      ,{'queue_options', ?QUEUE_OPTIONS}
-                                      ,{'consume_options', ?CONSUME_OPTIONS}
+                                     ,{'responders', ?RESPONDERS}
+                                     ,{'queue_name', ?QUEUE_NAME}
+                                     ,{'queue_options', ?QUEUE_OPTIONS}
+                                     ,{'consume_options', ?CONSUME_OPTIONS}
                                      ], [NumberProps, OffnetReq]).
 
 %%%===================================================================
@@ -84,11 +92,12 @@ init([NumberProps, OffnetReq]) ->
         'undefined' -> {'stop', 'normal'};
         ControlQ ->
             {'ok', #state{number_props=NumberProps
-                          ,resource_req=OffnetReq
-                          ,request_handler=self()
-                          ,control_queue=ControlQ
-                          ,response_queue=kz_api:server_id(OffnetReq)
-                          ,timeout=erlang:send_after(120000, self(), 'local_extension_timeout')
+                         ,resource_req=OffnetReq
+                         ,request_handler=self()
+                         ,control_queue=ControlQ
+                         ,response_queue=kz_api:server_id(OffnetReq)
+                         ,timeout=erlang:send_after(120000, self(), 'local_extension_timeout')
+                         ,call_id=kapi_offnet_resource:call_id(OffnetReq)
                          }}
     end.
 
@@ -106,6 +115,7 @@ init([NumberProps, OffnetReq]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     lager:debug("unhandled call: ~p", [_Request]),
     {'reply', {'error', 'not_implemented'}, State}.
@@ -120,6 +130,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast({'kz_amqp_channel', _}, State) ->
     {'noreply', State};
 handle_cast({'gen_listener', {'created_queue', Q}}, State) ->
@@ -141,6 +152,8 @@ handle_cast({'bridged', CallId}, #state{timeout=TimerRef}=State) ->
     lager:debug("channel bridged to ~s, canceling timeout", [CallId]),
     _ = erlang:cancel_timer(TimerRef),
     {'noreply', State#state{timeout='undefined'}};
+handle_cast({'replaced', ReplacedBy}, #state{}=State) ->
+    {'noreply', State#state{call_id=ReplacedBy}};
 handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p~n", [_Msg]),
     {'noreply', State}.
@@ -155,10 +168,11 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info('local_extension_timeout', #state{timeout='undefined'}=State) ->
     {'noreply', State};
 handle_info('local_extension_timeout', #state{response_queue=ResponseQ
-                                              ,resource_req=JObj
+                                             ,resource_req=JObj
                                              }=State) ->
     kapi_offnet_resource:publish_resp(ResponseQ, local_extension_timeout(JObj)),
     {'stop', 'normal', State#state{timeout='undefined'}};
@@ -176,22 +190,45 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 -spec handle_event(kz_json:object(), state()) -> {'reply', []}.
 handle_event(JObj, #state{request_handler=RequestHandler
-                          ,resource_req=Request
+                         ,resource_req=Request
+                         ,call_id=CallId
                          }) ->
-    case kapps_util:get_event_type(JObj) of
-        {<<"error">>, _} ->
+    case get_event_type(JObj) of
+        {<<"error">>, _, _} ->
             <<"bridge">> = kz_json:get_value([<<"Request">>, <<"Application-Name">>], JObj),
             lager:debug("channel execution error while waiting for execute extension: ~s"
-                        ,[kz_util:to_binary(kz_json:encode(JObj))]),
+                       ,[kz_util:to_binary(kz_json:encode(JObj))]),
             gen_listener:cast(RequestHandler, {'local_extension_result', local_extension_error(JObj, Request)});
-        {<<"call_event">>, <<"CHANNEL_DESTROY">>} ->
-            gen_listener:cast(RequestHandler, {'local_extension_result', local_extension_success(Request)});
-        {<<"call_event">>, <<"CHANNEL_EXECUTE_COMPLETE">>} ->
+        {<<"call_event">>, <<"CHANNEL_TRANSFEROR">>, _CallId} ->
+            Transferor = kz_call_event:other_leg_call_id(JObj),
+            gen_listener:cast(RequestHandler, {'replaced', Transferor}),
+            gen_listener:add_binding(RequestHandler, ?CALL_BINDING(Transferor));
+        {<<"call_event">>, <<"CHANNEL_REPLACED">>, _CallId} ->
+            ReplacedBy = kz_call_event:replaced_by(JObj),
+            gen_listener:cast(RequestHandler, {'replaced', ReplacedBy}),
+            gen_listener:add_binding(RequestHandler, ?CALL_BINDING(ReplacedBy));
+        {<<"call_event">>, <<"CHANNEL_DESTROY">>, CallId} ->
+            lager:debug("channel was destroyed while waiting for bridge"),
+            Result = case kz_json:get_value(<<"Disposition">>, JObj)
+                         =:= <<"SUCCESS">>
+                     of
+                         'true' -> local_extension_success(Request);
+                         'false' -> local_extension_failure(JObj, Request)
+                     end,
+            gen_listener:cast(RequestHandler, {'local_extension_result', Result});
+        {<<"call_event">>, <<"CHANNEL_EXECUTE_COMPLETE">>, CallId} ->
             <<"bridge">> = kz_json:get_value(<<"Application-Name">>, JObj),
-            gen_listener:cast(RequestHandler, {'local_extension_result', local_extension_success(Request)});
-        {<<"call_event">>, <<"CHANNEL_BRIDGE">>} ->
-            CallId = kz_json:get_value(<<"Other-Leg-Call-ID">>, JObj),
-            gen_listener:cast(RequestHandler, {'bridged', CallId});
+            lager:debug("channel execute complete for bridge"),
+            Result = case kz_json:get_value(<<"Disposition">>, JObj)
+                         =:= <<"SUCCESS">>
+                     of
+                         'true' -> local_extension_success(Request);
+                         'false' -> local_extension_failure(JObj, Request)
+                     end,
+            gen_listener:cast(RequestHandler, {'local_extension_result', Result});
+        {<<"call_event">>, <<"CHANNEL_BRIDGE">>, CallId} ->
+            OtherLeg = kz_json:get_value(<<"Other-Leg-Call-ID">>, JObj),
+            gen_listener:cast(RequestHandler, {'bridged', OtherLeg});
         _ -> 'ok'
     end,
     {'reply', []}.
@@ -207,6 +244,7 @@ handle_event(JObj, #state{request_handler=RequestHandler
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     lager:debug("listener terminating: ~p", [_Reason]).
 
@@ -218,6 +256,7 @@ terminate(_Reason, _State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
@@ -227,8 +266,8 @@ code_change(_OldVsn, State, _Extra) ->
 
 -spec build_local_extension(state()) -> kz_proplist().
 build_local_extension(#state{number_props=Props
-                             ,resource_req=JObj
-                             ,queue=Q
+                            ,resource_req=JObj
+                            ,queue=Q
                             }) ->
     {CIDNum, CIDName} = local_extension_caller_id(JObj),
     lager:debug("set outbound caller id to ~s '~s'", [CIDNum, CIDName]),
@@ -236,59 +275,60 @@ build_local_extension(#state{number_props=Props
     AccountId = knm_number_options:account_id(Props),
     OriginalAccountId = kz_json:get_value(<<"Account-ID">>, JObj),
     {CEDNum, CEDName} = local_extension_callee_id(JObj, Number),
-
     Realm = get_account_realm(AccountId),
+    FromRealm = get_account_realm(OriginalAccountId),
+    FromURI = <<"sip:", CIDNum/binary, "@", FromRealm/binary>>,
     CCVsOrig = kz_json:get_value(<<"Custom-Channel-Vars">>, JObj, kz_json:new()),
     CCVs = kz_json:set_values(
              [{<<"Ignore-Display-Updates">>, <<"true">>}
-              ,{<<"From-URI">>, bridge_from_uri(Number, JObj)}
-              ,{<<"Account-ID">>, OriginalAccountId}
-              ,{<<"Reseller-ID">>, kz_services:find_reseller_id(OriginalAccountId)}
+             ,{<<"From-URI">>, FromURI}
+             ,{<<"Account-ID">>, OriginalAccountId}
+             ,{<<"Reseller-ID">>, kz_services:find_reseller_id(OriginalAccountId)}
              ],
              CCVsOrig),
 
     CCVUpdates = props:filter_undefined(
                    [{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "Inception">>, <<Number/binary, "@", Realm/binary>>}
-                    ,{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "Account-ID">>, AccountId}
-                    ,{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "Retain-CID">>, kz_json:get_value(<<"Retain-CID">>, CCVsOrig)}
-                    ,{<<"Resource-ID">>, AccountId}
-                    ,{<<"Loopback-Request-URI">>, <<Number/binary, "@", Realm/binary>>}
+                   ,{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "Account-ID">>, AccountId}
+                   ,{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "Retain-CID">>, kz_json:get_value(<<"Retain-CID">>, CCVsOrig)}
+                   ,{<<"Resource-ID">>, AccountId}
+                   ,{<<"Loopback-Request-URI">>, <<Number/binary, "@", Realm/binary>>}
                    ]),
 
     Endpoint = kz_json:from_list(
                  props:filter_undefined(
                    [{<<"Invite-Format">>, <<"loopback">>}
-                    ,{<<"Route">>, Number}
-                    ,{<<"To-DID">>, Number}
-                    ,{<<"To-Realm">>, Realm}
-                    ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVUpdates)}
-                    ,{<<"Outbound-Caller-ID-Name">>, CIDName}
-                    ,{<<"Outbound-Caller-ID-Number">>, CIDNum}
-                    ,{<<"Outbound-Callee-ID-Name">>, CEDName}
-                    ,{<<"Outbound-Callee-ID-Number">>, CEDNum}
-                    ,{<<"Caller-ID-Name">>, CIDName}
-                    ,{<<"Caller-ID-Number">>, CIDNum}
-                    ,{<<"Ignore-Early-Media">>, 'true'}
-                    ,{<<"Enable-T38-Fax">>, 'false'}
-                    ,{<<"Enable-T38-Fax-Request">>, 'false'}
+                   ,{<<"Route">>, Number}
+                   ,{<<"To-DID">>, Number}
+                   ,{<<"To-Realm">>, Realm}
+                   ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVUpdates)}
+                   ,{<<"Outbound-Caller-ID-Name">>, CIDName}
+                   ,{<<"Outbound-Caller-ID-Number">>, CIDNum}
+                   ,{<<"Outbound-Callee-ID-Name">>, CEDName}
+                   ,{<<"Outbound-Callee-ID-Number">>, CEDNum}
+                   ,{<<"Caller-ID-Name">>, CIDName}
+                   ,{<<"Caller-ID-Number">>, CIDNum}
+                   ,{<<"Ignore-Early-Media">>, 'true'}
+                   ,{<<"Enable-T38-Fax">>, 'false'}
+                   ,{<<"Enable-T38-Fax-Request">>, 'false'}
                    ])),
 
     props:filter_undefined(
-                [{<<"Application-Name">>, <<"bridge">>}
-                 ,{<<"Call-ID">>, kz_json:get_value(<<"Call-ID">>, JObj)}
-                 ,{<<"Endpoints">>, [Endpoint]}
-                 ,{<<"Dial-Endpoint-Method">>, <<"single">>}
-                 ,{<<"Custom-Channel-Vars">>, CCVs}
-                 ,{<<"Outbound-Callee-ID-Name">>, CEDName}
-                 ,{<<"Outbound-Callee-ID-Number">>, CEDNum}
-                 ,{<<"Outbound-Caller-ID-Name">>, CIDName}
-                 ,{<<"Outbound-Caller-ID-Number">>, CIDNum}
-                 ,{<<"Caller-ID-Name">>, CIDName}
-                 ,{<<"Caller-ID-Number">>, CIDNum}
-                 ,{<<"Simplify-Loopback">>, <<"false">>}
-                 ,{<<"Loopback-Bowout">>, <<"false">>}
-                 | kz_api:default_headers(Q, <<"call">>, <<"command">>, ?APP_NAME, ?APP_VERSION)
-                ]).
+      [{<<"Application-Name">>, <<"bridge">>}
+      ,{<<"Call-ID">>, kz_json:get_value(<<"Call-ID">>, JObj)}
+      ,{<<"Endpoints">>, [Endpoint]}
+      ,{<<"Dial-Endpoint-Method">>, <<"single">>}
+      ,{<<"Custom-Channel-Vars">>, CCVs}
+      ,{<<"Outbound-Callee-ID-Name">>, CEDName}
+      ,{<<"Outbound-Callee-ID-Number">>, CEDNum}
+      ,{<<"Outbound-Caller-ID-Name">>, CIDName}
+      ,{<<"Outbound-Caller-ID-Number">>, CIDNum}
+      ,{<<"Caller-ID-Name">>, CIDName}
+      ,{<<"Caller-ID-Number">>, CIDNum}
+      ,{<<"Simplify-Loopback">>, <<"false">>}
+      ,{<<"Loopback-Bowout">>, <<"false">>}
+       | kz_api:default_headers(Q, <<"call">>, <<"command">>, ?APP_NAME, ?APP_VERSION)
+      ]).
 
 -spec get_account_realm(ne_binary()) -> ne_binary().
 get_account_realm(AccountId) ->
@@ -300,28 +340,28 @@ get_account_realm(AccountId) ->
 -spec local_extension_caller_id(kz_json:object()) -> {api_binary(), api_binary()}.
 local_extension_caller_id(JObj) ->
     {kz_json:get_first_defined([<<"Outbound-Caller-ID-Number">>
-                                ,<<"Emergency-Caller-ID-Number">>
+                               ,<<"Emergency-Caller-ID-Number">>
                                ], JObj)
-     ,kz_json:get_first_defined([<<"Outbound-Caller-ID-Name">>
-                                 ,<<"Emergency-Caller-ID-Name">>
-                                ], JObj)
+    ,kz_json:get_first_defined([<<"Outbound-Caller-ID-Name">>
+                               ,<<"Emergency-Caller-ID-Name">>
+                               ], JObj)
     }.
 
 -spec local_extension_callee_id(kz_json:object(), ne_binary()) -> {api_binary(), api_binary()}.
 local_extension_callee_id(JObj, Number) ->
     {kz_json:get_value(<<"Outbound-Callee-ID-Number">>, JObj, Number)
-     ,kz_json:get_value(<<"Outbound-Callee-ID-Name">>, JObj, Number)
+    ,kz_json:get_value(<<"Outbound-Callee-ID-Name">>, JObj, Number)
     }.
 
 -spec local_extension_timeout(kz_json:object()) -> kz_proplist().
 local_extension_timeout(Request) ->
     lager:debug("attempt to connect to resources timed out"),
     [{<<"Call-ID">>, kz_json:get_value(<<"Call-ID">>, Request)}
-     ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, Request, <<>>)}
-     ,{<<"Response-Message">>, <<"NORMAL_TEMPORARY_FAILURE">>}
-     ,{<<"Response-Code">>, <<"sip:500">>}
-     ,{<<"Error-Message">>, <<"local extension request timed out">>}
-     ,{<<"To-DID">>, kz_json:get_value(<<"To-DID">>, Request)}
+    ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, Request, <<>>)}
+    ,{<<"Response-Message">>, <<"NORMAL_TEMPORARY_FAILURE">>}
+    ,{<<"Response-Code">>, <<"sip:500">>}
+    ,{<<"Error-Message">>, <<"local extension request timed out">>}
+    ,{<<"To-DID">>, kz_json:get_value(<<"To-DID">>, Request)}
      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
     ].
 
@@ -329,11 +369,11 @@ local_extension_timeout(Request) ->
 local_extension_error(JObj, Request) ->
     lager:debug("error during outbound request: ~s", [kz_util:to_binary(kz_json:encode(JObj))]),
     [{<<"Call-ID">>, kz_json:get_value(<<"Call-ID">>, Request)}
-     ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, Request, <<>>)}
-     ,{<<"Response-Message">>, <<"NORMAL_TEMPORARY_FAILURE">>}
-     ,{<<"Response-Code">>, <<"sip:500">>}
-     ,{<<"Error-Message">>, kz_json:get_value(<<"Error-Message">>, JObj, <<"failed to process request">>)}
-     ,{<<"To-DID">>, kz_json:get_value(<<"To-DID">>, Request)}
+    ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, Request, <<>>)}
+    ,{<<"Response-Message">>, <<"NORMAL_TEMPORARY_FAILURE">>}
+    ,{<<"Response-Code">>, <<"sip:500">>}
+    ,{<<"Error-Message">>, kz_json:get_value(<<"Error-Message">>, JObj, <<"failed to process request">>)}
+    ,{<<"To-DID">>, kz_json:get_value(<<"To-DID">>, Request)}
      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
     ].
 
@@ -341,33 +381,29 @@ local_extension_error(JObj, Request) ->
 local_extension_success(Request) ->
     lager:debug("local extension request successfully completed"),
     [{<<"Call-ID">>, kz_json:get_value(<<"Call-ID">>, Request)}
-     ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, Request, <<>>)}
-     ,{<<"Response-Message">>, <<"SUCCESS">>}
-     ,{<<"Response-Code">>, <<"sip:200">>}
-     ,{<<"Resource-Response">>, kz_json:new()}
+    ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, Request, <<>>)}
+    ,{<<"Response-Message">>, <<"SUCCESS">>}
+    ,{<<"Response-Code">>, <<"sip:200">>}
+    ,{<<"Resource-Response">>, kz_json:new()}
      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
     ].
 
--spec bridge_from_uri(api_binary(), kapi_offnet_resource:req()) ->
-                             api_binary().
-bridge_from_uri(Number, OffnetReq) ->
-    Realm = default_realm(OffnetReq),
+-spec local_extension_failure(kz_json:object(), kapi_offnet_resource:req()) -> kz_proplist().
+local_extension_failure(JObj, OffnetReq) ->
+    lager:debug("resources for outbound request failed: ~s"
+               ,[kz_json:get_value(<<"Disposition">>, JObj)]
+               ),
+    [{<<"Call-ID">>, kapi_offnet_resource:call_id(OffnetReq)}
+    ,{<<"Msg-ID">>, kapi_offnet_resource:msg_id(OffnetReq)}
+    ,{<<"Response-Message">>, kz_json:get_first_defined([<<"Application-Response">>
+                                                        ,<<"Hangup-Cause">>
+                                                        ], JObj)}
+    ,{<<"Response-Code">>, kz_json:get_value(<<"Hangup-Code">>, JObj)}
+    ,{<<"Resource-Response">>, JObj}
+     | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+    ].
 
-    case (kapps_config:get_is_true(?SS_CONFIG_CAT, <<"format_from_uri">>, 'false')
-          orelse kapi_offnet_resource:format_from_uri(OffnetReq)
-         )
-        andalso (is_binary(Number) andalso is_binary(Realm))
-    of
-        'false' -> 'undefined';
-        'true' ->
-            FromURI = <<"sip:", Number/binary, "@", Realm/binary>>,
-            lager:debug("setting bridge from-uri to ~s", [FromURI]),
-            FromURI
-    end.
-
--spec default_realm(kapi_offnet_resource:req()) -> api_binary().
-default_realm(OffnetReq) ->
-    case kapi_offnet_resource:from_uri_realm(OffnetReq) of
-        'undefined' -> kapi_offnet_resource:account_realm(OffnetReq);
-        Realm -> Realm
-    end.
+-spec get_event_type(kz_json:object()) -> {ne_binary(), ne_binary(), ne_binary()}.
+get_event_type(JObj) ->
+    {C, E} = kapps_util:get_event_type(JObj),
+    {C, E, kz_call_event:call_id(JObj)}.

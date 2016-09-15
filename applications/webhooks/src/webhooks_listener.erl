@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2015, 2600Hz
+%%% @copyright (C) 2013-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -11,15 +11,15 @@
 -behaviour(gen_listener).
 
 -export([start_link/0
-         ,handle_config/2
+        ,handle_config/2
         ]).
 -export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,handle_event/2
-         ,terminate/2
-         ,code_change/3
+        ,handle_call/3
+        ,handle_cast/2
+        ,handle_info/2
+        ,handle_event/2
+        ,terminate/2
+        ,code_change/3
         ]).
 
 -include("webhooks.hrl").
@@ -31,15 +31,15 @@
 -type state() :: #state{}.
 
 -define(BINDINGS, [{'conf', [{'action', <<"*">>}
-                             ,{'db', ?KZ_WEBHOOKS_DB}
-                             ,{'type', <<"webhook">>}
-                             ,{'id', <<"*">>}
-                             ,'federate'
+                            ,{'db', ?KZ_WEBHOOKS_DB}
+                            ,{'type', <<"webhook">>}
+                            ,{'id', <<"*">>}
+                            ,'federate'
                             ]}
                   ]).
 
 -define(RESPONDERS, [{{?MODULE, 'handle_config'}
-                      ,[{<<"configuration">>, <<"*">>}]
+                     ,[{<<"configuration">>, <<"*">>}]
                      }
                     ]).
 
@@ -53,10 +53,10 @@
 -spec start_link() -> startlink_ret().
 start_link() ->
     gen_listener:start_link(?SERVER
-                            ,[{'bindings', ?BINDINGS}
-                              ,{'responders', ?RESPONDERS}
-                             ]
-                            ,[]
+                           ,[{'bindings', ?BINDINGS}
+                            ,{'responders', ?RESPONDERS}
+                            ]
+                           ,[]
                            ).
 
 -spec handle_config(kz_json:object(), kz_proplist()) -> 'ok'.
@@ -64,8 +64,8 @@ start_link() ->
 handle_config(JObj, Props) ->
     'true' = kapi_conf:doc_update_v(JObj),
     handle_config(JObj
-                  ,props:get_value('server', Props)
-                  ,kz_api:event_name(JObj)
+                 ,props:get_value('server', Props)
+                 ,kz_api:event_name(JObj)
                  ).
 
 handle_config(JObj, Srv, ?DOC_CREATED) ->
@@ -95,7 +95,7 @@ handle_config(JObj, Srv, ?DOC_DELETED) ->
         Hook ->
             gen_listener:cast(Srv, {'remove_hook', webhooks_util:jobj_to_rec(Hook)}),
             webhooks_disabler:flush_failures(kapi_conf:get_account_id(JObj)
-                                             ,kz_doc:id(JObj)
+                                            ,kz_doc:id(JObj)
                                             )
     end.
 
@@ -127,7 +127,7 @@ find_and_remove_hook(JObj, Srv) ->
 find_hook(JObj) ->
     kz_datamgr:open_cache_doc(?KZ_WEBHOOKS_DB
                              ,kapi_conf:get_id(JObj)
-                            ).
+                             ).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -163,6 +163,7 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
@@ -176,6 +177,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast({'add_hook', #webhook{id=_Id}=Hook}, State) ->
     lager:debug("adding hook ~s", [_Id]),
     ets:insert_new(webhooks_util:table_id(), Hook),
@@ -211,6 +213,7 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info({'ETS-TRANSFER', _TblId, _From, _Data}, State) ->
     lager:info("write access to table '~p' available", [_TblId]),
     Self = self(),
@@ -233,6 +236,7 @@ handle_info(_Info, State) ->
 %% @spec handle_event(JObj, State) -> {reply, Options}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_event(kz_json:object(), kz_proplist()) -> handle_event_ret().
 handle_event(_JObj, _State) ->
     {'reply', []}.
 
@@ -247,6 +251,7 @@ handle_event(_JObj, _State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     lager:debug("listener terminating: ~p", [_Reason]).
 
@@ -258,6 +263,7 @@ terminate(_Reason, _State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
@@ -266,7 +272,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 -spec maybe_add_shared_bindings(webhook()) -> 'ok'.
 maybe_add_shared_bindings(#webhook{hook_event = <<"object">>
-                                   ,account_id=AccountId
+                                  ,account_id=AccountId
                                   }) ->
     lager:debug("adding doc bindings for ~s", [AccountId]),
     webhooks_shared_listener:add_object_bindings(AccountId);
@@ -283,11 +289,11 @@ maybe_remove_shared_bindings(Id) ->
 
 -spec remove_shared_bindings(webhook()) -> 'ok'.
 remove_shared_bindings(#webhook{account_id = AccountId
-                                ,id = Id
+                               ,id = Id
                                }
                       ) ->
     lager:debug("account ~s removed an doc hook, seeing if others exist"
-                ,[AccountId]
+               ,[AccountId]
                ),
     case ets:select(webhooks_util:table_id(), object_account_ms(AccountId, Id)) of
         [] ->
@@ -300,10 +306,10 @@ remove_shared_bindings(#webhook{account_id = AccountId
 -spec object_account_ms(ne_binary(), ne_binary()) -> ets:match_spec().
 object_account_ms(AccountId, Id) ->
     [{#webhook{account_id=AccountId
-               ,hook_event='$1'
-               ,hook_id=Id
-               ,_='_'
+              ,hook_event='$1'
+              ,hook_id=Id
+              ,_='_'
               }
-      ,[{'=:=', '$1', {'const', <<"object">>}}]
-      ,['$_']
+     ,[{'=:=', '$1', {'const', <<"object">>}}]
+     ,['$_']
      }].

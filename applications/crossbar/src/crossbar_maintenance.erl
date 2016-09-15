@@ -9,16 +9,16 @@
 -module(crossbar_maintenance).
 
 -export([migrate/0
-         ,migrate/1
-         ,migrate_accounts_data/0
-         ,migrate_account_data/1
+        ,migrate/1
+        ,migrate_accounts_data/0
+        ,migrate_account_data/1
         ]).
 
 -export([start_module/1]).
 -export([stop_module/1]).
 -export([running_modules/0]).
 -export([refresh/0, refresh/1
-         ,flush/0
+        ,flush/0
         ]).
 -export([find_account_by_number/1]).
 -export([find_account_by_name/1]).
@@ -34,6 +34,7 @@
 -export([migrate_ring_group_callflow/1]).
 
 -export([init_apps/2, init_app/2]).
+-export([init_apps/1, init_app/1]).
 
 -include("crossbar.hrl").
 -include_lib("kazoo/include/kz_system_config.hrl").
@@ -131,11 +132,9 @@ flush() ->
 %%--------------------------------------------------------------------
 -spec start_module(text()) -> 'ok'.
 start_module(Module) ->
-    try crossbar_init:start_mod(Module) of
-        _ -> maybe_autoload_module(kz_util:to_binary(Module))
-    catch
-        _E:_R ->
-            io:format("failed to start ~s: ~s: ~p~n", [Module, _E, _R])
+    case crossbar_init:start_mod(Module) of
+        'ok' -> maybe_autoload_module(kz_util:to_binary(Module));
+        {'error', Error} -> io:format("failed to start ~s: ~p~n", [Module, Error])
     end.
 
 -spec maybe_autoload_module(ne_binary()) -> 'ok'.
@@ -165,14 +164,12 @@ persist_module(Module, Mods) ->
 %%--------------------------------------------------------------------
 -spec stop_module(text()) -> 'ok'.
 stop_module(Module) ->
-    try crossbar_init:stop_mod(Module) of
-        _ ->
+    case crossbar_init:stop_mod(Module) of
+        'ok' ->
             Mods = crossbar_config:autoload_modules(),
             crossbar_config:set_default_autoload_modules(lists:delete(kz_util:to_binary(Module), Mods)),
-            io:format("stopped and removed ~s from autoloaded modules~n", [Module])
-    catch
-        _E:_R ->
-            io:format("failed to stop ~s: ~s: ~p~n", [Module, _E, _R])
+            io:format("stopped and removed ~s from autoloaded modules~n", [Module]);
+        {'error', Error} -> io:format("failed to stop ~s: ~p~n", [Module, Error])
     end.
 
 %%--------------------------------------------------------------------
@@ -190,21 +187,20 @@ running_modules() -> crossbar_bindings:modules_loaded().
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec find_account_by_number(input_term()) ->
-                                    {'ok', ne_binary()} |
-                                    {'error', any()}.
+-spec find_account_by_number(input_term()) -> {'ok', ne_binary()} |
+                                              {'error', any()}.
 find_account_by_number(Number) when not is_binary(Number) ->
     find_account_by_number(kz_util:to_binary(Number));
 find_account_by_number(Number) ->
     case knm_number:lookup_account(Number) of
         {'ok', AccountId, _} ->
-            AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
+            AccountDb = kz_util:format_account_db(AccountId),
             print_account_info(AccountDb, AccountId);
         {'error', {'not_in_service', AssignedTo}} ->
-            AccountDb = kz_util:format_account_id(AssignedTo, 'encoded'),
+            AccountDb = kz_util:format_account_db(AssignedTo),
             print_account_info(AccountDb, AssignedTo);
         {'error', {'account_disabled', AssignedTo}} ->
-            AccountDb = kz_util:format_account_id(AssignedTo, 'encoded'),
+            AccountDb = kz_util:format_account_db(AssignedTo),
             print_account_info(AccountDb, AssignedTo);
         {'error', Reason}=E ->
             io:format("failed to find account assigned to number '~s': ~p~n", [Number, Reason]),
@@ -274,8 +270,8 @@ find_account_by_realm(Realm) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec find_account_by_id(input_term()) ->
-                                   {'ok', ne_binary()} |
-                                   {'error', any()}.
+                                {'ok', ne_binary()} |
+                                {'error', any()}.
 find_account_by_id(Id) when is_binary(Id) ->
     print_account_info(kz_util:format_account_id(Id, 'encoded'));
 find_account_by_id(Id) ->
@@ -366,25 +362,18 @@ demote_account(AccountId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_account(input_term(), input_term(), input_term(), input_term()) -> 'ok' | 'failed'.
-create_account(AccountName, Realm, Username, Password) when not is_binary(AccountName) ->
-    create_account(kz_util:to_binary(AccountName), Realm, Username, Password);
-create_account(AccountName, Realm, Username, Password) when not is_binary(Realm) ->
-    create_account(AccountName, kz_util:to_binary(Realm), Username, Password);
-create_account(AccountName, Realm, Username, Password) when not is_binary(Username) ->
-    create_account(AccountName, Realm, kz_util:to_binary(Username), Password);
-create_account(AccountName, Realm, Username, Password) when not is_binary(Password) ->
-    create_account(AccountName, Realm, Username, kz_util:to_binary(Password));
-create_account(AccountName, Realm, Username, Password) ->
+create_account(AccountName, Realm, Username, Password)
+  when is_binary(AccountName), is_binary(Realm), is_binary(Username), is_binary(Password) ->
     Account = kz_json:from_list([{<<"_id">>, kz_datamgr:get_uuid()}
-                                 ,{<<"name">>, AccountName}
-                                 ,{<<"realm">>, Realm}
+                                ,{<<"name">>, AccountName}
+                                ,{<<"realm">>, Realm}
                                 ]),
     User = kz_json:from_list([{<<"_id">>, kz_datamgr:get_uuid()}
-                              ,{<<"username">>, Username}
-                              ,{<<"password">>, Password}
-                              ,{<<"first_name">>, <<"Account">>}
-                              ,{<<"last_name">>, <<"Admin">>}
-                              ,{<<"priv_level">>, <<"admin">>}
+                             ,{<<"username">>, Username}
+                             ,{<<"password">>, Password}
+                             ,{<<"first_name">>, <<"Account">>}
+                             ,{<<"last_name">>, <<"Admin">>}
+                             ,{<<"priv_level">>, <<"admin">>}
                              ]),
     try
         {'ok', C1} = validate_account(Account, cb_context:new()),
@@ -403,15 +392,20 @@ create_account(AccountName, Realm, Username, Password) ->
                 _ = update_system_config(AccountId),
                 'ok';
             _Else -> 'ok'
-        end,
-        'ok'
+        end
     catch
         _E:_R ->
             ST = erlang:get_stacktrace(),
             lager:error("crashed creating account: ~s: ~p", [_E, _R]),
             kz_util:log_stacktrace(ST),
             'failed'
-    end.
+    end;
+create_account(AccountName, Realm, Username, Password) ->
+    create_account(kz_util:to_binary(AccountName)
+                  ,kz_util:to_binary(Realm)
+                  ,kz_util:to_binary(Username)
+                  ,kz_util:to_binary(Password)
+                  ).
 
 -spec update_system_config(ne_binary()) -> 'ok'.
 update_system_config(AccountId) ->
@@ -429,11 +423,11 @@ update_system_config(AccountId) ->
                               {'error', kz_json:object()}.
 validate_account(JObj, Context) ->
     Payload = [cb_context:setters(Context
-                                  ,[{fun cb_context:set_req_data/2, JObj}
-                                    ,{fun cb_context:set_req_nouns/2, [{?KZ_ACCOUNTS_DB, []}]}
-                                    ,{fun cb_context:set_req_verb/2, ?HTTP_PUT}
-                                    ,{fun cb_context:set_resp_status/2, 'fatal'}
-                                   ])
+                                 ,[{fun cb_context:set_req_data/2, JObj}
+                                  ,{fun cb_context:set_req_nouns/2, [{?KZ_ACCOUNTS_DB, []}]}
+                                  ,{fun cb_context:set_req_verb/2, ?HTTP_PUT}
+                                  ,{fun cb_context:set_resp_status/2, 'fatal'}
+                                  ])
               ],
     Context1 = crossbar_bindings:fold(<<"v1_resource.validate.accounts">>, Payload),
     case cb_context:resp_status(Context1) of
@@ -455,11 +449,11 @@ validate_account(JObj, Context) ->
                            {'error', kz_json:object()}.
 validate_user(JObj, Context) ->
     Payload = [cb_context:setters(Context
-                                  ,[{fun cb_context:set_req_data/2, JObj}
-                                    ,{fun cb_context:set_req_nouns/2, [{?KZ_ACCOUNTS_DB, []}]}
-                                    ,{fun cb_context:set_req_verb/2, ?HTTP_PUT}
-                                    ,{fun cb_context:set_resp_status/2, 'fatal'}
-                                   ]
+                                 ,[{fun cb_context:set_req_data/2, JObj}
+                                  ,{fun cb_context:set_req_nouns/2, [{?KZ_ACCOUNTS_DB, []}]}
+                                  ,{fun cb_context:set_req_verb/2, ?HTTP_PUT}
+                                  ,{fun cb_context:set_resp_status/2, 'fatal'}
+                                  ]
                                  )
               ],
     Context1 = crossbar_bindings:fold(<<"v1_resource.validate.users">>, Payload),
@@ -485,7 +479,7 @@ create_account(Context) ->
     case cb_context:resp_status(Context1) of
         'success' ->
             io:format("created new account '~s' in db '~s'~n", [cb_context:account_id(Context1)
-                                                                ,cb_context:account_db(Context1)
+                                                               ,cb_context:account_db(Context1)
                                                                ]),
             {'ok', Context1};
         _Status ->
@@ -510,7 +504,7 @@ create_user(Context) ->
     case cb_context:resp_status(Context1) of
         'success' ->
             io:format("created new account admin user '~s'~n"
-                      ,[kz_doc:id(cb_context:doc(Context1))]
+                     ,[kz_doc:id(cb_context:doc(Context1))]
                      ),
             {'ok', Context1};
         _Status ->
@@ -576,7 +570,7 @@ descendants_count(AccountId) ->
 -spec migrate_ring_group_callflow(ne_binary()) -> 'ok'.
 migrate_ring_group_callflow(Account) ->
     lists:foreach(fun create_new_ring_group_callflow/1
-                  ,get_migrateable_ring_group_callflows(Account)
+                 ,get_migrateable_ring_group_callflows(Account)
                  ).
 
 -spec get_migrateable_ring_group_callflows(ne_binary()) -> kz_json:objects().
@@ -593,15 +587,15 @@ get_migrateable_ring_group_callflows(Account) ->
 -spec get_migrateable_ring_group_callflows(ne_binary(), kz_json:objects()) -> kz_json:objects().
 get_migrateable_ring_group_callflows(AccountDb, JObjs) ->
     lists:foldl(fun(JObj, Acc) -> get_migrateable_ring_group_callflow(JObj, Acc, AccountDb) end
-                ,[]
-                ,JObjs
+               ,[]
+               ,JObjs
                ).
 
 -spec get_migrateable_ring_group_callflow(kz_json:object(), kz_json:objects(), ne_binary()) ->
                                                  kz_json:objects().
 get_migrateable_ring_group_callflow(JObj, Acc, AccountDb) ->
     case {kz_json:get_ne_binary_value([<<"value">>, <<"group_id">>], JObj)
-          ,kz_json:get_ne_binary_value([<<"value">>, <<"type">>], JObj)
+         ,kz_json:get_ne_binary_value([<<"value">>, <<"type">>], JObj)
          }
     of
         {'undefined', _} -> Acc;
@@ -635,17 +629,17 @@ base_group_ring_group(JObj) ->
     BaseGroup = kz_json:from_list(
                   props:filter_undefined(
                     [{<<"pvt_vsn">>, <<"1">>}
-                     ,{<<"pvt_type">>, <<"callflow">>}
-                     ,{<<"pvt_modified">>, kz_util:current_tstamp()}
-                     ,{<<"pvt_created">>, kz_util:current_tstamp()}
-                     ,{<<"pvt_account_db">>, kz_doc:account_db(JObj)}
-                     ,{<<"pvt_account_id">>, kz_doc:account_id(JObj)}
-                     ,{<<"flow">>, kz_json:from_list([{<<"children">>, kz_json:new()}
-                                                      ,{<<"module">>, <<"ring_group">>}
-                                                     ])
-                      }
-                     ,{<<"group_id">>, kz_json:get_value(<<"group_id">>, JObj)}
-                     ,{<<"type">>, <<"baseGroup">>}
+                    ,{<<"pvt_type">>, <<"callflow">>}
+                    ,{<<"pvt_modified">>, kz_util:current_tstamp()}
+                    ,{<<"pvt_created">>, kz_util:current_tstamp()}
+                    ,{<<"pvt_account_db">>, kz_doc:account_db(JObj)}
+                    ,{<<"pvt_account_id">>, kz_doc:account_id(JObj)}
+                    ,{<<"flow">>, kz_json:from_list([{<<"children">>, kz_json:new()}
+                                                    ,{<<"module">>, <<"ring_group">>}
+                                                    ])
+                     }
+                    ,{<<"group_id">>, kz_json:get_value(<<"group_id">>, JObj)}
+                    ,{<<"type">>, <<"baseGroup">>}
                     ])),
     set_data_for_callflow(JObj, BaseGroup).
 
@@ -665,7 +659,7 @@ set_data_for_callflow(JObj, BaseGroup) ->
 
 -spec set_number_for_callflow(kz_json:object(), kz_json:object()) -> kz_json:object().
 set_number_for_callflow(JObj, BaseGroup) ->
-    Number = <<"group_", (kz_util:to_binary(kz_util:now_ms(os:timestamp())))/binary>>,
+    Number = <<"group_", (kz_util:to_binary(kz_util:now_ms()))/binary>>,
     Numbers = [Number],
     set_name_for_callflow(JObj, kz_json:set_value(<<"numbers">>, Numbers, BaseGroup)).
 
@@ -696,8 +690,7 @@ save_new_ring_group_callflow(JObj, NewCallflow, AccountDb) ->
     case kz_datamgr:save_doc(AccountDb, NewCallflow) of
         {'error', _M} ->
             io:format("unable to save new callflow (old:~p) in ~p aborting...~n"
-                      ,[kz_doc:id(JObj), AccountDb]
-                     );
+                     ,[kz_doc:id(JObj), AccountDb]);
         {'ok', NewJObj} ->
             io:format("  saved base group callflow: ~s~n", [kz_json:encode(NewJObj)]),
             update_old_ring_group_callflow(JObj, NewJObj)
@@ -710,20 +703,19 @@ check_if_callflow_exist(AccountDb, Name) ->
             io:format("error fetching callflows in ~p ~p~n", [AccountDb, _M]),
             'true';
         {'ok', JObjs} ->
-            lists:any(
-              fun(JObj) ->
-                      kz_json:get_value([<<"value">>, <<"name">>], JObj) =:= Name
-              end
-              ,JObjs
-            )
+            lists:any(fun(JObj) ->
+                              kz_json:get_value([<<"value">>, <<"name">>], JObj) =:= Name
+                      end
+                     ,JObjs
+                     )
     end.
 
 -spec update_old_ring_group_callflow(kz_json:object(), kz_json:object()) -> 'ok'.
 update_old_ring_group_callflow(JObj, NewCallflow) ->
     Routines = [fun update_old_ring_group_type/2
-                ,fun update_old_ring_group_metadata/2
-                ,fun update_old_ring_group_flow/2
-                ,fun save_old_ring_group/2
+               ,fun update_old_ring_group_metadata/2
+               ,fun update_old_ring_group_flow/2
+               ,fun save_old_ring_group/2
                ],
     lists:foldl(fun(F, J) -> F(J, NewCallflow) end, JObj, Routines).
 
@@ -759,46 +751,59 @@ save_old_ring_group(JObj, NewCallflow) ->
     case kz_datamgr:save_doc(AccountDb, JObj) of
         {'error', _M} ->
             io:format("unable to save callflow ~p in ~p, removing new one (~p)~n"
-                      ,[kz_doc:id(JObj), AccountDb, kz_doc:id(NewCallflow)]
-                     ),
+                     ,[kz_doc:id(JObj), AccountDb, kz_doc:id(NewCallflow)]),
             {'ok', _} = kz_datamgr:del_doc(AccountDb, NewCallflow),
             'ok';
         {'ok', _OldJObj} ->
             io:format("  saved ring group callflow: ~s~n", [kz_json:encode(_OldJObj)])
     end.
 
--spec init_apps(filelib:dirname(), ne_binary()) -> 'ok'.
+
+-spec init_apps(file:name()) -> 'ok'.
+init_apps(AppsPath) ->
+    init_apps(AppsPath, 'undefined').
+
+-spec init_apps(file:name(), api_binary()) -> 'ok'.
 init_apps(AppsPath, AppUrl) ->
     Apps = find_apps(AppsPath),
     InitApp = fun(App) -> init_app(App, AppUrl) end,
     lists:foreach(InitApp, Apps).
 
--spec find_apps(filelib:dirname()) -> [file:name()].
+-spec find_apps(file:name()) -> [file:name()].
 find_apps(AppsPath) ->
     AccFun =
-        fun (AppJSONPath, Acc) ->
+        fun(AppJSONPath, Acc) ->
                 App = filename:absname(AppJSONPath),
-                %% App/metadata/app.json --> App
+                %% /.../App/metadata/app.json --> App
                 [filename:dirname(filename:dirname(App)) | Acc]
         end,
     filelib:fold_files(AppsPath, "app\\.json", 'true', AccFun, []).
 
--spec init_app(file:filename(), ne_binary()) -> 'ok'.
+-spec init_app(file:filename()) -> 'ok'.
+init_app(AppPath) ->
+    init_app(AppPath, 'undefined').
+
+-spec init_app(file:filename(), api_binary()) -> 'ok'.
 init_app(AppPath, AppUrl) ->
     io:format("trying to init app from ~s~n", [AppPath]),
     try find_metadata(AppPath) of
         {'ok', MetaData} ->
-            maybe_create_app(AppPath, kz_json:set_value(<<"api_url">>, AppUrl, MetaData));
+            maybe_create_app(AppPath, maybe_set_api_url(AppUrl, MetaData));
         {'invalid_data', _E} ->
             io:format("  failed to validate app data ~s: ~p~n", [AppPath, _E])
     catch
         'error':{'badmatch', {'error', 'enoent'}} ->
             io:format("  failed to incorporate app because there was no app.json in ~s~n"
-                      ,[filename:join([AppPath, <<"metadata">>])]
-                     );
+                     ,[filename:join([AppPath, <<"metadata">>])]);
         'error':_E ->
             io:format("  failed to find metadata in ~s: ~p~n", [AppPath, _E])
     end.
+
+-spec maybe_set_api_url(api_binary(), kz_json:object()) -> kz_json:object().
+maybe_set_api_url('undefined', MetaData) ->
+    kz_json:delete_key(<<"api_url">>, MetaData);
+maybe_set_api_url(AppUrl, MetaData) ->
+    kz_json:set_value(<<"api_url">>, AppUrl, MetaData).
 
 -spec maybe_create_app(file:filename(), kz_json:object()) -> 'ok'.
 -spec maybe_create_app(file:filename(), kz_json:object(), ne_binary()) -> 'ok'.
@@ -807,92 +812,79 @@ maybe_create_app(AppPath, MetaData) ->
     maybe_create_app(AppPath, MetaData, MasterAccountDb).
 
 maybe_create_app(AppPath, MetaData, MasterAccountDb) ->
-    AppName = kz_json:get_value(<<"name">>, MetaData),
+    AppName = kzd_app:name(MetaData),
     case find_app(MasterAccountDb, AppName) of
         {'ok', JObj} ->
-	    io:format(" app ~s already loaded in system~n", [AppName]),
-	    maybe_update_app(AppPath, MetaData, MasterAccountDb, JObj);
+            io:format(" app ~s already loaded in system~n", [AppName]),
+            maybe_update_app(AppPath, MetaData, MasterAccountDb, JObj);
         {'error', 'not_found'} -> create_app(AppPath, MetaData, MasterAccountDb);
         {'error', _E} -> io:format(" failed to find app ~s: ~p", [AppName, _E])
     end.
 
 -spec maybe_update_app(file:filename(), kz_json:object(), ne_binary(), kz_json:object()) -> 'ok'.
-maybe_update_app(AppPath, MetaData, MasterAccountDb, JObj) ->
-    CurrentDocId  = kz_doc:id(JObj),
+maybe_update_app(AppPath, MetaData, MasterAccountDb, AppJObj) ->
     ApiUrlKey = <<"api_url">>,
-    CurrentApiUrl = kz_json:get_value([<<"value">>, ApiUrlKey], JObj),
-
-    case kz_json:get_value(ApiUrlKey, MetaData) of
-	'undefined'   -> io:format(" not updating ~s, it is undefined~n", [ApiUrlKey]);
-	CurrentApiUrl -> io:format(" not updating ~s, it is unchanged~n", [ApiUrlKey]);
-	NewApiUrl ->
-	    Update = [{ApiUrlKey, NewApiUrl}],
-	    case kz_datamgr:update_doc(MasterAccountDb, CurrentDocId, Update) of
-		{'ok', _NJObj} -> io:format(" updated ~s to ~s~n", [ApiUrlKey, NewApiUrl]);
-		{'error', Err} -> io:format(" error updating ~s: ~p~n", [ApiUrlKey, Err])
-	    end
+    CurrentDocId = kzd_app:id(AppJObj),
+    CurrentApiUrl = kzd_app:api_url(kz_json:get_value(<<"value">>, AppJObj)),
+    case kzd_app:api_url(MetaData) of
+        'undefined'   -> io:format(" not updating ~s, it is undefined~n", [ApiUrlKey]);
+        CurrentApiUrl -> io:format(" not updating ~s, it is unchanged~n", [ApiUrlKey]);
+        NewApiUrl ->
+            Update = [{ApiUrlKey, NewApiUrl}],
+            case kz_datamgr:update_doc(MasterAccountDb, CurrentDocId, Update) of
+                {'ok', _NJObj} -> io:format(" updated ~s to ~s~n", [ApiUrlKey, NewApiUrl]);
+                {'error', Err} -> io:format(" error updating ~s: ~p~n", [ApiUrlKey, Err])
+            end
     end,
-
     'ok' = delete_old_images(CurrentDocId, MetaData, MasterAccountDb),
     maybe_add_images(AppPath, CurrentDocId, MetaData, MasterAccountDb).
 
--spec find_app(ne_binary(), ne_binary()) ->
-                      {'ok', kz_json:object()} |
-                      {'error', any()}.
+-spec find_app(ne_binary(), ne_binary()) -> {'ok', kz_json:object()} |
+                                            {'error', any()}.
 find_app(Db, Name) ->
-    case kz_datamgr:get_results(Db, ?CB_APPS_STORE_LIST, [{'key', Name}]) of
-        {'ok', []} -> {'error', 'not_found'};
-        {'ok', [View]} -> {'ok', View};
-        {'error', _}=E -> E
-    end.
+    ViewOptions = [{'key', Name}],
+    kz_datamgr:get_single_result(Db, ?CB_APPS_STORE_LIST, ViewOptions).
 
 -spec create_app(file:filename(), kz_json:object(), ne_binary()) -> 'ok'.
 create_app(AppPath, MetaData, MasterAccountDb) ->
-    Doc = kz_json:delete_keys([<<"source_url">>]
-                              ,kz_doc:update_pvt_parameters(MetaData, MasterAccountDb, [{'type', <<"app">>}])
-                             ),
+    Doc0 = kz_doc:update_pvt_parameters(MetaData, MasterAccountDb, [{'type', <<"app">>}]),
+    Doc = kz_json:delete_keys([<<"source_url">>], Doc0),
     case kz_datamgr:save_doc(MasterAccountDb, Doc) of
-        {'ok', JObj} ->
-            io:format(" saved app ~s as doc ~s~n", [kz_json:get_value(<<"name">>, JObj)
-                                                    ,kz_doc:id(JObj)
-                                                   ]),
-            maybe_add_images(AppPath, kz_doc:id(JObj), MetaData, MasterAccountDb);
+        {'ok', AppJObj} ->
+            AppId = kzd_app:id(AppJObj),
+            io:format(" saved app ~s as doc ~s~n", [kzd_app:name(AppJObj), AppId]),
+            maybe_add_images(AppPath, AppId, MetaData, MasterAccountDb);
         {'error', _E} ->
             io:format(" failed to save app ~s to ~s: ~p~n"
-                      ,[kz_json:get_value(<<"name">>, MetaData), MasterAccountDb, _E]
-                     )
+                     ,[kzd_app:name(MetaData), MasterAccountDb, _E])
     end.
 
 -spec delete_old_images(ne_binary(), kz_json:object(), ne_binary()) -> 'ok'.
 delete_old_images(AppId, MetaData, MasterAccountDb) ->
-    Icons       = [kz_json:get_value(<<"icon">>, MetaData)],
-    Screenshots = kz_json:get_value(<<"screenshots">>, MetaData, []),
-
-    _ = [safe_delete_image(MasterAccountDb, AppId, X) || X <- Icons],
-    _ = [safe_delete_image(MasterAccountDb, AppId, X) || X <- Screenshots],
-    'ok'.
+    F = fun (X) -> safe_delete_image(MasterAccountDb, AppId, X) end,
+    lists:foreach(F, [kzd_app:icon(MetaData)]),
+    lists:foreach(F, kzd_app:screenshots(MetaData)).
 
 -spec safe_delete_image(ne_binary(), ne_binary(), api_binary()) -> 'ok'.
 safe_delete_image(_AccountDb, _AppId, 'undefined') -> 'ok';
 safe_delete_image(AccountDb, AppId, Image) ->
     case kz_datamgr:fetch_attachment(AccountDb, AppId, Image) of
-	{'ok', _}    -> kz_datamgr:delete_attachment(AccountDb, AppId, Image);
-	{'error', _} -> 'ok'
+        {'error', _} -> 'ok';
+        {'ok', _} ->
+            kz_datamgr:delete_attachment(AccountDb, AppId, Image)
     end.
 
 -spec maybe_add_images(file:filename(), ne_binary(), kz_json:object(), ne_binary()) -> 'ok'.
-maybe_add_images(AppPath, <<_/binary>> = AppId, MetaData, MasterAccountDb) ->
-    Icons       = [kz_json:get_value(<<"icon">>, MetaData)],
-    Screenshots = kz_json:get_value(<<"screenshots">>, MetaData, []),
+maybe_add_images(AppPath, ?NE_BINARY=AppId, MetaData, MasterAccountDb) ->
+    Icon = kzd_app:icon(MetaData),
+    Screenshots = [kzd_app:screenshots(MetaData)],
 
-    IconPaths  = [{Icon, filename:join([AppPath, <<"metadata">>, <<"icon">>, Icon])}
-                  || Icon <- Icons
-                 ],
+    IconPath = {Icon, filename:join([AppPath, <<"metadata">>, <<"icon">>, Icon])},
     SShotPaths = [{SShot, filename:join([AppPath, <<"metadata">>, <<"screenshots">>, SShot])}
                   || SShot <- Screenshots
                  ],
 
-    _ = update_images(AppId, MasterAccountDb, IconPaths, <<"icon">>),
+    _ = update_images(AppId, MasterAccountDb, [IconPath], <<"icon">>),
     _ = update_images(AppId, MasterAccountDb, SShotPaths, <<"screenshots">>).
 
 -type image_path() :: {kz_json:object(), file:filename()}.
@@ -934,15 +926,12 @@ read_image(File) ->
     {'ok', ImageData} = file:read_file(File),
     ImageData.
 
--spec find_metadata(file:filename()) ->
-                           {'ok', kz_json:object()} |
-                           {'invalid_data', kz_proplist()}.
+-spec find_metadata(file:filename()) -> {'ok', kz_json:object()} |
+                                        {'invalid_data', kz_proplist()}.
 find_metadata(AppPath) ->
-    AppJSONPath = filename:join([AppPath, <<"metadata">>, <<"app.json">>]),
-    {'ok', JSON} = file:read_file(AppJSONPath),
-    JObj = kz_json:decode(JSON),
+    {'ok', JSON} = file:read_file(filename:join([AppPath, <<"metadata">>, <<"app.json">>])),
     {'ok', Schema} = kz_json_schema:load(<<"app">>),
-    case jesse:validate_with_schema(Schema, kz_json:public_fields(JObj)) of
+    case jesse:validate_with_schema(Schema, kz_json:public_fields(kz_json:decode(JSON))) of
         {'ok', _}=OK -> OK;
         {'error', Errors} ->
             {'invalid_data', [Error || {'data_invalid', _, Error, _, _} <- Errors]}

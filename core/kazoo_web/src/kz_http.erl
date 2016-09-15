@@ -9,15 +9,15 @@
 -module(kz_http).
 
 -export([req/1, req/2, req/3, req/4, req/5
-         ,async_req/2, async_req/3, async_req/4, async_req/5, async_req/6
-         ,get/1, get/2, get/3
-         ,options/1, options/2, options/3
-         ,head/1, head/2, head/3
-         ,trace/1, trace/2, trace/3
-         ,post/1, post/2, post/3, post/4
-         ,put/1, put/2, put/3, put/4
-         ,delete/1, delete/2, delete/3, delete/4
-         ,handle_response/1
+        ,async_req/2, async_req/3, async_req/4, async_req/5, async_req/6
+        ,get/1, get/2, get/3
+        ,options/1, options/2, options/3
+        ,head/1, head/2, head/3
+        ,trace/1, trace/2, trace/3
+        ,post/1, post/2, post/3, post/4
+        ,put/1, put/2, put/3, put/4
+        ,delete/1, delete/2, delete/3, delete/4
+        ,handle_response/1
         ]).
 
 -include("kz_web.hrl").
@@ -38,9 +38,9 @@
 
 -type httpc_ret() :: {'ok', httpc_result()} |
                      {'ok', 'saved_to_file'} |
-                     {'error', {'connect_failed', any()} |
-                               {'send_failed', any()} |
-                               any()
+                     {'error', {'connect_failed' | 'malformed_url', any()} |
+                      {'send_failed', any()} |
+                      any()
                      }.
 
 -type httpc_request() :: {string(), kz_proplist()} |
@@ -50,7 +50,7 @@
                   {'ok', reference()} |
                   reference().
 
--type ret() :: {'ok', pos_integer(), kz_proplist(), string() | binary()} |
+-type ret() :: {'ok', pos_integer(), kz_proplist(), text()} |
                {'ok', 'saved_to_file'} |
                {'error', any()} |
                req_id().
@@ -167,11 +167,11 @@ req(Method, Url, Hdrs, Body, Opts) ->
 %% @public
 %% @doc Send an asynchronous HTTP request
 %%--------------------------------------------------------------------
--spec async_req(pid(), string()) -> ret().
--spec async_req(pid(), method(), string()) -> ret().
--spec async_req(pid(), method(), string(), kz_proplist()) -> ret().
--spec async_req(pid(), method(), string(), kz_proplist(), http_body()) -> ret().
--spec async_req(pid(), method(), string(), kz_proplist(), http_body(), kz_proplist()) -> ret().
+-spec async_req(pid(), text()) -> ret().
+-spec async_req(pid(), method(), text()) -> ret().
+-spec async_req(pid(), method(), text(), kz_proplist()) -> ret().
+-spec async_req(pid(), method(), text(), kz_proplist(), http_body()) -> ret().
+-spec async_req(pid(), method(), text(), kz_proplist(), http_body(), kz_proplist()) -> ret().
 async_req(Pid, Url) ->
     async_req(Pid, 'get', Url, [], [], []).
 async_req(Pid, Method, Url) ->
@@ -184,8 +184,8 @@ async_req(Pid, Method, Url, Hdrs, Body, Opts) ->
     {Headers, Options} = maybe_basic_auth(Hdrs, Opts),
     Request = build_request(Method, Url, Headers, Body),
     NewOptions = [{'receiver', Pid}
-                  ,{'sync', 'false'}
-                  ,{'stream', 'self'}
+                 ,{'sync', 'false'}
+                 ,{'stream', 'self'}
                   | Options
                  ],
     execute_request(Method, Request, NewOptions).
@@ -198,10 +198,8 @@ async_req(Pid, Method, Url, Hdrs, Body, Opts) ->
 execute_request(Method, Request, Opts) ->
     HTTPOptions = get_options(?HTTP_OPTIONS, Opts),
     Opts1 = get_options(?OPTIONS, Opts),
-    Options = case props:get_value('body_format', Opts1) of
-                'undefined' -> [{'body_format', 'binary'} | Opts1];
-                _ -> Opts1
-              end,
+    Options = props:insert_value('body_format', 'binary', Opts1),
+
     handle_response(catch httpc:request(Method, Request, HTTPOptions, Options)).
 
 %%--------------------------------------------------------------------
@@ -209,17 +207,17 @@ execute_request(Method, Request, Opts) ->
 %% @doc Response to caller in a proper manner
 %%--------------------------------------------------------------------
 -spec handle_response(httpc_ret()) -> ret().
-handle_response({'ok', 'saved_to_file'}) ->
-    {'ok', 'saved_to_file'};
+handle_response({'ok', 'saved_to_file'}=Ok) ->
+    Ok;
 handle_response({'ok', ReqId})
   when is_reference(ReqId) ->
     {'http_req_id', ReqId};
 handle_response({'ok', {{_, StatusCode, _}, Headers, Body}})
   when is_integer(StatusCode) ->
     {'ok', StatusCode, Headers, Body};
-handle_response({'error', 'timeout'}) ->
+handle_response({'error', 'timeout'}=Err) ->
     lager:debug("connection timeout"),
-    {'error', 'timeout'};
+    Err;
 handle_response({'EXIT', {Error,_Trace}}) ->
     lager:debug("caught EXIT ~p: ~p", [Error, _Trace]),
     {'error', Error};
@@ -232,9 +230,9 @@ handle_response({'error', {'failed_connect',[{_, _Address}, {_, _, 'econnrefused
 handle_response({'error', {'malformed_url', _, Url}}) ->
     lager:debug("failed to parse URL ~p", [Url]),
     {'error', {'malformed_url', Url}};
-handle_response({'error', Error}) ->
+handle_response({'error', Error}=Err) ->
     lager:debug("request failed with ~p", [Error]),
-    {'error', Error}.
+    Err.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -253,7 +251,7 @@ maybe_basic_auth(Headers, Options) ->
 %% @private
 %% @doc Build httpc request argument based on method
 %%--------------------------------------------------------------------
--spec build_request(method(), string(), kz_proplist(), http_body()) -> httpc_request().
+-spec build_request(method(), text(), kz_proplist(), http_body()) -> httpc_request().
 build_request(Method, Url, Headers, _Body) when (Method == 'options');
                                                 (Method == 'get');
                                                 (Method == 'head');
@@ -263,14 +261,14 @@ build_request(Method, Url, Headers, Body) when (Method == 'post');
                                                (Method == 'put');
                                                (Method == 'delete') ->
     ContentType = props:get_first_defined(["Content-Type"
-                                           ,"content-type"
-                                           ,'content_type'
-                                           ,<<"Content-Type">>
-                                           ,<<"content-type">>
-                                           ,<<"content_type">>
+                                          ,"content-type"
+                                          ,'content_type'
+                                          ,<<"Content-Type">>
+                                          ,<<"content-type">>
+                                          ,<<"content_type">>
                                           ]
-                                          ,Headers
-                                          ,""),
+                                         ,Headers
+                                         ,""),
     {kz_util:to_list(Url), ensure_string_headers(Headers), kz_util:to_list(ContentType), Body}.
 
 ensure_string_headers(Headers) ->
@@ -284,4 +282,4 @@ ensure_string_headers(Headers) ->
 %%--------------------------------------------------------------------
 -spec get_options(list(), kz_proplist()) -> kz_proplist().
 get_options(Type, Options) ->
-    [{K, V} || {K, V} <- Options, lists:member(K, Type)].
+    [KV || KV = {K, _V} <- Options, lists:member(K, Type)].

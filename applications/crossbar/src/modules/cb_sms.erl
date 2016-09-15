@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%%
 %%%
@@ -10,11 +10,11 @@
 -module(cb_sms).
 
 -export([init/0
-         ,allowed_methods/0, allowed_methods/1
-         ,resource_exists/0, resource_exists/1
-         ,validate/1, validate/2
-         ,put/1
-         ,delete/2
+        ,allowed_methods/0, allowed_methods/1
+        ,resource_exists/0, resource_exists/1
+        ,validate/1, validate/2
+        ,put/1
+        ,delete/2
         ]).
 
 -include("crossbar.hrl").
@@ -53,14 +53,10 @@ init() ->
 %%--------------------------------------------------------------------
 -spec allowed_methods() -> http_methods().
 -spec allowed_methods(path_token()) -> http_methods().
-
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
-
-allowed_methods(_Id) ->
+allowed_methods(_SMSId) ->
     [?HTTP_GET, ?HTTP_DELETE].
-
-
 
 %%--------------------------------------------------------------------
 %% @public
@@ -73,10 +69,8 @@ allowed_methods(_Id) ->
 %%--------------------------------------------------------------------
 -spec resource_exists() -> 'true'.
 -spec resource_exists(path_token()) -> 'true'.
-
 resource_exists() -> 'true'.
 resource_exists(_) -> 'true'.
-
 
 %%--------------------------------------------------------------------
 %% @public
@@ -90,10 +84,8 @@ resource_exists(_) -> 'true'.
 %%--------------------------------------------------------------------
 -spec validate(cb_context:context()) -> cb_context:context().
 -spec validate(cb_context:context(), path_token()) -> cb_context:context().
-
 validate(Context) ->
     validate_request(Context, cb_context:req_verb(Context)).
-
 validate(Context, Id) ->
     validate_sms(Context, Id, cb_context:req_verb(Context)).
 
@@ -118,7 +110,6 @@ validate_sms(Context, Id, ?HTTP_DELETE) ->
 -spec put(cb_context:context()) -> cb_context:context().
 put(Context) ->
     crossbar_doc:save(Context).
-
 
 %%--------------------------------------------------------------------
 %% @public
@@ -208,33 +199,33 @@ on_successful_validation(Context) ->
     SmsDocId = create_sms_doc_id(),
 
     cb_context:set_doc(cb_context:set_account_db(Context, AccountDb)
-                       ,kz_json:set_values(
-                          props:filter_undefined(
-                            [{<<"pvt_type">>, <<"sms">>}
-                             ,{<<"pvt_status">>, <<"queued">>}
-                             ,{<<"pvt_account_id">>, AccountId}
-                             ,{<<"pvt_account_db">>, AccountDb}
-                             ,{<<"pvt_reseller_id">>, ResellerId}
-                             ,{<<"pvt_owner_id">>, OwnerId}
-                             ,{<<"pvt_authorization_type">>, AuthorizationType}
-                             ,{<<"pvt_authorization">>, Authorization}
-                             ,{<<"pvt_origin">>, <<"api">>}
-                             ,{<<"pvt_address_options">>, kz_json:from_list(AddrOpts)}
-                             ,{<<"request">>, To}
-                             ,{<<"request_user">>, ToUser}
-                             ,{<<"request_realm">>, Realm}
-                             ,{<<"to">>, To}
-                             ,{<<"to_user">>, ToUser}
-                             ,{<<"to_realm">>, Realm}
-                             ,{<<"from">>, From}
-                             ,{<<"from_user">>, FromUser}
-                             ,{<<"from_realm">>, Realm}
-                             ,{<<"_id">>, SmsDocId}
-                             ,{<<"pvt_created">>, kz_util:current_tstamp()}
-                             ,{<<"pvt_modified">>, kz_util:current_tstamp()}
-                            ])
-                          ,JObj
-                         )).
+                      ,kz_json:set_values(
+                         props:filter_undefined(
+                           [{<<"pvt_type">>, <<"sms">>}
+                           ,{<<"pvt_status">>, <<"queued">>}
+                           ,{<<"pvt_account_id">>, AccountId}
+                           ,{<<"pvt_account_db">>, AccountDb}
+                           ,{<<"pvt_reseller_id">>, ResellerId}
+                           ,{<<"pvt_owner_id">>, OwnerId}
+                           ,{<<"pvt_authorization_type">>, AuthorizationType}
+                           ,{<<"pvt_authorization">>, Authorization}
+                           ,{<<"pvt_origin">>, <<"api">>}
+                           ,{<<"pvt_address_options">>, kz_json:from_list(AddrOpts)}
+                           ,{<<"request">>, To}
+                           ,{<<"request_user">>, ToUser}
+                           ,{<<"request_realm">>, Realm}
+                           ,{<<"to">>, To}
+                           ,{<<"to_user">>, ToUser}
+                           ,{<<"to_realm">>, Realm}
+                           ,{<<"from">>, From}
+                           ,{<<"from_user">>, FromUser}
+                           ,{<<"from_realm">>, Realm}
+                           ,{<<"_id">>, SmsDocId}
+                           ,{<<"pvt_created">>, kz_util:current_tstamp()}
+                           ,{<<"pvt_modified">>, kz_util:current_tstamp()}
+                           ])
+                                         ,JObj
+                        )).
 
 -define(CALLER_ID_INTERNAL, [<<"caller_id">>, <<"internal">>, <<"number">>]).
 -define(CALLER_ID_EXTERNAL, [<<"caller_id">>, <<"external">>, <<"number">>]).
@@ -244,8 +235,8 @@ get_default_caller_id(Context, 'undefined') ->
     {'ok', JObj} = kz_account:fetch(cb_context:account_id(Context)),
     kz_json:get_first_defined(
       [?CALLER_ID_INTERNAL, ?CALLER_ID_EXTERNAL]
-      ,JObj
-      ,kz_util:anonymous_caller_id_number()
+                             ,JObj
+                             ,kz_util:anonymous_caller_id_number()
      );
 get_default_caller_id(Context, OwnerId) ->
     AccountDb = cb_context:account_db(Context),
@@ -253,8 +244,8 @@ get_default_caller_id(Context, OwnerId) ->
     {'ok', JObj2} = kz_datamgr:open_cache_doc(AccountDb, OwnerId),
     kz_json:get_first_defined(
       [?CALLER_ID_INTERNAL, ?CALLER_ID_EXTERNAL]
-      ,kz_json:merge_recursive(JObj1, JObj2)
-      ,kz_util:anonymous_caller_id_number()
+                             ,kz_json:merge_recursive(JObj1, JObj2)
+                             ,kz_util:anonymous_caller_id_number()
      ).
 
 -spec create_sms_doc_id() -> ne_binary().
@@ -262,8 +253,8 @@ create_sms_doc_id() ->
     {Year, Month, _} = erlang:date(),
     kz_util:to_binary(
       io_lib:format("~B~s-~s",[Year
-                               ,kz_util:pad_month(Month)
-                               ,kz_util:rand_hex_binary(16)
+                              ,kz_util:pad_month(Month)
+                              ,kz_util:rand_hex_binary(16)
                               ])
      ).
 
@@ -313,13 +304,16 @@ filter_number(Number) ->
     << <<X>> || <<X>> <= Number, is_digit(X)>>.
 
 -spec is_digit(integer()) -> boolean().
-is_digit(N) -> N >= $0 andalso N =< $9.
+is_digit(N) when is_integer(N),
+                 N >= $0,
+                 N =< $9 -> true;
+is_digit(_) -> false.
 
 -spec build_number(ne_binary()) -> {api_binary(), kz_proplist()}.
 build_number(Number) ->
     N = binary:split(Number, <<",">>, ['global']),
-    case length(N) of
-        1 -> {Number, []};
+    case N of
+        [_One] -> {Number, []};
         _ -> lists:foldl(fun parse_number/2, {'undefined', []}, N)
     end.
 

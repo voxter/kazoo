@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz
+%%% @copyright (C) 2011-2016, 2600Hz
 %%% @doc
 %%% Util functions used by kazoo_couch
 %%% @end
@@ -11,11 +11,11 @@
 
 %% View-related
 -export([design_compact/3
-         ,design_info/3
-         ,all_design_docs/3
-         ,get_results/4
-         ,get_results_count/4
-         ,all_docs/2, all_docs/3
+        ,design_info/3
+        ,all_design_docs/3
+        ,get_results/4
+        ,get_results_count/4
+        ,all_docs/1, all_docs/2, all_docs/3
         ]).
 
 -include("kz_couch.hrl").
@@ -45,10 +45,13 @@ design_info(#server{}=Conn, DBName, Design) ->
 all_design_docs(#server{}=Conn, DBName, Options) ->
     Db = kz_couch_util:get_db(Conn, DBName),
     Filter = [{'startkey', <<"_design/">>}
-              ,{'endkey', <<"_design0">>}
+             ,{'endkey', <<"_design0">>}
               | Options
              ],
     do_fetch_results(Db, 'all_docs', Filter).
+
+-spec all_docs(db()) -> {'ok', kz_json:objects()} | couchbeam_error().
+all_docs(Db) -> all_docs(Db, []).
 
 -spec all_docs(db(), view_options()) -> {'ok', kz_json:objects()} |
                                         couchbeam_error().
@@ -99,7 +102,7 @@ do_fetch_results(Db, DesignDoc, Options) ->
 
 -spec map_options(view_options()) -> view_options().
 map_options(Options) ->
-    lists:map(fun map_view_option/1, Options).
+    [map_view_option(O) || O <- Options].
 
 -spec map_view_option(term()) -> term().
 map_view_option({K, V})

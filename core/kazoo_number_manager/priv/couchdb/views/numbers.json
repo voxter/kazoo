@@ -2,11 +2,14 @@
     "_id": "_design/numbers",
     "language": "javascript",
     "views": {
+        "assigned_to": {
+            "map": "function(doc) { emit([doc.pvt_assigned_to, doc._id], null); }"
+        },
         "listing_undefined_module": {
             "map": "function(doc) { if (doc.pvt_module_name != 'undefined' ) return; emit([doc._id], [doc.pvt_module_name]); }"
         },
         "status": {
-            "map": "function(doc) { emit([(typeof doc.pvt_state !== 'undefined') ? doc.pvt_state : doc.pvt_number_state, doc._id], null); }"
+            "map": "function(doc) { emit([doc.pvt_state||doc.pvt_number_state, doc._id], null); }"
         }
     }
 }

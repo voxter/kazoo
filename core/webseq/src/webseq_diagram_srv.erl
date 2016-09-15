@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2015, 2600Hz
+%%% @copyright (C) 2013-2016, 2600Hz
 %%% @doc
 %%% Log messages in a way to make importing to WebSequenceDiagrams.com
 %%% easier
@@ -8,34 +8,33 @@
 %%%   James Aimonetti
 %%%-------------------------------------------------------------------
 -module(webseq_diagram_srv).
-
 -behaviour(gen_server).
 
 -export([start/1
-         ,stop/1
-         ,evt/4
-         ,title/2
-         ,note/4
-         ,trunc/1
-         ,rotate/1
-         ,process_pid/1
-         ,reg_who/3
+        ,stop/1
+        ,evt/4
+        ,title/2
+        ,note/4
+        ,trunc/1
+        ,rotate/1
+        ,process_pid/1
+        ,reg_who/3
         ]).
 
 -export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,code_change/3
-         ,terminate/2
+        ,handle_call/3
+        ,handle_cast/2
+        ,handle_info/2
+        ,code_change/3
+        ,terminate/2
         ]).
 
 -include("webseq.hrl").
 
 -record(state, {type :: diagram_type()
-                ,name :: ne_binary()
-                ,io_device :: 'undefined' | file:io_device()
-                ,who_registry :: dict:dict()
+               ,name :: ne_binary()
+               ,io_device :: 'undefined' | file:io_device()
+               ,who_registry :: dict:dict()
                }).
 -type state() :: #state{}.
 
@@ -68,7 +67,7 @@ rotate(Srv) -> gen_server:cast(Srv, 'rotate').
 -spec process_pid(kz_json:object()) -> api_binary().
 process_pid(P) ->
     ProcId = kz_json:get_value(<<"Process-ID">>, P),
-    case re:run(ProcId, <<".*(\<.*\>)">>, [{'capture', [1], 'binary'}]) of
+    case re:run(ProcId, <<".*(<.*>)">>, [{'capture', [1], 'binary'}]) of
         {'match', [M]} -> M;
         {'match', M} -> iolist_to_binary(M);
         _ -> ProcId
@@ -91,9 +90,18 @@ who(Srv, P) ->
 what(B) when is_binary(B) -> B;
 what(IO) when is_list(IO) -> iolist_to_binary(IO).
 
--spec init(diagram_type() | [diagram_type()]) ->
-                  {'ok', state()} |
-                  {'stop', _}.
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Initializes the server
+%%
+%% @spec init(Args) -> {ok, State} |
+%%                     {ok, State, Timeout} |
+%%                     ignore |
+%%                     {stop, Reason}
+%% @end
+%%--------------------------------------------------------------------
+-spec init(diagram_type() | [diagram_type()]) -> {'ok', state()}.
 init([Type]) ->
     init(Type);
 init({'file', <<_/binary>>=Filename}) ->
@@ -107,9 +115,9 @@ init({'file', Name, PreFilename}=Type) ->
         {'ok', IO} ->
             lager:debug("webseq tracing ~s to file: ~s", [Name, Filename]),
             {'ok', #state{io_device=IO
-                          ,name=Name
-                          ,type=Type
-                          ,who_registry=dict:new()
+                         ,name=Name
+                         ,type=Type
+                         ,who_registry=dict:new()
                          }};
         {'error', 'eaccess'} ->
             lager:info("failed to open ~s, eaccess error - check permissions", [Filename]),
@@ -127,14 +135,29 @@ init({'db', Name, Database}=Type) ->
         'true' ->
             lager:debug("webseq tracing ~s to db: ~s", [Name, Database]),
             {'ok', #state{name=Name
-                          ,type=Type
-                          ,who_registry=dict:new()
+                         ,type=Type
+                         ,who_registry=dict:new()
                          }};
         'false' ->
             lager:debug("database ~s not found", [Database]),
             {'error', 'not_found'}
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handling call messages
+%%
+%% @spec handle_call(Request, From, State) ->
+%%                                   {reply, Reply, State} |
+%%                                   {reply, Reply, State, Timeout} |
+%%                                   {noreply, State} |
+%%                                   {noreply, State, Timeout} |
+%%                                   {stop, Reason, Reply, State} |
+%%                                   {stop, Reason, State}
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call('stop', _, State) ->
     {'stop', 'normal', 'ok', State};
 handle_call({'who', P}, _, #state{who_registry=Who}=State) when is_pid(P) ->
@@ -151,8 +174,19 @@ handle_call({'who', P}, _, #state{who_registry=Who}=State) ->
 handle_call(_,_,S) ->
     {'reply', 'ok', S}.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handling cast messages
+%%
+%% @spec handle_cast(Msg, State) -> {noreply, State} |
+%%                                  {noreply, State, Timeout} |
+%%                                  {stop, Reason, State}
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast({'write', Str, Args}, #state{type={'file', _Name, _Filename}
-                                         ,io_device=IO
+                                        ,io_device=IO
                                         }=State) ->
     catch file:write(IO, io_lib:format(Str, Args)),
     {'noreply', State};
@@ -161,7 +195,7 @@ handle_cast({'write', Str, Args}, #state{type={'db', Name, Database}}=State) ->
     {'noreply', State};
 
 handle_cast('trunc', #state{io_device=IO
-                            ,type={'file', _Name, _Filename}
+                           ,type={'file', _Name, _Filename}
                            }=State) ->
     catch file:truncate(IO),
     {'noreply', State};
@@ -170,7 +204,7 @@ handle_cast('trunc', #state{type={'db', Name, Database}}=State) ->
     {'noreply', State};
 
 handle_cast('rotate', #state{io_device=OldIO
-                             ,type={'file', _Name, Filename}
+                            ,type={'file', _Name, Filename}
                             }=State) ->
     _ = file:close(OldIO),
     {'ok', IO} = start_file(Filename),
@@ -187,13 +221,45 @@ handle_cast(_Msg, S) ->
     lager:debug("unhandled cast: ~p", [_Msg]),
     {'noreply', S}.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handling all non call/cast messages
+%%
+%% @spec handle_info(Info, State) -> {noreply, State} |
+%%                                   {noreply, State, Timeout} |
+%%                                   {stop, Reason, State}
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info(_Info, S) ->
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', S}.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Convert process state when code is changed
+%%
+%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
+%% @end
+%%--------------------------------------------------------------------
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_, S, _) ->
     {'ok', S}.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function is called by a gen_server when it is about to
+%% terminate. It should be the opposite of Module:init/1 and do any
+%% necessary cleaning up. When it returns, the gen_server terminates
+%% with Reason. The return value is ignored.
+%%
+%% @spec terminate(Reason, State) -> void()
+%% @end
+%%--------------------------------------------------------------------
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, #state{io_device='undefined'}) ->
     gproc:goodbye(),
     lager:debug("webseq terminating: ~p", [_Reason]);
@@ -206,15 +272,15 @@ terminate(_Reason, #state{io_device=IO}) ->
 webseq_doc(Name, Str, Args) ->
     Line = iolist_to_binary(io_lib:format(Str, Args)),
     kz_json:from_list([{<<"line">>, Line}
-                       ,{<<"name">>, Name}
+                      ,{<<"name">>, Name}
                       ]).
 
 -spec write_to_db(ne_binary(), ne_binary(), text(), text()) -> 'ok'.
 write_to_db(Database, Name, Str, Args) ->
     Doc = kz_doc:update_pvt_parameters(
             webseq_doc(Name, Str, Args)
-            ,Database
-            ,[{'type', <<"webseq">>}]
+                                      ,Database
+                                      ,[{'type', <<"webseq">>}]
            ),
     case kz_datamgr:save_doc(Database, Doc) of
         {'ok', _} -> 'ok';
@@ -279,7 +345,7 @@ rotate_db(Database, Name, Docs) ->
 -spec rotate_doc(ne_binary(), kz_json:object()) -> kz_json:object().
 rotate_doc(RotatedName, Doc) ->
     kz_json:set_value(<<"name">>, RotatedName
-                      ,kz_doc:update_pvt_parameters(Doc, 'undefined')
+                     ,kz_doc:update_pvt_parameters(Doc, 'undefined')
                      ).
 
 -spec init_db(ne_binary()) -> 'ok'.

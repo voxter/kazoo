@@ -1,54 +1,70 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz Inc
+%%% @copyright (C) 2012-2016, 2600Hz Inc
 %%% @doc
 %%%
 %%% @end
 %%% @contributors
 %%%   Peter Defebvre
+%%%   Roman Galeev
 %%%-------------------------------------------------------------------
 -module(bh_fax).
 
--export([handle_event/2
-         ,add_amqp_binding/2, rm_amqp_binding/2
+-export([init/0
+        ,validate/2
+        ,bindings/2
         ]).
 
 -include("blackhole.hrl").
 
--spec handle_event(bh_context:context(), kz_json:object()) -> 'ok'.
-handle_event(Context, EventJObj) ->
-    kz_util:put_callid(EventJObj),
-    lager:debug("handle_event fired for ~s ~s", [bh_context:account_id(Context), bh_context:websocket_session_id(Context)]),
-    'true' = kapi_fax:status_v(EventJObj) andalso is_account_event(Context, EventJObj),
-    lager:debug("valid event and emitting to ~p: ~s", [bh_context:websocket_pid(Context), event_name(EventJObj)]),
-    J = kz_json:normalize_jobj(EventJObj),
-    blackhole_data_emitter:emit(bh_context:websocket_pid(Context), event_name(EventJObj), J).
+-spec init() -> any().
+init() ->
+    _ = blackhole_bindings:bind(<<"blackhole.events.validate.fax">>, ?MODULE, 'validate'),
+    blackhole_bindings:bind(<<"blackhole.events.bindings.fax">>, ?MODULE, 'bindings').
 
--spec is_account_event(bh_context:context(), kz_json:object()) -> any().
-is_account_event(Context, EventJObj) ->
-    kz_json:get_first_defined([<<"Account-ID">>
-                               ,[<<"Custom-Channel-Vars">>, <<"Account-ID">>]
-                              ], EventJObj
-                             )
-        =:= bh_context:account_id(Context).
+-spec validate(bh_context:context(), map()) -> bh_context:context().
+validate(Context, #{keys := [<<"status">>, _]
+                   }) ->
+    Context;
+validate(Context, #{keys := [<<"object">>, _]
+                   }) ->
+    Context;
+validate(Context, #{keys := Keys}) ->
+    bh_context:add_error(Context, <<"invalid format for object subscription : ", (kz_util:join_binary(Keys))/binary>>).
 
--spec event_name(kz_json:object()) -> ne_binary().
-event_name(_JObj) -> <<"fax.status">>.
 
--spec add_amqp_binding(ne_binary(), bh_context:context()) -> 'ok'.
-add_amqp_binding(<<"fax.status.", FaxId/binary>>, Context) ->
-    blackhole_listener:add_binding('fax', [{'restrict_to', ['status']}
-                                           ,{'account_id', bh_context:account_id(Context)}
-                                           ,{'fax_id', FaxId}
-                                           ,'federate'
-                                          ]);
-add_amqp_binding(_Binding, _Context) ->
-    lager:debug("unmatched binding ~s", [_Binding]).
+-spec bindings(bh_context:context(), map()) -> map().
+bindings(_Context, #{account_id := AccountId
+                    ,keys := [<<"status">>, FaxId]
+                    }=Map) ->
+    Requested = <<"fax.status.", FaxId/binary>>,
+    Subscribed = [<<"fax.status.", AccountId/binary, ".", FaxId/binary>>],
+    Listeners = [{'amqp', 'fax', fax_status_bind_options(AccountId, FaxId)}],
+    Map#{requested => Requested
+        ,subscribed => Subscribed
+        ,listeners => Listeners
+        };
+bindings(_Context, #{account_id := AccountId
+                    ,keys := [<<"object">>, Action]
+                    }=Map) ->
+    MODB = kazoo_modb:get_modb(AccountId),
+    Requested = <<"fax.object.", Action/binary>>,
+    Subscribed = [<<Action/binary, ".", MODB/binary, ".fax.*">>],
+    Listeners = [{'amqp', 'conf', fax_object_bind_options(MODB, Action)}],
+    Map#{requested => Requested
+        ,subscribed => Subscribed
+        ,listeners => Listeners
+        }.
 
--spec rm_amqp_binding(ne_binary(), bh_context:context()) -> 'ok'.
-rm_amqp_binding(<<"fax.status.", FaxId/binary>>, Context) ->
-    blackhole_listener:remove_binding('fax', [{'restrict_to', ['status']}
-                                              ,{'account_id', bh_context:account_id(Context)}
-                                              ,{'fax_id', FaxId}
-                                             ]);
-rm_amqp_binding(_Binding, _Context) ->
-    lager:debug("unmatched binding ~s", [_Binding]).
+-spec fax_status_bind_options(ne_binary(), ne_binary()) -> kz_proplist().
+fax_status_bind_options(AccountId, FaxId) ->
+    [{'restrict_to', ['status']}
+    ,{'account_id', AccountId}
+    ,{'fax_id', FaxId}
+    ,'federate'
+    ].
+
+-spec fax_object_bind_options(ne_binary(), ne_binary()) -> kz_json:object().
+fax_object_bind_options(MODB, Action) ->
+    [{'keys', [[{'action', Action}, {'db', MODB}, {'doc_type', <<"fax">>}]]}
+    ,'federate'
+    ].

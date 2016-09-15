@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2013, 2600Hz
+%%% @copyright (C) 2012-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -18,8 +18,8 @@
 
 %% Helper macro for declaring children of supervisor
 -define(CHILDREN, [?CACHE(?CACHE_NAME)
-                   ,?SUPER('pivot_calls_sup')
-                   ,?WORKER('pivot_listener')
+                  ,?SUPER('pivot_calls_sup')
+                  ,?WORKER('pivot_listener')
                   ]).
 
 %% ===================================================================

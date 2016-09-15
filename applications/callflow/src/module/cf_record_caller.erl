@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz
+%%% @copyright (C) 2012-2016, 2600Hz
 %%% @doc
 %%% Handles starting/stopping a call recording
 %%%
@@ -13,6 +13,8 @@
 %%%   James Aimonetti
 %%%-------------------------------------------------------------------
 -module(cf_record_caller).
+
+-behaviour(gen_cf_action).
 
 -export([handle/2]).
 
@@ -46,10 +48,10 @@ record_caller(Data, Call, Url) ->
     _ = set_recording_url(Data, Call, Url, MediaName),
 
     _ = kapps_call_command:b_record(MediaName
-                                     ,?ANY_DIGIT
-                                     ,kz_media_recording:get_timelimit(Data)
-                                     ,Call
-                                    ),
+                                   ,?ANY_DIGIT
+                                   ,kz_media_recording:get_timelimit(Data)
+                                   ,Call
+                                   ),
     lager:debug("recording ended").
 
 -spec set_recording_url(kz_json:object(), kapps_call:call(), ne_binary(), ne_binary()) -> any().
@@ -58,8 +60,8 @@ set_recording_url(Data, Call, Url, MediaName) ->
 
     kapps_call:set_custom_channel_vars(
       [{<<"Media-Name">>, MediaName}
-       ,{<<"Media-Transfer-Method">>, kz_json:get_value(<<"method">>, Data, <<"put">>)}
-       ,{<<"Media-Transfer-Destination">>, Url}
+      ,{<<"Media-Transfer-Method">>, kz_json:get_value(<<"method">>, Data, <<"put">>)}
+      ,{<<"Media-Transfer-Destination">>, Url}
       ]
-      ,Call
+                                      ,Call
      ).

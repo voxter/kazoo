@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -7,16 +7,16 @@
 -module(kazoo_modb_maintenance).
 
 -export([delete_modbs/1
-         ,archive_modbs/0
-         ,archive_modbs/1
+        ,archive_modbs/0
+        ,archive_modbs/1
         ]).
 -export([verify_rollups/0
-         ,verify_rollups/1
+        ,verify_rollups/1
         ]).
 -export([fix_rollup/1]).
 -export([rollup_accounts/0
-         ,rollup_account/1
-         ,rollup_account/2
+        ,rollup_account/1
+        ,rollup_account/2
         ]).
 
 -include("kazoo_modb.hrl").
@@ -80,7 +80,7 @@ archive_modbs(AccountId) ->
 -spec do_archive_modbs(ne_binaries(), api_binary()) -> 'no_return'.
 do_archive_modbs(MODbs, AccountId) ->
     kz_util:put_callid(?MODULE),
-    _ = [kazoo_modb:maybe_archive_modb(MODb) || MODb <- MODbs],
+    lists:foreach(fun kazoo_modb:maybe_archive_modb/1, MODbs),
     Keep = kapps_config:get_integer(?CONFIG_CAT, <<"active_modbs">>, 6),
     From = case AccountId =:= 'undefined' of 'true' -> <<"all">>; 'false' -> AccountId end,
     io:format("archived ~s MODbs more than ~b months old~n", [From, Keep]),
@@ -100,8 +100,7 @@ verify_rollups() ->
                               {pos_integer(), pos_integer()}.
 verify_db_rollup(AccountDb, {Current, Total}) ->
     io:format("verify rollup accounts (~p/~p) '~s'~n"
-              ,[Current, Total, AccountDb]
-             ),
+             ,[Current, Total, AccountDb]),
     verify_rollups(AccountDb),
     {Current+1, Total}.
 
@@ -122,8 +121,8 @@ verify_rollups(AccountDb, Year, Month) ->
 
 verify_rollups(AccountDb, Year, Month, AccountId, JObj) ->
     Balance = wht_util:previous_balance(AccountDb
-                                        ,kz_util:to_binary(Year)
-                                        ,kz_util:pad_month(Month)
+                                       ,kz_util:to_binary(Year)
+                                       ,kz_util:pad_month(Month)
                                        ),
     case rollup_balance(JObj) of
         Balance ->
@@ -132,7 +131,7 @@ verify_rollups(AccountDb, Year, Month, AccountId, JObj) ->
             verify_rollups(AccountDb, PYear, PMonth);
         _RollupBalance ->
             io:format("    account ~s has a discrepancy! rollup/balance ~p/~p~n"
-                      ,[AccountId, _RollupBalance, Balance]
+                     ,[AccountId, _RollupBalance, Balance]
                      )
     end.
 
@@ -142,8 +141,8 @@ fix_rollup(Account) ->
     {Y, M, _} = erlang:date(),
     {PYear, PMonth} =  kazoo_modb_util:prev_year_month(Y, M),
     Balance = wht_util:previous_balance(AccountId
-                                        ,kz_util:to_binary(PYear)
-                                        ,kz_util:pad_month(PMonth)
+                                       ,kz_util:to_binary(PYear)
+                                       ,kz_util:pad_month(PMonth)
                                        ),
     AccountMODb = kazoo_modb:get_modb(AccountId),
     lager:debug("rolling up ~p credits to ~s", [Balance, AccountMODb]),
@@ -159,9 +158,7 @@ rollup_accounts() ->
 -spec rollup_account_fold(ne_binary(), {pos_integer(), pos_integer()}) ->
                                  {pos_integer(), pos_integer()}.
 rollup_account_fold(AccountDb, {Current, Total}) ->
-    io:format("rollup accounts (~p/~p) '~s'~n"
-              ,[Current, Total, AccountDb]
-             ),
+    io:format("rollup accounts (~p/~p) '~s'~n", [Current, Total, AccountDb]),
     _ = rollup_account(AccountDb),
     {Current + 1, Total}.
 
@@ -174,9 +171,7 @@ rollup_account(Account) ->
 -spec rollup_account(ne_binary(), integer()) -> 'ok'.
 rollup_account(AccountId, Balance) ->
     AccountMODb = kazoo_modb:get_modb(AccountId),
-    lager:debug("rolling up ~p credits to ~s"
-                ,[Balance, AccountMODb]
-               ),
+    lager:debug("rolling up ~p credits to ~s", [Balance, AccountMODb]),
     wht_util:rollup(AccountMODb, Balance).
 
 -spec rollup_balance(kz_json:object()) -> integer().

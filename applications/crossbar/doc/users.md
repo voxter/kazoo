@@ -73,7 +73,7 @@ Key | Description | Type | Default | Required
 
 > GET /v2/accounts/{ACCOUNT_ID}/users
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN} \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/users
@@ -118,7 +118,7 @@ curl -v -X GET \
 
 > PUT /v2/accounts/{ACCOUNT_ID}/users
 
-```curl
+```shell
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN} \
     -H "Content-Type: application/json" \
@@ -174,7 +174,7 @@ This request will return the current JSON object of the now-deleted user.
 
 > DELETE /v2/accounts/{ACCOUNT_ID}/users/{USER_ID}
 
-```curl
+```shell
 curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/users/{USER_ID}
@@ -226,12 +226,12 @@ curl -v -X DELETE \
 
 > GET /v2/accounts/{ACCOUNT_ID}/users/{USER_ID}
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN} \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/users/{USER_ID}
 {
-    "auth_token": "e4c49cfb8b91784c672222d3291b9449",
+    "auth_token": "{AUTH_TOKEN}",
     "data": {
         "call_restriction": {},
         "caller_id": {},
@@ -278,7 +278,7 @@ curl -v -X GET \
 
 > PATCH /v2/accounts/{ACCOUNT_ID}/users/{USER_ID}
 
-```curl
+```shell
 curl -v -X PATCH \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     -H "Content-Type: application/json" \
@@ -336,7 +336,7 @@ This requires posting the full user's document in the request body
 
 > POST /v2/accounts/{ACCOUNT_ID}/users/{USER_ID}
 
-```curl
+```shell
 curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     -H "Content-Type: application/json" \
@@ -392,7 +392,7 @@ curl -v -X POST \
 
 > GET /v2/accounts/{ACCOUNT_ID}/users/{USER_ID}/vcard
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN} \
     -H "Accept: text/x-vcard"
@@ -408,7 +408,7 @@ END:VCARD
 
 > DELETE /v2/accounts/{ACCOUNT_ID}/users/{USER_ID}/photo
 
-```curl
+```shell
 curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN} \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/users/{USER_ID}/photo
@@ -422,7 +422,7 @@ If the result is successful, you will want to pipe the response into a file.
 
 > GET /v2/accounts/{ACCOUNT_ID}/users/{USER_ID}/photo
 
-```curl
+```shell
 curl -v -X GET \
     -H "Accept: application/base64" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/users/{USER_ID}/photo
@@ -435,7 +435,7 @@ Use `application/octet-stream` as the content type.
 
 > POST /v2/accounts/{ACCOUNT_ID}/users/{USER_ID}/photo
 
-```curl
+```shell
 curl -v -X POST \
     -H "Content-Type: application/octet-stream" \
     --data-binary @/path/to/image.jpg \
@@ -451,9 +451,9 @@ curl -v -X POST \
 
 #### Execute a quick call
 
-Ring user's devices; once answered, connect to `{NUMBER}`
+Ring user's devices; once answered, connect to `{PHONE_NUMBER}`
 
-In this scenario, the user's devices are considered the `callee` while the `{NUMBER}` side is considered the caller (helpful to know when debugging a call!).
+In this scenario, the user's devices are considered the `callee` while the `{PHONE_NUMBER}` side is considered the caller (helpful to know when debugging a call!).
 
 Query string options:
 
@@ -461,18 +461,21 @@ Key | Type | Description
 --- | ---- | -----------
 `auto_answer` | `boolean()` | Tells the SIP phone to auto-answer the call, if supported
 `cid-name` | `string()` | Set the caller ID name (defaults to "Device QuickCall")
-`cid-number` | `string()` | Set the caller ID number (defaults to the `{NUMBER}`)
+`cid-number` | `string()` | Set the caller ID number (defaults to the `{PHONE_NUMBER}`)
 `ignore-early-media` | `boolean()` | Toggle whether to ignore [early media](https://freeswitch.org/confluence/display/FREESWITCH/Early+Media)
 `media` | `string('bypass', 'process')` | Toggle whether to go peer-to-peer([bypass](https://freeswitch.org/confluence/display/FREESWITCH/Bypass+Media+Overview) with the RTP
 `number_filter` | `boolean()`, `regex()` | If true, remove non-alphanumeric characters. If a regex, use the first capture group as the "number" to dial.
 `timeout` | `integer(3..)` | In seconds, how long to ring the device(s) (defaults to 30)
 
-> GET /v2/accounts/{ACCOUNT_ID}/users/{USER_ID}/quickcall/{NUMBER}
+> GET /v2/accounts/{ACCOUNT_ID}/users/{USER_ID}/quickcall/{PHONE_NUMBER}
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/users/{USER_ID}/quickcall/{NUMBER}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/users/{USER_ID}/quickcall/{PHONE_NUMBER}
+```
+
+```json
 {
   "auth_token": "{AUTH_TOKEN}",
   "data": {
@@ -526,7 +529,7 @@ curl -v -X GET \
       }
     ],
     "application_data": {
-      "route": "{NUMBER}"
+      "route": "{PHONE_NUMBER}"
     },
     "application_name": "transfer"
   },

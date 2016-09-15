@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -16,7 +16,6 @@
 
 %% API
 -export([start_link/0]).
--export([new/1]).
 -export([workers/0, worker/1]).
 
 %% Supervisor callbacks
@@ -35,10 +34,6 @@
 -spec start_link() -> startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?SERVER}, ?MODULE, []).
-
--spec new(list()) -> sup_startchild_ret().
-new(Args) ->
-    supervisor:start_child(?SERVER, Args).
 
 -spec workers() -> pids().
 workers() ->

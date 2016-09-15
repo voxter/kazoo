@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2014, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%% Handles setup/initialization of Konami
 %%% @end
@@ -9,7 +9,7 @@
 -module(konami_init).
 
 -export([start_link/0
-         ,init/0
+        ,init/0
         ]).
 
 -include("konami.hrl").

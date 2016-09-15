@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -11,10 +11,10 @@
 -include("doodle.hrl").
 
 -define(SIP_ENDPOINT_ID_KEY(Realm, User)
-        ,{?MODULE, 'sip_endpoint_id', Realm, User}
+       ,{?MODULE, 'sip_endpoint_id', Realm, User}
        ).
 -define(SIP_ENDPOINT_KEY(Realm, User)
-        ,{?MODULE, 'sip_endpoint', Realm, User}
+       ,{?MODULE, 'sip_endpoint', Realm, User}
        ).
 -define(DEFAULT_INCEPTION, <<"off-net">>).
 -define(MDN_VIEW, <<"mobile/listing_by_mdn">>).
@@ -34,7 +34,6 @@
 -export([get_callee_id/2 , set_callee_id/2]).
 -export([get_caller_id/2 , get_caller_id/3]).
 -export([set_caller_id/2, set_caller_id/3]).
--export([lookup_number/1]).
 -export([get_inbound_destination/1]).
 -export([lookup_mdn/1]).
 -export([maybe_reschedule_sms/1, maybe_reschedule_sms/2, maybe_reschedule_sms/3]).
@@ -54,7 +53,7 @@ get_sms_body(Call) ->
 -spec set_flow_status(ne_binary() | {binary(), binary()}, kapps_call:call()) -> kapps_call:call().
 set_flow_status({Status, Message}, Call) ->
     Props = [{<<"flow_status">>, Status}
-             ,{<<"flow_message">>, Message}
+            ,{<<"flow_message">>, Message}
             ],
     kapps_call:kvs_store_proplist(Props, Call);
 set_flow_status(Status, Call) ->
@@ -63,14 +62,14 @@ set_flow_status(Status, Call) ->
 -spec set_flow_status(ne_binary(), ne_binary(), kapps_call:call()) -> kapps_call:call().
 set_flow_status(Status, Message, Call) ->
     Props = [{<<"flow_status">>, Status}
-             ,{<<"flow_message">>, Message}
+            ,{<<"flow_message">>, Message}
             ],
     kapps_call:kvs_store_proplist(Props, Call).
 
 -spec set_flow_error(api_binary() | {binary(), binary()}, kapps_call:call()) -> kapps_call:call().
 set_flow_error({Status, Error}, Call) ->
     Props = [{<<"flow_status">>, Status}
-             ,{<<"flow_error">>, Error}
+            ,{<<"flow_error">>, Error}
             ],
     kapps_call:kvs_store_proplist(Props, Call);
 set_flow_error(Error, Call) ->
@@ -79,7 +78,7 @@ set_flow_error(Error, Call) ->
 -spec set_flow_error(ne_binary(), api_binary(), kapps_call:call()) -> kapps_call:call().
 set_flow_error(Status, Error, Call) ->
     Props = [{<<"flow_status">>, Status}
-             ,{<<"flow_error">>, Error}
+            ,{<<"flow_error">>, Error}
             ],
     kapps_call:kvs_store_proplist(Props, Call).
 
@@ -115,8 +114,8 @@ save_sms(JObj, 'undefined', Call) ->
     SmsDocId = kz_util:to_binary(
                  io_lib:format("~B~s-~s",
                                [Year
-                                ,kz_util:pad_month(Month)
-                                ,kapps_call:call_id(Call)
+                               ,kz_util:pad_month(Month)
+                               ,kapps_call:call_id(Call)
                                ])
                 ),
     UpdatedCall = kapps_call:kvs_store('sms_docid', SmsDocId, Call),
@@ -153,37 +152,37 @@ save_sms(JObj, ?MATCH_MODB_PREFIX(Year,Month,_) = DocId, Doc, Call) ->
     Schedule = kapps_call:kvs_fetch(<<"flow_schedule">>, Call),
     Props = props:filter_empty(
               [{<<"_id">>, DocId}
-               ,{<<"pvt_type">>, <<"sms">>}
-               ,{<<"account_id">>, AccountId}
-               ,{<<"pvt_account_id">>, AccountId}
-               ,{<<"pvt_account_db">>, AccountDb}
-               ,{<<"owner_id">>, OwnerId}
-               ,{<<"pvt_owner_id">>, OwnerId}
-               ,{<<"authorization_type">>, AuthType}
-               ,{<<"authorization_id">>, AuthId}
-               ,{<<"pvt_authorization_type">>, AuthType}
-               ,{<<"pvt_authorization_id">>, AuthId}
-               ,{<<"pvt_target_device_id">>, kapps_call:kvs_fetch(<<"target_device_id">>, Call)}
-               ,{<<"pvt_target_owner_id">>, kapps_call:kvs_fetch(<<"target_owner_id">>, Call)}
-               ,{<<"to">>, To}
-               ,{<<"to_user">>, ToUser}
-               ,{<<"to_realm">>, ToRealm}
-               ,{<<"from">>, From}
-               ,{<<"from_user">>, FromUser}
-               ,{<<"from_realm">>, FromRealm}
-               ,{<<"request">>, Request}
-               ,{<<"request_user">>, RequestUser}
-               ,{<<"request_realm">>, RequestRealm}
-               ,{<<"body">>, Body}
-               ,{<<"bits">>, Bits}
-               ,{<<"message_id">>, MessageId}
-               ,{<<"pvt_created">>, Created}
-               ,{<<"pvt_modified">>, Modified}
-               ,{<<"pvt_schedule">>, Schedule}
-               ,{<<"pvt_status">>, Status}
-               ,{<<"call_id">>, kapps_call:call_id_direct(Call)}
-               ,{<<"pvt_call">>, kapps_call:to_json(remove_keys(Call))}
-               ,{<<"_rev">>, Rev}
+              ,{<<"pvt_type">>, <<"sms">>}
+              ,{<<"account_id">>, AccountId}
+              ,{<<"pvt_account_id">>, AccountId}
+              ,{<<"pvt_account_db">>, AccountDb}
+              ,{<<"owner_id">>, OwnerId}
+              ,{<<"pvt_owner_id">>, OwnerId}
+              ,{<<"authorization_type">>, AuthType}
+              ,{<<"authorization_id">>, AuthId}
+              ,{<<"pvt_authorization_type">>, AuthType}
+              ,{<<"pvt_authorization_id">>, AuthId}
+              ,{<<"pvt_target_device_id">>, kapps_call:kvs_fetch(<<"target_device_id">>, Call)}
+              ,{<<"pvt_target_owner_id">>, kapps_call:kvs_fetch(<<"target_owner_id">>, Call)}
+              ,{<<"to">>, To}
+              ,{<<"to_user">>, ToUser}
+              ,{<<"to_realm">>, ToRealm}
+              ,{<<"from">>, From}
+              ,{<<"from_user">>, FromUser}
+              ,{<<"from_realm">>, FromRealm}
+              ,{<<"request">>, Request}
+              ,{<<"request_user">>, RequestUser}
+              ,{<<"request_realm">>, RequestRealm}
+              ,{<<"body">>, Body}
+              ,{<<"bits">>, Bits}
+              ,{<<"message_id">>, MessageId}
+              ,{<<"pvt_created">>, Created}
+              ,{<<"pvt_modified">>, Modified}
+              ,{<<"pvt_schedule">>, Schedule}
+              ,{<<"pvt_status">>, Status}
+              ,{<<"call_id">>, kapps_call:call_id_direct(Call)}
+              ,{<<"pvt_call">>, kapps_call:to_json(remove_keys(Call))}
+              ,{<<"_rev">>, Rev}
               ]),
     JObjDoc = kz_json:set_values(Props, Doc),
     kazoo_modb:create(AccountDb),
@@ -220,19 +219,16 @@ endpoint_id_from_sipdb(Realm, Username) ->
                                         {'error', any()}.
 get_endpoint_id_from_sipdb(Realm, Username) ->
     ViewOptions = [{'key', [kz_util:to_lower_binary(Realm)
-                            ,kz_util:to_lower_binary(Username)
+                           ,kz_util:to_lower_binary(Username)
                            ]
                    }],
-    case kz_datamgr:get_results(?KZ_SIP_DB, <<"credentials/lookup">>, ViewOptions) of
-        {'ok', [JObj]} ->
+    case kz_datamgr:get_single_result(?KZ_SIP_DB, <<"credentials/lookup">>, ViewOptions) of
+        {'ok', JObj} ->
             EndpointId = kz_doc:id(JObj),
             AccountDb = kz_json:get_value([<<"value">>, <<"account_db">>], JObj),
             CacheProps = [{'origin', {'db', ?KZ_SIP_DB, EndpointId}}],
             kz_cache:store_local(?CACHE_NAME, ?SIP_ENDPOINT_ID_KEY(Realm, Username), {AccountDb, EndpointId}, CacheProps),
             {'ok', EndpointId};
-        {'ok', []} ->
-            lager:debug("sip username ~s not in sip_db", [Username]),
-            {'error', 'not_found'};
         {'error', _R}=E ->
             lager:warning("unable to lookup sip username ~s for owner ids: ~p", [Username, _R]),
             E
@@ -253,23 +249,20 @@ endpoint_from_sipdb(Realm, Username) ->
                                      {'error', any()}.
 get_endpoint_from_sipdb(Realm, Username) ->
     ViewOptions = [{'key', [kz_util:to_lower_binary(Realm)
-                            ,kz_util:to_lower_binary(Username)
+                           ,kz_util:to_lower_binary(Username)
                            ]
                    }
-                   ,'include_docs'
+                  ,'include_docs'
                   ],
-    case kz_datamgr:get_results(?KZ_SIP_DB, <<"credentials/lookup">>, ViewOptions) of
-        {'ok', [JObj]} ->
+    case kz_datamgr:get_single_result(?KZ_SIP_DB, <<"credentials/lookup">>, ViewOptions) of
+        {'ok', JObj} ->
             EndpointId = kz_doc:id(JObj),
             CacheProps = [{'origin', {'db', ?KZ_SIP_DB, EndpointId}}],
             Doc = kz_json:get_value(<<"doc">>, JObj),
             kz_cache:store_local(?CACHE_NAME, ?SIP_ENDPOINT_ID_KEY(Realm, Username), Doc, CacheProps),
             {'ok', Doc};
-        {'ok', []} ->
-            lager:debug("sip username ~s not in sip_db", [Username]),
-            {'error', 'not_found'};
         {'error', _R}=E ->
-            lager:warning("unable to lookup sip username ~s in sipdb: ~p", [Username, _R]),
+            lager:warning("lookup sip username ~s in sipdb failed: ~p", [Username, _R]),
             E
     end.
 
@@ -287,9 +280,9 @@ replay_sms_flow(_AccountId, _DocId, _Rev, 'undefined', _) -> 'ok';
 replay_sms_flow(AccountId, <<_:7/binary, CallId/binary>> = DocId, Rev, JObj, Schedule) ->
     lager:debug("replaying sms ~s for account ~s",[DocId, AccountId]),
     Routines = [{fun kapps_call:set_call_id/2, CallId}
-                ,fun(C) -> set_sms_revision(Rev, C) end
-                ,fun(C) -> set_flow_status(<<"resumed">>, C) end
-                ,{fun kapps_call:kvs_store/3, <<"flow_schedule">>, Schedule}
+               ,fun(C) -> set_sms_revision(Rev, C) end
+               ,fun(C) -> set_flow_status(<<"resumed">>, C) end
+               ,{fun kapps_call:kvs_store/3, <<"flow_schedule">>, Schedule}
                ],
 
     Call = kapps_call:exec(Routines, kapps_call:from_json(JObj)),
@@ -366,11 +359,11 @@ set_caller_id(Data, Call) ->
 set_caller_id(CIDNumber, CIDName, Call) ->
     Props = props:filter_empty(
               [{<<"Caller-ID-Name">>, CIDName}
-               ,{<<"Caller-ID-Number">>, CIDNumber}
+              ,{<<"Caller-ID-Number">>, CIDNumber}
               ]),
     Routines = [{fun kapps_call:set_caller_id_number/2, CIDNumber}
-                ,{fun kapps_call:set_caller_id_name/2, CIDName}
-                ,{fun kapps_call:set_custom_channel_vars/2, Props}
+               ,{fun kapps_call:set_caller_id_name/2, CIDName}
+               ,{fun kapps_call:set_custom_channel_vars/2, Props}
                ],
     kapps_call:exec(Routines, Call).
 
@@ -383,7 +376,7 @@ set_callee_id(EndpointId, Call) ->
     {CIDNumber, CIDName} = get_callee_id(EndpointId, Call),
     Props = props:filter_empty(
               [{<<"Callee-ID-Name">>, CIDName}
-               ,{<<"Callee-ID-Number">>, CIDNumber}
+              ,{<<"Callee-ID-Number">>, CIDNumber}
               ]),
     kapps_call:set_custom_channel_vars(Props, Call).
 
@@ -402,42 +395,6 @@ get_inbound_destination(JObj) ->
     Number = kz_json:get_first_defined(Keys, JObj),
     {knm_converters:normalize(Number), Inception}.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec lookup_number(ne_binary()) -> {'ok', ne_binary(), knm_number_options:extra_options()} |
-                                    {'error', any()}.
-lookup_number(Number) ->
-    Num = knm_converters:normalize(Number),
-    case kz_cache:fetch_local(?CACHE_NAME, cache_key_number(Num)) of
-        {'ok', {AccountId, Props}} ->
-            lager:debug("cached number ~s is associated with account ~s", [Num, AccountId]),
-            {'ok', AccountId, Props};
-        {'error', 'not_found'} ->
-            fetch_number(Num)
-    end.
-
--spec fetch_number(ne_binary()) -> {'ok', ne_binary(), knm_number_options:extra_options()} |
-                                   {'error', any()}.
-fetch_number(Num) ->
-    case knm_number:lookup_account(Num) of
-        {'ok', AccountId, Props} ->
-            CacheProps = [{'origin', [{'db', knm_converters:to_db(Num), Num}, {'type', <<"number">>}]}],
-            kz_cache:store_local(?CACHE_NAME, cache_key_number(Num), {AccountId, Props}, CacheProps),
-            lager:debug("~s is associated with account ~s", [Num, AccountId]),
-            {'ok', AccountId, Props};
-        {'error', Reason}=E ->
-            lager:debug("~s is not associated with any account, ~p", [Num, Reason]),
-            E
-    end.
-
--spec cache_key_number(ne_binary()) -> {'sms_number', ne_binary()}.
-cache_key_number(Number) ->
-    {'sms_number', Number}.
-
 -spec lookup_mdn(ne_binary()) ->
                         {'ok', ne_binary(), api_binary()} |
                         {'error', any()}.
@@ -454,7 +411,7 @@ lookup_mdn(Number) ->
                        {'ok', ne_binary(), api_binary()} |
                        {'error', any()}.
 fetch_mdn(Num) ->
-    case lookup_number(Num) of
+    case knm_number:lookup_account(Num) of
         {'ok', AccountId, _Props} ->
             fetch_mdn_result(AccountId, Num);
         {'error', Reason}=E ->
@@ -468,14 +425,15 @@ fetch_mdn(Num) ->
 fetch_mdn_result(AccountId, Num) ->
     AccountDb = kz_util:format_account_db(AccountId),
     ViewOptions = [{'key', mdn_from_e164(Num)}],
-    case kz_datamgr:get_results(AccountDb, ?MDN_VIEW, ViewOptions) of
-        {'ok', []} -> {'error', 'not_found'};
-        {'ok', [JObj]} ->
+    case kz_datamgr:get_single_result(AccountDb, ?MDN_VIEW, ViewOptions) of
+        {'ok', JObj} ->
             Id = kz_doc:id(JObj),
             OwnerId = kz_json:get_value([<<"value">>, <<"owner_id">>], JObj),
             lager:debug("~s is associated with mobile device ~s in account ~s", [Num, Id, AccountId]),
             cache_mdn_result(AccountDb, Id, OwnerId);
-        {'error', _}=E -> E
+        {'error', _R}=E ->
+            lager:debug("coudl not fetch mdn for ~p: ~p", [Num, _R]),
+            E
     end.
 
 -spec cache_mdn_result(ne_binary(), ne_binary(), api_binary()) ->
@@ -520,9 +478,9 @@ maybe_reschedule_sms(Code, Message, AccountId, Call) ->
     Rules = kapps_account_config:get_global(AccountId, ?CONFIG_CAT, <<"reschedule">>, kz_json:new()),
     Schedule = kz_json:set_values(
                  [{<<"code">>, Code}
-                  ,{<<"reason">>, Message}
+                 ,{<<"reason">>, Message}
                  ]
-                 ,kapps_call:kvs_fetch(<<"flow_schedule">>, kz_json:new(), Call)
+                                 ,kapps_call:kvs_fetch(<<"flow_schedule">>, kz_json:new(), Call)
                 ),
     case apply_reschedule_logic(kz_json:get_values(Rules), Schedule) of
         'no_rule' ->
@@ -566,12 +524,12 @@ apply_reschedule_rules({[Rule | Rules], [Key | Keys]}, JObj, Step) ->
         'no_match' ->
             NewObj = kz_json:set_values(
                        [{<<"rule_start_time">>, kz_util:current_tstamp()}
-                        ,{<<"attempts">>, 0}
+                       ,{<<"attempts">>, 0}
                        ], JObj),
             apply_reschedule_rules({Rules, Keys}, NewObj, Step+1);
         Schedule -> kz_json:set_values(
                       [{<<"rule">>, Step}
-                       ,{<<"rule_name">>, Key}
+                      ,{<<"rule_name">>, Key}
                       ], Schedule)
     end.
 
@@ -592,10 +550,18 @@ apply_reschedule_rule(<<"error">>, ErrorObj, JObj) ->
     XReasons = kz_json:get_value(<<"xreason">>, ErrorObj, []),
     Code = kz_json:get_value(<<"code">>, JObj, <<>>),
     Reason = kz_json:get_value(<<"reason">>, JObj, <<>>),
-    case    (lists:member(Code, Codes) orelse Codes =:= [])
-    andalso (lists:member(Reason, Reasons) orelse Reasons =:= [])
-    andalso ((not lists:member(Code, XCodes)) orelse XCodes =:= [])
-    andalso ((not lists:member(Reason, XReasons)) orelse XReasons =:= [])
+    case (lists:member(Code, Codes)
+          orelse Codes =:= []
+         )
+        andalso (lists:member(Reason, Reasons)
+                 orelse Reasons =:= []
+                )
+        andalso ((not lists:member(Code, XCodes))
+                 orelse XCodes =:= []
+                )
+        andalso ((not lists:member(Reason, XReasons))
+                 orelse XReasons =:= []
+                )
     of
         'true' -> JObj;
         'false' -> 'no_match'
@@ -626,15 +592,15 @@ apply_reschedule_rule(<<"report">>, V, JObj) ->
             >>,
     Props = props:filter_undefined(
               [{<<"To">>, kapps_call:to_user(Call)}
-               ,{<<"From">>, kapps_call:from_user(Call)}
-               ,{<<"Error">>, kz_util:strip_binary(Error)}
-               ,{<<"Attempts">>, kz_json:get_value(<<"attempts">>, JObj)}
+              ,{<<"From">>, kapps_call:from_user(Call)}
+              ,{<<"Error">>, kz_util:strip_binary(Error)}
+              ,{<<"Attempts">>, kz_json:get_value(<<"attempts">>, JObj)}
                | safe_to_proplist(V)
               ]),
     Notify = [{<<"Subject">>, <<"sms_error">>}
-              ,{<<"Message">>, <<"undelivered sms">>}
-              ,{<<"Details">>, kz_json:set_values(Props, kz_json:new())}
-              ,{<<"Account-ID">>, kapps_call:account_id(Call)}
+             ,{<<"Message">>, <<"undelivered sms">>}
+             ,{<<"Details">>, kz_json:set_values(Props, kz_json:new())}
+             ,{<<"Account-ID">>, kapps_call:account_id(Call)}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ],
     kz_amqp_worker:cast(Notify, fun kapi_notifications:publish_system_alert/1),

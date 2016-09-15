@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2014, 2600Hz
+%%% @copyright (C) 2013-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -59,14 +59,14 @@ collect_channel_prop(Key, JObj) ->
 -spec attachment_name(binary(), ne_binary()) -> ne_binary().
 attachment_name(Filename, CT) ->
     Generators = [fun maybe_generate_random_filename/1
-                  ,fun(A) -> maybe_attach_extension(A, CT) end
+                 ,fun(A) -> maybe_attach_extension(A, CT) end
                  ],
     lists:foldl(fun(F, A) -> F(A) end, Filename, Generators).
 
 -spec maybe_generate_random_filename(binary()) -> ne_binary().
 maybe_generate_random_filename(A) ->
     case kz_util:is_empty(A) of
-        'true' -> kz_util:to_hex_binary(crypto:rand_bytes(16));
+        'true' -> kz_util:to_hex_binary(crypto:strong_rand_bytes(16));
         'false' -> A
     end.
 
@@ -141,7 +141,10 @@ check_fax_attachment(DocId, Name) ->
                                     {'error', any()}.
 save_fax_doc_completed(JObj)->
     DocId = kz_doc:id(JObj),
-    case kz_datamgr:save_doc(?KZ_FAXES_DB, kz_json:set_values([{<<"pvt_job_status">>, <<"pending">>}], JObj)) of
+    Updates = [{<<"pvt_job_status">>, <<"pending">>}
+              ,{<<"pvt_modified">>, kz_util:current_tstamp()}
+              ],
+    case kz_datamgr:save_doc(?KZ_FAXES_DB, kz_json:set_values(Updates, JObj)) of
         {'ok', Doc} ->
             lager:debug("fax jobid ~s set to pending", [DocId]),
             {'ok', Doc};

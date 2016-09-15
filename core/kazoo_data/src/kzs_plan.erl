@@ -11,7 +11,9 @@
 
 -export([plan/0, plan/1, plan/2, plan/3, flush/0]).
 
--define(IS_JSON_GUARD(Obj), is_tuple(Obj) andalso is_list(element(1, Obj))).
+-define(IS_JSON_GUARD(Obj), is_tuple(Obj)
+        andalso is_list(element(1, Obj))
+       ).
 
 -define(NEW_CONNECTION_TIMEOUT, ?MILLISECONDS_IN_SECOND * 5).
 
@@ -22,12 +24,15 @@
 -define(CACHED_ACCOUNT_DATAPLAN(A), fetch_cached_dataplan(A, fun fetch_account_dataplan/1)).
 -define(CACHED_STORAGE_DATAPLAN(A,B), fetch_cached_dataplan({A, B}, fun fetch_storage_dataplan/1)).
 
+-spec flush() -> 'ok'.
 flush() ->
     kz_cache:flush_local(?KAZOO_DATA_PLAN_CACHE).
 
+-spec plan() -> map().
 plan() ->
     system_dataplan().
 
+-spec plan(ne_binary()) -> map().
 plan(DbName) ->
     get_dataplan(DbName).
 
@@ -35,7 +40,10 @@ plan(DbName) ->
 plan(DbName, DocType) when is_binary(DocType) ->
     plan(DbName, DocType, 'undefined');
 plan(DbName, Props) when is_list(Props) ->
-    plan(DbName, props:get_value('doc_type', Props), props:get_first_defined(['storage_id', 'doc_owner'], Props));
+    Type = props:get_value('doc_type', Props),
+    Owner = props:get_first_defined(['storage_id', 'doc_owner'], Props),
+    Plan = plan(DbName, Type, Owner),
+    maybe_override_plan(Plan, props:get_value('plan_override', Props));
 plan(DbName, Doc) when ?IS_JSON_GUARD(Doc) ->
     plan(DbName, kz_doc:type(Doc));
 plan(DbName, 'undefined')  ->
@@ -52,10 +60,15 @@ plan(DbName, DocType, 'undefined') ->
 plan(DbName, DocType, DocOwner) ->
     get_dataplan(DbName, DocType, DocOwner).
 
+maybe_override_plan(Plan, 'undefined') -> Plan;
+maybe_override_plan(Plan, #{}=Map) ->
+    maps:merge(Plan, Map).
+
 get_dataplan(DBName) ->
     case kzs_util:db_classification(DBName) of
         'modb' -> account_modb_dataplan(DBName);
         'account' -> account_dataplan(DBName);
+        'resource_selectors' -> account_dataplan(DBName);
         Else -> system_dataplan(DBName, Else)
     end.
 
@@ -65,6 +78,7 @@ get_dataplan(DBName, DocType) ->
     case kzs_util:db_classification(DBName) of
         'modb' -> account_modb_dataplan(DBName, DocType);
         'account' -> account_dataplan(DBName, DocType);
+        'resource_selectors' -> account_dataplan(DBName, DocType);
         Else -> system_dataplan(DBName, Else)
     end.
 
@@ -74,6 +88,7 @@ get_dataplan(DBName, DocType, DocOwner) ->
     case kzs_util:db_classification(DBName) of
         'modb' -> account_modb_dataplan(DBName, DocType, DocOwner);
         'account' -> account_dataplan(DBName, DocType, DocOwner);
+        'resource_selectors' -> account_dataplan(DBName, DocType, DocOwner);
         Else -> system_dataplan(DBName, Else)
     end.
 
@@ -134,7 +149,7 @@ account_modb_dataplan(AccountMODB, DocType, StorageId) ->
 -spec dataplan_connections(map(),map()) -> [{atom(), server()}].
 dataplan_connections(Map, Index) ->
     [maybe_start_connection(C, maps:get(C, Index, #{}))
-      || {_, #{<<"connection">> := C}} <- maps:to_list(Map)
+     || {_, #{<<"connection">> := C}} <- maps:to_list(Map)
     ].
 
 -spec dataplan_match(ne_binary(), map(), api_binary()) -> map().
@@ -149,11 +164,10 @@ dataplan_match(Classification, Plan, AccountId) ->
      } = Plan,
 
     {Tag, Server} = maybe_start_connection(CCon, maps:get(CCon, GCon, #{})),
-    Others = lists:filter(fun(T) -> T =/= Tag end
-                         ,lists:usort(fun({T1,_}, {T2, _}) -> T1 =< T2 end
-                                     ,dataplan_connections(Types, GCon)
-                                     )
-                         ),
+    Others = [T || T <- lists:usort(fun({T1,_}, {T2, _}) -> T1 =< T2 end
+                                   ,dataplan_connections(Types, GCon)
+                                   ),
+                   T =/= Tag],
 
     case maps:get(<<"handler">>, CAtt, 'undefined') of
         'undefined' ->
@@ -168,7 +182,7 @@ dataplan_match(Classification, Plan, AccountId) ->
                                 ,<<"settings">> := AttSettings
                                 }
              } = GAtt,
-            AttHandler = kz_util:to_atom(AttHandlerBin,'true'),
+            AttHandler = kz_util:to_atom(<<"kz_att_", AttHandlerBin/binary>>,'true'),
             Params = maps:merge(AttSettings, maps:get(<<"params">>, CAtt, #{})),
 
             #{tag => Tag
@@ -216,8 +230,8 @@ dataplan_type_match(Classification, DocType, Plan, AccountId) ->
                                 ,<<"settings">> := AttSettings
                                 }
              } = GAtt,
-             AttHandler = kz_util:to_atom(AttHandlerBin,'true'),
-             Params = maps:merge(AttSettings, maps:get(<<"params">>, TypeAttMap, #{})),
+            AttHandler = kz_util:to_atom(<<"kz_att_", AttHandlerBin/binary>>,'true'),
+            Params = maps:merge(AttSettings, maps:get(<<"params">>, TypeAttMap, #{})),
             #{tag => Tag
              ,server => Server
              ,att_proxy => 'true'
@@ -264,16 +278,17 @@ fetch_storage_dataplan({AccountId, StorageId}) ->
 
 -spec fetch_cached_dataplan(term(), fun()) -> map().
 fetch_cached_dataplan(Key, Fun) ->
-    case kz_cache:fetch_local(?KAZOO_DATA_PLAN_CACHE, {'plan', Key}) of
+    PT = {'plan', Key},
+    case kz_cache:fetch_local(?KAZOO_DATA_PLAN_CACHE, PT) of
         {'ok', Plan} -> Plan;
         {'error', 'not_found'} ->
             lager:debug("creating new dataplan ~p", [Key]),
             {Keys, PlanJObj} = Fun(Key),
             Plan = kz_json:to_map(PlanJObj),
             CacheProps = [{'origin', [{'db', ?KZ_DATA_DB, K } || K <- Keys]}
-                          ,{'expires','infinity'}
+                         ,{'expires','infinity'}
                          ],
-            kz_cache:store_local(?KAZOO_DATA_PLAN_CACHE, {'plan', Key}, Plan, CacheProps),
+            kz_cache:store_local(?KAZOO_DATA_PLAN_CACHE, PT, Plan, CacheProps),
             Plan
     end.
 
@@ -295,7 +310,7 @@ fetch_dataplan_from_file(Id) ->
                                          ,[Id, ".json"]
                                          ),
     kzs_cache:add_to_doc_cache(?KZ_DATA_DB, Id, JObj),
-     JObj.
+    JObj.
 
 -spec default_dataplan() -> kz_json:object().
 default_dataplan() ->

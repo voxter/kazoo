@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2015, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%% Init to be done
 %%% @end
@@ -7,7 +7,7 @@
 -module(registrar_init).
 
 -export([start_link/0
-         ,init/0
+        ,init/0
         ]).
 
 -include("reg.hrl").

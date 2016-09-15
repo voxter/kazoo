@@ -25,8 +25,8 @@ push(RegIds, Message, Key) ->
             {error, {retry, RetryTime}};
         {ok, {{_StatusLine, _, _}, _, _Body}} ->
             {error, timeout};
-        {error, Reason} ->
-            {error, Reason};
+        {error, _Reason} = Error ->
+            Error;
         _OtherError ->
             {noreply, unknown}
     catch
@@ -39,14 +39,14 @@ push(RegIds, Message, Key) ->
 -spec retry_after_from(headers()) -> 'no_retry' | non_neg_integer().
 retry_after_from(Headers) ->
     case proplists:get_value("retry-after", Headers) of
-	undefined ->
-	    no_retry;
-	RetryTime ->
-	    case string:to_integer(RetryTime) of
-		{Time, _} when is_integer(Time) ->
-		    Time;
-		{error, no_integer} ->
-		    Date = qdate:to_unixtime(RetryTime),
-		    Date - qdate:unixtime()
-	    end
+        undefined ->
+            no_retry;
+        RetryTime ->
+            case string:to_integer(RetryTime) of
+                {Time, _} when is_integer(Time) ->
+                    Time;
+                {error, no_integer} ->
+                    Date = qdate:to_unixtime(RetryTime),
+                    Date - qdate:unixtime()
+            end
     end.

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2015, 2600Hz inc
+%%% @copyright (C) 2016, 2600Hz inc
 %%% @doc
 %%%
 %%% @end
@@ -7,28 +7,29 @@
 %%% Peter DEfebvre
 %%%-------------------------------------------------------------------
 -module(blackhole_tracking).
-
 -behaviour(gen_listener).
 
 -export([start_link/0
-         ,handle_req/2
-         ,add_socket/1
-         ,remove_socket/1
-         ,update_socket/1
-         ,get_sockets/1
-         ,get_socket/1
+        ,handle_req/2
+        ,add_socket/1
+        ,remove_socket/1
+        ,update_socket/1
+        ,get_sockets/1
+        ,get_socket/1
         ]).
 
 -export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,handle_event/2
-         ,terminate/2
-         ,code_change/3
+        ,handle_call/3
+        ,handle_cast/2
+        ,handle_info/2
+        ,handle_event/2
+        ,terminate/2
+        ,code_change/3
         ]).
 
 -include("blackhole.hrl").
+
+-type state() :: ets:tid() | atom().
 
 -define(SERVER, ?MODULE).
 
@@ -49,14 +50,14 @@
 -spec start_link() -> startlink_ret().
 start_link() ->
     gen_listener:start_link({'local', ?SERVER}
-                            ,?MODULE
-                            ,[{'responders', ?RESPONDERS}
-                               ,{'bindings', ?BINDINGS}
-                               ,{'queue_name', ?BLACKHOLE_QUEUE_NAME}
-                               ,{'queue_options', ?BLACKHOLE_QUEUE_OPTIONS}
-                               ,{'consume_options', ?BLACKHOLE_CONSUME_OPTIONS}
+                           ,?MODULE
+                           ,[{'responders', ?RESPONDERS}
+                            ,{'bindings', ?BINDINGS}
+                            ,{'queue_name', ?BLACKHOLE_QUEUE_NAME}
+                            ,{'queue_options', ?BLACKHOLE_QUEUE_OPTIONS}
+                            ,{'consume_options', ?BLACKHOLE_CONSUME_OPTIONS}
                             ]
-                            ,[]
+                           ,[]
                            ).
 
 %%--------------------------------------------------------------------
@@ -72,16 +73,16 @@ handle_req(ApiJObj, _Props) ->
     Node = kz_json:get_binary_value(<<"Node">>, ApiJObj),
     RespData =
         handle_get_req_data(
-            kz_json:get_value(<<"Account-ID">>, ApiJObj)
-            ,kz_json:get_value(<<"Socket-ID">>, ApiJObj)
-            ,Node
-        ),
+          kz_json:get_value(<<"Account-ID">>, ApiJObj)
+                           ,kz_json:get_value(<<"Socket-ID">>, ApiJObj)
+                           ,Node
+         ),
     case RespData of
         'ok' -> 'ok';
         RespData ->
             RespQ = kz_json:get_value(<<"Server-ID">>, ApiJObj),
             Resp = [{<<"Data">>, RespData}
-                    ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, ApiJObj)}
+                   ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, ApiJObj)}
                     | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                    ],
             lager:debug("sending reply ~p to ~s",[RespData, Node]),
@@ -152,10 +153,13 @@ init([]) ->
     process_flag('trap_exit', 'true'),
     lager:debug("starting new ~s server", [?SERVER]),
     Tab = ets:new(?SERVER, ['set'
-                            ,'protected'
-                            ,'named_table'
-                            ,{'keypos', #bh_context.websocket_session_id}
+                           ,'protected'
+                           ,'named_table'
+                           ,{'keypos', #bh_context.websocket_session_id}
                            ]),
+    blackhole_bindings:bind(<<"blackhole.session.open">>, ?MODULE, 'add_socket'),
+    blackhole_bindings:bind(<<"blackhole.session.close">>, ?MODULE, 'remove_socket'),
+    blackhole_bindings:bind(<<"blackhole.finish.*">>, ?MODULE, 'update_socket'),
     {'ok', Tab}.
 
 %%--------------------------------------------------------------------
@@ -172,8 +176,9 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call({'get_sockets', AccountId}, _From, State) ->
-    Pattern = #bh_context{account_id=AccountId, _='_'},
+    Pattern = #bh_context{auth_account_id=AccountId, _='_'},
     Result =
         case ets:match_object(State, Pattern) of
             [] -> {'error', 'not_found'};
@@ -202,6 +207,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast({'add_socket', Context}, State) ->
     _ = ets:insert(State, Context),
     {noreply, State};
@@ -224,6 +230,7 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info(_Info, State) ->
     {'noreply', State}.
 
@@ -235,6 +242,7 @@ handle_info(_Info, State) ->
 %% @spec handle_event(JObj, State) -> {reply, Options}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_event(kz_json:object(), kz_proplist()) -> handle_event_ret().
 handle_event(_JObj, _State) ->
     {'reply', []}.
 
@@ -249,7 +257,11 @@ handle_event(_JObj, _State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
+    blackhole_bindings:unbind(<<"blackhole.session.open">>, ?MODULE, 'add_socket'),
+    blackhole_bindings:unbind(<<"blackhole.session.close">>, ?MODULE, 'remove_socket'),
+    blackhole_bindings:unbind(<<"blackhole.finish.*">>, ?MODULE, 'update_socket'),
     lager:debug("listener terminating: ~p", [_Reason]).
 
 %%--------------------------------------------------------------------
@@ -260,6 +272,7 @@ terminate(_Reason, _State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
@@ -277,7 +290,7 @@ handle_get_req_data('undefined', 'undefined', Node) ->
     lager:warning("received undefined blackhole get req", [Node]);
 handle_get_req_data(AccountId, 'undefined', Node) ->
     lager:debug("received blackhole get for account:~s from ~s", [AccountId, Node]),
-    case ?MODULE:get_sockets(AccountId) of
+    case get_sockets(AccountId) of
         {'error', 'not_found'} ->
             lager:debug("no sockets found for ~s", [AccountId]),
             [];
@@ -288,7 +301,7 @@ handle_get_req_data(AccountId, 'undefined', Node) ->
     end;
 handle_get_req_data('undefined', SocketId, Node) ->
     lager:debug("received blackhole get for socket:~s from ~s", [SocketId, Node]),
-    case ?MODULE:get_socket(SocketId) of
+    case get_socket(SocketId) of
         {'error', 'not_found'} ->
             lager:debug("socket ~s not found", [SocketId]);
         {'ok', Context} ->

@@ -1,0 +1,79 @@
+{
+    "$schema": "http://json-schema.org/draft-03/schema#",
+    "_id": "system_config.kazoo_couch",
+    "description": "Schema for kazoo_couch system_config",
+    "properties": {
+        "allow_maintenance_db_delete": {
+            "default": false,
+            "description": "kazoo_couch allow maintenance db delete",
+            "type": "boolean"
+        },
+        "autocompaction_check": {
+            "default": 60000,
+            "description": "kazoo_couch autocompaction check",
+            "type": "integer"
+        },
+        "compact_automatically": {
+            "default": true,
+            "description": "kazoo_couch compact automatically",
+            "type": "boolean"
+        },
+        "default_chunk_size": {
+            "default": 1000,
+            "description": "kazoo_couch default chunk size",
+            "type": "integer"
+        },
+        "max_compacting_shards": {
+            "default": 2,
+            "description": "kazoo_couch maximum compacting shards",
+            "type": "integer"
+        },
+        "max_compacting_views": {
+            "default": 2,
+            "description": "kazoo_couch maximum compacting views",
+            "type": "integer"
+        },
+        "max_concurrent_docs_to_archive": {
+            "default": 500,
+            "description": "kazoo_couch maximum concurrent docs to archive",
+            "type": "integer"
+        },
+        "max_wait_for_compaction_pids": {
+            "default": 360000,
+            "description": "kazoo_couch maximum wait for compaction pids",
+            "type": "integer"
+        },
+        "min_data_size": {
+            "default": 131072,
+            "description": "kazoo_couch minimum data size",
+            "type": "integer"
+        },
+        "min_ratio": {
+            "default": 1.2,
+            "description": "kazoo_couch minimum ratio",
+            "type": "number"
+        },
+        "sleep_between_compaction": {
+            "default": 60000,
+            "description": "kazoo_couch sleep between compaction",
+            "type": "integer"
+        },
+        "sleep_between_poll": {
+            "default": 3000,
+            "description": "kazoo_couch sleep between poll",
+            "type": "integer"
+        },
+        "sleep_between_views": {
+            "default": 2000,
+            "description": "kazoo_couch sleep between views",
+            "type": "integer"
+        },
+        "use_bigcouch_direct": {
+            "default": true,
+            "description": "kazoo_couch use bigcouch direct",
+            "type": "boolean"
+        }
+    },
+    "required": true,
+    "type": "object"
+}

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2013, 2600Hz
+%%% @copyright (C) 2012-2016, 2600Hz
 %%% @doc
 %%% Handles single requests for media binaries
 %%% @end
@@ -9,12 +9,16 @@
 -module(kz_media_single_proxy).
 
 -export([init/3
-         ,terminate/3
-         ,handle/2
+        ,terminate/3
+        ,handle/2
         ]).
 
 -include("kazoo_media.hrl").
 
+-type state() :: {kz_json:object(), binary()}.
+
+-spec init(any(), cowboy_req:req(), any()) -> {'ok', cowboy_req:req(), state()} |
+                                              {'shutdown', cowboy_req:req(), 'ok'}.
 init({_Transport, _Proto}, Req0, _Opts) ->
     kz_util:put_callid(kz_util:rand_hex_binary(16)),
     case cowboy_req:path_info(Req0) of
@@ -58,12 +62,11 @@ init_from_doc(Url, Req) ->
             {'shutdown', Req1, 'ok'}
     end.
 
+-spec handle(cowboy_req:req(), state()) -> {'ok', cowboy_req:req(), 'ok'}.
 handle(Req0, {Meta, Bin}) ->
     Size = byte_size(Bin),
-
     lager:debug("found binary to return: ~b bytes", [Size]),
-
-    ChunkSize = case Size of S when S > ?CHUNKSIZE -> ?CHUNKSIZE; S -> S end,
+    ChunkSize = min(Size, ?CHUNKSIZE),
 
     ContentType = kz_json:get_value(<<"content_type">>, Meta),
     MediaName = kz_json:get_value(<<"media_name">>, Meta, <<>>),
@@ -73,24 +76,25 @@ handle(Req0, {Meta, Bin}) ->
                CT when CT =:= <<"audio/mpeg">> orelse CT =:= <<"audio/mp3">> ->
                    Req1 = set_resp_headers(Req0, ChunkSize, ContentType, MediaName, Url),
                    cowboy_req:set_resp_body_fun(Size
-                                                ,fun(Socket, Transport) ->
-                                                         kz_media_proxy_util:stream(Socket, Transport, ChunkSize, Bin
-                                                                                    ,kz_media_proxy_util:get_shout_header(MediaName, Url)
-                                                                                    ,'true')
-                                                 end
-                                                ,Req1);
+                                               ,fun(Socket, Transport) ->
+                                                        kz_media_proxy_util:stream(Socket, Transport, ChunkSize, Bin
+                                                                                  ,kz_media_proxy_util:get_shout_header(MediaName, Url)
+                                                                                  ,'true')
+                                                end
+                                               ,Req1);
                CT ->
                    Req1 = set_resp_headers(Req0, CT),
                    cowboy_req:set_resp_body_fun(Size
-                                                ,fun(Socket, Transport) ->
-                                                         kz_media_proxy_util:stream(Socket, Transport, ChunkSize, Bin, 'undefined', 'false')
-                                                 end
-                                                ,Req1)
+                                               ,fun(Socket, Transport) ->
+                                                        kz_media_proxy_util:stream(Socket, Transport, ChunkSize, Bin, 'undefined', 'false')
+                                                end
+                                               ,Req1)
            end,
 
     {'ok', Req3} = cowboy_req:reply(200, Req2),
     {'ok', Req3, 'ok'}.
 
+-spec terminate(any(), cowboy_req:req(), state()) -> cowboy_req:req().
 terminate(_Reason, Req, _State) ->
     lager:debug("terminating single proxy req"),
     Req.
@@ -99,7 +103,7 @@ set_resp_headers(Req, ContentType) ->
     lists:foldl(fun({K,V}, Req0Acc) ->
                         cowboy_req:set_resp_header(K, V, Req0Acc)
                 end, Req, [{<<"Server">>, list_to_binary([?APP_NAME, "/", ?APP_VERSION])}
-                           ,{<<"Content-Type">>, ContentType}
+                          ,{<<"Content-Type">>, ContentType}
                           ]
                ).
 
@@ -109,15 +113,15 @@ set_resp_headers(Req, ChunkSize, ContentType, MediaName, Url) ->
     lists:foldl(fun({K,V}, Req0Acc) ->
                         cowboy_req:set_resp_header(K, V, Req0Acc)
                 end, Req, [{<<"Server">>, list_to_binary([?APP_NAME, "/", ?APP_VERSION])}
-                           ,{<<"Content-Type">>, ContentType}
-                           ,{<<"icy-notice1">>, <<"MediaMgr">>}
-                           ,{<<"icy-name">>, MediaName}
-                           ,{<<"icy-genre">>, <<"Kazoo Media">>}
-                           ,{<<"icy-url">>, Url}
-                           ,{<<"content-type">>, ContentType}
-                           ,{<<"icy-pub">>, <<"1">>}
-                           ,{<<"icy-metaint">>, kz_util:to_binary(ChunkSize)}
-                           ,{<<"icy-br">>, <<"8">>}
+                          ,{<<"Content-Type">>, ContentType}
+                          ,{<<"icy-notice1">>, <<"MediaMgr">>}
+                          ,{<<"icy-name">>, MediaName}
+                          ,{<<"icy-genre">>, <<"Kazoo Media">>}
+                          ,{<<"icy-url">>, Url}
+                          ,{<<"content-type">>, ContentType}
+                          ,{<<"icy-pub">>, <<"1">>}
+                          ,{<<"icy-metaint">>, kz_util:to_binary(ChunkSize)}
+                          ,{<<"icy-br">>, <<"8">>}
                           ]
                ).
 

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2015, 2600hz, INC
+%%% @copyright (C) 2013-2016, 2600Hz, INC
 %%% @doc
 %%%
 %%% @end
@@ -7,6 +7,8 @@
 %%%   SIPLABS LLC (Maksim Krzhemenevskiy)
 %%%-------------------------------------------------------------------
 -module(cf_hangup).
+
+-behaviour(gen_cf_action).
 
 %% API
 -export([handle/2]).

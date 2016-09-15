@@ -2,14 +2,43 @@
 
 Kazoo Tasks enables listing, adding, starting & removing generic background tasks.
 
+#### Schema
+
+Key | Description | Type | Default | Required
+--- | ----------- | ---- | ------- | --------
+`records` | List the rows of input data | `array(object)` |   | `false`
+
+
 
 #### List available tasks
 
 > GET /v2/tasks
 
+##### No such category and/or action
+
 ```shell
 curl -v -X GET \
-    http://{SERVER}:8000/v2/tasks
+    http://{SERVER}:8000/v2/tasks?category=services&action=blipblop
+```
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": {
+        "message": "invalid request"
+    },
+    "error": "500",
+    "message": "invalid request",
+    "request_id": "{REQUEST_ID}",
+    "status": "error"
+}
+```
+
+##### Success
+
+```shell
+curl -v -X GET \
+    http://{SERVER}:8000/v2/tasks?category=services&action=descendant_quantities
 ```
 
 ```json
@@ -17,35 +46,14 @@ curl -v -X GET \
     "auth_token": "{AUTH_TOKEN}",
     "data": {
         "tasks": {
-            "number_management": {
-                "add": {
-                    "description": "Bulk-create numbers",
-                    "expected_content": "text/csv",
-                    "mandatory": [
-                        "number",
-                        "account_id"
-                    ],
-                    "optional": [
-                        "auth_by",
-                        "module_name"
-                    ]
-                },
-                "assign_to": {
-                    "description": "Bulk-assign numbers to the provided account",
-                    "expected_content": "text/csv",
-                    "mandatory": [
-                        "number",
-                        "account_id"
-                    ],
-                    "optional": [
-                        "auth_by"
-                    ]
-                }
+            "descendant_quantities": {
+                "description": "List per-month descendant accounts quantities",
+                "doc": "Attempts to create a month-on-month listing of quantities used by descendant accounts.\nThis task returns the following fields:\n* `account_id`: a sub-account of the creator of this task.\n* `year`: integral year as 4 characters.\n* `month`: integral month as 2 characters (left-padded with a zero).\n* `category`: name of the quantity's category.\n* `item`: name of the category's item.\n* `quantity_bom`: integral quantity's value or empty.\n* `quantity_eom`: integral quantity's value or empty.\nNote: some beginning-of-month and end-of-month quantities documents may be missing.\nNote: when both an account's BoM & EoM documents for a given month are missing, no rows are a created for this month.\nNote: in all other cases the documents' value is printed verbatim: if unset the empty string is returned.\nE.g.: an integer quantity (such as 1, 10 or 0 (zero)) represents was the system has. If no quantity was found, the empty value is used.\n"
             }
         }
     },
-    "request_id": "71f237d7ccce7a2418c8e026f18289aa",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -67,15 +75,18 @@ curl -v -X GET \
     "data": [
         {
             "account_id": "{ACCOUNT_ID}",
+            "auth_account_id": "{AUTH_ACCOUNT_ID}",
             "action": "add",
             "category": "number_management",
             "created": 63632526992,
+            "file_name": "my_input_for_add.csv",
             "id": "e5c92c4b50bcec520d5d7e1ce1b869",
             "status": "pending",
             "total_count": 1
         },
         {
             "account_id": "{ACCOUNT_ID}",
+            "auth_account_id": "{AUTH_ACCOUNT_ID}",
             "action": "add",
             "category": "number_management",
             "created": 63632526924,
@@ -89,8 +100,8 @@ curl -v -X GET \
         }
     ],
     "page_size": 2,
-    "request_id": "9fcff776cd4eb3d7d92389d9209db2d5",
-    "revision": "601ffbf34fcbbc56597acf79847efde7",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -107,7 +118,7 @@ curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     -H "Content-Type: text/csv" \
     --data-binary @path/to/your/file.csv \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/tasks?category={CATEGORY}&action={ACTION}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/tasks?category={CATEGORY}&action={ACTION}&file_name={FILE_NAME}
 ```
 
 With JSON input data:
@@ -115,7 +126,7 @@ With JSON input data:
 ```shell
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    -d '{"data": {"records": [{RECORDS}]}}' \
+    -d '{"data": {"records":[{RECORDS}], "file_name":"{FILE_NAME}"}}' \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/tasks?category={CATEGORY}&action={ACTION}
 ```
 
@@ -135,6 +146,7 @@ curl -v -X PUT \
     "data": {
         "_read_only": {
             "account_id": "{ACCOUNT_ID}",
+            "auth_account_id": "{AUTH_ACCOUNT_ID}",
             "action": "{ACTION}",
             "category": "{CATEGORY}",
             "id": "edfb48ea9617fa6832e43ce676c53f",
@@ -142,26 +154,9 @@ curl -v -X PUT \
             "total_count": {RECORDS_COUNT}
         }
     },
-    "request_id": "6bc9187feafe54a5c16d07e1a493c04f",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
-}
-```
-
-##### Failure: no task providers known yet
-
-```json
-{
-    "auth_token": "{AUTH_TOKEN}",
-    "data": {
-        "cause": "{CATEGORY}",
-        "message": "bad identifier",
-        "tip": "No APIs known yet: please try again in a second."
-    },
-    "error": "404",
-    "message": "bad_identifier",
-    "request_id": "0e77686d7dfc6ecb1b8c78b745c2ed92",
-    "status": "error"
 }
 ```
 
@@ -175,7 +170,7 @@ curl -v -X PUT \
     ],
     "error": "404",
     "message": "bad identifier",
-    "request_id": "86218c6dcd58505f1dc6e036b08cd151",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```
@@ -190,7 +185,7 @@ curl -v -X PUT \
     ],
     "error": "404",
     "message": "bad identifier",
-    "request_id": "151dc80b630e6cd1f50585dcd6c81268",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```
@@ -209,7 +204,7 @@ curl -v -X PUT \
     },
     "error": "500",
     "message": "invalid request",
-    "request_id": "f319f2a4fd112c91ba536dfa39fd50ff",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```
@@ -230,7 +225,7 @@ curl -v -X PUT \
     },
     "error": "500",
     "message": "invalid request",
-    "request_id": "296a70611e460b82628cb873c11e5c98",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```
@@ -252,7 +247,7 @@ curl -v -X PUT \
     },
     "error": "500",
     "message": "invalid request",
-    "request_id": "216e9b80decc66a706320a9bd11da544",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```
@@ -274,7 +269,7 @@ curl -v -X PUT \
     },
     "error": "500",
     "message": "invalid request",
-    "request_id": "5d2a8cd40b3e9242eeeb456cc76b5ad9",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```
@@ -298,6 +293,7 @@ curl -v -X DELETE \
     "data": {
         "_read_only": {
             "account_id": "{ACCOUNT_ID}",
+            "auth_account_id": "{AUTH_ACCOUNT_ID}",
             "action": "add",
             "category": "number_management",
             "end_timestamp": 63632524230,
@@ -311,8 +307,8 @@ curl -v -X DELETE \
             "total_count": 2
         }
     },
-    "request_id": "de3900aff99402497280f11928c81ea6",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -327,7 +323,7 @@ curl -v -X DELETE \
     ],
     "error": "404",
     "message": "bad identifier",
-    "request_id": "8a495e9ed03f75e414e19c8923ece5f5",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```
@@ -343,7 +339,7 @@ curl -v -X DELETE \
     },
     "error": "404",
     "message": "bad_identifier",
-    "request_id": "c5488723679244682ddcfd06fa7d4fcd",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```
@@ -351,23 +347,7 @@ curl -v -X DELETE \
 
 #### Get a specific task's details
 
-Optional: use `-H "Accept: text/csv"` to fetch the task's input data file as a CSV.
-
 > GET /v2/accounts/{ACCOUNT_ID}/tasks/{TASK_ID}
-
-To fetch its CSV data:
-
-```shell
-curl -v -X GET \
-    -H "X-Auth-Token: {AUTH_TOKEN}" \
-    -H "Accept: text/csv" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/tasks/{TASK_ID}
-```
-
-Streams back the contents of the task's input in CSV format.
-
-
-To fetch a task's summary:
 
 ```shell
 curl -v -X GET \
@@ -383,16 +363,20 @@ curl -v -X GET \
     "data": {
         "_read_only": {
             "account_id": "{ACCOUNT_ID}",
-            "action": "add",
+            "auth_account_id": "{AUTH_ACCOUNT_ID}",
+            "action": "list",
             "category": "number_management",
+            "created": 63633924886,
+            "failure_count": 0,
             "id": "{TASK_ID}",
-            "status": "pending",
-            "submit_timestamp": 63632220951
-            "total_count": 2
+            "node": "whistle_apps@qwd",
+            "start_timestamp": 63633924909,
+            "status": "executing",
+            "success_count": 50
         }
     },
-    "request_id": "8341d44579d03e7aa2e97e1cc0c5123f",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -407,7 +391,7 @@ curl -v -X GET \
     ],
     "error": "404",
     "message": "bad identifier",
-    "request_id": "d3f7ba1b65348a4257fc1a59e99b6203",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```
@@ -431,6 +415,7 @@ curl -v -X PATCH \
     "data": {
         "_read_only": {
             "account_id": "{ACCOUNT_ID}",
+            "auth_account_id": "{AUTH_ACCOUNT_ID}",
             "action": "add",
             "category": "number_management",
             "id": "{TASK_ID}",
@@ -441,8 +426,8 @@ curl -v -X PATCH \
             "total_count": 2
         }
     },
-    "request_id": "c05d845800c67d1cd5c01e5276155436",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -459,7 +444,7 @@ curl -v -X PATCH \
     },
     "error": "404",
     "message": "bad_identifier",
-    "request_id": "d85d7a75fba07d672c58ef2a984619f9",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```
@@ -475,7 +460,38 @@ curl -v -X PATCH \
     },
     "error": "404",
     "message": "bad_identifier",
-    "request_id": "f1a27978cada1d8cc41bd2473edd3ade",
+    "request_id": "{REQUEST_ID}",
+    "status": "error"
+}
+```
+
+
+#### Retrieve a task's input CSV
+
+> GET /v2/accounts/{ACCOUNT_ID}/tasks/{TASK_ID}/input
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/tasks/{TASK_ID}/input
+```
+
+##### Success
+
+Streams back the task's input in CSV format.
+
+##### Task does not exist or did not have any input data
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": {
+        "cause": "{TASK_ID}",
+        "message": "bad identifier"
+    },
+    "error": "404",
+    "message": "bad_identifier",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```
@@ -491,4 +507,22 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/tasks/{TASK_ID}/output
 ```
 
+##### Success
+
 Streams back the task's output in CSV format.
+
+##### Task does not exist or output not yet in database
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": {
+        "cause": "{TASK_ID}",
+        "message": "bad identifier"
+    },
+    "error": "404",
+    "message": "bad_identifier",
+    "request_id": "{REQUEST_ID}",
+    "status": "error"
+}
+```

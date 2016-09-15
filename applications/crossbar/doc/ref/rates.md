@@ -19,7 +19,7 @@ Key | Description | Type | Default | Required
 `rate_increment` | The time slice, in seconds, to bill in. | `integer` | `60` | `false`
 `rate_minimum` | The minimum time slice, in seconds to bill a call | `integer` | `60` | `false`
 `rate_name` | Friendly name of the rate | `string` |   | `false`
-`rate_nocharge_time` | If the call duration is shorter than this threshold, the call is not billed | `integer` | `0` | `false`
+`rate_nocharge_time` | If the call duration is shorter than this threshold (seconds), the call is not billed | `integer` | `0` | `false`
 `rate_surcharge` | The upfront cost of connecting the call | `number` | `0` | `false`
 `routes` | List of regexs that match valid DIDs for this rate | `array(string)` | `[]` | `false`
 `routes.[]` |   | `string` |   | `false`
@@ -30,7 +30,7 @@ Key | Description | Type | Default | Required
 
 > GET /v2/rates
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/rates
@@ -40,7 +40,7 @@ curl -v -X GET \
 
 > POST /v2/rates
 
-```curl
+```shell
 curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/rates
@@ -50,7 +50,7 @@ curl -v -X POST \
 
 > PUT /v2/rates
 
-```curl
+```shell
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/rates
@@ -60,7 +60,7 @@ curl -v -X PUT \
 
 > DELETE /v2/rates/{RATE_ID}
 
-```curl
+```shell
 curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/rates/{RATE_ID}
@@ -70,7 +70,7 @@ curl -v -X DELETE \
 
 > GET /v2/rates/{RATE_ID}
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/rates/{RATE_ID}
@@ -80,7 +80,7 @@ curl -v -X GET \
 
 > PATCH /v2/rates/{RATE_ID}
 
-```curl
+```shell
 curl -v -X PATCH \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/rates/{RATE_ID}
@@ -90,7 +90,7 @@ curl -v -X PATCH \
 
 > POST /v2/rates/{RATE_ID}
 
-```curl
+```shell
 curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/rates/{RATE_ID}
@@ -98,11 +98,11 @@ curl -v -X POST \
 
 #### Fetch
 
-> GET /v2/rates/number/{PHONENUMBER}
+> GET /v2/rates/number/{PHONE_NUMBER}
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/rates/number/{PHONENUMBER}
+    http://{SERVER}:8000/v2/rates/number/{PHONE_NUMBER}
 ```
 

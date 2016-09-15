@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2013, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -7,6 +7,8 @@
 %%%   Jon Blanton
 %%%-------------------------------------------------------------------
 -module(cf_prepend_cid).
+
+-behaviour(gen_cf_action).
 
 -include("callflow.hrl").
 
@@ -19,14 +21,14 @@ handle(Data, Call) ->
             <<"reset">> -> {'undefined', 'undefined'};
             _ ->
                 {kz_json:get_ne_value(<<"caller_id_name_prefix">>, Data)
-                 ,kz_json:get_ne_value(<<"caller_id_number_prefix">>, Data)
+                ,kz_json:get_ne_value(<<"caller_id_number_prefix">>, Data)
                 }
         end,
 
     lager:info("update prefix with name: ~s num: ~s", [CIDNamePrefix, CIDNumberPrefix]),
 
     Updates = [fun(C) -> set_cid_name_prefix(C, CIDNamePrefix) end
-               ,fun(C) -> set_cid_number_prefix(C, CIDNumberPrefix) end
+              ,fun(C) -> set_cid_number_prefix(C, CIDNumberPrefix) end
               ],
     {'ok', Call1} = cf_exe:get_call(Call),
     cf_exe:set_call(kapps_call:exec(Updates, Call1)),

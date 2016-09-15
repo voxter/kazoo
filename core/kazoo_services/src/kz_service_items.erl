@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2015, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -42,8 +42,8 @@ get_updated_items(UpdatedItems, ExistingItems) ->
       fun(Key, UpdatedItem, DifferingItems) ->
               get_updated_items(Key, UpdatedItem, ExistingItems, DifferingItems)
       end
-      ,dict:new()
-      ,UpdatedItems
+             ,dict:new()
+             ,UpdatedItems
      ).
 
 get_updated_items(Key, UpdatedItem, ExistingItems, DifferingItems) ->
@@ -65,10 +65,8 @@ get_item(Key, Items) ->
 
 -spec compare(kz_service_item:item(), kz_service_item:item()) -> boolean().
 compare(Item1, Item2) ->
-    case compare_quantity(Item1, Item2) of
-        'true' -> 'true';
-        'false' -> compare_rate(Item1, Item2)
-    end.
+    compare_quantity(Item1, Item2)
+        orelse compare_rate(Item1, Item2).
 
 -spec compare_quantity(kz_service_item:item(), kz_service_item:item()) -> boolean().
 compare_quantity(Item1, Item2) ->
@@ -175,7 +173,7 @@ log_update_cumulative_discount(Category, Item, ServiceItem) ->
         'true' -> 'ok';
         CumulativeRate ->
             lager:debug("set '~s/~s' cumulative discount with quantity ~p @ $~p"
-                        ,[Category, Item, CumulativeDiscount, CumulativeRate]
+                       ,[Category, Item, CumulativeDiscount, CumulativeRate]
                        )
     end.
 
@@ -187,6 +185,6 @@ log_update_single_discount(Category, Item, ServiceItem) ->
         'false' -> 'ok';
         SingleRate ->
             lager:debug("set '~s/~s' single discount for $~p"
-                        ,[Category, Item, SingleRate]
+                       ,[Category, Item, SingleRate]
                        )
     end.

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2014-2015, 2600Hz Inc
+%%% @copyright (C) 2014-2016, 2600Hz Inc
 %%% @doc
 %%%
 %%% @end
@@ -9,7 +9,7 @@
 -module(teletype_voicemail_to_email).
 
 -export([init/0
-         ,handle_new_voicemail/2
+        ,handle_new_voicemail/2
         ]).
 
 -include("teletype.hrl").
@@ -19,19 +19,17 @@
 -define(TEMPLATE_ID, <<"voicemail_to_email">>).
 
 -define(TEMPLATE_MACROS
-        ,kz_json:from_list(
-           [?MACRO_VALUE(<<"voicemail.box">>, <<"voicemail_box">>, <<"Voicemail Box">>, <<"Which voicemail box was the message left in">>)
-            ,?MACRO_VALUE(<<"voicemail.name">>, <<"voicemail_name">>, <<"Voicemail Name">>, <<"Name of the voicemail file">>)
-            ,?MACRO_VALUE(<<"voicemail.length">>, <<"voicemail_length">>, <<"Voicemail Length">>, <<"Length of the voicemail file">>)
-            ,?MACRO_VALUE(<<"call_id">>, <<"call_id">>, <<"Call ID">>, <<"Call ID of the caller">>)
-            ,?MACRO_VALUE(<<"owner.first_name">>, <<"first_name">>, <<"First Name">>, <<"First name of the owner of the voicemail box">>)
-            ,?MACRO_VALUE(<<"owner.last_name">>, <<"last_name">>, <<"Last Name">>, <<"Last name of the owner of the voicemail box">>)
-            | ?DEFAULT_CALL_MACROS
-           ])
+       ,kz_json:from_list(
+          [?MACRO_VALUE(<<"voicemail.box">>, <<"voicemail_box">>, <<"Voicemail Box">>, <<"Which voicemail box was the message left in">>)
+          ,?MACRO_VALUE(<<"voicemail.name">>, <<"voicemail_name">>, <<"Voicemail Name">>, <<"Name of the voicemail file">>)
+          ,?MACRO_VALUE(<<"voicemail.length">>, <<"voicemail_length">>, <<"Voicemail Length">>, <<"Length of the voicemail file">>)
+          ,?MACRO_VALUE(<<"call_id">>, <<"call_id">>, <<"Call ID">>, <<"Call ID of the caller">>)
+          ,?MACRO_VALUE(<<"owner.first_name">>, <<"first_name">>, <<"First Name">>, <<"First name of the owner of the voicemail box">>)
+          ,?MACRO_VALUE(<<"owner.last_name">>, <<"last_name">>, <<"Last Name">>, <<"Last name of the owner of the voicemail box">>)
+           | ?DEFAULT_CALL_MACROS
+          ])
        ).
 
--define(TEMPLATE_TEXT, <<"New Voicemail Message\n\nCaller ID: {{caller_id.number}}\nCaller Name: {{caller_id.name}}\n\nCalled To: {{to.user}}   (Originally dialed number)\nCalled On: {{date_called.local|date:\"l, F j, Y \\\\a\\\\t H:i\"}}\n\nTranscription: {{voicemail.transcription|default:\"Not Enabled\"}}">>).
--define(TEMPLATE_HTML, <<"<html><body><h3>New Voicemail Message</h3><table><tr><td>Caller ID</td><td>{{caller_id.name}} ({{caller_id.number}})</td></tr><tr><td>Callee ID</td><td>{{to.user}} (originally dialed number)</td></tr><tr><td>Call received</td><td>{{date_called.local|date:\"l, F j, Y \\\\a\\\\t H:i\"}}</td></tr></table><p style=\"font-size: 9px;color:#C0C0C0\">{{call_id}}</p><p>Transcription: {{voicemail.transcription|default:\"Not Enabled\"}}</p></body></html>">>).
 -define(TEMPLATE_SUBJECT, <<"New voicemail from {{caller_id.name}} ({{caller_id.number}})">>).
 -define(TEMPLATE_CATEGORY, <<"voicemail">>).
 -define(TEMPLATE_NAME, <<"Voicemail To Email">>).
@@ -46,16 +44,14 @@
 init() ->
     kz_util:put_callid(?MODULE),
     teletype_templates:init(?TEMPLATE_ID, [{'macros', ?TEMPLATE_MACROS}
-                                           ,{'text', ?TEMPLATE_TEXT}
-                                           ,{'html', ?TEMPLATE_HTML}
-                                           ,{'subject', ?TEMPLATE_SUBJECT}
-                                           ,{'category', ?TEMPLATE_CATEGORY}
-                                           ,{'friendly_name', ?TEMPLATE_NAME}
-                                           ,{'to', ?TEMPLATE_TO}
-                                           ,{'from', ?TEMPLATE_FROM}
-                                           ,{'cc', ?TEMPLATE_CC}
-                                           ,{'bcc', ?TEMPLATE_BCC}
-                                           ,{'reply_to', ?TEMPLATE_REPLY_TO}
+                                          ,{'subject', ?TEMPLATE_SUBJECT}
+                                          ,{'category', ?TEMPLATE_CATEGORY}
+                                          ,{'friendly_name', ?TEMPLATE_NAME}
+                                          ,{'to', ?TEMPLATE_TO}
+                                          ,{'from', ?TEMPLATE_FROM}
+                                          ,{'cc', ?TEMPLATE_CC}
+                                          ,{'bcc', ?TEMPLATE_BCC}
+                                          ,{'reply_to', ?TEMPLATE_REPLY_TO}
                                           ]).
 
 -spec handle_new_voicemail(kz_json:object(), kz_proplist()) -> 'ok'.
@@ -84,18 +80,21 @@ handle_new_voicemail(JObj, _Props) ->
     %% If the box has emails, continue processing
     %% or If the voicemail notification is enabled on the user, continue processing
     %% otherwise stop processing
-    (Emails =/= [] andalso
-     (kzd_user:voicemail_notification_enabled(UserJObj) orelse kz_json:is_empty(UserJObj)))
+    (Emails =/= []
+     andalso (kzd_user:voicemail_notification_enabled(UserJObj)
+              orelse kz_json:is_empty(UserJObj)
+             )
+    )
         orelse teletype_util:stop_processing("box ~s has no emails or owner doesn't want emails", [VMBoxId]),
 
     ReqData =
         kz_json:set_values(
           [{<<"voicemail">>, VMBox}
-           ,{<<"owner">>, UserJObj}
-           ,{<<"account">>, AccountJObj}
-           ,{<<"to">>, Emails}
+          ,{<<"owner">>, UserJObj}
+          ,{<<"account">>, AccountJObj}
+          ,{<<"to">>, Emails}
           ]
-          ,DataJObj
+                          ,DataJObj
          ),
 
     case teletype_util:is_preview(DataJObj) of
@@ -132,7 +131,7 @@ process_req(DataJObj) ->
 
     Subject = teletype_util:render_subject(
                 kz_json:find(<<"subject">>, [DataJObj, TemplateMetaJObj], ?TEMPLATE_SUBJECT)
-                ,Macros
+                                          ,Macros
                ),
 
     Emails = teletype_util:find_addresses(DataJObj, TemplateMetaJObj, ?MOD_CONFIG_CAT),
@@ -153,15 +152,15 @@ email_attachments(_DataJObj, _Macros, 'true') -> [];
 email_attachments(DataJObj, Macros, 'false') ->
     VMId = kz_json:get_value(<<"voicemail_name">>, DataJObj),
     AccountId = kz_json:get_value(<<"account_id">>, DataJObj),
-    DB = kz_vm_message:get_db(AccountId, VMId),
-    {'ok', VMJObj} = kz_vm_message:message_doc(AccountId, VMId),
+    DB = kvm_util:get_db(AccountId, VMId),
+    {'ok', VMJObj} = kvm_message:fetch(AccountId, VMId),
 
     {[AttachmentMeta], [AttachmentId]} = kz_json:get_values(kz_doc:attachments(VMJObj)),
     {'ok', AttachmentBin} = kz_datamgr:fetch_attachment(DB, VMId, AttachmentId),
 
     [{kz_json:get_value(<<"content_type">>, AttachmentMeta)
-      ,get_file_name(VMJObj, Macros)
-      ,AttachmentBin
+     ,get_file_name(VMJObj, Macros)
+     ,AttachmentBin
      }].
 
 -spec get_file_name(kz_json:object(), kz_proplist()) -> ne_binary().
@@ -169,7 +168,7 @@ get_file_name(MediaJObj, Macros) ->
     %% CallerID_Date_Time.mp3
     CallerID =
         case {props:get_value([<<"caller_id">>, <<"name">>], Macros)
-              ,props:get_value([<<"caller_id">>, <<"number">>], Macros)
+             ,props:get_value([<<"caller_id">>, <<"number">>], Macros)
              }
         of
             {'undefined', 'undefined'} -> <<"Unknown">>;
@@ -193,41 +192,41 @@ get_extension(MediaJObj) ->
 -spec build_template_data(kz_json:object()) -> kz_proplist().
 build_template_data(DataJObj) ->
     [{<<"caller_id">>, build_caller_id_data(DataJObj)}
-     ,{<<"callee_id">>, build_callee_id_data(DataJObj)}
-     ,{<<"date_called">>, build_date_called_data(DataJObj)}
-     ,{<<"voicemail">>, build_voicemail_data(DataJObj)}
-     ,{<<"call_id">>, kz_json:get_value(<<"call_id">>, DataJObj)}
-     ,{<<"from">>, build_from_data(DataJObj)}
-     ,{<<"to">>, build_to_data(DataJObj)}
-     ,{<<"account">>, teletype_util:account_params(DataJObj)}
+    ,{<<"callee_id">>, build_callee_id_data(DataJObj)}
+    ,{<<"date_called">>, build_date_called_data(DataJObj)}
+    ,{<<"voicemail">>, build_voicemail_data(DataJObj)}
+    ,{<<"call_id">>, kz_json:get_value(<<"call_id">>, DataJObj)}
+    ,{<<"from">>, build_from_data(DataJObj)}
+    ,{<<"to">>, build_to_data(DataJObj)}
+    ,{<<"account">>, teletype_util:account_params(DataJObj)}
     ].
 
 -spec build_from_data(kz_json:object()) -> kz_proplist().
 build_from_data(DataJObj) ->
     props:filter_undefined(
       [{<<"user">>, kz_json:get_value(<<"from_user">>, DataJObj)}
-       ,{<<"realm">>, kz_json:get_value(<<"from_realm">>, DataJObj)}
+      ,{<<"realm">>, kz_json:get_value(<<"from_realm">>, DataJObj)}
       ]).
 
 -spec build_to_data(kz_json:object()) -> kz_proplist().
 build_to_data(DataJObj) ->
     props:filter_undefined(
       [{<<"user">>, kz_json:get_value(<<"to_user">>, DataJObj)}
-       ,{<<"realm">>, kz_json:get_value(<<"to_realm">>, DataJObj)}
+      ,{<<"realm">>, kz_json:get_value(<<"to_realm">>, DataJObj)}
       ]).
 
 -spec build_caller_id_data(kz_json:object()) -> kz_proplist().
 build_caller_id_data(DataJObj) ->
     props:filter_undefined(
       [{<<"number">>, knm_util:pretty_print(kz_json:get_value(<<"caller_id_number">>, DataJObj))}
-       ,{<<"name">>, knm_util:pretty_print(kz_json:get_value(<<"caller_id_name">>, DataJObj))}
+      ,{<<"name">>, knm_util:pretty_print(kz_json:get_value(<<"caller_id_name">>, DataJObj))}
       ]).
 
 -spec build_callee_id_data(kz_json:object()) -> kz_proplist().
 build_callee_id_data(DataJObj) ->
     props:filter_undefined(
       [{<<"number">>, knm_util:pretty_print(kz_json:get_value(<<"callee_id_number">>, DataJObj))}
-       ,{<<"name">>, knm_util:pretty_print(kz_json:get_value(<<"callee_id_name">>, DataJObj))}
+      ,{<<"name">>, knm_util:pretty_print(kz_json:get_value(<<"callee_id_name">>, DataJObj))}
       ]).
 
 -spec build_date_called_data(kz_json:object()) -> kz_proplist().
@@ -243,7 +242,7 @@ build_date_called_data(DataJObj) ->
 
     props:filter_undefined(
       [{<<"utc">>, localtime:local_to_utc(DateTime, ClockTimezone)}
-       ,{<<"local">>, localtime:local_to_local(DateTime, ClockTimezone, Timezone)}
+      ,{<<"local">>, localtime:local_to_local(DateTime, ClockTimezone, Timezone)}
       ]).
 
 -spec date_called(api_object() | gregorian_seconds()) -> gregorian_seconds().
@@ -256,9 +255,9 @@ date_called(DataJObj) ->
 build_voicemail_data(DataJObj) ->
     props:filter_undefined(
       [{<<"box">>, kz_json:get_value(<<"voicemail_box">>, DataJObj)}
-       ,{<<"name">>, kz_json:get_value(<<"voicemail_name">>, DataJObj)}
-       ,{<<"transcription">>, kz_json:get_value([<<"voicemail_transcription">>, <<"text">>], DataJObj)}
-       ,{<<"length">>, pretty_print_length(DataJObj)}
+      ,{<<"name">>, kz_json:get_value(<<"voicemail_name">>, DataJObj)}
+      ,{<<"transcription">>, kz_json:get_value([<<"voicemail_transcription">>, <<"text">>], DataJObj)}
+      ,{<<"length">>, pretty_print_length(DataJObj)}
       ]).
 
 -spec pretty_print_length(api_object() | pos_integer()) -> ne_binary().

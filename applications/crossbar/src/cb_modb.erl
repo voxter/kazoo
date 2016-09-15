@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%% Token auth module
 %%%
@@ -14,7 +14,7 @@
 -module(cb_modb).
 
 -export([init/0
-         ,clean_modb/1
+        ,clean_modb/1
         ]).
 
 -include("crossbar.hrl").

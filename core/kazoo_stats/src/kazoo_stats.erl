@@ -6,23 +6,22 @@
 %%% sip events statistics.
 %%%-------------------------------------------------------------------
 -module(kazoo_stats).
-
 -behaviour(gen_server).
 
 -export([start_link/0]).
 -export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,terminate/2
-         ,code_change/3
+        ,handle_call/3
+        ,handle_cast/2
+        ,handle_info/2
+        ,terminate/2
+        ,code_change/3
         ]).
 -export([increment_counter/1
-         ,increment_counter/2
-         ,send_counter/2
-         ,send_absolute/2
-         ,stop/0
-         ,getdb/0
+        ,increment_counter/2
+        ,send_counter/2
+        ,send_absolute/2
+        ,stop/0
+        ,getdb/0
         ]).
 
 -include_lib("kazoo/include/kz_log.hrl").
@@ -33,9 +32,10 @@
 -define(SEND_INTERVAL, 10 * ?MILLISECONDS_IN_SECOND).
 
 -record(state, {variables=[]
-                ,sip=[]
-                ,send_stats=?SEND_INTERVAL
+               ,sip=[]
+               ,send_stats=?SEND_INTERVAL
                }).
+-type state() :: #state{}.
 
 %%%===================================================================
 %%% API
@@ -50,20 +50,26 @@ start_link() -> start_link(?SEND_INTERVAL).
 start_link(Send_stats) ->
     gen_server:start_link({'local', ?SERVER}, ?MODULE, [Send_stats], []).
 
+-spec stop() -> 'ok'.
 stop() ->
     gen_server:cast(?SERVER, 'stop').
 
+-spec getdb() -> state().
 getdb() ->
     gen_server:call(?SERVER, 'get_db').
 
+-spec increment_counter(any()) -> 'ok'.
+-spec increment_counter(any(), any()) -> 'ok'.
 increment_counter(Item) -> send_counter(Item, 1).
 
 increment_counter(Realm, Item) ->
     gen_server:cast(?SERVER, {'add', Realm, Item, 1}).
 
+-spec send_counter(any(), pos_integer()) -> 'ok'.
 send_counter(Item, Value) when is_integer(Value) ->
     gen_server:cast(?SERVER, {'add', Item, Value}).
 
+-spec send_absolute(any(), any()) -> 'ok'.
 send_absolute(Item, Value) ->
     gen_server:cast(?SERVER, {'store', Item, Value}).
 
@@ -82,7 +88,7 @@ send_absolute(Item, Value) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
--spec init(list()) -> {'ok', #state{}}.
+-spec init(list()) -> {'ok', state()}.
 init([Send_stats]) ->
     erlang:send_after(Send_stats, self(), {'send_stats', Send_stats}),
     {'ok', #state{send_stats=Send_stats}}.
@@ -101,6 +107,7 @@ init([Send_stats]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call('get_db', _From, State) ->
     {'reply', State, State};
 handle_call(Other,_From,State) ->
@@ -118,6 +125,7 @@ handle_call(Other,_From,State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast('stop', State) ->
     {'stop', 'ok', State};
 handle_cast({Operation, Key, Val}, State) when Operation == 'add';
@@ -139,9 +147,10 @@ handle_cast(_,State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info({'send_stats', SendStats},State) ->
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+handle_info({'send_stats', SendStats}=Info,State) ->
     send_stats(State#state.variables, State#state.sip),
-    erlang:send_after(SendStats, self(), {'send_stats', SendStats}),
+    erlang:send_after(SendStats, self(), Info),
     {'noreply', State};
 handle_info(_Info, State) ->
     {'noreply', State}.
@@ -157,6 +166,7 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) -> 'ok'.
 
 %%--------------------------------------------------------------------
@@ -167,6 +177,7 @@ terminate(_Reason, _State) -> 'ok'.
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
@@ -245,8 +256,8 @@ get_ecallmgr_values2(VarList) ->
                                   ,is_list(X)
                           ]),
     [{'reduction',Reduction}
-     ,{'register-fail',RegFail}
-     ,{'processes', length(processes())}
+    ,{'register-fail',RegFail}
+    ,{'processes', length(processes())}
     ].
 
 send(RawPayload) ->
@@ -263,7 +274,7 @@ recursive_from_proplist(List) when is_list(List) ->
         'true' -> List;
         'false' ->
             kz_json:from_list([{kz_util:to_binary(K)
-                                ,recursive_from_proplist(V)}
+                               ,recursive_from_proplist(V)}
                                || {K,V} <- List
                               ])
     end;

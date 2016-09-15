@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -21,8 +21,8 @@
 -export([lock/1, lock_v/1]).
 -export([mute_participant/1, mute_participant_v/1]).
 -export([play/1, play_v/1
-         ,tones/1, tones_v/1
-         ,say/1, say_v/1, tts/1, tts_v/1
+        ,tones/1, tones_v/1
+        ,say/1, say_v/1, tts/1, tts_v/1
         ]).
 -export([record/1, record_v/1]).
 -export([recordstop/1, recordstop_v/1]).
@@ -34,10 +34,10 @@
 -export([unmute_participant/1, unmute_participant_v/1]).
 -export([participant_volume_in/1, participant_volume_in_v/1]).
 -export([participant_volume_out/1, participant_volume_out_v/1]).
--export([participants_event/1, participants_event_v/1]).
+-export([participant_event/1, participant_event_v/1]).
 -export([conference_error/1, conference_error_v/1]).
 -export([config_req/1, config_req_v/1
-         ,config_resp/1, config_resp_v/1
+        ,config_resp/1, config_resp_v/1
         ]).
 -export([play_macro_req/1, play_macro_req_v/1]).
 
@@ -67,11 +67,11 @@
 -export([publish_participant_volume_in/2, publish_participant_volume_in/3]).
 -export([publish_participant_volume_out/2, publish_participant_volume_out/3]).
 -export([publish_error/2, publish_error/3]).
--export([publish_participants_event/2, publish_participants_event/3]).
+-export([publish_participant_event/3, publish_participant_event/4]).
 -export([publish_command/2, publish_command/3]).
 -export([publish_targeted_command/2, publish_targeted_command/3]).
 -export([publish_config_req/1, publish_config_req/2
-         ,publish_config_resp/2, publish_config_resp/3
+        ,publish_config_resp/2, publish_config_resp/3
         ]).
 
 -include_lib("kazoo/include/kz_api.hrl").
@@ -81,71 +81,71 @@
 -define(SEARCH_REQ_HEADERS, [<<"Conference-ID">>]).
 -define(OPTIONAL_SEARCH_REQ_HEADERS, []).
 -define(SEARCH_REQ_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                            ,{<<"Event-Name">>, <<"search_req">>}
+                           ,{<<"Event-Name">>, <<"search_req">>}
                            ]).
 -define(SEARCH_REQ_TYPES, [{<<"Conference-ID">>, fun is_binary/1}]).
 
 %% Conference Search Response
 -define(SEARCH_RESP_HEADERS, [<<"Conference-ID">>, <<"Participant-Count">>]).
 -define(OPTIONAL_SEARCH_RESP_HEADERS, [<<"UUID">>, <<"Running">>, <<"Answered">>, <<"Dynamic">>
-                                       ,<<"Run-Time">>, <<"Participants">>, <<"Locked">>
-                                       ,<<"Switch-Hostname">>, <<"Switch-URL">>, <<"Switch-External-IP">>
+                                      ,<<"Run-Time">>, <<"Start-Time">>, <<"Participants">>, <<"Locked">>
+                                      ,<<"Switch-Hostname">>, <<"Switch-URL">>, <<"Switch-External-IP">>
                                       ]).
 -define(SEARCH_RESP_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                             ,{<<"Event-Name">>, <<"search_resp">>}
+                            ,{<<"Event-Name">>, <<"search_resp">>}
                             ]).
 -define(SEARCH_RESP_TYPES, [{<<"Conference-ID">>, fun is_binary/1}]).
 
 %% Conference Discovery Request
 -define(DISCOVERY_REQ_HEADERS, [<<"Call">>]).
 -define(OPTIONAL_DISCOVERY_REQ_HEADERS, [<<"Conference-ID">>, <<"Moderator">>
-                                         ,<<"Conference-Doc">>, <<"Play-Welcome">>
-                                         ,<<"Play-Welcome-Media">>
-                                         ,<<"Play-Exit-Tone">>, <<"Play-Entry-Tone">>
+                                        ,<<"Conference-Doc">>, <<"Play-Welcome">>
+                                        ,<<"Play-Welcome-Media">>
+                                        ,<<"Play-Exit-Tone">>, <<"Play-Entry-Tone">>
                                         ]).
 -define(DISCOVERY_REQ_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                               ,{<<"Event-Name">>, <<"discovery_req">>}
+                              ,{<<"Event-Name">>, <<"discovery_req">>}
                               ]).
 -define(DISCOVERY_REQ_TYPES, [{<<"Moderator">>, fun kz_util:is_boolean/1}
-                              ,{<<"Play-Welcome">>, fun kz_util:is_boolean/1}
+                             ,{<<"Play-Welcome">>, fun kz_util:is_boolean/1}
                              ]).
 
 %% Conference Discovery Request
 -define(DISCOVERY_RESP_HEADERS, [<<"Participant-ID">>]).
 -define(OPTIONAL_DISCOVERY_RESP_HEADERS, [<<"Conference-ID">>]).
 -define(DISCOVERY_RESP_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                                ,{<<"Event-Name">>, <<"discovery_resp">>}
-                              ]).
+                               ,{<<"Event-Name">>, <<"discovery_resp">>}
+                               ]).
 -define(DISCOVERY_RESP_TYPES, []).
 
 %% Conference Deaf
--define(DEAF_PARTICIPANT_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>, <<"Participant">>]).
+-define(DEAF_PARTICIPANT_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>, <<"Participant-ID">>]).
 -define(OPTIONAL_DEAF_PARTICIPANT_HEADERS, []).
 -define(DEAF_PARTICIPANT_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                                  ,{<<"Event-Name">>, <<"command">>}
-                                  ,{<<"Application-Name">>, <<"deaf_participant">>}
+                                 ,{<<"Event-Name">>, <<"command">>}
+                                 ,{<<"Application-Name">>, <<"deaf_participant">>}
                                  ]).
 -define(DEAF_PARTICIPANT_TYPES, [{<<"Conference-ID">>, fun is_binary/1}
                                 ]).
 
 %% Conference Energy
 -define(PARTICIPANT_ENERGY_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>
-                                         ,<<"Participant">>, <<"Energy-Level">>
+                                    ,<<"Participant-ID">>, <<"Energy-Level">>
                                     ]).
 -define(OPTIONAL_PARTICIPANT_ENERGY_HEADERS, []).
 -define(PARTICIPANT_ENERGY_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                                    ,{<<"Event-Name">>, <<"command">>}
-                                    ,{<<"Application-Name">>, <<"participant_energy">>}
+                                   ,{<<"Event-Name">>, <<"command">>}
+                                   ,{<<"Application-Name">>, <<"participant_energy">>}
                                    ]).
 -define(PARTICIPANT_ENERGY_TYPES, [{<<"Conference-ID">>, fun is_binary/1}
                                   ]).
 
 %% Conference Kick
 -define(KICK_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>]).
--define(OPTIONAL_KICK_HEADERS, [<<"Participant">>]).
+-define(OPTIONAL_KICK_HEADERS, [<<"Participant-ID">>]).
 -define(KICK_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                      ,{<<"Event-Name">>, <<"command">>}
-                      ,{<<"Application-Name">>, <<"kick">>}
+                     ,{<<"Event-Name">>, <<"command">>}
+                     ,{<<"Application-Name">>, <<"kick">>}
                      ]).
 -define(KICK_TYPES, [{<<"Conference-ID">>, fun is_binary/1}
                     ]).
@@ -154,8 +154,8 @@
 -define(PARTICIPANTS_REQ_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>]).
 -define(OPTIONAL_PARTICIPANTS_REQ_HEADERS, []).
 -define(PARTICIPANTS_REQ_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                                  ,{<<"Event-Name">>, <<"command">>}
-                                  ,{<<"Application-Name">>, <<"participants">>}
+                                 ,{<<"Event-Name">>, <<"command">>}
+                                 ,{<<"Application-Name">>, <<"participants">>}
                                  ]).
 -define(PARTICIPANTS_REQ_TYPES, [{<<"Conference-ID">>, fun is_binary/1}]).
 
@@ -163,7 +163,7 @@
 -define(PARTICIPANTS_RESP_HEADERS, [<<"Participants">>]).
 -define(OPTIONAL_PARTICIPANTS_RESP_HEADERS, []).
 -define(PARTICIPANTS_RESP_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                                   ,{<<"Event-Name">>, <<"participants_resp">>}
+                                  ,{<<"Event-Name">>, <<"participants_resp">>}
                                   ]).
 -define(PARTICIPANTS_RESP_TYPES, [{<<"Conference-ID">>, fun is_binary/1}]).
 
@@ -171,39 +171,39 @@
 -define(LOCK_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>]).
 -define(OPTIONAL_LOCK_HEADERS, []).
 -define(LOCK_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                      ,{<<"Event-Name">>, <<"command">>}
-                      ,{<<"Application-Name">>, <<"lock">>}
+                     ,{<<"Event-Name">>, <<"command">>}
+                     ,{<<"Application-Name">>, <<"lock">>}
                      ]).
 -define(LOCK_TYPES, [{<<"Conference-ID">>, fun is_binary/1}
                     ]).
 
 %% Conference Mute
--define(MUTE_PARTICIPANT_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>, <<"Participant">>]).
+-define(MUTE_PARTICIPANT_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>, <<"Participant-ID">>]).
 -define(OPTIONAL_MUTE_PARTICIPANT_HEADERS, []).
 -define(MUTE_PARTICIPANT_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                                  ,{<<"Event-Name">>, <<"command">>}
-                                  ,{<<"Application-Name">>, <<"mute_participant">>}
+                                 ,{<<"Event-Name">>, <<"command">>}
+                                 ,{<<"Application-Name">>, <<"mute_participant">>}
                                  ]).
 -define(MUTE_PARTICIPANT_TYPES, [{<<"Conference-ID">>, fun is_binary/1}
                                 ]).
 
 %% Conference Play
 -define(PLAY_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>, <<"Media-Name">>]).
--define(OPTIONAL_PLAY_HEADERS, [<<"Participant">>, <<"Call-ID">>]).
+-define(OPTIONAL_PLAY_HEADERS, [<<"Participant-ID">>, <<"Call-ID">>]).
 -define(PLAY_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                      ,{<<"Event-Name">>, <<"command">>}
-                      ,{<<"Application-Name">>, <<"play">>}
+                     ,{<<"Event-Name">>, <<"command">>}
+                     ,{<<"Application-Name">>, <<"play">>}
                      ]).
 -define(PLAY_TYPES, [{<<"Conference-ID">>, fun is_binary/1}
-                     ,{<<"Media-Name">>, fun is_binary/1}
+                    ,{<<"Media-Name">>, fun is_binary/1}
                     ]).
 
 %% Conference Record
 -define(RECORD_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>, <<"Media-Name">>]).
 -define(OPTIONAL_RECORD_HEADERS, [<<"Call-ID">>]).
 -define(RECORD_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                        ,{<<"Event-Name">>, <<"command">>}
-                        ,{<<"Application-Name">>, <<"record">>}
+                       ,{<<"Event-Name">>, <<"command">>}
+                       ,{<<"Application-Name">>, <<"record">>}
                        ]).
 -define(RECORD_TYPES, [{<<"Conference-ID">>, fun is_binary/1}]).
 
@@ -211,19 +211,19 @@
 -define(RECORDSTOP_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>, <<"Media-Name">>]).
 -define(OPTIONAL_RECORDSTOP_HEADERS, [<<"Call-ID">>]).
 -define(RECORDSTOP_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                        ,{<<"Event-Name">>, <<"command">>}
-                        ,{<<"Application-Name">>, <<"recordstop">>}
-                       ]).
+                           ,{<<"Event-Name">>, <<"command">>}
+                           ,{<<"Application-Name">>, <<"recordstop">>}
+                           ]).
 -define(RECORDSTOP_TYPES, [{<<"Conference-ID">>, fun is_binary/1}]).
 
 
 %% Conference Relate Participants
--define(RELATE_PARTICIPANTS_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>, <<"Participant">>, <<"Other-Participant">>]).
+-define(RELATE_PARTICIPANTS_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>, <<"Participant-ID">>, <<"Other-Participant">>]).
 -define(OPTIONAL_RELATE_PARTICIPANTS_HEADERS, [<<"Relationship">>]).
 -define(RELATE_PARTICIPANTS_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                                     ,{<<"Event-Name">>, <<"command">>}
-                                     ,{<<"Application-Name">>, <<"relate_participants">>}
-                                     ,{<<"Relationship">>, [<<"deaf">>, <<"mute">>, <<"clear">>]}
+                                    ,{<<"Event-Name">>, <<"command">>}
+                                    ,{<<"Application-Name">>, <<"relate_participants">>}
+                                    ,{<<"Relationship">>, [<<"deaf">>, <<"mute">>, <<"clear">>]}
                                     ]).
 -define(RELATE_PARTICIPANTS_TYPES, [{<<"Conference-ID">>, fun is_binary/1}
                                    ]).
@@ -232,30 +232,30 @@
 -define(SET_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>, <<"Parameter">>, <<"Value">>]).
 -define(OPTIONAL_SET_HEADERS, []).
 -define(SET_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                     ,{<<"Event-Name">>, <<"command">>}
-                     ,{<<"Application-Name">>, <<"set">>}
-                     ,{<<"Parameter">>, [<<"Max-Members">>, <<"Caller-ID-Name">>, <<"Caller-ID-Number">>]}
+                    ,{<<"Event-Name">>, <<"command">>}
+                    ,{<<"Application-Name">>, <<"set">>}
+                    ,{<<"Parameter">>, [<<"Max-Members">>, <<"Caller-ID-Name">>, <<"Caller-ID-Number">>]}
                     ]).
 -define(SET_TYPES, [{<<"Conference-ID">>, fun is_binary/1}
-                    ,{<<"Value">>, fun is_binary/1}
+                   ,{<<"Value">>, fun is_binary/1}
                    ]).
 
 %% Conference Stop Play
 -define(STOP_PLAY_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>]).
--define(OPTIONAL_STOP_PLAY_HEADERS, [<<"Participant">>, <<"Affects">>]).
+-define(OPTIONAL_STOP_PLAY_HEADERS, [<<"Participant-ID">>, <<"Affects">>]).
 -define(STOP_PLAY_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                           ,{<<"Event-Name">>, <<"command">>}
-                           ,{<<"Application-Name">>, <<"stop_play">>}
-                           ,{<<"Affects">>, [<<"current">>, <<"all">>]}
+                          ,{<<"Event-Name">>, <<"command">>}
+                          ,{<<"Application-Name">>, <<"stop_play">>}
+                          ,{<<"Affects">>, [<<"current">>, <<"all">>]}
                           ]).
 -define(STOP_PLAY_TYPES, [{<<"Conference-ID">>, fun is_binary/1}
                          ]).
 %% Conference Undeaf
--define(UNDEAF_PARTICIPANT_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>, <<"Participant">>]).
+-define(UNDEAF_PARTICIPANT_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>, <<"Participant-ID">>]).
 -define(OPTIONAL_UNDEAF_PARTICIPANT_HEADERS, []).
 -define(UNDEAF_PARTICIPANT_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                                    ,{<<"Event-Name">>, <<"command">>}
-                                    ,{<<"Application-Name">>, <<"undeaf_participant">>}
+                                   ,{<<"Event-Name">>, <<"command">>}
+                                   ,{<<"Application-Name">>, <<"undeaf_participant">>}
                                    ]).
 -define(UNDEAF_PARTICIPANT_TYPES, [{<<"Conference-ID">>, fun is_binary/1}
                                   ]).
@@ -264,97 +264,112 @@
 -define(UNLOCK_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>]).
 -define(OPTIONAL_UNLOCK_HEADERS, []).
 -define(UNLOCK_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                        ,{<<"Event-Name">>, <<"command">>}
-                        ,{<<"Application-Name">>, <<"unlock">>}
+                       ,{<<"Event-Name">>, <<"command">>}
+                       ,{<<"Application-Name">>, <<"unlock">>}
                        ]).
 -define(UNLOCK_TYPES, [{<<"Conference-ID">>, fun is_binary/1}
                       ]).
 
 %% Conference Unmute
--define(UNMUTE_PARTICIPANT_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>, <<"Participant">>]).
+-define(UNMUTE_PARTICIPANT_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>, <<"Participant-ID">>]).
 -define(OPTIONAL_UNMUTE_PARTICIPANT_HEADERS, []).
 -define(UNMUTE_PARTICIPANT_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                                    ,{<<"Event-Name">>, <<"command">>}
-                                    ,{<<"Application-Name">>, <<"unmute_participant">>}
+                                   ,{<<"Event-Name">>, <<"command">>}
+                                   ,{<<"Application-Name">>, <<"unmute_participant">>}
                                    ]).
 -define(UNMUTE_PARTICIPANT_TYPES, [{<<"Conference-ID">>, fun is_binary/1}
                                   ]).
 
 %% Conference Set Volume In
 -define(PARTICIPANT_VOLUME_IN_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>
-                                            ,<<"Participant">>, <<"Volume-In-Level">>
+                                       ,<<"Participant-ID">>, <<"Volume-In-Level">>
                                        ]).
 -define(OPTIONAL_PARTICIPANT_VOLUME_IN_HEADERS, []).
 -define(PARTICIPANT_VOLUME_IN_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                                       ,{<<"Event-Name">>, <<"command">>}
-                                       ,{<<"Application-Name">>, <<"participant_volume_in">>}
+                                      ,{<<"Event-Name">>, <<"command">>}
+                                      ,{<<"Application-Name">>, <<"participant_volume_in">>}
                                       ]).
 -define(PARTICIPANT_VOLUME_IN_TYPES, [{<<"Conference-ID">>, fun is_binary/1}
                                      ]).
 
 %% Conference Set Volume Out
 -define(PARTICIPANT_VOLUME_OUT_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>
-                                             ,<<"Participant">>, <<"Volume-Out-Level">>
+                                        ,<<"Participant-ID">>, <<"Volume-Out-Level">>
                                         ]).
 -define(OPTIONAL_PARTICIPANT_VOLUME_OUT_HEADERS, []).
 -define(PARTICIPANT_VOLUME_OUT_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                                        ,{<<"Event-Name">>, <<"command">>}
-                                        ,{<<"Application-Name">>, <<"participant_volume_out">>}
+                                       ,{<<"Event-Name">>, <<"command">>}
+                                       ,{<<"Application-Name">>, <<"participant_volume_out">>}
                                        ]).
 -define(PARTICIPANT_VOLUME_OUT_TYPES, [{<<"Conference-ID">>, fun is_binary/1}
                                       ]).
 
 %% Conference Participants Event
--define(PARTICIPANTS_EVENT_HEADERS, [<<"Conference-ID">>, <<"Focus">>]).
--define(OPTIONAL_PARTICIPANTS_EVENT_HEADERS, [<<"Participants">>, <<"Switch-Hostname">>
-                                              ,<<"Switch-URL">>, <<"Switch-External-IP">>]).
--define(PARTICIPANTS_EVENT_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                                    ,{<<"Event-Name">>, <<"participants_event">>}
+-define(PARTICIPANT_EVENT_HEADERS, [<<"Event">>
+                                   ,<<"Call-ID">>
+                                   ,<<"Focus">>
+                                   ,<<"Conference-ID">>
+                                   ,<<"Instance-ID">>
+                                   ,<<"Participant-ID">>
+                                   ,<<"Floor">>
+                                   ,<<"Hear">>
+                                   ,<<"Speak">>
+                                   ,<<"Talking">>
+                                   ,<<"Current-Energy">>
+                                   ,<<"Energy-Level">>
+                                   ,<<"Video">>
+                                   ,<<"Mute-Detect">>
+                                   ,<<"Caller-ID-Name">>
+                                   ,<<"Caller-ID-Number">>
+                                   ,<<"Channel-Presence-ID">>
+                                   ,<<"Custom-Channel-Vars">>
                                    ]).
--define(PARTICIPANTS_EVENT_TYPES, [{<<"Conference-ID">>, fun is_binary/1}]).
+-define(OPTIONAL_PARTICIPANT_EVENT_HEADERS, []).
+-define(PARTICIPANT_EVENT_VALUES, [{<<"Event-Category">>, <<"conference">>}, {<<"Event-Name">>, <<"participant_event">>}]).
+-define(PARTICIPANT_EVENT_TYPES, []).
 
 %% Conference Error
 -define(CONFERENCE_ERROR_HEADERS, [<<"Error-Message">>, <<"Request">>]).
 -define(OPTIONAL_CONFERENCE_ERROR_HEADERS, []).
 -define(CONFERENCE_ERROR_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                                  ,{<<"Event-Name">>, <<"error">>}
+                                 ,{<<"Event-Name">>, <<"error">>}
                                  ]).
 -define(CONFERENCE_ERROR_TYPES, []).
 
--define(CONFIG_REQ_HEADERS, [<<"Profile">>]).
--define(OPTIONAL_CONFIG_REQ_HEADERS, []).
+-define(CONFIG_REQ_HEADERS, [<<"Request">>, <<"Profile">>]).
+-define(OPTIONAL_CONFIG_REQ_HEADERS, [<<"Controls">>]).
 -define(CONFIG_REQ_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                            ,{<<"Event-Name">>, <<"config_req">>}
+                           ,{<<"Event-Name">>, <<"config_req">>}
                            ]).
 -define(CONFIG_REQ_TYPES, []).
 
--define(CONFIG_RESP_HEADERS, [<<"Profiles">>]).
--define(OPTIONAL_CONFIG_RESP_HEADERS, [<<"Caller-Controls">>, <<"Advertise">>, <<"Chat-Permissions">>]).
+-define(CONFIG_RESP_HEADERS, [[<<"Profiles">>, <<"Caller-Controls">>]]).
+-define(OPTIONAL_CONFIG_RESP_HEADERS, [<<"Advertise">>, <<"Chat-Permissions">>]).
 -define(CONFIG_RESP_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                             ,{<<"Event-Name">>, <<"config_resp">>}
+                            ,{<<"Event-Name">>, <<"config_resp">>}
                             ]).
 -define(CONFIG_RESP_TYPES, []).
 
--define(APPLICTION_MAP, [{<<"deaf_participant">>, ?DEAF_PARTICIPANT_VALUES, fun ?MODULE:deaf_participant/1}
-                         ,{<<"participant_energy">>, ?PARTICIPANT_ENERGY_VALUES, fun ?MODULE:participant_energy/1}
-                         ,{<<"kick">>, ?KICK_VALUES, fun ?MODULE:kick/1}
-                         ,{<<"participants">>, ?PARTICIPANTS_REQ_VALUES, fun ?MODULE:participants_req/1}
-                         ,{<<"lock">>, ?LOCK_VALUES, fun ?MODULE:lock/1}
-                         ,{<<"mute_participant">>, ?MUTE_PARTICIPANT_VALUES, fun ?MODULE:mute_participant/1}
-                         ,{<<"play">>, ?PLAY_VALUES, fun ?MODULE:play/1}
-                         ,{<<"record">>, ?RECORD_VALUES, fun ?MODULE:record/1}
-                         ,{<<"recordstop">>, ?RECORDSTOP_VALUES, fun ?MODULE:recordstop/1}
-                         ,{<<"relate_participants">>, ?RELATE_PARTICIPANTS_VALUES, fun ?MODULE:relate_participants/1}
-                         ,{<<"stop_play">>, ?STOP_PLAY_VALUES, fun ?MODULE:stop_play/1}
-                         ,{<<"undeaf_participant">>, ?UNDEAF_PARTICIPANT_VALUES, fun ?MODULE:undeaf_participant/1}
-                         ,{<<"unlock">>, ?UNLOCK_VALUES, fun ?MODULE:unlock/1}
-                         ,{<<"unmute_participant">>, ?UNMUTE_PARTICIPANT_VALUES, fun ?MODULE:unmute_participant/1}
-                         ,{<<"participant_volume_in">>, ?PARTICIPANT_VOLUME_IN_VALUES, fun ?MODULE:participant_volume_in/1}
-                         ,{<<"participant_volume_out">>, ?PARTICIPANT_VOLUME_OUT_VALUES, fun ?MODULE:participant_volume_out/1}
-                         ,{<<"tones">>, ?CONF_TONES_REQ_VALUES, fun ?MODULE:tones/1}
-                         ,{<<"say">>, ?CONF_SAY_REQ_VALUES, fun ?MODULE:say/1}
-                         ,{<<"tts">>, ?CONF_SAY_REQ_VALUES, fun ?MODULE:tts/1}
-                         ,{<<"play_macro">>, ?CONF_PLAY_MACRO_REQ_VALUES, fun ?MODULE:play_macro_req/1}
+-define(APPLICTION_MAP, [{<<"deaf_participant">>, ?DEAF_PARTICIPANT_VALUES, fun deaf_participant/1}
+                        ,{<<"participant_energy">>, ?PARTICIPANT_ENERGY_VALUES, fun participant_energy/1}
+                        ,{<<"kick">>, ?KICK_VALUES, fun kick/1}
+                        ,{<<"participants">>, ?PARTICIPANTS_REQ_VALUES, fun participants_req/1}
+                        ,{<<"lock">>, ?LOCK_VALUES, fun lock/1}
+                        ,{<<"mute_participant">>, ?MUTE_PARTICIPANT_VALUES, fun mute_participant/1}
+                        ,{<<"play">>, ?PLAY_VALUES, fun play/1}
+                        ,{<<"record">>, ?RECORD_VALUES, fun record/1}
+                        ,{<<"recordstop">>, ?RECORDSTOP_VALUES, fun recordstop/1}
+                        ,{<<"relate_participants">>, ?RELATE_PARTICIPANTS_VALUES, fun relate_participants/1}
+                        ,{<<"stop_play">>, ?STOP_PLAY_VALUES, fun stop_play/1}
+                        ,{<<"undeaf_participant">>, ?UNDEAF_PARTICIPANT_VALUES, fun undeaf_participant/1}
+                        ,{<<"unlock">>, ?UNLOCK_VALUES, fun unlock/1}
+                        ,{<<"unmute_participant">>, ?UNMUTE_PARTICIPANT_VALUES, fun unmute_participant/1}
+                        ,{<<"participant_volume_in">>, ?PARTICIPANT_VOLUME_IN_VALUES, fun participant_volume_in/1}
+                        ,{<<"participant_volume_out">>, ?PARTICIPANT_VOLUME_OUT_VALUES, fun participant_volume_out/1}
+                        ,{<<"tones">>, ?CONF_TONES_REQ_VALUES, fun tones/1}
+                        ,{<<"say">>, ?CONF_SAY_REQ_VALUES, fun say/1}
+                        ,{<<"tts">>, ?CONF_SAY_REQ_VALUES, fun tts/1}
+                        ,{<<"play_macro">>, ?CONF_PLAY_MACRO_REQ_VALUES, fun play_macro_req/1}
                         ]).
 
 -define(CONF_PLAY_MACRO_REQ_HEADERS, [<<"Application-Name">>, <<"Conference-ID">>, <<"Commands">>]).
@@ -363,6 +378,7 @@
 -define(CONF_PLAY_MACRO_REQ_TYPES, [{<<"Conference-ID">>, fun is_binary/1}
                                    ]).
 
+-spec focus_queue_name(atom()) -> ne_binary().
 focus_queue_name(Focus) -> <<(kz_util:to_binary(Focus))/binary, "_conference">>.
 
 %%--------------------------------------------------------------------
@@ -371,9 +387,9 @@ focus_queue_name(Focus) -> <<(kz_util:to_binary(Focus))/binary, "_conference">>.
 %% @end
 %%--------------------------------------------------------------------
 -define(CONF_SAY_REQ_VALUES, [{<<"Event-Category">>, <<"conference">>}
-                              ,{<<"Application-Name">>, [<<"say">>, <<"tts">>]}
+                             ,{<<"Application-Name">>, [<<"say">>, <<"tts">>]}
                               | props:delete_keys([<<"Event-Category">>
-                                                   ,<<"Application-Name">>
+                                                  ,<<"Application-Name">>
                                                   ], ?TONES_REQ_VALUES)
                              ]).
 -spec say(api_terms()) -> api_formatter_return() .
@@ -384,6 +400,7 @@ say(Prop) when is_list(Prop) ->
     end;
 say(JObj) -> say(kz_json:to_proplist(JObj)).
 
+-spec tts(api_terms()) -> api_formatter_return().
 tts(API) -> say(API).
 
 -spec say_v(api_terms()) -> boolean().
@@ -391,6 +408,7 @@ say_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?TTS_REQ_HEADERS, ?CONF_SAY_REQ_VALUES, ?TTS_REQ_TYPES);
 say_v(JObj) -> say_v(kz_json:to_proplist(JObj)).
 
+-spec tts_v(api_terms()) -> boolean().
 tts_v(API) -> say_v(API).
 
 %%--------------------------------------------------------------------
@@ -842,18 +860,18 @@ participant_volume_out_v(JObj) -> participant_volume_out_v(kz_json:to_proplist(J
 %% Takes proplist, creates JSON string or error
 %% @end
 %%--------------------------------------------------------------------
--spec participants_event(api_terms()) -> {'ok', iolist()} | {'error', string()}.
-participants_event(Prop) when is_list(Prop) ->
-    case participants_event_v(Prop) of
-        'true' -> kz_api:build_message(Prop, ?PARTICIPANTS_EVENT_HEADERS, ?OPTIONAL_PARTICIPANTS_EVENT_HEADERS);
-        'false' -> {'error', "Proplist failed validation for participants_event response"}
+-spec participant_event(api_terms()) -> {'ok', iolist()} | {'error', string()}.
+participant_event(Prop) when is_list(Prop) ->
+    case participant_event_v(Prop) of
+        'true' -> kz_api:build_message(Prop, ?PARTICIPANT_EVENT_HEADERS, ?OPTIONAL_PARTICIPANT_EVENT_HEADERS);
+        'false' -> {'error', "Proplist failed validation for participant_event response"}
     end;
-participants_event(JObj) -> participants_event(kz_json:to_proplist(JObj)).
+participant_event(JObj) -> participant_event(kz_json:to_proplist(JObj)).
 
--spec participants_event_v(api_terms()) -> boolean().
-participants_event_v(Prop) when is_list(Prop) ->
-    kz_api:validate(Prop, ?PARTICIPANTS_EVENT_HEADERS, ?PARTICIPANTS_EVENT_VALUES, ?PARTICIPANTS_EVENT_TYPES);
-participants_event_v(JObj) -> participants_event_v(kz_json:to_proplist(JObj)).
+-spec participant_event_v(api_terms()) -> boolean().
+participant_event_v(Prop) when is_list(Prop) ->
+    kz_api:validate(Prop, ?PARTICIPANT_EVENT_HEADERS, ?PARTICIPANT_EVENT_VALUES, ?PARTICIPANT_EVENT_TYPES);
+participant_event_v(JObj) -> participant_event_v(kz_json:to_proplist(JObj)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -935,10 +953,18 @@ bind_to_q(Q, ['config'|T], Props) ->
     Profile = props:get_value('profile', Props, <<"*">>),
     'ok' = amqp_util:bind_q_to_conference(Q, 'config', Profile),
     bind_to_q(Q, T, Props);
-bind_to_q(Q, [{'conference', ConfId}|T], Props) ->
+bind_to_q(Q, [{'event', {ConfId, CallId}}|T], Props) ->
+    EncodedCallId = amqp_util:encode(CallId),
+    'ok' = amqp_util:bind_q_to_conference(Q, 'event', ConfId, EncodedCallId),
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, [{'event', ConfId}|T], Props) ->
     'ok' = amqp_util:bind_q_to_conference(Q, 'event', ConfId),
     bind_to_q(Q, T, Props);
-bind_to_q(_Q, [], _) -> 'ok'.
+bind_to_q(Q, [{'command', ConfId}|T], Props) ->
+    'ok' = amqp_util:bind_q_to_conference(Q, 'command', ConfId),
+    bind_to_q(Q, T, Props);
+bind_to_q(_Q, [], _) ->
+    'ok'.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -962,13 +988,20 @@ unbind_from_q(Q, ['command'|T], Props) ->
 unbind_from_q(Q, ['event'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_conference(Q, 'event'),
     unbind_from_q(Q, T, Props);
-unbind_from_q(Q, [{'conference', ConfId}|T], Props) ->
-    'ok' = amqp_util:unbind_q_from_conference(Q, 'event', ConfId),
-    unbind_from_q(Q, T, Props);
 unbind_from_q(Q, ['config'|T], Props) ->
     Profile = props:get_value('profile', Props, <<"*">>),
     'ok' = amqp_util:unbind_q_from_conference(Q, 'config', Profile),
     unbind_from_q(Q, T, Props);
+unbind_from_q(Q, [{event, {ConfId, CallId}}|T], Props) ->
+    EncodedCallId = amqp_util:encode(CallId),
+    'ok' = amqp_util:unbind_q_from_conference(Q, 'event', ConfId, EncodedCallId),
+    unbind_from_q(Q, T, Props);
+unbind_from_q(Q, [{'event', ConfId}|T], Props) ->
+    'ok' = amqp_util:unbind_q_from_conference(Q, 'event', ConfId),
+    unbind_from_q(Q, T, Props);
+unbind_from_q(Q, [{'command', ConfId}|T], Props) ->
+    'ok' = amqp_util:bind_q_to_conference(Q, 'command', ConfId),
+    bind_to_q(Q, T, Props);
 unbind_from_q(_Q, [], _) -> 'ok'.
 
 %%--------------------------------------------------------------------
@@ -990,7 +1023,7 @@ declare_exchanges() ->
 publish_search_req(JObj) ->
     publish_search_req(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_search_req(Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?SEARCH_REQ_VALUES, fun ?MODULE:search_req/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?SEARCH_REQ_VALUES, fun search_req/1),
     amqp_util:conference_publish(Payload, 'discovery', 'undefined', [], ContentType).
 
 %%--------------------------------------------------------------------
@@ -1003,7 +1036,7 @@ publish_search_req(Req, ContentType) ->
 publish_search_resp(Queue, Resp) ->
     publish_search_resp(Queue, Resp, ?DEFAULT_CONTENT_TYPE).
 publish_search_resp(Queue, Resp, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?SEARCH_RESP_VALUES, fun ?MODULE:search_resp/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?SEARCH_RESP_VALUES, fun search_resp/1),
     amqp_util:targeted_publish(Queue, Payload, ContentType).
 
 %%--------------------------------------------------------------------
@@ -1016,7 +1049,7 @@ publish_search_resp(Queue, Resp, ContentType) ->
 publish_discovery_req(JObj) ->
     publish_discovery_req(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_discovery_req(Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?DISCOVERY_REQ_VALUES, fun ?MODULE:discovery_req/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?DISCOVERY_REQ_VALUES, fun discovery_req/1),
     amqp_util:conference_publish(Payload, 'discovery', 'undefined', [], ContentType).
 
 %%--------------------------------------------------------------------
@@ -1029,7 +1062,7 @@ publish_discovery_req(Req, ContentType) ->
 publish_discovery_resp(Q, JObj) ->
     publish_discovery_resp(Q, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_discovery_resp(Q, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?DISCOVERY_RESP_VALUES, fun ?MODULE:discovery_resp/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?DISCOVERY_RESP_VALUES, fun discovery_resp/1),
     amqp_util:targeted_publish(Q, Payload, ContentType).
 
 %%--------------------------------------------------------------------
@@ -1042,7 +1075,7 @@ publish_discovery_resp(Q, Req, ContentType) ->
 publish_deaf_participant(ConferenceId, JObj) ->
     publish_deaf_participant(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_deaf_participant(ConferenceId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?DEAF_PARTICIPANT_VALUES, fun ?MODULE:deaf_participant/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?DEAF_PARTICIPANT_VALUES, fun deaf_participant/1),
     amqp_util:conference_publish(Payload, 'command', ConferenceId, [], ContentType).
 
 %%--------------------------------------------------------------------
@@ -1055,7 +1088,7 @@ publish_deaf_participant(ConferenceId, Req, ContentType) ->
 publish_participant_energy(ConferenceId, JObj) ->
     publish_participant_energy(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_participant_energy(ConferenceId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?PARTICIPANT_ENERGY_VALUES, fun ?MODULE:participant_energy/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?PARTICIPANT_ENERGY_VALUES, fun participant_energy/1),
     amqp_util:conference_publish(Payload, 'command', ConferenceId, [], ContentType).
 
 %%--------------------------------------------------------------------
@@ -1068,7 +1101,7 @@ publish_participant_energy(ConferenceId, Req, ContentType) ->
 publish_kick(ConferenceId, JObj) ->
     publish_kick(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_kick(ConferenceId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?KICK_VALUES, fun ?MODULE:kick/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?KICK_VALUES, fun kick/1),
     amqp_util:conference_publish(Payload, 'command', ConferenceId, [], ContentType).
 
 %%--------------------------------------------------------------------
@@ -1081,7 +1114,7 @@ publish_kick(ConferenceId, Req, ContentType) ->
 publish_participants_req(ConferenceId, JObj) ->
     publish_participants_req(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_participants_req(ConferenceId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?PARTICIPANTS_REQ_VALUES, fun ?MODULE:participants_req/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?PARTICIPANTS_REQ_VALUES, fun participants_req/1),
     amqp_util:conference_publish(Payload, 'command', ConferenceId, [], ContentType).
 
 %%--------------------------------------------------------------------
@@ -1094,7 +1127,7 @@ publish_participants_req(ConferenceId, Req, ContentType) ->
 publish_participants_resp(Queue, Resp) ->
     publish_participants_resp(Queue, Resp, ?DEFAULT_CONTENT_TYPE).
 publish_participants_resp(Queue, Resp, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?PARTICIPANTS_RESP_VALUES, fun ?MODULE:participants_resp/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?PARTICIPANTS_RESP_VALUES, fun participants_resp/1),
     amqp_util:targeted_publish(Queue, Payload, ContentType).
 
 %%--------------------------------------------------------------------
@@ -1107,7 +1140,7 @@ publish_participants_resp(Queue, Resp, ContentType) ->
 publish_lock(ConferenceId, JObj) ->
     publish_lock(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_lock(ConferenceId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?LOCK_VALUES, fun ?MODULE:lock/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?LOCK_VALUES, fun lock/1),
     amqp_util:conference_publish(Payload, 'command', ConferenceId, [], ContentType).
 
 %%--------------------------------------------------------------------
@@ -1120,7 +1153,7 @@ publish_lock(ConferenceId, Req, ContentType) ->
 publish_mute_participant(ConferenceId, JObj) ->
     publish_mute_participant(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_mute_participant(ConferenceId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?MUTE_PARTICIPANT_VALUES, fun ?MODULE:mute_participant/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?MUTE_PARTICIPANT_VALUES, fun mute_participant/1),
     amqp_util:conference_publish(Payload, 'command', ConferenceId, [], ContentType).
 
 %%--------------------------------------------------------------------
@@ -1133,7 +1166,7 @@ publish_mute_participant(ConferenceId, Req, ContentType) ->
 publish_play(ConferenceId, JObj) ->
     publish_play(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_play(ConferenceId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?PLAY_VALUES, fun ?MODULE:play/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?PLAY_VALUES, fun play/1),
     amqp_util:conference_publish(Payload, 'command', ConferenceId, [], ContentType).
 
 %%--------------------------------------------------------------------
@@ -1146,7 +1179,7 @@ publish_play(ConferenceId, Req, ContentType) ->
 publish_record(ConferenceId, JObj) ->
     publish_record(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_record(ConferenceId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?RECORD_VALUES, fun ?MODULE:record/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?RECORD_VALUES, fun record/1),
     amqp_util:conference_publish(Payload, 'command', ConferenceId, [], ContentType).
 
 %%--------------------------------------------------------------------
@@ -1159,7 +1192,7 @@ publish_record(ConferenceId, Req, ContentType) ->
 publish_recordstop(ConferenceId, JObj) ->
     publish_recordstop(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_recordstop(ConferenceId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?RECORDSTOP_VALUES, fun ?MODULE:recordstop/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?RECORDSTOP_VALUES, fun recordstop/1),
     amqp_util:conference_publish(Payload, 'command', ConferenceId, [], ContentType).
 
 %%--------------------------------------------------------------------
@@ -1172,7 +1205,7 @@ publish_recordstop(ConferenceId, Req, ContentType) ->
 publish_relate_participants(ConferenceId, JObj) ->
     publish_relate_participants(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_relate_participants(ConferenceId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?RELATE_PARTICIPANTS_VALUES, fun ?MODULE:relate_participants/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?RELATE_PARTICIPANTS_VALUES, fun relate_participants/1),
     amqp_util:conference_publish(Payload, 'command', ConferenceId, [], ContentType).
 
 %%--------------------------------------------------------------------
@@ -1185,7 +1218,7 @@ publish_relate_participants(ConferenceId, Req, ContentType) ->
 publish_set(ConferenceId, JObj) ->
     publish_set(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_set(ConferenceId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?SET_VALUES, fun ?MODULE:set/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?SET_VALUES, fun set/1),
     amqp_util:conference_publish(Payload, 'command', ConferenceId, [], ContentType).
 
 %%--------------------------------------------------------------------
@@ -1198,7 +1231,7 @@ publish_set(ConferenceId, Req, ContentType) ->
 publish_stop_play(ConferenceId, JObj) ->
     publish_stop_play(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_stop_play(ConferenceId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?STOP_PLAY_VALUES, fun ?MODULE:stop_play/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?STOP_PLAY_VALUES, fun stop_play/1),
     amqp_util:conference_publish(Payload, 'command', ConferenceId, [], ContentType).
 
 %%--------------------------------------------------------------------
@@ -1211,7 +1244,7 @@ publish_stop_play(ConferenceId, Req, ContentType) ->
 publish_undeaf_participant(ConferenceId, JObj) ->
     publish_undeaf_participant(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_undeaf_participant(ConferenceId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?UNDEAF_PARTICIPANT_VALUES, fun ?MODULE:undeaf_participant/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?UNDEAF_PARTICIPANT_VALUES, fun undeaf_participant/1),
     amqp_util:conference_publish(Payload, 'command', ConferenceId, [], ContentType).
 
 %%--------------------------------------------------------------------
@@ -1224,7 +1257,7 @@ publish_undeaf_participant(ConferenceId, Req, ContentType) ->
 publish_unlock(ConferenceId, JObj) ->
     publish_unlock(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_unlock(ConferenceId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?UNLOCK_VALUES, fun ?MODULE:unlock/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?UNLOCK_VALUES, fun unlock/1),
     amqp_util:conference_publish(Payload, 'command', ConferenceId, [], ContentType).
 
 %%--------------------------------------------------------------------
@@ -1237,7 +1270,7 @@ publish_unlock(ConferenceId, Req, ContentType) ->
 publish_unmute_participant(ConferenceId, JObj) ->
     publish_unmute_participant(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_unmute_participant(ConferenceId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?UNMUTE_PARTICIPANT_VALUES, fun ?MODULE:unmute_participant/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?UNMUTE_PARTICIPANT_VALUES, fun unmute_participant/1),
     amqp_util:conference_publish(Payload, 'command', ConferenceId, [], ContentType).
 
 %%--------------------------------------------------------------------
@@ -1250,7 +1283,7 @@ publish_unmute_participant(ConferenceId, Req, ContentType) ->
 publish_participant_volume_in(ConferenceId, JObj) ->
     publish_participant_volume_in(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_participant_volume_in(ConferenceId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?PARTICIPANT_VOLUME_IN_VALUES, fun ?MODULE:participant_volume_in/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?PARTICIPANT_VOLUME_IN_VALUES, fun participant_volume_in/1),
     amqp_util:conference_publish(Payload, 'command', ConferenceId, [], ContentType).
 
 %%--------------------------------------------------------------------
@@ -1263,7 +1296,7 @@ publish_participant_volume_in(ConferenceId, Req, ContentType) ->
 publish_participant_volume_out(ConferenceId, JObj) ->
     publish_participant_volume_out(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_participant_volume_out(ConferenceId, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?PARTICIPANT_VOLUME_OUT_VALUES, fun ?MODULE:participant_volume_out/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?PARTICIPANT_VOLUME_OUT_VALUES, fun participant_volume_out/1),
     amqp_util:conference_publish(Payload, 'command', ConferenceId, [], ContentType).
 
 %%--------------------------------------------------------------------
@@ -1271,13 +1304,13 @@ publish_participant_volume_out(ConferenceId, Req, ContentType) ->
 %% Publish to the conference exchange
 %% @end
 %%--------------------------------------------------------------------
--spec publish_participants_event(ne_binary(), api_terms()) -> 'ok'.
--spec publish_participants_event(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
-publish_participants_event(ConferenceId, JObj) ->
-    publish_participants_event(ConferenceId, JObj, ?DEFAULT_CONTENT_TYPE).
-publish_participants_event(ConferenceId, Event, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Event, ?PARTICIPANTS_EVENT_VALUES, fun ?MODULE:participants_event/1),
-    amqp_util:conference_publish(Payload, 'event', ConferenceId, [], ContentType).
+-spec publish_participant_event(ne_binary(), ne_binary(), api_terms()) -> 'ok'.
+-spec publish_participant_event(ne_binary(), ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+publish_participant_event(ConferenceId, CallId, JObj) ->
+    publish_participant_event(ConferenceId, CallId, JObj, ?DEFAULT_CONTENT_TYPE).
+publish_participant_event(ConferenceId, CallId, Event, ContentType) ->
+    {'ok', Payload} = kz_api:prepare_api_payload(Event, ?PARTICIPANT_EVENT_VALUES, fun participant_event/1),
+    amqp_util:conference_publish(Payload, 'event', ConferenceId, amqp_util:encode(CallId), [], ContentType).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1289,7 +1322,7 @@ publish_participants_event(ConferenceId, Event, ContentType) ->
 publish_error(Queue, JObj) ->
     publish_error(Queue, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_error(Queue, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?CONFERENCE_ERROR_VALUES, fun ?MODULE:conference_error/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?CONFERENCE_ERROR_VALUES, fun conference_error/1),
     amqp_util:targeted_publish(Queue, Payload, ContentType).
 
 %%--------------------------------------------------------------------
@@ -1315,8 +1348,8 @@ publish_command(ConferenceId, Req, ContentType) ->
 %% Publish to the conference exchange
 %% @end
 %%--------------------------------------------------------------------
--spec publish_targeted_command(ne_binary(), api_terms()) -> 'ok'.
--spec publish_targeted_command(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
+-spec publish_targeted_command(atom(), api_terms()) -> 'ok'.
+-spec publish_targeted_command(atom(), api_terms(), ne_binary()) -> 'ok'.
 publish_targeted_command(Focus, JObj) ->
     publish_targeted_command(Focus, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_targeted_command(Focus, Req, ContentType) ->
@@ -1340,7 +1373,7 @@ publish_config_req(JObj) ->
     publish_config_req(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_config_req(Req, ContentType) ->
     Profile = profile(Req),
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?CONFIG_REQ_VALUES, fun ?MODULE:config_req/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?CONFIG_REQ_VALUES, fun config_req/1),
     amqp_util:conference_publish(Payload, 'config', Profile, [], ContentType).
 
 profile(Props) when is_list(Props) -> props:get_value(<<"Profile">>, Props);
@@ -1356,5 +1389,5 @@ profile(JObj) -> kz_json:get_value(<<"Profile">>, JObj).
 publish_config_resp(Queue, JObj) ->
     publish_config_resp(Queue, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_config_resp(Queue, Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?CONFIG_RESP_VALUES, fun ?MODULE:config_resp/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?CONFIG_RESP_VALUES, fun config_resp/1),
     amqp_util:targeted_publish(Queue, Payload, ContentType).

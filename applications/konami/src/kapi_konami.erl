@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2014, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -11,7 +11,7 @@
 -export([transferred/1, transferred_v/1]).
 
 -export([bind_q/2, unbind_q/2
-         ,declare_exchanges/0
+        ,declare_exchanges/0
         ]).
 
 -export([publish_transferred/2]).
@@ -21,7 +21,7 @@
 -define(TRANSFERRED_HEADERS, [<<"Transferee">>, <<"Target">>, <<"Call">>]).
 -define(OPTIONAL_TRANSFERRED_HEADERS, [<<"Transferor">>]).
 -define(TRANSFERRED_VALUES, [{<<"Event-Category">>, ?APP_NAME}
-                             ,{<<"Event-Name">>, <<"transferred">>}
+                            ,{<<"Event-Name">>, <<"transferred">>}
                             ]).
 -define(TRANSFERRED_TYPES, []).
 
@@ -80,7 +80,7 @@ declare_exchanges() ->
 
 -spec publish_transferred(ne_binary(), api_terms()) -> 'ok'.
 publish_transferred(TargetCallId, API) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?TRANSFERRED_VALUES, fun ?MODULE:transferred/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?TRANSFERRED_VALUES, fun transferred/1),
     amqp_util:kapps_publish(transferred_routing_key(TargetCallId), Payload).
 
 -spec bind_for_transferred(ne_binary(), ne_binary()) -> 'ok'.

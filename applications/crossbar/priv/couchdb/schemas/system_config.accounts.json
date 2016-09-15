@@ -1,0 +1,27 @@
+{
+    "$schema": "http://json-schema.org/draft-03/schema#",
+    "_id": "system_config.accounts",
+    "description": "Schema for accounts system_config",
+    "properties": {
+        "allow_subaccounts_for_direct": {
+            "default": true,
+            "description": "accounts allow subaccounts for direct",
+            "type": "boolean"
+        },
+        "default_timezone": {
+            "default": "America/Los_Angeles",
+            "description": "accounts default timezone",
+            "type": "string"
+        },
+        "master_account_id": {
+            "description": "accounts master account id"
+        },
+        "timezone": {
+            "default": "America/Los_Angeles",
+            "description": "accounts timezone",
+            "type": "string"
+        }
+    },
+    "required": true,
+    "type": "object"
+}

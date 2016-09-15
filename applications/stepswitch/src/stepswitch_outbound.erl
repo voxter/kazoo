@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz
+%%% @copyright (C) 2011-2016, 2600Hz
 %%% @doc
 %%% Handle offnet requests, including rating them
 %%% @end
@@ -47,9 +47,9 @@ handle_audio_req(OffnetReq) ->
     handle_audio_req(Number, OffnetReq).
 
 handle_audio_req(Number, OffnetReq) ->
-    case stepswitch_util:lookup_number(Number) of
-        {'ok', AccountId, Props} ->
-            maybe_force_outbound(knm_number_options:set_account_id(Props, AccountId), OffnetReq);
+    case knm_number:lookup_account(Number) of
+        {'ok', _AccountId, Props} ->
+            maybe_force_outbound(Props, OffnetReq);
         _ -> maybe_bridge(Number, OffnetReq)
     end.
 
@@ -63,16 +63,15 @@ handle_audio_req(Number, OffnetReq) ->
 handle_originate_req(OffnetReq) ->
     Number = stepswitch_util:get_outbound_destination(OffnetReq),
     lager:debug("received outbound audio resource request for ~s from account ~s"
-                ,[Number, kapi_offnet_resource:account_id(OffnetReq)]
+               ,[Number, kapi_offnet_resource:account_id(OffnetReq)]
                ),
     handle_originate_req(Number, maybe_add_call_id(kz_json:get_value(<<"Outbound-Call-ID">>, OffnetReq) , OffnetReq)).
 
 -spec handle_originate_req(ne_binary(), kz_json:object()) -> any().
 handle_originate_req(Number, JObj) ->
-    case stepswitch_util:lookup_number(Number) of
-        {'ok', AccountId, Props} ->
-            NewProps = knm_number_options:set_account_id(Props, AccountId),
-            maybe_force_originate_outbound(NewProps, JObj);
+    case knm_number:lookup_account(Number) of
+        {'ok', _AccountId, Props} ->
+            maybe_force_originate_outbound(Props, JObj);
         _ -> maybe_originate(Number, JObj)
     end.
 
@@ -100,9 +99,9 @@ maybe_force_originate_outbound(Props, JObj) ->
 handle_sms_req(OffnetReq) ->
     Number = stepswitch_util:get_outbound_destination(OffnetReq),
     lager:debug("received outbound sms resource request for ~s", [Number]),
-    case stepswitch_util:lookup_number(Number) of
-        {'ok', AccountId, Props} ->
-            maybe_force_outbound_sms(knm_number_options:set_account_id(Props, AccountId), OffnetReq);
+    case knm_number:lookup_account(Number) of
+        {'ok', _AccountId, Props} ->
+            maybe_force_outbound_sms(Props, OffnetReq);
         _ -> maybe_sms(Number, OffnetReq)
     end.
 
@@ -144,7 +143,8 @@ maybe_force_outbound_sms(Props, OffnetReq) ->
 %%--------------------------------------------------------------------
 -spec maybe_bridge(ne_binary(), kapi_offnet_resource:req()) -> any().
 maybe_bridge(Number, OffnetReq) ->
-    case stepswitch_resources:endpoints(Number, OffnetReq) of
+    RouteBy = stepswitch_util:route_by(),
+    case RouteBy:endpoints(Number, OffnetReq) of
         [] -> maybe_correct_shortdial(Number, OffnetReq);
         Endpoints -> stepswitch_request_sup:bridge(Endpoints, OffnetReq)
     end.
@@ -171,7 +171,8 @@ maybe_correct_shortdial(Number, OffnetReq) ->
 %%--------------------------------------------------------------------
 -spec maybe_sms(ne_binary(), kapi_offnet_resource:req()) -> any().
 maybe_sms(Number, OffnetReq) ->
-    case stepswitch_resources:endpoints(Number, OffnetReq) of
+    RouteBy = stepswitch_util:route_by(),
+    case RouteBy:endpoints(Number, OffnetReq) of
         [] -> publish_no_resources(OffnetReq);
         Endpoints -> stepswitch_request_sup:sms(Endpoints, OffnetReq)
     end.
@@ -205,7 +206,8 @@ local_sms(Props, OffnetReq) ->
 %%--------------------------------------------------------------------
 -spec maybe_originate(ne_binary(), kapi_offnet_resource:req()) -> any().
 maybe_originate(Number, OffnetReq) ->
-    case stepswitch_resources:endpoints(Number, OffnetReq) of
+    RouteBy = stepswitch_util:route_by(),
+    case RouteBy:endpoints(Number, OffnetReq) of
         [] -> publish_no_resources(OffnetReq);
         Endpoints -> stepswitch_request_sup:originate(Endpoints, OffnetReq)
     end.
@@ -214,7 +216,7 @@ maybe_originate(Number, OffnetReq) ->
 local_originate(Props, JObj) ->
     Endpoints = [create_loopback_endpoint(Props, JObj)],
     J = kz_json:set_values([{<<"Simplify-Loopback">>, <<"false">>}
-                            ,{<<"Loopback-Bowout">>, <<"false">>}
+                           ,{<<"Loopback-Bowout">>, <<"false">>}
                            ], JObj),
     lager:debug("originate local request"),
     stepswitch_request_sup:originate(Endpoints, J).
@@ -222,11 +224,11 @@ local_originate(Props, JObj) ->
 -spec local_originate_caller_id(kz_json:object()) -> {api_binary(), api_binary()}.
 local_originate_caller_id(JObj) ->
     {kz_json:get_first_defined([<<"Outbound-Caller-ID-Number">>
-                                ,<<"Emergency-Caller-ID-Number">>
+                               ,<<"Emergency-Caller-ID-Number">>
                                ], JObj)
-     ,kz_json:get_first_defined([<<"Outbound-Caller-ID-Name">>
-                                 ,<<"Emergency-Caller-ID-Name">>
-                                ], JObj)
+    ,kz_json:get_first_defined([<<"Outbound-Caller-ID-Name">>
+                               ,<<"Emergency-Caller-ID-Name">>
+                               ], JObj)
     }.
 
 -spec get_account_realm(ne_binary()) -> ne_binary().
@@ -244,27 +246,27 @@ create_loopback_endpoint(Props, JObj) ->
     AccountId = knm_number_options:account_id(Props),
     Realm = get_account_realm(AccountId),
     CCVs = props:filter_undefined(
-                   [{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "Inception">>, <<Number/binary, "@", Realm/binary>>}
-                    ,{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "Account-ID">>, AccountId}
-                    ,{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "Retain-CID">>, "true"}
-                    ,{<<"Resource-ID">>, AccountId}
-                    ,{<<"Loopback-Request-URI">>, <<Number/binary, "@", Realm/binary>>}
-                   ]),
+             [{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "Inception">>, <<Number/binary, "@", Realm/binary>>}
+             ,{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "Account-ID">>, AccountId}
+             ,{<<?CHANNEL_LOOPBACK_HEADER_PREFIX, "Retain-CID">>, "true"}
+             ,{<<"Resource-ID">>, AccountId}
+             ,{<<"Loopback-Request-URI">>, <<Number/binary, "@", Realm/binary>>}
+             ]),
     Endpoint = kz_json:from_list(
                  props:filter_undefined(
                    [{<<"Invite-Format">>, <<"loopback">>}
-                    ,{<<"Route">>, Number}
-                    ,{<<"To-DID">>, Number}
-                    ,{<<"To-Realm">>, Realm}
-                    ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
-                    ,{<<"Outbound-Caller-ID-Name">>, CIDName}
-                    ,{<<"Outbound-Caller-ID-Number">>, CIDNum}
-                    ,{<<"Caller-ID-Name">>, CIDName}
-                    ,{<<"Caller-ID-Number">>, CIDNum}
-                    ,{<<"Ignore-Early-Media">>, 'true'}
-                    ,{<<"Ignore-Early-Media">>, 'true'}
-                    ,{<<"Enable-T38-Fax">>, 'false'}
-                    ,{<<"Enable-T38-Fax-Request">>, 'false'}
+                   ,{<<"Route">>, Number}
+                   ,{<<"To-DID">>, Number}
+                   ,{<<"To-Realm">>, Realm}
+                   ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
+                   ,{<<"Outbound-Caller-ID-Name">>, CIDName}
+                   ,{<<"Outbound-Caller-ID-Number">>, CIDNum}
+                   ,{<<"Caller-ID-Name">>, CIDName}
+                   ,{<<"Caller-ID-Number">>, CIDNum}
+                   ,{<<"Ignore-Early-Media">>, 'true'}
+                   ,{<<"Ignore-Early-Media">>, 'true'}
+                   ,{<<"Enable-T38-Fax">>, 'false'}
+                   ,{<<"Enable-T38-Fax-Request">>, 'false'}
                    ])),
     Endpoint.
 %%--------------------------------------------------------------------
@@ -287,10 +289,10 @@ no_resources(OffnetReq) ->
     lager:info("no available resources for ~s", [ToDID]),
     props:filter_undefined(
       [{?KEY_TO_DID, ToDID}
-       ,{<<"Response-Message">>, <<"NO_ROUTE_DESTINATION">>}
-       ,{<<"Response-Code">>, <<"sip:404">>}
-       ,{<<"Error-Message">>, <<"no available resources">>}
-       ,{?KEY_CALL_ID, kapi_offnet_resource:call_id(OffnetReq)}
-       ,{?KEY_MSG_ID, kapi_offnet_resource:msg_id(OffnetReq)}
+      ,{<<"Response-Message">>, <<"NO_ROUTE_DESTINATION">>}
+      ,{<<"Response-Code">>, <<"sip:404">>}
+      ,{<<"Error-Message">>, <<"no available resources">>}
+      ,{?KEY_CALL_ID, kapi_offnet_resource:call_id(OffnetReq)}
+      ,{?KEY_MSG_ID, kapi_offnet_resource:msg_id(OffnetReq)}
        | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
       ]).

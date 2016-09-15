@@ -54,7 +54,7 @@ Key | Description | Type | Default | Required
 
 > GET /v2/accounts/{ACCOUNT_ID}/cdrs
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/cdrs
@@ -62,21 +62,31 @@ curl -v -X GET \
 
 #### Fetch
 
-> GET /v2/accounts/{ACCOUNT_ID}/cdrs/{ID}
+> GET /v2/accounts/{ACCOUNT_ID}/cdrs/{CDR_ID}
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/cdrs/{ID}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/cdrs/{CDR_ID}
 ```
 
 #### Fetch
 
-> GET /v2/accounts/{ACCOUNT_ID}/cdrs/legs/{ID}
+> GET /v2/accounts/{ACCOUNT_ID}/cdrs/interaction
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/cdrs/legs/{ID}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/cdrs/interaction
+```
+
+#### Fetch
+
+> GET /v2/accounts/{ACCOUNT_ID}/cdrs/legs/{INTERACTION_ID}
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/cdrs/legs/{INTERACTION_ID}
 ```
 

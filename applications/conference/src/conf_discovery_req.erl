@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -39,7 +39,7 @@ welcome_to_conference(Call, Srv, DiscoveryJObj) ->
         'undefined' -> kapps_call_command:prompt(<<"conf-welcome">>, Call);
         Media -> kapps_call_command:play(
                    kz_media_util:media_path(Media, kapps_call:account_id(Call))
-                   ,Call
+                                        ,Call
                   )
     end,
     maybe_collect_conference_id(Call, Srv, DiscoveryJObj).
@@ -69,13 +69,13 @@ collect_conference_id(Call, Srv, DiscoveryJObj) ->
     end.
 
 -spec maybe_set_conference_tones(kapps_conference:conference(), kz_json:object()) ->
-                                  kapps_conference:conference().
+                                        kapps_conference:conference().
 maybe_set_conference_tones(Conference, JObj) ->
     ShouldPlayOnEntry = kz_json:get_ne_value(<<"Play-Entry-Tone">>, JObj, kapps_conference:play_entry_tone(Conference)),
     ShouldPlayOnExit = kz_json:get_ne_value(<<"Play-Exit-Tone">>, JObj, kapps_conference:play_exit_tone(Conference)),
     kapps_conference:set_play_entry_tone(ShouldPlayOnEntry
-                                          ,kapps_conference:set_play_exit_tone(ShouldPlayOnExit, Conference)
-                                         ).
+                                        ,kapps_conference:set_play_exit_tone(ShouldPlayOnExit, Conference)
+                                        ).
 
 -spec maybe_collect_conference_pin(kapps_conference:conference(), kapps_call:call(), pid()) -> 'ok'.
 maybe_collect_conference_pin(Conference, Call, Srv) ->
@@ -132,8 +132,8 @@ collect_conference_pin(Type, Conference, Call, Srv) ->
 -spec prepare_kapps_conference(kapps_conference:conference(), kapps_call:call(), pid()) -> 'ok'.
 prepare_kapps_conference(Conference, Call, Srv) ->
     Routines = [{fun kapps_conference:set_application_version/2, ?APP_VERSION}
-                ,{fun kapps_conference:set_application_name/2, ?APP_NAME}
-                ,{fun maybe_set_as_moderator/2, Srv}
+               ,{fun kapps_conference:set_application_name/2, ?APP_NAME}
+               ,{fun maybe_set_as_moderator/2, Srv}
                ],
     C = kapps_conference:update(Routines, Conference),
     search_for_conference(C, Call, Srv).
@@ -191,8 +191,8 @@ play_participants_count(Call, 1) ->
     'ok';
 play_participants_count(Call, Count) when is_integer(Count) andalso Count > 0 ->
     kapps_call_command:audio_macro([{'prompt', <<"conf-there_are">>}
-                                     ,{'say', kz_util:to_binary(Count), <<"number">>}
-                                     ,{'prompt', <<"conf-other_participants">>}
+                                    ,{'say', kz_util:to_binary(Count), <<"number">>}
+                                    ,{'prompt', <<"conf-other_participants">>}
                                     ], Call),
     'ok';
 play_participants_count(Call, JObj) ->
@@ -216,11 +216,14 @@ wait_for_creation(Conference) ->
                                {'ok', kz_json:object()} |
                                {'error', 'timeout'}.
 wait_for_creation(_, After) when After =< 0 ->
+    kz_amqp_channel:release(),
     {'error', 'timeout'};
 wait_for_creation(Conference, After) ->
     Start = os:timestamp(),
     case kapps_conference_command:search(Conference) of
-        {'ok', _}=Ok -> Ok;
+        {'ok', _}=Ok ->
+            kz_amqp_channel:release(),
+            Ok;
         {'error', _} ->
             timer:sleep(?MILLISECONDS_IN_SECOND),
             wait_for_creation(Conference, kz_util:decr_timeout(After, Start))
@@ -230,7 +233,8 @@ wait_for_creation(Conference, After) ->
 handle_search_resp(JObj, Conference, Call, Srv) ->
     MaxParticipants =  kapps_conference:max_participants(Conference),
     Participants = length(kz_json:get_value(<<"Participants">>, JObj, [])),
-    case (MaxParticipants =/= 0) andalso (Participants >= MaxParticipants) of
+    case MaxParticipants =/= 0
+        andalso Participants >= MaxParticipants of
         'false' ->
             play_participants_count(Call, Participants),
             add_participant_to_conference(JObj, Conference, Call, Srv);
@@ -318,7 +322,8 @@ validate_conference_id('undefined', Call, Loop) when Loop > 3 ->
     {'error', 'too_many_attempts'};
 validate_conference_id('undefined', Call, Loop) ->
     lager:debug("requesting conference id from caller"),
-    case kapps_call_command:b_prompt_and_collect_digits(1, 16, <<"conf-enter_conf_number">>, 1, Call) of
+    Timeout = get_number_timeout(Call),
+    case kapps_call_command:b_prompt_and_collect_digits(1, 16, <<"conf-enter_conf_number">>, 1, Timeout, Call) of
         {'error', _}=E -> E;
         {'ok', Digits} ->
             validate_collected_conference_id(Call, Loop, Digits)
@@ -337,10 +342,13 @@ validate_conference_id(ConferenceId, Call, Loop) ->
 -spec validate_collected_conference_id(kapps_call:call(), non_neg_integer(), binary()) ->
                                               {'ok', kapps_conference:conference()} |
                                               {'error', any()}.
+validate_collected_conference_id(Call, Loop, <<>>) ->
+    _ = kapps_call_command:prompt(<<"conf-bad_conf">>, Call),
+    validate_conference_id('undefined', Call, Loop + 1);
 validate_collected_conference_id(Call, Loop, Digits) ->
     AccountDb = kapps_call:account_db(Call),
     ViewOptions = [{'key', Digits}
-                   ,'include_docs'
+                  ,'include_docs'
                   ],
     case kz_datamgr:get_results(AccountDb, <<"conference/listing_by_number">>, ViewOptions) of
         {'ok', [JObj]} ->
@@ -361,21 +369,24 @@ validate_conference_pin(_, _, Call, Loop) when Loop > 3->
     {'error', 'too_many_attempts'};
 validate_conference_pin('true', Conference, Call, Loop) ->
     lager:debug("requesting moderator pin from caller"),
-    case kapps_call_command:b_prompt_and_collect_digits(1, 16, <<"conf-enter_conf_pin">>, 1, Call) of
+    Timeout = get_pin_timeout(Conference),
+    case kapps_call_command:b_prompt_and_collect_digits(1, 16, <<"conf-enter_conf_pin">>, 1, Timeout, Call) of
         {'error', _}=E -> E;
         {'ok', Digits} ->
             validate_collected_conference_pin(Conference, Call, Loop, Digits)
     end;
 validate_conference_pin('false', Conference, Call, Loop) ->
     lager:debug("requesting member pin from caller"),
-    case kapps_call_command:b_prompt_and_collect_digits(1, 16, <<"conf-enter_conf_pin">>, 1, Call) of
+    Timeout = get_pin_timeout(Conference),
+    case kapps_call_command:b_prompt_and_collect_digits(1, 16, <<"conf-enter_conf_pin">>, 1, Timeout, Call) of
         {'error', _}=E -> E;
         {'ok', Digits} ->
             validate_collected_member_pins(Conference, Call, Loop, Digits)
     end;
 validate_conference_pin(_, Conference, Call, Loop) ->
     lager:debug("requesting conference pin from caller, which will be used to disambiguate member/moderator"),
-    case kapps_call_command:b_prompt_and_collect_digits(1, 16, <<"conf-enter_conf_pin">>, 1, Call) of
+    Timeout = get_pin_timeout(Conference),
+    case kapps_call_command:b_prompt_and_collect_digits(1, 16, <<"conf-enter_conf_pin">>, 1, Timeout, Call) of
         {'error', _}=E -> E;
         {'ok', Digits} ->
             validate_if_pin_is_for_moderator(Conference, Call, Loop, Digits)
@@ -388,11 +399,13 @@ validate_if_pin_is_for_moderator(Conference, Call, Loop, Digits) ->
     MemberPins = kapps_conference:member_pins(Conference),
     ModeratorPins = kapps_conference:moderator_pins(Conference),
     case {(lists:member(Digits, MemberPins)
-           orelse (MemberPins =:= [] andalso Digits =:= <<>>)
+           orelse (MemberPins =:= []
+                   andalso Digits =:= <<>>)
           )
-          ,(lists:member(Digits, ModeratorPins)
-            orelse (MemberPins =:= [] andalso Digits =:= <<>>)
-           )
+         ,(lists:member(Digits, ModeratorPins)
+           orelse (MemberPins =:= []
+                   andalso Digits =:= <<>>)
+          )
          }
     of
         {'true', _} ->
@@ -413,7 +426,8 @@ validate_if_pin_is_for_moderator(Conference, Call, Loop, Digits) ->
 validate_collected_member_pins(Conference, Call, Loop, Digits) ->
     Pins = kapps_conference:member_pins(Conference),
     case lists:member(Digits, Pins)
-        orelse (Pins =:= [] andalso Digits =:= <<>>)
+        orelse (Pins =:= []
+                andalso Digits =:= <<>>)
     of
         'true' ->
             lager:debug("caller entered a valid member pin"),
@@ -430,7 +444,8 @@ validate_collected_member_pins(Conference, Call, Loop, Digits) ->
 validate_collected_conference_pin(Conference, Call, Loop, Digits) ->
     Pins = kapps_conference:moderator_pins(Conference),
     case lists:member(Digits, Pins)
-        orelse (Pins =:= [] andalso Digits =:= <<>>)
+        orelse (Pins =:= []
+                andalso Digits =:= <<>>)
     of
         'true' ->
             lager:debug("caller entered a valid moderator pin"),
@@ -449,7 +464,7 @@ create_conference(JObj, Digits, Call) ->
     ModeratorNumbers = kz_json:get_value([<<"moderator">>, <<"numbers">>], JObj, []),
     MemberNumbers = kz_json:get_value([<<"member">>, <<"numbers">>], JObj, []),
     case {lists:member(Digits, MemberNumbers)
-          ,lists:member(Digits, ModeratorNumbers)
+         ,lists:member(Digits, ModeratorNumbers)
          }
     of
         {'true', 'false'} ->
@@ -462,3 +477,27 @@ create_conference(JObj, Digits, Call) ->
         %%   or they joined by the discovery event having the conference id
         _Else -> Conference
     end.
+
+-spec get_pin_timeout(kapps_conference:conference()) -> pos_integer().
+get_pin_timeout(Conference) ->
+    AccountId = kapps_conference:account_id(Conference),
+    lager:debug("pin timeout request account:~p conference:~p", [AccountId, kapps_conference:id(Conference)]),
+    JObj = kapps_conference:conference_doc(Conference),
+    kz_json:get_value(<<"pin_timeout">>, JObj, get_account_pin_timeout(AccountId)).
+
+-spec get_account_pin_timeout(ne_binary()) -> pos_integer().
+get_account_pin_timeout(AccountId) ->
+    kapps_account_config:get_global(AccountId, ?CONFIG_CAT, <<"pin_timeout">>, get_default_pin_timeout()).
+
+-spec get_default_pin_timeout() -> pos_integer().
+get_default_pin_timeout() ->
+    kapps_config:get(?CONFIG_CAT, <<"pin_timeout">>, 5 * ?MILLISECONDS_IN_SECOND).
+
+-spec get_number_timeout(kapps_call:call()) -> pos_integer().
+get_number_timeout(Call) ->
+    AccountId = kapps_call:account_id(Call),
+    kapps_account_config:get_global(AccountId, ?CONFIG_CAT, <<"number_timeout">>, get_default_number_timeout()).
+
+-spec get_default_number_timeout() -> pos_integer().
+get_default_number_timeout() ->
+    kapps_config:get(?CONFIG_CAT, <<"number_timeout">>, 5 * ?MILLISECONDS_IN_SECOND).

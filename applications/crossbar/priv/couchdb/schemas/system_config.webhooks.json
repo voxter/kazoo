@@ -1,0 +1,27 @@
+{
+    "$schema": "http://json-schema.org/draft-03/schema#",
+    "_id": "system_config.webhooks",
+    "description": "Schema for webhooks system_config",
+    "properties": {
+        "attempt_failure_count": {
+            "description": "webhooks attempt failure count"
+        },
+        "attempt_failure_expiry_ms": {
+            "default": 60000,
+            "description": "webhooks attempt failure expiry in milliseconds",
+            "type": "integer"
+        },
+        "log_successful_attempts": {
+            "default": false,
+            "description": "webhooks log successful attempts",
+            "type": "boolean"
+        },
+        "object_types": {
+            "default": "default",
+            "description": "webhooks object types",
+            "type": "array"
+        }
+    },
+    "required": true,
+    "type": "object"
+}

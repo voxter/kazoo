@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%% Token auth module
 %%%
@@ -14,14 +14,16 @@
 -module(cb_token_restrictions).
 
 -export([init/0
-         ,allowed_methods/0
-         ,resource_exists/0
-         ,validate/1
-         ,post/1
-         ,delete/1
-         ,authorize/1
+        ,allowed_methods/0
+        ,resource_exists/0
+        ,validate/1
+        ,post/1
+        ,delete/1
+        ,authorize/1
 
-         ,config_cat/0
+        ,default_priv_level/0
+        ,default_method_restrictions/0
+        ,method_restrictions/1
         ]).
 
 -ifdef(TEST).
@@ -42,8 +44,20 @@
 -define(PVT_TYPE, <<"token_restrictions">>).
 -define(MOD_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".token_restrictions">>).
 
-config_cat() ->
-    ?MOD_CONFIG_CAT.
+-spec default_priv_level() -> ne_binary().
+default_priv_level() ->
+    kapps_config:get_binary(?MOD_CONFIG_CAT
+                           ,<<"default_priv_level">>
+                           ,<<"admin">>
+                           ).
+
+-spec default_method_restrictions() -> kz_json:object().
+default_method_restrictions() ->
+    kapps_config:get_json(?MOD_CONFIG_CAT, ?CATCH_ALL).
+
+-spec method_restrictions(atom()) -> api_object().
+method_restrictions(AuthModule) ->
+    kapps_config:get_json(?MOD_CONFIG_CAT, AuthModule).
 
 %%%===================================================================
 %%% API
@@ -94,7 +108,7 @@ on_successful_validation(Context) ->
         'success' -> Context1;
         _Status ->
             Setters = [fun add_doc_id/1
-                       ,fun add_pvt_type/1
+                      ,fun add_pvt_type/1
                       ],
             cb_context:setters(Context, Setters)
     end.
@@ -121,8 +135,8 @@ delete(Context) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(cb_context:context()) ->
-                          'false' |
-                          {'true' | 'halt', cb_context:context()}.
+                       'false' |
+                       {'true' | 'halt', cb_context:context()}.
 authorize(Context) ->
     case maybe_deny_access(Context) of
         'false' -> 'false';
@@ -146,16 +160,16 @@ maybe_deny_access(Context) ->
 -spec maybe_deny_access(cb_context:context(), kz_json:object()) -> boolean().
 maybe_deny_access(Context, Restrictions) ->
     MatchFuns = [fun match_endpoint/2
-                 ,fun match_account/2
-                 ,fun match_arguments/2
-                 ,fun match_verb/2
+                ,fun match_account/2
+                ,fun match_arguments/2
+                ,fun match_verb/2
                 ],
 
     not lists:foldl(fun(F, RestrictionContext) ->
                             F(Context, RestrictionContext)
                     end
-                    ,Restrictions
-                    ,MatchFuns
+                   ,Restrictions
+                   ,MatchFuns
                    ).
 
 -spec match_endpoint(cb_context:context(), api_object()) ->
@@ -187,10 +201,10 @@ match_account(Context, EndpointRestrictions) ->
 find_endpoint_restrictions_by_account(_Accounts, []) ->
     'undefined';
 find_endpoint_restrictions_by_account(AllowedAccounts
-                                      ,[Restriction|Restrictions]
+                                     ,[Restriction|Restrictions]
                                      ) ->
     case maybe_match_accounts(AllowedAccounts
-                              ,kz_json:get_value(<<"allowed_accounts">>, Restriction)
+                             ,kz_json:get_value(<<"allowed_accounts">>, Restriction)
                              )
     of
         'true' -> kz_json:get_value(<<"rules">>, Restriction);
@@ -261,7 +275,7 @@ match_rules(ReqParams, [RuleKey|RuleKeys]) ->
 -spec does_rule_match(ne_binary(), ne_binaries()) -> boolean().
 does_rule_match(RuleKey, ReqParams) ->
     kazoo_bindings:matches(binary:split(RuleKey, <<"/">>, ['global', 'trim'])
-                           ,ReqParams
+                          ,ReqParams
                           ).
 
 -spec match_verb(cb_context:context(), http_methods()) -> boolean().

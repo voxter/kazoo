@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% Listing of all expected v1 callbacks
@@ -12,14 +12,14 @@
 -module(cb_configs).
 
 -export([init/0
-         ,allowed_methods/1
-         ,resource_exists/0, resource_exists/1
-         ,validate/2
-         ,get/2
-         ,put/2
-         ,post/2
-         ,patch/2
-         ,delete/2
+        ,allowed_methods/1
+        ,resource_exists/0, resource_exists/1
+        ,validate/2
+        ,get/2
+        ,put/2
+        ,post/2
+        ,patch/2
+        ,delete/2
         ]).
 
 -include("crossbar.hrl").
@@ -53,7 +53,7 @@ init() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec allowed_methods(path_token()) -> http_methods().
-allowed_methods(_) ->
+allowed_methods(_ConfigId) ->
     [?HTTP_GET, ?HTTP_PUT, ?HTTP_POST, ?HTTP_PATCH, ?HTTP_DELETE].
 
 %%--------------------------------------------------------------------

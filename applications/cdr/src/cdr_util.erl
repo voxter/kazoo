@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (c) 2010-2014, 2600Hz
+%%% @copyright (c) 2010-2016, 2600Hz
 %%% @doc
 %%% Utility module for CDR operations
 %%% @end
@@ -9,7 +9,7 @@
 -module(cdr_util).
 
 -export([get_cdr_doc_id/2
-         ,get_cdr_doc_id/3
+        ,get_cdr_doc_id/3
         ]).
 -export([save_cdr/2]).
 

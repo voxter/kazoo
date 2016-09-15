@@ -1,0 +1,38 @@
+{
+    "$schema": "http://json-schema.org/draft-03/schema#",
+    "_id": "system_config.notify",
+    "description": "Schema for notify system_config",
+    "properties": {
+        "backoff_fudge_ms": {
+            "default": 5000,
+            "description": "notify backoff fudge in milliseconds",
+            "type": "integer"
+        },
+        "mime-encoding": {
+            "properties": {
+                "{ContentType}": {
+                    "properties": {
+                        "content_transfer_encoding": {
+                            "properties": {
+                                "description": "notify content transfer encoding",
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "notification_app": {
+            "default": "notify",
+            "description": "notify notification app",
+            "type": "string"
+        },
+        "search_rep_email": {
+            "default": true,
+            "description": "notify search rep email",
+            "type": "boolean"
+        }
+    },
+    "required": true,
+    "type": "object"
+}

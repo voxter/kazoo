@@ -1,19 +1,24 @@
 %% @author root
 %% @doc @todo Add description to kazoo_oauth_client.
-
-
 -module(kazoo_oauth_client).
 
 -include("kazoo_oauth.hrl").
 
+-export([authenticate/1, authenticate/3]).
+
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([authenticate/1, authenticate/3]).
 
+-spec authenticate(kz_json:object()) -> {'ok', kz_json:object()} |
+                                        {'error', ne_binary()}.
+-spec authenticate(ne_binary(), ne_binary(), kz_json:object()) ->
+                          {'ok', kz_json:object()} |
+                          {'error', ne_binary()}.
 authenticate(JObj) ->
     case {kz_json:get_value(<<"access_token">>, JObj)
-         ,kz_json:get_value(<<"provider">>, JObj)}
+         ,kz_json:get_value(<<"provider">>, JObj)
+         }
     of
         {'undefined', 'undefined'} ->
             {'error', <<"OAUTH missing parameters AccessToken and Provider">>};
@@ -72,12 +77,12 @@ get_refresh_token(_ , _, _ , _) -> kz_json:new().
 
 save_oauth_doc(App, DocId, JObj, TokenObj, RefreshTokenObj) ->
     Doc = props:filter_undefined([{<<"email">>, kz_json:get_value(<<"email">>, TokenObj) }
-           ,{<<"verified_email">>, kz_json:get_value(<<"verified_email">>, TokenObj) }
-           ,{<<"access_type">>, kz_json:get_value(<<"access_type">>, TokenObj) }
-           ,{<<"scope">>, kz_json:get_value(<<"scope">>, TokenObj) }
-           ,{<<"scopes">>, binary:split(kz_json:get_value(<<"scope">>, TokenObj), <<" ">>) }
-           ,{<<"refresh_token">>, kz_json:get_value(<<"refresh_token">>, RefreshTokenObj) }
-          ]),
+                                 ,{<<"verified_email">>, kz_json:get_value(<<"verified_email">>, TokenObj) }
+                                 ,{<<"access_type">>, kz_json:get_value(<<"access_type">>, TokenObj) }
+                                 ,{<<"scope">>, kz_json:get_value(<<"scope">>, TokenObj) }
+                                 ,{<<"scopes">>, binary:split(kz_json:get_value(<<"scope">>, TokenObj), <<" ">>) }
+                                 ,{<<"refresh_token">>, kz_json:get_value(<<"refresh_token">>, RefreshTokenObj) }
+                                 ]),
     case kz_datamgr:update_doc(?KZ_OAUTH_DB, DocId, Doc) of
         {'ok', DocObj} -> load_profile(App, JObj, TokenObj, DocObj);
         {'error', _R} ->
@@ -106,9 +111,9 @@ load_profile(#oauth_app{provider=#oauth_provider{profile_url=ProfileURL}}, JObj,
             lager:info("loaded outh profile: ~p",[RespXML]),
             ProfileJObj = kz_json:decode(RespXML),
             Doc = kz_json:from_list([{<<"Token">>, JObj}
-                                     ,{<<"VerifiedToken">>, TokenObj}
-                                     ,{<<"Profile">>, ProfileJObj}
-                                     ,{<<"AuthDoc">>, AuthDoc}
+                                    ,{<<"VerifiedToken">>, TokenObj}
+                                    ,{<<"Profile">>, ProfileJObj}
+                                    ,{<<"AuthDoc">>, AuthDoc}
                                     ]),
             {'ok', Doc};
         _Else ->

@@ -17,7 +17,7 @@ Key | Description | Type | Default | Required
 
 > PUT /v2/user_auth
 
-```curl
+```shell
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/user_auth
@@ -25,19 +25,29 @@ curl -v -X PUT \
 
 #### Fetch
 
-> GET /v2/user_auth/{AUTHTOKEN}
+> GET /v2/user_auth/{AUTH_TOKEN}
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/user_auth/{AUTHTOKEN}
+    http://{SERVER}:8000/v2/user_auth/{AUTH_TOKEN}
+```
+
+#### Change
+
+> POST /v2/user_auth/recovery
+
+```shell
+curl -v -X POST \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/user_auth/recovery
 ```
 
 #### Create
 
 > PUT /v2/user_auth/recovery
 
-```curl
+```shell
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/user_auth/recovery

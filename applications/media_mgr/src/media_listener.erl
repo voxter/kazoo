@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2015, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -8,25 +8,27 @@
 %%%   Karl Anderson
 %%%-------------------------------------------------------------------
 -module(media_listener).
-
 -behaviour(gen_listener).
 
 %% API
 -export([start_link/0
-         ,handle_media_req/2
+        ,handle_media_req/2
         ]).
 
 %% gen_server callbacks
 -export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,handle_event/2
-         ,terminate/2
-         ,code_change/3
+        ,handle_call/3
+        ,handle_cast/2
+        ,handle_info/2
+        ,handle_event/2
+        ,terminate/2
+        ,code_change/3
         ]).
 
 -include("media.hrl").
+
+-record(state, {}).
+-type state() :: #state{}.
 
 -define(SERVER, ?MODULE).
 
@@ -40,9 +42,9 @@
 -spec start_link() -> startlink_ret().
 start_link() ->
     gen_listener:start_link(?SERVER, [{'bindings', [{'media', []}]}
-                                      ,{'responders', [{{?MODULE, 'handle_media_req'}
-                                                        ,[{<<"media">>, <<"media_req">>}]}
-                                                      ]}
+                                     ,{'responders', [{{?MODULE, 'handle_media_req'}
+                                                      ,[{<<"media">>, <<"media_req">>}]}
+                                                     ]}
                                      ], []).
 
 handle_media_req(JObj, _Props) ->
@@ -74,7 +76,7 @@ handle_media_req(JObj, _Props) ->
 %%--------------------------------------------------------------------
 init([]) ->
     lager:debug("starting media_mgr listener"),
-    {'ok', 'ok'}.
+    {'ok', #state{}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -90,6 +92,7 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_supported'}, State}.
 
@@ -103,6 +106,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast(_Msg, State) ->
     {'noreply', State}.
 
@@ -116,6 +120,7 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info(_Info, State) ->
     {'noreply', State}.
 
@@ -133,6 +138,7 @@ handle_event(_JObj, _State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     lager:debug("media listener terminating: ~p", [_Reason]).
 
@@ -144,6 +150,7 @@ terminate(_Reason, _State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
@@ -154,9 +161,9 @@ code_change(_OldVsn, State, _Extra) ->
 send_error_resp(JObj, ErrMsg) ->
     MediaName = kz_json:get_value(<<"Media-Name">>, JObj),
     Error = [{<<"Media-Name">>, MediaName}
-             ,{<<"Error-Code">>, <<"other">>}
-             ,{<<"Error-Msg">>, kz_util:to_binary(ErrMsg)}
-             ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
+            ,{<<"Error-Code">>, <<"other">>}
+            ,{<<"Error-Msg">>, kz_util:to_binary(ErrMsg)}
+            ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ],
     lager:debug("sending error reply ~s for ~s", [ErrMsg, MediaName]),
@@ -168,8 +175,8 @@ send_error_resp(JObj, ErrMsg) ->
 send_media_resp(JObj, StreamURL) ->
     lager:debug("media stream URL: ~s", [StreamURL]),
     Resp = [{<<"Media-Name">>, kz_json:get_value(<<"Media-Name">>, JObj)}
-            ,{<<"Stream-URL">>, StreamURL}
-            ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
+           ,{<<"Stream-URL">>, StreamURL}
+           ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
     ServerId = kz_json:get_value(<<"Server-ID">>, JObj),

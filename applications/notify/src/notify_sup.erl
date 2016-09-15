@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2013, 2600Hz
+%%% @copyright (C) 2011-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -24,7 +24,6 @@
 
 %% Helper macro for declaring children of supervisor
 -define(CHILDREN, [?WORKER('notify_listener')
-                   ,?WORKER('notify_account_crawler')
                   ]).
 
 %% ===================================================================

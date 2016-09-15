@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -18,9 +18,9 @@
 
 %% Helper macro for declaring children of supervisor
 -define(CHILDREN, [?SUPER('ci_analyzers_sup')
-                   ,?SUPER('ci_parsers_sup')
-                   ,?WORKER('ci_datastore')
-                   ,?WORKER('ci_listener')
+                  ,?SUPER('ci_parsers_sup')
+                  ,?WORKER('ci_datastore')
+                  ,?WORKER('ci_listener')
                   ]).
 
 %% ===================================================================

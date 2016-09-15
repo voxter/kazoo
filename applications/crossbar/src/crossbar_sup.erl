@@ -27,15 +27,14 @@
 -define(CACHE_PROPS, [{'origin_bindings', ?ORIGIN_BINDINGS}]).
 
 -define(CHILDREN, [?WORKER('crossbar_init')
-                   ,?SUPER('crossbar_module_sup')
-                   ,?CACHE_ARGS(?CACHE_NAME, ?CACHE_PROPS)
-                   ,?WORKER('crossbar_cleanup')
-                   ,?WORKER('crossbar_bindings')
+                  ,?SUPER('crossbar_module_sup')
+                  ,?CACHE_ARGS(?CACHE_NAME, ?CACHE_PROPS)
+                  ,?WORKER('crossbar_cleanup')
+                  ,?WORKER('crossbar_bindings')
                   ]
        ).
 
--define(DISPATCH_FILE, [code:lib_dir('crossbar', 'priv'), "/dispatch.conf"]).
--define(DEFAULT_LOG_DIR, kz_util:to_binary(code:lib_dir('crossbar', 'log'))).
+-define(DISPATCH_FILE, [code:priv_dir('crossbar'), "/dispatch.conf"]).
 
 %% ===================================================================
 %% API functions

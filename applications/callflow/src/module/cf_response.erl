@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -7,6 +7,8 @@
 %%%   Karl Anderson
 %%%-------------------------------------------------------------------
 -module(cf_response).
+
+-behaviour(gen_cf_action).
 
 -include("callflow.hrl").
 
@@ -22,8 +24,8 @@
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     Code = kz_json:get_binary_value(<<"code">>, Data, <<"486">>),
-    Cause = kz_json:get_ne_value(<<"message">>, Data),
-    Media = kz_media_util:media_path(kz_json:get_value(<<"media">>, Data), Call),
+    Cause = kz_json:get_ne_binary_value(<<"message">>, Data),
+    Media = kz_media_util:media_path(kz_json:get_binary_value(<<"media">>, Data), Call),
     lager:info("responding to call with ~s ~s", [Code, Cause]),
     _ = kapps_call_command:response(Code, Cause, Media, Call),
     cf_exe:stop(Call).

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright
+%%% @copyright (C) 2012-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -9,12 +9,12 @@
 -module(cb_cccps).
 
 -export([init/0
-         ,allowed_methods/0, allowed_methods/1
-         ,resource_exists/0, resource_exists/1
-         ,validate/1, validate/2, validate/3
-         ,put/1, put/2
-         ,post/2
-         ,delete/2
+        ,allowed_methods/0, allowed_methods/1
+        ,resource_exists/0, resource_exists/1
+        ,validate/1, validate/2, validate/3
+        ,put/1, put/2
+        ,post/2
+        ,delete/2
         ]).
 
 -include("crossbar.hrl").
@@ -46,7 +46,7 @@ init() ->
 maybe_init_db() ->
     case kz_datamgr:db_exists(<<"cccps">>) of
         'true' ->
-             _ = kz_datamgr:revise_doc_from_file(<<"cccps">>, 'crossbar', <<"views/cccps.json">>),
+            _ = kz_datamgr:revise_doc_from_file(<<"cccps">>, 'crossbar', <<"views/cccps.json">>),
             'ok';
         'false' -> init_db()
     end.
@@ -68,7 +68,7 @@ init_db() ->
 -spec allowed_methods(path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
-allowed_methods(_) ->
+allowed_methods(_CCCPId) ->
     [?HTTP_GET, ?HTTP_PUT, ?HTTP_POST, ?HTTP_DELETE].
 
 %%--------------------------------------------------------------------
@@ -117,14 +117,20 @@ validate_cccps(Context, ?HTTP_PUT) ->
 
 -spec validate_cccp(cb_context:context(), path_token(), http_method()) -> cb_context:context().
 validate_cccp(Context, ?AUTODIAL, ?HTTP_PUT) ->
-    JObj = kz_json:from_list([{<<"Number">>, kz_json:get_value(<<"a_leg_number">>, cb_context:req_data(Context))}
-                              ,{<<"B-Leg-Number">>, kz_json:get_value(<<"b_leg_number">>, cb_context:req_data(Context))}
-                              ,{<<"Outbound-Caller-ID-Number">>, kz_json:get_value(<<"outbound_cid">>, cb_context:req_data(Context))}
-                              ,{<<"Account-ID">>, cb_context:account_id(Context)}
-                              ,{<<"Callback-Delay">>, kz_json:get_value(<<"callback_delay">>, cb_context:req_data(Context))}
-                             ]),
-    cccp_callback_sup:new(JObj),
-    cb_context:set_resp_status(Context, 'success');
+    AccountId = cb_context:account_id(Context),
+    case (cb_context:auth_account_id(Context) == AccountId) of
+        'true' ->
+            ReqData = cb_context:req_data(Context),
+            Values = [{<<"account_id">>, cb_context:account_id(Context)}
+                     ,{<<"user_id">>, cb_context:auth_user_id(Context)}
+                     ],
+            JObj = kz_json:set_values(Values, ReqData),
+            cccp_callback_sup:new(JObj),
+            cb_context:set_resp_status(Context, 'success');
+        'false' ->
+            Resp = kz_json:from_list([{<<"message">>, <<"For direct use by account holder only">>}]),
+            cb_context:add_validation_error(<<"account">>, <<"forbidden">>, Resp, Context)
+    end;
 validate_cccp(Context, Id, ?HTTP_GET) ->
     read(Id, Context);
 validate_cccp(Context, Id, ?HTTP_POST) ->
@@ -254,7 +260,7 @@ normalize_view_results(JObj, Acc) ->
 -spec check_pin(cb_context:context()) -> cb_context:context().
 check_pin(Context) ->
     case unique_pin(Context) of
-        'empty' -> create(Context);
+        'true' -> create(Context);
         _ -> error_pin_exists(Context)
     end.
 
@@ -269,7 +275,7 @@ check_cid(Context) ->
             ReqData2 = kz_json:set_value(<<"cid">>, knm_converters:normalize(CID), ReqData),
             Context2 = cb_context:set_req_data(Context, ReqData2),
             case unique_cid(Context2) of
-                'empty' -> create(Context2);
+                'true' -> create(Context2);
                 _ -> error_cid_exists(Context2, CID)
             end
 
@@ -279,11 +285,11 @@ check_cid(Context) ->
 error_pin_exists(Context) ->
     cb_context:add_validation_error(
       <<"cccp">>
-      ,<<"unique">>
-      ,kz_json:from_list(
-         [{<<"message">>, <<"Pin already exists">>}]
-        )
-      ,Context
+                                   ,<<"unique">>
+                                   ,kz_json:from_list(
+                                      [{<<"message">>, <<"Pin already exists">>}]
+                                     )
+                                   ,Context
      ).
 
 -spec error_number_is_not_reconcilable(cb_context:context(), ne_binary()) ->
@@ -291,34 +297,37 @@ error_pin_exists(Context) ->
 error_number_is_not_reconcilable(Context, CID) ->
     cb_context:add_validation_error(
       <<"cccp">>
-      ,<<"unique">>
-      ,kz_json:from_list(
-         [{<<"message">>, <<"Number is non reconcilable">>}
-          ,{<<"cause">>, CID}
-         ])
-      ,Context
+                                   ,<<"unique">>
+                                   ,kz_json:from_list(
+                                      [{<<"message">>, <<"Number is non reconcilable">>}
+                                      ,{<<"cause">>, CID}
+                                      ])
+                                   ,Context
      ).
 
 error_cid_exists(Context, CID) ->
     cb_context:add_validation_error(
       <<"cccp">>
-      ,<<"unique">>
-      ,kz_json:from_list(
-         [{<<"message">>, <<"CID already exists">>}
-          ,{<<"cause">>, CID}
-         ])
-      ,Context
+                                   ,<<"unique">>
+                                   ,kz_json:from_list(
+                                      [{<<"message">>, <<"CID already exists">>}
+                                      ,{<<"cause">>, CID}
+                                      ])
+                                   ,Context
      ).
 
--spec unique_cid(cb_context:context()) ->
-                        {'ok', list()} |
-                        'empty' |
-                        'error'.
+-spec unique_cid(cb_context:context()) -> boolean().
 unique_cid(Context) ->
     CID = kz_json:get_value(<<"cid">>, cb_context:req_data(Context)),
-    cccp_util:authorize(CID, <<"cccps/cid_listing">>).
+    case cccp_util:authorize(CID, <<"cccps/cid_listing">>) of
+        {'ok',[]} -> 'true';
+        _ -> 'false'
+    end.
 
--spec unique_pin(cb_context:context()) -> {'ok', list()} | 'empty' | 'error'.
+-spec unique_pin(cb_context:context()) -> boolean().
 unique_pin(Context) ->
     Pin = kz_json:get_value(<<"pin">>, cb_context:req_data(Context)),
-    cccp_util:authorize(Pin, <<"cccps/pin_listing">>).
+    case cccp_util:authorize(Pin, <<"cccps/pin_listing">>) of
+        {'ok',[]} -> 'true';
+        _ -> 'false'
+    end.

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2013, 2600Hz
+%%% @copyright (C) 2010-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -12,14 +12,14 @@
 
 -export([start_link/0]).
 -export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,terminate/2
-         ,code_change/3
+        ,handle_call/3
+        ,handle_cast/2
+        ,handle_info/2
+        ,terminate/2
+        ,code_change/3
         ]).
 -export([add_request/1
-         ,available_device/2
+        ,available_device/2
         ]).
 
 -include("camper.hrl").
@@ -30,9 +30,9 @@
 -define(RINGING_TIMEOUT, 30).
 
 -record('state', {'requests' :: dict:dict()
-                  ,'requestor_queues' :: dict:dict()
-                  ,'sipnames' :: dict:dict()
-                  ,'account_db' :: ne_binary()
+                 ,'requestor_queues' :: dict:dict()
+                 ,'sipnames' :: dict:dict()
+                 ,'account_db' :: ne_binary()
                  }
        ).
 
@@ -111,6 +111,7 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
@@ -124,29 +125,30 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast({'add_request', JObj}, GlobalState) ->
     AccountDb = kz_json:get_value(<<"Account-DB">>, JObj),
     AccountId = kz_util:format_account_id(AccountDb, 'raw'),
     Dev = {kz_json:get_value(<<"Authorizing-ID">>, JObj)
-           ,kz_json:get_value(<<"Authorizing-Type">>, JObj)
+          ,kz_json:get_value(<<"Authorizing-Type">>, JObj)
           },
     Exten = kz_json:get_value(<<"Number">>, JObj),
     Targets = kz_json:get_value(<<"Targets">>, JObj, []),
     Timeout = timer:minutes(kz_json:get_value(<<"Timeout">>
-                                              ,JObj
-                                              ,kapps_config:get(?APP_NAME, ?TIMEOUT, ?DEFAULT_TIMEOUT)
+                                             ,JObj
+                                             ,kapps_config:get(?APP_NAME, ?TIMEOUT, ?DEFAULT_TIMEOUT)
                                              )),
     kz_hooks:register(AccountId, <<"CHANNEL_DESTROY">>),
     NewGlobal = with_state(AccountId
                           ,GlobalState
                           ,fun(Local) ->
                                    #state{'requests' = dict:merge(fun(_K, _V1, V2) -> V2 end
-                                                                  ,get_requests(Local)
-                                                                  ,make_requests(Targets, Dev, Exten, Timeout)
+                                                                 ,get_requests(Local)
+                                                                 ,make_requests(Targets, Dev, Exten, Timeout)
                                                                  )
-                                          ,'sipnames' = dict:store(Exten, Targets, get_sipnames(Local))
-                                          ,'requestor_queues' = maybe_update_queues(Targets, Dev, get_requestor_queues(Local))
-                                          ,'account_db' = AccountDb
+                                         ,'sipnames' = dict:store(Exten, Targets, get_sipnames(Local))
+                                         ,'requestor_queues' = maybe_update_queues(Targets, Dev, get_requestor_queues(Local))
+                                         ,'account_db' = AccountDb
                                          }
                            end
                           ),
@@ -155,15 +157,15 @@ handle_cast({'available_device', AccountId, SIPName}, GlobalState) ->
     NewGlobal = with_state(AccountId
                           ,GlobalState
                           ,fun(Local) ->
-                               case dict:find(SIPName, get_requestor_queues(Local)) of
-                                   {'ok', Q} ->
-                                       maybe_handle_request(SIPName, Q, Local);
-                                   _ ->
-                                       lager:debug("Request not found"),
-                                       Local
-                               end
+                                   case dict:find(SIPName, get_requestor_queues(Local)) of
+                                       {'ok', Q} ->
+                                           maybe_handle_request(SIPName, Q, Local);
+                                       _ ->
+                                           lager:debug("Request not found"),
+                                           Local
+                                   end
                            end
-                         ),
+                          ),
     {'noreply', NewGlobal};
 handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p", [_Msg]),
@@ -174,8 +176,8 @@ with_state(AccountId, Global, F) ->
     Local = case dict:find(AccountId, Global) of
                 {'ok', #state{}=S} -> S;
                 _ -> #state{'requests' = dict:new()
-                            ,'requestor_queues' = dict:new()
-                            ,'sipnames' = dict:new()
+                           ,'requestor_queues' = dict:new()
+                           ,'sipnames' = dict:new()
                            }
             end,
     dict:store(AccountId, F(Local), Global).
@@ -215,9 +217,9 @@ handle_request(SIPName, Requestor, Local) ->
 -spec originate_call({ne_binary(), ne_binary()}, ne_binary(), ne_binary()) -> 'ok'.
 originate_call({Id, Type}, Exten, AccountDb) ->
     Routines = [fun(C) -> kapps_call:set_account_db(AccountDb, C) end
-                ,fun(C) -> kapps_call:set_account_id(kz_util:format_account_id(AccountDb, 'raw'), C) end
-                ,fun(C) -> kapps_call:set_authorizing_id(Id, C) end
-                ,fun(C) -> kapps_call:set_authorizing_type(Type, C) end
+               ,fun(C) -> kapps_call:set_account_id(kz_util:format_account_id(AccountDb, 'raw'), C) end
+               ,fun(C) -> kapps_call:set_authorizing_id(Id, C) end
+               ,fun(C) -> kapps_call:set_authorizing_type(Type, C) end
                ],
     Call = lists:foldl(fun(F, C) -> F(C) end, kapps_call:new(), Routines),
     case get_endpoints(Call, Id, Type) of
@@ -230,24 +232,24 @@ originate_call({Id, Type}, Exten, AccountDb) ->
 -spec originate_quickcall(kz_json:objects(), ne_binary(), kapps_call:call()) -> 'ok'.
 originate_quickcall(Endpoints, Exten, Call) ->
     CCVs = [{<<"Account-ID">>, kapps_call:account_id(Call)}
-            ,{<<"Retain-CID">>, <<"true">>}
-            ,{<<"Inherit-Codec">>, <<"false">>}
-            ,{<<"Authorizing-Type">>, kapps_call:authorizing_type(Call)}
-            ,{<<"Authorizing-ID">>, kapps_call:authorizing_id(Call)}
+           ,{<<"Retain-CID">>, <<"true">>}
+           ,{<<"Inherit-Codec">>, <<"false">>}
+           ,{<<"Authorizing-Type">>, kapps_call:authorizing_type(Call)}
+           ,{<<"Authorizing-ID">>, kapps_call:authorizing_id(Call)}
            ],
     MsgId = kz_util:rand_hex_binary(16),
 
     Request = [{<<"Application-Name">>, <<"transfer">>}
-               ,{<<"Application-Data">>, kz_json:from_list([{<<"Route">>, Exten}])}
-               ,{<<"Msg-ID">>, MsgId}
-               ,{<<"Endpoints">>, Endpoints}
-               ,{<<"Timeout">>, ?RINGING_TIMEOUT}
-               ,{<<"Outbound-Caller-ID-Name">>, <<"Campered call">>}
-               ,{<<"Outbound-Caller-ID-Number">>, Exten}
-               ,{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
-               ,{<<"Continue-On-Fail">>, 'false'}
-               ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
-               ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>, <<"Retain-CID">>, <<"Authorizing-ID">>, <<"Authorizing-Type">>]}
+              ,{<<"Application-Data">>, kz_json:from_list([{<<"Route">>, Exten}])}
+              ,{<<"Msg-ID">>, MsgId}
+              ,{<<"Endpoints">>, Endpoints}
+              ,{<<"Timeout">>, ?RINGING_TIMEOUT}
+              ,{<<"Outbound-Caller-ID-Name">>, <<"Campered call">>}
+              ,{<<"Outbound-Caller-ID-Number">>, Exten}
+              ,{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
+              ,{<<"Continue-On-Fail">>, 'false'}
+              ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
+              ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>, <<"Retain-CID">>, <<"Authorizing-ID">>, <<"Authorizing-Type">>]}
                | kz_api:default_headers(<<"resource">>, <<"originate_req">>, ?APP_NAME, ?APP_VERSION)
               ],
     kapi_resource:publish_originate_req(props:filter_undefined(Request)),
@@ -256,7 +258,7 @@ originate_quickcall(Endpoints, Exten, Call) ->
 -spec get_endpoints(kapps_call:call(), ne_binary(), ne_binary()) -> kz_json:objects().
 get_endpoints(Call, EndpointId, <<"device">>) ->
     Properties = kz_json:from_list([{<<"can_call_self">>, 'true'}
-                                    ,{<<"suppress_clid">>, 'true'}
+                                   ,{<<"suppress_clid">>, 'true'}
                                    ]),
     case kz_endpoint:build(EndpointId, Properties, Call) of
         {'error', _} -> [];
@@ -265,14 +267,14 @@ get_endpoints(Call, EndpointId, <<"device">>) ->
     end;
 get_endpoints(Call, UserId, <<"user">>) ->
     Properties = kz_json:from_list([{<<"can_call_self">>, 'true'}
-                                    ,{<<"suppress_clid">>, 'true'}
+                                   ,{<<"suppress_clid">>, 'true'}
                                    ]),
     lists:foldl(fun(EndpointId, Acc) ->
-        case kz_endpoint:build(EndpointId, Properties, Call) of
-            {'ok', Endpoint} -> Endpoint ++ Acc;
-            {'error', _E} -> Acc
-        end
-    end, [], kz_attributes:owned_by(UserId, <<"device">>, Call));
+                        case kz_endpoint:build(EndpointId, Properties, Call) of
+                            {'ok', Endpoint} -> Endpoint ++ Acc;
+                            {'error', _E} -> Acc
+                        end
+                end, [], kz_attributes:owned_by(UserId, <<"device">>, Call));
 get_endpoints(_, _, _) ->
     [].
 
@@ -290,7 +292,7 @@ clear_request(Requestor, Exten, Local) ->
 
 -spec make_requests(ne_binaries(), {ne_binary(), ne_binary()}, ne_binary(), non_neg_integer()) -> dict:dict().
 make_requests(SIPNames, Requestor, Exten, Timeout) ->
-    R = lists:map(fun(SIPName) -> {SIPName, Requestor} end, SIPNames),
+    R = [{SIPName, Requestor} || SIPName <- SIPNames],
     {_, Seconds, _} = os:timestamp(),
     lists:foldl(fun(Req, Acc) -> dict:store(Req, {Exten, Seconds + Timeout}, Acc) end, dict:new(), R).
 
@@ -306,8 +308,8 @@ maybe_update_queues(SIPNames, Requestor, Queues) ->
                             'false' -> dict:store(SIPName,queue:in(Requestor, Q),Acc)
                         end
                 end
-                ,Queues
-                ,SIPNames
+               ,Queues
+               ,SIPNames
                ).
 
 %%--------------------------------------------------------------------
@@ -320,11 +322,12 @@ maybe_update_queues(SIPNames, Requestor, Queues) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info(?HOOK_EVT(_AccountId, _, JObj), State) ->
     AcctId = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
     SIPName = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Username">>], JObj),
     lager:debug("available device: ~s(~s)", [SIPName, AcctId]),
-    ?MODULE:available_device(AcctId, SIPName),
+    available_device(AcctId, SIPName),
     {'noreply', State};
 handle_info(_Info, State) ->
     lager:debug("unhandled msg: ~p", [_Info]),
@@ -341,6 +344,7 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     lager:debug("onnet handler ~p termination", [_Reason]),
     'ok'.
@@ -353,6 +357,7 @@ terminate(_Reason, _State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 

@@ -1,12 +1,11 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012, VoIP, INC
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
 %%% @contributors
 %%%-------------------------------------------------------------------
 -module(kapps_sup).
-
 -behaviour(supervisor).
 
 -include_lib("kazoo/include/kz_types.hrl").
@@ -42,6 +41,7 @@ restart_app(App) ->
     _ = supervisor:terminate_child(?SERVER, App),
     supervisor:restart_child(?SERVER, App).
 
+-spec stop_app(atom()) -> 'ok' | {'error', atom()}.
 stop_app(App) ->
     _ = supervisor:terminate_child(?SERVER, App),
     supervisor:delete_child(?SERVER, App).

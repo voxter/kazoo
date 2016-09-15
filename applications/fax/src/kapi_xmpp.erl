@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -9,15 +9,15 @@
 -module(kapi_xmpp).
 
 -export([event/1, event_v/1
-         ,bind_q/2, unbind_q/2
-         ,declare_exchanges/0
-         ,publish_event/1, publish_event/2
+        ,bind_q/2, unbind_q/2
+        ,declare_exchanges/0
+        ,publish_event/1, publish_event/2
         ]).
 
 -export([jid_short/1
-         ,jid_username/1
-         ,jid_server/1
-         ,jid_resource/1
+        ,jid_username/1
+        ,jid_server/1
+        ,jid_resource/1
         ]).
 
 -include("fax.hrl").
@@ -26,9 +26,9 @@
 
 
 -define(XMPP_EVENT_ROUTING_KEY(Event, JID), <<"xmpp."
-                                                 ,(kz_util:to_binary(Event))/binary
-                                                 ,"."
-                                                 ,(amqp_util:encode(JID))/binary>>).
+                                              ,(kz_util:to_binary(Event))/binary
+                                              ,"."
+                                              ,(amqp_util:encode(JID))/binary>>).
 -define(XMPP_EVENT_HEADERS, [<<"JID">>]).
 -define(OPTIONAL_XMPP_EVENT_HEADERS, [<<"Application-Name">>
                                      ,<<"Application-Event">>
@@ -93,7 +93,7 @@ publish_event(Event) -> publish_event(Event, ?DEFAULT_CONTENT_TYPE).
 publish_event(Event, ContentType) when is_list(Event) ->
     JID = props:get_value(<<"JID">>, Event),
     EventName = props:get_value(<<"Event-Name">>, Event),
-    {'ok', Payload} = kz_api:prepare_api_payload(Event, ?XMPP_EVENT_VALUES, fun ?MODULE:event/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Event, ?XMPP_EVENT_VALUES, fun event/1),
     amqp_util:basic_publish(?XMPP_EXCHANGE, ?XMPP_EVENT_ROUTING_KEY(EventName, JID), Payload, ContentType);
 publish_event(Event, ContentType) ->
     publish_event(kz_json:to_proplist(Event), ContentType).

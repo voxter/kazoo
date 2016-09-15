@@ -1,40 +1,39 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
 %%% @contributors
 %%%-------------------------------------------------------------------
 -module(blackhole_listener).
-
 -behaviour(gen_listener).
 
 -export([start_link/0
-         ,handle_amqp_event/3
-         ,add_call_binding/1, remove_call_binding/1
-         ,add_binding/2, remove_binding/2
+        ,handle_amqp_event/3
+        ,add_binding/1, remove_binding/1
+        ,add_bindings/1, remove_bindings/1
         ]).
 -export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,handle_event/2
-         ,terminate/2
-         ,code_change/3
+        ,handle_call/3
+        ,handle_cast/2
+        ,handle_info/2
+        ,handle_event/2
+        ,terminate/2
+        ,code_change/3
         ]).
 
 -include("blackhole.hrl").
 
 -define(SERVER, ?MODULE).
 
--record(state, {}).
+-record(state, {bindings :: ets:tid()}).
 -type state() :: #state{}.
 
 %% By convention, we put the options here in macros, but not required.
 -define(BINDINGS, []).
 -define(RESPONDERS, [{{?MODULE, 'handle_amqp_event'}
-                      ,[{<<"*">>, <<"*">>}]
-                      }
+                     ,[{<<"*">>, <<"*">>}]
+                     }
                     ]).
 -define(QUEUE_NAME, <<>>).
 -define(QUEUE_OPTIONS, []).
@@ -50,36 +49,44 @@
 -spec start_link() -> startlink_ret().
 start_link() ->
     gen_listener:start_link({'local', ?SERVER}
-                            ,?MODULE
-                            ,[{'bindings', ?BINDINGS}
-                              ,{'responders', ?RESPONDERS}
-                              ,{'queue_name', ?QUEUE_NAME}       % optional to include
-                              ,{'queue_options', ?QUEUE_OPTIONS} % optional to include
-                              ,{'consume_options', ?CONSUME_OPTIONS} % optional to include
-                             ], []).
+                           ,?MODULE
+                           ,[{'bindings', ?BINDINGS}
+                            ,{'responders', ?RESPONDERS}
+                            ,{'queue_name', ?QUEUE_NAME}       % optional to include
+                            ,{'queue_options', ?QUEUE_OPTIONS} % optional to include
+                            ,{'consume_options', ?CONSUME_OPTIONS} % optional to include
+                            ], []).
 
 -spec handle_amqp_event(kz_json:object(), kz_proplist(), gen_listener:basic_deliver() | ne_binary()) -> any().
 handle_amqp_event(EventJObj, Props, #'basic.deliver'{routing_key=RoutingKey}) ->
     handle_amqp_event(EventJObj, Props, RoutingKey);
 handle_amqp_event(EventJObj, _Props, <<_/binary>> = RoutingKey) ->
-    lager:debug("recv event ~p (~s)", [kz_util:get_event_type(EventJObj), RoutingKey]),
-    blackhole_bindings:map(RoutingKey, EventJObj).
+    Evt = kz_util:get_event_type(EventJObj),
+    lager:debug("recv event ~p (~s)", [Evt, RoutingKey]),
+    RK = <<"blackhole.event.", RoutingKey/binary, ".*">>,
+    Res = blackhole_bindings:map(RK, [RoutingKey, EventJObj]),
+    lager:debug("delivered the event ~p (~s) to ~b subscriptions", [Evt, RoutingKey, length(Res)]).
 
--spec add_call_binding(ne_binary()) -> 'ok'.
-add_call_binding(AccountId) ->
-    gen_listener:cast(?SERVER, {'add_call_binding', AccountId}).
+-type bh_amqp_binding() :: {'amqp', atom(), kz_proplist()}.
+-type bh_hook_binding() :: {'hook', ne_binary()} | {'hook', ne_binary(), ne_binary()}.
+-type bh_event_binding() :: bh_amqp_binding() | bh_hook_binding().
+-type bh_event_bindings() :: [bh_event_binding()].
 
--spec remove_call_binding(ne_binary()) -> 'ok'.
-remove_call_binding(AccountId) ->
-    gen_listener:cast(?SERVER, {'remove_call_binding', AccountId}).
+-spec add_binding(bh_event_binding()) -> 'ok'.
+add_binding(Binding) ->
+    gen_listener:cast(?SERVER, {'add_bh_binding', Binding}).
 
--spec add_binding(atom(), kz_proplist()) -> 'ok'.
-add_binding(Wapi, Options) ->
-    gen_listener:add_binding(?SERVER, Wapi, Options).
+-spec add_bindings(bh_event_bindings()) -> 'ok'.
+add_bindings(Bindings) ->
+    gen_listener:cast(?SERVER, {'add_bh_bindings', Bindings}).
 
--spec remove_binding(atom(), kz_proplist()) -> 'ok'.
-remove_binding(Wapi, Options) ->
-    gen_listener:rm_binding(?SERVER, Wapi, Options).
+-spec remove_binding(bh_event_binding()) -> 'ok'.
+remove_binding(Binding) ->
+    gen_listener:cast(?SERVER, {'remove_bh_binding', Binding}).
+
+-spec remove_bindings(bh_event_bindings()) -> 'ok'.
+remove_bindings(Bindings) ->
+    gen_listener:cast(?SERVER, {'remove_bh_bindings', Bindings}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -96,8 +103,9 @@ remove_binding(Wapi, Options) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
+-spec init(list()) -> {'ok', state()}.
 init([]) ->
-    {'ok', #state{}}.
+    {'ok', #state{bindings=ets:new(bindings, [])}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -113,6 +121,7 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
@@ -126,8 +135,18 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({'add_call_binding', AccountId}, State) ->
-    kz_hooks:register(AccountId),
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
+handle_cast({'add_bh_bindings', Bindings}, #state{bindings=ETS}=State) ->
+    _ = add_bh_bindings(ETS, Bindings),
+    {'noreply', State};
+handle_cast({'add_bh_binding', Binding}, #state{bindings=ETS}=State) ->
+    _ = add_bh_binding(ETS, Binding),
+    {'noreply', State};
+handle_cast({'remove_bh_bindings', Bindings}, #state{bindings=ETS}=State) ->
+    _ = remove_bh_bindings(ETS, Bindings),
+    {'noreply', State};
+handle_cast({'remove_bh_binding', Binding}, #state{bindings=ETS}=State) ->
+    _ = remove_bh_binding(ETS, Binding),
     {'noreply', State};
 handle_cast({'gen_listener', {'created_queue', _QueueNAme}}, State) ->
     {'noreply', State};
@@ -148,15 +167,11 @@ handle_cast(_Msg, State) ->
 %%--------------------------------------------------------------------
 -spec handle_info(?HOOK_EVT(ne_binary(), ne_binary(), kz_json:object()), state()) ->
                          {'noreply', state()}.
-handle_info(?HOOK_EVT(_AccountId, EventType, JObj), State) ->
-    _ = kz_util:spawn(fun handle_amqp_event/3, [JObj, [], call_routing(EventType, JObj)]),
+handle_info(?HOOK_EVT(AccountId, EventType, JObj), State) ->
+    _ = kz_util:spawn(fun handle_hook_event/3, [AccountId, EventType, JObj]),
     {'noreply', State};
 handle_info(_Info, State) ->
     {'noreply', State}.
-
--spec call_routing(ne_binary(), kz_json:object()) -> ne_binary().
-call_routing(EventType, JObj) ->
-    kapi_call:event_routing_key(EventType, kz_json:get_value(<<"Call-ID">>, JObj)).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -166,6 +181,7 @@ call_routing(EventType, JObj) ->
 %% @spec handle_event(JObj, State) -> {reply, Options}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_event(kz_json:object(), kz_proplist()) -> handle_event_ret().
 handle_event(_JObj, _State) ->
     {'reply', []}.
 
@@ -180,6 +196,7 @@ handle_event(_JObj, _State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     lager:debug("listener terminating: ~p", [_Reason]).
 
@@ -191,9 +208,59 @@ terminate(_Reason, _State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+-spec encode_call_id(kz_json:object()) -> ne_binary().
+encode_call_id(JObj) ->
+    amqp_util:encode(kz_call_event:call_id(JObj)).
+
+-spec handle_hook_event(ne_binary(), ne_binary(), kz_json:object()) -> any().
+handle_hook_event(AccountId, EventType, JObj) ->
+    RK = kz_util:join_binary([<<"call">>
+                             ,AccountId
+                             ,EventType
+                             ,encode_call_id(JObj)
+                             ], <<".">>),
+    handle_amqp_event(JObj, [], RK).
+
+binding_key(Binding) -> base64:encode(term_to_binary(Binding)).
+
+add_bh_binding(ETS, Binding) ->
+    Key = binding_key(Binding),
+    case ets:update_counter(ETS, Key, 1, {Key, 0}) of
+        1 -> add_bh_binding(Binding);
+        _ -> 'ok'
+    end.
+
+remove_bh_binding(ETS, Binding) ->
+    Key = binding_key(Binding),
+    case ets:update_counter(ETS, Key, -1, {Key, 0}) of
+        0 -> remove_bh_binding(Binding),
+             ets:delete(ETS, Key);
+        _ -> 'ok'
+    end.
+
+add_bh_binding({'hook', AccountId}) ->
+    kz_hooks:register(AccountId);
+add_bh_binding({'hook', AccountId, Event}) ->
+    kz_hooks:register(AccountId, Event);
+add_bh_binding({'amqp', Wapi, Options}) ->
+    gen_listener:add_binding(self(), Wapi, Options).
+
+remove_bh_binding({'hook', AccountId}) ->
+    kz_hooks:deregister(AccountId);
+remove_bh_binding({'hook', AccountId, Event}) ->
+    kz_hooks:deregister(AccountId, Event);
+remove_bh_binding({'amqp', Wapi, Options}) ->
+    gen_listener:rm_binding(self(), Wapi, Options).
+
+add_bh_bindings(ETS, Bindings) ->
+    [add_bh_binding(ETS, Binding) || Binding <- Bindings].
+
+remove_bh_bindings(ETS, Bindings) ->
+    [remove_bh_binding(ETS, Binding) || Binding <- Bindings].

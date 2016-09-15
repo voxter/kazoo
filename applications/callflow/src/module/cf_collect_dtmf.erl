@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2014, 2600Hz INC
+%%% @copyright (C) 2016, 2600Hz INC
 %%% @doc
 %%% Collect DTMF into an optional key for later retrieval
 %%% "data":{
@@ -14,6 +14,8 @@
 %%% @contributors
 %%%-------------------------------------------------------------------
 -module(cf_collect_dtmf).
+
+-behaviour(gen_cf_action).
 
 -include("callflow.hrl").
 
@@ -58,12 +60,12 @@ maybe_collect_more_digits(Data, Call, AlreadyCollected, ACS, Max) ->
 -spec collect_more_digits(kz_json:object(), kapps_call:call(), binary(), pos_integer()) -> 'ok'.
 collect_more_digits(Data, Call, AlreadyCollected, MaxDigits) ->
     case kapps_call_command:collect_digits(MaxDigits
-                                            ,collect_timeout(Data)
-                                            ,interdigit(Data)
-                                            ,'undefined'
-                                            ,terminators(Data)
-                                            ,Call
-                                           )
+                                          ,collect_timeout(Data)
+                                          ,interdigit(Data)
+                                          ,'undefined'
+                                          ,terminators(Data)
+                                          ,Call
+                                          )
     of
         {'ok', Ds} ->
             CollectionName = collection_name(Data),

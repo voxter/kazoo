@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2015, 2600Hz
+%%% @copyright (C) 2012-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -12,6 +12,7 @@
 
 -include("kazoo_media.hrl").
 
+-spec get_uri(ne_binary(), kz_json:object()) -> ne_binary().
 get_uri(<<"tts://", Text/binary>>, JObj) ->
     {'ok', _TTSServer} = kz_media_cache_sup:find_tts_server(Text, JObj),
     lager:debug("tts server for ~s at ~p", [Text, _TTSServer]),

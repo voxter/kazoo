@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz Inc
+%%% @copyright (C) 2012-2016, 2600Hz Inc
 %%% @doc
 %%%
 %%% @end
@@ -7,43 +7,73 @@
 %%%   James Aimonetti
 %%%   Peter Defebvre
 %%%   Ben Wann
+%%%   Roman Galeev
 %%%-------------------------------------------------------------------
 -module(bh_conference).
 
--export([handle_event/2
-         ,add_amqp_binding/2, rm_amqp_binding/2
+-export([init/0
+        ,validate/2
+        ,bindings/2
         ]).
 
 -include("blackhole.hrl").
 
--spec handle_event(bh_context:context(), kz_json:object()) -> 'ok'.
-handle_event(Context, EventJObj) ->
-    lager:debug("handling conference event ~s", [get_response_key(EventJObj)]),
-    blackhole_data_emitter:emit(bh_context:websocket_pid(Context)
-                                ,get_response_key(EventJObj)
-                                ,EventJObj
-                               ).
+-spec init() -> any().
+init() ->
+    _ = blackhole_bindings:bind(<<"blackhole.events.validate.conference">>, ?MODULE, 'validate'),
+    blackhole_bindings:bind(<<"blackhole.events.bindings.conference">>, ?MODULE, 'bindings').
 
--spec add_amqp_binding(ne_binary(), bh_context:context()) -> 'ok'.
-add_amqp_binding(<<"conference.event.", ConfId/binary>>, _Context) ->
-    blackhole_listener:add_binding('conference', [{'conference', ConfId}, {'restrict_to', ['event']}]);
-add_amqp_binding(<<"conference.command.", ConfId/binary>>, _Context) ->
-    blackhole_listener:add_binding('conference', [{'conference', ConfId}, {'restrict_to', ['command']}]);
-add_amqp_binding(Binding, _Context) ->
-    lager:debug("unmatched binding ~p", [Binding]),
-    'ok'.
 
--spec rm_amqp_binding(ne_binary(), bh_context:context()) -> 'ok'.
-rm_amqp_binding(<<"conference.event.", ConfId/binary>>, _Context) ->
-    blackhole_listener:remove_binding('conference', [{'conference', ConfId}, {'restrict_to', ['event']}]);
-rm_amqp_binding(<<"conference.command.", ConfId/binary>>, _Context) ->
-    blackhole_listener:remove_binding('conference', [{'conference', ConfId}, {'restrict_to', ['command']}]);
-rm_amqp_binding(Binding, _Context) ->
-    lager:debug("unmatched binding ~p", [Binding]),
-    'ok'.
+-spec validate(bh_context:context(), map()) -> bh_context:context().
+validate(Context, #{keys := [<<"command">>, <<"*">>]
+                   }) ->
+    bh_context:add_error(Context, <<"ConferenceId required">>);
+validate(Context, #{keys := [<<"command">>, _]
+                   }) ->
+    Context;
+validate(Context, #{keys := [<<"event">>, <<"*">>, _]
+                   }) ->
+    bh_context:add_error(Context, <<"ConferenceId required">>);
+validate(Context, #{keys := [<<"event">>, _, _]
+                   }) ->
+    Context;
+validate(Context, #{keys := Keys}) ->
+    bh_context:add_error(Context, <<"invalid format for conference subscription : ", (kz_util:join_binary(Keys))/binary>>).
+
+-spec bindings(bh_context:context(), map()) -> map().
+bindings(_Context, #{account_id := _AccountId
+                    ,keys := [<<"command">>, ConferenceId]
+                    }=Map) ->
+    Requested = <<"conference.command.", ConferenceId/binary>>,
+    Subscribed = [<<"conference.command.", ConferenceId/binary>>],
+    Listeners = [{'amqp', 'conference', command_binding_options(ConferenceId)}],
+    Map#{requested => Requested
+        ,subscribed => Subscribed
+        ,listeners => Listeners
+        };
+bindings(_Context, #{account_id := _AccountId
+                    ,keys := [<<"event">>, ConferenceId, CallId]
+                    }=Map) ->
+    Requested = <<"conference.event.", ConferenceId/binary, ".", CallId/binary>>,
+    Subscribed = [<<"conference.event.", ConferenceId/binary, ".", CallId/binary>>],
+    Listeners = [{'amqp', 'conference', event_binding_options(ConferenceId, CallId)}],
+    Map#{requested => Requested
+        ,subscribed => Subscribed
+        ,listeners => Listeners
+        }.
 
 %%%===================================================================
 %%% Internal functions
 %%%==================================================================
-get_response_key(JObj) ->
-    kz_json:get_first_defined([<<"Application-Name">>, <<"Event-Name">>], JObj).
+
+-spec command_binding_options(ne_binary()) -> kz_proplist().
+command_binding_options(ConfId) ->
+    [{'restrict_to', [{'command', ConfId}]}
+    ,'federate'
+    ].
+
+-spec event_binding_options(ne_binary(), ne_binary()) -> kz_proplist().
+event_binding_options(ConfId, CallId) ->
+    [{'restrict_to', [{'event', {ConfId, CallId}}]}
+    ,'federate'
+    ].

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013, 2600Hz INC
+%%% @copyright (C) 2013-2016, 2600Hz INC
 %%% @doc
 %%% Pickup a call in the specified group/device/user/extension
 %%%
@@ -41,13 +41,14 @@
 %%%   Luis Azedo  <luis.azedo@factorlusitano.com>
 %%%-------------------------------------------------------------------
 %%% @author Luis Azedo
-%%% @copyright (C) 2013, VoIP INC
 %%% @doc
 %%%
 %%% @end
 %%% Created : 10 Oct 2013
 %%%-------------------------------------------------------------------
 -module(cf_group_pickup_feature).
+
+-behaviour(gen_cf_action).
 
 -include("callflow.hrl").
 
@@ -70,7 +71,7 @@ handle(Data, Call) ->
             cf_group_pickup:handle(kz_json:from_list(Params), Call);
         {'error', _E} ->
             lager:info("Error <<~s>> processing pickup '~s' for number ~s"
-                       ,[_E, PickupType, Number]),
+                      ,[_E, PickupType, Number]),
             _ = kapps_call_command:b_play(<<"park-no_caller">>, Call),
             cf_exe:stop(Call)
     end.
@@ -90,7 +91,7 @@ build_pickup_params(_Number, <<"group">>, _Call) ->
     {'error', <<"work in progress">>};
 build_pickup_params(Number, <<"extension">>, Call) ->
     AccountId = kapps_call:account_id(Call),
-    case cf_util:lookup_callflow(Number, AccountId) of
+    case cf_flow:lookup(Number, AccountId) of
         {'ok', FlowDoc, 'false'} ->
             Data = kz_json:get_value([<<"flow">>, <<"data">>], FlowDoc),
             Module = kz_json:get_value([<<"flow">>, <<"module">>], FlowDoc),
@@ -117,7 +118,7 @@ params_from_data(<<"ring_group">>, Data, _Call) ->
     [Endpoint |_Endpoints] = kz_json:get_value(<<"endpoints">>, Data, []),
     EndpointType = kz_json:get_value(<<"endpoint_type">>, Endpoint),
     {'ok', [{<<EndpointType/binary,"_id">>
-             ,kz_doc:id(Endpoint)}
+            ,kz_doc:id(Endpoint)}
            ]};
 params_from_data(<<"page_group">>, Data, _Call) ->
     params_from_data(<<"ring_group">>, Data, _Call);

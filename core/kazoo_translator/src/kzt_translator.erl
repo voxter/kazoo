@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%% Standard interface for client modules to use to get dialplan commands
 %%% translated into 2600Hz-specific commands
@@ -10,14 +10,14 @@
 -module(kzt_translator).
 
 -export([exec/2, exec/3
-         ,get_user_vars/1
-         ,set_user_vars/2
+        ,get_user_vars/1
+        ,set_user_vars/2
         ]).
 
 -include("kzt.hrl").
 
--spec exec(kapps_call:call(), list()) -> exec_return().
--spec exec(kapps_call:call(), list(), api_binary() | list()) -> exec_return().
+-spec exec(kapps_call:call(), binary()) -> exec_return().
+-spec exec(kapps_call:call(), binary(), api_binary() | list()) -> exec_return().
 exec(Call, Cmds) ->
     exec(Call, Cmds, <<"text/xml">>).
 
@@ -37,8 +37,8 @@ exec(Call, Cmds, CT) ->
 just_the_type(ContentType) ->
     case binary:split(ContentType, <<";">>) of
         [ContentType] -> kz_util:strip_binary(ContentType);
-        [JustContentType | _Other] ->
-            lager:debug("just using content type ~s, ignoring ~p", [JustContentType, _Other]),
+        [JustContentType | _Other]=L ->
+            lager:debug("just using content type ~s, ignoring ~p", L),
             kz_util:strip_binary(JustContentType)
     end.
 
@@ -62,9 +62,10 @@ find_candidate_translators(<<"application/json">>) ->
 find_candidate_translators(_) ->
     ['kzt_twiml', 'kzt_kazoo'].
 
--spec is_recognized(atom(), any()) -> {boolean(), any()}.
+-spec is_recognized(atom(), binary()) -> {boolean(), any()}.
 is_recognized(M, Cmds) ->
     case catch M:parse_cmds(Cmds) of
+        {'json', _Msg, _B, _A}=Err -> throw(Err);
         {'error', _E} -> {'false', []};
         {'ok', Resp} -> {'true', Resp}
     end.

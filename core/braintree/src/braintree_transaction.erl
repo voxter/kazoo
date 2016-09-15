@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -23,12 +23,9 @@
 -export([record_to_json/1]).
 -export([json_to_record/1]).
 
--define(MIN_AMOUNT, kapps_config:get_float(<<"braintree">>, <<"min_amount">>, 5.00)).
+-define(MIN_AMOUNT, kapps_config:get_float(?CONFIG_CAT, <<"min_amount">>, 5.00)).
 
--import('braintree_util', [make_doc_xml/2]).
--import('kz_util', [get_xml_value/2]).
-
--include_lib("braintree/include/braintree.hrl").
+-include("bt.hrl").
 
 %%--------------------------------------------------------------------
 %% @public
@@ -48,9 +45,9 @@ url(TransactionId) ->
 
 url(TransactionId, Options) ->
     lists:append(["/transactions/"
-                  ,kz_util:to_list(TransactionId)
-                  ,"/"
-                  ,kz_util:to_list(Options)
+                 ,kz_util:to_list(TransactionId)
+                 ,"/"
+                 ,kz_util:to_list(Options)
                  ]).
 
 %%--------------------------------------------------------------------
@@ -75,7 +72,7 @@ find(TransactionId) ->
 find_by_customer(CustomerId) ->
     Url = url(<<"advanced_search">>),
     Props = [{'customer_id', [{'is', CustomerId}]}],
-    Request = make_doc_xml(Props, 'search'),
+    Request = braintree_util:make_doc_xml(Props, 'search'),
     Xml = braintree_request:post(Url, Request),
     [xml_to_record(Transaction)
      || Transaction <- xmerl_xpath:string("/credit-card-transactions/transaction", Xml)
@@ -85,16 +82,16 @@ find_by_customer(CustomerId) ->
 find_by_customer(CustomerId, Min, Max) ->
     Url = url(<<"advanced_search">>),
     Props = [{'customer_id', [{'is', CustomerId}]}
-             ,{'created_at', [{'checked', <<"created">>}
-                              ,{'min', Min}
-                              ,{'min_hour', 0}
-                              ,{'min_minute', 0}
-                              ,{'max', Max}
-                              ,{'max_hour', 23}
-                              ,{'max_minute', 59}
-                             ]}
+            ,{'created_at', [{'checked', <<"created">>}
+                            ,{'min', Min}
+                            ,{'min_hour', 0}
+                            ,{'min_minute', 0}
+                            ,{'max', Max}
+                            ,{'max_hour', 23}
+                            ,{'max_minute', 59}
+                            ]}
             ],
-    Request = make_doc_xml(Props, 'search'),
+    Request = braintree_util:make_doc_xml(Props, 'search'),
     Xml = braintree_request:post(Url, Request),
     [xml_to_record(Transaction)
      || Transaction <- xmerl_xpath:string("/credit-card-transactions/transaction", Xml)
@@ -112,7 +109,7 @@ find_by_customer(CustomerId, Min, Max) ->
 -spec create(ne_binary(), bt_transaction()) -> bt_transaction().
 
 create(#bt_transaction{amount=Amount}=Transaction) ->
-    MaxAmount = kapps_config:get_float(<<"braintree">>, <<"max_amount">>, 200.00),
+    MaxAmount = kapps_config:get_float(?CONFIG_CAT, <<"max_amount">>, 200.00),
     case kz_util:to_float(Amount) >  MaxAmount of
         'true' -> braintree_util:error_max_amount(MaxAmount);
         'false' -> 'ok'
@@ -138,7 +135,7 @@ sale(Transaction) ->
 
 sale(CustomerId, Transaction) ->
     create(Transaction#bt_transaction{type=?BT_TRANS_SALE
-                                      ,customer_id=CustomerId
+                                     ,customer_id=CustomerId
                                      }).
 
 -spec quick_sale(ne_binary(), number() | ne_binary()) -> bt_transaction().
@@ -170,14 +167,14 @@ credit(Transaction) ->
 
 credit(CustomerId, Transaction) ->
     create(Transaction#bt_transaction{type=?BT_TRANS_CREDIT
-                                      ,customer_id=CustomerId
+                                     ,customer_id=CustomerId
                                      }).
 
 -spec quick_credit(ne_binary(), ne_binary()) -> bt_transaction().
 quick_credit(CustomerId, Amount) ->
     credit(CustomerId, #bt_transaction{amount=kz_util:to_binary(Amount)
-                                       ,settle='false'
-                                       ,tax_exempt='false'
+                                      ,settle='false'
+                                      ,tax_exempt='false'
                                       }).
 
 %%--------------------------------------------------------------------
@@ -232,40 +229,40 @@ xml_to_record(Xml, Base) ->
     BillingAddress = braintree_address:xml_to_record(Xml, [Base, "/billing"]),
     Card = braintree_card:xml_to_record(Xml, [Base, "/credit-card"]),
     StatusHistory = get_status_history(Xml, Base),
-    #bt_transaction{id = get_xml_value([Base, "/id/text()"], Xml)
-                    ,status = get_xml_value([Base, "/status/text()"], Xml)
-                    ,type = get_xml_value([Base, "/type/text()"], Xml)
-                    ,currency_code = get_xml_value([Base, "/currency-iso-code/text()"], Xml)
-                    ,amount = get_xml_value([Base, "/amount/text()"], Xml)
-                    ,merchant_account_id = get_xml_value([Base, "/merchant-account-id/text()"], Xml)
-                    ,order_id = get_xml_value([Base, "/order-id/text()"], Xml)
-                    ,purchase_order = get_xml_value([Base, "/purchase-order-number/text()"], Xml)
-                    ,created_at = get_xml_value([Base, "/created-at/text()"], Xml)
-                    ,update_at = get_xml_value([Base, "/updated-at/text()"], Xml)
-                    ,refund_id = get_xml_value([Base, "/refund-id/text()"], Xml)
-                    ,refunded_transaction = get_xml_value([Base, "/refunded-transaction-id /text()"], Xml)
-                    ,settlement_batch = get_xml_value([Base, "/settlement-batch-id/text()"], Xml)
-                    ,avs_error_code = get_xml_value([Base, "/avs-error-response-code/text()"], Xml)
-                    ,avs_postal_response = get_xml_value([Base, "/avs-postal-code-response-code/text()"], Xml)
-                    ,avs_street_response = get_xml_value([Base, "/avs-street-address-response-code/text()"], Xml)
-                    ,ccv_response_code = get_xml_value([Base, "/cvv-response-code/text()"], Xml)
-                    ,gateway_rejection = get_xml_value([Base, "/gateway-rejection-reason/text()"], Xml)
-                    ,processor_authorization_code = get_xml_value([Base, "/processor-authorization-code/text()"], Xml)
-                    ,processor_response_code = get_xml_value([Base, "/processor-response-code/text()"], Xml)
-                    ,processor_response_text = get_xml_value([Base, "/processor-response-text/text()"], Xml)
-                    ,tax_amount = get_xml_value([Base, "/tax-amount/text()"], Xml)
-                    ,tax_exempt = kz_util:is_true(get_xml_value([Base, "/tax-exempt/text()"], Xml))
-                    ,billing_address = BillingAddress
-                    ,shipping_address = braintree_address:xml_to_record(Xml, [Base, "/shipping"])
-                    ,customer = braintree_customer:xml_to_record(Xml, [Base, "/customer"])
-                    ,card = Card#bt_card{billing_address=BillingAddress}
-                    ,subscription_id = get_xml_value([Base, "/subscription-id/text()"], Xml)
-                    ,add_ons = [braintree_addon:xml_to_record(Addon)
-                                || Addon <- xmerl_xpath:string(AddOnsPath, Xml)
-                               ]
-                    ,discounts = [braintree_discount:xml_to_record(Discounts)
-                                  || Discounts <- xmerl_xpath:string(DiscountsPath, Xml)
-                                 ]
+    #bt_transaction{id = kz_util:get_xml_value([Base, "/id/text()"], Xml)
+                   ,status = kz_util:get_xml_value([Base, "/status/text()"], Xml)
+                   ,type = kz_util:get_xml_value([Base, "/type/text()"], Xml)
+                   ,currency_code = kz_util:get_xml_value([Base, "/currency-iso-code/text()"], Xml)
+                   ,amount = kz_util:get_xml_value([Base, "/amount/text()"], Xml)
+                   ,merchant_account_id = kz_util:get_xml_value([Base, "/merchant-account-id/text()"], Xml)
+                   ,order_id = kz_util:get_xml_value([Base, "/order-id/text()"], Xml)
+                   ,purchase_order = kz_util:get_xml_value([Base, "/purchase-order-number/text()"], Xml)
+                   ,created_at = kz_util:get_xml_value([Base, "/created-at/text()"], Xml)
+                   ,update_at = kz_util:get_xml_value([Base, "/updated-at/text()"], Xml)
+                   ,refund_id = kz_util:get_xml_value([Base, "/refund-id/text()"], Xml)
+                   ,refunded_transaction = kz_util:get_xml_value([Base, "/refunded-transaction-id /text()"], Xml)
+                   ,settlement_batch = kz_util:get_xml_value([Base, "/settlement-batch-id/text()"], Xml)
+                   ,avs_error_code = kz_util:get_xml_value([Base, "/avs-error-response-code/text()"], Xml)
+                   ,avs_postal_response = kz_util:get_xml_value([Base, "/avs-postal-code-response-code/text()"], Xml)
+                   ,avs_street_response = kz_util:get_xml_value([Base, "/avs-street-address-response-code/text()"], Xml)
+                   ,ccv_response_code = kz_util:get_xml_value([Base, "/cvv-response-code/text()"], Xml)
+                   ,gateway_rejection = kz_util:get_xml_value([Base, "/gateway-rejection-reason/text()"], Xml)
+                   ,processor_authorization_code = kz_util:get_xml_value([Base, "/processor-authorization-code/text()"], Xml)
+                   ,processor_response_code = kz_util:get_xml_value([Base, "/processor-response-code/text()"], Xml)
+                   ,processor_response_text = kz_util:get_xml_value([Base, "/processor-response-text/text()"], Xml)
+                   ,tax_amount = kz_util:get_xml_value([Base, "/tax-amount/text()"], Xml)
+                   ,tax_exempt = kz_util:is_true(kz_util:get_xml_value([Base, "/tax-exempt/text()"], Xml))
+                   ,billing_address = BillingAddress
+                   ,shipping_address = braintree_address:xml_to_record(Xml, [Base, "/shipping"])
+                   ,customer = braintree_customer:xml_to_record(Xml, [Base, "/customer"])
+                   ,card = Card#bt_card{billing_address=BillingAddress}
+                   ,subscription_id = kz_util:get_xml_value([Base, "/subscription-id/text()"], Xml)
+                   ,add_ons = [braintree_addon:xml_to_record(Addon)
+                               || Addon <- xmerl_xpath:string(AddOnsPath, Xml)
+                              ]
+                   ,discounts = [braintree_discount:xml_to_record(Discounts)
+                                 || Discounts <- xmerl_xpath:string(DiscountsPath, Xml)
+                                ]
                    ,is_api = props:get_value('is_api', StatusHistory)
                    ,is_automatic = props:get_value('is_automatic', StatusHistory)
                    ,is_recurring = props:get_value('is_recurring', StatusHistory)
@@ -284,21 +281,21 @@ get_status_history(Xml, Base) ->
                              (<<"2600hz-api">>) -> 'true';
                              (_) -> 'false'
                           end, Sources ++ Users)}
-     ,{'is_recurring', lists:any(fun(<<"recurring">>) -> 'true';
-                                    (_) -> 'false'
-                                 end, Sources)}
+    ,{'is_recurring', lists:any(fun(<<"recurring">>) -> 'true';
+                                   (_) -> 'false'
+                                end, Sources)}
     ].
 
 -spec get_users(bt_xml(), api_binaries()) -> api_binaries().
 get_users([], Users) -> Users;
 get_users([Element|Elements], Users) ->
-    User = get_xml_value("user/text()", Element),
+    User = kz_util:get_xml_value("user/text()", Element),
     get_users(Elements, [User|Users]).
 
 -spec get_transaction_sources(bt_xml(), api_binaries()) -> api_binaries().
 get_transaction_sources([], Sources) -> Sources;
 get_transaction_sources([Element|Elements], Sources) ->
-    Source = get_xml_value("transaction-source/text()", Element),
+    Source = kz_util:get_xml_value("transaction-source/text()", Element),
     get_transaction_sources(Elements, [Source|Sources]).
 
 %%--------------------------------------------------------------------
@@ -315,15 +312,15 @@ record_to_xml(Transaction) ->
 
 record_to_xml(#bt_transaction{}=Transaction, ToString) ->
     Props = [{'type', Transaction#bt_transaction.type}
-             ,{'amount', Transaction#bt_transaction.amount}
-             ,{'customer-id', Transaction#bt_transaction.customer_id}
-             ,{'merchant-account-id', Transaction#bt_transaction.merchant_account_id}
-             ,{'order-id', Transaction#bt_transaction.order_id}
-             ,{'purchase-order-number', Transaction#bt_transaction.purchase_order}
-             ,{'payment-method-token', Transaction#bt_transaction.payment_token}
-             ,{'shipping-address-id', Transaction#bt_transaction.shipping_address_id}
-             ,{'tax-amount', Transaction#bt_transaction.tax_amount}
-             ,{'tax-exempt', Transaction#bt_transaction.tax_exempt}
+            ,{'amount', Transaction#bt_transaction.amount}
+            ,{'customer-id', Transaction#bt_transaction.customer_id}
+            ,{'merchant-account-id', Transaction#bt_transaction.merchant_account_id}
+            ,{'order-id', Transaction#bt_transaction.order_id}
+            ,{'purchase-order-number', Transaction#bt_transaction.purchase_order}
+            ,{'payment-method-token', Transaction#bt_transaction.payment_token}
+            ,{'shipping-address-id', Transaction#bt_transaction.shipping_address_id}
+            ,{'tax-amount', Transaction#bt_transaction.tax_amount}
+            ,{'tax-exempt', Transaction#bt_transaction.tax_exempt}
             ],
     Conditionals = [fun(#bt_transaction{billing_address='undefined'}, P) -> P;
                        (#bt_transaction{billing_address=BA}, P) ->
@@ -391,7 +388,7 @@ record_to_xml(#bt_transaction{}=Transaction, ToString) ->
                     end],
     Props1 = lists:foldr(fun(F, P) -> F(Transaction, P) end, Props, Conditionals),
     case ToString of
-        'true' -> make_doc_xml(Props1, 'transaction');
+        'true' -> braintree_util:make_doc_xml(Props1, 'transaction');
         'false' -> Props1
     end.
 
@@ -404,45 +401,45 @@ record_to_xml(#bt_transaction{}=Transaction, ToString) ->
 -spec record_to_json(bt_transaction()) -> kz_json:object().
 record_to_json(#bt_transaction{}=Transaction) ->
     Props = [{<<"id">>, Transaction#bt_transaction.id}
-             ,{<<"status">>, Transaction#bt_transaction.status}
-             ,{<<"type">>, Transaction#bt_transaction.type}
-             ,{<<"currency_code">>, Transaction#bt_transaction.currency_code}
-             ,{<<"amount">>, Transaction#bt_transaction.amount}
-             ,{<<"merchant_account_id">>, Transaction#bt_transaction.merchant_account_id}
-             ,{<<"order_id">>, Transaction#bt_transaction.order_id}
-             ,{<<"purchase_order">>, Transaction#bt_transaction.purchase_order}
-             ,{<<"created_at">>, Transaction#bt_transaction.created_at}
-             ,{<<"update_at">>, Transaction#bt_transaction.update_at}
-             ,{<<"refund_id">>, Transaction#bt_transaction.refund_id}
-             ,{<<"refunded_transaction">>, Transaction#bt_transaction.refunded_transaction}
-             ,{<<"settlement_batch">>, Transaction#bt_transaction.settlement_batch}
-             ,{<<"avs_error_code">>, Transaction#bt_transaction.avs_error_code}
-             ,{<<"avs_postal_response">>, Transaction#bt_transaction.avs_postal_response}
-             ,{<<"avs_street_response">>, Transaction#bt_transaction.avs_street_response}
-             ,{<<"ccv_response_code">>, Transaction#bt_transaction.ccv_response_code}
-             ,{<<"gateway_rejection">>, Transaction#bt_transaction.gateway_rejection}
-             ,{<<"processor_authorization_code">>, Transaction#bt_transaction.processor_authorization_code}
-             ,{<<"processor_response_code">>, Transaction#bt_transaction.processor_response_code}
-             ,{<<"processor_response_text">>, Transaction#bt_transaction.processor_response_text}
-             ,{<<"tax_amount">>, Transaction#bt_transaction.tax_amount}
-             ,{<<"tax_exempt">>, Transaction#bt_transaction.tax_exempt}
-             ,{<<"billing_address">>, braintree_address:record_to_json(Transaction#bt_transaction.billing_address)}
-             ,{<<"shipping_address_id">>, Transaction#bt_transaction.shipping_address_id}
-             ,{<<"shipping_address">>, braintree_address:record_to_json(Transaction#bt_transaction.shipping_address)}
-             ,{<<"customer_id">>, Transaction#bt_transaction.customer_id}
-             ,{<<"customer">>, braintree_customer:record_to_json(Transaction#bt_transaction.customer)}
-             ,{<<"payment_token">>, Transaction#bt_transaction.payment_token}
-             ,{<<"card">>, braintree_card:record_to_json(Transaction#bt_transaction.card)}
-             ,{<<"subscription_id">>, Transaction#bt_transaction.subscription_id}
-             ,{<<"add_ons">>, [braintree_addon:record_to_json(Addon)
-                               || Addon <- Transaction#bt_transaction.add_ons
-                              ]}
-             ,{<<"discounts">>, [braintree_discount:record_to_json(Discounts)
-                                 || Discounts <- Transaction#bt_transaction.discounts
-                                ]}
-             ,{<<"is_api">>, Transaction#bt_transaction.is_api}
-             ,{<<"is_automatic">>, Transaction#bt_transaction.is_automatic}
-             ,{<<"is_recurring">>, Transaction#bt_transaction.is_recurring}
+            ,{<<"status">>, Transaction#bt_transaction.status}
+            ,{<<"type">>, Transaction#bt_transaction.type}
+            ,{<<"currency_code">>, Transaction#bt_transaction.currency_code}
+            ,{<<"amount">>, Transaction#bt_transaction.amount}
+            ,{<<"merchant_account_id">>, Transaction#bt_transaction.merchant_account_id}
+            ,{<<"order_id">>, Transaction#bt_transaction.order_id}
+            ,{<<"purchase_order">>, Transaction#bt_transaction.purchase_order}
+            ,{<<"created_at">>, Transaction#bt_transaction.created_at}
+            ,{<<"update_at">>, Transaction#bt_transaction.update_at}
+            ,{<<"refund_id">>, Transaction#bt_transaction.refund_id}
+            ,{<<"refunded_transaction">>, Transaction#bt_transaction.refunded_transaction}
+            ,{<<"settlement_batch">>, Transaction#bt_transaction.settlement_batch}
+            ,{<<"avs_error_code">>, Transaction#bt_transaction.avs_error_code}
+            ,{<<"avs_postal_response">>, Transaction#bt_transaction.avs_postal_response}
+            ,{<<"avs_street_response">>, Transaction#bt_transaction.avs_street_response}
+            ,{<<"ccv_response_code">>, Transaction#bt_transaction.ccv_response_code}
+            ,{<<"gateway_rejection">>, Transaction#bt_transaction.gateway_rejection}
+            ,{<<"processor_authorization_code">>, Transaction#bt_transaction.processor_authorization_code}
+            ,{<<"processor_response_code">>, Transaction#bt_transaction.processor_response_code}
+            ,{<<"processor_response_text">>, Transaction#bt_transaction.processor_response_text}
+            ,{<<"tax_amount">>, Transaction#bt_transaction.tax_amount}
+            ,{<<"tax_exempt">>, Transaction#bt_transaction.tax_exempt}
+            ,{<<"billing_address">>, braintree_address:record_to_json(Transaction#bt_transaction.billing_address)}
+            ,{<<"shipping_address_id">>, Transaction#bt_transaction.shipping_address_id}
+            ,{<<"shipping_address">>, braintree_address:record_to_json(Transaction#bt_transaction.shipping_address)}
+            ,{<<"customer_id">>, Transaction#bt_transaction.customer_id}
+            ,{<<"customer">>, braintree_customer:record_to_json(Transaction#bt_transaction.customer)}
+            ,{<<"payment_token">>, Transaction#bt_transaction.payment_token}
+            ,{<<"card">>, braintree_card:record_to_json(Transaction#bt_transaction.card)}
+            ,{<<"subscription_id">>, Transaction#bt_transaction.subscription_id}
+            ,{<<"add_ons">>, [braintree_addon:record_to_json(Addon)
+                              || Addon <- Transaction#bt_transaction.add_ons
+                             ]}
+            ,{<<"discounts">>, [braintree_discount:record_to_json(Discounts)
+                                || Discounts <- Transaction#bt_transaction.discounts
+                               ]}
+            ,{<<"is_api">>, Transaction#bt_transaction.is_api}
+            ,{<<"is_automatic">>, Transaction#bt_transaction.is_automatic}
+            ,{<<"is_recurring">>, Transaction#bt_transaction.is_recurring}
             ],
     kz_json:from_list(props:filter_undefined(Props)).
 
@@ -451,49 +448,49 @@ json_to_record('undefined') -> 'undefined';
 json_to_record(JObj) ->
     #bt_transaction{
        id = kz_doc:id(JObj)
-       ,status = kz_json:get_binary_value(<<"status">>, JObj)
-       ,type = kz_json:get_binary_value(<<"type">>, JObj)
-       ,currency_code = kz_json:get_binary_value(<<"currency_code">>, JObj)
-       ,amount = kz_json:get_binary_value(<<"amount">>, JObj)
-       ,merchant_account_id = kz_json:get_binary_value(<<"merchant_account_id">>, JObj)
-       ,order_id = kz_json:get_binary_value(<<"order_id">>, JObj)
-       ,purchase_order = kz_json:get_binary_value(<<"purchase_order">>, JObj)
-       ,created_at = kz_json:get_binary_value(<<"created_at">>, JObj)
-       ,update_at = kz_json:get_binary_value(<<"update_at">>, JObj)
-       ,refund_id = kz_json:get_binary_value(<<"refund_id">>, JObj)
-       ,refund_ids = kz_json:get_binary_value(<<"refund_ids">>, JObj)
-       ,refunded_transaction = kz_json:get_binary_value(<<"refunded_transaction">>, JObj)
-       ,settlement_batch = kz_json:get_binary_value(<<"settlement_batch">>, JObj)
-       ,avs_error_code = kz_json:get_binary_value(<<"avs_error_code">>, JObj)
-       ,avs_postal_response = kz_json:get_binary_value(<<"avs_postal_response">>, JObj)
-       ,avs_street_response = kz_json:get_binary_value(<<"avs_street_response">>, JObj)
-       ,ccv_response_code = kz_json:get_binary_value(<<"ccv_response_code">>, JObj)
-       ,gateway_rejection = kz_json:get_binary_value(<<"gateway_rejection">>, JObj)
-       ,processor_authorization_code = kz_json:get_binary_value(<<"processor_authorization_code">>, JObj)
-       ,processor_response_code = kz_json:get_binary_value(<<"processor_response_code">>, JObj)
-       ,processor_response_text = kz_json:get_binary_value(<<"processor_response_text">>, JObj)
-       ,tax_amount = kz_json:get_binary_value(<<"tax_amount">>, JObj)
-       ,tax_exempt = kz_json:get_value(<<"tax_exempt">>, JObj, 'false')
-       ,billing_address = braintree_address:json_to_record(kz_json:get_value(<<"billing_address">>, JObj))
-       ,shipping_address_id  = kz_json:get_binary_value(<<"shipping_address_id">>, JObj)
-       ,shipping_address = braintree_address:json_to_record(kz_json:get_value(<<"shipping_address">>, JObj))
-       ,customer_id = kz_json:get_binary_value(<<"customer_id">>, JObj)
-       ,customer = braintree_customer:json_to_record(kz_json:get_value(<<"customer">>, JObj))
-       ,payment_token = kz_json:get_binary_value(<<"payment_token">>, JObj)
-       ,card = braintree_card:json_to_record(kz_json:get_value(<<"customer">>, JObj))
-       ,subscription_id = kz_json:get_binary_value(<<"subscription_id">>, JObj)
-       ,add_ons = [braintree_addon:json_to_record(Addon)
-                   || Addon <- kz_json:get_value(<<"add_ons">>, JObj, [])
-                  ]
-       ,discounts = [braintree_discount:json_to_record(Discount)
-                     || Discount <- kz_json:get_value(<<"discounts">>, JObj, [])
-                    ]
-       ,descriptor = kz_json:get_binary_value(<<"descriptor">>, JObj)
-       ,store_in_vault = kz_json:get_value(<<"store_in_vault">>, JObj, 'false')
-       ,store_on_success = kz_json:get_value(<<"store_on_success">>, JObj, 'false')
-       ,change_billing_address = kz_json:get_value(<<"change_billing_address">>, JObj, 'false')
-       ,store_shipping_address = kz_json:get_value(<<"store_shipping_address">>, JObj, 'false')
-       ,is_api = kz_json:is_true(<<"is_api">>, JObj)
-       ,is_automatic = kz_json:is_true(<<"is_automatic">>, JObj)
-       ,is_recurring = kz_json:is_true(<<"is_recurring">>, JObj)
+                   ,status = kz_json:get_binary_value(<<"status">>, JObj)
+                   ,type = kz_json:get_binary_value(<<"type">>, JObj)
+                   ,currency_code = kz_json:get_binary_value(<<"currency_code">>, JObj)
+                   ,amount = kz_json:get_binary_value(<<"amount">>, JObj)
+                   ,merchant_account_id = kz_json:get_binary_value(<<"merchant_account_id">>, JObj)
+                   ,order_id = kz_json:get_binary_value(<<"order_id">>, JObj)
+                   ,purchase_order = kz_json:get_binary_value(<<"purchase_order">>, JObj)
+                   ,created_at = kz_json:get_binary_value(<<"created_at">>, JObj)
+                   ,update_at = kz_json:get_binary_value(<<"update_at">>, JObj)
+                   ,refund_id = kz_json:get_binary_value(<<"refund_id">>, JObj)
+                   ,refund_ids = kz_json:get_binary_value(<<"refund_ids">>, JObj)
+                   ,refunded_transaction = kz_json:get_binary_value(<<"refunded_transaction">>, JObj)
+                   ,settlement_batch = kz_json:get_binary_value(<<"settlement_batch">>, JObj)
+                   ,avs_error_code = kz_json:get_binary_value(<<"avs_error_code">>, JObj)
+                   ,avs_postal_response = kz_json:get_binary_value(<<"avs_postal_response">>, JObj)
+                   ,avs_street_response = kz_json:get_binary_value(<<"avs_street_response">>, JObj)
+                   ,ccv_response_code = kz_json:get_binary_value(<<"ccv_response_code">>, JObj)
+                   ,gateway_rejection = kz_json:get_binary_value(<<"gateway_rejection">>, JObj)
+                   ,processor_authorization_code = kz_json:get_binary_value(<<"processor_authorization_code">>, JObj)
+                   ,processor_response_code = kz_json:get_binary_value(<<"processor_response_code">>, JObj)
+                   ,processor_response_text = kz_json:get_binary_value(<<"processor_response_text">>, JObj)
+                   ,tax_amount = kz_json:get_binary_value(<<"tax_amount">>, JObj)
+                   ,tax_exempt = kz_json:get_value(<<"tax_exempt">>, JObj, 'false')
+                   ,billing_address = braintree_address:json_to_record(kz_json:get_value(<<"billing_address">>, JObj))
+                   ,shipping_address_id  = kz_json:get_binary_value(<<"shipping_address_id">>, JObj)
+                   ,shipping_address = braintree_address:json_to_record(kz_json:get_value(<<"shipping_address">>, JObj))
+                   ,customer_id = kz_json:get_binary_value(<<"customer_id">>, JObj)
+                   ,customer = braintree_customer:json_to_record(kz_json:get_value(<<"customer">>, JObj))
+                   ,payment_token = kz_json:get_binary_value(<<"payment_token">>, JObj)
+                   ,card = braintree_card:json_to_record(kz_json:get_value(<<"customer">>, JObj))
+                   ,subscription_id = kz_json:get_binary_value(<<"subscription_id">>, JObj)
+                   ,add_ons = [braintree_addon:json_to_record(Addon)
+                               || Addon <- kz_json:get_value(<<"add_ons">>, JObj, [])
+                              ]
+                   ,discounts = [braintree_discount:json_to_record(Discount)
+                                 || Discount <- kz_json:get_value(<<"discounts">>, JObj, [])
+                                ]
+                   ,descriptor = kz_json:get_binary_value(<<"descriptor">>, JObj)
+                   ,store_in_vault = kz_json:get_value(<<"store_in_vault">>, JObj, 'false')
+                   ,store_on_success = kz_json:get_value(<<"store_on_success">>, JObj, 'false')
+                   ,change_billing_address = kz_json:get_value(<<"change_billing_address">>, JObj, 'false')
+                   ,store_shipping_address = kz_json:get_value(<<"store_shipping_address">>, JObj, 'false')
+                   ,is_api = kz_json:is_true(<<"is_api">>, JObj)
+                   ,is_automatic = kz_json:is_true(<<"is_automatic">>, JObj)
+                   ,is_recurring = kz_json:is_true(<<"is_recurring">>, JObj)
       }.

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% Listing of all expected v1 callbacks
@@ -12,13 +12,13 @@
 -module(cb_system_configs).
 
 -export([init/0
-         ,authorize/1, authorize/2, authorize/3
-         ,allowed_methods/0, allowed_methods/1, allowed_methods/2
-         ,resource_exists/0, resource_exists/1, resource_exists/2
-         ,validate/1, validate/2, validate/3
-         ,put/1
-         ,post/2, post/3
-         ,delete/2, delete/3
+        ,authorize/1, authorize/2, authorize/3
+        ,allowed_methods/0, allowed_methods/1, allowed_methods/2
+        ,resource_exists/0, resource_exists/1, resource_exists/2
+        ,validate/1, validate/2, validate/3
+        ,put/1
+        ,post/2, post/3
+        ,delete/2, delete/3
         ]).
 
 -include("crossbar.hrl").
@@ -56,9 +56,9 @@ init() ->
 -spec authorize(cb_context:context()) -> boolean().
 -spec authorize(cb_context:context(), path_token()) -> boolean().
 -spec authorize(cb_context:context(), path_token(), path_token()) -> boolean().
-authorize(Context) -> cb_modules_util:is_superduper_admin(Context).
-authorize(Context, _Id) -> cb_modules_util:is_superduper_admin(Context).
-authorize(Context, _Id, _Node) -> cb_modules_util:is_superduper_admin(Context).
+authorize(Context) -> cb_context:is_superduper_admin(Context).
+authorize(Context, _Id) -> cb_context:is_superduper_admin(Context).
+authorize(Context, _Id, _Node) -> cb_context:is_superduper_admin(Context).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -72,9 +72,9 @@ authorize(Context, _Id, _Node) -> cb_modules_util:is_superduper_admin(Context).
 -spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
-allowed_methods(_Id) ->
+allowed_methods(_SystemConfigId) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE].
-allowed_methods(_Id, _Node) ->
+allowed_methods(_SystemConfigId, _Node) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE].
 
 %%--------------------------------------------------------------------
@@ -113,7 +113,7 @@ validate(Context) ->
     validate_system_configs(update_db(Context), cb_context:req_verb(Context)).
 validate(Context, Id) ->
     validate_system_config(update_db(Context), Id, cb_context:req_verb(Context)
-                           ,cb_context:req_value(Context, <<"node">>, <<"default">>)
+                          ,cb_context:req_value(Context, <<"node">>, <<"undefined">>)
                           ).
 validate(Context, Id, Node) ->
     validate_system_config(update_db(Context), Id, cb_context:req_verb(Context), Node).
@@ -171,18 +171,15 @@ post(Context, _Id, Node) ->
 delete(Context, _Id) ->
     Context1 = crossbar_doc:delete(Context),
     case cb_context:resp_status(Context1) of
-        'success' ->
-            cb_context:set_resp_data(Context1, kz_json:new());
+        'success' -> cb_context:set_resp_data(Context1, kz_json:new());
         _Status -> Context1
     end.
 
 delete(Context, Id, <<"default">>) ->
     delete(Context, Id);
 delete(Context, _Id, Node) ->
-    save(
-      cb_context:set_doc(Context, kz_json:delete_key(Node, cb_context:doc(Context)))
-      ,<<"default">>
-     ).
+    Context1 = cb_context:set_doc(Context, kz_json:delete_key(Node, cb_context:doc(Context))),
+    save(Context1, <<"default">>).
 
 -spec save(cb_context:context(), ne_binary()) -> cb_context:context().
 save(Context, Node) ->
@@ -190,8 +187,7 @@ save(Context, Node) ->
     case cb_context:resp_status(Context1) of
         'success' ->
             cb_context:set_resp_data(Context1, kz_json:get_value(Node, cb_context:doc(Context1)));
-        _Status ->
-            Context1
+        _Status -> Context1
     end.
 
 %%--------------------------------------------------------------------
@@ -206,17 +202,13 @@ create(Context) ->
     case kz_doc:id(Doc) of
         'undefined' ->
             lager:debug("no id on doc ~p", [Doc]),
-            cb_context:add_validation_error(
-                <<"id">>
-                ,<<"required">>
-                ,kz_json:from_list([
-                    {<<"message">>, <<"id is required to create a system_config resource">>}
-                 ])
-                ,Context
-            );
+            Msg = kz_json:from_list(
+                    [{<<"message">>, <<"id is required to create a system_config resource">>}
+                    ]),
+            cb_context:add_validation_error(<<"id">>, <<"required">>, Msg, Context);
         Id ->
             SysDoc = kz_json:from_list([{<<"_id">>, Id}
-                                        ,{<<"default">>, kz_json:delete_key(<<"id">>, Doc)}
+                                       ,{<<"default">>, kz_json:delete_key(<<"id">>, Doc)}
                                        ]),
             lager:debug("trying to create ~s/~s: ~p", [?KZ_CONFIG_DB, Id, SysDoc]),
             cb_context:set_resp_status(cb_context:set_doc(Context, SysDoc), 'success')
@@ -228,13 +220,19 @@ create(Context) ->
 %% Load an instance from the database
 %% @end
 %%--------------------------------------------------------------------
+-spec filter_read(cb_context:context(), ne_binary()) -> kz_json:object().
+filter_read(Context, <<"undefined">>) ->
+    kz_doc:public_fields(cb_context:doc(Context));
+
+filter_read(Context, Node) ->
+    kz_json:get_value(Node, cb_context:doc(Context), kz_json:new()).
+
 -spec read(ne_binary(), cb_context:context(), ne_binary()) ->
                   cb_context:context().
 read(Id, Context, Node) ->
     Context1 = crossbar_doc:load(Id, Context, ?TYPE_CHECK_OPTION(<<"config">>)),
-    cb_context:set_resp_data(Context1
-                             ,kz_json:get_value(Node, cb_context:doc(Context1), kz_json:new())
-                            ).
+    Data     = filter_read(Context1, Node),
+    cb_context:set_resp_data(Context1, Data).
 
 -spec read_for_delete(ne_binary(), cb_context:context()) ->
                              cb_context:context().
@@ -262,7 +260,7 @@ update(Id, Context, Node) ->
 
 update(_Id, Node, Context, 'success') ->
     cb_context:set_doc(Context
-                       ,kz_json:set_value(Node, cb_context:req_data(Context), cb_context:doc(Context))
+                      ,kz_json:set_value(Node, cb_context:req_data(Context), cb_context:doc(Context))
                       );
 update(_Id, _Node, Context, _Status) ->
     Context.
@@ -277,9 +275,9 @@ update(_Id, _Node, Context, _Status) ->
 -spec summary(cb_context:context()) -> cb_context:context().
 summary(Context) ->
     crossbar_doc:load_view(<<"system_configs/crossbar_listing">>
-                           ,[]
-                           ,Context
-                           ,fun normalize_view_results/2
+                          ,[]
+                          ,Context
+                          ,fun normalize_view_results/2
                           ).
 
 %%--------------------------------------------------------------------
@@ -295,6 +293,6 @@ normalize_view_results(JObj, Acc) ->
 -spec update_db(cb_context:context()) -> cb_context:context().
 update_db(Context) ->
     cb_context:setters(Context
-                       ,[{fun cb_context:set_account_db/2, ?KZ_CONFIG_DB}
-                         ,{fun cb_context:set_account_id/2, cb_context:auth_account_id(Context)}
-                        ]).
+                      ,[{fun cb_context:set_account_db/2, ?KZ_CONFIG_DB}
+                       ,{fun cb_context:set_account_id/2, cb_context:auth_account_id(Context)}
+                       ]).

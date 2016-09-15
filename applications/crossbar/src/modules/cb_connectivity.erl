@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% Handle client requests for connectivity documents
@@ -12,13 +12,13 @@
 -module(cb_connectivity).
 
 -export([init/0
-         ,allowed_methods/0, allowed_methods/1
-         ,resource_exists/0, resource_exists/1
-         ,validate/1, validate/2
-         ,put/1
-         ,post/2
-         ,patch/2
-         ,delete/2
+        ,allowed_methods/0, allowed_methods/1
+        ,resource_exists/0, resource_exists/1
+        ,validate/1, validate/2
+        ,put/1
+        ,post/2
+        ,patch/2
+        ,delete/2
         ]).
 
 -include("crossbar.hrl").
@@ -50,7 +50,7 @@ init() ->
 -spec allowed_methods(path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET, ?HTTP_PUT].
-allowed_methods(_) ->
+allowed_methods(_ConnectivityId) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_PATCH, ?HTTP_DELETE].
 
 %%--------------------------------------------------------------------
@@ -158,7 +158,7 @@ track_assignment('post', Context) ->
                 || Num <- NewNums,
                    not (lists:member(Num, OldNums))
                ],
-    Unassigned = [{Num, <<>>}
+    Unassigned = [{Num, 'undefined'}
                   || Num <- OldNums,
                      not (lists:member(Num, NewNums))
                  ],
@@ -167,7 +167,7 @@ track_assignment('post', Context) ->
     cb_modules_util:log_assignment_updates(Updates);
 track_assignment('delete', Context) ->
     Nums = get_numbers(cb_context:doc(Context)),
-    Unassigned = [{Num, <<>>} || Num <- Nums],
+    Unassigned = [{Num, 'undefined'} || Num <- Nums],
 
     Updates = cb_modules_util:apply_assignment_updates(Unassigned),
     cb_modules_util:log_assignment_updates(Updates).
@@ -253,9 +253,9 @@ on_successful_validation(Id, Context) ->
 -spec summary(cb_context:context()) -> cb_context:context().
 summary(Context) ->
     crossbar_doc:load_view(?CB_LIST
-                           ,[{'reduce', 'false'}]
-                           ,Context
-                           ,fun normalize_view_results/2
+                          ,[{'reduce', 'false'}]
+                          ,Context
+                          ,fun normalize_view_results/2
                           ).
 
 %%--------------------------------------------------------------------

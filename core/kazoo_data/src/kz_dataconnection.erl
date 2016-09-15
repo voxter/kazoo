@@ -1,25 +1,25 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2015, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
 %%% @contributors
 %%%-------------------------------------------------------------------
 -module(kz_dataconnection).
-
 -behaviour(gen_server).
 
 -export([start_link/1]).
 
 -export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,terminate/2
-         ,code_change/3
+        ,handle_call/3
+        ,handle_cast/2
+        ,handle_info/2
+        ,terminate/2
+        ,code_change/3
         ]).
 
 -include("kz_data.hrl").
+-type state() :: #data_connection{}.
 
 -define(SERVER, ?MODULE).
 
@@ -49,6 +49,7 @@ start_link(#data_connection{}=Connection) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
+-spec init(list()) -> {'ok', state()}.
 init([Connection]) ->
     lager:info("start connection"),
     self() ! 'maintain_connection',
@@ -68,6 +69,7 @@ init([Connection]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call(_Request, _From, Connection) ->
     {'reply', {'error', 'not_implemented'}, Connection}.
 
@@ -81,6 +83,7 @@ handle_call(_Request, _From, Connection) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast(_Msg, Connection) ->
     {'noreply', Connection}.
 
@@ -94,6 +97,7 @@ handle_cast(_Msg, Connection) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info('maintain_connection', #data_connection{connected = 'false'}=Connection) ->
     case try_connection(Connection) of
         {'error', _} ->
@@ -104,8 +108,8 @@ handle_info('maintain_connection', #data_connection{connected = 'false'}=Connect
             {'noreply', connection_established(C#data_connection{connected='true'})}
     end;
 handle_info('maintain_connection', #data_connection{ready=Ready
-                                                    ,server=Server
-                                                    ,app=App
+                                                   ,server=Server
+                                                   ,app=App
                                                    }=Connection) ->
     case App:server_info(Server) of
         {'ok', _} when not Ready ->
@@ -132,6 +136,7 @@ handle_info(_Info, Connection) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _Connection) ->
     lager:debug("couch connection terminating: ~p", [_Reason]).
 
@@ -143,6 +148,7 @@ terminate(_Reason, _Connection) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, Connection, _Extra) ->
     {'ok', Connection}.
 
@@ -181,5 +187,5 @@ reset_connection(Connection) ->
     %% TODO: this is disabled for the moment to maintain backward
     %% compatablity with kz_datamgr which always assumed the connection
     %% was available
-%%    kz_dataconnections:update(C),
+    %%    kz_dataconnections:update(C),
     C.

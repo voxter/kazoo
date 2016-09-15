@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -16,18 +16,18 @@
 
 %% API
 -export([start_link/1, start_link/2, start_link/4
-         ,restart/1
-         ,listener/1
-         ,fsm/1
-         ,stop/1
-         ,status/1
+        ,restart/1
+        ,listener/1
+        ,fsm/1
+        ,stop/1
+        ,status/1
         ]).
 
 %% Supervisor callbacks
 -export([init/1]).
 
 -define(CHILDREN, [?WORKER_ARGS_TYPE('acdc_agent_listener', [self() | Args], 'transient')
-                   ,?WORKER_ARGS_TYPE('acdc_agent_fsm', [self() | Args], 'transient')
+                  ,?WORKER_ARGS_TYPE('acdc_agent_fsm', [self() | Args], 'transient')
                   ]).
 
 %%%===================================================================
@@ -68,12 +68,12 @@ status(Supervisor) ->
             print_status(augment_status(Status, LPid));
         _ ->
             lager:info("Agent Supervisor ~p is dead, stopping", [Supervisor]),
-            ?MODULE:stop(Supervisor)
+            stop(Supervisor)
     end.
 
 -define(AGENT_INFO_FIELDS, kapps_config:get(?CONFIG_CAT, <<"agent_info_fields">>
-                                                 ,[<<"first_name">>, <<"last_name">>, <<"username">>, <<"email">>]
-                                            )).
+                                           ,[<<"first_name">>, <<"last_name">>, <<"username">>, <<"email">>]
+                                           )).
 
 augment_status(Status, LPid) ->
     Fs = ?AGENT_INFO_FIELDS,

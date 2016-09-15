@@ -1,0 +1,142 @@
+{
+    "$schema": "http://json-schema.org/draft-03/schema#",
+    "_id": "system_config.callflow",
+    "description": "Schema for callflow system_config",
+    "properties": {
+        "call_recording": {
+            "properties": {
+                "extension": {
+                    "properties": {
+                        "default": "mp3",
+                        "description": "callflow extension",
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "calls_consume_tokens": {
+            "default": true,
+            "description": "callflow calls consume tokens",
+            "type": "boolean"
+        },
+        "default_pin_length": {
+            "default": 10,
+            "description": "callflow default pin length",
+            "type": "integer"
+        },
+        "default_use_account_caller_id": {
+            "default": true,
+            "description": "callflow default use account caller id",
+            "type": "boolean"
+        },
+        "ensure_valid_caller_id": {
+            "default": false,
+            "description": "callflow ensure valid caller id",
+            "type": "boolean"
+        },
+        "fax_detect_duration_s": {
+            "default": 5,
+            "description": "callflow fax detect duration in seconds",
+            "type": "integer"
+        },
+        "min_bucket_cost": {
+            "default": 5,
+            "description": "callflow minimum bucket cost",
+            "type": "integer"
+        },
+        "mwi_send_unsoliciated_updates": {
+            "default": true,
+            "description": "callflow mwi send unsoliciated updates",
+            "type": "boolean"
+        },
+        "post_answer_delay": {
+            "default": 100,
+            "description": "callflow post answer delay",
+            "type": "integer"
+        },
+        "ring_ready_offnet": {
+            "default": true,
+            "description": "callflow ring ready offnet",
+            "type": "boolean"
+        },
+        "route_win_timeout": {
+            "default": 3000,
+            "description": "callflow route win timeout",
+            "type": "integer"
+        },
+        "singular_call_hook_url": {
+            "default": "",
+            "description": "callflow singular call hook url",
+            "type": "string"
+        },
+        "voicemail": {
+            "properties": {
+                "delete_after_notify": {
+                    "properties": {
+                        "default": false,
+                        "description": "callflow delete after notify",
+                        "type": "boolean"
+                    }
+                },
+                "extension": {
+                    "properties": {
+                        "default": "mp3",
+                        "description": "callflow extension",
+                        "type": "string"
+                    }
+                },
+                "max_box_number_length": {
+                    "properties": {
+                        "default": 15,
+                        "description": "callflow maximum box number length",
+                        "type": "integer"
+                    }
+                },
+                "max_message_count": {
+                    "properties": {
+                        "default": 100,
+                        "description": "callflow maximum message count",
+                        "type": "integer"
+                    }
+                },
+                "max_message_length": {
+                    "properties": {
+                        "default": 500,
+                        "description": "callflow maximum message length",
+                        "type": "integer"
+                    }
+                },
+                "max_pin_length": {
+                    "properties": {
+                        "default": 6,
+                        "description": "callflow maximum pin length",
+                        "type": "integer"
+                    }
+                },
+                "message_retention_duration": {
+                    "properties": {
+                        "default": 93,
+                        "description": "callflow message retention duration",
+                        "type": "integer"
+                    }
+                },
+                "min_message_size": {
+                    "properties": {
+                        "default": 500,
+                        "description": "callflow minimum message size",
+                        "type": "integer"
+                    }
+                },
+                "save_after_notify": {
+                    "properties": {
+                        "default": false,
+                        "description": "callflow save after notify",
+                        "type": "boolean"
+                    }
+                }
+            }
+        }
+    },
+    "required": true,
+    "type": "object"
+}

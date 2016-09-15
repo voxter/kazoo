@@ -1,12 +1,11 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2013, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
 %%% @contributors
 %%%-------------------------------------------------------------------
 -module(kz_dataconnection_sup).
-
 -behaviour(supervisor).
 
 -include("kz_data.hrl").
@@ -17,7 +16,8 @@
 -export([add/1]).
 -export([init/1]).
 
--define(CHILDREN, [?WORKER('kz_dataconnection')]).
+-define(CHILDREN, [?WORKER('kz_dataconnection')
+                  ]).
 
 %% ===================================================================
 %% API functions
@@ -31,6 +31,7 @@
 start_link() ->
     supervisor:start_link({'local', ?SERVER}, ?MODULE, []).
 
+-spec add(data_connection()) -> sup_startchild_ret().
 add(Connection) ->
     supervisor:start_child(?SERVER, [Connection]).
 

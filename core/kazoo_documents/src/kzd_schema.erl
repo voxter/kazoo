@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2015, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%% General schema manipulation
 %%% @end
@@ -9,8 +9,8 @@
 -module(kzd_schema).
 
 -export([find_schema/1
-         ,properties/2
-         ,max_length/2
+        ,properties/2
+        ,max_length/2
         ]).
 
 -include("kz_documents.hrl").

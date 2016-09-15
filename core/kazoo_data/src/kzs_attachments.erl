@@ -11,10 +11,10 @@
 
 %% Attachment-related
 -export([fetch_attachment/4
-         ,stream_attachment/5
-         ,put_attachment/6
-         ,delete_attachment/5
-         ,attachment_url/6
+        ,stream_attachment/5
+        ,put_attachment/6
+        ,delete_attachment/5
+        ,attachment_url/6
         ]).
 
 
@@ -121,8 +121,8 @@ attachment_handler_jobj(Handler, Props) ->
 
 -spec handle_put_attachment(map(), kz_json:object(), ne_binary(), ne_binary(), ne_binary(), ne_binary()
                            , kz_proplist(), kz_proplist()) ->
-                            {'ok', kz_json:object()} |
-                            data_error().
+                                   {'ok', kz_json:object()} |
+                                   data_error().
 
 handle_put_attachment(#{att_post_handler := 'stub'
                        ,server := {App, Conn}
@@ -147,6 +147,9 @@ delete_attachment(#{server := {App, Conn}}, DbName, DocId, AName, Options) ->
     kzs_cache:flush_cache_doc(DbName, DocId),
     App:delete_attachment(Conn, DbName, DocId, AName, Options).
 
+-spec attachment_url(map(), ne_binary(), ne_binary(), ne_binary(), api_atom(), kz_proplist()) ->
+                            ne_binary() |
+                            {'proxy', tuple()}.
 attachment_url(#{att_proxy := 'true'}, DbName, DocId, AttachmentId, 'undefined', Options) ->
     {'proxy', {DbName, DocId, AttachmentId, Options}};
 attachment_url(#{server := {App, Conn}}, DbName, DocId, AttachmentId, 'undefined', Options) ->

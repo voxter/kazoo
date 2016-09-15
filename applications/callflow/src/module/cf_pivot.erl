@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%% Accept third-party dialplan
 %%% "data":{
@@ -14,6 +14,8 @@
 %%%   James Aimonetti
 %%%-------------------------------------------------------------------
 -module(cf_pivot).
+
+-behaviour(gen_cf_action).
 
 -include("callflow.hrl").
 
@@ -41,11 +43,11 @@
 handle(Data, Call) ->
     Prop = props:filter_empty(
              [{<<"Call">>, kapps_call:to_json(Call)}
-              ,{<<"Voice-URI">>, maybe_use_variable(Data, Call)}
-              ,{<<"CDR-URI">>, kz_json:get_value(<<"cdr_url">>, Data)}
-              ,{<<"Request-Format">>, kz_json:get_value(<<"req_format">>, Data)}
-              ,{<<"HTTP-Method">>, kzt_util:http_method(kz_json:get_value(<<"method">>, Data, 'get'))}
-              ,{<<"Debug">>, kz_json:is_true(<<"debug">>, Data, 'false')}
+             ,{<<"Voice-URI">>, maybe_use_variable(Data, Call)}
+             ,{<<"CDR-URI">>, kz_json:get_value(<<"cdr_url">>, Data)}
+             ,{<<"Request-Format">>, kz_json:get_value(<<"req_format">>, Data)}
+             ,{<<"HTTP-Method">>, kzt_util:http_method(kz_json:get_value(<<"method">>, Data, 'get'))}
+             ,{<<"Debug">>, kz_json:is_true(<<"debug">>, Data, 'false')}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     kapi_pivot:publish_req(Prop),

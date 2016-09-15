@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%% "data":{"id":"doc_id"}
 %%% @end
@@ -7,6 +7,8 @@
 %%%   Karl Anderson
 %%%-------------------------------------------------------------------
 -module(cf_play).
+
+-behaviour(gen_cf_action).
 
 -include("callflow.hrl").
 

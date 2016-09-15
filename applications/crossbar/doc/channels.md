@@ -5,17 +5,31 @@
 
 The Channels API allows queries to find active channels for an account, a user, or a device. Given a call-id for a channel, a limited set of commands are allowed to be executed against that channel (such as hangup, transfer, or play media).
 
-#### Fetch active channels
+#### Fetch active channels system wide.
+
+For superduper admin only.
+Be sure to set system_config->crossbar.channels->system_wide_channels_list flag to 'true'.
+
+> GET /v2/channels
+
+```shell
+curl -v -X GET \
+    -H "Content-Type: application/json" \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/channels
+```
+
+#### Fetch active channels for an account
 
 > GET /v2/accounts/{ACCOUNT_ID}/channels
 
-```curl
+```shell
 curl -v -X GET \
     -H "Content-Type: application/json" \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/channels
 {
-    "auth_token": "b72c847cbb652606e1d68ed399aff89e",
+    "auth_token": "{AUTH_TOKEN}",
     "data": [
         {
             "answered": true,
@@ -41,7 +55,7 @@ curl -v -X GET \
 
 > GET /v2/accounts/{ACCOUNT_ID}/users/{USER_ID}/channels
 
-```curl
+```shell
 curl -v -X GET \
     -H "Content-Type: application/json" \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
@@ -50,7 +64,7 @@ curl -v -X GET \
 
 > GET /v2/accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}/channels
 
-```curl
+```shell
 curl -v -X GET \
     -H "Content-Type: application/json" \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
@@ -61,7 +75,7 @@ curl -v -X GET \
 
 > GET /v2/accounts/{ACCOUNT_ID}/channels/{UUID}
 
-```curl
+```shell
 curl -v -X GET \
     -H "Content-Type: application/json" \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
@@ -74,7 +88,7 @@ curl -v -X GET \
 
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
-`action` | What to execute on the channel | `string('transfer', 'hangup', 'callflow')` | | `true`
+`action` | What to execute on the channel | `string('transfer', 'hangup', 'callflow', 'intercept')` | | `true`
 `action.transfer` | Transfers the `{UUID}` leg to the `target` extension/DID and places the other leg on hold | | |
 `target` | The extension/DID to transfer the `{UUID}` to | string() | |
 `takeback_dtmf` | DTMF to cancel the transfer | `string("0".."9","*","#")` | |
@@ -83,10 +97,14 @@ Key | Description | Type | Default | Required
 `action.callflow` | Executes a callflow ID on the `{UUID}` | | |
 `id` | Callflow ID to execute | `string()` | |
 `action.hangup` | Hangup the `{UUID}` | | |
+`action.intercept` | Intercept `{UUID}` to `target` and hangup the other leg| | |
+`target_type` | Type of `target` | `string('device', 'user')` | | `true`
+`target_id` | Id of device to which current channel will be bridged | `string()` | | `true`
+`unbridged_only` | Intercept only unbridged channel | `boolean()` | `true` | 
 
 > POST /v2/accounts/{ACCOUNT_ID}/channels/{UUID}
 
-```curl
+```shell
 curl -v -X POST \
     -H "Content-Type: application/json" \
     -H "X-Auth-Token: {AUTH_TOKEN}" \

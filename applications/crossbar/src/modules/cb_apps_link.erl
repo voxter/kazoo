@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% Listing of all expected v1 callbacks
@@ -12,10 +12,10 @@
 -module(cb_apps_link).
 
 -export([init/0
-         ,authorize/1
-         ,allowed_methods/1
-         ,resource_exists/1
-         ,validate/2
+        ,authorize/1
+        ,allowed_methods/1
+        ,resource_exists/1
+        ,validate/2
         ]).
 
 -include("crossbar.hrl").
@@ -94,7 +94,7 @@ resource_exists(?AUTHORIZE) -> 'true'.
 validate(Context, ?AUTHORIZE) ->
     JObj = kz_json:from_list(
              [{<<"auth_token">>, auth_info(Context)}
-              ,{<<"account">>, account_info(Context)}
+             ,{<<"account">>, account_info(Context)}
              ]
             ),
     crossbar_util:response(JObj, Context).

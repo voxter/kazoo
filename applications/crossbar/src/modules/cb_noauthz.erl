@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2012, VoIP INC
+%%% @copyright (C) 2011-2016, 2600Hz
 %%% @doc
 %%% NoAuthZ module
 %%%
@@ -13,7 +13,7 @@
 -module(cb_noauthz).
 
 -export([init/0
-         ,authorize/1
+        ,authorize/1
         ]).
 
 -include("crossbar.hrl").

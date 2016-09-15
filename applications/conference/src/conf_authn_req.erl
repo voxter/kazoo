@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2014, 2600Hz INC
+%%% @copyright (C) 2016, 2600Hz INC
 %%% @doc
 %%% Handle authn_req messages
 %%% @end
@@ -35,8 +35,8 @@ maybe_send_authn_resp(JObj) ->
 send_authn_resp(Password, JObj) ->
     Resp = props:filter_undefined(
              [{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
-              ,{<<"Auth-Password">>, Password}
-              ,{<<"Auth-Method">>, <<"password">>}
+             ,{<<"Auth-Password">>, Password}
+             ,{<<"Auth-Method">>, <<"password">>}
               | kz_api:default_headers(<<"directory">>, <<"authn_resp">>, ?APP_NAME, ?APP_VERSION)
              ]),
     lager:debug("sending SIP authentication reply, with credentials"),

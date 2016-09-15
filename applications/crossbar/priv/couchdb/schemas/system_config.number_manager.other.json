@@ -1,0 +1,20 @@
+{
+    "$schema": "http://json-schema.org/draft-03/schema#",
+    "_id": "system_config.number_manager.other",
+    "description": "Schema for number_manager.other system_config",
+    "properties": {
+        "default_country": {
+            "default": "US",
+            "description": "number_manager.other default country",
+            "type": "string"
+        },
+        "endpoints": {
+            "description": "number_manager.other endpoints"
+        },
+        "phonebook_url": {
+            "description": "number_manager.other phonebook url"
+        }
+    },
+    "required": true,
+    "type": "object"
+}

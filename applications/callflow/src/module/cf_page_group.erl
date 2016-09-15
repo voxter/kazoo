@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -7,6 +7,8 @@
 %%%   Karl Anderson
 %%%-------------------------------------------------------------------
 -module(cf_page_group).
+
+-behaviour(gen_cf_action).
 
 -include("callflow.hrl").
 
@@ -99,8 +101,8 @@ resolve_endpoint_ids([Member|Members], EndpointIds, Call) ->
                                               [{<<"device">>, EndpointId, Member}|Acc]
                                       end
                               end
-                              ,[{Type, Id, 'undefined'}|EndpointIds]
-                              ,kz_attributes:owned_by(Id, <<"device">>, Call)),
+                             ,[{Type, Id, 'undefined'}|EndpointIds]
+                             ,kz_attributes:owned_by(Id, <<"device">>, Call)),
             resolve_endpoint_ids(Members, Ids, Call);
         <<"device">> ->
             resolve_endpoint_ids(Members, [{Type, Id, Member}|EndpointIds], Call)
@@ -116,9 +118,9 @@ get_group_members(Member, Id, Call) ->
             DefaultDelay = kz_json:get_value(<<"delay">>, Member),
             DefaultTimeout = kz_json:get_value(<<"timeout">>, Member),
             [kz_json:set_values([{<<"endpoint_type">>, kz_json:get_value([Key, <<"type">>], Endpoints)}
-                                 ,{<<"id">>, Key}
-                                 ,{<<"delay">>, kz_json:get_value([Key, <<"delay">>], Endpoints, DefaultDelay)}
-                                 ,{<<"timeout">>, kz_json:get_value([Key, <<"timeout">>], Endpoints, DefaultTimeout)}
+                                ,{<<"id">>, Key}
+                                ,{<<"delay">>, kz_json:get_value([Key, <<"delay">>], Endpoints, DefaultDelay)}
+                                ,{<<"timeout">>, kz_json:get_value([Key, <<"timeout">>], Endpoints, DefaultTimeout)}
                                 ], Member)
              || Key <- kz_json:get_keys(Endpoints)
             ];

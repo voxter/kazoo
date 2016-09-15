@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%% Init to be done
 %%% @end
@@ -9,15 +9,17 @@
 -module(kazoo_apps_init).
 
 -export([start_link/0
-         ,init/0
+        ,init/0
         ]).
 
 -include("kazoo_apps.hrl").
 
+-spec start_link() -> startlink_ret().
 start_link() ->
     _ = kz_util:spawn(fun init/0),
     'ignore'.
 
+-spec init() -> 'ok'.
 init() ->
     kz_util:put_callid(?MODULE),
     case kz_config:get_atom('kazoo_apps', 'cookie') of

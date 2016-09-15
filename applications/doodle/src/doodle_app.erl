@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -22,7 +22,7 @@ start(_Type, _Args) ->
     _ = declare_exchanges(),
     case kapps_config:get(?CONFIG_CAT, <<"reschedule">>) of
         'undefined' ->
-            case kz_json:load_fixture_from_file(?APP, <<"reschedule.json">>) of
+            case kz_json:load_fixture_from_file(?APP, <<"fixtures">>, <<"reschedule.json">>) of
                 {'error', Err} ->
                     lager:error("default sms is 'undefined' and cannot read default from file : ~p", [Err]);
                 JObj ->

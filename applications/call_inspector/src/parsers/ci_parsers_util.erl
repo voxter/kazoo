@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (c) 2010-2015, 2600Hz
+%%% @copyright (c) 2010-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -15,7 +15,7 @@
 -export([parse_interval/0]).
 -export([make_name/1]).
 -export([call_id/1
-         ,c_seq/1
+        ,c_seq/1
         ]).
 
 -include_lib("kazoo/include/kz_types.hrl").
@@ -35,7 +35,7 @@ timestamp(<<YYYY:4/binary, "-", MM:2/binary, "-", DD:2/binary, "T"
     1.0e-6 * kz_util:to_integer(Micro) +
         calendar:datetime_to_gregorian_seconds(
           {{kz_util:to_integer(YYYY), kz_util:to_integer(MM), kz_util:to_integer(DD)}
-           ,{kz_util:to_integer(HH), kz_util:to_integer(MMM), kz_util:to_integer(SS)}
+          ,{kz_util:to_integer(HH), kz_util:to_integer(MMM), kz_util:to_integer(SS)}
           }
          );
 timestamp({_,_,_} = TS) ->
@@ -45,8 +45,8 @@ timestamp(_) -> 'undefined'.
 -spec open_file(iodata()) -> file:io_device().
 open_file(Filename) ->
     Options = ['read','append'      %% Read whole file then from its end
-               ,'binary'            %% Return binaries instead of lists
-               ,'raw','read_ahead'  %% Faster access to file
+              ,'binary'            %% Return binaries instead of lists
+              ,'raw','read_ahead'  %% Faster access to file
               ],
     case file:open(Filename, Options) of
         {'ok', IoDevice} -> IoDevice;
@@ -58,7 +58,10 @@ open_file(Filename) ->
 parse_interval() ->
     2 * ?MILLISECONDS_IN_SECOND.  %% Milliseconds
 
--spec make_name(ne_binary() | {'parser_args', ne_binary(), any()}) -> atom().
+-type parser_args() :: {'parser_args', ne_binary(), any()} |
+                       {'parser_args', file:filename_all(), ne_binary(), any()}.
+
+-spec make_name(ne_binary() | parser_args()) -> atom().
 make_name(Bin)
   when is_binary(Bin) ->
     binary_to_atom(Bin, 'utf8');

@@ -3,7 +3,7 @@
 -include_lib("kazoo/include/kz_log.hrl").
 -include_lib("kazoo/include/kz_api.hrl").
 -include_lib("kazoo_number_manager/include/knm_phone_number.hrl").
--include_lib("kazoo_apps/src/kapps_call_command_types.hrl").
+-include_lib("kazoo_call/include/kapps_call_command_types.hrl").
 -include_lib("kazoo_documents/include/kazoo_documents.hrl").
 
 -type cf_exe_response() :: {'stop'} |
@@ -22,10 +22,10 @@
 -type cf_api_bridge_return() :: {'error', 'timeout' | kz_json:object()} |
                                 {'fail', kz_json:object()} |
                                 {'ok', kz_json:object()}.
--type cf_api_binary() :: binary() | 'undefined'.
 
 -define(APP_NAME, <<"callflow">>).
 -define(APP_VERSION, <<"4.0.0">> ).
+-define(CF_CONFIG_CAT, ?APP_NAME).
 
 -define(RECORDED_NAME_KEY, [<<"media">>, <<"name">>]).
 -define(CF_RECORDING_ID_KEY, <<"Recording-ID">>).
@@ -41,17 +41,19 @@
 
 -define(DEFAULT_TIMEOUT_S, 20).
 
--define(CF_CONFIG_CAT, <<"callflow">>).
-
 -define(MANUAL_PRESENCE_DOC, <<"manual_presence">>).
 
 -define(CACHE_NAME, 'callflow_cache').
 
 -define(DEFAULT_TIMEZONE
-        ,kapps_config:get(<<"accounts">>, <<"default_timezone">>, <<"America/Los_Angeles">>)
+       ,kapps_config:get(<<"accounts">>, <<"default_timezone">>, <<"America/Los_Angeles">>)
        ).
 
 -define(RESTRICTED_ENDPOINT_KEY, <<"Restricted-Endpoint-ID">>).
+
+-define(RESOURCE_TYPES_HANDLED, [<<"audio">>, <<"video">>]).
+-define(CF_FLOW_CACHE_KEY(Number, AccountId), {'cf_flow', Number, AccountId}).
+-define(CF_PATTERN_CACHE_KEY(AccountId), {'cf_patterns', AccountId}).
 
 -define(CALLFLOW_HRL, 'true').
 -endif.

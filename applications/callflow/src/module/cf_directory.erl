@@ -37,6 +37,8 @@
 %%%-------------------------------------------------------------------
 -module(cf_directory).
 
+-behaviour(gen_cf_action).
+
 -include("callflow.hrl").
 
 -export([handle/2]).
@@ -75,25 +77,25 @@
 %%------------------------------------------------------------------------------
 -record(directory_user, {
           first_name :: ne_binary()
-          ,last_name :: ne_binary()
-          ,full_name :: ne_binary()
-          ,first_last_keys :: ne_binary() % DTMF-version of first, last
-          ,last_first_keys :: ne_binary() % DTMF-version of last, first
-          ,callflow_id :: ne_binary() % what callflow to use on match
-          ,name_audio_id :: api_binary() % pre-recorded audio of user's name
+                        ,last_name :: ne_binary()
+                        ,full_name :: ne_binary()
+                        ,first_last_keys :: ne_binary() % DTMF-version of first, last
+                        ,last_first_keys :: ne_binary() % DTMF-version of last, first
+                        ,callflow_id :: ne_binary() % what callflow to use on match
+                        ,name_audio_id :: api_binary() % pre-recorded audio of user's name
          }).
 -type directory_user() :: #directory_user{}.
 -type directory_users() :: [directory_user()].
 
 -record(directory, {
           sort_by = 'last' :: 'first' | 'last'
-          ,search_fields = 'both' :: 'first' | 'last' | 'both'
-          ,min_dtmf :: pos_integer()
-          ,max_dtmf :: non_neg_integer()
-          ,confirm_match = 'false' :: boolean()
-          ,digits_collected = <<>> :: binary()
-          ,users = [] :: directory_users()
-          ,curr_users = [] :: directory_users()
+                   ,search_fields = 'both' :: 'first' | 'last' | 'both'
+                   ,min_dtmf :: pos_integer()
+                   ,max_dtmf :: non_neg_integer()
+                   ,confirm_match = 'false' :: boolean()
+                   ,digits_collected = <<>> :: binary()
+                   ,users = [] :: directory_users()
+                   ,curr_users = [] :: directory_users()
          }).
 -type directory() :: #directory{}.
 
@@ -111,21 +113,21 @@
 handle(Data, Call) ->
     {'ok', DirJObj} = kz_datamgr:open_cache_doc(kapps_call:account_db(Call)
                                                ,kz_doc:id(Data)
-                                              ),
+                                               ),
     kapps_call_command:answer(Call),
 
     case get_directory_listing(kapps_call:account_db(Call)
-                               ,kz_doc:id(DirJObj)
+                              ,kz_doc:id(DirJObj)
                               )
     of
         {'ok', Users} ->
             State = #directory{
                        sort_by = get_sort_by(kz_json:get_value(<<"sort_by">>, DirJObj, <<"last_name">>))
-                       ,search_fields = get_search_fields(kz_json:get_value(<<"search_fields">>, DirJObj, <<"both">>))
-                       ,min_dtmf = kz_json:get_integer_value(<<"min_dtmf">>, DirJObj, 3)
-                       ,max_dtmf = kz_json:get_integer_value(<<"max_dtmf">>, DirJObj, 0)
-                       ,confirm_match = kz_json:is_true(<<"confirm_match">>, DirJObj, 'false')
-                       ,digits_collected = <<>>
+                              ,search_fields = get_search_fields(kz_json:get_value(<<"search_fields">>, DirJObj, <<"both">>))
+                              ,min_dtmf = kz_json:get_integer_value(<<"min_dtmf">>, DirJObj, 3)
+                              ,max_dtmf = kz_json:get_integer_value(<<"max_dtmf">>, DirJObj, 0)
+                              ,confirm_match = kz_json:is_true(<<"confirm_match">>, DirJObj, 'false')
+                              ,digits_collected = <<>>
                       },
             Users1 = sort_users(Users, State#directory.sort_by),
             _ = log(Users1),
@@ -152,17 +154,17 @@ directory_start(Call, State, CurrUsers) ->
 -spec collect_digits(kapps_call:call(), directory(), directory_users(), binary()) -> 'ok'.
 collect_digits(Call, State, CurrUsers, DTMF) ->
     case kapps_call_command:collect_digits(100, ?TIMEOUT_DTMF, ?TIMEOUT_DTMF, Call) of
-	{'error', _E} ->
-	    lager:error("failed to collect digits: ~p", [_E]),
-	    cf_exe:stop(Call);
-	{'ok', <<>>} ->
-	    kapps_call_command:audio_macro([{'prompt', ?PROMPT_SPECIFY_MINIMUM}], Call),
-	    directory_start(Call, State, CurrUsers);
+        {'error', _E} ->
+            lager:error("failed to collect digits: ~p", [_E]),
+            cf_exe:stop(Call);
+        {'ok', <<>>} ->
+            kapps_call_command:audio_macro([{'prompt', ?PROMPT_SPECIFY_MINIMUM}], Call),
+            directory_start(Call, State, CurrUsers);
         {'ok', <<"0">>} ->
             lager:info("caller chose to return to the main menu"),
             cf_exe:continue(Call);
-	{'ok', DTMFS} ->
-	    maybe_match(Call, add_dtmf(add_dtmf(State, DTMF), DTMFS), CurrUsers)
+        {'ok', DTMFS} ->
+            maybe_match(Call, add_dtmf(add_dtmf(State, DTMF), DTMFS), CurrUsers)
     end.
 
 -spec maybe_match(kapps_call:call(), directory(), directory_users()) -> 'ok'.
@@ -262,8 +264,8 @@ route_to_match(Call, Callflow) ->
                        {'ok', binary()}.
 play_user(Call, UsernameTuple, _MatchNum) ->
     play_and_collect(Call, [{'prompt', ?PROMPT_RESULT_NUMBER}
-                            ,UsernameTuple
-                            ,{'prompt', ?PROMPT_RESULT_MENU}
+                           ,UsernameTuple
+                           ,{'prompt', ?PROMPT_RESULT_MENU}
                            ]).
 
 -spec play_invalid(kapps_call:call()) -> ne_binary().
@@ -276,8 +278,8 @@ play_confirm_match(Call, User) ->
     lager:info("playing confirm_match with username: ~p", [UserName]),
 
     play_and_collect(Call, [{'prompt', ?PROMPT_FOUND}
-                            ,UserName
-                            ,{'prompt', ?PROMPT_CONFIRM_MENU, ?ANY_DIGIT}
+                           ,UserName
+                           ,{'prompt', ?PROMPT_CONFIRM_MENU, ?ANY_DIGIT}
                            ]).
 
 -spec username_audio_macro(kapps_call:call(), directory_user()) -> kapps_call_command:audio_macro_prompt().
@@ -293,17 +295,17 @@ maybe_play_media(Call, User, MediaId) ->
     AccountDb = kapps_call:account_db(Call),
 
     case kz_datamgr:open_cache_doc(AccountDb, MediaId) of
-	{'ok', Doc}    ->
-	    case kz_doc:attachments(Doc) of
-		'undefined'  -> {'tts', <<39, (full_name(User))/binary, 39>>};
-		_ValidAttach -> {'play', <<$/, AccountDb/binary, $/, MediaId/binary>>}
-	    end;
-	{'error', _} -> {'tts', <<39, (full_name(User))/binary, 39>>}
+        {'ok', Doc}    ->
+            case kz_doc:attachments(Doc) of
+                'undefined'  -> {'tts', <<39, (full_name(User))/binary, 39>>};
+                _ValidAttach -> {'play', <<$/, AccountDb/binary, $/, MediaId/binary>>}
+            end;
+        {'error', _} -> {'tts', <<39, (full_name(User))/binary, 39>>}
     end.
 
 -spec play_directory_instructions(kapps_call:call(), 'first' | 'last' | 'both' | ne_binary()) ->
                                          {'ok', binary()} |
-					 {'error', atom()}.
+                                         {'error', atom()}.
 play_directory_instructions(Call, 'first') ->
     play_and_collect(Call, [{'prompt', ?PROMPT_ENTER_PERSON_FIRSTNAME}]);
 play_directory_instructions(Call, 'last') ->
@@ -321,10 +323,10 @@ play_no_users_found(Call) ->
 
 -spec play_and_collect(kapps_call:call(), kapps_call_command:audio_macro_prompts()) ->
                               {'ok', binary()} |
-			      {'error', atom()}.
+                              {'error', atom()}.
 -spec play_and_collect(kapps_call:call(), kapps_call_command:audio_macro_prompts(), non_neg_integer()) ->
                               {'ok', binary()} |
-			      {'error', atom()}.
+                              {'error', atom()}.
 play_and_collect(Call, AudioMacro) ->
     play_and_collect(Call, AudioMacro, 1).
 play_and_collect(Call, AudioMacro, NumDigits) ->
@@ -401,12 +403,12 @@ get_directory_user(U, CallflowId) ->
 
     #directory_user{
        first_name = First
-       ,last_name = Last
-       ,full_name = <<First/binary, " ", Last/binary>>
-       ,first_last_keys = cf_util:alpha_to_dialpad(<<First/binary, Last/binary>>)
-       ,last_first_keys = cf_util:alpha_to_dialpad(<<Last/binary, First/binary>>)
-       ,callflow_id = CallflowId
-       ,name_audio_id = kz_json:get_value(?RECORDED_NAME_KEY, U)
+                   ,last_name = Last
+                   ,full_name = <<First/binary, " ", Last/binary>>
+                   ,first_last_keys = cf_util:alpha_to_dialpad(<<First/binary, Last/binary>>)
+                   ,last_first_keys = cf_util:alpha_to_dialpad(<<Last/binary, First/binary>>)
+                   ,callflow_id = CallflowId
+                   ,name_audio_id = kz_json:get_value(?RECORDED_NAME_KEY, U)
       }.
 
 -spec sort_users(directory_users(), 'first' | 'last') -> directory_users().
@@ -442,44 +444,44 @@ filter_users(Users, DTMFs, 'last') ->
     lager:info("filtering users by ~s", [DTMFs]),
     Size = byte_size(DTMFs),
     queue:to_list(
-        lists:foldl(
-          fun(U, Q) ->
-                  case maybe_dtmf_matches(DTMFs, Size, last_first_dtmfs(U)) of
-                      'true' -> queue:in(U, Q);
-                      'false' -> Q
-                  end
-          end, queue:new(), Users
-         )
+      lists:foldl(
+        fun(U, Q) ->
+                case maybe_dtmf_matches(DTMFs, Size, last_first_dtmfs(U)) of
+                    'true' -> queue:in(U, Q);
+                    'false' -> Q
+                end
+        end, queue:new(), Users
+       )
      );
 filter_users(Users, DTMFs, 'first') ->
     lager:info("filtering users by ~s", [DTMFs]),
     Size = byte_size(DTMFs),
     queue:to_list(
-        lists:foldl(
-          fun(U, Q) ->
-                  case maybe_dtmf_matches(DTMFs, Size, first_last_dtmfs(U)) of
-                      'true' -> queue:in(U, Q);
-                      'false' -> Q
-                  end
-          end, queue:new(), Users
-         )
+      lists:foldl(
+        fun(U, Q) ->
+                case maybe_dtmf_matches(DTMFs, Size, first_last_dtmfs(U)) of
+                    'true' -> queue:in(U, Q);
+                    'false' -> Q
+                end
+        end, queue:new(), Users
+       )
      );
 filter_users(Users, DTMFs, 'both') ->
     lager:info("filtering users by ~s", [DTMFs]),
     Size = byte_size(DTMFs),
     queue:to_list(
-        lists:foldl(
-          fun(U, Q) ->
-                  case maybe_dtmf_matches(DTMFs, Size, first_last_dtmfs(U)) of
-                      'true' -> queue:in(U, Q);
-                      'false' ->
-                          case maybe_dtmf_matches(DTMFs, Size, last_first_dtmfs(U)) of
-                              'true' -> queue:in(U, Q);
-                              'false' -> Q
-                          end
-                  end
-          end, queue:new(), Users
-         )
+      lists:foldl(
+        fun(U, Q) ->
+                case maybe_dtmf_matches(DTMFs, Size, first_last_dtmfs(U)) of
+                    'true' -> queue:in(U, Q);
+                    'false' ->
+                        case maybe_dtmf_matches(DTMFs, Size, last_first_dtmfs(U)) of
+                            'true' -> queue:in(U, Q);
+                            'false' -> Q
+                        end
+                end
+        end, queue:new(), Users
+       )
      ).
 
 -spec maybe_dtmf_matches(ne_binary(), pos_integer(), ne_binary()) -> boolean().

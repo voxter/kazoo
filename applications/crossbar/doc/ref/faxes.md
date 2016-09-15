@@ -13,9 +13,9 @@ Key | Description | Type | Default | Required
 `document.host` | The host header to be used when fetching for transmission | `string` |   | `false`
 `document.method` | The method that should be used to reteive the document | `string('get', 'post')` | `get` | `false`
 `document.referer` | The referer header to be used when fetching for transmission | `string` |   | `false`
-`document.url` | The url of the fax document | `string` |   | `false`
+`document.url` | The url of the fax document | `string` |   | `true`
 `from_name` | The sender name for the fax | `string` |   | `false`
-`from_number` | The sender number for the fax | `string` |   | `false`
+`from_number` | The sender number for the fax | `string` |   | `true`
 `notifications` | Status notifications | `object` |   | `false`
 `notifications.email` | Email notifications | `object` |   | `false`
 `notifications.email.send_to` | A list or string of email recipent(s) | `string, array(string)` |   | `false`
@@ -23,13 +23,13 @@ Key | Description | Type | Default | Required
 `notifications.sms.send_to` | A list or string of sms recipent(s) | `string, array(string)` |   | `false`
 `retries` | The number of times to retry | `integer` | `1` | `false`
 `to_name` | The recipient name for the fax | `string` |   | `false`
-`to_number` | The recipient number for the fax | `string` |   | `false`
-`tx_result` | The result of a transmission attempt | `object` | `{}` | `false`
+`to_number` | The recipient number for the fax | `string` |   | `true`
+`tx_result` | The result of a transmission attempt | `object` |   | `false`
 `tx_result.error_message` | A description of any error that occured | `string` | "" | `false`
 `tx_result.fax_bad_rows` | The number of bad rows | `integer` | `0` | `false`
 `tx_result.fax_error_correction` | True if fax error correction was used | `boolean` | `false` | `false`
 `tx_result.fax_receiver_id` | The receiver id reported by the remote fax device | `string` | "" | `false`
-`tx_result.fax_speed` | The speed achieved during transmission | `integer` | `0` | `false`
+`tx_result.fax_speed` | The speed (Baud-Rate) achieved during transmission | `integer` | `0` | `false`
 `tx_result.pages_sent` | The number of pages transmitted | `integer` | `0` | `false`
 `tx_result.success` | True if the fax transmission was successful | `boolean` | `false` | `false`
 `tx_result.time_elapsed` | The amount of time from submition to completion | `integer` | `0` | `false`
@@ -39,7 +39,7 @@ Key | Description | Type | Default | Required
 
 > PUT /v2/accounts/{ACCOUNT_ID}/faxes
 
-```curl
+```shell
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes
@@ -49,7 +49,7 @@ curl -v -X PUT \
 
 > GET /v2/accounts/{ACCOUNT_ID}/faxes/outgoing
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/outgoing
@@ -59,7 +59,7 @@ curl -v -X GET \
 
 > PUT /v2/accounts/{ACCOUNT_ID}/faxes/outgoing
 
-```curl
+```shell
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/outgoing
@@ -69,7 +69,7 @@ curl -v -X PUT \
 
 > GET /v2/accounts/{ACCOUNT_ID}/faxes/outbox
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/outbox
@@ -79,7 +79,7 @@ curl -v -X GET \
 
 > GET /v2/accounts/{ACCOUNT_ID}/faxes/incoming
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/incoming
@@ -89,7 +89,7 @@ curl -v -X GET \
 
 > GET /v2/accounts/{ACCOUNT_ID}/faxes/inbox
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/inbox
@@ -99,7 +99,7 @@ curl -v -X GET \
 
 > GET /v2/accounts/{ACCOUNT_ID}/faxes/smtplog
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/smtplog
@@ -107,19 +107,19 @@ curl -v -X GET \
 
 #### Fetch
 
-> GET /v2/accounts/{ACCOUNT_ID}/faxes/outgoing/{FAXJOB_ID}
+> GET /v2/accounts/{ACCOUNT_ID}/faxes/outgoing/{FAX_JOB_ID}
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/outgoing/{FAXJOB_ID}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/outgoing/{FAX_JOB_ID}
 ```
 
 #### Remove
 
 > DELETE /v2/accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}
 
-```curl
+```shell
 curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}
@@ -129,8 +129,18 @@ curl -v -X DELETE \
 
 > GET /v2/accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}
 
-```curl
+```shell
 curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}
+```
+
+#### Create
+
+> PUT /v2/accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}
+
+```shell
+curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}
 ```
@@ -139,7 +149,7 @@ curl -v -X GET \
 
 > DELETE /v2/accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}
 
-```curl
+```shell
 curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}
@@ -149,8 +159,18 @@ curl -v -X DELETE \
 
 > GET /v2/accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}
 
-```curl
+```shell
 curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}
+```
+
+#### Create
+
+> PUT /v2/accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}
+
+```shell
+curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}
 ```
@@ -159,7 +179,7 @@ curl -v -X GET \
 
 > GET /v2/accounts/{ACCOUNT_ID}/faxes/incoming/{FAX_ID}
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/incoming/{FAX_ID}
@@ -169,7 +189,7 @@ curl -v -X GET \
 
 > GET /v2/accounts/{ACCOUNT_ID}/faxes/smtplog/{ATTEMPT_ID}
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/smtplog/{ATTEMPT_ID}
@@ -179,7 +199,7 @@ curl -v -X GET \
 
 > DELETE /v2/accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}/attachment
 
-```curl
+```shell
 curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}/attachment
@@ -189,7 +209,7 @@ curl -v -X DELETE \
 
 > GET /v2/accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}/attachment
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}/attachment
@@ -199,7 +219,7 @@ curl -v -X GET \
 
 > DELETE /v2/accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}/attachment
 
-```curl
+```shell
 curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}/attachment
@@ -209,7 +229,7 @@ curl -v -X DELETE \
 
 > GET /v2/accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}/attachment
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}/attachment

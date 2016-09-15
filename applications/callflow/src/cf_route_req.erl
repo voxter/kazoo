@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%% handler for route requests, responds if callflows match
 %%% @end
@@ -12,10 +12,8 @@
 
 -include("callflow.hrl").
 
--define(RESOURCE_TYPES_HANDLED, [<<"audio">>, <<"video">>]).
-
 -define(DEFAULT_METAFLOWS(AccountId)
-        ,kapps_account_config:get(AccountId, <<"metaflows">>, <<"default_metaflow">>, 'false')
+       ,kapps_account_config:get(AccountId, <<"metaflows">>, <<"default_metaflow">>, 'false')
        ).
 
 -define(DEFAULT_ROUTE_WIN_TIMEOUT, 3000).
@@ -27,20 +25,20 @@ handle_req(JObj, Props) ->
     _ = kz_util:put_callid(JObj),
     'true' = kapi_route:req_v(JObj),
     Routines = [fun maybe_referred_call/1
-                ,fun maybe_device_redirected/1
+               ,fun maybe_device_redirected/1
                ],
     Call = kapps_call:exec(Routines, kapps_call:from_route_req(JObj)),
     case is_binary(kapps_call:account_id(Call))
         andalso callflow_should_respond(Call)
-        andalso callflow_resource_allowed(Call)
     of
         'true' ->
             lager:info("received request ~s asking if callflows can route this call", [kapi_route:fetch_id(JObj)]),
             AllowNoMatch = allow_no_match(Call),
-            case cf_util:lookup_callflow(Call) of
+            case cf_flow:lookup(Call) of
                 %% if NoMatch is false then allow the callflow or if it is true and we are able allowed
                 %% to use it for this call
-                {'ok', Flow, NoMatch} when (not NoMatch) orelse AllowNoMatch ->
+                {'ok', Flow, NoMatch} when (not NoMatch)
+                                           orelse AllowNoMatch ->
                     maybe_prepend_preflow(JObj, Props, Call, Flow, NoMatch);
                 {'ok', _, 'true'} ->
                     lager:info("only available callflow is a nomatch for a unauthorized call", []);
@@ -52,8 +50,8 @@ handle_req(JObj, Props) ->
     end.
 
 -spec maybe_prepend_preflow(kz_json:object(), kz_proplist()
-                            ,kapps_call:call(), kz_json:object()
-                            ,boolean()
+                           ,kapps_call:call(), kz_json:object()
+                           ,boolean()
                            ) -> 'ok'.
 maybe_prepend_preflow(JObj, Props, Call, Flow, NoMatch) ->
     AccountId = kapps_call:account_id(Call),
@@ -83,17 +81,17 @@ prepend_preflow(AccountId, PreflowId, Flow) ->
         {'ok', Doc} ->
             Children = kz_json:from_list([{<<"_">>, kz_json:get_value(<<"flow">>, Flow)}]),
             Preflow = kz_json:set_value(<<"children">>
-                                        ,Children
-                                        ,kz_json:get_value(<<"flow">>, Doc)
+                                       ,Children
+                                       ,kz_json:get_value(<<"flow">>, Doc)
                                        ),
             kz_json:set_value(<<"flow">>, Preflow, Flow)
     end.
 
 -spec maybe_reply_to_req(kz_json:object(), kz_proplist()
-                         ,kapps_call:call(), kz_json:object(), boolean()) -> 'ok'.
+                        ,kapps_call:call(), kz_json:object(), boolean()) -> 'ok'.
 maybe_reply_to_req(JObj, Props, Call, Flow, NoMatch) ->
     lager:info("callflow ~s in ~s satisfies request", [kz_doc:id(Flow)
-                                                       ,kapps_call:account_id(Call)
+                                                      ,kapps_call:account_id(Call)
                                                       ]),
     case maybe_consume_token(Call, Flow) of
         'false' -> 'ok';
@@ -186,15 +184,6 @@ callflow_should_respond(Call) ->
         _Else -> 'false'
     end.
 
--spec callflow_resource_allowed(kapps_call:call()) -> boolean().
-callflow_resource_allowed(Call) ->
-    is_resource_allowed(kapps_call:resource_type(Call)).
-
--spec is_resource_allowed(api_binary()) -> boolean().
-is_resource_allowed('undefined') -> 'true';
-is_resource_allowed(ResourceType) ->
-    lists:member(ResourceType, ?RESOURCE_TYPES_HANDLED).
-
 %%-----------------------------------------------------------------------------
 %% @private
 %% @doc
@@ -208,22 +197,22 @@ send_route_response(Flow, JObj, Call) ->
     AccountId = kapps_call:account_id(Call),
     Resp = props:filter_undefined(
              [{?KEY_MSG_ID, kz_api:msg_id(JObj)}
-              ,{?KEY_MSG_REPLY_ID, kapps_call:call_id_direct(Call)}
-              ,{<<"Routes">>, []}
-              ,{<<"Method">>, <<"park">>}
-              ,{<<"Transfer-Media">>, get_transfer_media(Flow, JObj)}
-              ,{<<"Ringback-Media">>, get_ringback_media(Flow, JObj)}
-              ,{<<"Pre-Park">>, pre_park_action(Call)}
-              ,{<<"From-Realm">>, kz_util:get_account_realm(AccountId)}
-              ,{<<"Custom-Channel-Vars">>, kapps_call:custom_channel_vars(Call)}
+             ,{?KEY_MSG_REPLY_ID, kapps_call:call_id_direct(Call)}
+             ,{<<"Routes">>, []}
+             ,{<<"Method">>, <<"park">>}
+             ,{<<"Transfer-Media">>, get_transfer_media(Flow, JObj)}
+             ,{<<"Ringback-Media">>, get_ringback_media(Flow, JObj)}
+             ,{<<"Pre-Park">>, pre_park_action(Call)}
+             ,{<<"From-Realm">>, kz_util:get_account_realm(AccountId)}
+             ,{<<"Custom-Channel-Vars">>, kapps_call:custom_channel_vars(Call)}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     ServerId = kz_api:server_id(JObj),
     Publisher = fun(P) -> kapi_route:publish_resp(ServerId, P) end,
     case kz_amqp_worker:call(Resp
-                             ,Publisher
-                             ,fun kapi_route:win_v/1
-                             ,?ROUTE_WIN_TIMEOUT
+                            ,Publisher
+                            ,fun kapi_route:win_v/1
+                            ,?ROUTE_WIN_TIMEOUT
                             )
     of
         {'ok', RouteWin} ->
@@ -257,7 +246,7 @@ get_ringback_media(Flow, JObj) ->
 %%-----------------------------------------------------------------------------
 -spec pre_park_action(kapps_call:call()) -> ne_binary().
 pre_park_action(Call) ->
-    case kapps_config:get_is_true(<<"callflow">>, <<"ring_ready_offnet">>, 'true')
+    case kapps_config:get_is_true(?CF_CONFIG_CAT, <<"ring_ready_offnet">>, 'true')
         andalso kapps_call:inception(Call) =/= 'undefined'
         andalso kapps_call:authorizing_type(Call) =:= 'undefined'
     of
@@ -276,16 +265,18 @@ pre_park_action(Call) ->
                          kapps_call:call().
 update_call(Flow, NoMatch, ControllerQ, Call) ->
     Props = [{'cf_flow_id', kz_doc:id(Flow)}
-             ,{'cf_flow', kz_json:get_value(<<"flow">>, Flow)}
-             ,{'cf_capture_group', kz_json:get_ne_value(<<"capture_group">>, Flow)}
-             ,{'cf_no_match', NoMatch}
-             ,{'cf_metaflow', kz_json:get_value(<<"metaflows">>, Flow, ?DEFAULT_METAFLOWS(kapps_call:account_id(Call)))}
+            ,{'cf_flow', kz_json:get_value(<<"flow">>, Flow)}
+            ,{'cf_capture_group', kz_json:get_ne_value(<<"capture_group">>, Flow)}
+            ,{'cf_capture_groups', kz_json:get_value(<<"capture_groups">>, Flow, kz_json:new())}
+            ,{'cf_no_match', NoMatch}
+            ,{'cf_metaflow', kz_json:get_value(<<"metaflows">>, Flow, ?DEFAULT_METAFLOWS(kapps_call:account_id(Call)))}
             ],
 
     Updaters = [{fun kapps_call:kvs_store_proplist/2, Props}
-                ,{fun kapps_call:set_controller_queue/2, ControllerQ}
-                ,{fun kapps_call:set_application_name/2, ?APP_NAME}
-                ,{fun kapps_call:set_application_version/2, ?APP_VERSION}
+               ,{fun kapps_call:set_controller_queue/2, ControllerQ}
+               ,{fun kapps_call:set_application_name/2, ?APP_NAME}
+               ,{fun kapps_call:set_application_version/2, ?APP_VERSION}
+               ,{fun kapps_call:insert_custom_channel_var/3, <<"CallFlow-ID">>, kz_doc:id(Flow)}
                ],
     kapps_call:exec(Updaters, Call).
 

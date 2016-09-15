@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%% Dialplan API commands
 %%% @end
@@ -17,77 +17,78 @@
 -export([optional_bridge_req_endpoint_headers/0]).
 
 -export([bridge/1, bridge_v/1, bridge_endpoint/1, bridge_endpoint_v/1
-         ,unbridge/1, unbridge_v/1
-         ,page/1, page_v/1
-         ,store/1, store_v/1, store_amqp_resp/1, store_amqp_resp_v/1
-         ,store_http_resp/1, store_http_resp_v/1
-         ,noop/1, noop_v/1
-         ,fetch/1, fetch_v/1
-         ,respond/1, respond_v/1
-         ,redirect/1, redirect_v/1
-         ,progress/1, progress_v/1
-         ,ring/1, ring_v/1
-         ,receive_fax/1, receive_fax_v/1
-         ,store_fax/1, store_fax_v/1
-         ,execute_extension/1, execute_extension_v/1
-         ,break/1, break_v/1
-         ,play/1, play_v/1, playstop/1, playstop_v/1
-         ,tts/1, tts_v/1
-         ,record/1, record_v/1
-         ,record_call/1, record_call_v/1
-         ,answer/1, answer_v/1
-         ,echo/1, echo_v/1
-         ,privacy/1, privacy_v/1
-         ,hold/1, hold_v/1
-         ,soft_hold/1, soft_hold_v/1
-         ,park/1, park_v/1
-         ,play_and_collect_digits/1, play_and_collect_digits_v/1
-         ,call_pickup/1, call_pickup_v/1
-         ,connect_leg/1, connect_leg_v/1
-         ,eavesdrop/1, eavesdrop_v/1
-         ,hangup/1, hangup_v/1
-         ,say/1, say_v/1
-         ,sleep/1, sleep_v/1
-         ,tone_detect/1, tone_detect_v/1
-         ,set/1, set_v/1
-         ,set_terminators/1, set_terminators_v/1
-         ,send_dtmf/1, send_dtmf_v/1
-         ,tones/1, tones_req_tone/1, tones_v/1, tones_req_tone_v/1
-         ,tones_req_tone_headers/1
-         ,conference/1, conference_v/1
-         ,originate_ready/1, originate_ready_v/1
-         ,originate_execute/1, originate_execute_v/1
-         ,metaflow/1, metaflow_v/1
-         ,fax_detection/1, fax_detection_v/1
-         ,send_display/1, send_display_v/1
-         ,store_vm/1, store_vm_v/1
-         ,b_leg_events_v/1
-         ,audio_level/1
+        ,unbridge/1, unbridge_v/1
+        ,page/1, page_v/1
+        ,store/1, store_v/1, store_amqp_resp/1, store_amqp_resp_v/1
+        ,store_http_resp/1, store_http_resp_v/1
+        ,noop/1, noop_v/1
+        ,fetch/1, fetch_v/1
+        ,respond/1, respond_v/1
+        ,redirect/1, redirect_v/1
+        ,progress/1, progress_v/1
+        ,ring/1, ring_v/1
+        ,receive_fax/1, receive_fax_v/1
+        ,store_fax/1, store_fax_v/1
+        ,execute_extension/1, execute_extension_v/1
+        ,break/1, break_v/1
+        ,play/1, play_v/1, playstop/1, playstop_v/1
+        ,tts/1, tts_v/1
+        ,record/1, record_v/1
+        ,record_call/1, record_call_v/1
+        ,answer/1, answer_v/1
+        ,echo/1, echo_v/1
+        ,privacy/1, privacy_v/1
+        ,hold/1, hold_v/1
+        ,soft_hold/1, soft_hold_v/1
+        ,park/1, park_v/1
+        ,play_and_collect_digits/1, play_and_collect_digits_v/1
+        ,call_pickup/1, call_pickup_v/1
+        ,connect_leg/1, connect_leg_v/1
+        ,eavesdrop/1, eavesdrop_v/1
+        ,hangup/1, hangup_v/1
+        ,say/1, say_v/1
+        ,sleep/1, sleep_v/1
+        ,tone_detect/1, tone_detect_v/1
+        ,set/1, set_v/1
+        ,set_terminators/1, set_terminators_v/1
+        ,send_dtmf/1, send_dtmf_v/1
+        ,tones/1, tones_req_tone/1, tones_v/1, tones_req_tone_v/1
+        ,tones_req_tone_headers/1
+        ,conference/1, conference_v/1
+        ,originate_ready/1, originate_ready_v/1
+        ,originate_execute/1, originate_execute_v/1
+        ,metaflow/1, metaflow_v/1
+        ,fax_detection/1, fax_detection_v/1
+        ,send_display/1, send_display_v/1
+        ,store_vm/1, store_vm_v/1
+        ,b_leg_events_v/1
+        ,audio_level/1, audio_level_v/1
+        ,transfer/1, transfer_v/1
         ]).
 
 -export([queue/1, queue_v/1
-         ,error/1, error_v/1
+        ,error/1, error_v/1
+        ,build_command/1, build_command/2
         ]).
 
 %% API Helpers
 -export([dial_method_single/0
-         ,dial_method_simultaneous/0
-         ,terminators/1, terminators_v/1
-         ,offsite_store_url/2
+        ,dial_method_simultaneous/0
+        ,terminators/1, terminators_v/1
+        ,offsite_store_url/2
         ]).
 
 -export([bind_q/2
-         ,unbind_q/2
+        ,unbind_q/2
         ]).
 
 -export([declare_exchanges/0]).
 
 -export([publish_action/2, publish_action/3
-         ,publish_error/2, publish_error/3
-         ,publish_command/2, publish_command/3
-         ,publish_metaflow/1, publish_metaflow/2
-         ,publish_originate_ready/2, publish_originate_ready/3
-         ,publish_originate_execute/2, publish_originate_execute/3
+        ,publish_error/2, publish_error/3
+        ,publish_command/2, publish_command/3
+        ,publish_originate_ready/2, publish_originate_ready/3
+        ,publish_originate_execute/2, publish_originate_execute/3
         ]).
 
 -include_lib("kazoo/include/kz_api.hrl").
@@ -120,8 +121,8 @@ v(JObj) ->
 v(Prop, DPApp) ->
     try
         VFun = kz_util:to_atom(<<DPApp/binary, "_v">>),
-        case lists:keyfind(VFun, 1, ?MODULE:module_info(exports)) of
-            'false' -> throw({invalid_dialplan_object, Prop});
+        case lists:keyfind(VFun, 1, ?MODULE:module_info('exports')) of
+            'false' -> throw({'invalid_dialplan_object', Prop});
             {_, 1} -> ?MODULE:VFun(Prop)
         end
     catch
@@ -275,7 +276,8 @@ store_http_resp_v(JObj) -> store_http_resp_v(kz_json:to_proplist(JObj)).
 
 -spec store_media_content_v(binary() | 'eof') -> boolean().
 store_media_content_v(V) ->
-    is_binary(V) orelse V =:= 'eof'.
+    is_binary(V)
+        orelse V =:= 'eof'.
 
 %%--------------------------------------------------------------------
 %% @doc Create a DTMF (or DTMFs) on the channel - see wiki
@@ -706,8 +708,8 @@ park_v(JObj) ->
 -spec audio_level(api_terms()) -> api_formatter_return().
 audio_level(Prop) when is_list(Prop) ->
     case audio_level_v(Prop) of
-         'true' -> kz_api:build_message(Prop, ?AUDIO_REQ_HEADERS, ?OPTIONAL_AUDIO_REQ_HEADERS);
-         'false' -> {'error', "Proplist failed validation for audio_level_req"}
+        'true' -> kz_api:build_message(Prop, ?AUDIO_REQ_HEADERS, ?OPTIONAL_AUDIO_REQ_HEADERS);
+        'false' -> {'error', "Proplist failed validation for audio_level_req"}
     end;
 audio_level(JObj) ->
     audio_level(kz_json:to_proplist(JObj)).
@@ -1047,11 +1049,11 @@ error(JObj) -> error(kz_json:to_proplist(JObj)).
 -spec error_v(api_terms()) -> boolean().
 error_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop
-                    ,?ERROR_RESP_HEADERS
-                    ,[{<<"Event-Name">>, <<"dialplan">>}
-                      | ?ERROR_RESP_VALUES
-                     ]
-                    ,?ERROR_RESP_TYPES
+                   ,?ERROR_RESP_HEADERS
+                   ,[{<<"Event-Name">>, <<"dialplan">>}
+                     | ?ERROR_RESP_VALUES
+                    ]
+                   ,?ERROR_RESP_TYPES
                    );
 error_v(JObj) -> error_v(kz_json:to_proplist(JObj)).
 
@@ -1065,35 +1067,35 @@ publish_command(CtrlQ, JObj) ->
     publish_command(CtrlQ, kz_json:to_proplist(JObj)).
 
 publish_command(CtrlQ, Prop, DPApp) ->
+    {'ok', Payload} = build_command(Prop, DPApp),
+    amqp_util:callctl_publish(CtrlQ, Payload, ?DEFAULT_CONTENT_TYPE).
+
+-spec build_command(api_terms()) -> {'ok', api_terms()}.
+build_command(Prop) when is_list(Prop) ->
+    build_command(Prop, props:get_value(<<"Application-Name">>, Prop));
+build_command(JObj) ->
+    build_command(kz_json:to_proplist(JObj)).
+
+-spec build_command(api_terms(), ne_binary()) -> {'ok', api_terms()}.
+build_command(Prop, DPApp) when is_list(Prop) ->
     try kz_util:to_atom(<<DPApp/binary>>) of
         BuildMsgFun ->
             case lists:keyfind(BuildMsgFun, 1, ?MODULE:module_info('exports')) of
                 'false' ->
                     {'error', 'invalid_dialplan_object'};
                 {_, 1} ->
-                    {'ok', Payload} = ?MODULE:BuildMsgFun(kz_api:set_missing_values(Prop, ?DEFAULT_VALUES)),
-                    amqp_util:callctl_publish(CtrlQ, Payload, ?DEFAULT_CONTENT_TYPE)
+                    ?MODULE:BuildMsgFun(kz_api:set_missing_values(Prop, ?DEFAULT_VALUES))
             end
     catch
-        _:R -> throw({R, Prop})
-    end.
-
--spec publish_metaflow(api_terms()) -> 'ok'.
--spec publish_metaflow(api_terms(), ne_binary()) -> 'ok'.
-publish_metaflow(API) ->
-    publish_metaflow(API, ?DEFAULT_CONTENT_TYPE).
-publish_metaflow(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?METAFLOW_VALUES, fun ?MODULE:metaflow/1),
-    CallId = metaflow_callid(API),
-    amqp_util:kapps_publish(?METAFLOW_ROUTING_KEY(CallId), Payload, ContentType).
-
--spec metaflow_callid(api_terms()) -> api_binary().
-metaflow_callid([_|_]=Props) ->
-    kz_json:get_value(<<"Call-ID">>, props:get_value(<<"Call">>, Props));
-metaflow_callid(JObj) ->
-    kz_json:get_value([<<"Call">>, <<"Call-ID">>], JObj).
+        _:R -> kz_util:log_stacktrace(),
+               throw({R, Prop})
+    end;
+build_command(JObj, DPApp) ->
+    build_command(kz_json:to_proplist(JObj), DPApp).
 
 %% sending DP actions to CallControl Queue
+-spec publish_action(ne_binary(), iodata()) -> 'ok'.
+-spec publish_action(ne_binary(), iodata(), ne_binary()) -> 'ok'.
 publish_action(Queue, JSON) ->
     publish_action(Queue, JSON, ?DEFAULT_CONTENT_TYPE).
 publish_action(Queue, Payload, ContentType) ->
@@ -1106,7 +1108,7 @@ publish_error(CallID, JObj) ->
 publish_error(CallID, API, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(API, [{<<"Event-Name">>, <<"dialplan">>}
                                                        | ?ERROR_RESP_VALUES
-                                                      ], fun ?MODULE:error/1),
+                                                      ], fun error/1),
     amqp_util:callevt_publish(kapi_call:event_routing_key(<<"diaplan">>, CallID), Payload, ContentType).
 
 -spec publish_originate_ready(ne_binary(), api_terms()) -> 'ok'.
@@ -1114,7 +1116,7 @@ publish_error(CallID, API, ContentType) ->
 publish_originate_ready(ServerId, JObj) ->
     publish_originate_ready(ServerId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_originate_ready(ServerId, API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?ORIGINATE_READY_VALUES, fun ?MODULE:originate_ready/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?ORIGINATE_READY_VALUES, fun originate_ready/1),
     amqp_util:targeted_publish(ServerId, Payload, ContentType).
 
 -spec publish_originate_execute(ne_binary(), api_terms()) -> 'ok'.
@@ -1122,56 +1124,22 @@ publish_originate_ready(ServerId, API, ContentType) ->
 publish_originate_execute(ServerId, JObj) ->
     publish_originate_execute(ServerId, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_originate_execute(ServerId, API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?ORIGINATE_EXECUTE_VALUES, fun ?MODULE:originate_execute/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?ORIGINATE_EXECUTE_VALUES, fun originate_execute/1),
     amqp_util:targeted_publish(ServerId, Payload, ContentType).
 
+-spec dial_method_single() -> ne_binary().
 dial_method_single() -> ?DIAL_METHOD_SINGLE.
 
+-spec dial_method_simultaneous() -> ne_binary().
 dial_method_simultaneous() -> ?DIAL_METHOD_SIMUL.
 
-%%--------------------------------------------------------------------
-%% @doc Asks for metaflows to be enabled for a call - see wiki
-%% Takes proplist, creates JSON string or error
-%% @end
-%%--------------------------------------------------------------------
--spec metaflow(api_terms()) -> api_formatter_return().
-metaflow(Prop) when is_list(Prop) ->
-    case metaflow_v(Prop) of
-        'true' -> kz_api:build_message(Prop, ?METAFLOW_HEADERS, ?OPTIONAL_METAFLOW_HEADERS);
-        'false' -> {'error', "Proplist failed validation for metaflow"}
-    end;
-metaflow(JObj) -> metaflow(kz_json:to_proplist(JObj)).
-
--spec metaflow_v(api_terms()) -> boolean().
-metaflow_v(Prop) when is_list(Prop) ->
-    kz_api:validate(Prop, ?METAFLOW_HEADERS, ?METAFLOW_VALUES, ?METAFLOW_TYPES);
-metaflow_v(JObj) -> metaflow_v(kz_json:to_proplist(JObj)).
-
--spec metaflow_digit_timeout_v(any()) -> boolean().
-metaflow_digit_timeout_v(X) ->
-    is_integer(kz_util:to_integer(X)).
-
 -spec bind_q(ne_binary(), kz_proplist()) -> 'ok'.
-bind_q(Queue, Props) ->
-    bind_q(Queue, Props, props:get_value('metaflow', Props)).
-
--spec bind_q(ne_binary(), kz_proplist(), 'undefined' | 'true') -> 'ok'.
-bind_q(Queue, _Props, 'undefined') ->
-    amqp_util:bind_q_to_callctl(Queue);
-bind_q(Queue, Props, 'true') ->
-    CallId = props:get_value('callid', Props, <<"*">>),
-    amqp_util:bind_q_to_kapps(Queue, ?METAFLOW_ROUTING_KEY(CallId)).
+bind_q(Queue, _Props) ->
+    amqp_util:bind_q_to_callctl(Queue).
 
 -spec unbind_q(ne_binary(), kz_proplist()) -> 'ok'.
-unbind_q(Queue, Props) ->
-    unbind_q(Queue, Props, props:get_value('metaflow', Props)).
-
--spec unbind_q(ne_binary(), kz_proplist(), 'undefined' | 'true') -> 'ok'.
-unbind_q(Queue, _Props, 'undefined') ->
-    amqp_util:unbind_q_from_callctl(Queue);
-unbind_q(Queue, Props, 'true') ->
-    CallId = props:get_value('callid', Props, <<"*">>),
-    amqp_util:unbind_q_from_kapps(Queue, ?METAFLOW_ROUTING_KEY(CallId)).
+unbind_q(Queue, _Props) ->
+    amqp_util:unbind_q_from_callctl(Queue).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1180,8 +1148,7 @@ unbind_q(Queue, Props, 'true') ->
 %%--------------------------------------------------------------------
 -spec declare_exchanges() -> 'ok'.
 declare_exchanges() ->
-    amqp_util:callctl_exchange(),
-    amqp_util:kapps_exchange().
+    amqp_util:callctl_exchange().
 
 -spec terminators(api_binary()) -> ne_binaries().
 terminators(Bin) when is_binary(Bin) ->
@@ -1241,8 +1208,8 @@ send_display_v(Prop) when is_list(Prop) ->
 send_display_v(JObj) -> send_display_v(kz_json:to_proplist(JObj)).
 
 -spec store_vm(api_terms()) ->
-                   {'ok', kz_proplist()} |
-                   {'error', string()}.
+                      {'ok', kz_proplist()} |
+                      {'error', string()}.
 store_vm(Prop) when is_list(Prop) ->
     case store_vm_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?STORE_VM_REQ_HEADERS, ?OPTIONAL_STORE_VM_REQ_HEADERS);
@@ -1254,3 +1221,16 @@ store_vm(JObj) -> store_vm(kz_json:to_proplist(JObj)).
 store_vm_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?STORE_VM_REQ_HEADERS, ?STORE_VM_REQ_VALUES, ?STORE_VM_REQ_TYPES);
 store_vm_v(JObj) -> store_vm_v(kz_json:to_proplist(JObj)).
+
+-spec transfer(api_terms()) -> api_formatter_return().
+transfer(Prop) when is_list(Prop) ->
+    case transfer_v(Prop) of
+        'true' -> kz_api:build_message(Prop, ?TRANSFER_HEADERS, ?OPTIONAL_TRANSFER_HEADERS);
+        'false' -> {'error', "Proplist failed validation for conference_req"}
+    end;
+transfer(JObj) -> transfer(kz_json:to_proplist(JObj)).
+
+-spec transfer_v(api_terms()) -> boolean().
+transfer_v(Prop) when is_list(Prop) ->
+    kz_api:validate(Prop, ?TRANSFER_HEADERS, ?TRANSFER_VALUES, ?TRANSFER_TYPES);
+transfer_v(JObj) -> transfer_v(kz_json:to_proplist(JObj)).

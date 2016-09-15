@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%% Media requests, responses, and errors
 %%% @end
@@ -28,15 +28,15 @@
 -define(MEDIA_REQ_HEADERS, [<<"Media-Name">>]).
 -define(OPTIONAL_MEDIA_REQ_HEADERS, [<<"Stream-Type">>, <<"Call-ID">>
                                          %% TTS-related flags
-                                     ,<<"Voice">>, <<"Language">>, <<"Format">>
-                                     ,<<"Account-ID">>, <<"Protocol">>, <<"Engine">>
+                                    ,<<"Voice">>, <<"Language">>, <<"Format">>
+                                    ,<<"Account-ID">>, <<"Protocol">>, <<"Engine">>
                                     ]).
 -define(MEDIA_REQ_VALUES, [{<<"Event-Category">>, <<"media">>}
-                           ,{<<"Event-Name">>, <<"media_req">>}
-                           ,{<<"Stream-Type">>, [<<"new">>, <<"extant">>, 'new', 'extant']}
-                           ,{<<"Voice">>, [<<"male">>, <<"female">>]}
-                           ,{<<"Format">>, [<<"mp3">>, <<"wav">>]}
-                           ,{<<"Protocol">>, [<<"http">>, <<"https">>, <<"shout">>, <<"vlc">>]}
+                          ,{<<"Event-Name">>, <<"media_req">>}
+                          ,{<<"Stream-Type">>, [<<"new">>, <<"extant">>, 'new', 'extant']}
+                          ,{<<"Voice">>, [<<"male">>, <<"female">>]}
+                          ,{<<"Format">>, [<<"mp3">>, <<"wav">>]}
+                          ,{<<"Protocol">>, [<<"http">>, <<"https">>, <<"shout">>, <<"vlc">>]}
                           ]).
 -define(MEDIA_REQ_TYPES, []).
 
@@ -44,7 +44,7 @@
 -define(MEDIA_RESP_HEADERS, [<<"Media-Name">>, <<"Stream-URL">>]).
 -define(OPTIONAL_MEDIA_RESP_HEADERS, []).
 -define(MEDIA_RESP_VALUES, [{<<"Event-Category">>, <<"media">>}
-                            ,{<<"Event-Name">>, <<"media_resp">>}
+                           ,{<<"Event-Name">>, <<"media_resp">>}
                            ]).
 -define(MEDIA_RESP_TYPES, [{<<"Stream-URL">>, fun(<<"shout://", _/binary>>) -> 'true';
                                                  (<<"http://", _/binary>>) -> 'true';
@@ -57,8 +57,8 @@
 -define(MEDIA_ERROR_HEADERS, [<<"Media-Name">>, <<"Error-Code">>]).
 -define(OPTIONAL_MEDIA_ERROR_HEADERS, [<<"Error-Msg">>]).
 -define(MEDIA_ERROR_VALUES, [{<<"Event-Category">>, <<"media">>}
-                             ,{<<"Event-Name">>, <<"media_error">>}
-                             ,{<<"Error-Code">>, [<<"not_found">>, <<"no_data">>, <<"other">>]}
+                            ,{<<"Event-Name">>, <<"media_error">>}
+                            ,{<<"Error-Code">>, [<<"not_found">>, <<"no_data">>, <<"other">>]}
                             ]).
 -define(MEDIA_ERROR_TYPES, []).
 
@@ -144,7 +144,7 @@ declare_exchanges() ->
 publish_req(JObj) ->
     publish_req(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_req(Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?MEDIA_REQ_VALUES, fun ?MODULE:req/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?MEDIA_REQ_VALUES, fun req/1),
     amqp_util:kapps_publish(?MEDIA_REQ_ROUTING_KEY, Payload, ContentType).
 
 -spec publish_resp(ne_binary(), api_terms()) -> 'ok'.
@@ -152,7 +152,7 @@ publish_req(Req, ContentType) ->
 publish_resp(Queue, JObj) ->
     publish_resp(Queue, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_resp(Queue, Resp, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?MEDIA_RESP_VALUES, fun ?MODULE:resp/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?MEDIA_RESP_VALUES, fun resp/1),
     amqp_util:targeted_publish(Queue, Payload, ContentType).
 
 -spec publish_error(ne_binary(), api_terms()) -> 'ok'.
@@ -160,5 +160,5 @@ publish_resp(Queue, Resp, ContentType) ->
 publish_error(Queue, JObj) ->
     publish_error(Queue, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_error(Queue, Error, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Error, ?MEDIA_ERROR_VALUES, fun ?MODULE:error/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Error, ?MEDIA_ERROR_VALUES, fun error/1),
     amqp_util:targeted_publish(Queue, Payload, ContentType).

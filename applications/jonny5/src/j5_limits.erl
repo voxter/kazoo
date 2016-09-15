@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -26,30 +26,28 @@
 -export([allow_postpay/1]).
 -export([reserve_amount/1]).
 -export([max_postpay/1]).
--export([disconnect_active_calls/1]).
 
 -include("jonny5.hrl").
 
 -record(limits, {account_id  :: api_binary()
-                 ,account_db :: api_binary()
-                 ,enabled = 'true' :: boolean()
-                 ,calls = -1 :: tristate_integer()
-                 ,resource_consuming_calls = -1 :: tristate_integer()
-                 ,inbound_trunks = 0 :: tristate_integer()
-                 ,outbound_trunks = 0 :: tristate_integer()
-                 ,twoway_trunks = -1 :: tristate_integer()
-                 ,bundled_inbound_trunks = 0 :: non_neg_integer()
-                 ,bundled_outbound_trunks = 0 :: non_neg_integer()
-                 ,bundled_twoway_trunks = 0 :: non_neg_integer()
-                 ,burst_trunks = 0 :: tristate_integer()
-                 ,max_postpay_amount = 0 :: tristate_integer()
-                 ,reserve_amount = 0 :: non_neg_integer()
-                 ,allow_prepay = 'true' :: boolean()
-                 ,allow_postpay = 'false' :: boolean()
-                 ,allotments = kz_json:new() :: kz_json:object()
-                 ,soft_limit_inbound = 'false' :: boolean()
-                 ,soft_limit_outbound = 'false' :: boolean()
-                 ,disconnect_active_calls = 'false' :: boolean()
+                ,account_db :: api_binary()
+                ,enabled = 'true' :: boolean()
+                ,calls = -1 :: tristate_integer()
+                ,resource_consuming_calls = -1 :: tristate_integer()
+                ,inbound_trunks = 0 :: tristate_integer()
+                ,outbound_trunks = 0 :: tristate_integer()
+                ,twoway_trunks = -1 :: tristate_integer()
+                ,bundled_inbound_trunks = 0 :: non_neg_integer()
+                ,bundled_outbound_trunks = 0 :: non_neg_integer()
+                ,bundled_twoway_trunks = 0 :: non_neg_integer()
+                ,burst_trunks = 0 :: tristate_integer()
+                ,max_postpay_amount = 0 :: tristate_integer()
+                ,reserve_amount = 0 :: non_neg_integer()
+                ,allow_prepay = 'true' :: boolean()
+                ,allow_postpay = 'false' :: boolean()
+                ,allotments = kz_json:new() :: kz_json:object()
+                ,soft_limit_inbound = 'false' :: boolean()
+                ,soft_limit_outbound = 'false' :: boolean()
                 }).
 
 -type limits() :: #limits{}.
@@ -75,31 +73,15 @@ get(Account) ->
 fetch(Account) ->
     AccountId = kz_util:format_account_id(Account, 'raw'),
     AccountDb = kz_util:format_account_id(Account, 'encoded'),
-    JObj = get_limit_jobj(AccountDb),
-    Limits = #limits{account_id = AccountId
-                     ,account_db = AccountDb
-                     ,enabled = get_limit_boolean(<<"enabled">>, JObj, 'true')
-                     ,calls = get_limit(<<"calls">>, JObj, -1)
-                     ,resource_consuming_calls = get_limit(<<"resource_consuming_calls">>, JObj, -1)
-                     ,inbound_trunks = get_limit(<<"inbound_trunks">>, JObj, 0)
-                     ,outbound_trunks = get_limit(<<"outbound_trunks">>, JObj, 0)
-                     ,twoway_trunks = get_limit(<<"twoway_trunks">>, JObj, -1)
-                     ,bundled_inbound_trunks = get_bundled_inbound_limit(AccountDb, JObj)
-                     ,bundled_outbound_trunks = get_bundled_outbound_limit(AccountDb, JObj)
-                     ,bundled_twoway_trunks = get_bundled_twoway_limit(AccountDb, JObj)
-                     ,burst_trunks = get_limit(<<"burst_trunks">>, JObj, 0)
-                     ,max_postpay_amount = get_limit_units(<<"max_postpay_amount">>, JObj, 0.0) * -1
-                     ,reserve_amount = get_limit_units(<<"reserve_amount">>, JObj, ?DEFAULT_RATE)
-                     ,allow_prepay = get_limit_boolean(<<"allow_prepay">>, JObj, 'true')
-                     ,allow_postpay = get_limit_boolean(<<"allow_postpay">>, JObj, 'false')
-                     ,allotments = kz_json:get_value(<<"pvt_allotments">>, JObj, kz_json:new())
-                     ,soft_limit_inbound = get_limit_boolean(<<"soft_limit_inbound">>, JObj, 'false')
-                     ,soft_limit_outbound = get_limit_boolean(<<"soft_limit_outbound">>, JObj, 'false')
-                     ,disconnect_active_calls = get_limit_boolean(<<"disconnect_active_calls">>, JObj, 'false')
-                    },
-    CacheProps = [{'origin', {'db', AccountDb}}],
-    kz_cache:store_local(?CACHE_NAME, ?LIMITS_KEY(AccountId), Limits, CacheProps),
-    Limits.
+    case get_limit_jobj(AccountDb) of
+        {'error', _} ->
+            create_limits(AccountId, AccountDb, kz_json:new());
+        JObj ->
+            Limits = create_limits(AccountId, AccountDb, JObj),
+            CacheProps = [{'origin', {'db', AccountDb}}],
+            kz_cache:store_local(?CACHE_NAME, ?LIMITS_KEY(AccountId), Limits, CacheProps),
+            Limits
+    end.
 
 -spec cached() -> [limits()].
 cached() ->
@@ -192,7 +174,7 @@ resource_consuming_calls(#limits{resource_consuming_calls=Calls}) -> Calls.
 -spec inbound_trunks(limits()) -> tristate_integer().
 inbound_trunks(#limits{inbound_trunks=-1}) -> -1;
 inbound_trunks(#limits{bundled_inbound_trunks=BundledTrunks
-                       ,inbound_trunks=Trunks}) ->
+                      ,inbound_trunks=Trunks}) ->
     BundledTrunks + Trunks.
 
 %%--------------------------------------------------------------------
@@ -204,7 +186,7 @@ inbound_trunks(#limits{bundled_inbound_trunks=BundledTrunks
 -spec outbound_trunks(limits()) -> tristate_integer().
 outbound_trunks(#limits{outbound_trunks=-1}) -> -1;
 outbound_trunks(#limits{bundled_outbound_trunks=BundledTrunks
-                        ,outbound_trunks=Trunks}) ->
+                       ,outbound_trunks=Trunks}) ->
     BundledTrunks + Trunks.
 
 %%--------------------------------------------------------------------
@@ -216,7 +198,7 @@ outbound_trunks(#limits{bundled_outbound_trunks=BundledTrunks
 -spec twoway_trunks(limits()) -> tristate_integer().
 twoway_trunks(#limits{twoway_trunks=-1}) -> -1;
 twoway_trunks(#limits{bundled_twoway_trunks=BundledTrunks
-                      ,twoway_trunks=Trunks}) ->
+                     ,twoway_trunks=Trunks}) ->
     BundledTrunks + Trunks.
 
 %%--------------------------------------------------------------------
@@ -263,15 +245,6 @@ reserve_amount(#limits{reserve_amount=ReserveAmount}) -> ReserveAmount.
 %%--------------------------------------------------------------------
 -spec max_postpay(limits()) -> non_neg_integer().
 max_postpay(#limits{max_postpay_amount=MaxPostpay}) -> MaxPostpay.
-
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec disconnect_active_calls(limits()) -> boolean().
-disconnect_active_calls(#limits{disconnect_active_calls=DisconnectActiveCalls}) -> DisconnectActiveCalls.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -393,7 +366,7 @@ get_bundled_limit(AccountDb, View) ->
         {'ok', JObjs} -> filter_bundled_limit(JObjs);
         {'error', _R} ->
             lager:debug("failed get bundled limit from ~s in ~s: ~p"
-                        ,[View, AccountDb, _R]),
+                       ,[View, AccountDb, _R]),
             0
     end.
 
@@ -402,8 +375,8 @@ filter_bundled_limit(JObjs) ->
     length([JObj
             || JObj <- JObjs
                    ,kz_json:is_true([<<"value">>, <<"enabled">>]
-                                    ,JObj
-                                    ,'true')
+                                   ,JObj
+                                   ,'true')
            ]).
 
 %%--------------------------------------------------------------------
@@ -412,36 +385,59 @@ filter_bundled_limit(JObjs) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_limit_jobj(ne_binary()) -> kz_json:object().
+-spec get_limit_jobj(ne_binary()) -> kz_json:object() | {'error', any()}.
 get_limit_jobj(AccountDb) ->
     case kz_datamgr:open_doc(AccountDb, <<"limits">>) of
         {'ok', JObj} -> JObj;
         {'error', 'not_found'} ->
             lager:debug("limits doc in account db ~s not found", [AccountDb]),
-            create_limit_jobj(AccountDb);
-        {'error', _R} ->
+            create_default_limit_jobj(AccountDb);
+        {'error', _R} = Error ->
             lager:debug("failed to open limits doc in account db '~s': ~p"
-                        ,[AccountDb, _R]),
-            kz_json:new()
+                       ,[AccountDb, _R]),
+            Error
     end.
 
--spec create_limit_jobj(ne_binary()) -> kz_json:object().
-create_limit_jobj(AccountDb) ->
+-spec create_default_limit_jobj(ne_binary()) -> kz_json:object().
+create_default_limit_jobj(AccountDb) ->
     TStamp = kz_util:current_tstamp(),
     JObj = kz_json:from_list(
              [{<<"_id">>, <<"limits">>}
-              ,{<<"pvt_account_db">>, AccountDb}
-              ,{<<"pvt_account_id">>, kz_util:format_account_id(AccountDb, 'raw')}
-              ,{<<"pvt_type">>, <<"limits">>}
-              ,{<<"pvt_created">>, TStamp}
-              ,{<<"pvt_modified">>, TStamp}
-              ,{<<"pvt_vsn">>, 1}
+             ,{<<"pvt_account_db">>, AccountDb}
+             ,{<<"pvt_account_id">>, kz_util:format_account_id(AccountDb, 'raw')}
+             ,{<<"pvt_type">>, <<"limits">>}
+             ,{<<"pvt_created">>, TStamp}
+             ,{<<"pvt_modified">>, TStamp}
+             ,{<<"pvt_vsn">>, 1}
              ]),
     case kz_datamgr:save_doc(AccountDb, JObj) of
         {'ok', J} ->
             lager:debug("created initial limits document in db ~s", [AccountDb]),
             J;
-         {'error', _R} ->
+        {'error', _R} = Error ->
             lager:debug("failed to create initial limits document in db ~s: ~p", [AccountDb, _R]),
-            kz_json:new()
+            Error
     end.
+
+-spec create_limits(ne_binary(), ne_binary(), kz_json:object()) -> limits().
+create_limits(AccountId, AccountDb, JObj) ->
+    #limits{account_id = AccountId
+           ,account_db = AccountDb
+           ,enabled = get_limit_boolean(<<"enabled">>, JObj, 'true')
+           ,calls = get_limit(<<"calls">>, JObj, -1)
+           ,resource_consuming_calls = get_limit(<<"resource_consuming_calls">>, JObj, -1)
+           ,inbound_trunks = get_limit(<<"inbound_trunks">>, JObj, 0)
+           ,outbound_trunks = get_limit(<<"outbound_trunks">>, JObj, 0)
+           ,twoway_trunks = get_limit(<<"twoway_trunks">>, JObj, -1)
+           ,bundled_inbound_trunks = get_bundled_inbound_limit(AccountDb, JObj)
+           ,bundled_outbound_trunks = get_bundled_outbound_limit(AccountDb, JObj)
+           ,bundled_twoway_trunks = get_bundled_twoway_limit(AccountDb, JObj)
+           ,burst_trunks = get_limit(<<"burst_trunks">>, JObj, 0)
+           ,max_postpay_amount = get_limit_units(<<"max_postpay_amount">>, JObj, 0.0) * -1
+           ,reserve_amount = get_limit_units(<<"reserve_amount">>, JObj, ?DEFAULT_RATE)
+           ,allow_prepay = get_limit_boolean(<<"allow_prepay">>, JObj, 'true')
+           ,allow_postpay = get_limit_boolean(<<"allow_postpay">>, JObj, 'false')
+           ,allotments = kz_json:get_value(<<"pvt_allotments">>, JObj, kz_json:new())
+           ,soft_limit_inbound = get_limit_boolean(<<"soft_limit_inbound">>, JObj, 'false')
+           ,soft_limit_outbound = get_limit_boolean(<<"soft_limit_outbound">>, JObj, 'false')
+           }.

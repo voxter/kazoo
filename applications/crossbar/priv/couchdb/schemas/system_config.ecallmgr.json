@@ -1,0 +1,400 @@
+{
+    "$schema": "http://json-schema.org/draft-03/schema#",
+    "_id": "system_config.ecallmgr",
+    "description": "Schema for ecallmgr system_config",
+    "properties": {
+        "acls": {
+            "default": {},
+            "description": "ecallmgr acls",
+            "type": "object"
+        },
+        "authz_default_action": {
+            "default": "deny",
+            "description": "ecallmgr authz default action",
+            "type": "string"
+        },
+        "authz_dry_run": {
+            "default": false,
+            "description": "ecallmgr authz dry run",
+            "type": "boolean"
+        },
+        "authz_enabled": {
+            "default": false,
+            "description": "ecallmgr authz enabled",
+            "type": "boolean"
+        },
+        "authz_local_resources": {
+            "default": false,
+            "description": "ecallmgr authz local resources",
+            "type": "boolean"
+        },
+        "balance_crawler_cycle_ms": {
+            "default": 60000,
+            "description": "ecallmgr balance crawler cycle in milliseconds",
+            "type": "integer"
+        },
+        "balance_crawler_enabled": {
+            "default": false,
+            "description": "ecallmgr balance crawler enabled",
+            "type": "boolean"
+        },
+        "balance_crawler_fetch_timeout_ms": {
+            "default": 10000,
+            "description": "ecallmgr balance crawler fetch timeout in milliseconds",
+            "type": "integer"
+        },
+        "balance_crawler_interaccount_delay_ms": {
+            "default": 10,
+            "description": "ecallmgr balance crawler interaccount delay in milliseconds",
+            "type": "integer"
+        },
+        "call_routing_bindings": {
+            "default": [
+                "context_2"
+            ],
+            "description": "ecallmgr call routing bindings",
+            "type": "array"
+        },
+        "capabilities": {
+            "default": [
+                {
+                    "capability": "conference",
+                    "is_loaded": false,
+                    "module": "mod_conference"
+                },
+                {
+                    "capability": "channel_move",
+                    "is_loaded": false,
+                    "module": "mod_channel_move"
+                },
+                {
+                    "capability": "http_cache",
+                    "is_loaded": false,
+                    "module": "mod_http_cache"
+                },
+                {
+                    "capability": "dialplan",
+                    "is_loaded": false,
+                    "module": "mod_dptools"
+                },
+                {
+                    "capability": "sip",
+                    "is_loaded": false,
+                    "module": "mod_sofia"
+                },
+                {
+                    "capability": "fax",
+                    "is_loaded": false,
+                    "module": "mod_spandsp"
+                },
+                {
+                    "capability": "tts",
+                    "is_loaded": false,
+                    "module": "mod_flite"
+                },
+                {
+                    "capability": "freetdm",
+                    "is_loaded": false,
+                    "module": "mod_freetdm"
+                },
+                {
+                    "capability": "skype",
+                    "is_loaded": false,
+                    "module": "mod_skypopen"
+                },
+                {
+                    "capability": "xmpp",
+                    "is_loaded": false,
+                    "module": "mod_dingaling"
+                },
+                {
+                    "capability": "skinny",
+                    "is_loaded": false,
+                    "module": "mod_skinny"
+                },
+                {
+                    "capability": "sms",
+                    "is_loaded": false,
+                    "module": "mod_sms"
+                }
+            ],
+            "description": "ecallmgr capabilities",
+            "type": "array"
+        },
+        "configuration_handlers": {
+            "description": "ecallmgr configuration handlers"
+        },
+        "debug_channel": {
+            "default": false,
+            "description": "ecallmgr debug channel",
+            "type": "boolean"
+        },
+        "default_fax_extension": {
+            "default": ".tiff",
+            "description": "ecallmgr default fax extension",
+            "type": "string"
+        },
+        "default_realm": {
+            "default": "nodomain.com",
+            "description": "ecallmgr default realm",
+            "type": "string"
+        },
+        "default_recording_extension": {
+            "default": ".mp3",
+            "description": "ecallmgr default recording extension",
+            "type": "string"
+        },
+        "default_ringback": {
+            "description": "ecallmgr default ringback"
+        },
+        "event_stream_idle_alert": {
+            "default": 0,
+            "description": "ecallmgr event stream idle alert",
+            "type": "integer"
+        },
+        "expires_deviation_time": {
+            "default": 0,
+            "description": "ecallmgr expires deviation time",
+            "type": "integer"
+        },
+        "fax_file_path": {
+            "default": "/tmp/",
+            "description": "ecallmgr fax file path",
+            "type": "string"
+        },
+        "fetch_timeout": {
+            "default": 2600,
+            "description": "ecallmgr fetch timeout",
+            "type": "integer"
+        },
+        "force_conference_verbose_events": {
+            "description": "ecallmgr force conference verbose events",
+            "type": "boolean"
+        },
+        "freeswitch_context": {
+            "default": "context_2",
+            "description": "ecallmgr freeswitch context",
+            "type": "string"
+        },
+        "fs_cmds": {
+            "default": [
+                {
+                    "load": "mod_sofia"
+                },
+                {
+                    "reloadacl": ""
+                }
+            ],
+            "description": "ecallmgr fs cmds",
+            "type": "array"
+        },
+        "fs_cmds_wait_ms": {
+            "default": 5000,
+            "description": "ecallmgr fs cmds wait in milliseconds",
+            "type": "integer"
+        },
+        "fs_node_uptime_s": {
+            "default": 600,
+            "description": "ecallmgr fs node uptime in seconds",
+            "type": "integer"
+        },
+        "fs_nodes": {
+            "default": [],
+            "description": "ecallmgr fs nodes",
+            "type": "array"
+        },
+        "fs_profiles": {
+            "default": {},
+            "description": "ecallmgr fs profiles",
+            "type": "object"
+        },
+        "fs_reconnect_cmds": {
+            "description": "ecallmgr fs reconnect cmds"
+        },
+        "gateways": {
+            "default": {},
+            "description": "ecallmgr gateways",
+            "type": "object"
+        },
+        "insert_fetched_registration_locally": {
+            "default": false,
+            "description": "ecallmgr insert fetched registration locally",
+            "type": "boolean"
+        },
+        "max_channel_cleanup_timeout_ms": {
+            "default": 60000,
+            "description": "ecallmgr maximum channel cleanup timeout in milliseconds",
+            "type": "integer"
+        },
+        "max_channel_uptime_s": {
+            "default": 0,
+            "description": "ecallmgr maximum channel uptime in seconds",
+            "type": "integer"
+        },
+        "max_timeout_for_node_restart": {
+            "default": 10000,
+            "description": "ecallmgr maximum timeout for node restart",
+            "type": "integer"
+        },
+        "modules": {
+            "default": {
+                "authn": {
+                    "type": "worker"
+                },
+                "channel": {
+                    "type": "worker"
+                },
+                "conference": {
+                    "type": "worker"
+                },
+                "config": {
+                    "type": "worker"
+                },
+                "event_stream_sup": {
+                    "type": "supervisor"
+                },
+                "msg": {
+                    "type": "worker"
+                },
+                "node": {
+                    "type": "worker"
+                },
+                "notify": {
+                    "type": "worker"
+                },
+                "recordings": {
+                    "type": "worker"
+                },
+                "resource": {
+                    "type": "worker"
+                },
+                "route_sup": {
+                    "type": "supervisor"
+                }
+            },
+            "description": "ecallmgr modules",
+            "type": "object"
+        },
+        "network_map": {
+            "default": {},
+            "description": "ecallmgr network map",
+            "type": "object"
+        },
+        "node_commands": {
+            "properties": {
+                "send_http": {
+                    "properties": {
+                        "delete_on_success": {
+                            "properties": {
+                                "default": false,
+                                "description": "ecallmgr delete on success",
+                                "type": "boolean"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "node_down_grace_period": {
+            "default": 10000,
+            "description": "ecallmgr node down grace period",
+            "type": "integer"
+        },
+        "process_gateways": {
+            "default": false,
+            "description": "ecallmgr process gateways",
+            "type": "boolean"
+        },
+        "publish_channel_reconnect": {
+            "default": false,
+            "description": "ecallmgr publish channel reconnect",
+            "type": "boolean"
+        },
+        "publish_channel_state": {
+            "default": true,
+            "description": "ecallmgr publish channel state",
+            "type": "boolean"
+        },
+        "record_sample_rate": {
+            "default": 8000,
+            "description": "ecallmgr record sample rate",
+            "type": "integer"
+        },
+        "record_stereo_sample_rate": {
+            "default": 16000,
+            "description": "ecallmgr record stereo sample rate",
+            "type": "integer"
+        },
+        "record_waste_resources": {
+            "default": false,
+            "description": "ecallmgr record waste resources",
+            "type": "boolean"
+        },
+        "recording_file_path": {
+            "default": "/tmp/",
+            "description": "ecallmgr recording file path",
+            "type": "string"
+        },
+        "redirect_via_proxy": {
+            "default": true,
+            "description": "ecallmgr redirect via proxy",
+            "type": "boolean"
+        },
+        "restrict_channel_state_publisher": {
+            "default": false,
+            "description": "ecallmgr restrict channel state publisher",
+            "type": "boolean"
+        },
+        "should_detect_inband_dtmf": {
+            "description": "ecallmgr should detect inband dtmf",
+            "type": "boolean"
+        },
+        "sofia_conf": {
+            "description": "ecallmgr sofia conf"
+        },
+        "tcp_packet_type": {
+            "default": 2,
+            "description": "ecallmgr tcp packet type",
+            "type": "integer"
+        },
+        "text_routing_bindings": {
+            "default": [
+                "context_2"
+            ],
+            "description": "ecallmgr text routing bindings",
+            "type": "array"
+        },
+        "use_bypass_media_after_bridge": {
+            "default": false,
+            "description": "ecallmgr use bypass media after bridge",
+            "type": "boolean"
+        },
+        "use_http_cache": {
+            "default": true,
+            "description": "ecallmgr use http cache",
+            "type": "boolean"
+        },
+        "use_shout": {
+            "default": false,
+            "description": "ecallmgr use shout",
+            "type": "boolean"
+        },
+        "use_vlc": {
+            "default": false,
+            "description": "ecallmgr use vlc",
+            "type": "boolean"
+        },
+        "{Direction}_rate_required": {
+            "default": false,
+            "description": "ecallmgr {Direction} rate required",
+            "type": "boolean"
+        },
+        "{Direction}_rate_resp_timeout": {
+            "default": 10000,
+            "description": "ecallmgr {Direction} rate resp timeout",
+            "type": "integer"
+        }
+    },
+    "required": true,
+    "type": "object"
+}

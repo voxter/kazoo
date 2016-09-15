@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%% Starts a cf_exe and processes the "flow" sans DB
 %%% @end
@@ -20,5 +20,5 @@ handle_req(JObj, _Props) ->
     lager:info("received call resume, taking control"),
     cf_route_win:execute_callflow(
       JObj
-      ,kapps_call:kvs_store('cf_flow', kz_json:get_value(<<"Flow">>, JObj), Call)
+                                 ,kapps_call:kvs_store('cf_flow', kz_json:get_value(<<"Flow">>, JObj), Call)
      ).

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2015, 2600Hz
+%%% @copyright (C) 2012-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -10,8 +10,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--spec cleanup_dial_me_test() -> any().
 cleanup_dial_me_test() ->
     ?assertEqual(<<"+14158867900">>
-                 ,kzt_twiml_dial:cleanup_dial_me(<<"+1 (415) 886-7900">>)
+                ,kzt_twiml_dial:cleanup_dial_me(<<"+1 (415) 886-7900">>)
                 ).

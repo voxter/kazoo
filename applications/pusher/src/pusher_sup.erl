@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2015, 2600Hz
+%%% @copyright (C) 2013-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -18,8 +18,8 @@
 
 %% Helper macro for declaring children of supervisor
 -define(CHILDREN, [?SUPER('pusher_module_sup')
-                   ,?WORKER('pusher_listener')
-                   ,?CACHE(?CACHE_NAME)
+                  ,?WORKER('pusher_listener')
+                  ,?CACHE(?CACHE_NAME)
                   ]).
 
 %% ===================================================================

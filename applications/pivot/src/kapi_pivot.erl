@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%% Pivot API
 %%% @end
@@ -11,32 +11,32 @@
 -include("pivot.hrl").
 
 -export([req/1, req_v/1
-         ,bind_q/2
-         ,unbind_q/2
-         ,declare_exchanges/0
-         ,publish_req/1, publish_req/2
+        ,bind_q/2
+        ,unbind_q/2
+        ,declare_exchanges/0
+        ,publish_req/1, publish_req/2
         ]).
 
 
 -export([succeeded/1, succeeded_v/1
-         ,failed/1, failed_v/1
-         ,publish_succeeded/2
-         ,publish_failed/2
+        ,failed/1, failed_v/1
+        ,publish_succeeded/2
+        ,publish_failed/2
         ]).
 
 -define(KEY_PIVOT_REQ, <<"pivot.req">>).
 
 -define(PIVOT_REQ_HEADERS, [<<"Call">>, <<"Voice-URI">>]).
 -define(OPTIONAL_PIVOT_REQ_HEADERS, [<<"CDR-URI">>
-                                     ,<<"Request-Format">>
-                                     ,<<"HTTP-Method">>
-                                     ,<<"Debug">>
+                                    ,<<"Request-Format">>
+                                    ,<<"HTTP-Method">>
+                                    ,<<"Debug">>
                                     ]).
 -define(PIVOT_REQ_VALUES, [{<<"Event-Category">>,<<"dialplan">>}
-                           ,{<<"Event-Name">>, <<"pivot_req">>}
+                          ,{<<"Event-Name">>, <<"pivot_req">>}
                           ]).
 -define(PIVOT_REQ_TYPES, [{<<"Call">>, fun kz_json:is_json_object/1}
-                          ,{<<"Debug">>, fun kz_util:is_boolean/1}
+                         ,{<<"Debug">>, fun kz_util:is_boolean/1}
                          ]).
 
 -define(PIVOT_SUCCEEDED_HEADERS, [<<"Call-ID">>]).
@@ -49,7 +49,7 @@
 -define(PIVOT_FAILED_HEADERS, [<<"Call-ID">>]).
 -define(OPTIONAL_PIVOT_FAILED_HEADERS, []).
 -define(PIVOT_FAILED_VALUES, [{<<"Event-Category">>,<<"pivot">>}
-                              ,{<<"Event-Name">>, <<"failed">>}
+                             ,{<<"Event-Name">>, <<"failed">>}
                              ]).
 -define(PIVOT_FAILED_TYPES, []).
 
@@ -86,7 +86,7 @@ succeeded_v(JObj) ->
     succeeded_v(kz_json:to_proplist(JObj)).
 
 -spec failed(api_terms()) -> {'ok', iolist()} |
-                          {'error', string()}.
+                             {'error', string()}.
 failed(Prop) when is_list(Prop) ->
     case failed_v(Prop) of
         'false' -> {'error', "Proplist failed validation for pivot_failed"};

@@ -24,10 +24,10 @@
 -module(cb_recordings).
 
 -export([init/0
-         ,allowed_methods/0, allowed_methods/1, allowed_methods/2
-         ,resource_exists/0, resource_exists/1, resource_exists/2
-         ,content_types_provided/3
-         ,validate/1, validate/2, validate/3
+        ,allowed_methods/0, allowed_methods/1, allowed_methods/2
+        ,resource_exists/0, resource_exists/1, resource_exists/2
+        ,content_types_provided/3
+        ,validate/1, validate/2, validate/3
         ]).
 
 -include("crossbar.hrl").
@@ -134,15 +134,15 @@ recording_summary(Context) ->
     case cb_modules_util:range_modb_view_options(Context, PreFilter, PostFilter) of
         {'ok', ViewOptions} ->
             crossbar_doc:load_view(View
-                                   ,['include_docs' | ViewOptions]
-                                   ,Context
-                                   ,fun normalize_view_results/2
+                                  ,['include_docs' | ViewOptions]
+                                  ,Context
+                                  ,fun normalize_view_results/2
                                   );
         Ctx -> Ctx
     end.
 
 -spec normalize_view_results(kz_json:object(), kz_json:objects()) ->
-                                             kz_json:objects().
+                                    kz_json:objects().
 normalize_view_results(JObj, Acc) ->
     [kz_json:public_fields(kz_json:get_value(<<"doc">>, JObj))|Acc].
 
@@ -168,7 +168,11 @@ do_load_recording_binary(DocId, Context) ->
     case cb_context:resp_status(Context1) of
         'success' ->
             case kz_doc:attachment_names(cb_context:doc(Context1)) of
-                [] -> cb_context:add_system_error('bad_identifier', [{'details', DocId}], Context1);
+                [] ->
+                    cb_context:add_system_error('bad_identifier'
+                                               ,kz_json:from_list([{<<"details">>, DocId}])
+                                               ,Context1
+                                               );
                 [AName | _] ->
                     Ctx = crossbar_doc:load_attachment({<<"call_recording">>, DocId}, AName, ?TYPE_CHECK_OPTION(<<"call_recording">>), Context),
                     set_resp_headers(Ctx, AName)

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz
+%%% @copyright (C) 2011-2016, 2600Hz
 %%% @doc
 %%% proplists-like interface to json objects
 %%% @end
@@ -48,6 +48,7 @@
          ,find_value/3, find_value/4
          ,foreach/2
          ,all/2, any/2
+         ,exec/2
         ]).
 
 -export([get_ne_value/2, get_ne_value/3]).
@@ -111,12 +112,12 @@ encode(JObj) -> jiffy:encode(JObj).
 -spec unsafe_decode(iolist() | ne_binary()) -> json_term().
 -spec unsafe_decode(iolist() | ne_binary(), ne_binary()) -> json_term().
 
-unsafe_decode(Thing) when is_list(Thing) orelse is_binary(Thing) ->
+unsafe_decode(Thing) when is_list(Thing)
+                          orelse is_binary(Thing) ->
     unsafe_decode(Thing, <<"application/json">>).
 
 unsafe_decode(JSON, <<"application/json">>) ->
-    try jiffy:decode(JSON) of
-        JObj -> JObj
+    try jiffy:decode(JSON)
     catch
         'throw':{'error',{_Loc, 'invalid_string'}}=Error ->
             lager:debug("invalid string(near char ~p) in input, checking for unicode", [_Loc]),
@@ -133,12 +134,12 @@ unsafe_decode(JSON, <<"application/json">>) ->
 -spec decode(iolist() | ne_binary()) -> json_term().
 -spec decode(iolist() | ne_binary(), ne_binary()) -> json_term().
 
-decode(Thing) when is_list(Thing) orelse is_binary(Thing) ->
+decode(Thing) when is_list(Thing)
+                   orelse is_binary(Thing) ->
     decode(Thing, <<"application/json">>).
 
 decode(JSON, <<"application/json">>) ->
-    try unsafe_decode(JSON) of
-        JObj -> JObj
+    try unsafe_decode(JSON)
     catch
         _:{'invalid_json', {'error', {_Loc, _Msg}}, _JSON} ->
             lager:debug("decode error ~s near char # ~b", [_Msg, _Loc]),
@@ -219,9 +220,9 @@ are_identical('undefined', 'undefined') -> 'true';
 are_identical('undefined', _) -> 'false';
 are_identical(_, 'undefined') -> 'false';
 are_identical(JObj1, JObj2) ->
-    [KV || {_, V}=KV <- kz_json:to_proplist(JObj1), (not kz_util:is_empty(V))]
+    [KV || {_, V}=KV <- to_proplist(JObj1), (not kz_util:is_empty(V))]
         =:=
-    [KV || {_, V}=KV <- kz_json:to_proplist(JObj2), (not kz_util:is_empty(V))].
+    [KV || {_, V}=KV <- to_proplist(JObj2), (not kz_util:is_empty(V))].
 
 %% converts top-level proplist to json object, but only if sub-proplists have been converted
 %% first.
@@ -270,8 +271,8 @@ merge_recursive(?JSON_WRAPPER(_)=JObj1, ?JSON_WRAPPER(_)=JObj2, Pred, Keys) when
     foldl(fun(Key2, Value2, JObj1Acc) ->
                   merge_recursive(JObj1Acc, Value2, Pred, [Key2|Keys])
           end
-          ,JObj1
-          ,JObj2
+         ,JObj1
+         ,JObj2
          );
 merge_recursive(?JSON_WRAPPER(_)=JObj1, Value, Pred, Keys) when is_function(Pred, 2) ->
     Syek = lists:reverse(Keys),
@@ -342,7 +343,8 @@ fold_kvs([K|Ks], [V|Vs], Prefix, Acc) ->
 encode_kv(Prefix, K, Vs) when is_list(Vs) ->
     encode_kv(Prefix, kz_util:to_binary(K), Vs, <<"[]=">>, []);
 %% if the value is a "simple" value, just encode it (url-encoded)
-encode_kv(Prefix, K, V) when is_binary(V) orelse is_number(V) ->
+encode_kv(Prefix, K, V) when is_binary(V)
+                             orelse is_number(V) ->
     encode_kv(Prefix, K, <<"=">>, kz_http_util:urlencode(V));
 encode_kv(Prefix, K, 'true') ->
     encode_kv(Prefix, K, <<"=">>, <<"true">>);
@@ -500,8 +502,7 @@ get_integer_value(Key, JObj, Default) ->
 
 -spec safe_cast(json_term(), json_term(), fun()) -> json_term().
 safe_cast(Value, Default, CastFun) ->
-    try CastFun(Value) of
-        Casted -> Casted
+    try CastFun(Value)
     catch
         _:_ -> Default
     end.
@@ -548,8 +549,8 @@ is_true(Key, JObj, Default) ->
         V -> kz_util:is_true(V)
     end.
 
--spec get_binary_boolean(keys(), kz_json:object() | objects()) -> api_binary().
--spec get_binary_boolean(keys(), kz_json:object() | objects(), Default) -> Default | ne_binary().
+-spec get_binary_boolean(keys(), object() | objects()) -> api_binary().
+-spec get_binary_boolean(keys(), object() | objects(), Default) -> Default | ne_binary().
 get_binary_boolean(Key, JObj) ->
     get_binary_boolean(Key, JObj, 'undefined').
 
@@ -656,7 +657,7 @@ get_first_defined(Keys, JObj) ->
 
 get_first_defined([], _JObj, Default) -> Default;
 get_first_defined([H|T], JObj, Default) ->
-    case ?MODULE:get_value(H, JObj) of
+    case get_value(H, JObj) of
         'undefined' -> get_first_defined(T, JObj, Default);
         V -> V
     end.
@@ -820,8 +821,8 @@ delete_key(Keys, JObj, PruneOpt) ->
 delete_keys(Keys, JObj) when is_list(Keys) ->
     lists:foldr(fun(K, JObj0) -> delete_key(K, JObj0) end, JObj, Keys).
 
-prune([], JObj) ->
-    JObj;
+-spec prune(keys(), object() | objects()) -> object() | objects().
+prune([], JObj) -> JObj;
 prune([K], JObj) when not is_list(JObj) ->
     case lists:keydelete(K, 1, to_proplist(JObj)) of
         [] -> new();
@@ -846,8 +847,8 @@ prune([K|T], [_|_]=JObjs) ->
         V1 -> replace_in_list(K, V1, JObjs, [])
     end.
 
-no_prune([], JObj) ->
-    JObj;
+-spec no_prune(keys(), object() | objects()) -> object() | objects().
+no_prune([], JObj) -> JObj;
 no_prune([K], JObj) when not is_list(JObj) ->
     case lists:keydelete(K, 1, to_proplist(JObj)) of
         [] -> new();
@@ -895,11 +896,11 @@ replace_in_list(N, V1, [V | Vs], Acc) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec load_fixture_from_file(atom(), nonempty_string() | ne_binary()) ->
-                                {'ok', kz_json:object()} |
+                                {'ok', object()} |
                                 {'error', atom()}.
 
 -spec load_fixture_from_file(atom(), nonempty_string() | ne_binary(), ne_binary()) ->
-                                {'ok', kz_json:object()} |
+                                {'ok', object()} |
                                 {'error', atom()}.
 
 load_fixture_from_file(App, File) ->
@@ -907,7 +908,7 @@ load_fixture_from_file(App, File) ->
 
 load_fixture_from_file(App, Dir, File) ->
     Path = list_to_binary([code:priv_dir(App), "/", kz_util:to_list(Dir), "/", kz_util:to_list(File)]),
-    lager:debug("read fixture from filesystem whapp ~s from JSON file: ~s", [App, Path]),
+    lager:debug("read fixture for kapp ~s from JSON file: ~s", [App, Path]),
     try
         {'ok', Bin} = file:read_file(Path),
         decode(Bin)
@@ -1051,14 +1052,15 @@ flatten([_ | _] = Elems, Acc, Keys, Depth) ->
                 end,
                 Acc, Elems);
 flatten({Key, Value}, Acc, Keys, Depth) ->
+    KList = [Key | Keys],
     case length(Keys) + 2 =:=  Depth of
         'false' ->
-            flatten(Value, Acc, [Key | Keys], Depth);
+            flatten(Value, Acc, KList, Depth);
         'true' ->
-            case flatten(Value, [], [Key | Keys], Depth) of
+            case flatten(Value, [], KList, Depth) of
                 [] -> Acc;
                 Group ->
-                    Pos = lists:reverse([Key | Keys]),
+                    Pos = lists:reverse(KList),
                     [{Pos, Group} | Acc]
             end
     end;
@@ -1068,3 +1070,18 @@ flatten(Value, Acc, [K | Keys], Depth) ->
         'true' ->
             [{K, Value} | Acc]
     end.
+
+-type exec_fun_1() :: fun((object()) -> object()).
+-type exec_fun_2() :: {fun((_, object()) -> object()), _}.
+-type exec_fun_3() :: {fun((_, _, object()) -> object()), _, _}.
+-type exec_fun() :: exec_fun_1() | exec_fun_2() | exec_fun_3().
+-type exec_funs() :: [exec_fun(),...].
+
+-spec exec(exec_funs(), object()) -> object().
+exec(Funs, ?JSON_WRAPPER(_)=JObj) ->
+    lists:foldl(fun exec_fold/2, JObj, Funs).
+
+-spec exec_fold(exec_fun(), object()) -> object().
+exec_fold({F, K, V}, C) when is_function(F, 3) -> F(K, V, C);
+exec_fold({F, V}, C) when is_function(F, 2) -> F(V, C);
+exec_fold(F, C) when is_function(F, 1) -> F(C).

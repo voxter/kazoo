@@ -14,10 +14,13 @@ Any fields that aren't defined in the JSON schema will be stored, unmodified, al
 
 > GET /v2/schemas
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/schemas
+```
+
+```json
 {
     "auth_token": "",
     "data": [
@@ -46,6 +49,7 @@ curl -v -X GET \
         "callflows.ring_group",
         "callflows.send_dtmf",
         "callflows.tts",
+        "callflows.voicemail",
         "cccps",
         "cdr",
         "clicktocall",
@@ -84,7 +88,7 @@ curl -v -X GET \
         "temporal_rules_sets",
         "token_restrictions",
         "trunkstore",
-        "ubiquit_auth",
+        "ubiquiti_auth",
         "user_auth",
         "user_auth_recovery",
         "users",
@@ -94,39 +98,37 @@ curl -v -X GET \
         "whitelabels"
     ],
     "request_id": "{REQUEST_ID}",
-    "revision": "undefined",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
 
 #### Fetch the schema definitions
 
-> GET /v2/schemas/{SCHEMANAME}
+> GET /v2/schemas/{SCHEMA_NAME}
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/schemas/acls
+```
+
+```json
 {
     "auth_token": "",
     "data": {
-        "$schema": "http://json-schema.org/draft-03/schema#",
+        "$schema": "http://json-schema.org/draft-04/schema#",
         "additionalProperties": false,
         "description": "Access Control List entries",
         "id": "acls",
-        "name": "ACL Entry",
         "properties": {
             "cidr": {
                 "description": "Classless Inter-Domain Routing IP notation for use on the ACL",
-                "name": "CIDR",
-                "required": true,
                 "type": "string"
             },
             "description": {
                 "description": "Will be added as a comment for quick identification later",
-                "maxLen": 30,
-                "name": "Name",
-                "required": false,
+                "maxLength": 30,
                 "type": "string"
             },
             "network-list-name": {
@@ -135,8 +137,6 @@ curl -v -X GET \
                     "authoritative",
                     "trusted"
                 ],
-                "name": "ACL List",
-                "required": true,
                 "type": "string"
             },
             "type": {
@@ -146,12 +146,14 @@ curl -v -X GET \
                     "allow",
                     "deny"
                 ],
-                "name": "Type",
-                "required": true,
                 "type": "string"
             }
         },
-        "required": true,
+        "required": [
+            "cird",
+            "network-list-name",
+            "type"
+        ],
         "type": "object"
     },
     "request_id": "{REQUEST_ID}",
@@ -166,16 +168,19 @@ Test your request data against the validation schema (without performing a datab
 
 > PUT /v2/schemas/{SCHEMA_NAME}/validation
 
-```curl
+```shell
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     -d '{"data":{...}}'
-    http://{SERVER}:8000/v2/schemas/{ID}/validation
+    http://{SERVER}:8000/v2/schemas/{SCHEMA_NAME}/validation
+```
+
+```json
 {
     "auth_token":"",
     "data":{...},
     "request_id":"{REQUEST_ID}",
-    "revision":"undefined",
+    "revision":"{REVISION}",
     "status":"success"
 }
 ```

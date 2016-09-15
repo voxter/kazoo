@@ -1,29 +1,30 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2015, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%% Lookup cnam
 %%% @end
 %%%-------------------------------------------------------------------
 -module(stepswitch_cnam).
-
 -behaviour(gen_server).
 
 -export([start_link/1]).
 -export([render/2]).
 -export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,handle_event/2
-         ,terminate/2
-         ,code_change/3
+        ,handle_call/3
+        ,handle_cast/2
+        ,handle_info/2
+        ,handle_event/2
+        ,terminate/2
+        ,code_change/3
         ]).
 
 -export([lookup/1
-         ,flush/0
+        ,flush/0
         ]).
 
 -include("stepswitch.hrl").
+
+-type state() :: atom().
 
 -define(SERVER, ?MODULE).
 
@@ -38,19 +39,19 @@
 -define(DEFAULT_CONTENT_TYPE_HDR, <<"application/json">>).
 
 -define(HTTP_ACCEPT_HEADER
-        ,kapps_config:get_string(?CONFIG_CAT, <<"http_accept_header">>, ?DEFAULT_ACCEPT_HDR)
+       ,kapps_config:get_string(?CONFIG_CAT, <<"http_accept_header">>, ?DEFAULT_ACCEPT_HDR)
        ).
 -define(HTTP_USER_AGENT
-        ,kapps_config:get_string(?CONFIG_CAT, <<"http_user_agent_header">>, ?DEFAULT_USER_AGENT_HDR)
+       ,kapps_config:get_string(?CONFIG_CAT, <<"http_user_agent_header">>, ?DEFAULT_USER_AGENT_HDR)
        ).
 -define(HTTP_CONTENT_TYPE
-        ,kapps_config:get_string(?CONFIG_CAT, <<"http_content_type_header">>, ?DEFAULT_CONTENT_TYPE_HDR)
+       ,kapps_config:get_string(?CONFIG_CAT, <<"http_content_type_header">>, ?DEFAULT_CONTENT_TYPE_HDR)
        ).
 -define(HTTP_CONNECT_TIMEOUT_MS
-        ,kapps_config:get_integer(?CONFIG_CAT, <<"http_connect_timeout_ms">>, 500)
+       ,kapps_config:get_integer(?CONFIG_CAT, <<"http_connect_timeout_ms">>, 500)
        ).
 -define(DISABLE_NORMALIZE
-        ,kapps_config:get_is_true(?CONFIG_CAT, <<"disable_normalize">>, 'false')
+       ,kapps_config:get_is_true(?CONFIG_CAT, <<"disable_normalize">>, 'false')
        ).
 
 -define(CACHE_KEY(Number), {'cnam', Number}).
@@ -70,13 +71,13 @@ start_link(_) ->
 -spec lookup(kz_json:object() | ne_binary()) -> kz_json:object().
 lookup(<<_/binary>> = Number) ->
     Num = case ?DISABLE_NORMALIZE of
-        'false' -> knm_converters:normalize(Number);
-        'true'  -> Number
-    end,
+              'false' -> knm_converters:normalize(Number);
+              'true'  -> Number
+          end,
     lookup(kz_json:set_values([{<<"phone_number">>, kz_util:uri_encode(Num)}
-                               ,{<<"Caller-ID-Number">>, Num}
+                              ,{<<"Caller-ID-Number">>, Num}
                               ]
-                              ,kz_json:new()
+                             ,kz_json:new()
                              )
           );
 lookup(JObj) ->
@@ -101,8 +102,8 @@ set_phone_number(Num, JObj) ->
 update_request(JObj, 'undefined', _) -> JObj;
 update_request(JObj, CNAM, FromCache) ->
     Props = [{<<"Caller-ID-Name">>, CNAM}
-             ,{[<<"Custom-Channel-Vars">>, <<"Caller-ID-Name">>], CNAM}
-             ,{[<<"Custom-Channel-Vars">>, <<"CNAM-From-Cache">>], FromCache}
+            ,{[<<"Custom-Channel-Vars">>, <<"Caller-ID-Name">>], CNAM}
+            ,{[<<"Custom-Channel-Vars">>, <<"CNAM-From-Cache">>], FromCache}
             ],
     kz_json:set_values(Props, JObj).
 
@@ -147,9 +148,10 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call({'render', Props, Template}, _, TemplateName) ->
-    {'ok', TemplateName} = erlydtl:compile_template(Template, TemplateName),
-    {'ok', Result} = TemplateName:render(Props),
+    {'ok', TemplateName} = kz_template:compile(Template, TemplateName),
+    {'ok', Result} = kz_template:render(TemplateName, Props),
     {'reply', {'ok', Result}, TemplateName};
 handle_call(_Request, _From, TemplateName) ->
     {'reply', {'error', 'not_implemented'}, TemplateName}.
@@ -164,6 +166,7 @@ handle_call(_Request, _From, TemplateName) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast(_Msg, TemplateName) ->
     {'noreply', TemplateName}.
 
@@ -177,6 +180,7 @@ handle_cast(_Msg, TemplateName) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info(_Info, TemplateName) ->
     {'noreply', TemplateName}.
 
@@ -188,6 +192,7 @@ handle_info(_Info, TemplateName) ->
 %% @spec handle_event(JObj, State) -> {reply, Options}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_event(kz_json:object(), kz_proplist()) -> handle_event_ret().
 handle_event(_JObj, _TemplateName) ->
     {'reply', []}.
 
@@ -202,6 +207,7 @@ handle_event(_JObj, _TemplateName) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _TemplateName) ->
     lager:debug("stepswitch cnam worker terminating: ~p", [_Reason]).
 
@@ -213,6 +219,7 @@ terminate(_Reason, _TemplateName) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, TemplateName, _Extra) ->
     {'ok', TemplateName}.
 
@@ -272,10 +279,10 @@ fetch_cnam(Number, JObj) ->
 make_request(Number, JObj) ->
     Url = kz_util:to_list(get_http_url(JObj)),
     case kz_http:req(get_http_method()
-                     ,Url
-                     ,get_http_headers()
-                     ,get_http_body(JObj)
-                     ,get_http_options(Url)
+                    ,Url
+                    ,get_http_headers()
+                    ,get_http_body(JObj)
+                    ,get_http_options(Url)
                     )
     of
         {'ok', 404, _, _} ->
@@ -325,15 +332,15 @@ get_http_body(JObj) ->
 -spec get_http_headers() -> [{nonempty_string(), nonempty_string()}].
 get_http_headers() ->
     Headers = [{"Accept", ?HTTP_ACCEPT_HEADER}
-               ,{"User-Agent", ?HTTP_USER_AGENT}
-               ,{"Content-Type", ?HTTP_CONTENT_TYPE}
+              ,{"User-Agent", ?HTTP_USER_AGENT}
+              ,{"Content-Type", ?HTTP_CONTENT_TYPE}
               ],
     maybe_enable_auth(Headers).
 
 -spec get_http_options(ne_binary()) -> kz_proplist().
 get_http_options(Url) ->
     Defaults = [{'connect_timeout', ?HTTP_CONNECT_TIMEOUT_MS}
-                ,{'timeout', 1500}
+               ,{'timeout', 1500}
                ],
     maybe_enable_ssl(Url, Defaults).
 
@@ -347,7 +354,9 @@ maybe_enable_ssl(_, Props) -> Props.
 maybe_enable_auth(Props) ->
     Username = kapps_config:get_string(?CONFIG_CAT, <<"http_basic_auth_username">>, <<>>),
     Password = kapps_config:get_string(?CONFIG_CAT, <<"http_basic_auth_password">>, <<>>),
-    case kz_util:is_empty(Username) orelse kz_util:is_empty(Password) of
+    case kz_util:is_empty(Username)
+        orelse kz_util:is_empty(Password)
+    of
         'true' -> Props;
         'false' -> [basic_auth(Username, Password) | Props]
     end.

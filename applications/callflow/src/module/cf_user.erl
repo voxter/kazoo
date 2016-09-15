@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -8,11 +8,11 @@
 %%%-------------------------------------------------------------------
 -module(cf_user).
 
+-behaviour(gen_cf_action).
+
 -include("callflow.hrl").
 
--export([handle/2
-         ,get_endpoints/3
-        ]).
+-export([handle/2]).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -29,16 +29,16 @@ handle(Data, Call) ->
     FailOnSingleReject = kz_json:get_value(<<"fail_on_single_reject">>, Data, 'undefined'),
     Timeout = kz_json:get_integer_value(<<"timeout">>, Data, ?DEFAULT_TIMEOUT_S),
     Strategy = kz_json:get_binary_value(<<"strategy">>, Data, <<"simultaneous">>),
-    IgnoreEarlyMedia = cf_util:ignore_early_media(Endpoints),
+    IgnoreEarlyMedia = kz_endpoints:ignore_early_media(Endpoints),
 
     Command = [{<<"Application-Name">>, <<"bridge">>}
-        ,{<<"Endpoints">>, Endpoints}
-        ,{<<"Timeout">>, Timeout}
-        ,{<<"Ignore-Early-Media">>, IgnoreEarlyMedia}
-        ,{<<"Fail-On-Single-Reject">>, FailOnSingleReject}
-        ,{<<"Dial-Endpoint-Method">>, Strategy}
-        ,{<<"Ignore-Forward">>, <<"false">>}
-    ],
+              ,{<<"Endpoints">>, Endpoints}
+              ,{<<"Timeout">>, Timeout}
+              ,{<<"Ignore-Early-Media">>, IgnoreEarlyMedia}
+              ,{<<"Fail-On-Single-Reject">>, FailOnSingleReject}
+              ,{<<"Dial-Endpoint-Method">>, Strategy}
+              ,{<<"Ignore-Forward">>, <<"false">>}
+              ],
 
     lager:info("attempting ~b user devices with strategy ~s", [length(Endpoints), Strategy]),
     case length(Endpoints) > 0
@@ -77,7 +77,6 @@ maybe_handle_bridge_failure(Reason, Call) ->
     end.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Loop over the provided endpoints for the callflow and build the
 %% json object used in the bridge API

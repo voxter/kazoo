@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2015, 2600Hz
+%%% @copyright (C) 2013-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -11,12 +11,12 @@
 
 -export([start_link/2]).
 -export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,handle_event/2
-         ,terminate/2
-         ,code_change/3
+        ,handle_call/3
+        ,handle_cast/2
+        ,handle_info/2
+        ,handle_event/2
+        ,terminate/2
+        ,code_change/3
         ]).
 
 -export([handle_message_delivery/2]).
@@ -26,18 +26,18 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {endpoints = [] :: kz_json:objects()
-                ,resource_req :: kapi_offnet_resource:req()
-                ,request_handler :: pid()
-                ,control_queue :: api_binary()
-                ,response_queue :: api_binary()
-                ,queue :: api_binary()
-                ,message = [] :: kz_proplist()
-                ,messages = queue:new() :: queue:queue()
+               ,resource_req :: kapi_offnet_resource:req()
+               ,request_handler :: pid()
+               ,control_queue :: api_binary()
+               ,response_queue :: api_binary()
+               ,queue :: api_binary()
+               ,message = [] :: kz_proplist()
+               ,messages = queue:new() :: queue:queue()
                }).
 -type state() :: #state{}.
 
 -define(RESPONDERS, [{{?MODULE, 'handle_message_delivery'}
-                      ,[{<<"message">>, <<"delivery">>}]
+                     ,[{<<"message">>, <<"delivery">>}]
                      }
                     ]).
 -define(QUEUE_NAME, <<>>).
@@ -59,10 +59,10 @@
 start_link(Endpoints, OffnetReq) ->
     Bindings = [{'self', []}],
     gen_listener:start_link(?SERVER, [{'bindings', Bindings}
-                                      ,{'responders', ?RESPONDERS}
-                                      ,{'queue_name', ?QUEUE_NAME}
-                                      ,{'queue_options', ?QUEUE_OPTIONS}
-                                      ,{'consume_options', ?CONSUME_OPTIONS}
+                                     ,{'responders', ?RESPONDERS}
+                                     ,{'queue_name', ?QUEUE_NAME}
+                                     ,{'queue_options', ?QUEUE_OPTIONS}
+                                     ,{'consume_options', ?CONSUME_OPTIONS}
                                      ], [Endpoints, OffnetReq]).
 
 %%%===================================================================
@@ -89,10 +89,10 @@ init([Endpoints, OffnetReq]) ->
             {'stop', 'normal'};
         ControlQ ->
             {'ok', #state{endpoints=Endpoints
-                          ,resource_req=OffnetReq
-                          ,request_handler=self()
-                          ,control_queue=ControlQ
-                          ,response_queue=kapi_offnet_resource:server_id(OffnetReq)
+                         ,resource_req=OffnetReq
+                         ,request_handler=self()
+                         ,control_queue=ControlQ
+                         ,response_queue=kapi_offnet_resource:server_id(OffnetReq)
                          }}
     end.
 
@@ -110,6 +110,7 @@ init([Endpoints, OffnetReq]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     lager:debug("unhandled call: ~p", [_Request]),
     {'reply', {'error', 'not_implemented'}, State}.
@@ -124,6 +125,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast({'kz_amqp_channel', _}, State) ->
     {'noreply', State};
 handle_cast({'gen_listener', {'created_queue', Q}}, State) ->
@@ -145,9 +147,9 @@ handle_cast({'sms_error', JObj}, #state{resource_req=OffnetReq}=State) ->
     gen_listener:cast(self(), {'sms_result', sms_error(JObj, OffnetReq)}),
     {'noreply', State};
 handle_cast('next_message', #state{message=API
-                                   ,messages=Queue
-                                   ,resource_req=JObj
-                                   ,response_queue=ResponseQ
+                                  ,messages=Queue
+                                  ,resource_req=JObj
+                                  ,response_queue=ResponseQ
                                   }=State) ->
     case queue:out(Queue) of
         {'empty', _} ->
@@ -171,6 +173,7 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info('sms_timeout', State) ->
     gen_listener:cast(self(), 'next_message'),
     {'noreply', State};
@@ -186,6 +189,7 @@ handle_info(_Info, State) ->
 %% @spec handle_event(JObj, State) -> {reply, Options}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_event(kz_json:object(), kz_proplist()) -> handle_event_ret().
 handle_event(_JObj, _State) ->
     {'reply', []}.
 
@@ -200,6 +204,7 @@ handle_event(_JObj, _State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     lager:debug("listener terminating: ~p", [_Reason]).
 
@@ -211,6 +216,7 @@ terminate(_Reason, _State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
@@ -246,7 +252,7 @@ send(<<"amqp">>, Endpoint, API) ->
     Options = kz_json:to_proplist(kz_json:get_value(<<"Endpoint-Options">>, Endpoint, [])),
     CCVs = kz_json:merge_jobjs(
              kz_json:get_value(<<"Custom-Channel-Vars">>, Endpoint, kz_json:new())
-             ,kz_json:filter(fun filter_smpp/1, props:get_value(<<"Custom-Channel-Vars">>, API, kz_json:new()))
+                              ,kz_json:filter(fun filter_smpp/1, props:get_value(<<"Custom-Channel-Vars">>, API, kz_json:new()))
             ),
     Props = kz_json:to_proplist(Endpoint) ++ Options,
     Payload = props:set_value(<<"Custom-Channel-Vars">>, CCVs, props:set_values(Props, API)),
@@ -275,9 +281,9 @@ filter_smpp(_) -> 'false'.
 -spec send_success(kz_proplist(), ne_binary()) -> 'ok'.
 send_success(API, CallId) ->
     DeliveryProps = [{<<"Delivery-Result-Code">>, <<"sip:200">>}
-                     ,{<<"Status">>, <<"Success">>}
-                     ,{<<"Message-ID">>, props:get_value(<<"Message-ID">>, API)}
-                     ,{<<"Call-ID">>, CallId}
+                    ,{<<"Status">>, <<"Success">>}
+                    ,{<<"Message-ID">>, props:get_value(<<"Message-ID">>, API)}
+                    ,{<<"Call-ID">>, CallId}
                      | kz_api:default_headers(<<"message">>, <<"delivery">>, ?APP_NAME, ?APP_VERSION)
                     ],
     gen_listener:cast(self(), {'sms_success', kz_json:from_list(DeliveryProps)}).
@@ -285,12 +291,12 @@ send_success(API, CallId) ->
 -spec send_timeout_error(kz_proplist(), ne_binary()) -> 'ok'.
 send_timeout_error(API, CallId) ->
     DeliveryProps = [{<<"Delivery-Result-Code">>, <<"sip:500">>}
-                     ,{<<"Delivery-Failure">>, 'true'}
-                     ,{<<"Error-Code">>, 500}
-                     ,{<<"Error-Message">>, <<"timeout">>}
-                     ,{<<"Status">>, <<"Failed">>}
-                     ,{<<"Message-ID">>, props:get_value(<<"Message-ID">>, API)}
-                     ,{<<"Call-ID">>, CallId}
+                    ,{<<"Delivery-Failure">>, 'true'}
+                    ,{<<"Error-Code">>, 500}
+                    ,{<<"Error-Message">>, <<"timeout">>}
+                    ,{<<"Status">>, <<"Failed">>}
+                    ,{<<"Message-ID">>, props:get_value(<<"Message-ID">>, API)}
+                    ,{<<"Call-ID">>, CallId}
                      | kz_api:default_headers(<<"message">>, <<"delivery">>, ?APP_NAME, ?APP_VERSION)
                     ],
     gen_listener:cast(self(), {'sms_error', kz_json:from_list(DeliveryProps)}).
@@ -298,12 +304,12 @@ send_timeout_error(API, CallId) ->
 -spec send_error(kz_proplist(), ne_binary(), ne_binary()) -> 'ok'.
 send_error(API, CallId, Reason) ->
     DeliveryProps = [{<<"Delivery-Result-Code">>, <<"sip:500">>}
-                     ,{<<"Delivery-Failure">>, 'true'}
-                     ,{<<"Error-Code">>, 500}
-                     ,{<<"Error-Message">>, kz_util:error_to_binary(Reason)}
-                     ,{<<"Status">>, <<"Failed">>}
-                     ,{<<"Message-ID">>, props:get_value(<<"Message-ID">>, API)}
-                     ,{<<"Call-ID">>, CallId}
+                    ,{<<"Delivery-Failure">>, 'true'}
+                    ,{<<"Error-Code">>, 500}
+                    ,{<<"Error-Message">>, kz_util:error_to_binary(Reason)}
+                    ,{<<"Status">>, <<"Failed">>}
+                    ,{<<"Message-ID">>, props:get_value(<<"Message-ID">>, API)}
+                    ,{<<"Call-ID">>, CallId}
                      | kz_api:default_headers(<<"message">>, <<"delivery">>, ?APP_NAME, ?APP_VERSION)
                     ],
     gen_listener:cast(self(), {'sms_error', kz_json:from_list(DeliveryProps)}).
@@ -339,13 +345,13 @@ maybe_add_broker(Broker, Exchange, RouteId, ExchangeType, ExchangeOptions, Broke
 
 -spec build_sms(state()) -> state().
 build_sms(#state{endpoints=Endpoints
-                 ,resource_req=OffnetReq
-                 ,queue=Q
+                ,resource_req=OffnetReq
+                ,queue=Q
                 }=State) ->
     {CIDNum, CIDName} = bridge_caller_id(Endpoints, OffnetReq),
     gen_listener:cast(self(), 'next_message'),
     State#state{messages=queue:from_list(maybe_endpoints_format_from(Endpoints, CIDNum, OffnetReq))
-                ,message=build_sms_base({CIDNum, CIDName}, OffnetReq, Q)
+               ,message=build_sms_base({CIDNum, CIDName}, OffnetReq, Q)
                }.
 
 -spec build_sms_base({binary(), binary()}, kapi_offnet_resource:req(), binary()) -> kz_proplist().
@@ -355,26 +361,26 @@ build_sms_base({CIDNum, CIDName}, OffnetReq, Q) ->
     CCVs = kapi_offnet_resource:custom_channel_vars(OffnetReq, kz_json:new()),
     CCVUpdates = props:filter_undefined(
                    [{<<"Ignore-Display-Updates">>, <<"true">>}
-                    ,{<<"Account-ID">>, AccountId}
-                    ,{<<"Account-Realm">>, AccountRealm}
-                    ,{<<"From-URI">>, bridge_from_uri(CIDNum, OffnetReq)}
-                    ,{<<"Reseller-ID">>, kz_services:find_reseller_id(AccountId)}
+                   ,{<<"Account-ID">>, AccountId}
+                   ,{<<"Account-Realm">>, AccountRealm}
+                   ,{<<"From-URI">>, bridge_from_uri(CIDNum, OffnetReq)}
+                   ,{<<"Reseller-ID">>, kz_services:find_reseller_id(AccountId)}
                    ]),
     props:filter_undefined(
       [{<<"Application-Name">>, <<"send">>}
-       ,{<<"Dial-Endpoint-Method">>, <<"single">>}
-       ,{<<"Outbound-Caller-ID-Number">>, CIDNum}
-       ,{<<"Outbound-Caller-ID-Name">>, CIDName}
-       ,{<<"Caller-ID-Number">>, CIDNum}
-       ,{<<"Caller-ID-Name">>, CIDName}
-       ,{<<"Presence-ID">>, kapi_offnet_resource:presence_id(OffnetReq)}
-       ,{<<"Custom-Channel-Vars">>, kz_json:set_values(CCVUpdates, CCVs)}
-       ,{<<"Custom-SIP-Headers">>, stepswitch_util:get_sip_headers(OffnetReq)}
-       ,{<<"Call-ID">>, kapi_offnet_resource:call_id(OffnetReq)}
-       ,{<<"Outbound-Callee-ID-Number">>, kapi_offnet_resource:outbound_callee_id_number(OffnetReq)}
-       ,{<<"Outbound-Callee-ID-Name">>, kapi_offnet_resource:outbound_callee_id_name(OffnetReq)}
-       ,{<<"Message-ID">>, kapi_offnet_resource:message_id(OffnetReq)}
-       ,{<<"Body">>, kapi_offnet_resource:body(OffnetReq)}
+      ,{<<"Dial-Endpoint-Method">>, <<"single">>}
+      ,{<<"Outbound-Caller-ID-Number">>, CIDNum}
+      ,{<<"Outbound-Caller-ID-Name">>, CIDName}
+      ,{<<"Caller-ID-Number">>, CIDNum}
+      ,{<<"Caller-ID-Name">>, CIDName}
+      ,{<<"Presence-ID">>, kapi_offnet_resource:presence_id(OffnetReq)}
+      ,{<<"Custom-Channel-Vars">>, kz_json:set_values(CCVUpdates, CCVs)}
+      ,{<<"Custom-SIP-Headers">>, stepswitch_util:get_sip_headers(OffnetReq)}
+      ,{<<"Call-ID">>, kapi_offnet_resource:call_id(OffnetReq)}
+      ,{<<"Outbound-Callee-ID-Number">>, kapi_offnet_resource:outbound_callee_id_number(OffnetReq)}
+      ,{<<"Outbound-Callee-ID-Name">>, kapi_offnet_resource:outbound_callee_id_name(OffnetReq)}
+      ,{<<"Message-ID">>, kapi_offnet_resource:message_id(OffnetReq)}
+      ,{<<"Body">>, kapi_offnet_resource:body(OffnetReq)}
        | kz_api:default_headers(Q, ?APP_NAME, ?APP_VERSION)
       ]).
 
@@ -396,12 +402,12 @@ maybe_endpoint_format_from(Endpoint, CIDNum, DefaultRealm) ->
         'true' -> endpoint_format_from(Endpoint, CIDNum, DefaultRealm);
         'false' ->
             kz_json:set_value(<<"Custom-Channel-Vars">>
-                              ,kz_json:delete_keys([<<"Format-From-URI">>
-                                                    ,<<"From-URI-Realm">>
-                                                   ]
-                                                   ,CCVs
-                                                  )
-                              ,Endpoint
+                             ,kz_json:delete_keys([<<"Format-From-URI">>
+                                                  ,<<"From-URI-Realm">>
+                                                  ]
+                                                 ,CCVs
+                                                 )
+                             ,Endpoint
                              )
     end.
 
@@ -412,27 +418,27 @@ endpoint_format_from(Endpoint, CIDNum, DefaultRealm) ->
     case is_binary(Realm) of
         'false' ->
             kz_json:set_value(<<"Custom-Channel-Vars">>
-                              ,kz_json:delete_keys([<<"Format-From-URI">>
-                                                    ,<<"From-URI-Realm">>
-                                                   ]
-                                                   ,CCVs
-                                                  )
-                              ,Endpoint
+                             ,kz_json:delete_keys([<<"Format-From-URI">>
+                                                  ,<<"From-URI-Realm">>
+                                                  ]
+                                                 ,CCVs
+                                                 )
+                             ,Endpoint
                              );
         'true' ->
             FromURI = <<"sip:", CIDNum/binary, "@", Realm/binary>>,
             lager:debug("setting resource ~s from-uri to ~s"
-                        ,[kz_json:get_value(<<"Resource-ID">>, CCVs)
-                          ,FromURI
-                         ]),
+                       ,[kz_json:get_value(<<"Resource-ID">>, CCVs)
+                        ,FromURI
+                        ]),
             UpdatedCCVs = kz_json:set_value(<<"From-URI">>, FromURI, CCVs),
             kz_json:set_value(<<"Custom-Channel-Vars">>
-                              ,kz_json:delete_keys([<<"Format-From-URI">>
-                                                    ,<<"From-URI-Realm">>
-                                                   ]
-                                                   ,UpdatedCCVs
-                                                  )
-                              ,Endpoint
+                             ,kz_json:delete_keys([<<"Format-From-URI">>
+                                                  ,<<"From-URI-Realm">>
+                                                  ]
+                                                 ,UpdatedCCVs
+                                                 )
+                             ,Endpoint
                              )
     end.
 
@@ -449,14 +455,14 @@ bridge_caller_id(Endpoints, JObj) ->
 bridge_emergency_caller_id(OffnetReq) ->
     lager:debug("outbound call is using an emergency route, attempting to set CID accordingly"),
     {maybe_emergency_cid_number(OffnetReq)
-     ,stepswitch_bridge:bridge_emergency_cid_name(OffnetReq)
+    ,stepswitch_bridge:bridge_emergency_cid_name(OffnetReq)
     }.
 
 -spec bridge_caller_id(kapi_offnet_resource:req()) ->
                               {ne_binary(), ne_binary()}.
 bridge_caller_id(OffnetReq) ->
     {stepswitch_bridge:bridge_outbound_cid_number(OffnetReq)
-     ,stepswitch_bridge:bridge_outbound_cid_name(OffnetReq)
+    ,stepswitch_bridge:bridge_outbound_cid_name(OffnetReq)
     }.
 
 -spec bridge_from_uri(api_binary(), kapi_offnet_resource:req()) ->
@@ -466,7 +472,9 @@ bridge_from_uri(CIDNum, OffnetReq) ->
     case (kapps_config:get_is_true(?APP_NAME, <<"format_from_uri">>, 'false')
           orelse kapi_offnet_resource:format_from_uri(OffnetReq)
          )
-        andalso (is_binary(CIDNum) andalso is_binary(Realm))
+        andalso (is_binary(CIDNum)
+                 andalso is_binary(Realm)
+                )
     of
         'false' -> 'undefined';
         'true' ->
@@ -491,7 +499,7 @@ maybe_emergency_cid_number(OffnetReq) ->
 emergency_cid_number(OffnetReq) ->
     AccountId = kapi_offnet_resource:account_id(OffnetReq),
     Candidates = [kapi_offnet_resource:emergency_caller_id_number(OffnetReq)
-                  ,kapi_offnet_resource:outbound_caller_id_number(OffnetReq)
+                 ,kapi_offnet_resource:outbound_caller_id_number(OffnetReq)
                  ],
     Requested = stepswitch_bridge:bridge_emergency_cid_number(OffnetReq),
     lager:debug("ensuring requested CID is emergency enabled: ~s", [Requested]),
@@ -524,20 +532,18 @@ emergency_cid_number(Requested, [Candidate|Candidates], EmergencyEnabled) ->
 -spec contains_emergency_endpoints(kz_json:objects()) -> boolean().
 contains_emergency_endpoints([]) -> 'false';
 contains_emergency_endpoints([Endpoint|Endpoints]) ->
-    case kz_json:is_true([<<"Custom-Channel-Vars">>, <<"Emergency-Resource">>], Endpoint) of
-        'true' -> 'true';
-        'false' -> contains_emergency_endpoints(Endpoints)
-    end.
+    kz_json:is_true([<<"Custom-Channel-Vars">>, <<"Emergency-Resource">>], Endpoint)
+        orelse contains_emergency_endpoints(Endpoints).
 
 -spec sms_timeout(kapi_offnet_resource:req()) -> kz_proplist().
 sms_timeout(OffnetReq) ->
     lager:debug("attempt to connect to resources timed out"),
     [{<<"Call-ID">>, kapi_offnet_resource:call_id(OffnetReq)}
-     ,{<<"Msg-ID">>, kapi_offnet_resource:msg_id(OffnetReq)}
-     ,{<<"Response-Message">>, <<"NORMAL_TEMPORARY_FAILURE">>}
-     ,{<<"Response-Code">>, <<"sip:500">>}
-     ,{<<"Error-Message">>, <<"bridge request timed out">>}
-     ,{<<"To-DID">>, kapi_offnet_resource:to_did(OffnetReq)}
+    ,{<<"Msg-ID">>, kapi_offnet_resource:msg_id(OffnetReq)}
+    ,{<<"Response-Message">>, <<"NORMAL_TEMPORARY_FAILURE">>}
+    ,{<<"Response-Code">>, <<"sip:500">>}
+    ,{<<"Error-Message">>, <<"bridge request timed out">>}
+    ,{<<"To-DID">>, kapi_offnet_resource:to_did(OffnetReq)}
      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
     ].
 
@@ -545,11 +551,11 @@ sms_timeout(OffnetReq) ->
 sms_error(JObj, OffnetReq) ->
     lager:debug("error during outbound request: ~s", [kz_util:to_binary(kz_json:encode(JObj))]),
     [{<<"Call-ID">>, kapi_offnet_resource:call_id(OffnetReq)}
-     ,{<<"Msg-ID">>, kapi_offnet_resource:msg_id(OffnetReq)}
-     ,{<<"Response-Message">>, <<"NORMAL_TEMPORARY_FAILURE">>}
-     ,{<<"Response-Code">>, <<"sip:500">>}
-     ,{<<"Error-Message">>, kz_json:get_value(<<"Error-Message">>, JObj, <<"failed to process request">>)}
-     ,{<<"To-DID">>, kapi_offnet_resource:to_did(OffnetReq)}
+    ,{<<"Msg-ID">>, kapi_offnet_resource:msg_id(OffnetReq)}
+    ,{<<"Response-Message">>, <<"NORMAL_TEMPORARY_FAILURE">>}
+    ,{<<"Response-Code">>, <<"sip:500">>}
+    ,{<<"Error-Message">>, kz_json:get_value(<<"Error-Message">>, JObj, <<"failed to process request">>)}
+    ,{<<"To-DID">>, kapi_offnet_resource:to_did(OffnetReq)}
      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
     ].
 
@@ -557,24 +563,24 @@ sms_error(JObj, OffnetReq) ->
 sms_success(JObj, OffnetReq) ->
     lager:debug("outbound request successfully completed"),
     [{<<"Call-ID">>, kapi_offnet_resource:call_id(OffnetReq)}
-     ,{<<"Msg-ID">>, kapi_offnet_resource:msg_id(OffnetReq)}
-     ,{<<"Response-Message">>, <<"SUCCESS">>}
-     ,{<<"Response-Code">>, <<"sip:200">>}
-     ,{<<"Resource-Response">>, JObj}
+    ,{<<"Msg-ID">>, kapi_offnet_resource:msg_id(OffnetReq)}
+    ,{<<"Response-Message">>, <<"SUCCESS">>}
+    ,{<<"Response-Code">>, <<"sip:200">>}
+    ,{<<"Resource-Response">>, JObj}
      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
     ].
 
 -spec sms_failure(kz_json:object(), kapi_offnet_resource:req()) -> kz_proplist().
 sms_failure(JObj, OffnetReq) ->
     lager:debug("resources for outbound request failed: ~s"
-                ,[kz_json:get_value(<<"Disposition">>, JObj)]
+               ,[kz_json:get_value(<<"Disposition">>, JObj)]
                ),
     [{<<"Call-ID">>, kapi_offnet_resource:call_id(OffnetReq)}
-     ,{<<"Msg-ID">>, kapi_offnet_resource:msg_id(OffnetReq)}
-     ,{<<"Response-Message">>, kz_json:get_first_defined([<<"Application-Response">>
-                                                          ,<<"Hangup-Cause">>
-                                                         ], JObj)}
-     ,{<<"Response-Code">>, kz_json:get_value(<<"Hangup-Code">>, JObj)}
-     ,{<<"Resource-Response">>, JObj}
+    ,{<<"Msg-ID">>, kapi_offnet_resource:msg_id(OffnetReq)}
+    ,{<<"Response-Message">>, kz_json:get_first_defined([<<"Application-Response">>
+                                                        ,<<"Hangup-Cause">>
+                                                        ], JObj)}
+    ,{<<"Response-Code">>, kz_json:get_value(<<"Hangup-Code">>, JObj)}
+    ,{<<"Resource-Response">>, JObj}
      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
     ].

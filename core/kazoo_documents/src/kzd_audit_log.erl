@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2015, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%% Audit Log document manipulation
 %%% @end
@@ -9,24 +9,24 @@
 -module(kzd_audit_log).
 
 -export([audit_account_ids/1
-         ,audit_account_id/2, audit_account_id/3
-         ,audit_account_quantities/2
-         ,audit_cascase_quantities/2
-         ,audit_account_name/2
-         ,tree/1
-         ,authenticating_user/1
-         ,authenticating_user_first_name/1
-         ,authenticating_user_last_name/1
-         ,authenticating_user_account_id/1
-         ,authenticating_user_account_name/1
-         ,type/0, type/1
+        ,audit_account_id/2, audit_account_id/3
+        ,audit_account_quantities/2
+        ,audit_cascase_quantities/2
+        ,audit_account_name/2
+        ,tree/1
+        ,authenticating_user/1
+        ,authenticating_user_first_name/1
+        ,authenticating_user_last_name/1
+        ,authenticating_user_account_id/1
+        ,authenticating_user_account_name/1
+        ,type/0, type/1
 
-         ,new/0
-         ,set_tree/2
-         ,set_authenticating_user/2
-         ,set_audit_account/3
+        ,new/0
+        ,set_tree/2
+        ,set_authenticating_user/2
+        ,set_audit_account/3
 
-         ,save/2
+        ,save/2
         ]).
 
 -include_lib("kazoo/include/kz_log.hrl").
@@ -133,7 +133,7 @@ save(Services, AuditLog, MasterAccountId) ->
 
 save(_Services, _AuditLog, MasterAccountId, MasterAccountId) ->
     lager:debug("reached master account when processing audit log for ~s"
-                ,[kz_services:account_id(_Services)]
+               ,[kz_services:account_id(_Services)]
                );
 save(Services, AuditLog, MasterAccountId, AccountId) ->
     JObj = kz_services:services_json(Services),
@@ -141,17 +141,17 @@ save(Services, AuditLog, MasterAccountId, AccountId) ->
     maybe_save_audit_log_to_reseller(Services, UpdatedLog, MasterAccountId, AccountId, JObj).
 
 -spec maybe_save_audit_log_to_reseller(kz_services:services()
-                                       ,doc()
-                                       ,ne_binary()
-                                       ,ne_binary()
-                                       ,kzd_services:doc()
+                                      ,doc()
+                                      ,ne_binary()
+                                      ,ne_binary()
+                                      ,kzd_services:doc()
                                       ) ->
                                               'ok'.
 maybe_save_audit_log_to_reseller(Services
-                                 ,AuditLog
-                                 ,MasterAccountId
-                                 ,AccountId
-                                 ,JObj
+                                ,AuditLog
+                                ,MasterAccountId
+                                ,AccountId
+                                ,JObj
                                 ) ->
     case kzd_services:reseller_id(JObj) of
         MasterAccountId ->
@@ -164,24 +164,23 @@ maybe_save_audit_log_to_reseller(Services
             save(ResellerServices, AuditLog1, MasterAccountId)
     end.
 
--spec maybe_save_audit_log(kz_services:services(), kz_json:object(), ne_binary()) ->
-                                  kzd_audit_log:doc().
+-spec maybe_save_audit_log(kz_services:services(), kz_json:object(), ne_binary()) -> doc().
 maybe_save_audit_log(Services, AuditLog, ResellerId) ->
     case kz_services:have_quantities_changed(Services) of
         'true' ->
             save_audit_log(Services, AuditLog, ResellerId);
         'false' ->
             lager:debug("nothing has changed for account ~s(reseller ~s), ignoring audit log"
-                        ,[kz_services:account_id(Services), ResellerId]
+                       ,[kz_services:account_id(Services), ResellerId]
                        ),
             AuditLog
     end.
 
--spec maybe_save_master_audit_log(kz_services:services(), kzd_audit_log:doc(), ne_binary()) -> 'ok'.
--spec maybe_save_master_audit_log(kz_services:services(), kzd_audit_log:doc(), ne_binary(), boolean()) -> 'ok'.
+-spec maybe_save_master_audit_log(kz_services:services(), doc(), ne_binary()) -> 'ok'.
+-spec maybe_save_master_audit_log(kz_services:services(), doc(), ne_binary(), boolean()) -> 'ok'.
 maybe_save_master_audit_log(Services, AuditLog, MasterAccountId) ->
     maybe_save_master_audit_log(Services, AuditLog, MasterAccountId
-                                ,kapps_config:get_is_true(<<"services">>, <<"should_save_master_audit_logs">>, 'false')
+                               ,kapps_config:get_is_true(<<"services">>, <<"should_save_master_audit_logs">>, 'false')
                                ).
 
 maybe_save_master_audit_log(_Services, _AuditLog, _MasterAccountId, 'false') ->
@@ -190,10 +189,10 @@ maybe_save_master_audit_log(Services, AuditLog, MasterAccountId, 'true') ->
     save_audit_log(Services, AuditLog, MasterAccountId),
     lager:debug("reached master account, saved audit log").
 
--spec save_audit_log(kz_services:services(), kzd_audit_log:doc(), ne_binary()) -> kzd_audit_log:doc().
+-spec save_audit_log(kz_services:services(), doc(), ne_binary()) -> doc().
 save_audit_log(Services, AuditLog, ResellerId) ->
     AuditLog1 = update_audit_log(Services, AuditLog),
-    case ?MODULE:audit_account_ids(AuditLog1) of
+    case audit_account_ids(AuditLog1) of
         [] ->
             lager:debug("no audit log to save");
         _Ids ->
@@ -204,19 +203,17 @@ save_audit_log(Services, AuditLog, ResellerId) ->
     end,
     AuditLog1.
 
--spec update_audit_log(kz_services:services(), kzd_audit_log:doc()) -> kzd_audit_log:doc().
-update_audit_log(Services
-                 ,AuditLog
-                ) ->
+-spec update_audit_log(kz_services:services(), doc()) -> doc().
+update_audit_log(Services, AuditLog) ->
     AccountId = kz_services:account_id(Services),
     JObj = kz_services:services_json(Services),
 
     AccountAudit = kz_json:from_list(
                      props:filter_empty(
                        [{?KEY_ACCOUNT_QUANTITIES, kzd_services:quantities(JObj)}
-                        ,{?KEY_DIFF_QUANTITIES, kz_services:diff_quantities(Services)}
-                        ,{?KEY_CASCADE_QUANTITIES, kz_services:cascade_quantities(Services)}
-                        ,{<<"account_name">>, kz_services:account_name(AccountId)}
+                       ,{?KEY_DIFF_QUANTITIES, kz_services:diff_quantities(Services)}
+                       ,{?KEY_CASCADE_QUANTITIES, kz_services:cascade_quantities(Services)}
+                       ,{<<"account_name">>, kz_services:account_name(AccountId)}
                        ])
                     ),
-    ?MODULE:set_audit_account(AuditLog, AccountId, AccountAudit).
+    set_audit_account(AuditLog, AccountId, AccountAudit).

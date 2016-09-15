@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%% Functions shared between crossbar modules
 %%% @end
@@ -9,33 +9,34 @@
 -module(cb_modules_util).
 
 -export([pass_hashes/2
-         ,update_mwi/2
-         ,get_devices_owned_by/2
-         ,maybe_originate_quickcall/1
-         ,is_superduper_admin/1
-         ,is_admin/1, is_admin/2
-         ,is_parent_account/2
+        ,update_mwi/2
+        ,get_devices_owned_by/2
+        ,maybe_originate_quickcall/1
+        ,is_superduper_admin/1
+        ,is_admin/1, is_admin/2
+        ,is_parent_account/2
 
-         ,attachment_name/2
-         ,parse_media_type/1
+        ,attachment_name/2
+        ,parse_media_type/1
 
-         ,bucket_name/1
-         ,token_cost/1, token_cost/2, token_cost/3
-         ,bind/2
+        ,bucket_name/1
+        ,token_cost/1, token_cost/2, token_cost/3
+        ,bind/2
 
-         ,range_view_options/1, range_view_options/2, range_view_options/3, range_view_options/5
+        ,range_view_options/1, range_view_options/2, range_view_options/3, range_view_options/5
 
-         ,range_modb_view_options/1, range_modb_view_options/2, range_modb_view_options/3, range_modb_view_options/5
+        ,range_modb_view_options/1, range_modb_view_options/2, range_modb_view_options/3, range_modb_view_options/5
 
-         ,take_sync_field/1
+        ,take_sync_field/1
 
-         ,remove_plaintext_password/1
+        ,remove_plaintext_password/1
 
-         ,apply_assignment_updates/1
-         ,log_assignment_updates/1
+        ,apply_assignment_updates/1
+        ,log_assignment_updates/1
         ]).
 
 -include("crossbar.hrl").
+-include_lib("kazoo/src/kz_json.hrl").
 
 -define(QCALL_NUMBER_FILTER, [<<" ">>, <<",">>, <<".">>, <<"-">>, <<"(">>, <<")">>]).
 
@@ -101,7 +102,7 @@ range_modb_view_options(Context, 'undefined', SuffixKeys) ->
 range_modb_view_options(Context, PrefixKeys, 'undefined') ->
     range_modb_view_options(Context, PrefixKeys, []);
 range_modb_view_options(Context, PrefixKeys, SuffixKeys) ->
-    case ?MODULE:range_view_options(Context) of
+    case range_view_options(Context) of
         {CreatedFrom, CreatedTo} ->
             range_modb_view_options1(Context, PrefixKeys, SuffixKeys, CreatedFrom, CreatedTo);
         Context1 -> Context1
@@ -111,7 +112,7 @@ range_modb_view_options(Context, PrefixKeys, SuffixKeys) ->
                                      {'ok', crossbar_doc:view_options()} |
                                      cb_context:context().
 range_modb_view_options(Context, PrefixKeys, SuffixKeys, CreatedFrom, CreatedTo) ->
-    case ?MODULE:range_view_options(Context, ?MAX_RANGE, <<"created">>, CreatedFrom, CreatedTo) of
+    case range_view_options(Context, ?MAX_RANGE, <<"created">>, CreatedFrom, CreatedTo) of
         {CreatedFrom, CreatedTo} ->
             range_modb_view_options1(Context, PrefixKeys, SuffixKeys, CreatedFrom, CreatedTo);
         Context1 -> Context1
@@ -181,19 +182,22 @@ send_mwi_update(BoxId, AccountId) ->
     BoxNumber = kzd_voicemail_box:mailbox_number(BoxJObj),
 
     _ = kz_util:spawn(fun cf_util:unsolicited_owner_mwi_update/2, [AccountDb, OwnerId]),
-    Messages = kz_vm_message:messages(AccountId, BoxId),
-    New = kzd_box_message:count_folder(Messages, <<"New">>),
-    Saved = kzd_box_message:count_folder(Messages, <<"Saved">>),
+    Messages = kvm_messages:get(AccountId, BoxId),
+    New = kzd_box_message:count_folder(Messages, ?VM_FOLDER_NEW),
+    Saved = kzd_box_message:count_folder(Messages, ?VM_FOLDER_SAVED),
     _ = kz_util:spawn(fun send_mwi_update/4, [New, Saved, BoxNumber, AccountId]),
     lager:debug("sent MWI updates for vmbox ~s in account ~s (~b/~b)", [BoxNumber, AccountId, New, Saved]).
+
+-define(FAKE_CALLID(C), kz_util:to_hex_binary(crypto:hash(md5, C))).
 
 -spec send_mwi_update(non_neg_integer(), non_neg_integer(), ne_binary(), ne_binary()) -> 'ok'.
 send_mwi_update(New, Saved, BoxNumber, AccountId) ->
     Realm = kz_util:get_account_realm(AccountId),
-    Command = [{<<"To">>, <<BoxNumber/binary, "@", Realm/binary>>}
-               ,{<<"Messages-New">>, New}
-               ,{<<"Messages-Saved">>, Saved}
-               ,{<<"Call-ID">>, <<>>}
+    To = <<BoxNumber/binary, "@", Realm/binary>>,
+    Command = [{<<"To">>, To}
+              ,{<<"Messages-New">>, New}
+              ,{<<"Messages-Saved">>, Saved}
+              ,{<<"Call-ID">>, ?FAKE_CALLID(To)}
                | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
               ],
     lager:debug("updating MWI for vmbox ~s@~s (~b/~b)", [BoxNumber, Realm, New, Saved]),
@@ -202,9 +206,9 @@ send_mwi_update(New, Saved, BoxNumber, AccountId) ->
 -spec get_devices_owned_by(ne_binary(), ne_binary()) -> kz_json:objects().
 get_devices_owned_by(OwnerID, DB) ->
     case kz_datamgr:get_results(DB
-                               ,<<"kz_attributes/owned">>
+                               ,<<"attributes/owned">>
                                ,[{'key', [OwnerID, <<"device">>]}
-                                 ,'include_docs'
+                                ,'include_docs'
                                 ])
     of
         {'ok', JObjs} ->
@@ -230,9 +234,9 @@ create_call_from_context(Context) ->
     Routines =
         props:filter_undefined(
           [{fun kapps_call:set_account_db/2, cb_context:account_db(Context)}
-           ,{fun kapps_call:set_account_id/2, cb_context:account_id(Context)}
-           ,{fun kapps_call:set_resource_type/2, <<"audio">>}
-           ,{fun kapps_call:set_owner_id/2, kz_json:get_ne_value(<<"owner_id">>, cb_context:doc(Context))}
+          ,{fun kapps_call:set_account_id/2, cb_context:account_id(Context)}
+          ,{fun kapps_call:set_resource_type/2, <<"audio">>}
+          ,{fun kapps_call:set_owner_id/2, kz_json:get_ne_value(<<"owner_id">>, cb_context:doc(Context))}
            | request_specific_extraction_funs(Context)
           ]),
     kapps_call:exec(Routines, kapps_call:new()).
@@ -246,16 +250,16 @@ request_specific_extraction_funs(Context) ->
 request_specific_extraction_funs_from_nouns(Context, ?DEVICES_QCALL_NOUNS(DeviceId, Number)) ->
     NumberURI = build_number_uri(Context, Number),
     [{fun kapps_call:set_authorizing_id/2, DeviceId}
-     ,{fun kapps_call:set_authorizing_type/2, <<"device">>}
-     ,{fun kapps_call:set_request/2, NumberURI}
-     ,{fun kapps_call:set_to/2, NumberURI}
+    ,{fun kapps_call:set_authorizing_type/2, <<"device">>}
+    ,{fun kapps_call:set_request/2, NumberURI}
+    ,{fun kapps_call:set_to/2, NumberURI}
     ];
 request_specific_extraction_funs_from_nouns(Context, ?USERS_QCALL_NOUNS(UserId, Number)) ->
     NumberURI = build_number_uri(Context, Number),
     [{fun kapps_call:set_authorizing_id/2, UserId}
-     ,{fun kapps_call:set_authorizing_type/2, <<"user">>}
-     ,{fun kapps_call:set_request/2, NumberURI}
-     ,{fun kapps_call:set_to/2, NumberURI}
+    ,{fun kapps_call:set_authorizing_type/2, <<"user">>}
+    ,{fun kapps_call:set_request/2, NumberURI}
+    ,{fun kapps_call:set_to/2, NumberURI}
     ];
 request_specific_extraction_funs_from_nouns(_Context, _ReqNouns) ->
     [].
@@ -278,10 +282,10 @@ build_number_uri(Context, Number) ->
     FilterVal = kz_json:get_value(<<"number_filter">>, QueryStr, <<"true">>),
 
     UseNumber = case FilterVal of
-        <<"false">> -> Number;
-        <<"true">>  -> binary:replace(Number, ?QCALL_NUMBER_FILTER, <<>>, ['global']);
-        FilterRegex -> filter_number_regex(Number, FilterRegex)
-    end,
+                    <<"false">> -> Number;
+                    <<"true">>  -> binary:replace(Number, ?QCALL_NUMBER_FILTER, <<>>, ['global']);
+                    FilterRegex -> filter_number_regex(Number, FilterRegex)
+                end,
 
     Realm = kz_util:get_account_realm(cb_context:account_id(Context)),
     <<UseNumber/binary, "@", Realm/binary>>.
@@ -293,8 +297,8 @@ get_endpoints(Call, Context) ->
 
 get_endpoints(Call, Context, ?DEVICES_QCALL_NOUNS(_DeviceId, Number)) ->
     Properties = kz_json:from_list([{<<"can_call_self">>, 'true'}
-                                    ,{<<"suppress_clid">>, 'true'}
-                                    ,{<<"source">>, 'cb_devices'}
+                                   ,{<<"suppress_clid">>, 'true'}
+                                   ,{<<"source">>, 'cb_devices'}
                                    ]),
     case kz_endpoint:build(cb_context:doc(Context), Properties, aleg_cid(Number, Call)) of
         {'error', _} -> [];
@@ -331,10 +335,10 @@ aleg_cid(Number, Call) ->
 originate_quickcall(Endpoints, Call, Context) ->
     AutoAnswer = kz_json:is_true(<<"auto_answer">>, cb_context:query_string(Context), 'true'),
     CCVs = [{<<"Account-ID">>, cb_context:account_id(Context)}
-            ,{<<"Retain-CID">>, <<"true">>}
-            ,{<<"Inherit-Codec">>, <<"false">>}
-            ,{<<"Authorizing-Type">>, kapps_call:authorizing_type(Call)}
-            ,{<<"Authorizing-ID">>, kapps_call:authorizing_id(Call)}
+           ,{<<"Retain-CID">>, <<"true">>}
+           ,{<<"Inherit-Codec">>, <<"false">>}
+           ,{<<"Authorizing-Type">>, kapps_call:authorizing_type(Call)}
+           ,{<<"Authorizing-ID">>, kapps_call:authorizing_id(Call)}
            ],
     MsgId = case kz_util:is_empty(cb_context:req_id(Context)) of
                 'true' -> kz_util:rand_hex_binary(16);
@@ -492,17 +496,17 @@ is_parent_account(Context, Account2) ->
 attachment_name(Filename, CT) ->
     Generators = [fun(A) ->
                           case kz_util:is_empty(A) of
-                              'true' -> kz_util:to_hex_binary(crypto:rand_bytes(16));
+                              'true' -> kz_util:to_hex_binary(crypto:strong_rand_bytes(16));
                               'false' -> A
                           end
                   end
-                  ,fun(A) ->
-                           case kz_util:is_empty(filename:extension(A)) of
-                               'false' -> A;
-                               'true' ->
-                                   <<A/binary, ".", (kz_mime:to_extension(CT))/binary>>
-                           end
-                   end
+                 ,fun(A) ->
+                          case kz_util:is_empty(filename:extension(A)) of
+                              'false' -> A;
+                              'true' ->
+                                  <<A/binary, ".", (kz_mime:to_extension(CT))/binary>>
+                          end
+                  end
                  ],
     lists:foldl(fun(F, A) -> F(A) end, Filename, Generators).
 
@@ -516,7 +520,7 @@ parse_media_type(MediaType) ->
 -spec bucket_name(api_binary(), api_binary()) -> ne_binary().
 bucket_name(Context) ->
     bucket_name(cb_context:client_ip(Context)
-                ,cb_context:account_id(Context)
+               ,cb_context:account_id(Context)
                ).
 
 bucket_name('undefined', 'undefined') ->
@@ -542,44 +546,44 @@ token_cost(Context, [_|_]=Suffix) ->
 token_cost(Context, Default) ->
     token_cost(Context, Default, []).
 
-token_cost(Context, Default, Suffix) when is_integer(Default), Default >= 0 ->
+token_cost(Context, Default, Suffix) when is_integer(Default)
+                                          andalso Default >= 0 ->
     Costs = kapps_config:get(?CONFIG_CAT, <<"token_costs">>, 1),
     find_token_cost(Costs
-                    ,Default
-                    ,Suffix
-                    ,cb_context:req_nouns(Context)
-                    ,cb_context:req_verb(Context)
-                    ,cb_context:account_id(Context)
+                   ,Default
+                   ,Suffix
+                   ,cb_context:req_nouns(Context)
+                   ,cb_context:req_verb(Context)
+                   ,cb_context:account_id(Context)
                    ).
 
 -spec find_token_cost(kz_json:object() | non_neg_integer()
-                      ,non_neg_integer()
-                      ,kz_json:keys()
-                      ,req_nouns()
-                      ,http_method()
-                      ,api_binary()
+                     ,Default
+                     ,kz_json:keys()
+                     ,req_nouns()
+                     ,http_method()
+                     ,api_binary()
                      ) ->
-                             non_neg_integer().
-
+                             integer() | Default.
 find_token_cost(N, _Default, _Suffix, _Nouns, _ReqVerb, _AccountId) when is_integer(N) ->
     lager:debug("flat token cost of ~p configured", [N]),
     N;
 find_token_cost(JObj, Default, Suffix, [{Endpoint, _} | _], ReqVerb, 'undefined') ->
     Keys = [[Endpoint, ReqVerb | Suffix]
-            ,[Endpoint | Suffix]
+           ,[Endpoint | Suffix]
            ],
     get_token_cost(JObj, Default, Keys);
 find_token_cost(JObj, Default, Suffix, [{Endpoint, _}|_], ReqVerb, AccountId) ->
     Keys = [[AccountId, Endpoint, ReqVerb | Suffix]
-            ,[AccountId, Endpoint | Suffix]
-            ,[AccountId | Suffix]
-            ,[Endpoint, ReqVerb | Suffix]
-            ,[Endpoint | Suffix]
+           ,[AccountId, Endpoint | Suffix]
+           ,[AccountId | Suffix]
+           ,[Endpoint, ReqVerb | Suffix]
+           ,[Endpoint | Suffix]
            ],
     get_token_cost(JObj, Default, Keys).
 
--spec get_token_cost(kz_json:object(), non_neg_integer(), kz_json:keys()) ->
-                            non_neg_integer().
+-spec get_token_cost(kz_json:object(), Default, kz_json:keys()) ->
+                            integer() | Default.
 get_token_cost(JObj, Default, Keys) ->
     case kz_json:get_first_defined(Keys, JObj) of
         'undefined' -> Default;
@@ -593,34 +597,47 @@ take_sync_field(Context) ->
     ShouldSync = kz_json:is_true(<<"sync">>, Doc, 'false'),
     CleansedDoc = kz_json:delete_key(<<"sync">>, Doc),
     cb_context:setters(Context, [{fun cb_context:store/3, 'sync', ShouldSync}
-                                 ,{fun cb_context:set_doc/2, CleansedDoc}
+                                ,{fun cb_context:set_doc/2, CleansedDoc}
                                 ]).
 
 %% @public
 -spec remove_plaintext_password(cb_context:context()) -> cb_context:context().
 remove_plaintext_password(Context) ->
-    Doc = kz_json:delete_keys(
-            [<<"password">>,
-             <<"confirm_password">>
-            ], cb_context:doc(Context)
-           ),
+    Doc = kz_json:delete_keys([<<"password">>
+                              ,<<"confirm_password">>
+                              ]
+                             ,cb_context:doc(Context)
+                             ),
     cb_context:set_doc(Context, Doc).
 
--type assignment_updates() :: [{ne_binary(), knm_number:knm_number_return()}].
+-type assignment_update() :: {ne_binary(), knm_number:knm_number_return()} |
+                             {ne_binary(), {'ok', kz_json:object()}} |
+                             {ne_binary(), {'error', any()}}.
+-type assignment_updates() :: [assignment_update()].
 
 -spec apply_assignment_updates([{ne_binary(), api_binary()}]) ->
                                       assignment_updates().
 apply_assignment_updates(Updates) ->
-    [{DID, knm_number:assign_to_app(DID, Assign)}
+    [maybe_assign_to_port_number(DID, Assign)
      || {DID, Assign} <- Updates
     ].
 
+-spec maybe_assign_to_port_number(ne_binary(), api_binary()) ->
+                                         assignment_update().
+maybe_assign_to_port_number(DID, Assign) ->
+    Num = knm_converters:normalize(DID),
+    case knm_port_request:get(Num) of
+        {'error', _} ->
+            {DID, knm_number:assign_to_app(DID, Assign)};
+        {'ok', JObj} ->
+            {DID, knm_port_request:assign_to_app(Num, Assign, JObj)}
+    end.
+
 -spec log_assignment_updates(assignment_updates()) -> 'ok'.
 log_assignment_updates(Updates) ->
-    _ = [log_assignment_update(Update) || Update <- Updates],
-    'ok'.
+    lists:foreach(fun log_assignment_update/1, Updates).
 
--spec log_assignment_update({ne_binary(), knm_number:knm_number_return()}) -> 'ok'.
+-spec log_assignment_update(assignment_update()) -> 'ok'.
 log_assignment_update({DID, {'ok', _Number}}) ->
     lager:debug("successfully updated ~s", [DID]);
 log_assignment_update({DID, {'error', E}}) ->

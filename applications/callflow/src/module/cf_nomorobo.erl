@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2014, 2600Hz INC
+%%% @copyright (C) 2016, 2600Hz INC
 %%% @doc
 %%% Look up caller id number for spam score
 %%% "data":{
@@ -32,13 +32,15 @@
 %%%-------------------------------------------------------------------
 -module(cf_nomorobo).
 
+-behaviour(gen_cf_action).
+
 -export([handle/2
-         ,nomorobo_req/2
+        ,nomorobo_req/2
         ]).
 
 -ifdef(TEST).
 -export([nomorobo_branches/1
-         ,nomorobo_branch/2
+        ,nomorobo_branch/2
         ]).
 -endif.
 
@@ -88,7 +90,7 @@ nomorobo_req(URI, Data) ->
     Username = kz_json:get_binary_value(<<"username">>, Data),
     Password = kz_json:get_binary_value(<<"password">>, Data),
     Options = [{'basic_auth', {Username, Password}}
-               ,{'ssl', [{'verify', 'verify_none'}]}
+              ,{'ssl', [{'verify', 'verify_none'}]}
               ],
 
     kz_http:get(kz_util:to_list(URI), [], Options).
@@ -96,10 +98,10 @@ nomorobo_req(URI, Data) ->
 -spec nomorobo_uri(kapps_call:call()) -> ne_binary().
 nomorobo_uri(Call) ->
     lists:foldl(fun uri_replace/2
-                ,?URL
-                ,[{<<"{TO}">>, knm_converters:to_npan(kapps_call:request_user(Call))}
-                  ,{<<"{FROM}">>, knm_converters:to_npan(kapps_call:caller_id_number(Call))}
-                 ]).
+               ,?URL
+               ,[{<<"{TO}">>, knm_converters:to_npan(kapps_call:request_user(Call))}
+                ,{<<"{FROM}">>, knm_converters:to_npan(kapps_call:caller_id_number(Call))}
+                ]).
 
 -spec uri_replace({ne_binary(), ne_binary()}, ne_binary()) -> ne_binary().
 uri_replace({S, R}, U) -> binary:replace(U, S, R).

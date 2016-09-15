@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2015, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%% Account document
 %%% @end
@@ -9,36 +9,38 @@
 -module(kz_account).
 
 -export([new/0
-         ,type/0
-         ,id/1
-         ,fetch/1
+        ,type/0
+        ,id/1
+        ,fetch/1
 
-         ,name/1, name/2, set_name/2
-         ,realm/1, realm/2, set_realm/2
-         ,language/1, set_language/2
-         ,timezone/1, timezone/2, set_timezone/2
-         ,parent_account_id/1
-         ,tree/1, tree/2 ,set_tree/2
-         ,notification_preference/1, set_notification_preference/2
-         ,is_enabled/1, enable/1, disable/1
-         ,api_key/1, set_api_key/2
-         ,is_superduper_admin/1, set_superduper_admin/2
-         ,allow_number_additions/1, set_allow_number_additions/2
-         ,trial_expiration/1, trial_expiration/2, set_trial_expiration/2
-         ,trial_time_left/1, trial_time_left/2
-         ,trial_has_expired/1, trial_has_expired/2
-         ,is_expired/1
-         ,is_trial_account/1
-         ,is_reseller/1, promote/1, demote/1
-         ,reseller_id/1, set_reseller_id/2
+        ,name/1, name/2, set_name/2
+        ,realm/1, realm/2, set_realm/2
+        ,language/1, set_language/2
+        ,timezone/1, timezone/2, set_timezone/2
+        ,parent_account_id/1
+        ,tree/1, tree/2 ,set_tree/2
+        ,notification_preference/1, set_notification_preference/2
+        ,is_enabled/1, enable/1, disable/1
+        ,api_key/1, set_api_key/2
+        ,is_superduper_admin/1, set_superduper_admin/2
+        ,allow_number_additions/1, set_allow_number_additions/2
+        ,trial_expiration/1, trial_expiration/2, set_trial_expiration/2
+        ,trial_time_left/1, trial_time_left/2
+        ,trial_has_expired/1, trial_has_expired/2
+        ,is_expired/1
+        ,is_trial_account/1
+        ,is_reseller/1, promote/1, demote/1
+        ,reseller_id/1, set_reseller_id/2
 
-         ,dial_plan/1, dial_plan/2
-         ,fax_settings/1
-         ,low_balance_threshold/1, low_balance_threshold/2, set_low_balance_threshold/2
-         ,low_balance_sent/1, set_low_balance_sent/1, reset_low_balance_sent/1
-         ,low_balance_enabled/1, set_low_balance_enabled/1, reset_low_balance_enabled/1, low_balance_enabled_exists/1
-         ,low_balance_tstamp/1, set_low_balance_tstamp/1, set_low_balance_tstamp/2, remove_low_balance_tstamp/1
-         ,topup_threshold/1, topup_threshold/2, set_topup_threshold/2
+        ,dial_plan/1, dial_plan/2
+        ,fax_settings/1
+        ,low_balance_threshold/1, low_balance_threshold/2, set_low_balance_threshold/2
+        ,low_balance_sent/1, set_low_balance_sent/1, reset_low_balance_sent/1
+        ,low_balance_enabled/1, set_low_balance_enabled/1, reset_low_balance_enabled/1, low_balance_enabled_exists/1
+        ,low_balance_tstamp/1, set_low_balance_tstamp/1, set_low_balance_tstamp/2, remove_low_balance_tstamp/1
+        ,topup_threshold/1, topup_threshold/2, set_topup_threshold/2
+        ,sent_initial_registration/1, set_initial_registration_sent/2
+        ,sent_initial_call/1, set_initial_call_sent/2
         ]).
 
 -include("kz_documents.hrl").
@@ -65,6 +67,8 @@
 -define(LOW_BALANCE_THRESHOLD, [<<"notifications">>, <<"low_balance">>, <<"threshold">>]).
 -define(LOW_BALANCE_TSTAMP, [<<"notifications">>, <<"low_balance">>, <<"last_notification">>]).
 -define(TOPUP_THRESHOLD, [<<"topup">>, <<"threshold">>]).
+-define(SENT_INITIAL_REGISTRATION, [<<"notifications">>, <<"first_occurrence">>, <<"sent_initial_registration">>]).
+-define(SENT_INITIAL_CALL, [<<"notifications">>, <<"first_occurrence">>, <<"sent_initial_call">>]).
 
 -define(PVT_TYPE, <<"account">>).
 
@@ -214,11 +218,18 @@ set_timezone(JObj, Timezone) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec low_balance_threshold(doc()) -> api_float().
-low_balance_threshold(JObj) ->
-    low_balance_threshold(JObj, 'undefined').
+-spec low_balance_threshold(ne_binary() | doc()) -> api_float().
+low_balance_threshold(Thing) ->
+    ConfigCat = <<"notify.low_balance">>,
+    Default = kapps_config:get_float(ConfigCat, <<"threshold">>, 5.00),
+    low_balance_threshold(Thing, Default).
 
--spec low_balance_threshold(doc(), Default) -> float() | Default.
+-spec low_balance_threshold(ne_binary() | doc(), Default) -> float() | Default.
+low_balance_threshold(AccountId, Default) when is_binary(AccountId) ->
+    case fetch(AccountId) of
+        {'error', _R} -> low_balance_threshold(kz_json:new(), Default);
+        {'ok', JObj} -> low_balance_threshold(JObj, Default)
+    end;
 low_balance_threshold(JObj, Default) ->
     case kz_json:get_float_value(?LOW_BALANCE_THRESHOLD, JObj) of
         'undefined' -> topup_threshold(JObj, Default);
@@ -305,6 +316,33 @@ topup_threshold(JObj, Default) ->
 -spec set_topup_threshold(doc(), float()) -> doc().
 set_topup_threshold(JObj, Threshold) ->
     kz_json:set_value(?TOPUP_THRESHOLD, Threshold, JObj).
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec sent_initial_registration(doc()) -> boolean().
+sent_initial_registration(JObj) ->
+    kz_json:is_true(?SENT_INITIAL_REGISTRATION, JObj).
+
+-spec set_initial_registration_sent(doc(), boolean()) -> doc().
+set_initial_registration_sent(JObj, Sent) ->
+    kz_json:set_value(?SENT_INITIAL_REGISTRATION, Sent, JObj).
+
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec sent_initial_call(doc()) -> boolean().
+sent_initial_call(JObj) ->
+    kz_json:is_true(?SENT_INITIAL_CALL, JObj).
+
+-spec set_initial_call_sent(doc(), boolean()) -> doc().
+set_initial_call_sent(JObj, Sent) ->
+    kz_json:set_value(?SENT_INITIAL_CALL, Sent, JObj).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -472,6 +510,7 @@ trial_time_left(JObj, Now) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec trial_has_expired(doc()) -> boolean().
+-spec trial_has_expired(doc(), gregorian_seconds()) -> boolean().
 trial_has_expired(JObj) ->
     trial_has_expired(JObj, kz_util:current_tstamp()).
 trial_has_expired(JObj, Now) ->
@@ -487,8 +526,7 @@ trial_has_expired(JObj, Now) ->
 is_expired(JObj) ->
     case trial_has_expired(JObj) of
         'false' -> 'false';
-        'true' ->
-            {'true', kz_account:trial_expiration(JObj)}
+        'true' -> {'true', trial_expiration(JObj)}
     end.
 
 %%--------------------------------------------------------------------

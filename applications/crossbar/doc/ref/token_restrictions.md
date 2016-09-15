@@ -13,7 +13,7 @@ Key | Description | Type | Default | Required
 `restrictions.^\w+$.^\w+$.^\w+$.[].allowed_accounts` | Account allowed to match this item | `array(string)` |   | `false`
 `restrictions.^\w+$.^\w+$.^\w+$.[].allowed_accounts.[]` |   | `string` |   | `false`
 `restrictions.^\w+$.^\w+$.^\w+$.[].rules` | Rules applied to endpoint parameters | `object` |   | `false`
-`restrictions.^\w+$.^\w+$.^\w+$.[].rules.^[\w/#*]+$` |   | `array(string('GET', 'PUT', 'POST', 'PATCH', 'DELETE', '_'))` |   | `false`
+`restrictions.^\w+$.^\w+$.^\w+$.[].rules.^[\w/#*]+$` | verbs | `array(string('GET', 'PUT', 'POST', 'PATCH', 'DELETE', '_'))` |   | `false`
 `restrictions.^\w+$.^\w+$.^\w+$.[].rules.^[\w/#*]+$.[]` |   | `string` |   | `false`
 
 
@@ -21,7 +21,7 @@ Key | Description | Type | Default | Required
 
 > DELETE /v2/accounts/{ACCOUNT_ID}/token_restrictions
 
-```curl
+```shell
 curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/token_restrictions
@@ -31,7 +31,7 @@ curl -v -X DELETE \
 
 > GET /v2/accounts/{ACCOUNT_ID}/token_restrictions
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/token_restrictions
@@ -41,7 +41,7 @@ curl -v -X GET \
 
 > POST /v2/accounts/{ACCOUNT_ID}/token_restrictions
 
-```curl
+```shell
 curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/token_restrictions

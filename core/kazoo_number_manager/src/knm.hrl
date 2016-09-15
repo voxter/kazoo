@@ -4,6 +4,7 @@
 
 -define(APP_VERSION, <<"4.0.0">>).
 -define(APP_NAME, <<"kazoo_number_manager">>).
+-define(APP, 'kazoo_number_manager').
 
 -define(CACHE_NAME, 'knm_cache').
 -define(KNM_CONFIG_CAT, <<"number_manager">>).
@@ -15,6 +16,14 @@
 
 -define(KEY_DISPLAY_NAME, <<"display_name">>).
 -define(KEY_INBOUND_LOOKUP, <<"inbound_lookup">>).
+
+-define(DEFAULT_ALLOWED_FEATURES, [?FEATURE_CNAM
+                                  ,?DASH_KEY
+                                  ,<<"failover">>
+                                  ,<<"port">>
+                                  ,<<"prepend">>
+                                  ,?VITELITY_KEY
+                                  ]).
 
 -define(KNM_USER_AGENT, "Kazoo Number Manager " ++ binary_to_list(?APP_VERSION)).
 
@@ -37,86 +46,86 @@
 -define(CHILD_ACCOUNT_ID,    <<"child_account_670a04df0014d0b27a">>).
 
 -define(PVT_TREE, [?MASTER_ACCOUNT_ID
-                   ,?RESELLER_ACCOUNT_ID
+                  ,?RESELLER_ACCOUNT_ID
                   ]).
 
 -define(RESELLER_ACCOUNT_DOC
-        ,kz_json:from_list(
-           [{<<"_id">>, ?RESELLER_ACCOUNT_ID}]
-          )
+       ,kz_json:from_list(
+          [{<<"_id">>, ?RESELLER_ACCOUNT_ID}]
+         )
        ).
 
 -define(AVAILABLE_NUMBER
-        ,kz_json:from_list(
-           [{<<"_id">>, ?TEST_AVAILABLE_NUM}
-            ,{<<"_rev">>, <<"10-7dd6a1523e81a4e3c2689140ed3a8e69">>}
-            ,{?PVT_MODIFIED, 63565934349}
-            ,{?PVT_FEATURES, kz_json:new()}
-            ,{?PVT_ASSIGNED_TO, ?RESELLER_ACCOUNT_ID}
-            ,{?PVT_RESERVE_HISTORY, [?RESELLER_ACCOUNT_ID]}
-            ,{?PVT_MODULE_NAME, ?CARRIER_LOCAL}
-            ,{?PVT_STATE, ?NUMBER_STATE_AVAILABLE}
-            ,{?PVT_DB_NAME, <<"numbers%2F%2B1555">>}
-            ,{?PVT_CREATED, 63565934344}
-            ,{?PVT_AUTH_BY, ?MASTER_ACCOUNT_ID}
-            ,{?PVT_USED_BY, <<"callflow">>}
-           ]
-          )
+       ,kz_json:from_list(
+          [{<<"_id">>, ?TEST_AVAILABLE_NUM}
+          ,{<<"_rev">>, <<"10-7dd6a1523e81a4e3c2689140ed3a8e69">>}
+          ,{?PVT_MODIFIED, 63565934349}
+          ,{?PVT_FEATURES, kz_json:new()}
+          ,{?PVT_ASSIGNED_TO, ?RESELLER_ACCOUNT_ID}
+          ,{?PVT_RESERVE_HISTORY, [?RESELLER_ACCOUNT_ID]}
+          ,{?PVT_MODULE_NAME, ?CARRIER_LOCAL}
+          ,{?PVT_STATE, ?NUMBER_STATE_AVAILABLE}
+          ,{?PVT_DB_NAME, <<"numbers%2F%2B1555">>}
+          ,{?PVT_CREATED, 63565934344}
+          ,{?PVT_AUTH_BY, ?MASTER_ACCOUNT_ID}
+          ,{?PVT_USED_BY, <<"callflow">>}
+          ]
+         )
        ).
 
 -define(IN_SERVICE_NUMBER
-        ,kz_json:from_list(
-           [{<<"_id">>, ?TEST_IN_SERVICE_NUM}
-            ,{<<"_rev">>, <<"3-7dd6a1523e81a4e3c2689140ed3a8e69">>}
-            ,{?PVT_MODIFIED, 63565934349}
-            ,{?PVT_FEATURES, kz_json:new()}
-            ,{?PVT_ASSIGNED_TO, ?RESELLER_ACCOUNT_ID}
-            ,{?PVT_RESERVE_HISTORY, [?RESELLER_ACCOUNT_ID]}
-            ,{?PVT_MODULE_NAME, ?CARRIER_LOCAL}
-            ,{?PVT_STATE, ?NUMBER_STATE_IN_SERVICE}
-            ,{?PVT_DB_NAME, <<"numbers%2F%2B1555">>}
-            ,{?PVT_CREATED, 63565934344}
-            ,{?PVT_AUTH_BY, ?MASTER_ACCOUNT_ID}
-            ,{?PVT_USED_BY, <<"callflow">>}
-           ]
-          )
+       ,kz_json:from_list(
+          [{<<"_id">>, ?TEST_IN_SERVICE_NUM}
+          ,{<<"_rev">>, <<"3-7dd6a1523e81a4e3c2689140ed3a8e69">>}
+          ,{?PVT_MODIFIED, 63565934349}
+          ,{?PVT_FEATURES, kz_json:new()}
+          ,{?PVT_ASSIGNED_TO, ?RESELLER_ACCOUNT_ID}
+          ,{?PVT_RESERVE_HISTORY, [?RESELLER_ACCOUNT_ID]}
+          ,{?PVT_MODULE_NAME, ?CARRIER_LOCAL}
+          ,{?PVT_STATE, ?NUMBER_STATE_IN_SERVICE}
+          ,{?PVT_DB_NAME, <<"numbers%2F%2B1555">>}
+          ,{?PVT_CREATED, 63565934344}
+          ,{?PVT_AUTH_BY, ?MASTER_ACCOUNT_ID}
+          ,{?PVT_USED_BY, <<"callflow">>}
+          ]
+         )
        ).
 
 -define(IN_SERVICE_WITH_HISTORY_NUMBER
-        ,kz_json:from_list(
-           [{<<"_id">>, ?TEST_IN_SERVICE_WITH_HISTORY_NUM}
-            ,{<<"_rev">>, <<"3-7dd6a1523e81a4e3c2689140ed3a8e69">>}
-            ,{?PVT_MODIFIED, 63565934349}
-            ,{?PVT_FEATURES, kz_json:new()}
-            ,{?PVT_ASSIGNED_TO, ?RESELLER_ACCOUNT_ID}
-            ,{?PVT_RESERVE_HISTORY, [?RESELLER_ACCOUNT_ID, ?MASTER_ACCOUNT_ID]}
-            ,{?PVT_MODULE_NAME, ?CARRIER_LOCAL}
-            ,{?PVT_STATE, ?NUMBER_STATE_IN_SERVICE}
-            ,{?PVT_DB_NAME, <<"numbers%2F%2B1555">>}
-            ,{?PVT_CREATED, 63565934344}
-            ,{?PVT_AUTH_BY, ?MASTER_ACCOUNT_ID}
-            ,{?PVT_USED_BY, <<"callflow">>}
-           ]
-          )
+       ,kz_json:from_list(
+          [{<<"_id">>, ?TEST_IN_SERVICE_WITH_HISTORY_NUM}
+          ,{<<"_rev">>, <<"3-7dd6a1523e81a4e3c2689140ed3a8e69">>}
+          ,{?PVT_MODIFIED, 63565934349}
+          ,{?PVT_FEATURES, kz_json:new()}
+          ,{?PVT_ASSIGNED_TO, ?RESELLER_ACCOUNT_ID}
+          ,{?PVT_RESERVE_HISTORY, [?RESELLER_ACCOUNT_ID, ?MASTER_ACCOUNT_ID]}
+          ,{?PVT_MODULE_NAME, ?CARRIER_LOCAL}
+          ,{?PVT_STATE, ?NUMBER_STATE_IN_SERVICE}
+          ,{?PVT_DB_NAME, <<"numbers%2F%2B1555">>}
+          ,{?PVT_CREATED, 63565934344}
+          ,{?PVT_AUTH_BY, ?MASTER_ACCOUNT_ID}
+          ,{?PVT_USED_BY, <<"callflow">>}
+          ]
+         )
        ).
 
 
 -define(EXISTING_TOLL
-        ,kz_json:from_list(
-           [{<<"_id">>, ?TEST_EXISTING_TOLL}
-            ,{<<"_rev">>, <<"10-7dd6a1523e81a4e3c2689140ed3a8e69">>}
-            ,{?PVT_MODIFIED, 63565934349}
-            ,{?PVT_FEATURES, kz_json:new()}
-            ,{?PVT_ASSIGNED_TO, ?RESELLER_ACCOUNT_ID}
-            ,{?PVT_RESERVE_HISTORY, [?RESELLER_ACCOUNT_ID]}
-            ,{?PVT_MODULE_NAME, ?CARRIER_LOCAL}
-            ,{?PVT_STATE, ?NUMBER_STATE_AVAILABLE}
-            ,{?PVT_DB_NAME, <<"numbers%2F%2B1800">>}
-            ,{?PVT_CREATED, 63565934344}
-            ,{?PVT_AUTH_BY, ?MASTER_ACCOUNT_ID}
-            ,{?PVT_USED_BY, <<"callflow">>}
-           ]
-          )
+       ,kz_json:from_list(
+          [{<<"_id">>, ?TEST_EXISTING_TOLL}
+          ,{<<"_rev">>, <<"10-7dd6a1523e81a4e3c2689140ed3a8e69">>}
+          ,{?PVT_MODIFIED, 63565934349}
+          ,{?PVT_FEATURES, kz_json:new()}
+          ,{?PVT_ASSIGNED_TO, ?RESELLER_ACCOUNT_ID}
+          ,{?PVT_RESERVE_HISTORY, [?RESELLER_ACCOUNT_ID]}
+          ,{?PVT_MODULE_NAME, ?CARRIER_LOCAL}
+          ,{?PVT_STATE, ?NUMBER_STATE_AVAILABLE}
+          ,{?PVT_DB_NAME, <<"numbers%2F%2B1800">>}
+          ,{?PVT_CREATED, 63565934344}
+          ,{?PVT_AUTH_BY, ?MASTER_ACCOUNT_ID}
+          ,{?PVT_USED_BY, <<"callflow">>}
+          ]
+         )
        ).
 
 -define(BLOCK_PHONEBOOK_URL, <<"http://blocks.tld">>).
@@ -124,75 +133,75 @@
 -define(START_BLOCK, <<"+14158867900">>).
 -define(END_BLOCK, <<"+14158897909">>).
 -define(BLOCK_RESP
-        ,kz_json:from_list([{<<"start_number">>, ?START_BLOCK}
-                            ,{<<"end_number">>, ?END_BLOCK}
-                           ])
+       ,kz_json:from_list([{<<"start_number">>, ?START_BLOCK}
+                          ,{<<"end_number">>, ?END_BLOCK}
+                          ])
        ).
 
 -define(BLOCKS_RESP
-        ,kz_json:from_list([{<<"status">>, <<"success">>}
-                            ,{<<"data">>, [?BLOCK_RESP]}
-                           ])
+       ,kz_json:from_list([{<<"status">>, <<"success">>}
+                          ,{<<"data">>, [?BLOCK_RESP]}
+                          ])
        ).
 
 -define(NUMBER_PHONEBOOK_URL_L, "http://numbers.tld").
 -define(NUMBER_PHONEBOOK_URL, <<?NUMBER_PHONEBOOK_URL_L>>).
 
 -define(NUMBERS_DATA
-        ,kz_json:from_list(
-           [{<<"+1415886790", (D + $0)>>
-             ,kz_json:from_list([{<<"extension">>, D}])
-            }
-            || D <- lists:seq(0,9)
-           ]
-          )
+       ,kz_json:from_list(
+          [{<<"+1415886790", (D + $0)>>
+           ,kz_json:from_list([{<<"extension">>, D}])
+           }
+           || D <- lists:seq(0,9)
+          ]
+         )
        ).
 
 -define(NUMBERS_RESPONSE
-        ,kz_json:from_list([{<<"status">>, <<"success">>}
-                            ,{<<"data">>, ?NUMBERS_DATA}
-                           ])
+       ,kz_json:from_list([{<<"status">>, <<"success">>}
+                          ,{<<"data">>, ?NUMBERS_DATA}
+                          ])
        ).
 
 -define(BANDWIDTH_NPAN_RESPONSE
-        ,knm_util:fixture("bandwidth_numbersearch_response.xml")
+       ,knm_util:fixture("bandwidth_numbersearch_response.xml")
        ).
 
 -define(BANDWIDTH_AREACODE_RESPONSE
-        ,knm_util:fixture("bandwidth_areacode_response.xml")
+       ,knm_util:fixture("bandwidth_areacode_response.xml")
        ).
 
 -define(BW_EXISTING_DID, <<"+14122065197">>).
 -define(BW_EXISTING_JSON
-        ,kz_json:from_list(
-           [{<<"_id">>, <<"+14122065197">>},
-            {?PVT_DB_NAME, <<"numbers%2F%2B1412">>},
-            {?PVT_FEATURES, kz_json:new()},
-            {?PVT_STATE, ?NUMBER_STATE_DISCOVERY},
-            {?PVT_RESERVE_HISTORY, []},
-            {?PVT_PORTED_IN, 'false'},
-            {?PVT_MODULE_NAME, <<"knm_bandwidth">>},
-            {?PVT_CARRIER_DATA
-             ,kz_json:from_list(
-                [{<<"number_id">>, <<"0C107941-CDDA-42FE-823C-042EADBD3719">>},
-                 {<<"ten_digit">>,<<"4122065197">>},
-                 {<<"formatted_number">>,<<"1-412-206-5197">>},
-                 {<<"e164">>,<<"+14122065197">>},
-                 {<<"npa_nxx">>,<<"412206">>},
-                 {<<"status">>,<<"Available">>},
-                 {<<"rate_center">>
-                  ,kz_json:from_list(
-                     [{<<"name">>,<<"PITTSBURGH SUBURBAN ZONE 13">>},
-                      {<<"lata">>,<<"234">>},
-                      {<<"state">>,<<"PA">>}
-                     ])
-                 }
-                ])
-            },
-            {?PVT_MODIFIED, 63610268576},
-            {?PVT_CREATED, 63610268576},
-            {?PVT_TYPE,<<"number">>}]
-          )
+       ,kz_json:from_list(
+          [{<<"_id">>, <<"+14122065197">>},
+           {?PVT_DB_NAME, <<"numbers%2F%2B1412">>},
+           {?PVT_FEATURES, kz_json:new()},
+           {?PVT_STATE, ?NUMBER_STATE_DISCOVERY},
+           {?PVT_RESERVE_HISTORY, []},
+           {?PVT_PORTED_IN, 'false'},
+           {?PVT_MODULE_NAME, <<"knm_bandwidth">>},
+           {?PVT_CARRIER_DATA
+           ,kz_json:from_list(
+              [{<<"number_id">>, <<"0C107941-CDDA-42FE-823C-042EADBD3719">>},
+               {<<"ten_digit">>,<<"4122065197">>},
+               {<<"formatted_number">>,<<"1-412-206-5197">>},
+               {<<"e164">>,<<"+14122065197">>},
+               {<<"npa_nxx">>,<<"412206">>},
+               {<<"status">>,<<"Available">>},
+               {<<"rate_center">>
+               ,kz_json:from_list(
+                  [{<<"name">>,<<"PITTSBURGH SUBURBAN ZONE 13">>},
+                   {<<"lata">>,<<"234">>},
+                   {<<"state">>,<<"PA">>}
+                  ])
+               }
+              ])
+           },
+           {?PVT_MODIFIED, 63610268576},
+           {?PVT_CREATED, 63610268576},
+           {?PVT_TYPE,<<"number">>}]
+         )
        ).
 -else.
 

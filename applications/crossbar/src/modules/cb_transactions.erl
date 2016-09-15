@@ -9,11 +9,12 @@
 -module(cb_transactions).
 
 -export([init/0
-         ,allowed_methods/0, allowed_methods/1
-         ,resource_exists/0, resource_exists/1
-         ,validate/1, validate/2
-         ,to_csv/1
-         ,delete/2
+        ,allowed_methods/0, allowed_methods/1
+        ,resource_exists/0, resource_exists/1
+        ,validate/1, validate/2
+        ,to_csv/1
+        ,put/2
+        ,delete/2
         ]).
 
 -include("crossbar.hrl").
@@ -22,6 +23,7 @@
 -define(CURRENT_BALANCE, <<"current_balance">>).
 -define(MONTHLY, <<"monthly_recurring">>).
 -define(SUBSCRIPTIONS, <<"subscriptions">>).
+-define(CREDIT, <<"credit">>).
 -define(DEBIT, <<"debit">>).
 
 -type payload() :: {cowboy_req:req(), cb_context:context()}.
@@ -41,6 +43,7 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.allowed_methods.transactions">>, ?MODULE, 'allowed_methods'),
     _ = crossbar_bindings:bind(<<"*.resource_exists.transactions">>, ?MODULE, 'resource_exists'),
     _ = crossbar_bindings:bind(<<"*.validate.transactions">>, ?MODULE, 'validate'),
+    _ = crossbar_bindings:bind(<<"*.execute.put.transactions">>, ?MODULE, 'put'),
     _ = crossbar_bindings:bind(<<"*.execute.delete.transactions">>, ?MODULE, 'delete'),
     _ = crossbar_bindings:bind(<<"*.to_csv.get.transactions">>, ?MODULE, 'to_csv').
 
@@ -77,6 +80,8 @@ allowed_methods() ->
 
 allowed_methods(?CURRENT_BALANCE) ->
     [?HTTP_GET];
+allowed_methods(?CREDIT) ->
+    [?HTTP_PUT];
 allowed_methods(?DEBIT) ->
     [?HTTP_DELETE];
 allowed_methods(?MONTHLY) ->
@@ -122,6 +127,109 @@ validate(Context, PathToken) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
+-spec put(cb_context:context(), path_token()) -> cb_context:context().
+put(Context, ?CREDIT) ->
+    case cb_context:resp_status(Context) of
+        'success' -> maybe_credit_billing_id(Context);
+        _Error -> Context
+    end.
+
+-spec maybe_credit_billing_id(cb_context:context()) -> cb_context:context().
+maybe_credit_billing_id(Context) ->
+    AuthAccountId = cb_context:auth_account_id(Context),
+    {'ok', MasterAccountId} = kapps_util:get_master_account_id(),
+    CreditAccountId = cb_context:account_id(Context),
+
+    case kz_services:find_reseller_id(CreditAccountId) of
+        MasterAccountId when AuthAccountId =:= MasterAccountId
+                             andalso CreditAccountId =:= MasterAccountId ->
+            lager:debug("master account is about to credit himself - should be always free"),
+            free_credit(Context);
+        MasterAccountId when AuthAccountId =:= MasterAccountId ->
+            lager:debug("master account is about to add credit, we need to check whether to invoke a bookkeeper or not"),
+            maybe_free_credit(Context);
+        MasterAccountId when AuthAccountId =:= CreditAccountId ->
+            lager:debug("master's child wants to credit himself. invoking a bookkeeper to add credit"),
+            normal_credit(Context);
+        AuthAccountId when AuthAccountId =/= CreditAccountId ->
+            lager:debug("allowing non mster reseller to credit its child (but not himself) without invoking a bookkeeper"),
+            free_credit(Context);
+        ResellerId ->
+            lager:debug("sub-resellers must contact resellers to add credit to themselves"),
+            Resp = kz_json:from_list(
+                     [{<<"message">>, <<"Please contact your phone provider to add credit.">>}
+                     ,{<<"cause">>, ResellerId}
+                     ]),
+            cb_context:add_validation_error(<<"amount">>, <<"forbidden">>, Resp, Context)
+    end.
+
+-spec free_credit(cb_context:context()) -> cb_context:context().
+free_credit(Context) ->
+    maybe_create_credit_tansaction('save', Context).
+
+-spec normal_credit(cb_context:context()) -> cb_context:context().
+normal_credit(Context) ->
+    maybe_create_credit_tansaction('service_save', Context).
+
+-spec maybe_free_credit(cb_context:context()) -> cb_context:context().
+maybe_free_credit(Context) ->
+    case kz_json:get_value(<<"credit_type">>, cb_context:req_data(Context)) of
+        <<"free">> -> free_credit(Context);
+        _ -> normal_credit(Context)
+    end.
+
+-spec maybe_create_credit_tansaction('save'|'service_save', cb_context:context()) -> cb_context:context().
+maybe_create_credit_tansaction(CreditType, Context) ->
+    case create_credit_tansaction(CreditType, Context) of
+        {'error', _R}=Error ->
+            lager:error("failed to create credit transaction : ~p", [_R]),
+            cb_context:add_system_error(
+              'transaction_failed'
+                                       ,kz_json:from_list(
+                                          [{<<"message">>, <<"failed to create credit transaction">>}
+                                          ,{<<"cause">>, kz_util:error_to_binary(Error)}
+                                          ])
+                                       ,Context
+             );
+        {'ok', Transaction} ->
+            cb_context:set_resp_data(
+              Context
+                                    ,kz_transaction:to_public_json(Transaction)
+             )
+    end.
+
+-spec create_credit_tansaction('save'|'service_save', cb_context:context()) ->
+                                      {'ok', kz_transaction:transaction()} |
+                                      {'error', _}.
+create_credit_tansaction(CreditType, Context) ->
+    AccountId = cb_context:account_id(Context),
+    JObj = cb_context:req_data(Context),
+    Amount = kz_json:get_float_value(<<"amount">>, JObj),
+    Units = wht_util:dollars_to_units(Amount),
+    Meta =
+        kz_json:from_list(
+          [{<<"auth_account_id">>, cb_context:auth_account_id(Context)}]
+         ),
+    Reason = kz_json:get_value(<<"reason">>, JObj, <<"manual_addition">>),
+    Description = kz_json:get_value(<<"description">>, JObj),
+
+    Routines = [fun(Tr) -> kz_transaction:set_reason(Reason, Tr) end
+               ,fun(Tr) -> kz_transaction:set_description(Description, Tr) end
+               ,fun(Tr) -> kz_transaction:set_metadata(Meta, Tr) end
+               ,fun kz_transaction:CreditType/1
+               ],
+    lists:foldl(
+      fun(F, Tr) -> F(Tr) end
+               ,kz_transaction:credit(AccountId, Units)
+               ,Routines
+     ).
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%%
+%% @end
+%%--------------------------------------------------------------------
 -spec delete(cb_context:context(), path_token()) -> cb_context:context().
 delete(Context, ?DEBIT) ->
     case cb_context:resp_status(Context) of
@@ -146,7 +254,7 @@ maybe_debit_billing_id(Context) ->
             lager:debug("sub-accounts of non-master resellers must contact the reseller to change their credit"),
             Resp = kz_json:from_list(
                      [{<<"message">>, <<"Please contact your phone provider to remove credit.">>}
-                      ,{<<"cause">>, ResellerId}
+                     ,{<<"cause">>, ResellerId}
                      ]),
             cb_context:add_validation_error(<<"amount">>, <<"forbidden">>, Resp, Context)
     end.
@@ -158,16 +266,16 @@ maybe_create_debit_tansaction(Context) ->
             lager:error("failed to create debit transaction : ~p", [_R]),
             cb_context:add_system_error(
               'transaction_failed'
-              ,kz_json:from_list(
-                 [{<<"message">>, <<"failed to create debit transaction">>}
-                  ,{<<"cause">>, kz_util:error_to_binary(Error)}
-                 ])
-              ,Context
+                                       ,kz_json:from_list(
+                                          [{<<"message">>, <<"failed to create debit transaction">>}
+                                          ,{<<"cause">>, kz_util:error_to_binary(Error)}
+                                          ])
+                                       ,Context
              );
         {'ok', Transaction} ->
             cb_context:set_resp_data(
               Context
-              ,kz_transaction:to_public_json(Transaction)
+                                    ,kz_transaction:to_public_json(Transaction)
              )
     end.
 
@@ -184,15 +292,17 @@ create_debit_tansaction(Context) ->
           [{<<"auth_account_id">>, cb_context:auth_account_id(Context)}]
          ),
     Reason = kz_json:get_value(<<"reason">>, JObj, <<"admin_discretion">>),
+    Description = kz_json:get_value(<<"description">>, JObj),
 
     Routines = [fun(Tr) -> kz_transaction:set_reason(Reason, Tr) end
-                ,fun(Tr) -> kz_transaction:set_metadata(Meta, Tr) end
-                ,fun kz_transaction:save/1
+               ,fun(Tr) -> kz_transaction:set_description(Description, Tr) end
+               ,fun(Tr) -> kz_transaction:set_metadata(Meta, Tr) end
+               ,fun kz_transaction:save/1
                ],
     lists:foldl(
       fun(F, Tr) -> F(Tr) end
-      ,kz_transaction:debit(AccountId, Units)
-      ,Routines
+               ,kz_transaction:debit(AccountId, Units)
+               ,Routines
      ).
 
 %%--------------------------------------------------------------------
@@ -215,9 +325,9 @@ validate_transaction(Context, ?CURRENT_BALANCE, ?HTTP_GET) ->
     Balance = wht_util:units_to_dollars(wht_util:current_balance(cb_context:account_id(Context))),
     JObj = kz_json:from_list([{<<"balance">>, Balance}]),
     cb_context:setters(Context
-                       ,[{fun cb_context:set_resp_status/2, 'success'}
-                         ,{fun cb_context:set_resp_data/2, JObj}
-                        ]);
+                      ,[{fun cb_context:set_resp_status/2, 'success'}
+                       ,{fun cb_context:set_resp_data/2, JObj}
+                       ]);
 validate_transaction(Context, ?MONTHLY, ?HTTP_GET) ->
     case cb_modules_util:range_view_options(Context) of
         {CreatedFrom, CreatedTo} ->
@@ -227,6 +337,8 @@ validate_transaction(Context, ?MONTHLY, ?HTTP_GET) ->
     end;
 validate_transaction(Context, ?SUBSCRIPTIONS, ?HTTP_GET) ->
     filter_subscriptions(Context);
+validate_transaction(Context, ?CREDIT, ?HTTP_PUT) ->
+    validate_credit(Context);
 validate_transaction(Context, ?DEBIT, ?HTTP_DELETE) ->
     validate_debit(Context);
 validate_transaction(Context, _PathToken, _Verb) ->
@@ -238,12 +350,49 @@ validate_transaction(Context, _PathToken, _Verb) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
+-spec validate_credit(cb_context:context()) -> cb_context:context().
+-spec validate_credit(cb_context:context(), api_float()) -> cb_context:context().
+validate_credit(Context) ->
+    Amount = kz_json:get_float_value(<<"amount">>, cb_context:req_data(Context)),
+    {'ok', MasterAccountId} = kapps_util:get_master_account_id(),
+
+    case cb_context:is_superduper_admin(Context) of
+        'true' -> validate_credit(Context, Amount);
+        'false' ->
+            case kz_services:is_reseller(cb_context:auth_account_id(Context))
+                orelse
+                MasterAccountId =:= kz_services:find_reseller_id(cb_context:account_id(Context))
+            of
+                'true' -> validate_credit(Context, Amount);
+                'false' -> cb_context:add_system_error('forbidden', Context)
+            end
+    end.
+
+validate_credit(Context, 'undefined') ->
+    Message = <<"Amount is required">>,
+    cb_context:add_validation_error(
+      <<"amount">>
+                                   ,<<"required">>
+                                   ,kz_json:from_list([{<<"message">>, Message}])
+                                   ,Context
+     );
+validate_credit(Context, Amount) when Amount =< 0 ->
+    Message = <<"Amount must be greater than 0">>,
+    cb_context:add_validation_error(
+      <<"amount">>
+                                   ,<<"minimum">>
+                                   ,kz_json:from_list([{<<"message">>, Message}])
+                                   ,Context
+     );
+validate_credit(Context, _) ->
+    cb_context:set_resp_status(Context, 'success').
+
 -spec validate_debit(cb_context:context()) -> cb_context:context().
 -spec validate_debit(cb_context:context(), api_float()) -> cb_context:context().
 validate_debit(Context) ->
     Amount = kz_json:get_float_value(<<"amount">>, cb_context:req_data(Context)),
 
-    case cb_modules_util:is_superduper_admin(Context) of
+    case cb_context:is_superduper_admin(Context) of
         'true' -> validate_debit(Context, Amount);
         'false' ->
             case kz_services:is_reseller(cb_context:auth_account_id(Context)) of
@@ -256,17 +405,17 @@ validate_debit(Context, 'undefined') ->
     Message = <<"Amount is required">>,
     cb_context:add_validation_error(
       <<"amount">>
-      ,<<"required">>
-      ,kz_json:from_list([{<<"message">>, Message}])
-      ,Context
+                                   ,<<"required">>
+                                   ,kz_json:from_list([{<<"message">>, Message}])
+                                   ,Context
      );
 validate_debit(Context, Amount) when Amount =< 0 ->
     Message = <<"Amount must be more than 0">>,
     cb_context:add_validation_error(
       <<"amount">>
-      ,<<"minimum">>
-      ,kz_json:from_list([{<<"message">>, Message}])
-      ,Context
+                                   ,<<"minimum">>
+                                   ,kz_json:from_list([{<<"message">>, Message}])
+                                   ,Context
      );
 validate_debit(Context, Amount) ->
     AccountId = cb_context:account_id(Context),
@@ -278,12 +427,12 @@ validate_debit(Context, Amount) ->
             Message = <<"Available credit can not be less than 0">>,
             cb_context:add_validation_error(
               <<"amount">>
-              ,<<"minimum">>
-              ,kz_json:from_list(
-                 [{<<"message">>, Message}
-                  ,{<<"cause">>, FuturAmount}
-                 ])
-              ,Context
+                                           ,<<"minimum">>
+                                           ,kz_json:from_list(
+                                              [{<<"message">>, Message}
+                                              ,{<<"cause">>, FuturAmount}
+                                              ])
+                                           ,Context
              )
     end.
 
@@ -377,7 +526,7 @@ filter_subscriptions(Context) ->
 -spec filter_subscription(kz_json:object()) -> kz_json:object().
 filter_subscription(BSubscription) ->
     Routines = [fun clean_braintree_subscription/1
-                ,fun correct_date_braintree_subscription/1
+               ,fun correct_date_braintree_subscription/1
                ],
     lists:foldl(fun(F, BSub) -> F(BSub) end, BSubscription, Routines).
 
@@ -390,18 +539,18 @@ filter_subscription(BSubscription) ->
 -spec clean_braintree_subscription(kz_json:object()) -> kz_json:object().
 clean_braintree_subscription(BSubscription) ->
     RemoveKeys = [<<"billing_dom">>
-                  ,<<"failure_count">>
-                  ,<<"merchant_account_id">>
-                  ,<<"never_expires">>
-                  ,<<"paid_through_date">>
-                  ,<<"payment_token">>
-                  ,<<"trial_period">>
-                  ,<<"do_not_inherit">>
-                  ,<<"start_immediately">>
-                  ,<<"prorate_charges">>
-                  ,<<"revert_on_prorate_fail">>
-                  ,<<"replace_add_ons">>
-                  ,<<"create">>
+                 ,<<"failure_count">>
+                 ,<<"merchant_account_id">>
+                 ,<<"never_expires">>
+                 ,<<"paid_through_date">>
+                 ,<<"payment_token">>
+                 ,<<"trial_period">>
+                 ,<<"do_not_inherit">>
+                 ,<<"start_immediately">>
+                 ,<<"prorate_charges">>
+                 ,<<"revert_on_prorate_fail">>
+                 ,<<"replace_add_ons">>
+                 ,<<"create">>
                  ],
     kz_json:delete_keys(RemoveKeys, BSubscription).
 
@@ -414,9 +563,9 @@ clean_braintree_subscription(BSubscription) ->
 -spec correct_date_braintree_subscription(kz_json:object()) -> kz_json:object().
 correct_date_braintree_subscription(BSubscription) ->
     Keys = [<<"billing_first_date">>
-            ,<<"billing_end_date">>
-            ,<<"billing_start_date">>
-            ,<<"next_bill_date">>
+           ,<<"billing_end_date">>
+           ,<<"billing_start_date">>
+           ,<<"next_bill_date">>
            ],
     lists:foldl(fun correct_date_braintree_subscription_fold/2, BSubscription, Keys).
 
@@ -440,12 +589,12 @@ correct_date_braintree_subscription_fold(Key, BSub) ->
 -spec send_resp({'ok', any()} | {'error', any()}, cb_context:context()) -> cb_context:context().
 send_resp({'ok', JObj}, Context) ->
     cb_context:setters(Context
-                       ,[{fun cb_context:set_resp_status/2, 'success'}
-                         ,{fun cb_context:set_resp_data/2, JObj}
-                        ]);
+                      ,[{fun cb_context:set_resp_status/2, 'success'}
+                       ,{fun cb_context:set_resp_data/2, JObj}
+                       ]);
 send_resp({'error', Details}, Context) ->
     cb_context:add_system_error(
       'bad_identifier'
-      ,kz_json:from_list([{<<"cause">>, Details}])
-      ,Context
+                               ,kz_json:from_list([{<<"cause">>, Details}])
+                               ,Context
      ).

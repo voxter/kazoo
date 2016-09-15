@@ -1,0 +1,12 @@
+{
+    "$schema": "http://json-schema.org/draft-03/schema#",
+    "_id": "system_config.number_manager.locality",
+    "description": "Schema for number_manager.locality system_config",
+    "properties": {
+        "url": {
+            "description": "number_manager.locality url"
+        }
+    },
+    "required": true,
+    "type": "object"
+}

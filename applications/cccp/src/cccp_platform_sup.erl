@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright
+%%% @copyright (C) 2012-2016, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -12,7 +12,7 @@
 
 %% API
 -export([start_link/0
-         ,new/1
+        ,new/1
         ]).
 
 %% Supervisor callbacks

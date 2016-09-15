@@ -8,12 +8,15 @@
 -type channel_down_return() :: {'channel_down', kapps_call:call()}.
 -type usurp_return() :: {'usurp', kapps_call:call()}.
 -type request_return() :: {'request', kapps_call:call()}.
+-type error_return() :: {'error', kapps_call:call()} |
+                        {'error', kazpps_call:call(), list()}.
 
 -type exec_element_return() ::
         ok_return() |
         stop_return() |
         channel_down_return() |
         usurp_return() |
+        error_return() |
         request_return().
 
 -type exec_return() :: exec_element_return().

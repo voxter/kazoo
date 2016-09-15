@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz
+%%% @copyright (C) 2011-2016, 2600Hz
 %%% @doc
 %%% Google Drive for attachments
 %%% @end
@@ -10,10 +10,6 @@
 -module(kz_att_google_drive).
 
 -include("kz_att.hrl").
-
-%% ====================================================================
-%% API functions
-%% ====================================================================
 
 -export([put_attachment/6]).
 -export([fetch_attachment/4]).
@@ -27,8 +23,12 @@
 -define(DRV_BASE_FETCH_URL, "https://www.googleapis.com/drive/v2/files/").
 
 
+%% ====================================================================
+%% API functions
+%% ====================================================================
+
 encode_multipart(Parts, Boundary) ->
-   encode_multipart(Parts, Boundary, <<>>).
+    encode_multipart(Parts, Boundary, <<>>).
 
 encode_multipart([], Boundary, Encoded) ->
     Close = <<"\r\n--" , Boundary/binary, "--">>,
@@ -47,18 +47,19 @@ encode_multipart_headers([{K, V} | Headers], Encoded) ->
     Acc = <<Encoded/binary, K/binary, ": ", V/binary, "\r\n">>,
     encode_multipart_headers(Headers, Acc).
 
+-spec put_attachment(kz_data:connection(), ne_binary(), ne_binary(), ne_binary(), ne_binary(), kz_data:options()) -> any().
 put_attachment(#{oauth_doc_id := TokenDocId, folder_id := Folder}, _DbName, _DocId, AName, Contents, Options) ->
     {'ok', Token} = kazoo_oauth_util:token(TokenDocId),
     CT = kz_mime:from_filename(AName),
     JObj = kz_json:from_list(
              props:filter_empty(
                [{<<"mimeType">>, CT}
-              ,{<<"name">>, AName}
-              ,{<<"parents">>, [Folder]}
-              ,{<<"description">>, props:get_value('description', Options)}
-              ,{<<"appProperties">>, kz_json:from_list(props:get_value('metadata', Options, [])) }
-              ,{<<"properties">>, kz_json:from_list(props:get_value('metadata', Options, [])) }
-             ])),
+               ,{<<"name">>, AName}
+               ,{<<"parents">>, [Folder]}
+               ,{<<"description">>, props:get_value('description', Options)}
+               ,{<<"appProperties">>, kz_json:from_list(props:get_value('metadata', Options, [])) }
+               ,{<<"properties">>, kz_json:from_list(props:get_value('metadata', Options, [])) }
+               ])),
     JsonPart = {kz_json:encode(JObj), [{<<"Content-Type">>, <<"application/json">>}] },
     FilePart = {base64:encode(Contents), [{<<"Content-Type">>, CT},{<<"Content-Transfer-Encoding">>, <<"base64">>}] },
     Boundary = <<"------", (kz_util:rand_hex_binary(16))/binary>>,
@@ -66,7 +67,7 @@ put_attachment(#{oauth_doc_id := TokenDocId, folder_id := Folder}, _DbName, _Doc
     Body = encode_multipart([JsonPart, FilePart], Boundary),
     ContentType = kz_util:to_list(<<"multipart/related; boundary=", Boundary/binary>>),
     Headers = [{<<"Authorization">>, kazoo_oauth_util:authorization_header(Token)}
-               ,{<<"Content-Type">>, ContentType}
+              ,{<<"Content-Type">>, ContentType}
               ],
     case kz_http:post(?DRV_MULTIPART_FILE_URL, Headers, Body) of
         {'ok', 200, ResponseHeaders, ResponseBody} ->
@@ -93,6 +94,7 @@ convert_kv({K, V})
     convert_kv({K, kz_util:to_binary(V)});
 convert_kv(KV) -> KV.
 
+-spec fetch_attachment(kz_data:connection(), ne_binary(), ne_binary(), ne_binary()) -> any().
 fetch_attachment(HandlerProps, _DbName, _DocId, _AName) ->
     case kz_json:get_value(<<"gdrive">>, HandlerProps) of
         'undefined' -> {'error', 'invalid_data'};

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2015, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -16,17 +16,17 @@
 
 %% API
 -export([start_link/2
-         ,stop/1
-         ,manager/1
-         ,workers_sup/1
-         ,status/1
+        ,stop/1
+        ,manager/1
+        ,workers_sup/1
+        ,status/1
         ]).
 
 %% Supervisor callbacks
 -export([init/1]).
 
 -define(CHILDREN, [?SUPER('acdc_queue_workers_sup')
-                   ,?WORKER_ARGS('acdc_queue_manager', [self() | Args])
+                  ,?WORKER_ARGS('acdc_queue_manager', [self() | Args])
                   ]).
 
 %%%===================================================================

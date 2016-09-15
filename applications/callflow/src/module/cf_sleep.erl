@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2014, 2600Hz INC
+%%% @copyright (C) 2016, 2600Hz INC
 %%% @doc
 %%%
 %%% data:{
@@ -14,6 +14,8 @@
 %%%   James Aimonetti
 %%%-------------------------------------------------------------------
 -module(cf_sleep).
+
+-behaviour(gen_cf_action).
 
 -include("callflow.hrl").
 
@@ -60,8 +62,3 @@ constrain_duration(DurationMS) when DurationMS > ?MILLISECONDS_IN_DAY ->
     ?MILLISECONDS_IN_DAY;
 constrain_duration(DurationMS) ->
     DurationMS.
-
-
-
-
-

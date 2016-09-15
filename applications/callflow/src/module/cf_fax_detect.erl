@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2014, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%% Detects if a call is fax
 %%% user(s).
@@ -10,6 +10,8 @@
 %%%   Luis Azedo
 %%%-------------------------------------------------------------------
 -module(cf_fax_detect).
+
+-behaviour(gen_cf_action).
 
 -include("callflow.hrl").
 

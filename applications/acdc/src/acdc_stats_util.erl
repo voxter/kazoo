@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2014, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%% Stat util functions
 %%% @end
@@ -9,16 +9,16 @@
 -module(acdc_stats_util).
 
 -export([wait_time/2
-         ,pause_time/2
-         ,caller_id_name/2
-         ,caller_id_number/2
+        ,pause_time/2
+        ,caller_id_name/2
+        ,caller_id_number/2
 
-         ,get_query_limit/1
-         ,db_name/1
-         ,prev_modb/1
+        ,get_query_limit/1
+        ,db_name/1
+        ,prev_modb/1
 
-         ,cleanup_old_stats/0
-         ,cleanup_old_calls/1, cleanup_old_statuses/1
+        ,cleanup_old_stats/0
+        ,cleanup_old_calls/1, cleanup_old_statuses/1
         ]).
 
 -include("acdc.hrl").

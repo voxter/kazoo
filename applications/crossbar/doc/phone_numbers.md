@@ -51,8 +51,48 @@ curl -v -X GET \
             "ten_digit": "4152338421"
         }
     ],
-    "request_id": "1c9a13a0f729c2d6d35a9c4515e5da03",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
+    "status": "success"
+}
+```
+
+
+#### Search for available numbers you own
+
+Set `number_manager.search_prefers_available_numbers` to `true` to only look for
+available numbers you already bought & imported.
+
+- `PREFIX`: a 3-digit number prefix or an URL-encoded e164 prefix (e.g. `499` or `%2B1499`)
+- `QUANTITY`: maximum amount of numbers to be returned (e.g. `2`)
+- `OFFSET`: page number (e.g. `0`)
+
+> GET /v2/accounts/{ACCOUNT_ID}/phone_numbers?prefix={PREFIX}&quantity={QUANTITY}&offset={OFFSET}
+
+```shell
+curl -v -X GET \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers?prefix=555&quantity=3&offset=6
+```
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": [
+        {
+            "number": "+15552225562",
+            "state": "available"
+        },
+        {
+            "number": "+15554445558",
+            "state": "discovery"
+        },
+        {
+            "number": "+15552225562",
+            "state": "available"
+        }
+    ],
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -69,36 +109,47 @@ Note: one can apply filters such as `?filter_state=in_service` or `?created_from
 ```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers?page_size=3&start_key=%2B14152338421
 ```
 
 ```json
-{
+
     "auth_token": "{AUTH_TOKEN}",
     "data": {
         "casquade_quantity": 0,
         "numbers": {
-            "+14155555555": {
+            "+14152338421": {
                 "assigned_to": "{ACCOUNT_ID}",
-                "created": 63602230185,
+                "created": 63628550806,
+                "features": [],
+                "state": "in_service",
+                "updated": 63628550806
+            },
+            "+14155234712": {
+                "assigned_to": "{ACCOUNT_ID}",
+                "created": 63636963275,
                 "features": [
-                    "cnam"
+                    "local"
                 ],
                 "state": "in_service",
-                "updated": 63602230212,
-                "used_by": "callflow"
+                "updated": 63636963275
             },
-            "+14158865100": {
+            "+14155558920": {
                 "assigned_to": "{ACCOUNT_ID}",
-                "created": 63624719324,
-                "state": "in_service",
-                "updated": 63624719325
+                "created": 63633211146,
+                "features": [
+                    "local"
+                ],
+                "state": "reserved",
+                "updated": 63633211146
             }
         }
     },
-    "page_size": 2,
-    "request_id": "923fce7eec4d13d5e7df09ca6fbbcadd",
-    "revision": "19-d21bca301d4721b03f368b73de35f813",
+    "next_start_key": "+14155558921",
+    "page_size": 3,
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
+    "start_key": "+14152338421",
     "status": "success"
 }
 ```
@@ -106,7 +157,7 @@ curl -v -X GET \
 
 ### Per-number CRUD operations
 
-- Note: `PHONENUMBER` has to be URL-encoded
+- Note: `{PHONE_NUMBER}` has to be URL-encoded
     * e.g. turn `+14155555555` into `%2B14155555555`
     * Note `4123456789` is turned into `+14123456789`
     * Note however, `41234567` is turned into `+41234567`, so be careful!
@@ -117,12 +168,12 @@ curl -v -X GET \
 
 #### Remove a number from the account owning it
 
-> DELETE /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONENUMBER}
+> DELETE /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
 
 ```shell
 curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONENUMBER}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
 ```
 
 ##### Response
@@ -138,11 +189,11 @@ curl -v -X DELETE \
             "modified": 63627848588,
             "state": "available"
         },
-        "id": "{PHONENUMBER}",
+        "id": "{PHONE_NUMBER}",
         "state": "available"
     },
-    "request_id": "df394a4f3175bfe9367919482dc7f217",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -158,8 +209,39 @@ curl -v -X DELETE \
     },
     "error": "404",
     "message": "bad_identifier",
-    "request_id": "326492fe35f072b8f65e985e92af32ef",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
+}
+```
+
+
+#### Remove a number from account (admin only)
+
+> DELETE /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
+
+```shell
+curl -v -X DELETE \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}?hard=true
+```
+
+##### Response
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": {
+        "_read_only": {
+            "created": 63627848588,
+            "modified": 63627848588,
+            "state": "deleted"
+        },
+        "id": "{PHONE_NUMBER}",
+        "state": "deleted"
+    },
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
+    "status": "success"
 }
 ```
 
@@ -168,12 +250,12 @@ curl -v -X DELETE \
 
 Show the number's properties along with user-defined properties.
 
-> GET /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONENUMBER}
+> GET /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
 
 ```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONENUMBER}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
 ```
 
 ##### Response
@@ -195,12 +277,12 @@ curl -v -X GET \
         "features": [
             "local"
         ],
-        "id": "{PHONENUMBER}",
+        "id": "{PHONE_NUMBER}",
         "state": "reserved",
         "my_own_field": {}
     },
-    "request_id": "609d2ddbc57fbbce22b42be229b67840",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -221,7 +303,7 @@ Possible reasons for failure:
     },
     "error": "404",
     "message": "bad_identifier",
-    "request_id": "94cf464971722272dd0b04cbc491303f",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```
@@ -229,13 +311,15 @@ Possible reasons for failure:
 
 #### Update public fields of a number
 
-> POST /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONENUMBER}
+Note: some public fields are used to configure number features.
+
+> POST /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
 
 ```shell
 curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    -d '{"data": {"my_own_field": "some other value"}}' \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONENUMBER}
+    -d '{"data":{"my_own_field":"some other value", "cnam":{"display_name":"My caller ID", "inbound_lookup":true}}}' \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
 ```
 
 ```json
@@ -243,16 +327,29 @@ curl -v -X POST \
     "auth_token": "{AUTH_TOKEN}",
     "data": {
         "_read_only": {
-            "created": 63627848989,
-            "modified": 63627848989,
-            "state": "reserved"
+            "created": 63635220353,
+            "features": [
+                "outbound_cnam",
+                "inbound_cnam"
+            ],
+            "modified": 63635220353,
+            "state": "in_service",
+            "used_by": "callflow"
         },
-        "id": "{PHONENUMBER}",
-        "state": "reserved",
-        "my_own_field": "some other value"
+        "cnam": {
+            "display_name": "My caller ID",
+            "inbound_lookup": true
+        },
+        "features": [
+            "outbound_cnam",
+            "inbound_cnam"
+        ],
+        "id": "{PHONE_NUMBER}",
+        "state": "in_service",
+        "used_by": "callflow"
     },
-    "request_id": "609d2ddbc57fbbce22b42be229b67840",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -264,13 +361,13 @@ Adds a number to the database, returning its properties.
 
 Note: payload is facultative.
 
-> PUT /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONENUMBER}
+> PUT /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
 
 ```shell
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     -d '{"data": {"my_own_field": {}}}' \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONENUMBER}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
 ```
 
 ##### Response
@@ -286,12 +383,12 @@ curl -v -X PUT \
             "modified": 63627848989,
             "state": "reserved"
         },
-        "id": "{PHONENUMBER}",
+        "id": "{PHONE_NUMBER}",
         "state": "reserved",
         "my_own_field": {}
     },
-    "request_id": "609d2ddbc57fbbce22b42be229b67840",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -304,14 +401,34 @@ curl -v -X PUT \
 {
     "auth_token": "{AUTH_TOKEN}",
     "data": {
-        "cause": "{PHONENUMBER}",
+        "cause": "{PHONE_NUMBER}",
         "code": 409,
         "error": "number_exists",
-        "message": "number {PHONENUMBER} already exists"
+        "message": "number {PHONE_NUMBER} already exists"
     },
     "error": "409",
     "message": "number_exists",
-    "request_id": "230c62bcb9ed7f97538e22d72f2c724f",
+    "request_id": "{REQUEST_ID}",
+    "status": "error"
+}
+```
+
+####### Number does not conform to E.164 format
+
+A non-conforming `{PHONE_NUMBER}`: `"+141510010+15"`.
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": {
+        "cause": "{PHONE_NUMBER}",
+        "code": 404,
+        "error": "not_reconcilable",
+        "message": "number {PHONE_NUMBER} is not reconcilable"
+    },
+    "error": "404",
+    "message": "not_reconcilable",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```
@@ -327,7 +444,7 @@ curl -v -X PUT \
     },
     "error": "500",
     "message": "unauthorized",
-    "request_id": "e74ecf82e529dd2fa2a1dc57af3783d9",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```
@@ -345,7 +462,7 @@ This API check if the numbers are still available for purchase.
 ```shell
 curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    -d '{"data": {"numbers": [{PHONENUMBER1}, {PHONENUMBER2}]}}'
+    -d '{"data": {"numbers": [{PHONE_NUMBER1}, {PHONE_NUMBER2}]}}'
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/check
 ```
 
@@ -357,11 +474,11 @@ curl -v -X POST \
 {
     "auth_token": "{AUTH_TOKEN}",
     "data": {
-        "{PHONENUMBER1}": "success",
-        "{PHONENUMBER2}": "error"
+        "{PHONE_NUMBER1}": "success",
+        "{PHONE_NUMBER2}": "error"
     }
-    "request_id": "3934255dbf74ac0ff38443450ce8753d",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -379,8 +496,8 @@ It may be due to:
 {
     "auth_token": "{AUTH_TOKEN}",
     "data": {},
-    "request_id": "feaf1bc6fb1c4e3531840d188ea67344",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -393,7 +510,7 @@ It may be due to:
 ```shell
 curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    -d '{"data":{"numbers": ["{PHONENUMBER1}", "{PHONENUMBER2}"]}}' \
+    -d '{"data":{"numbers": ["{PHONE_NUMBER1}", "{PHONE_NUMBER2}"]}}' \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/locality
 ```
 
@@ -405,7 +522,7 @@ curl -v -X POST \
 {
     "auth_token": "{AUTH_TOKEN}",
     "data": {
-        "{PHONENUMBER1}": {
+        "{PHONE_NUMBER1}": {
             "carrier": {
                 "company": "T-Mobile USA Inc",
                 "dba": "T-Mobile USA Inc",
@@ -413,7 +530,7 @@ curl -v -X POST \
                 "type": "WIRELESS"
             },
             "country": "US",
-            "e164_number": "{PHONENUMBER1}",
+            "e164_number": "{PHONE_NUMBER1}",
             "geocode": {
                 "locality": "California"
             },
@@ -431,10 +548,10 @@ curl -v -X POST \
                 "switch": "OKLECAZVGT0",
                 "type": "WIRELESS"
             },
-            "number": "{PHONENUMBER1}",
+            "number": "{PHONE_NUMBER1}",
             "status": "success"
         },
-        "{PHONENUMBER2}": {
+        "{PHONE_NUMBER2}": {
             "carrier": {
                 "company": "Bandwidth.com CLEC LLC - CA",
                 "dba": "Bandwidth.com CLEC LLC",
@@ -442,7 +559,7 @@ curl -v -X POST \
                 "type": "CLEC"
             },
             "country": "US",
-            "e164_number": "{PHONENUMBER2}",
+            "e164_number": "{PHONE_NUMBER2}",
             "geocode": {
                 "locality": "California"
             },
@@ -460,12 +577,12 @@ curl -v -X POST \
                 "switch": "SNFCCA21XUY",
                 "type": "LANDLINE"
             },
-            "number": "{PHONENUMBER2}",
+            "number": "{PHONE_NUMBER2}",
             "status": "success"
         }
     },
-    "request_id": "22001e34f692908cf0fed818060db6ba",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -478,20 +595,59 @@ curl -v -X POST \
     "data": "Unable to acquire numbers missing carrier url",
     "error": "500",
     "message": "init failed",
-    "request_id": "58d565bb44e9da3c5500255940d88e1d",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```
 
 
-#### Fetch
+#### List available numbers of a given US city
 
 > GET /v2/accounts/{ACCOUNT_ID}/phone_numbers/prefix
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/prefix
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/prefix?city={CITY}
+```
+
+##### Responses
+
+###### Success
+
+```json
+
+```
+
+###### Country or city not found
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": {
+        "data": {},
+        "error": 404,
+        "message": "Not Found",
+        "status": "error"
+    },
+    "error": "500",
+    "message": "init failed",
+    "request_id": "{REQUEST_ID}",
+    "status": "error"
+}
+```
+
+###### Backend to PhoneBook not set up
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": "Unable to acquire numbers missing carrier url",
+    "error": "500",
+    "message": "init failed",
+    "request_id": "{REQUEST_ID}",
+    "status": "error"
+}
 ```
 
 
@@ -502,7 +658,7 @@ curl -v -X GET \
 ```shell
 curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    -d '{"data":{"numbers": ["{PHONENUMBER1}", "{PHONENUMBER2}", "{PHONENUMBER3}"]}}' \
+    -d '{"data":{"numbers": ["{PHONE_NUMBER1}", "{PHONE_NUMBER2}", "{PHONE_NUMBER3}"]}}' \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/collection
 ```
 
@@ -511,37 +667,89 @@ curl -v -X DELETE \
     "auth_token": "{AUTH_TOKEN}",
     "data": {
         "success": {
-            "{PHONENUMBER1": {
+            "{PHONE_NUMBER1": {
                 "_read_only": {
                     "created": 63628473168,
                     "modified": 63628473168,
                     "state": "available"
                 },
-                "id": "{PHONENUMBER1}",
+                "id": "{PHONE_NUMBER1}",
                 "state": "available"
             },
-            "{PHONENUMBER2}": {
+            "{PHONE_NUMBER2}": {
                 "_read_only": {
                     "created": 63628473168,
                     "modified": 63628473168,
                     "state": "available"
                 },
-                "id": "{PHONENUMBER2}",
+                "id": "{PHONE_NUMBER2}",
                 "state": "available"
             },
-            "{PHONENUMBER3}": {
+            "{PHONE_NUMBER3}": {
                 "_read_only": {
                     "created": 63628473168,
                     "modified": 63628473168,
                     "state": "available"
                 },
-                "id": "{PHONENUMBER3}",
+                "id": "{PHONE_NUMBER3}",
                 "state": "available"
             }
         }
     },
-    "request_id": "144493e2280213db59b81f7377fbff48",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
+    "status": "success"
+}
+```
+
+
+#### Remove a list of numbers from account (admin only)
+
+> DELETE /v2/accounts/{ACCOUNT_ID}/phone_numbers/collection
+
+```shell
+curl -v -X DELETE \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    -d '{"data":{"numbers": ["{PHONE_NUMBER1}", "{PHONE_NUMBER2}", "{PHONE_NUMBER3}"]}}' \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/collection?hard=true
+```
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": {
+        "success": {
+            "{PHONE_NUMBER1": {
+                "_read_only": {
+                    "created": 63628473168,
+                    "modified": 63628473168,
+                    "state": "deleted"
+                },
+                "id": "{PHONE_NUMBER1}",
+                "state": "deleted"
+            },
+            "{PHONE_NUMBER2}": {
+                "_read_only": {
+                    "created": 63628473168,
+                    "modified": 63628473168,
+                    "state": "deleted"
+                },
+                "id": "{PHONE_NUMBER2}",
+                "state": "deleted"
+            },
+            "{PHONE_NUMBER3}": {
+                "_read_only": {
+                    "created": 63628473168,
+                    "modified": 63628473168,
+                    "state": "deleted"
+                },
+                "id": "{PHONE_NUMBER3}",
+                "state": "deleted"
+            }
+        }
+    },
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -554,7 +762,7 @@ curl -v -X DELETE \
 ```shell
 curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    -d '{"data": {"numbers": ["{PHONENUMBER1}", "{PHONENUMBER2}"], "myfield": 1337}}' \
+    -d '{"data": {"numbers": ["{PHONE_NUMBER1}", "{PHONE_NUMBER2}"], "myfield": 1337}}' \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/collection
 ```
 
@@ -563,30 +771,30 @@ curl -v -X POST \
     "auth_token": "{AUTH_TOKEN}",
     "data": {
         "success": {
-            "{PHONENUMBER1}": {
+            "{PHONE_NUMBER1}": {
                 "_read_only": {
                     "created": 63628454912,
                     "modified": 63628454912,
                     "state": "reserved"
                 },
-                "id": "{PHONENUMBER1}",
+                "id": "{PHONE_NUMBER1}",
                 "myfield": 1337,
                 "state": "reserved"
             },
-            "{PHONENUMBER2}": {
+            "{PHONE_NUMBER2}": {
                 "_read_only": {
                     "created": 63628454912,
                     "modified": 63628454912,
                     "state": "reserved"
                 },
-                "id": "{PHONENUMBER2}",
+                "id": "{PHONE_NUMBER2}",
                 "myfield": 1337,
                 "state": "reserved"
             }
         }
     },
-    "request_id": "58191a05bcbbf528009fc5f4f0fe7ce5",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -599,7 +807,7 @@ curl -v -X POST \
 ```shell
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    -d '{"data":{"numbers": ["{PHONENUMBER1}", "{PHONENUMBER2}", "{PHONENUMBER3}"]}}' \
+    -d '{"data":{"numbers": ["{PHONE_NUMBER1}", "{PHONE_NUMBER2}", "{PHONE_NUMBER3}"]}}' \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/collection
 ```
 
@@ -612,37 +820,37 @@ curl -v -X PUT \
     "auth_token": "{AUTH_TOKEN}",
     "data": {
         "success": {
-            "{PHONENUMBER1}": {
+            "{PHONE_NUMBER1}": {
                 "_read_only": {
                     "created": 63628454912,
                     "modified": 63628454912,
                     "state": "reserved"
                 },
-                "id": "{PHONENUMBER1}",
+                "id": "{PHONE_NUMBER1}",
                 "state": "reserved"
             },
-            "{PHONENUMBER2}": {
+            "{PHONE_NUMBER2}": {
                 "_read_only": {
                     "created": 63628454912,
                     "modified": 63628454912,
                     "state": "reserved"
                 },
-                "id": "{PHONENUMBER2}",
+                "id": "{PHONE_NUMBER2}",
                 "state": "reserved"
             },
-            "{PHONENUMBER3}": {
+            "{PHONE_NUMBER3}": {
                 "_read_only": {
                     "created": 63628454912,
                     "modified": 63628454912,
                     "state": "reserved"
                 },
-                "id": "{PHONENUMBER3}",
+                "id": "{PHONE_NUMBER3}",
                 "state": "reserved"
             }
         }
     },
-    "request_id": "f0e0f0abdabaa2f0bb39d83ad3e3f3c6",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -653,22 +861,22 @@ curl -v -X PUT \
 {
     "auth_token": "{AUTH_TOKEN}",
     "data": {
-        "{PHONENUMBER2}": {
-            "cause": "{PHONENUMBER2}",
+        "{PHONE_NUMBER2}": {
+            "cause": "{PHONE_NUMBER2}",
             "code": 409,
             "error": "number_exists",
-            "message": "number {PHONENUMBER2} already exists"
+            "message": "number {PHONE_NUMBER2} already exists"
         },
-        "{PHONENUMBER3}": {
-            "cause": "{PHONENUMBER3}",
+        "{PHONE_NUMBER3}": {
+            "cause": "{PHONE_NUMBER3}",
             "code": 409,
             "error": "number_exists",
-            "message": "number {PHONENUMBER3} already exists"
+            "message": "number {PHONE_NUMBER3} already exists"
         }
     },
     "error": "400",
     "message": "client error",
-    "request_id": "34fded1acd0c8a440515fc6d42e409b6",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```
@@ -721,8 +929,8 @@ curl -v -X GET \
             "regex": "^(.*)$"
         }
     },
-    "request_id": "3a7cf0257c33fa959263dec20b184fe5",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -766,8 +974,8 @@ curl -v -X POST \
         }
     },
     "page_size": 2,
-    "request_id": "923fce7eec4d13d5e7df09ca6fbbcadd",
-    "revision": "19-d21bca301d4721b03f368b73de35f813",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -775,12 +983,12 @@ curl -v -X POST \
 
 #### Return which account a number belongs to
 
-> GET /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONENUMBER}/identify
+> GET /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}/identify
 
 ```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONENUMBER}/identify
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}/identify
 ```
 
 ##### Responses
@@ -792,10 +1000,10 @@ curl -v -X GET \
     "auth_token": "{AUTH_TOKEN}",
     "data": {
         "account_id": "009afc511c97b2ae693c6cc4920988e8",
-        "number": "{PHONENUMBER}"
+        "number": "{PHONE_NUMBER}"
     },
-    "request_id": "f8cee053b9992435924eaa1554d7555d",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -811,7 +1019,7 @@ curl -v -X GET \
     },
     "error": "404",
     "message": "bad_identifier",
-    "request_id": "8c3fa68c1ebf758ca4e1628e2048fb16",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```
@@ -819,12 +1027,12 @@ curl -v -X GET \
 
 #### Move a number to the reserved state
 
-> PUT /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONENUMBER}/reserve
+> PUT /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}/reserve
 
 ```shell
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONENUMBER}/reserve
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}/reserve
 ```
 
 ##### Responses
@@ -840,11 +1048,11 @@ curl -v -X PUT \
             "modified": 63628556896,
             "state": "reserved"
         },
-        "id": "{PHONENUMBER}",
+        "id": "{PHONE_NUMBER}",
         "state": "reserved"
     },
-    "request_id": "86d675b8d76e35f69328922d5607f200",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -861,7 +1069,7 @@ curl -v -X PUT \
     },
     "error": "400",
     "message": "no_change_required",
-    "request_id": "e26c4a9d57890f73a37762990b469592",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```
@@ -877,7 +1085,7 @@ curl -v -X PUT \
     },
     "error": "404",
     "message": "bad_identifier",
-    "request_id": "b36a44a38086ec1b630790e5645b8045",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```
@@ -887,12 +1095,12 @@ curl -v -X PUT \
 
 Note: one is not charged if number is already in service.
 
-> PUT /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONENUMBER}/activate
+> PUT /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}/activate
 
 ```shell
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONENUMBER}/activate
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}/activate
 ```
 
 ##### Responses
@@ -908,11 +1116,11 @@ curl -v -X PUT \
             "modified": 63628027112,
             "state": "in_service"
         },
-        "id": "{PHONENUMBER}",
+        "id": "{PHONE_NUMBER}",
         "state": "in_service"
     },
-    "request_id": "4a1a73bfa12d11ac63c74d377cd961f6",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -929,7 +1137,7 @@ curl -v -X PUT \
     },
     "error": "500",
     "message": "unspecified_fault",
-    "request_id": "9a1deab4464a3dbd1d5b5b9d93d8d790",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```
@@ -940,41 +1148,41 @@ curl -v -X PUT \
 {
     "auth_token": "{AUTH_TOKEN}",
     "data": {
-        "cause": "{PHONENUMBER}",
+        "cause": "{PHONE_NUMBER}",
         "code": 500,
         "error": "unspecified_fault",
         "message": "fault by carrier"
     },
     "error": "500",
     "message": "unspecified_fault",
-    "request_id": "0800ba14b0dfce2417185eb15c3a8f96",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```
 
 #### Classify a number
 
-> GET /v2/accounts/{ACCOUNT_ID}/phone_numbers/classifiers/{PHONENUMBER}
+> GET /v2/accounts/{ACCOUNT_ID}/phone_numbers/classifiers/{PHONE_NUMBER}
 
 ```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/classifiers/{PHONENUMBER}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/classifiers/{PHONE_NUMBER}
 ```
 
 ```json
 {
     "auth_token": "{AUTH_TOKEN}",
     "data": {
-        "e164": "+1{PHONENUMBER}",
+        "e164": "+1{PHONE_NUMBER}",
         "friendly_name": "US DID",
         "name": "did_us",
-        "number": "{PHONENUMBER}",
+        "number": "{PHONE_NUMBER}",
         "pretty_print": "SS(###) ### - ####",
         "regex": "^\\+?1?([2-9][0-9]{2}[2-9][0-9]{6})$"
     },
-    "request_id": "89bd26ad10ea97ad789fbde584be9568",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -989,7 +1197,7 @@ Note: numbers must have appeared as part of the results of a numbers search.
 ```shell
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    -d '{"data":{"numbers": ["{PHONENUMBER1}", "{PHONENUMBER2}"]}}' \
+    -d '{"data":{"numbers": ["{PHONE_NUMBER1}", "{PHONE_NUMBER2}"]}}' \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/collection/activate
 ```
 
@@ -1002,28 +1210,28 @@ curl -v -X PUT \
     "auth_token": "{AUTH_TOKEN}",
     "data": {
         "success": {
-            "{PHONENUMBER1}": {
+            "{PHONE_NUMBER1}": {
                 "_read_only": {
                     "created": 63628542222,
                     "modified": 63628542222,
                     "state": "in_service"
                 },
-                "id": "{PHONENUMBER1}",
+                "id": "{PHONE_NUMBER1}",
                 "state": "in_service"
             },
-            "{PHONENUMBER2}": {
+            "{PHONE_NUMBER2}": {
                 "_read_only": {
                     "created": 63628542222,
                     "modified": 63628542222,
                     "state": "in_service"
                 },
-                "id": "{PHONENUMBER2}",
+                "id": "{PHONE_NUMBER2}",
                 "state": "in_service"
             }
         }
     },
-    "request_id": "1fd30d420f3c4f601e05f8f9eb041e46",
-    "revision": "undefined",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
     "status": "success"
 }
 ```
@@ -1034,7 +1242,7 @@ curl -v -X PUT \
 {
     "auth_token": "{AUTH_TOKEN}",
     "data": {
-        "{PHONENUMBER2}": {
+        "{PHONE_NUMBER2}": {
             "code": 500,
             "error": "unspecified_fault",
             "message": "missing_provider_url"
@@ -1042,7 +1250,7 @@ curl -v -X PUT \
     },
     "error": "400",
     "message": "client error",
-    "request_id": "892b3cc884bd913cd3912c5b4c757421",
+    "request_id": "{REQUEST_ID}",
     "status": "error"
 }
 ```

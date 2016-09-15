@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2015, 2600Hz INC
+%%% @copyright (C) 2011-2016, 2600Hz INC
 %%% @doc
 %%% Handle registration-related APIs, like reg_success and reg_lookup.
 %%% @end
@@ -10,11 +10,11 @@
 -module(kapi_registration).
 
 -export([success/1, success_v/1
-         ,query_req/1, query_req_v/1
-         ,query_resp/1, query_resp_v/1
-         ,query_err/1, query_err_v/1
-         ,flush/1, flush_v/1
-         ,sync/1, sync_v/1
+        ,query_req/1, query_req_v/1
+        ,query_resp/1, query_resp_v/1
+        ,query_err/1, query_err_v/1
+        ,flush/1, flush_v/1
+        ,sync/1, sync_v/1
         ]).
 
 -export([bind_q/2, unbind_q/2]).
@@ -23,11 +23,11 @@
 -export([success_keys/0]).
 
 -export([publish_success/1, publish_success/2
-         ,publish_query_req/1, publish_query_req/2
-         ,publish_query_resp/2, publish_query_resp/3
-         ,publish_query_err/2, publish_query_err/3
-         ,publish_flush/1, publish_flush/2
-         ,publish_sync/0, publish_sync/1, publish_sync/2
+        ,publish_query_req/1, publish_query_req/2
+        ,publish_query_resp/2, publish_query_resp/3
+        ,publish_query_err/2, publish_query_err/3
+        ,publish_flush/1, publish_flush/2
+        ,publish_sync/0, publish_sync/1, publish_sync/2
         ]).
 
 -include_lib("kazoo/include/kz_api.hrl").
@@ -37,29 +37,29 @@
 
 %% Registration Success
 -define(REG_SUCCESS_HEADERS, [<<"Event-Timestamp">>, <<"Contact">>
-                              ,<<"Expires">>, <<"Username">>
-                              ,<<"Realm">>
+                             ,<<"Expires">>, <<"Username">>
+                             ,<<"Realm">>
                              ]).
 -define(OPTIONAL_REG_SUCCESS_HEADERS, [<<"Status">>, <<"User-Agent">>
-                                       ,<<"Call-ID">>, <<"Profile-Name">>
-                                       ,<<"Presence-Hosts">>
-                                       ,<<"Account-ID">>, <<"Account-DB">>
-                                       ,<<"From-User">>, <<"From-Host">>
-                                       ,<<"To-User">>, <<"To-Host">>
-                                       ,<<"RPid">>, <<"Authorizing-ID">>
-                                       ,<<"FreeSWITCH-Hostname">>
-                                       ,<<"FreeSWITCH-Nodename">>
-                                       ,<<"Network-IP">>, <<"Network-Port">>
-                                       ,<<"Suppress-Unregister-Notify">>
-                                       ,<<"Register-Overwrite-Notify">>
-                                       ,<<"Original-Contact">>
-                                       ,<<"Registrar-Node">>
-                                       ,<<"Proxy-Path">>, <<"AOR">>, <<"RUID">>
-                                       ,<<"First-Registration">>
-                                       ,<<"Custom-Channel-Vars">>
+                                      ,<<"Call-ID">>, <<"Profile-Name">>
+                                      ,<<"Presence-Hosts">>
+                                      ,<<"Account-ID">>, <<"Account-DB">>
+                                      ,<<"From-User">>, <<"From-Host">>
+                                      ,<<"To-User">>, <<"To-Host">>
+                                      ,<<"RPid">>, <<"Authorizing-ID">>
+                                      ,<<"FreeSWITCH-Hostname">>
+                                      ,<<"FreeSWITCH-Nodename">>
+                                      ,<<"Network-IP">>, <<"Network-Port">>
+                                      ,<<"Suppress-Unregister-Notify">>
+                                      ,<<"Register-Overwrite-Notify">>
+                                      ,<<"Original-Contact">>
+                                      ,<<"Registrar-Node">>
+                                      ,<<"Proxy-Path">>, <<"AOR">>, <<"RUID">>
+                                      ,<<"First-Registration">>
+                                      ,<<"Custom-Channel-Vars">>
                                       ]).
 -define(REG_SUCCESS_VALUES, [{<<"Event-Category">>, <<"directory">>}
-                             ,{<<"Event-Name">>, <<"reg_success">>}
+                            ,{<<"Event-Name">>, <<"reg_success">>}
                             ]).
 -define(REG_SUCCESS_TYPES, []).
 
@@ -67,7 +67,7 @@
 -define(REG_FLUSH_HEADERS, [<<"Realm">>]).
 -define(OPTIONAL_REG_FLUSH_HEADERS, [<<"Username">>]).
 -define(REG_FLUSH_VALUES, [{<<"Event-Category">>, <<"directory">>}
-                           ,{<<"Event-Name">>, <<"reg_flush">>}
+                          ,{<<"Event-Name">>, <<"reg_flush">>}
                           ]).
 -define(REG_FLUSH_TYPES, []).
 
@@ -75,28 +75,28 @@
 -define(REG_QUERY_HEADERS, []).
 -define(OPTIONAL_REG_QUERY_FIELDS, [<<"Bridge-RURI">>]).
 -define(OPTIONAL_REG_QUERY_HEADERS, [<<"Username">>, <<"Realm">>
-                                     ,<<"Count-Only">>, <<"Fields">>
+                                    ,<<"Count-Only">>, <<"Fields">>
                                     ]).
 -define(REG_QUERY_VALUES, [{<<"Event-Category">>, <<"directory">>}
-                           ,{<<"Event-Name">>, <<"reg_query">>}
+                          ,{<<"Event-Name">>, <<"reg_query">>}
                           ]).
 -define(REG_QUERY_TYPES, [{<<"Fields">>, fun(Fs) when is_list(Fs) ->
                                                  Allowed = ?OPTIONAL_REG_SUCCESS_HEADERS ++
-                                                               ?REG_SUCCESS_HEADERS ++
-                                                               ?OPTIONAL_REG_QUERY_FIELDS,
+                                                     ?REG_SUCCESS_HEADERS ++
+                                                     ?OPTIONAL_REG_QUERY_FIELDS,
                                                  lists:foldl(fun(F, 'true') -> lists:member(F, Allowed);
                                                                 (_, 'false') -> 'false'
                                                              end, 'true', Fs);
                                             (_) -> 'false'
                                          end}
-                          ,{<<"Count-Only">>, fun(N) -> kz_util:to_boolean(N) end}
+                         ,{<<"Count-Only">>, fun(N) -> kz_util:to_boolean(N) end}
                          ]).
 
 %% Registration Query Response
 -define(REG_QUERY_RESP_HEADERS, []).
 -define(OPTIONAL_REG_QUERY_RESP_HEADERS, [<<"Registrar-Age">>, <<"Count">>, <<"Fields">>]).
 -define(REG_QUERY_RESP_VALUES, [{<<"Event-Category">>, <<"directory">>}
-                                ,{<<"Event-Name">>, <<"reg_query_resp">>}
+                               ,{<<"Event-Name">>, <<"reg_query_resp">>}
                                ]).
 -define(REG_QUERY_RESP_TYPES, []).
 
@@ -104,7 +104,7 @@
 -define(REG_QUERY_ERR_HEADERS, []).
 -define(OPTIONAL_REG_QUERY_ERR_HEADERS, [<<"Registrar-Age">>]).
 -define(REG_QUERY_ERR_VALUES, [{<<"Event-Category">>, <<"directory">>}
-                               ,{<<"Event-Name">>, <<"reg_query_error">>}
+                              ,{<<"Event-Name">>, <<"reg_query_error">>}
                               ]).
 -define(REG_QUERY_ERR_TYPES, []).
 
@@ -112,8 +112,8 @@
 -define(REG_SYNC_HEADERS, []).
 -define(OPTIONAL_REG_SYNC_HEADERS, []).
 -define(REG_SYNC_VALUES, [{<<"Event-Category">>, <<"directory">>}
-                           ,{<<"Event-Name">>, <<"reg_sync">>}
-                          ]).
+                         ,{<<"Event-Name">>, <<"reg_sync">>}
+                         ]).
 -define(REG_SYNC_TYPES, []).
 -define(REG_SYNC_RK, <<"registration.sync">>).
 
@@ -159,8 +159,8 @@ flush_v(JObj) -> flush_v(kz_json:to_proplist(JObj)).
 
 
 -spec sync(api_terms()) ->
-                   {'ok', iolist()} |
-                   {'error', string()}.
+                  {'ok', iolist()} |
+                  {'error', string()}.
 sync(Prop) when is_list(Prop) ->
     case sync_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?REG_SYNC_HEADERS, ?OPTIONAL_REG_SYNC_HEADERS);
@@ -295,7 +295,7 @@ declare_exchanges() ->
 publish_success(JObj) ->
     publish_success(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_success(Success, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Success, ?REG_SUCCESS_VALUES, fun ?MODULE:success/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Success, ?REG_SUCCESS_VALUES, fun success/1),
     amqp_util:registrar_publish(get_success_routing(Success), Payload, ContentType).
 
 %%--------------------------------------------------------------------
@@ -307,7 +307,7 @@ publish_success(Success, ContentType) ->
 publish_flush(JObj) ->
     publish_flush(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_flush(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?REG_FLUSH_VALUES, fun ?MODULE:flush/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?REG_FLUSH_VALUES, fun flush/1),
     amqp_util:registrar_publish(get_flush_routing(API), Payload, ContentType).
 
 -spec publish_query_req(api_terms()) -> 'ok'.
@@ -315,7 +315,7 @@ publish_flush(API, ContentType) ->
 publish_query_req(JObj) ->
     publish_query_req(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_query_req(Req, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?REG_QUERY_VALUES, fun ?MODULE:query_req/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Req, ?REG_QUERY_VALUES, fun query_req/1),
     amqp_util:registrar_publish(get_query_routing(Req), Payload, ContentType).
 
 -spec publish_query_resp(ne_binary(), api_terms()) -> 'ok'.
@@ -323,7 +323,7 @@ publish_query_req(Req, ContentType) ->
 publish_query_resp(Queue, JObj) ->
     publish_query_resp(Queue, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_query_resp(Queue, Resp, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?REG_QUERY_RESP_VALUES, fun ?MODULE:query_resp/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?REG_QUERY_RESP_VALUES, fun query_resp/1),
     amqp_util:targeted_publish(Queue, Payload, ContentType).
 
 -spec publish_query_err(ne_binary(), api_terms()) -> 'ok'.
@@ -331,7 +331,7 @@ publish_query_resp(Queue, Resp, ContentType) ->
 publish_query_err(Queue, JObj) ->
     publish_query_err(Queue, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_query_err(Queue, Resp, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?REG_QUERY_ERR_VALUES, fun ?MODULE:query_err/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(Resp, ?REG_QUERY_ERR_VALUES, fun query_err/1),
     amqp_util:targeted_publish(Queue, Payload, ContentType).
 
 -spec publish_sync() -> 'ok'.
@@ -342,7 +342,7 @@ publish_sync() ->
 publish_sync(JObj) ->
     publish_sync(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_sync(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?REG_SYNC_VALUES, fun ?MODULE:sync/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?REG_SYNC_VALUES, fun sync/1),
     amqp_util:registrar_publish(?REG_SYNC_RK, Payload, ContentType).
 
 %%--------------------------------------------------------------------

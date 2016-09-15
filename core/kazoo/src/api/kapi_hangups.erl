@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013, 2600Hz
+%%% @copyright (C) 2016, 2600Hz
 %%% @doc
 %%% @end
 %%% @contributors
@@ -8,13 +8,13 @@
 -module(kapi_hangups).
 
 -export([query_req/1, query_req_v/1
-         ,query_resp/1, query_resp_v/1
+        ,query_resp/1, query_resp_v/1
 
-         ,bind_q/2, unbind_q/2
-         ,declare_exchanges/0
+        ,bind_q/2, unbind_q/2
+        ,declare_exchanges/0
 
-         ,publish_query_req/1, publish_query_req/2
-         ,publish_query_resp/2, publish_query_resp/3
+        ,publish_query_req/1, publish_query_req/2
+        ,publish_query_resp/2, publish_query_resp/3
         ]).
 
 -include_lib("kazoo/include/kz_api.hrl").
@@ -24,22 +24,22 @@
 -define(QUERY_REQ_HEADERS, [<<"Hangup-Cause">>]).
 -define(OPTIONAL_QUERY_REQ_HEADERS, [<<"Account-ID">>, <<"Raw-Data">>]).
 -define(QUERY_REQ_VALUES, [{<<"Event-Category">>, <<"hangups">>}
-                           ,{<<"Event-Name">>, <<"query_req">>}
+                          ,{<<"Event-Name">>, <<"query_req">>}
                           ]).
 -define(QUERY_REQ_TYPES, [{<<"Raw-Data">>, fun kz_util:is_boolean/1}]).
 
 -define(QUERY_RESP_HEADERS, []).
 -define(OPTIONAL_QUERY_RESP_HEADERS, [<<"mean">>
-                                      ,<<"one_to_five">>, <<"five_to_fifteen">>, <<"one_to_fifteen">>
-                                      ,<<"start_time">>
-                                      ,<<"account_id">>
-                                      ,<<"hangup_cause">>
-                                      ,<<"one">>, <<"five">>, <<"fifteen">>, <<"day">>
-                                      ,<<"count">>
-                                      ,<<"meters">>
+                                     ,<<"one_to_five">>, <<"five_to_fifteen">>, <<"one_to_fifteen">>
+                                     ,<<"start_time">>
+                                     ,<<"account_id">>
+                                     ,<<"hangup_cause">>
+                                     ,<<"one">>, <<"five">>, <<"fifteen">>, <<"day">>
+                                     ,<<"count">>
+                                     ,<<"meters">>
                                      ]).
 -define(QUERY_RESP_VALUES, [{<<"Event-Category">>, <<"hangups">>}
-                            ,{<<"Event-Name">>, <<"query_resp">>}
+                           ,{<<"Event-Name">>, <<"query_resp">>}
                            ]).
 -define(QUERY_RESP_TYPES, []).
 
@@ -69,8 +69,8 @@ query_req_v(JObj) -> query_req_v(kz_json:to_proplist(JObj)).
 %% @end
 %%--------------------------------------------------------------------
 -spec query_resp(api_terms()) ->
-                       {'ok', iolist()} |
-                       {'error', string()}.
+                        {'ok', iolist()} |
+                        {'error', string()}.
 query_resp(Prop) when is_list(Prop) ->
     case query_resp_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?QUERY_RESP_HEADERS, ?OPTIONAL_QUERY_RESP_HEADERS);
@@ -95,18 +95,18 @@ unbind_q(Queue, _Props) ->
 declare_exchanges() ->
     amqp_util:kapps_exchange().
 
--spec publish_query_req(kz_json:object()) -> 'ok'.
+-spec publish_query_req(api_terms()) -> 'ok'.
 -spec publish_query_req(api_terms(), ne_binary()) -> 'ok'.
 publish_query_req(JObj) ->
     publish_query_req(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_query_req(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?QUERY_REQ_VALUES, fun ?MODULE:query_req/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?QUERY_REQ_VALUES, fun query_req/1),
     amqp_util:kapps_publish(?QUERY_REQ_ROUTING_KEY, Payload, ContentType).
 
--spec publish_query_resp(ne_binary(), kz_json:object()) -> 'ok'.
+-spec publish_query_resp(ne_binary(), api_terms()) -> 'ok'.
 -spec publish_query_resp(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
 publish_query_resp(RespQ, JObj) ->
     publish_query_resp(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
 publish_query_resp(RespQ, API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?QUERY_RESP_VALUES, fun ?MODULE:query_resp/1),
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?QUERY_RESP_VALUES, fun query_resp/1),
     amqp_util:targeted_publish(RespQ, Payload, ContentType).

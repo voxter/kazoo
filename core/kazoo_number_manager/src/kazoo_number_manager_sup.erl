@@ -29,9 +29,6 @@
 
 %% Helper macro for declaring children of supervisor
 -define(CHILDREN, [?CACHE_ARGS(?CACHE_NAME, ?CACHE_PROPS)
-                   ,?WORKER('knm_port_request_crawler')
-                   ,?WORKER('knm_number_crawler')
-                   ,?WORKER('knm_tasks_listener')
                   ]).
 
 %% ===================================================================
@@ -45,6 +42,7 @@ start_link() ->
 %% Supervisor callbacks
 %% ===================================================================
 
+-spec init([]) -> sup_init_ret().
 init([]) ->
     RestartStrategy = 'one_for_one',
     MaxRestarts = 5,

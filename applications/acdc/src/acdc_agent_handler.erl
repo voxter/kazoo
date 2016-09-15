@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz INC
+%%% @copyright (C) 2012-2016, 2600Hz INC
 %%% @doc
 %%% Handlers for various call events, acdc events, etc
 %%% @end
@@ -10,23 +10,23 @@
 
 %% Listener callbacks
 -export([handle_status_update/2
-         ,handle_sync_req/2
-         ,handle_sync_resp/2
-         ,handle_call_event/2
-         ,handle_new_channel/2
-         ,handle_originate_resp/2
-         ,handle_member_connect_win/2
-         ,handle_member_message/2
-         ,handle_agent_message/2
-         ,handle_config_change/2
-         ,handle_presence_probe/2
-         ,handle_destroy/2
+        ,handle_sync_req/2
+        ,handle_sync_resp/2
+        ,handle_call_event/2
+        ,handle_new_channel/2
+        ,handle_originate_resp/2
+        ,handle_member_connect_win/2
+        ,handle_member_message/2
+        ,handle_agent_message/2
+        ,handle_config_change/2
+        ,handle_presence_probe/2
+        ,handle_destroy/2
         ]).
 
 -include("acdc.hrl").
 -include_lib("kazoo/include/kapi_conf.hrl").
 
--define(DEFAULT_PAUSE ,kapps_config:get(<<"acdc">>, <<"default_agent_pause_timeout">>, 600)).
+-define(DEFAULT_PAUSE ,kapps_config:get(?CONFIG_CAT, <<"default_agent_pause_timeout">>, 600)).
 
 -spec handle_status_update(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_status_update(JObj, _Props) ->
@@ -54,8 +54,8 @@ handle_status_update(JObj, _Props) ->
             'true' = kapi_acdc_agent:resume_v(JObj),
             maybe_resume_agent(AccountId, AgentId, JObj);
         Event -> maybe_agent_queue_change(AccountId, AgentId, Event
-                                          ,kz_json:get_value(<<"Queue-ID">>, JObj)
-                                          ,JObj
+                                         ,kz_json:get_value(<<"Queue-ID">>, JObj)
+                                         ,JObj
                                          )
     end.
 
@@ -76,9 +76,9 @@ maybe_agent_queue_change(AccountId, AgentId, <<"login_queue">>, QueueId, JObj) -
 maybe_agent_queue_change(AccountId, AgentId, <<"logout_queue">>, QueueId, JObj) ->
     lager:debug("queue logout for agent ~s into ~s", [AgentId, QueueId]),
     update_agent(acdc_agents_sup:find_agent_supervisor(AccountId, AgentId)
-                 ,QueueId
-                 ,fun acdc_agent_listener:rm_acdc_queue/2
-                 ,JObj
+                ,QueueId
+                ,fun acdc_agent_listener:rm_acdc_queue/2
+                ,JObj
                 ).
 
 update_agent('undefined', _QueueId, _F, _JObj) ->
@@ -130,7 +130,7 @@ login_resp(JObj, Status) ->
         {_, 'undefined'} -> lager:debug("not publishing a login resp: no msg_id");
         {ServerID, MsgId} ->
             Prop = [{<<"Status">>, Status}
-                    ,{<<"Msg-ID">>, MsgId}
+                   ,{<<"Msg-ID">>, MsgId}
                     | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                    ],
             kapi_acdc_agent:publish_login_resp(ServerID, Prop)
@@ -319,22 +319,22 @@ handle_config_change(JObj, _Props) ->
 -spec handle_change(kz_json:object(), ne_binary()) -> 'ok'.
 handle_change(JObj, <<"user">>) ->
     handle_agent_change(kz_json:get_value(<<"Database">>, JObj)
-                        ,kz_json:get_value(<<"Account-ID">>, JObj)
-                        ,kz_json:get_value(<<"ID">>, JObj)
-                        ,kz_json:get_value(<<"Event-Name">>, JObj)
+                       ,kz_json:get_value(<<"Account-ID">>, JObj)
+                       ,kz_json:get_value(<<"ID">>, JObj)
+                       ,kz_json:get_value(<<"Event-Name">>, JObj)
                        );
 handle_change(JObj, <<"device">>) ->
     handle_device_change(kz_json:get_value(<<"Database">>, JObj)
-                         ,kz_json:get_value(<<"Account-ID">>, JObj)
-                         ,kz_json:get_value(<<"ID">>, JObj)
-                         ,kz_json:get_value(<<"Rev">>, JObj)
-                         ,kz_json:get_value(<<"Event-Name">>, JObj)
+                        ,kz_json:get_value(<<"Account-ID">>, JObj)
+                        ,kz_json:get_value(<<"ID">>, JObj)
+                        ,kz_json:get_value(<<"Rev">>, JObj)
+                        ,kz_json:get_value(<<"Event-Name">>, JObj)
                         );
 handle_change(JObj, <<"undefined">>) ->
     lager:debug("undefined type for change"),
     case kz_datamgr:open_cache_doc(kz_json:get_value(<<"Database">>, JObj)
                                   ,kz_json:get_value(<<"ID">>, JObj)
-                                 )
+                                  )
     of
         {'ok', Doc} ->
             Type = kz_doc:type(Doc),
@@ -433,8 +433,8 @@ send_probe(JObj, State) ->
            ,(kz_json:get_value(<<"Realm">>, JObj))/binary>>,
     PresenceUpdate =
         [{<<"State">>, State}
-         ,{<<"Presence-ID">>, To}
-         ,{<<"Call-ID">>, kz_util:to_hex_binary(crypto:hash(md5, To))}
+        ,{<<"Presence-ID">>, To}
+        ,{<<"Call-ID">>, kz_util:to_hex_binary(crypto:hash(md5, To))}
          | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
         ],
     kapi_presence:publish_update(PresenceUpdate).
