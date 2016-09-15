@@ -305,7 +305,7 @@ maybe_remove_invalid_notify_doc(<<"notification">>, _, JObj) ->
 maybe_remove_invalid_notify_doc(_Type, _Id, _Doc) -> 'ok'.
 
 %%--------------------------------------------------------------------
-%% @private
+%% @public
 %% @doc
 %%
 %% @end

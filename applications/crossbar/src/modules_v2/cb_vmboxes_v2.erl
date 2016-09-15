@@ -760,10 +760,7 @@ load_attachment_from_message(Doc, BoxId, Context, Timezone) ->
                                   ,filename:extension(AttachmentId)
                                   ,Timezone
                                   ),
-    case (kzd_box_message:source_id(Doc) =:= BoxId)
-             andalso kz_datamgr:fetch_attachment(kz_doc:account_db(Doc), MediaId, AttachmentId)
-    of
-        'false' -> crossbar_doc:handle_couch_mgr_errors('not_found', MediaId, Context);
+    case kz_datamgr:fetch_attachment(kz_doc:account_db(Doc), MediaId, AttachmentId) of
         {'error', Error} ->
             crossbar_doc:handle_datamgr_errors(Error, MediaId, Context);
         {'ok', AttachBin} ->

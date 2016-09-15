@@ -225,14 +225,14 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/outbox
 ```
 
-#### Fetch the fax payload
+#### Fetch a fax from the outbox folder
 
-> GET /v2/accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}/attachment
+> GET /v2/accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}
 
 ```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}/attachment
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}
 ```
 
 #### Resubmit a fax from the outbox folder
@@ -269,18 +269,14 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/smtplog
 ```
 
-### Managing Past Inbound Faxes
+#### Fetch a specific log related to email
 
-#### Fetch all faxes in the inbox folder
-
-Retrieve a list of faxes that have previously been received.
-
-> GET /v2/accounts/{ACCOUNT_ID}/faxes/inbox
+> GET /v2/accounts/{ACCOUNT_ID}/faxes/smtplog/{ATTEMPT_ID}
 
 ```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/inbox
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/smtplog/{ATTEMPT_ID}
 ```
 
 
@@ -335,7 +331,7 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}
 ```
 
-#### Remove the fax payload
+#### Fetch the fax payload
 
 Retrieve the fax document / attachments for a particular inbound fax for which you have the fax ID.
 
@@ -359,7 +355,7 @@ curl -v -X DELETE \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}
 ```
 
-## APIs under active development
+#### Remove the fax payload
 
 In some cases, you may wish to remove the document from a fax (usually for privacy reasons) but keep evidence that the fax receipt occurred. This will remove attachments but not the metadata from a received fax. Useful after you've done post-processing on a fax externally.
 
@@ -368,7 +364,7 @@ In some cases, you may wish to remove the document from a fax (usually for priva
 ```shell
 curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/incoming
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}/attachment
 ```
 
 ## APIs under active development

@@ -1,24 +1,41 @@
 ### Ledgers
 
-#### List current Ledgers
+#### About Ledgers
 
 #### Schema
 
-##### Request
+Key | Description | Type | Default | Required
+--- | ----------- | ---- | ------- | --------
+`account` | Account info | `object` |   | `false`
+`account.id` | Account ID | `string` |   | `false`
+`account.name` | Account name | `string` |   | `false`
+`amount` | Ledger amount | `integer` |   | `false`
+`description` | Useful description for ledger | `string` |   | `false`
+`metadata` | Metadata for ledger document | `object` |   | `false`
+`period` | Period of ledger | `object` |   | `false`
+`period.end` | Period end | `integer` |   | `false`
+`period.start` | Period start | `integer` |   | `false`
+`source` | Origin of ledger | `object` |   | `true`
+`source.id` | Source ID | `string` |   | `true`
+`source.service` | Source service | `string` |   | `true`
+`usage` | Usage for ledger | `object` |   | `true`
+`usage.quantity` | Usage quantity | `integer` |   | `true`
+`usage.type` | Usage type | `string` |   | `true`
+`usage.unit` | Usage unit | `string` |   | `true`
 
-- Verb: `GET`
-- Url: `/accounts/{{ACCOUNT_ID}}/ledgers`
 
+#### List current Ledgers
 
-##### Response
+List current ledgers and value for an account.
 
 > GET /v2/accounts/{ACCOUNT_ID}/ledgers
 
-```curl
+```shell
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ledgers
 ```
+
 ```json
 {
     "data": {
@@ -116,23 +133,26 @@ curl -v -X GET \
 }
 ```
 
-##### Response
+#### Credit / Debit
 
-Credit or Debit a specific ledger
-the account_id for AUTH_TOKEN must be reseller of target account
+Credit or Debit a specific ledger.
+the `account_id` for `AUTH_TOKEN` must be reseller of target account.
 
-parameter "impact_reseller" (boolean not required) when true will also create the document in the reseller
+Parameter "impact_reseller" (boolean not required) when true will also create the document in the reseller
 
 > PUT /v2/accounts/{ACCOUNT_ID}/ledgers/debit
+
 > PUT /v2/accounts/{ACCOUNT_ID}/ledgers/credit
 
-```curl
+```shell
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/ledgers/debit
 ```
+
 ```json
-{ "data" : {
+{
+    "data": {
         "amount": 100,
         "description": "blablabla",
         "source": {

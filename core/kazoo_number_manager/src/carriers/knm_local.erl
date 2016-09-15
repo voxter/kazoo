@@ -113,8 +113,7 @@ is_number_billable(_Number) -> 'false'.
 %%--------------------------------------------------------------------
 -spec acquire_number(knm_number:knm_number()) ->
                             knm_number:knm_number().
-acquire_number(Number) ->
-    Number.
+acquire_number(Number) -> Number.
 
 %%--------------------------------------------------------------------
 %% @public

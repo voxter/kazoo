@@ -28,7 +28,6 @@
         ,pagination_page_size/0, pagination_page_size/1
         ,has_qs_filter/1
         ,filtered_doc_by_qs/2, filtered_doc_by_qs/3
-        ,filter_prop/3
         ]).
 
 -export([handle_json_success/2]).

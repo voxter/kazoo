@@ -885,32 +885,32 @@ maybe_fax_specific(Props) ->
 fax_specific(Props) ->
     props:filter_undefined(
       [{<<"Fax-Success">>, get_fax_success(Props)}
-       ,{<<"Fax-ECM-Used">>, get_fax_ecm_used(Props)}
-       ,{<<"Fax-T38-Used">>, get_fax_t38_used(Props)}
-       ,{<<"Fax-Result-Text">>, props:get_value(<<"variable_fax_result_text">>, Props)}
-       ,{<<"Fax-Transferred-Pages">>, props:get_value(<<"variable_fax_document_transferred_pages">>, Props)}
-       ,{<<"Fax-Total-Pages">>, props:get_value(<<"variable_fax_document_total_pages">>, Props)}
-       ,{<<"Fax-Bad-Rows">>, props:get_value(<<"variable_fax_bad_rows">>, Props)}
-       ,{<<"Fax-Transfer-Rate">>, props:get_value(<<"variable_fax_transfer_rate">>, Props)}
-       ,{<<"Fax-Local-Station-ID">>, props:get_value(<<"variable_fax_local_statio_id">>, Props)}
-       ,{<<"Fax-Remote-Station-ID">>, props:get_value(<<"variable_fax_remote_station_id">>, Props)}
-       ,{<<"Fax-Remote-Country">>, props:get_value(<<"variable_fax_remote_country">>, Props)}
-       ,{<<"Fax-Remote-Vendor">>, props:get_value(<<"variable_fax_remote_vendor">>, Props)}
-       ,{<<"Fax-Remote-Model">>, props:get_value(<<"variable_fax_remote_model">>, Props)}
-       ,{<<"Fax-Image-Resolution">>, props:get_value(<<"variable_fax_image_resolution">>, Props)}
-       ,{<<"Fax-File-Image-Resolution">>, props:get_value(<<"variable_fax_file_image_resolution">>, Props)}
-       ,{<<"Fax-Image-Size">>, props:get_value(<<"variable_fax_image_size">>, Props)}
-       ,{<<"Fax-Image-Pixel-Size">>, props:get_value(<<"variable_fax_image_pixel_size">>, Props)}
-       ,{<<"Fax-File-Image-Pixel-Size">>, props:get_value(<<"variable_fax_file_image_pixel_size">>, Props)}
-       ,{<<"Fax-Longest-Bad-Row-Run">>, props:get_value(<<"variable_fax_longest_bad_row_run">>, Props)}
-       ,{<<"Fax-Encoding">>, props:get_value(<<"variable_fax_encoding">>, Props)}
-       ,{<<"Fax-Encoding-Name">>, props:get_value(<<"variable_fax_encoding_name">>, Props)}
-       ,{<<"Fax-Timezone">>, props:get_value(<<"variable_fax_timezone">>, Props)}
-       ,{<<"Fax-Identity-Number">>, props:get_value(<<"variable_fax_ident">>, Props)}
-       ,{<<"Fax-Identity-Name">>, props:get_value(<<"variable_fax_header">>, Props)}
-       ,{<<"Fax-Doc-ID">>, props:get_value(<<"variable_fax_doc_id">>, Props)}
-       ,{<<"Fax-Doc-DB">>, props:get_value(<<"variable_fax_doc_database">>, Props)}
-       ]).
+      ,{<<"Fax-ECM-Used">>, get_fax_ecm_used(Props)}
+      ,{<<"Fax-T38-Used">>, get_fax_t38_used(Props)}
+      ,{<<"Fax-Result-Text">>, props:get_value(<<"variable_fax_result_text">>, Props)}
+      ,{<<"Fax-Transferred-Pages">>, props:get_value(<<"variable_fax_document_transferred_pages">>, Props)}
+      ,{<<"Fax-Total-Pages">>, props:get_value(<<"variable_fax_document_total_pages">>, Props)}
+      ,{<<"Fax-Bad-Rows">>, props:get_value(<<"variable_fax_bad_rows">>, Props)}
+      ,{<<"Fax-Transfer-Rate">>, props:get_value(<<"variable_fax_transfer_rate">>, Props)}
+      ,{<<"Fax-Local-Station-ID">>, props:get_value(<<"variable_fax_local_station_id">>, Props)}
+      ,{<<"Fax-Remote-Station-ID">>, props:get_value(<<"variable_fax_remote_station_id">>, Props)}
+      ,{<<"Fax-Remote-Country">>, props:get_value(<<"variable_fax_remote_country">>, Props)}
+      ,{<<"Fax-Remote-Vendor">>, props:get_value(<<"variable_fax_remote_vendor">>, Props)}
+      ,{<<"Fax-Remote-Model">>, props:get_value(<<"variable_fax_remote_model">>, Props)}
+      ,{<<"Fax-Image-Resolution">>, props:get_value(<<"variable_fax_image_resolution">>, Props)}
+      ,{<<"Fax-File-Image-Resolution">>, props:get_value(<<"variable_fax_file_image_resolution">>, Props)}
+      ,{<<"Fax-Image-Size">>, props:get_value(<<"variable_fax_image_size">>, Props)}
+      ,{<<"Fax-Image-Pixel-Size">>, props:get_value(<<"variable_fax_image_pixel_size">>, Props)}
+      ,{<<"Fax-File-Image-Pixel-Size">>, props:get_value(<<"variable_fax_file_image_pixel_size">>, Props)}
+      ,{<<"Fax-Longest-Bad-Row-Run">>, props:get_value(<<"variable_fax_longest_bad_row_run">>, Props)}
+      ,{<<"Fax-Encoding">>, props:get_value(<<"variable_fax_encoding">>, Props)}
+      ,{<<"Fax-Encoding-Name">>, props:get_value(<<"variable_fax_encoding_name">>, Props)}
+      ,{<<"Fax-Timezone">>, props:get_value(<<"variable_fax_timezone">>, Props)}
+      ,{<<"Fax-Identity-Number">>, props:get_value(<<"variable_fax_ident">>, Props)}
+      ,{<<"Fax-Identity-Name">>, props:get_value(<<"variable_fax_header">>, Props)}
+      ,{<<"Fax-Doc-ID">>, props:get_value(<<"variable_fax_doc_id">>, Props)}
+      ,{<<"Fax-Doc-DB">>, props:get_value(<<"variable_fax_doc_database">>, Props)}
+      ]).
 
 -spec should_publish(ne_binary(), ne_binary(), boolean()) -> boolean().
 should_publish(<<"CHANNEL_EXECUTE_COMPLETE">>, <<"bridge">>, 'false') ->

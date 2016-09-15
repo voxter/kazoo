@@ -395,6 +395,5 @@
 -type task_return() :: 'ok' | ne_binary() | kz_csv:row() | [kz_csv:row()].
 -type task_iterator() :: 'init' | 'stop' | any().
 
-
 -define(KAZOO_TYPES_INCLUDED, 'true').
 -endif.
