@@ -17,7 +17,7 @@
                 "    'owner_id': doc.owner_id,",
                 "    'enabled': doc.enabled,",
                 "    'device_type': doc.device_type || 'sip_device',",
-                "    'mobile': doc.mobile",
+                "    'mobile': doc.mobile,",
                 "    'contact_list': doc.contact_list",
                 "  });",
                 "}"
