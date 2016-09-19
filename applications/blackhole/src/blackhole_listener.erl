@@ -12,6 +12,7 @@
         ,handle_amqp_event/3
         ,add_binding/1, remove_binding/1
         ,add_bindings/1, remove_bindings/1
+        ,flush/0
         ]).
 -export([init/1
         ,handle_call/3
@@ -152,6 +153,9 @@ handle_cast({'gen_listener', {'created_queue', _QueueNAme}}, State) ->
     {'noreply', State};
 handle_cast({'gen_listener', {'is_consuming', _IsConsuming}}, State) ->
     {'noreply', State};
+handle_cast('flush_bh_bindings', #state{bindings=ETS}=State) ->
+    ets:delete_all_objects(ETS),
+    {'noreply', State};
 handle_cast(_Msg, State) ->
     {'noreply', State}.
 
@@ -233,16 +237,22 @@ binding_key(Binding) -> base64:encode(term_to_binary(Binding)).
 add_bh_binding(ETS, Binding) ->
     Key = binding_key(Binding),
     case ets:update_counter(ETS, Key, 1, {Key, 0}) of
-        1 -> add_bh_binding(Binding);
-        _ -> 'ok'
+        1 -> lager:debug("blackhole is creating new binding to ~p", [Binding]),
+             add_bh_binding(Binding);
+        0 -> lager:debug("listener has 0 refs after updating ? not creating new binding for ~p", [Binding]);
+        _Else -> lager:debug("listener has ~b refs, not creating new binding for ~p", [_Else, Binding])
     end.
 
 remove_bh_binding(ETS, Binding) ->
     Key = binding_key(Binding),
     case ets:update_counter(ETS, Key, -1, {Key, 0}) of
-        0 -> remove_bh_binding(Binding),
+        0 -> lager:debug("blackhole is deleting binding for ~p", [Binding]),
+             remove_bh_binding(Binding),
              ets:delete(ETS, Key);
-        _ -> 'ok'
+        Neg when Neg < 0 -> lager:debug("listener have ~b negative references, removing binding for ~p", [Neg, Binding]),
+             remove_bh_binding(Binding),
+             ets:delete(ETS, Key);
+        _Else -> lager:debug("listener still have ~b references, not removing binding for ~p", [_Else, Binding])
     end.
 
 add_bh_binding({'hook', AccountId}) ->
@@ -264,3 +274,7 @@ add_bh_bindings(ETS, Bindings) ->
 
 remove_bh_bindings(ETS, Bindings) ->
     [remove_bh_binding(ETS, Binding) || Binding <- Bindings].
+
+-spec flush() -> 'ok'.
+flush() ->
+    gen_listener:cast(?SERVER, 'flush_bh_bindings').

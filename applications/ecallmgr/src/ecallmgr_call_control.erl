@@ -346,63 +346,10 @@ handle_cast(_, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_info(any(), state()) -> handle_info_ret_state(state()).
-handle_info({'event', [CallId | Props]}, #state{call_id=CallId
-                                               ,node=Node
-                                               }=State) ->
-    JObj = ecallmgr_call_events:to_json(Props),
-    Application = kz_json:get_value(<<"Application-Name">>, JObj),
-    case props:get_first_defined([<<"Event-Subclass">>
-                                 ,<<"Event-Name">>
-                                 ]
-                                ,Props
-                                )
-    of
-        <<"kazoo::", _/binary>> ->
-            {'noreply', handle_execute_complete(Application, JObj, State)};
-        <<"CHANNEL_EXECUTE_COMPLETE">> ->
-            {'noreply', handle_execute_complete(Application, JObj, State)};
-        <<"RECORD_STOP">> ->
-            {'noreply', handle_execute_complete(Application, JObj, State)};
-        <<"CHANNEL_DESTROY">> ->
-            case kz_json:is_true(<<"Channel-Moving">>, JObj) of
-                'false' -> {'noreply', handle_channel_destroyed(JObj, State)};
-                'true' ->
-                    lager:debug("channel destroy while moving to other node, deferring to new controller"),
-                    {'stop', 'normal', State}
-            end;
-        <<"sofia::transferee">> ->
-            handle_transferee(Props, State);
-        <<"sofia::replaced">> ->
-            handle_replaced(Props, State);
-        <<"sofia::intercepted">> ->
-            'ok' = handle_intercepted(Node, CallId, Props),
-            {'noreply', State};
-        <<"CHANNEL_EXECUTE">> when Application =:= <<"redirect">> ->
-            gen_listener:cast(self(), {'channel_redirected', JObj}),
-            {'stop', 'normal', State};
-        <<"sofia::transferor">> ->
-            handle_transferor(Props, State);
-        _Else ->
-            {'noreply', State}
-    end;
-handle_info({'event', [_X | Props]}, State) ->
-    case props:get_first_defined([<<"Event-Subclass">>
-                                 ,<<"Event-Name">>
-                                 ]
-                                ,Props
-                                )
-    of
-        <<"CHANNEL_CREATE">> ->
-            {'noreply', handle_channel_create(Props, State)};
-        <<"CHANNEL_DESTROY">> ->
-            {'noreply', handle_channel_destroy(Props, State)};
-        <<"sofia::transferor">> ->
-            props:to_log(Props, <<"TRANSFEROR OTHER ", _X/binary>>),
-            {'noreply', State};
-        _Else ->
-            lager:debug("CALL CONTROL NOT HANDLED ~s", [_Else]),
-            {'noreply', State}
-    end;
+handle_info({'event', [CallId | Props]}, #state{call_id=CallId}=State) ->
+    handle_event_info(CallId, Props, State);
+handle_info({'event', [CallId | Props]}, State) ->
+    handle_other_event_info(CallId, Props, State);
 handle_info({'force_queue_advance', CallId}, #state{call_id=CallId}=State) ->
     {'noreply', force_queue_advance(State)};
 handle_info({'force_queue_advance', _}, State) ->
@@ -1199,15 +1146,30 @@ send_error_resp(CallId, Cmd) ->
                    ).
 
 -spec send_error_resp(ne_binary(), kz_json:object(), ne_binary()) -> 'ok'.
+-spec send_error_resp(ne_binary(), kz_json:object(), ne_binary(), api_object()) -> 'ok'.
 send_error_resp(CallId, Cmd, Msg) ->
+    case ecallmgr_fs_channel:fetch(CallId) of
+        {'ok', Channel} -> send_error_resp(CallId, Cmd, Msg, Channel);
+        {'error', 'not_found'} -> send_error_resp(CallId, Cmd, Msg, 'undefined')
+    end.
+
+send_error_resp(CallId, Cmd, Msg, Channel) ->
+    CCVs = error_ccvs(Channel),
+
     Resp = [{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, Cmd)}
            ,{<<"Error-Message">>, Msg}
            ,{<<"Request">>, Cmd}
            ,{<<"Call-ID">>, CallId}
+           ,{<<"Custom-Channel-Vars">>, CCVs}
             | kz_api:default_headers(<<>>, <<"error">>, <<"dialplan">>, ?APP_NAME, ?APP_VERSION)
            ],
     lager:debug("sending execution error: ~p", [Resp]),
     kapi_dialplan:publish_error(CallId, Resp).
+
+-spec error_ccvs(api_object()) -> api_object().
+error_ccvs('undefined') -> 'undefined';
+error_ccvs(Channel) ->
+    kz_json:from_list(ecallmgr_fs_channel:channel_ccvs(Channel)).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1339,3 +1301,66 @@ handle_intercepted(Node, CallId, Props) ->
                 CDR = props:get_value(?GET_CCV(<<?CALL_INTERACTION_ID>>), Props),
                 ecallmgr_fs_command:set(Node, UUID, [{<<?CALL_INTERACTION_ID>>, CDR}])
         end.
+
+-spec handle_event_info(ne_binary(), kzd_freeswitch:data(), state()) ->
+                               {'noreply', state()} |
+                               {'stop', any(), state()}.
+handle_event_info(CallId, Props, #state{call_id=CallId
+                                       ,node=Node
+                                       }=State) ->
+    JObj = ecallmgr_call_events:to_json(Props),
+    Application = kz_json:get_value(<<"Application-Name">>, JObj),
+    case props:get_first_defined([<<"Event-Subclass">>
+                                 ,<<"Event-Name">>
+                                 ]
+                                ,Props
+                                )
+    of
+        <<"kazoo::", _/binary>> ->
+            {'noreply', handle_execute_complete(Application, JObj, State)};
+        <<"CHANNEL_EXECUTE_COMPLETE">> ->
+            {'noreply', handle_execute_complete(Application, JObj, State)};
+        <<"RECORD_STOP">> ->
+            {'noreply', handle_execute_complete(Application, JObj, State)};
+        <<"CHANNEL_DESTROY">> ->
+            case kz_json:is_true(<<"Channel-Moving">>, JObj) of
+                'false' -> {'noreply', handle_channel_destroyed(JObj, State)};
+                'true' ->
+                    lager:debug("channel destroy while moving to other node, deferring to new controller"),
+                    {'stop', 'normal', State}
+            end;
+        <<"sofia::transferee">> ->
+            handle_transferee(Props, State);
+        <<"sofia::replaced">> ->
+            handle_replaced(Props, State);
+        <<"sofia::intercepted">> ->
+            'ok' = handle_intercepted(Node, CallId, Props),
+            {'noreply', State};
+        <<"CHANNEL_EXECUTE">> when Application =:= <<"redirect">> ->
+            gen_listener:cast(self(), {'channel_redirected', JObj}),
+            {'stop', 'normal', State};
+        <<"sofia::transferor">> ->
+            handle_transferor(Props, State);
+        _Else ->
+            {'noreply', State}
+    end.
+
+-spec handle_other_event_info(api_binary(), kzd_freeswitch:data(), state()) -> {'noreply', state()}.
+handle_other_event_info(CallId, Props, State) ->
+    case props:get_first_defined([<<"Event-Subclass">>
+                                 ,<<"Event-Name">>
+                                 ]
+                                ,Props
+                                )
+    of
+        <<"CHANNEL_CREATE">> ->
+            {'noreply', handle_channel_create(Props, State)};
+        <<"CHANNEL_DESTROY">> ->
+            {'noreply', handle_channel_destroy(Props, State)};
+        <<"sofia::transferor">> ->
+            props:to_log(Props, <<"TRANSFEROR OTHER ", CallId/binary>>),
+            {'noreply', State};
+        _Else ->
+            lager:debug("CALL CONTROL NOT HANDLED ~s", [_Else]),
+            {'noreply', State}
+    end.
