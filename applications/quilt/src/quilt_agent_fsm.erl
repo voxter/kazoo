@@ -38,35 +38,35 @@ handle_event(Event, StateName, State) ->
     {'next_state', StateName, State}.
 
 handle_sync_event({'agentlogin', JObj}, _From, 'started', State) ->
-    quilt_log:handle_event(JObj),
+    _ = wh_util:spawn('quilt_log', 'handle_event', [JObj]),
     {'reply', 'ok', 'ready', State};
 handle_sync_event({'agentlogin', JObj}, _From, 'loggedout', State) ->
-    quilt_log:handle_event(JObj),
+    _ = wh_util:spawn('quilt_log', 'handle_event', [JObj]),
     {'reply', 'ok', 'ready', State};
 handle_sync_event({'agentlogoff', JObj}, _From, 'paused', State) ->
-    quilt_log:handle_event(JObj),
+    _ = wh_util:spawn('quilt_log', 'handle_event', [JObj]),
     {'reply', 'ok', 'loggedout', State};
 handle_sync_event({'agentlogoff', JObj}, _From, 'ready', State) ->
-    quilt_log:handle_event(JObj),
+    _ = wh_util:spawn('quilt_log', 'handle_event', [JObj]),
     {'reply', 'ok', 'loggedout', State};
 handle_sync_event({'unpauseall', JObj}, _From, 'started', State) ->
-    quilt_log:handle_event(JObj),
+    _ = wh_util:spawn('quilt_log', 'handle_event', [JObj]),
     {'reply', 'ok', 'ready', State};
 handle_sync_event({'unpauseall', JObj}, _From, 'paused', State) ->
-    quilt_log:handle_event(JObj),
+    _ = wh_util:spawn('quilt_log', 'handle_event', [JObj]),
     {'reply', 'ok', 'ready', State};
 handle_sync_event({'pauseall', JObj}, _From, 'started', State) ->
-    quilt_log:handle_event(JObj),
+    _ = wh_util:spawn('quilt_log', 'handle_event', [JObj]),
     {'reply', 'ok', 'paused', State};
 handle_sync_event({'pauseall', JObj}, _From, 'ready', State) ->
-    quilt_log:handle_event(JObj),
+    _ = wh_util:spawn('quilt_log', 'handle_event', [JObj]),
     {'reply', 'ok', 'paused', State};
 handle_sync_event({'answer', _JObj}, _From, 'started', State) ->
     {'reply', 'ok', 'incall', State};
 handle_sync_event({'answer', _JObj}, _From, 'ready', State) ->
     {'reply', 'ok', 'incall', State};
 handle_sync_event({'hangup', JObj}, _From, 'incall', State) ->
-    quilt_log:handle_event(JObj),
+    _ = wh_util:spawn('quilt_log', 'handle_event', [JObj]),
     {'reply', 'ok', 'ready', State};
 handle_sync_event(Event, _From, StateName, State) ->
     lager:debug("unhandled sync event in state ~s: ~p", [StateName, Event]),

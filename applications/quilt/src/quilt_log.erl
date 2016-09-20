@@ -18,7 +18,7 @@
 
 handle_event(JObj) ->
     Event = {wh_json:get_value(<<"Event-Category">>, JObj), wh_json:get_value(<<"Event-Name">>, JObj)},
-    lager:debug("processing event: ~p", [Event]),
+    lager:debug("processing event: ~p, ~p", [Event, JObj]),
     handle_specific_event(Event, JObj).
 
 %%
