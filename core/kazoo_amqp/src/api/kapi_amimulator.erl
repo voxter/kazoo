@@ -14,7 +14,8 @@
          ,publish_control_queue_resp/2, publish_control_queue_resp/3
         ]).
 
--include_lib("kazoo/include/kz_api.hrl").
+-include_lib("amqp_util.hrl").
+-include_lib("kazoo_amqp/include/kz_api.hrl").
 
 -define(CONTROL_QUEUE_REQ_HEADERS, [<<"Call-ID">>]).
 -define(OPTIONAL_CONTROL_QUEUE_REQ_HEADERS, []).
