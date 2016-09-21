@@ -492,9 +492,9 @@ format_stats_fold(Stat, Acc) ->
     end.
 
 -spec maybe_add_answered(kz_json:object(), kz_json:object()) ->
-                                [{kz_json:key(), non_neg_integer()}].
+                                [{kz_json:path(), non_neg_integer()}].
 -spec maybe_add_answered(kz_json:object(), kz_json:object(), api_binary()) ->
-                                [{kz_json:key(), non_neg_integer()}].
+                                [{kz_json:path(), non_neg_integer()}].
 maybe_add_answered(Stat, Acc) ->
     maybe_add_answered(Stat, Acc, kz_json:get_value(<<"status">>, Stat)).
 maybe_add_answered(Stat, Acc, <<"handled">>) ->
@@ -506,7 +506,7 @@ maybe_add_answered(_, _, _S) ->
     [].
 
 -spec add_answered(kz_json:object(), kz_json:object()) ->
-                          [{kz_json:key(), non_neg_integer()},...].
+                          [{kz_json:path(), non_neg_integer()},...].
 add_answered(Stat, Acc) ->
     AgentId = kz_json:get_value(<<"agent_id">>, Stat),
     QueueId = kz_json:get_value(<<"queue_id">>, Stat),
