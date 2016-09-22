@@ -23,7 +23,7 @@
         ]).
 
 -include("fax.hrl").
--include_lib("kazoo/include/kapi_conf.hrl").
+-include_lib("kazoo_amqp/include/kapi_conf.hrl").
 
 -record(state, {}).
 -type state() :: #state{}.
@@ -171,6 +171,7 @@ handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State}.
 
+-spec handle_event(kz_json:object(), state()) -> gen_listener:handle_event_return().
 handle_event(_JObj, _State) ->
     {'reply', []}.
 

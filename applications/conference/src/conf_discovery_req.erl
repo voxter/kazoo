@@ -171,9 +171,9 @@ handle_search_error(Conference, Call, Srv) ->
     try amqp_util:basic_consume(Queue, [{'exclusive', 'true'}]) of
         'ok' ->
             lager:debug("initial participant creating conference on switch nodename '~p'", [kapps_call:switch_hostname(Call)]),
+            conf_participant:set_conference(Conference, Srv),
             play_participants_count(Call, 0),
             maybe_play_name(Conference, Call, Srv),
-            conf_participant:set_conference(Conference, Srv),
             conf_participant:join_local(Srv),
             wait_for_creation(Conference)
     catch
@@ -191,9 +191,9 @@ play_participants_count(Call, 1) ->
     'ok';
 play_participants_count(Call, Count) when is_integer(Count) andalso Count > 0 ->
     kapps_call_command:audio_macro([{'prompt', <<"conf-there_are">>}
-                                    ,{'say', kz_util:to_binary(Count), <<"number">>}
-                                    ,{'prompt', <<"conf-other_participants">>}
-                                    ], Call),
+                                   ,{'say', kz_util:to_binary(Count), <<"number">>}
+                                   ,{'prompt', <<"conf-other_participants">>}
+                                   ], Call),
     'ok';
 play_participants_count(Call, JObj) ->
     play_participants_count(Call, length(kz_json:get_value(<<"Participants">>, JObj, []))).
@@ -246,7 +246,7 @@ handle_search_resp(JObj, Conference, Call, Srv) ->
 -spec maybe_play_name(kapps_conference:conference(), kapps_call:call(), pid()) -> 'ok'.
 maybe_play_name(Conference, Call, Srv) ->
     case kapps_conference:play_name_on_join(Conference)
-        andalso ?SUPPORT_NAME_ANNOUNCEMENT
+        andalso ?SUPPORT_NAME_ANNOUNCEMENT(kapps_call:account_id(Call))
     of
         'true' ->
             PronouncedName = maybe_reuse_pronounced_name(kapps_conference:reuse_pronounced_name(Conference), Call),
@@ -281,12 +281,8 @@ record_pronounced_name(Call) ->
 
 -spec add_participant_to_conference(kz_json:object(), kapps_conference:conference(), kapps_call:call(), pid()) -> 'ok'.
 add_participant_to_conference(JObj, Conference, Call, Srv) ->
+    conf_participant:set_conference(Conference, Srv),
     _ = maybe_play_name(Conference, Call, Srv),
-
-    _ = case kapps_conference:play_entry_prompt(Conference) of
-            'false' -> 'ok';
-            'true' -> kapps_call_command:prompt(<<"conf-joining_conference">>, Call)
-        end,
 
     SwitchHostname = kapps_call:switch_hostname(Call),
     lager:debug("participant switch nodename ~p", [SwitchHostname]),
@@ -294,13 +290,9 @@ add_participant_to_conference(JObj, Conference, Call, Srv) ->
     case kz_json:get_value(<<"Switch-Hostname">>, JObj) of
         SwitchHostname ->
             lager:debug("running conference is on the same switch, joining on ~s", [SwitchHostname]),
-            conf_participant:set_conference(Conference, Srv),
             conf_participant:join_local(Srv);
         _Else ->
             lager:debug("running conference is on a different switch, bridging to ~s: ~p", [_Else, JObj]),
-            ParticipantHostname = kz_json:get_value(<<"Switch-Hostname">>, hd(kz_json:get_value(<<"Participants">>, JObj))),
-            Conference2 = kapps_conference:set_focus(ParticipantHostname, Conference),
-            conf_participant:set_conference(Conference2, Srv),
             conf_participant:join_remote(Srv, JObj)
     end.
 
@@ -487,17 +479,9 @@ get_pin_timeout(Conference) ->
 
 -spec get_account_pin_timeout(ne_binary()) -> pos_integer().
 get_account_pin_timeout(AccountId) ->
-    kapps_account_config:get_global(AccountId, ?CONFIG_CAT, <<"pin_timeout">>, get_default_pin_timeout()).
-
--spec get_default_pin_timeout() -> pos_integer().
-get_default_pin_timeout() ->
-    kapps_config:get(?CONFIG_CAT, <<"pin_timeout">>, 5 * ?MILLISECONDS_IN_SECOND).
+    kapps_account_config:get_global(AccountId, ?CONFIG_CAT, <<"pin_timeout">>, ?COLLECT_PIN_DEFAULT_TIMEOUT).
 
 -spec get_number_timeout(kapps_call:call()) -> pos_integer().
 get_number_timeout(Call) ->
     AccountId = kapps_call:account_id(Call),
-    kapps_account_config:get_global(AccountId, ?CONFIG_CAT, <<"number_timeout">>, get_default_number_timeout()).
-
--spec get_default_number_timeout() -> pos_integer().
-get_default_number_timeout() ->
-    kapps_config:get(?CONFIG_CAT, <<"number_timeout">>, 5 * ?MILLISECONDS_IN_SECOND).
+    kapps_account_config:get_global(AccountId, ?CONFIG_CAT, <<"number_timeout">>, ?COLLECT_NUMBER_DEFAULT_TIMEOUT).

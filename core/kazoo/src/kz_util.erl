@@ -20,9 +20,7 @@
         ,account_update/1, account_update/2
         ]).
 -export([is_in_account_hierarchy/2, is_in_account_hierarchy/3]).
--export([is_system_admin/1
-        ,is_system_db/1
-        ]).
+-export([is_system_admin/1]).
 -export([get_account_realm/1, get_account_realm/2]).
 -export([is_account_enabled/1, is_account_expired/1]).
 -export([maybe_disable_account/1
@@ -72,7 +70,6 @@
         ,uri_decode/1
         ,resolve_uri/2
         ,safe_urlencode/1
-        ,normalize_amqp_uri/1
         ]).
 
 -export([uri/2]).
@@ -82,6 +79,7 @@
 -export([binary_md5/1]).
 -export([pad_binary/3, pad_binary_left/3
         ,join_binary/1, join_binary/2
+        ,binary_reverse/1
         ]).
 -export([a1hash/3, floor/1, ceiling/1]).
 
@@ -149,7 +147,7 @@
 -include_lib("kazoo/include/kz_types.hrl").
 -include_lib("kazoo/include/kz_log.hrl").
 -include_lib("kazoo/include/kz_databases.hrl").
--include_lib("kazoo/include/kz_api.hrl").
+-include_lib("kazoo/include/kz_api_literals.hrl").
 
 -define(KAZOO_VERSION_CACHE_KEY, {?MODULE, 'kazoo_version'}).
 
@@ -537,10 +535,6 @@ is_system_admin(Account) ->
             'false'
     end.
 
--spec is_system_db(ne_binary()) -> boolean().
-is_system_db(Db) ->
-    lists:member(Db, ?KZ_SYSTEM_DBS).
-
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
@@ -767,21 +761,29 @@ randomize_list(T, List) ->
 -spec put_callid(kz_json:object() | kz_proplist() | ne_binary() | atom()) ->
                         api_binary().
 put_callid(?NE_BINARY = CallId) ->
-    lager:md([{'callid', CallId}]), erlang:put('callid', CallId);
+    lager:md([{'callid', CallId}]),
+    erlang:put('callid', CallId);
 put_callid(Atom) when is_atom(Atom) ->
-    lager:md([{'callid', Atom}]), erlang:put('callid', Atom);
-put_callid(Prop) when is_list(Prop) ->
-    lager:md([{'callid', callid(Prop)}]), erlang:put('callid', callid(Prop));
-put_callid(JObj) ->
-    lager:md([{'callid', callid(JObj)}]), erlang:put('callid', callid(JObj)).
+    lager:md([{'callid', Atom}]),
+    erlang:put('callid', Atom);
+put_callid(APITerm) ->
+    put_callid(callid(APITerm)).
 
 -spec get_callid() -> ne_binary().
 get_callid() -> erlang:get('callid').
 
-callid(Prop) when is_list(Prop) ->
-    props:get_first_defined([?KEY_LOG_ID, <<"Call-ID">>, ?KEY_MSG_ID], Prop, ?LOG_SYSTEM_ID);
-callid(JObj) ->
-    kz_json:get_first_defined([?KEY_LOG_ID, <<"Call-ID">>, ?KEY_MSG_ID], JObj, ?LOG_SYSTEM_ID).
+-spec callid(api_terms()) -> api_binary().
+callid(APITerm) when is_list(APITerm) ->
+    find_callid(APITerm, fun props:get_first_defined/3);
+callid(APITerm) ->
+    find_callid(APITerm, fun kz_json:get_first_defined/3).
+
+-spec find_callid(api_terms(), fun()) -> api_binary().
+find_callid(APITerm, GetFun) ->
+    GetFun([?KEY_LOG_ID, ?KEY_API_CALL_ID, ?KEY_MSG_ID]
+          ,APITerm
+          ,?LOG_SYSTEM_ID
+          ).
 
 -spec spawn(fun(() -> any())) -> pid().
 -spec spawn(fun(), list()) -> pid().
@@ -1057,7 +1059,7 @@ to_number(X) when is_list(X) ->
     end.
 
 -spec to_list(atom() | list() | binary() | integer() | float()) -> list().
-to_list(X) when is_float(X) -> mochinum:digits(X);
+to_list(X) when is_float(X) -> kz_mochinum:digits(X);
 to_list(X) when is_integer(X) -> integer_to_list(X);
 to_list(X) when is_binary(X) -> binary_to_list(X);
 to_list(X) when is_atom(X) -> atom_to_list(X);
@@ -1066,7 +1068,7 @@ to_list(X) when is_list(X) -> X.
 %% Known limitations:
 %%   Converting [256 | _], lists with integers > 255
 -spec to_binary(atom() | string() | binary() | integer() | float() | pid() | iolist()) -> binary().
-to_binary(X) when is_float(X) -> to_binary(mochinum:digits(X));
+to_binary(X) when is_float(X) -> to_binary(kz_mochinum:digits(X));
 to_binary(X) when is_integer(X) -> list_to_binary(integer_to_list(X));
 to_binary(X) when is_atom(X) -> list_to_binary(atom_to_list(X));
 to_binary(X) when is_list(X) -> iolist_to_binary(X);
@@ -1613,10 +1615,6 @@ make_dir(Filename) ->
             lager:error("creating directory ~s failed : ~p", [Filename, _E])
     end.
 
--spec normalize_amqp_uri(ne_binary()) -> ne_binary().
-normalize_amqp_uri(URI) ->
-    to_binary(amqp_uri:remove_credentials(to_list(URI))).
-
 -spec anonymous_caller_id_name() -> ne_binary().
 anonymous_caller_id_name() ->
     <<"anonymous">>.
@@ -1719,6 +1717,10 @@ iolist_join_prepend(_, []) -> [];
 iolist_join_prepend(Sep, [H|T]) ->
     [Sep, H | iolist_join_prepend(Sep, T)].
 
+
+-spec binary_reverse(binary()) -> binary().
+binary_reverse(Bin) ->
+    to_binary(lists:reverse(to_list(Bin))).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

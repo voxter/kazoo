@@ -19,7 +19,7 @@
         ]).
 
 -include("doodle.hrl").
--include_lib("kazoo/include/kapi_conf.hrl").
+-include_lib("kazoo_amqp/include/kapi_conf.hrl").
 
 -define(SERVER, ?MODULE).
 
@@ -139,7 +139,7 @@ handle_info(_Info, State) ->
 %% @spec handle_event(JObj, State) -> {reply, Options}
 %% @end
 %%--------------------------------------------------------------------
--spec handle_event(kz_json:object(), kz_proplist()) -> handle_event_ret().
+-spec handle_event(kz_json:object(), kz_proplist()) -> gen_listener:handle_event_return().
 handle_event(_JObj, _State) ->
     {'reply', []}.
 

@@ -26,7 +26,7 @@
         ]).
 
 -include("stepswitch.hrl").
--include_lib("kazoo/include/kapi_offnet_resource.hrl").
+-include_lib("kazoo_amqp/include/kapi_offnet_resource.hrl").
 -include_lib("kazoo_number_manager/include/knm_phone_number.hrl").
 
 -define(SERVER, ?MODULE).
@@ -193,7 +193,7 @@ handle_info(_Info, State) ->
 %% @spec handle_event(JObj, State) -> {reply, Options}
 %% @end
 %%--------------------------------------------------------------------
--spec handle_event(kz_json:object(), state()) -> handle_event_ret().
+-spec handle_event(kz_json:object(), state()) -> gen_listener:handle_event_return().
 handle_event(JObj, #state{request_handler=RequestHandler
                          ,resource_req=OffnetReq
                          ,call_id=CallId
