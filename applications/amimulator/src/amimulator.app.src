@@ -9,7 +9,6 @@
                  , crypto
                  , inets
                  , public_key
-                 , socketio
                  , ssl
 
                  , kazoo

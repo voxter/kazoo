@@ -52,7 +52,7 @@ account_conferences(AccountId) ->
 conference_bindings([], Bindings) ->
     Bindings;
 conference_bindings([ConferenceId|Ids], Bindings) ->
-    conference_bindings(Ids, [{conference, ConferenceId} | Bindings]).
+    conference_bindings(Ids, [{event, ConferenceId} | Bindings]).
 
 participants_cache_change(EventJObj) ->
     AccountId = kz_json:get_value(<<"Account-ID">>, EventJObj),
