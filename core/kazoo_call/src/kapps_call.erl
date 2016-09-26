@@ -454,9 +454,9 @@ to_json(#kapps_call{}=Call) ->
                         ,kz_json:is_json_term(V)
                 ],
     kz_json:from_list([KV
-                       || {_, V}=KV <- [{<<"Key-Value-Store">>, kz_json:from_list(KVS)},
-                                        {<<"Custom-KVs">>, kz_json:from_list(CustomKVs)} |
-                                        proplists:delete(<<"Key-Value-Store">>, Props)
+                       || {_, V}=KV <- [{<<"Key-Value-Store">>, kz_json:from_list(KVS)}
+                                       .{<<"Custom-KVs">>, kz_json:from_list(CustomKVs)} |
+                                        props:delete(<<"Key-Value-Store">>, Props)
                                        ]
                               ,V =/= 'undefined'
                               ,kz_json:is_json_term(V)
