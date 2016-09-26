@@ -95,9 +95,6 @@ handle_specific_event({<<"acdc_call_stat">>, <<"handled">>}, JObj) ->
     AgentId = wh_json:get_value(<<"Agent-ID">>, Call),
     AgentName = lookup_agent_name(AccountId, AgentId),
     WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, Call)),
-    lager:debug("updating call state to: ~p", [{EventName, CallId}]),
-    quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
-    quilt_store:put(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId]), {EventName, CallId}),
     EventParams = {WaitTime, AgentId, CallId},
     lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
     write_log(AccountId, CallId, QueueName, AgentName, EventName, EventParams);
@@ -107,12 +104,7 @@ handle_specific_event({<<"call_event">>, <<"CHANNEL_BRIDGE">>}, JObj) ->
     AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
     CallId = wh_json:get_value(<<"Call-ID">>, JObj),
     Call = acdc_stats:find_call(CallId),
-    AgentId = case Call of
-        'undefined' -> wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Owner-ID">>], JObj);
-        _ -> wh_json:get_value(<<"Agent-ID">>, Call)
-    end,
     {_, _, _, QueueName, BridgedChannel} = get_common_props(Call),
-    quilt_store:delete(erlang:iolist_to_binary([AccountId, <<"-">>, AgentId])),
     Extension = wh_json:get_value(<<"Callee-ID-Number">>, JObj),
     WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, Call)),
     TalkTime = integer_to_list(wh_json:get_value(<<"Talk-Time">>, Call)),
