@@ -455,7 +455,7 @@ to_json(#kapps_call{}=Call) ->
                 ],
     kz_json:from_list([KV
                        || {_, V}=KV <- [{<<"Key-Value-Store">>, kz_json:from_list(KVS)}
-                                       .{<<"Custom-KVs">>, kz_json:from_list(CustomKVs)} |
+                                       ,{<<"Custom-KVs">>, kz_json:from_list(CustomKVs)} |
                                         props:delete(<<"Key-Value-Store">>, Props)
                                        ]
                               ,V =/= 'undefined'
