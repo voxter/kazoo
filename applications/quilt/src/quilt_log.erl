@@ -99,12 +99,10 @@ handle_specific_event({<<"acdc_call_stat">>, <<"handled">>}, JObj) ->
     lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
     write_log(AccountId, CallId, QueueName, AgentName, EventName, EventParams);
 
-handle_specific_event({<<"call_event">>, <<"CHANNEL_BRIDGE">>}, JObj) ->
+handle_specific_event({<<"call_event">>, <<"transfer">>}, JObj) ->
     EventName = "TRANSFER", % TRANSFER(extension|context|holdtime|calltime|position)
-    AccountId = wh_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
-    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    {AccountId, CallId, _, QueueName, BridgedChannel} = get_common_props(JObj),
     Call = acdc_stats:find_call(CallId),
-    {_, _, _, QueueName, BridgedChannel} = get_common_props(Call),
     Extension = wh_json:get_value(<<"Callee-ID-Number">>, JObj),
     WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, Call)),
     TalkTime = integer_to_list(wh_json:get_value(<<"Talk-Time">>, Call)),
