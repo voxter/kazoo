@@ -165,7 +165,7 @@ handle_specific_event(<<"CHANNEL_DESTROY">>, JObj) ->
     lager:debug("CHANNEL_DESTROY, checking for transfer (account: ~p, agent: ~p, endpoint-disposition: ~p)", [AccountId, AgentId, EndpointDisposition]),
     case EndpointDisposition of
         <<"BLIND_TRANSFER">> -> %% Agent performed a successful blind transfer
-            CallId = <<"Other-Leg-Call-ID">>,
+            CallId = wh_json:get_value(<<"Other-Leg-Call-ID">>, JObj),
             quilt_sup:stop_member_fsm(CallId),
             case quilt_sup:retrieve_agent_fsm(AccountId, AgentId) of
                 {'ok', FSM} ->
