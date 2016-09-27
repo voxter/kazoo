@@ -101,9 +101,10 @@ handle_specific_event({<<"acdc_call_stat">>, <<"handled">>}, JObj) ->
 
 handle_specific_event({<<"call_event">>, <<"transfer">>}, JObj) ->
     EventName = "TRANSFER", % TRANSFER(extension|context|holdtime|calltime|position)
-    {AccountId, CallId, _, QueueName, BridgedChannel} = get_common_props(JObj),
-    Call = acdc_stats:find_call(CallId),
     Extension = wh_json:get_value(<<"Callee-ID-Number">>, JObj),
+    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    Call = acdc_stats:find_call(CallId),
+    {AccountId, CallId, _, QueueName, BridgedChannel} = get_common_props(Call),
     WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, Call)),
     TalkTime = integer_to_list(wh_json:get_value(<<"Talk-Time">>, Call)),
     Position = integer_to_list(wh_json:get_value(<<"Exited-Position">>, Call)),

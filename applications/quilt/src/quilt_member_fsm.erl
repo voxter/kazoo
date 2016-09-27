@@ -12,8 +12,6 @@
 
 -include("quilt.hrl").
 
-% -record(state, {}).
-
 -export([start_link/1]).
 
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
