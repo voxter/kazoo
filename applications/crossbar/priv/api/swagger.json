@@ -1537,13 +1537,24 @@
             "description": "Validator for the prepend_cid callflow's data object",
             "properties": {
                 "action": {
-                    "description": ""
+                    "default": "prepend",
+                    "description": "",
+                    "type": "string"
+                },
+                "apply_to": {
+                    "default": "original",
+                    "description": "",
+                    "type": "string"
                 },
                 "caller_id_name_prefix": {
-                    "description": ""
+                    "default": "",
+                    "description": "",
+                    "type": "string"
                 },
                 "caller_id_number_prefix": {
-                    "description": ""
+                    "default": "",
+                    "description": "",
+                    "type": "string"
                 }
             },
             "required": true,
@@ -7475,22 +7486,15 @@
                         },
                         "migrate_interaccount_delay_ms": {
                             "properties": {
-                                "default": 10000,
+                                "default": 2000,
                                 "description": "callflow migrate interaccount delay in milliseconds",
                                 "type": "integer"
                             }
                         },
-                        "migrate_interbox_delay_ms": {
+                        "migrate_max_bulk_insert": {
                             "properties": {
                                 "default": 2000,
-                                "description": "callflow migrate interbox delay in milliseconds",
-                                "type": "integer"
-                            }
-                        },
-                        "migrate_max_mailbox_process": {
-                            "properties": {
-                                "default": 10,
-                                "description": "callflow migrate maximum mailbox process",
+                                "description": "callflow migrate maximum bulk insert",
                                 "type": "integer"
                             }
                         },
@@ -21320,17 +21324,7 @@
             }
         },
         "/system_configs": {
-            "get": {},
-            "put": {
-                "parameters": {
-                    "in": "body",
-                    "name": "system_configs",
-                    "required": true,
-                    "schema": {
-                        "$ref": "#/definitions/system_configs"
-                    }
-                }
-            }
+            "get": {}
         },
         "/system_configs/{SYSTEM_CONFIG_ID}": {
             "delete": {
@@ -21348,6 +21342,13 @@
                 ]
             },
             "post": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/system_config_id"
+                    }
+                ]
+            },
+            "put": {
                 "parameters": [
                     {
                         "$ref": "#/parameters/system_config_id"

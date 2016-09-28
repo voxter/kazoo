@@ -99,8 +99,10 @@ rebuild_token_auth(Pause) ->
 %%--------------------------------------------------------------------
 -spec migrate_to_4_0() -> no_return.
 migrate_to_4_0() ->
-    %%TODO: add KVM migration here
+    %% Number migration
     knm_maintenance:migrate(),
+    %% Voicemail migration
+    kvm_maintenance:migrate(),
     no_return.
 
 %%--------------------------------------------------------------------
@@ -193,6 +195,7 @@ get_databases() ->
 refresh(?KZ_CONFIG_DB) ->
     kz_datamgr:db_create(?KZ_CONFIG_DB),
     kz_datamgr:revise_doc_from_file(?KZ_CONFIG_DB, 'teletype', <<"views/notifications.json">>),
+    kz_datamgr:revise_doc_from_file(?KZ_CONFIG_DB, 'crossbar', <<"views/system_configs.json">>),
     cleanup_invalid_notify_docs(),
     delete_system_media_references(),
     accounts_config_deprecate_timezone_for_default_timezone();
