@@ -43,7 +43,6 @@
 %%% API
 %%%===================================================================
 init() ->
-    kz_datamgr:db_create(?KZ_TOKEN_DB),
     _ = crossbar_bindings:bind(<<"*.authenticate">>, ?MODULE, 'authenticate'),
     _ = crossbar_bindings:bind(<<"*.authorize">>, ?MODULE, 'authorize'),
     _ = crossbar_bindings:bind(<<"*.allowed_methods.user_auth">>, ?MODULE, 'allowed_methods'),
@@ -144,7 +143,7 @@ validate(Context, AuthToken) ->
 -spec put(cb_context:context(), path_token()) -> cb_context:context().
 put(Context) ->
     _ = cb_context:put_reqid(Context),
-    crossbar_util:create_auth_token(Context, ?MODULE).
+    crossbar_auth:create_auth_token(Context, ?MODULE).
 
 put(Context, ?RECOVERY) ->
     _ = cb_context:put_reqid(Context),
@@ -160,7 +159,7 @@ post(Context, ?RECOVERY) ->
           ,{<<"owner_id">>, kz_doc:id(cb_context:doc(Context1))}
           ]),
     Context2 = cb_context:set_doc(Context1, DocForCreation),
-    crossbar_util:create_auth_token(Context2, ?MODULE).
+    crossbar_auth:create_auth_token(Context2, ?MODULE).
 
 %%%===================================================================
 %%% Internal functions
@@ -173,13 +172,12 @@ post(Context, ?RECOVERY) ->
 %%--------------------------------------------------------------------
 -spec maybe_get_auth_token(cb_context:context(), ne_binary()) -> cb_context:context().
 maybe_get_auth_token(Context, AuthToken) ->
-    Context1 = crossbar_doc:load(AuthToken, Context, ?TYPE_CHECK_OPTION_ANY),
-    case cb_context:resp_status(Context1) of
-        'success' ->
+    case AuthToken =:= cb_context:auth_token(Context) of
+        'true' ->
             AuthAccountId = cb_context:auth_account_id(Context),
             AccountId = cb_context:account_id(Context),
-            create_auth_resp(Context1, AuthToken, AccountId, AuthAccountId);
-        _ -> Context1
+            create_auth_resp(Context, AccountId, AuthAccountId);
+        'false' -> cb_context:add_system_error('invalid_credentials', Context)
     end.
 
 %%--------------------------------------------------------------------
@@ -187,15 +185,14 @@ maybe_get_auth_token(Context, AuthToken) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec create_auth_resp(cb_context:context(), ne_binary(), ne_binary(),  ne_binary()) ->
+-spec create_auth_resp(cb_context:context(), ne_binary(),  ne_binary()) ->
                               cb_context:context().
-create_auth_resp(Context, AuthToken, AccountId, AccountId) ->
+create_auth_resp(Context, AccountId, AccountId) ->
     lager:debug("account ~s is same as auth account", [AccountId]),
-    RespData = cb_context:resp_data(Context),
-    crossbar_util:response(crossbar_util:response_auth(RespData)
-                          ,cb_context:set_auth_token(Context, AuthToken)
+    crossbar_util:response(crossbar_util:response_auth(cb_context:auth_doc(Context))
+                          ,Context
                           );
-create_auth_resp(Context, _AccountId, _AuthToken, _AuthAccountId) ->
+create_auth_resp(Context, _AccountId, _AuthAccountId) ->
     lager:debug("forbidding token for account ~s and auth account ~s"
                ,[_AccountId, _AuthAccountId]),
     cb_context:add_system_error('forbidden', Context).
@@ -390,7 +387,7 @@ maybe_load_user_doc_by_username(Account, Context) ->
 %% @private
 -spec save_reset_id_then_send_email(cb_context:context()) -> cb_context:context().
 save_reset_id_then_send_email(Context) ->
-    MoDb = cb_context:account_modb(Context),
+    MoDb = kazoo_modb:get_modb(cb_context:account_db(Context)),
     ResetId = reset_id(MoDb),
     UserDoc = cb_context:doc(Context),
     %% Not much chance for doc to already exist
@@ -417,7 +414,7 @@ save_reset_id_then_send_email(Context) ->
 -spec maybe_load_user_doc_via_reset_id(cb_context:context()) -> cb_context:context().
 maybe_load_user_doc_via_reset_id(Context) ->
     ResetId = kz_json:get_ne_binary_value(?RESET_ID, cb_context:req_data(Context)),
-    MoDb = ?MATCH_MODB_SUFFIX_RAW(A, B, Rest, _Y, _M) = reset_id(ResetId),
+    MoDb = ?MATCH_MODB_SUFFIX_ENCODED(A, B, Rest, _Y, _M) = reset_id(ResetId),
     lager:debug("looking up password reset doc: ~s", [ResetId]),
     case kazoo_modb:open_doc(MoDb, ResetId) of
         {'ok', ResetIdDoc} ->

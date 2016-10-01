@@ -16,7 +16,7 @@
 -export([get_modb/1, get_modb/2, get_modb/3]).
 -export([maybe_archive_modb/1]).
 -export([refresh_views/1]).
--export([create/1
+-export([create/1, maybe_create/1
         ,add_routine/1
         ]).
 -export([maybe_delete/2]).
@@ -26,8 +26,11 @@
 
 -type view_option() :: {'year', kz_year()} |
                        {'month', kz_month()} |
+                       {'create_db', boolean()} |
                        kz_datamgr:view_option().
 -type view_options() :: [view_option()].
+
+-define(MAX_RETRIES, 3).
 
 -export_type([view_options/0]).
 
@@ -45,7 +48,7 @@
                          {'ok', kz_json:objects()} |
                          {'error', atom()}.
 get_results(Account, View, ViewOptions) ->
-    get_results(Account, View, ViewOptions, 3).
+    get_results(Account, View, ViewOptions, ?MAX_RETRIES).
 
 get_results(_Account, _View, _ViewOptions, Retry) when Retry =< 0 ->
     {'error', 'retries_exceeded'};
@@ -67,6 +70,7 @@ strip_modb_options(ViewOptions) ->
 -spec is_modb_option(view_option()) -> boolean().
 is_modb_option({'year', _}) -> 'true';
 is_modb_option({'month', _}) -> 'true';
+is_modb_option({'create_db', _}) -> 'true';
 is_modb_option(_) -> 'false'.
 
 -spec get_results_not_found(ne_binary(), ne_binary(), view_options(), integer()) ->
@@ -86,9 +90,12 @@ get_results_not_found(Account, View, ViewOptions, Retry) ->
                                     {'ok', kz_json:objects()}.
 get_results_missing_db(Account, View, ViewOptions, Retry) ->
     AccountMODb = get_modb(Account, ViewOptions),
-    case maybe_create(AccountMODb) of
-        'true' -> get_results(Account, View, ViewOptions, Retry-1);
-        'false' -> {'ok', []}
+    ShouldCreate = props:get_is_true('create_db', ViewOptions, 'true'),
+    case maybe_create_current_modb(AccountMODb) of
+        'true' when ShouldCreate ->
+            lager:warning("modb ~p not found, maybe creating...", [AccountMODb]),
+            get_results(Account, View, ViewOptions, Retry-1);
+        _ -> {'ok', []}
     end.
 
 %%--------------------------------------------------------------------
@@ -156,38 +163,49 @@ couch_open(AccountMODb, DocId, Options) ->
 -spec save_doc(ne_binary(), kz_json:object()) ->
                       {'ok', kz_json:object()} |
                       {'error', atom()}.
--spec save_doc(ne_binary(), kz_json:object(), kz_now()) ->
+-spec save_doc(ne_binary(), kz_json:object(), kz_now() | kz_proplist()) ->
                       {'ok', kz_json:object()} |
                       {'error', atom()}.
--spec save_doc(ne_binary(), kz_json:object(), kz_year() | ne_binary(), kz_month() | ne_binary()) ->
+-spec save_doc(ne_binary(), kz_json:object(), kz_year() | ne_binary() | kz_now(), kz_month() | ne_binary() | kz_proplist()) ->
                       {'ok', kz_json:object()} |
                       {'error', atom()}.
 save_doc(Account, Doc) ->
+    save_doc(Account, Doc, []).
+
+save_doc(Account, Doc, Options) when is_list(Options) ->
     AccountMODb = get_modb(Account),
-    couch_save(AccountMODb, Doc, 3).
-
+    couch_save(AccountMODb, Doc, Options, ?MAX_RETRIES);
 save_doc(Account, Doc, Timestamp) ->
+    save_doc(Account, Doc, Timestamp, []).
+
+save_doc(Account, Doc, Timestamp, Options) when is_list(Options) ->
     AccountMODb = get_modb(Account, Timestamp),
-    couch_save(AccountMODb, Doc, 3).
-
+    couch_save(AccountMODb, Doc, Options, ?MAX_RETRIES);
 save_doc(Account, Doc, Year, Month) ->
-    AccountMODb = get_modb(Account, Year, Month),
-    couch_save(AccountMODb, Doc, 3).
+    save_doc(Account, Doc, Year, Month, []).
 
--spec couch_save(ne_binary(), kz_json:object(), integer()) ->
+save_doc(Account, Doc, Year, Month, Options) ->
+    AccountMODb = get_modb(Account, Year, Month),
+    couch_save(AccountMODb, Doc, Options, ?MAX_RETRIES).
+
+-spec couch_save(ne_binary(), kz_json:object(), kz_proplist(), integer()) ->
                         {'ok', kz_json:object()} |
                         {'error', atom()}.
-couch_save(AccountMODb, _Doc, 0) ->
-    lager:error("failed to save doc in ~p", AccountMODb),
-    {'error', 'doc_save_failed'};
-couch_save(AccountMODb, Doc, Retry) ->
+couch_save(AccountMODb, _Doc, _Options, 0) ->
+    lager:error("failed to save doc in ~p", [AccountMODb]),
+    {'error', 'max_save_retries'};
+couch_save(AccountMODb, Doc, Options, Retry) ->
     EncodedMODb = kz_util:format_account_modb(AccountMODb, 'encoded'),
-    case kz_datamgr:save_doc(EncodedMODb, Doc) of
+    ShouldCreate = props:get_is_true('create_db', Options, 'true'),
+    case kz_datamgr:save_doc(EncodedMODb, Doc, strip_modb_options(Options)) of
         {'ok', _}=Ok -> Ok;
-        {'error', 'not_found'} ->
-            lager:warning("modb ~p not found, creating...", [AccountMODb]),
-            _ = maybe_create(AccountMODb),
-            couch_save(AccountMODb, Doc, Retry-1);
+        {'error', 'not_found'} = NotFound ->
+            case maybe_create_current_modb(AccountMODb) of
+                'true' when ShouldCreate ->
+                    lager:warning("modb ~p not found, maybe creating...", [AccountMODb]),
+                    couch_save(AccountMODb, Doc, Options, Retry - 1);
+                _ -> NotFound
+            end;
         {'error', _E}=Error ->
             lager:error("account mod save error: ~p", [_E]),
             Error
@@ -206,12 +224,20 @@ couch_save(AccountMODb, Doc, Retry) ->
                       ne_binary().
 get_modb(?MATCH_MODB_SUFFIX_RAW(_,_,_) = AccountMODb) ->
     AccountMODb;
+get_modb(?MATCH_MODB_SUFFIX_ENCODED(_,_,_) = AccountMODb) ->
+    kz_util:format_account_modb(AccountMODb, 'raw');
+get_modb(?MATCH_MODB_SUFFIX_UNENCODED(_,_,_) = AccountMODb) ->
+    kz_util:format_account_modb(AccountMODb, 'raw');
 get_modb(Account) ->
     {Year, Month, _} = erlang:date(),
     get_modb(Account, Year, Month).
 
 get_modb(?MATCH_MODB_SUFFIX_RAW(_,_,_) = AccountMODb, _) ->
     AccountMODb;
+get_modb(?MATCH_MODB_SUFFIX_ENCODED(_,_,_) = AccountMODb, _) ->
+    kz_util:format_account_modb(AccountMODb, 'raw');
+get_modb(?MATCH_MODB_SUFFIX_UNENCODED(_,_,_) = AccountMODb, _) ->
+    kz_util:format_account_modb(AccountMODb, 'raw');
 get_modb(Account, ViewOptions) when is_list(ViewOptions) ->
     case {props:get_value('month', ViewOptions)
          ,props:get_value('year', ViewOptions)
@@ -228,6 +254,10 @@ get_modb(Account, Timestamp) ->
 
 get_modb(?MATCH_MODB_SUFFIX_RAW(_,_,_) = AccountMODb, _Year, _Month) ->
     AccountMODb;
+get_modb(?MATCH_MODB_SUFFIX_ENCODED(_,_,_) = AccountMODb, _Year, _Month) ->
+    kz_util:format_account_modb(AccountMODb, 'raw');
+get_modb(?MATCH_MODB_SUFFIX_UNENCODED(_,_,_) = AccountMODb, _Year, _Month) ->
+    kz_util:format_account_modb(AccountMODb, 'raw');
 get_modb(Account, Year, Month) ->
     kz_util:format_account_mod_id(Account, Year, Month).
 
@@ -237,22 +267,55 @@ get_modb(Account, Year, Month) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_create(ne_binary()) -> boolean().
-maybe_create(?MATCH_MODB_SUFFIX_RAW(AccountId, Year, Month) = AccountMODb) ->
+-spec maybe_create_current_modb(ne_binary()) -> boolean().
+maybe_create_current_modb(?MATCH_MODB_SUFFIX_RAW(_AccountId, Year, Month) = AccountMODb) ->
     {Y, M, _} = erlang:date(),
-    case is_account_deleted(AccountId) =/= 'true'
-        andalso {kz_util:to_binary(Y), kz_util:pad_month(M)}
-    of
-        'false' -> 'false';
+    case {kz_util:to_binary(Y), kz_util:pad_month(M)} of
         {Year, Month} ->
-            create(AccountMODb),
+            maybe_create(AccountMODb),
             'true';
-        {_Year, _Month} -> 'false'
+        {_Year, _Month} ->
+            lager:warning("modb ~p is not for the current month, skip creating", [AccountMODb]),
+            'false'
     end;
-maybe_create(<<"account/", AccountId/binary>>) ->
-    maybe_create(binary:replace(AccountId, <<"/">>, <<>>, ['global']));
-maybe_create(<<"account%2F", AccountId/binary>>) ->
-    maybe_create(binary:replace(AccountId, <<"%2F">>, <<>>, ['global'])).
+maybe_create_current_modb(?MATCH_MODB_SUFFIX_ENCODED(_, _, _) = AccountMODb) ->
+    maybe_create_current_modb(kz_util:format_account_modb(AccountMODb, 'raw'));
+maybe_create_current_modb(?MATCH_MODB_SUFFIX_UNENCODED(_, _, _) = AccountMODb) ->
+    maybe_create_current_modb(kz_util:format_account_modb(AccountMODb, 'raw')).
+
+-spec maybe_create(ne_binary()) -> 'ok'.
+-spec maybe_create(ne_binary(), boolean()) -> 'ok'.
+maybe_create(?MATCH_MODB_SUFFIX_RAW(AccountId, _, _) = AccountMODb) ->
+    maybe_create(AccountMODb, is_account_deleted(AccountId));
+maybe_create(?MATCH_MODB_SUFFIX_ENCODED(_, _, _) = AccountMODb) ->
+    maybe_create(kz_util:format_account_modb(AccountMODb, 'raw'));
+maybe_create(?MATCH_MODB_SUFFIX_UNENCODED(_, _, _) = AccountMODb) ->
+    maybe_create(kz_util:format_account_modb(AccountMODb, 'raw')).
+
+maybe_create(?MATCH_MODB_SUFFIX_RAW(AccountId, _, _) = AccountMODb, 'true') ->
+    lager:warning("account ~s is deleted, not creating modb ~s", [AccountId, AccountMODb]);
+maybe_create(AccountMODb, 'false') ->
+    create(AccountMODb).
+
+
+-spec create(ne_binary()) -> 'ok'.
+create(AccountMODb) ->
+    EncodedMODb = kz_util:format_account_modb(AccountMODb, 'encoded'),
+    IsDbExists = kz_datamgr:db_exists_all(EncodedMODb),
+    do_create(AccountMODb, IsDbExists).
+
+-spec do_create(ne_binary(), boolean()) -> 'ok'.
+do_create(_AccountMODb, 'true') ->
+    lager:warning("modb ~p is exists, not creating", [_AccountMODb]);
+do_create(AccountMODb, 'false') ->
+    lager:debug("create modb ~p", [AccountMODb]),
+    EncodedMODb = kz_util:format_account_modb(AccountMODb, 'encoded'),
+    case kz_datamgr:db_create(EncodedMODb) of
+        'true' ->
+            refresh_views(EncodedMODb),
+            create_routines(AccountMODb);
+        _ -> 'false'
+    end.
 
 -spec is_account_deleted(ne_binary()) -> boolean().
 is_account_deleted(AccountId) ->
@@ -260,20 +323,6 @@ is_account_deleted(AccountId) ->
         {'ok', JObj} -> kz_doc:is_soft_deleted(JObj);
         {'error', _} -> 'true'
     end.
-
--spec create(ne_binary()) -> 'ok'.
-create(AccountMODb) ->
-    EncodedMODb = kz_util:format_account_modb(AccountMODb, 'encoded'),
-    do_create(AccountMODb, kz_datamgr:db_exists_all(EncodedMODb)).
-
--spec do_create(ne_binary(), boolean()) -> 'ok'.
-do_create(_AccountMODb, 'true') -> 'ok';
-do_create(AccountMODb, 'false') ->
-    lager:debug("create modb ~p", [AccountMODb]),
-    EncodedMODb = kz_util:format_account_modb(AccountMODb, 'encoded'),
-    _ = kz_datamgr:db_create(EncodedMODb),
-    _ = refresh_views(EncodedMODb),
-    create_routines(AccountMODb).
 
 -spec refresh_views(ne_binary()) -> 'ok'.
 refresh_views(AccountMODb) ->

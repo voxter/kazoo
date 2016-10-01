@@ -84,6 +84,7 @@ to_json(Hook) ->
       ,{<<"http_verb">>, Hook#webhook.http_verb}
       ,{<<"retries">>, Hook#webhook.retries}
       ,{<<"account_id">>, Hook#webhook.account_id}
+      ,{<<"include_subaccounts">>, Hook#webhook.include_subaccounts}
       ,{<<"custom_data">>, Hook#webhook.custom_data}
       ,{<<"modifiers">>, Hook#webhook.modifiers}
       ]).
@@ -91,8 +92,39 @@ to_json(Hook) ->
 -spec find_webhooks(ne_binary(), api_binary()) -> webhooks().
 find_webhooks(_HookEvent, 'undefined') -> [];
 find_webhooks(HookEvent, AccountId) ->
+    case kz_account:fetch(AccountId) of
+        {'ok', JObj} ->
+            Accounts = kz_account:tree(JObj) -- [AccountId],
+            find_webhooks(HookEvent, AccountId, Accounts);
+        {'error', 'not_found'} -> []
+    end.
+
+find_webhooks(HookEvent, AccountId, Accounts) ->
+    match_account_webhooks(HookEvent, AccountId) ++
+        lists:foldl(fun(ParentId, Acc) ->
+                            Acc ++ match_subaccount_webhooks(HookEvent, ParentId)
+                    end, [], Accounts).
+
+match_account_webhooks(HookEvent, AccountId) ->
     MatchSpec = [{#webhook{account_id = '$1'
                           ,hook_event = '$2'
+                          ,_='_'
+                          }
+                 ,[{'andalso'
+                   ,{'=:=', '$1', {'const', AccountId}}
+                   ,{'orelse'
+                    ,{'=:=', '$2', {'const', HookEvent}}
+                    ,{'=:=', '$2', {'const', <<"all">>}}
+                    }
+                   }]
+                 ,['$_']
+                 }],
+    ets:select(table_id(), MatchSpec).
+
+match_subaccount_webhooks(HookEvent, AccountId) ->
+    MatchSpec = [{#webhook{account_id = '$1'
+                          ,hook_event = '$2'
+                          ,include_subaccounts = 'true'
                           ,_='_'
                           }
                  ,[{'andalso'
@@ -243,7 +275,7 @@ save_attempt(AccountId, Attempt) ->
               ,{<<"pvt_created">>, Now}
               ,{<<"pvt_modified">>, Now}
               ]), Attempt),
-    _ = kz_datamgr:save_doc(ModDb, Doc, [{'publish_change_notice', 'false'}]),
+    _ = kazoo_modb:save_doc(ModDb, Doc, [{'publish_change_notice', 'false'}]),
     'ok'.
 
 -spec debug_req(webhook(), ne_binary(), ne_binary(), kz_proplist(), iodata()) ->
@@ -415,6 +447,7 @@ jobj_to_rec(Hook) ->
             ,hook_id = kz_doc:id(Hook)
             ,retries = kzd_webhook:retries(Hook)
             ,account_id = kz_doc:account_id(Hook)
+            ,include_subaccounts = kzd_webhook:include_subaccounts(Hook)
             ,custom_data = kzd_webhook:custom_data(Hook)
             ,modifiers = kzd_webhook:modifiers(Hook)
             }.
@@ -444,7 +477,7 @@ init_webhooks(Accts, Year, Month) ->
 -spec init_webhook(kz_json:object(), kz_year(), kz_month()) -> 'ok'.
 init_webhook(Acct, Year, Month) ->
     Db = kz_util:format_account_id(kz_json:get_value(<<"key">>, Acct), Year, Month),
-    kazoo_modb:create(Db),
+    kazoo_modb:maybe_create(Db),
     lager:debug("updated account_mod ~s", [Db]).
 
 -spec note_failed_attempt(ne_binary(), ne_binary()) -> 'ok'.

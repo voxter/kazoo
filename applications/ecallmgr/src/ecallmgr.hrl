@@ -286,6 +286,8 @@
                               ,{<<"Media-Files-Separator">>, <<"playback_delimiter">>}
                               ,{<<"Conference-Entry-Sound">>, <<"conference_enter_sound">>}
                               ,{<<"Conference-Exit-Sound">>, <<"conference_exit_sound">>}
+                              ,{<<"SIP-Refer-To">>, <<"sip_refer_to">>}
+                              ,{<<"SIP-Referred-By">>, <<"sip_h_Referred-By">>}
                               ]).
 
 %% [{FreeSWITCH-App-Name, Kazoo-App-Name}]
@@ -333,10 +335,11 @@
                               ]).
 
 -define(FS_EVENTS, [['CHANNEL_CREATE', 'CHANNEL_ANSWER', 'CHANNEL_DESTROY']
-                   ,'CALL_UPDATE', 'DETECTED_TONE', 'CHANNEL_PROGRESS_MEDIA'
-                   ,'DTMF', 'RECORD_START', 'RECORD_STOP', 'CHANNEL_BRIDGE'
-                   ,'CHANNEL_UNBRIDGE', 'CHANNEL_EXECUTE', 'CHANNEL_EXECUTE_COMPLETE'
-                   ,'CHANNEL_DATA', 'CALL_SECURE', 'PLAYBACK_START', 'PLAYBACK_STOP'
+                   ,['DETECTED_TONE', 'DTMF','CHANNEL_PROGRESS_MEDIA']
+                   ,['RECORD_START', 'RECORD_STOP']
+                   ,['CHANNEL_BRIDGE', 'CHANNEL_UNBRIDGE', 'CHANNEL_EXECUTE_COMPLETE']
+                   ,['CHANNEL_DATA','CALL_UPDATE', 'CALL_SECURE']
+                   ,['PLAYBACK_START', 'PLAYBACK_STOP']
                    ]).
 
 -define(FS_SOFIA_TRANSFER_EVENTS, ['sofia::transferor'
@@ -346,22 +349,27 @@
                                   ]).
 -define(IS_SOFIA_TRANSFER(N), lists:member(kz_util:to_atom(N, 'true'), ?FS_SOFIA_TRANSFER_EVENTS)).
 
--define(FS_CUSTOM_EVENTS, ['kazoo::noop', 'kazoo::masquerade'
-                          ,'sofia::transferor', 'sofia::transferee'
-                          ,'sofia::replaced','sofia::intercepted'
-                          ,'sofia::register'
+-define(FS_CUSTOM_EVENTS, [['kazoo::noop'
+                           ,'kazoo::masquerade'
+                           ]
+                          ,['sofia::transferor'
+                           ,'sofia::transferee'
+                           ,'sofia::replaced'
+                           ,'sofia::intercepted'
+                           ,'sofia::register'
+                           ]
                           ,'conference::maintenance'
-                          ,'spandsp::txfaxresult'
-                          ,'spandsp::rxfaxresult'
-                          ,'spandsp::txfaxpageresult'
-                          ,'spandsp::rxfaxpageresult'
-                          ,'spandsp::txfaxnegociateresult'
-                          ,'spandsp::rxfaxnegociateresult'
-                          ,?CHANNEL_MOVE_RELEASED_EVENT
-                          ,?CHANNEL_MOVE_COMPLETE_EVENT
-                          ,'KZ::DELIVERY_REPORT'
-                          ,'SMS::DELIVERY_REPORT'
-                          ,'KZ::MESSAGE'
+                          ,['spandsp::txfaxresult'
+                           ,'spandsp::rxfaxresult'
+                           ,'spandsp::txfaxpageresult'
+                           ,'spandsp::rxfaxpageresult'
+                           ,'spandsp::txfaxnegociateresult'
+                           ,'spandsp::rxfaxnegociateresult'
+                           ]
+                          ,['KZ::DELIVERY_REPORT'
+                           ,'SMS::DELIVERY_REPORT'
+                           ,'KZ::MESSAGE'
+                           ]
                           ,'loopback::bowout'
                           ]).
 
@@ -462,33 +470,6 @@
 
 
 -define(CHANNEL_VARS_EXT, "Execute-Extension-Original-").
-
-%% -define(CONFERENCE_XML_VARS, ['id'
-%%                              ,'can_hear'
-%%                              ,'can_speak'
-%%                              ,'mute_detect'
-%%                              ,'talking'
-%%                              ,'has_video'
-%%                              ,'has_floor'
-%%                              ,'is_moderator'
-%%                              ,'is_ghost'
-%%                              ,'energy'
-%%                              ,'can_see'
-%%                              ,'type'
-%%                              ]).
-
-%% -define(CONFERENCE_XML_VAR_MAP, [{'is_moderator', {<<"Is-Moderator">>, fun kz_util:to_boolean/1}}
-%%                             ,{'has_floor', <<"Floor">> fun kz_util:to_boolean/1}
-%%                             ,{'has_video', <<"Video">> fun kz_util:to_boolean/1}
-%%                             ,{'can_hear', <<"Hear">>, fun kz_util:to_boolean/1}
-%%                             ,{'can_see', <<"See">>, fun kz_util:to_boolean/1}
-%%                             ,{'can_speak', <<"Speak">>, fun kz_util:to_boolean/1}
-%%                             ,{'talking', <<"Talking">>, fun kz_util:to_boolean/1}
-%%                             ,{'mute_detect', <<"Mute-Detect">>, fun kz_util:to_boolean/1}
-%%                             ,{'energy', <<"Energy-Level">>, fun kz_util:to_integer/1}
-%%                             ,{'id', <<"Member-ID">>, fun kz_util:to_integer/1}
-%%                             ,{'type', <<"Member-Type">>}
-%%                             ,{'is_ghost', <<"Member-Ghost">>, fun kz_util:to_boolean/1}
 
 -define(CONFERENCE_VARS, [<<"variable_conference_moderator">>
                          ,<<"Floor">>
