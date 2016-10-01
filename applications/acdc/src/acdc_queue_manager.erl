@@ -404,7 +404,7 @@ handle_call('enter_when_empty', _, #state{enter_when_empty=EnterWhenEmpty}=State
 handle_call('next_winner', _, #state{strategy='mi'}=State) ->
     {'reply', 'undefined', State};
 handle_call('next_winner', _, #state{strategy='rr'
-                                     ,strategy_state=#strategy_state{agents=Agents}=SS
+                                    ,strategy_state=#strategy_state{agents=Agents}=SS
                                     }=State) ->
     case queue:out(Agents) of
         {{'value', Winner}, Agents1} ->
@@ -414,11 +414,11 @@ handle_call('next_winner', _, #state{strategy='rr'
     end;
 
 handle_call('current_agents', _, #state{strategy='rr'
-                                        ,strategy_state=Q
+                                       ,strategy_state=#strategy_state{agents=Q}
                                        }=State) ->
     {'reply', queue:to_list(Q), State};
 handle_call('current_agents', _, #state{strategy='mi'
-                                        ,strategy_state=L
+                                       ,strategy_state=#strategy_state{agents=L}
                                        }=State) ->
     {'reply', L, State};
 
