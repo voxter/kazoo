@@ -326,17 +326,23 @@ accounts_config_deprecate_timezone_for_default_timezone() ->
 -spec deprecate_timezone_for_default_timezone(wh_json:keys(), wh_json:object()) -> 'ok'.
 deprecate_timezone_for_default_timezone([], Doc) -> Doc;
 deprecate_timezone_for_default_timezone([Node|Nodes], Doc) ->
-    Timezone = wh_json:get_value([Node, <<"timezone">>], Doc),
-    DefaultTimezone = wh_json:get_value([Node, <<"default_timezone">>], Doc),
-    %% If timezone has been set, but not default_timezone, use the former's value
-    Doc1 = case Timezone =/= 'undefined'
-               andalso DefaultTimezone =:= 'undefined'
-           of
-               'true' -> wh_json:set_value(<<"default_timezone">>, Timezone, Doc);
-               'false' -> Doc
-           end,
-    deprecate_timezone_for_default_timezone(Nodes
-      ,wh_json:delete_key([Node, <<"timezone">>], Doc1)).
+    %% Filter out keys that don't map to objects
+    case wh_json:is_json_object(Node, Doc) of
+        'true' ->
+            Timezone = wh_json:get_value([Node, <<"timezone">>], Doc),
+            DefaultTimezone = wh_json:get_value([Node, <<"default_timezone">>], Doc),
+            %% If timezone has been set, but not default_timezone, use the former's value
+            Doc1 = case Timezone =/= 'undefined'
+                       andalso DefaultTimezone =:= 'undefined'
+                   of
+                       'true' -> wh_json:set_value(<<"default_timezone">>, Timezone, Doc);
+                       'false' -> Doc
+                   end,
+            deprecate_timezone_for_default_timezone(Nodes
+              ,wh_json:delete_key([Node, <<"timezone">>], Doc1));
+        'false' ->
+            deprecate_timezone_for_default_timezone(Nodes, Doc)
+    end.
 
 %%--------------------------------------------------------------------
 %% @public

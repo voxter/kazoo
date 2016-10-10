@@ -19,7 +19,7 @@
 %% Helper macro for declaring children of supervisor
 -define(CHILDREN, [
 	?WORKER_TYPE('quilt_listener', 'transient')
-	,?WORKER_TYPE('quilt_store', 'transient')
+	%,?WORKER_TYPE('quilt_store', 'transient')
 	]).
 
 start_link() ->
@@ -67,7 +67,7 @@ stop_member_fsm(CallId) ->
 
 start_agent_fsm(AccountId, AgentId) ->
 	FSM = erlang:iolist_to_binary([<<"quilt_agent_fsm-">>, AccountId, <<"-">>, AgentId]),
-	supervisor:start_child(?MODULE, ?WORKER_NAME_ARGS_TYPE(FSM, 'quilt_agent_fsm', [{AccountId, AgentId}], 'transient')).
+	supervisor:start_child(?MODULE, ?WORKER_NAME_ARGS_TYPE(FSM, 'quilt_agent_fsm', [#state{member_call_id='undefined'}], 'transient')).
 
 retrieve_agent_fsm(AccountId, AgentId) ->
 	Fsms = [Pid || {Name, Pid, 'worker', ['quilt_agent_fsm']} <- supervisor:which_children(?MODULE), Name == erlang:iolist_to_binary([<<"quilt_agent_fsm-">>, AccountId, <<"-">>, AgentId])],

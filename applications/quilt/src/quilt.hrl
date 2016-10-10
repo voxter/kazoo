@@ -21,4 +21,6 @@
 
 -define(QUILT_HRL, 'true').
 
+-record(state, {member_call_id='undefined'}).
+
 -endif.
