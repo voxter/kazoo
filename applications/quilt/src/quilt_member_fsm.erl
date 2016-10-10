@@ -12,8 +12,6 @@
 
 -include("quilt.hrl").
 
-% -record(state, {}).
-
 -export([start_link/1]).
 
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
@@ -39,23 +37,26 @@ handle_event(Event, StateName, State) ->
     {'next_state', StateName, State}.
 
 handle_sync_event({'enterqueue', JObj}, _From, 'started', State) ->
-    quilt_log:handle_event(JObj),
+    _ = wh_util:spawn('quilt_log', 'handle_event', [JObj]),
     {'reply', 'ok', 'waiting', State};
 handle_sync_event({'connected', JObj}, _From, 'waiting', State) ->
-    quilt_log:handle_event(JObj),
+    _ = wh_util:spawn('quilt_log', 'handle_event', [JObj]),
+    {'reply', 'ok', 'incall', State};
+handle_sync_event({'connected', JObj}, _From, 'incall', State) ->
+    _ = wh_util:spawn('quilt_log', 'handle_event', [JObj]),
     {'reply', 'ok', 'incall', State};
 handle_sync_event({'exitqueue', JObj}, _From, 'waiting', State) ->
     _ = wh_util:spawn('quilt_log', 'handle_event', [JObj]),
-    {'reply', 'ok', 'hangup', State};
-handle_sync_event({'abandon', JObj}, _From, 'waiting', State) ->
-    quilt_log:handle_event(JObj),
-    {'reply', 'ok', 'abandoned', State};
+    {'reply', 'ok', 'incall', State};
 handle_sync_event({'exitqueue', JObj}, _From, 'connected', State) ->
-    quilt_log:handle_event(JObj),
+    _ = wh_util:spawn('quilt_log', 'handle_event', [JObj]),
     {'reply', 'ok', 'incall', State};
 handle_sync_event({'exitqueue', JObj}, _From, 'abandoned', State) ->
     _ = wh_util:spawn('quilt_log', 'handle_event', [JObj]),
     {'reply', 'ok', 'hangup', State};
+handle_sync_event({'abandon', JObj}, _From, 'waiting', State) ->
+    _ = wh_util:spawn('quilt_log', 'handle_event', [JObj]),
+    {'reply', 'ok', 'abandoned', State};
 handle_sync_event(Event, _From, StateName, State) ->
     lager:debug("unhandled sync event in state ~s: ~p", [StateName, Event]),
     {'reply', 'ok', StateName, State}.
