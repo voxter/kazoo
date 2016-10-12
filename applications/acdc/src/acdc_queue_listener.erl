@@ -381,6 +381,7 @@ handle_cast({'timeout_member_call', JObj}, #state{delivery=Delivery
 
     maybe_timeout_agent(AgentId, QueueId, Call, JObj),
 
+    publish_queue_member_remove(AccountId, QueueId, kapps_call:call_id(Call)),
     acdc_queue_shared:ack(Pid, Delivery),
     send_member_call_failure(Q, AccountId, QueueId, kapps_call:call_id(Call), MyId, AgentId),
 
@@ -404,6 +405,7 @@ handle_cast({'exit_member_call'}, #state{delivery=Delivery
 
     acdc_util:unbind_from_call_events(Call),
     lager:debug("unbound from call events for ~s", [kapps_call:call_id(Call)]),
+    publish_queue_member_remove(AccountId, QueueId, kapps_call:call_id(Call)),
     acdc_queue_shared:ack(Pid, Delivery),
     send_member_call_failure(Q, AccountId, QueueId, kapps_call:call_id(Call), MyId, AgentId, <<"Caller exited the queue via DTMF">>),
 
@@ -421,6 +423,7 @@ handle_cast({'exit_member_call_empty'}, #state{delivery=Delivery
 
     acdc_util:unbind_from_call_events(Call),
     lager:debug("unbound from call events for ~s", [kapps_call:call_id(Call)]),
+    publish_queue_member_remove(AccountId, QueueId, kapps_call:call_id(Call)),
     acdc_queue_shared:ack(Pid, Delivery),
     send_member_call_failure(Q, AccountId, QueueId, kapps_call:call_id(Call), MyId, AgentId, <<"No agents left in queue">>),
 
@@ -475,15 +478,15 @@ handle_cast({'cancel_member_call'}, #state{delivery=Delivery
 handle_cast({'cancel_member_call', _RejectJObj}, #state{delivery='undefined'}=State) ->
     lager:debug("cancel a member_call that I don't have delivery info for"),
     {'noreply', State};
-handle_cast({'cancel_member_call', RejectJObj}, #state{queue_id=QueueId
-                                                      ,account_id=AccountId
-                                                      ,delivery=Delivery
-                                                      ,call=Call
-                                                      ,shared_pid=Pid
-                                                      }=State) ->
+handle_cast({'cancel_member_call', _RejectJObj}, #state{queue_id=QueueId
+                                                       ,account_id=AccountId
+                                                       ,delivery=Delivery
+                                                       ,call=Call
+                                                       ,shared_pid=Pid
+                                                       }=State) ->
     lager:debug("agent failed to handle the call, nack"),
 
-    publish_queue_member_remove(AccountId, QueueId, RejectJObj),
+    publish_queue_member_remove(AccountId, QueueId, kapps_call:call_id(Call)),
     _ = maybe_nack(Call, Delivery, Pid),
     {'noreply', clear_call_state(State), 'hibernate'};
 handle_cast({'cancel_member_call', _MemberCallJObj, Delivery}, #state{shared_pid=Pid}=State) ->
@@ -632,11 +635,11 @@ send_member_call_failure(Q, AccountId, QueueId, CallId, MyId, AgentId, Reason) -
              ]),
     publish(Q, Resp, fun kapi_acdc_queue:publish_member_call_failure/2).
 
--spec publish_queue_member_remove(ne_binary(), ne_binary(), kz_json:object()) -> 'ok'.
-publish_queue_member_remove(AccountId, QueueId, JObj) ->
+-spec publish_queue_member_remove(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+publish_queue_member_remove(AccountId, QueueId, CallId) ->
     Prop = [{<<"Account-ID">>, AccountId}
-           ,{<<"Queue-ID">>, QueueId}
-           ,{<<"JObj">>, JObj}
+            ,{<<"Queue-ID">>, QueueId}
+            ,{<<"JObj">>, kz_json:from_list([{<<"Call-ID">>, CallId}])}
             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
     kapi_acdc_queue:publish_queue_member_remove(Prop).

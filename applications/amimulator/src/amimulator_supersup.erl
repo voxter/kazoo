@@ -31,6 +31,5 @@ init([]) ->
     SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
 
     ChildSpec = {'amimulator_serv', {'amimulator_serv', 'start_link', []}, 'permanent', 'infinity', 'worker', ['amimulator_serv']},
-    
-    {'ok', {SupFlags, [ChildSpec]}}.
 
+    {'ok', {SupFlags, [ChildSpec]}}.
