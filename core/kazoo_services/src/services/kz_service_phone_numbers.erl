@@ -51,12 +51,9 @@ reconcile(Services, JObjs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec feature_activation_charge(ne_binary(), kz_services:services()) -> integer().
-feature_activation_charge(?DASH_KEY, Services) ->
-    feature_activation_charge(?EMERGENCY_SERVICES_KEY, Services);
-feature_activation_charge(?VITELITY_KEY, Services) ->
-    feature_activation_charge(?EMERGENCY_SERVICES_KEY, Services);
 feature_activation_charge(Feature, Services) ->
-    Charge = kz_services:activation_charges(?NUMBER_SERVICES, Feature, Services),
+    Name = knm_providers:service_name(Feature, kz_services:account_id(Services)),
+    Charge = kz_services:activation_charges(?NUMBER_SERVICES, Name, Services),
     wht_util:dollars_to_units(Charge).
 
 %%--------------------------------------------------------------------
@@ -165,15 +162,11 @@ is_number_billable(DID, M) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update_feature_quantities(ne_binaries() | kz_json:object(), kz_services:services()) -> kz_services:services().
-update_feature_quantities([], Services) ->
-    Services;
-update_feature_quantities([?DASH_KEY|Features], Services) ->
-    update_feature_quantities([?EMERGENCY_SERVICES_KEY|Features], Services);
-update_feature_quantities([?VITELITY_KEY|Features], Services) ->
-    update_feature_quantities([?EMERGENCY_SERVICES_KEY|Features], Services);
+update_feature_quantities([], Services) -> Services;
 update_feature_quantities([Feature|Features], Services) ->
-    Quantity = kz_services:updated_quantity(?NUMBER_SERVICES, Feature, Services),
-    UpdatedServices = kz_services:update(?NUMBER_SERVICES, Feature, Quantity + 1, Services),
+    Name = knm_providers:service_name(Feature, kz_services:account_id(Services)),
+    Quantity = kz_services:updated_quantity(?NUMBER_SERVICES, Name, Services),
+    UpdatedServices = kz_services:update(?NUMBER_SERVICES, Name, Quantity + 1, Services),
     update_feature_quantities(Features, UpdatedServices);
 update_feature_quantities(JObj, Services) ->
     update_feature_quantities(kz_json:get_keys(JObj), Services).

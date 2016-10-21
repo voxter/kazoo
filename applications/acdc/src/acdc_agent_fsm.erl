@@ -1688,13 +1688,13 @@ outbound({'channel_replaced', _}, State) ->
 outbound(?NEW_CHANNEL_TO(CallId, _), #state{outbound_call_ids=[CallId]}=State) ->
     {'next_state', 'outbound', State};
 outbound(?NEW_CHANNEL_FROM(CallId), #state{agent_listener=AgentListener
-                                           ,outbound_call_ids=OutboundCallIds
+                                          ,outbound_call_ids=OutboundCallIds
                                           }=State) ->
     lager:debug("outbound call_from outbound: ~s", [CallId]),
     acdc_util:bind_to_call_events(CallId, AgentListener),
     {'next_state', 'outbound', State#state{outbound_call_ids=[CallId | lists:delete(CallId, OutboundCallIds)]}};
 outbound(?NEW_CHANNEL_TO(CallId, 'undefined'), #state{agent_listener=AgentListener
-                                                      ,outbound_call_ids=OutboundCallIds
+                                                     ,outbound_call_ids=OutboundCallIds
                                                      }=State) ->
     lager:debug("outbound call_to outbound: ~s", [CallId]),
     acdc_util:bind_to_call_events(CallId, AgentListener),
@@ -1710,11 +1710,11 @@ outbound(_Msg, State) ->
     {'next_state', 'outbound', State}.
 
 outbound('status', _, #state{wrapup_ref=Ref
-                            ,outbound_call_ids=[OutboundCallId]
+                            ,outbound_call_ids=OutboundCallIds
                             }=State) ->
     {'reply', [{'state', <<"outbound">>}
               ,{'wrapup_left', time_left(Ref)}
-              ,{'outbound_call_id', OutboundCallId}
+              ,{'outbound_call_id', hd(OutboundCallIds)}
               ]
     ,'outbound', State};
 outbound('current_call', _, State) ->

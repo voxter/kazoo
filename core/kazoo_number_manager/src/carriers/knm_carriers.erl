@@ -21,6 +21,7 @@
 
         ,quantity/1
         ,prefix/1, prefix/2
+        ,dialcode/1
         ,country/1
         ,offset/1
         ,blocks/1
@@ -53,6 +54,7 @@
 -else.
 -type option() :: {'quantity', pos_integer()} |
                   {'prefix', ne_binary()} |
+                  {'dialcode', ne_binary()} |
                   {'country', knm_util:country()} |
                   {'offset', non_neg_integer()} |
                   {'blocks', boolean()} |
@@ -84,10 +86,10 @@ find(Prefix) ->
 find(Prefix, Quantity) ->
     find(Prefix, Quantity, []).
 
-find(Prefix, Quantity, Options) ->
-    NormalizedPrefix = <<(knm_util:prefix_for_country(country(Options)))/binary
-                         ,(prefix(Options, Prefix))/binary
-                       >>,
+find(Prefix, Quantity, Options0) ->
+    Dialcode = knm_util:prefix_for_country(country(Options0)),
+    Options = [{'dialcode', Dialcode} | Options0],
+    NormalizedPrefix = <<Dialcode/binary, (prefix(Options, Prefix))/binary>>,
     Carriers = available_carriers(Options),
     lager:debug("contacting, in order: ~p", [Carriers]),
     Acc0 = #{found => []
@@ -193,13 +195,12 @@ check_for_existing_did(Number, Acc, Carrier, {'ok', ExistingPhoneNumber}) ->
 transition_existing_to_discovery(Number, ExistingPhoneNumber, Acc) ->
     PhoneNumber0 = knm_number:phone_number(Number),
     {'ok', PhoneNumber} =
-        knm_phone_number:setters(
-          ExistingPhoneNumber
+        knm_phone_number:setters(ExistingPhoneNumber
                                 ,[{fun knm_phone_number:set_module_name/2, knm_phone_number:module_name(PhoneNumber0)}
                                  ,{fun knm_phone_number:set_carrier_data/2, knm_phone_number:carrier_data(PhoneNumber0)}
                                  ,{fun knm_phone_number:set_state/2, ?NUMBER_STATE_DISCOVERY}
                                  ]
-         ),
+                                ),
     case knm_number:save(knm_number:set_phone_number(Number, PhoneNumber)) of
         {'ok', SavedNumber} ->
             [found_number_to_jobj(SavedNumber) | Acc];
@@ -379,6 +380,10 @@ prefix(Options) ->
     props:get_ne_binary_value('prefix', Options).
 prefix(Options, Default) ->
     props:get_ne_binary_value('prefix', Options, Default).
+
+-spec dialcode(options()) -> ne_binary().
+dialcode(Options) ->
+    props:get_ne_binary_value('dialcode', Options).
 
 -spec country(options()) -> knm_util:country_iso3166a2().
 country(Options) ->

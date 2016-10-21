@@ -5,6 +5,7 @@
 %%% @end
 %%% @contributors
 %%%   James Aimonetti
+%%%   Daniel Finke
 %%%-------------------------------------------------------------------
 -module(acdc_agent_listener).
 -behaviour(gen_listener).
@@ -246,6 +247,10 @@ hangup_call(Srv, Call) ->
 
 monitor_call(Srv, Call, WinJObj, RecordingUrl) ->
     gen_listener:cast(Srv, {'monitor_call', Call, WinJObj, RecordingUrl}).
+
+-spec hangup_call(pid()) -> 'ok'.
+hangup_call(Srv) ->
+    gen_listener:cast(Srv, {'hangup_call'}).
 
 -spec bridge_to_member(pid(), kapps_call:call(), kz_json:object()
                       ,kz_json:objects(), api_binary(), api_binary()
