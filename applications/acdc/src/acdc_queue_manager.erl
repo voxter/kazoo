@@ -22,7 +22,6 @@
         ,handle_agents_available_req/2
         ,handle_queue_member_add/2
         ,handle_queue_member_remove/2
-        ,handle_queue_member_position/2
         ,handle_manager_success_notify/2
         ,handle_member_callback_reg/2
         ,are_agents_available/1
@@ -66,7 +65,7 @@
                                   ,'federate'
                                   ]}
                         ,{'acdc_queue', [{'restrict_to', ['member_call_result', 'stats_req', 'agent_change', 'agents_availability'
-                                                         ,'member_addremove', 'member_position', 'member_callback_reg'
+                                                         ,'member_addremove', 'member_callback_reg'
                                                          ]}
                                         ,{'account_id', A}
                                         ,{'queue_id', Q}
@@ -105,9 +104,6 @@
                      }
                     ,{{?MODULE, 'handle_queue_member_remove'}
                      ,[{<<"queue">>, <<"member_remove">>}]
-                     }
-                    ,{{?MODULE, 'handle_queue_member_position'}
-                     ,[{<<"queue">>, <<"call_position_req">>}]
                      }
                     ,{{?MODULE, 'handle_manager_success_notify'}
                      ,[{<<"member">>, <<"call_success">>}]
@@ -249,10 +245,6 @@ handle_queue_member_add(JObj, Prop) ->
 -spec handle_queue_member_remove(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_queue_member_remove(JObj, Prop) ->
     gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_remove', kz_json:get_value(<<"JObj">>, JObj)}).
-
--spec handle_queue_member_position(kz_json:object(), kz_proplist()) -> 'ok'.
-handle_queue_member_position(JObj, Prop) ->
-	gen_listener:cast(props:get_value('server', Prop), {'queue_member_position', JObj}).
 
 -spec handle_manager_success_notify(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_manager_success_notify(JObj, Prop) ->

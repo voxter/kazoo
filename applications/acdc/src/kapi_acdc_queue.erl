@@ -29,8 +29,6 @@
         ,agents_available_resp/1, agents_available_resp_v/1
         ,queue_member_add/1, queue_member_add_v/1
         ,queue_member_remove/1, queue_member_remove_v/1
-        ,call_position_req/1, call_position_req_v/1
-        ,call_position_resp/1, call_position_resp_v/1
         ,member_callback_reg/1, member_callback_reg_v/1
         ]).
 
@@ -65,8 +63,6 @@
         ,publish_agents_available_resp/2, publish_agents_available_resp/3
         ,publish_queue_member_add/1, publish_queue_member_add/2
         ,publish_queue_member_remove/1, publish_queue_member_remove/2
-        ,publish_call_position_req/1, publish_call_position_req/2
-        ,publish_call_position_resp/2, publish_call_position_resp/3
         ,publish_member_callback_reg/1, publish_member_callback_reg/2
         ]).
 
@@ -709,61 +705,6 @@ queue_member_remove_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?QUEUE_MEMBER_REMOVE_HEADERS, ?QUEUE_MEMBER_REMOVE_VALUES, ?QUEUE_MEMBER_REMOVE_TYPES);
 queue_member_remove_v(JObj) -> queue_member_remove_v(kz_json:to_proplist(JObj)).
 
--define(CALL_POSITION_REQ_HEADERS, [<<"Account-ID">>
-                                   ,<<"Queue-ID">>
-                                   ,<<"Call-ID">>
-                                   ]).
--define(OPTIONAL_CALL_POSITION_REQ_HEADERS, []).
--define(CALL_POSITION_REQ_VALUES, [{<<"Event-Category">>, <<"queue">>}
-                                  ,{<<"Event-Name">>, <<"call_position_req">>}
-                                  ]).
--define(CALL_POSITION_REQ_TYPES, []).
-
--spec call_position_req(api_terms()) ->
-                        {'ok', iolist()} |
-                        {'error', string()}.
-call_position_req(Props) when is_list(Props) ->
-    case call_position_req_v(Props) of
-        'true' -> kz_api:build_message(Props, ?CALL_POSITION_REQ_HEADERS, ?OPTIONAL_CALL_POSITION_REQ_HEADERS);
-        'false' -> {'error', "Proplist failed validation for call_position_req"}
-    end;
-call_position_req(JObj) ->
-    call_position_req(kz_json:to_proplist(JObj)).
-
--spec call_position_req_v(api_terms()) -> boolean().
-call_position_req_v(Prop) when is_list(Prop) ->
-    kz_api:validate(Prop, ?CALL_POSITION_REQ_HEADERS, ?CALL_POSITION_REQ_VALUES, ?CALL_POSITION_REQ_TYPES);
-call_position_req_v(JObj) ->
-    call_position_req_v(kz_json:to_proplist(JObj)).
-
--define(CALL_POSITION_RESP_HEADERS, [<<"Account-ID">>
-                                    ,<<"Queue-ID">>
-                                    ,<<"Call-ID">>
-                                    ,<<"Position">>
-                                    ]).
--define(OPTIONAL_CALL_POSITION_RESP_HEADERS, []).
--define(CALL_POSITION_RESP_VALUES, [{<<"Event-Category">>, <<"queue">>}
-                                   ,{<<"Event-Name">>, <<"call_position_resp">>}
-                                   ]).
--define(CALL_POSITION_RESP_TYPES, []).
-
--spec call_position_resp(api_terms()) ->
-                        {'ok', iolist()} |
-                        {'error', string()}.
-call_position_resp(Props) when is_list(Props) ->
-    case call_position_resp_v(Props) of
-        'true' -> kz_api:build_message(Props, ?CALL_POSITION_RESP_HEADERS, ?OPTIONAL_CALL_POSITION_RESP_HEADERS);
-        'false' -> {'error', "Proplist failed validation for call_position_resp"}
-    end;
-call_position_resp(JObj) ->
-    call_position_resp(kz_json:to_proplist(JObj)).
-
--spec call_position_resp_v(api_terms()) -> boolean().
-call_position_resp_v(Prop) when is_list(Prop) ->
-    kz_api:validate(Prop, ?CALL_POSITION_RESP_HEADERS, ?CALL_POSITION_RESP_VALUES, ?CALL_POSITION_RESP_TYPES);
-call_position_resp_v(JObj) ->
-    call_position_resp_v(kz_json:to_proplist(JObj)).
-
 %%------------------------------------------------------------------------------
 %% Member Call Back - let the caller leave the queue but be called back
 %%  when their turn comes up
@@ -879,9 +820,6 @@ bind_q(Q, AcctId, QID, CallId, ['agents_availability'|T]) ->
 bind_q(Q, AcctId, QID, CallId, ['member_addremove'|T]) ->
     amqp_util:bind_q_to_kapps(Q, queue_member_routing_key(AcctId, QID)),
     bind_q(Q, AcctId, QID, CallId, T);
-bind_q(Q, AcctId, QID, CallId, ['member_position'|T]) ->
-	amqp_util:bind_q_to_kapps(Q, queue_member_routing_key(AcctId, QID)),
-	bind_q(Q, AcctId, QID, CallId, T);
 bind_q(Q, AcctId, QID, CallId, ['member_callback_reg'|T]) ->
     amqp_util:bind_q_to_callmgr(Q, member_callback_reg_routing_key(AcctId, QID, CallId)),
     bind_q(Q, AcctId, QID, CallId, T);
@@ -1118,22 +1056,6 @@ publish_queue_member_remove(JObj) ->
 publish_queue_member_remove(API, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(API, ?QUEUE_MEMBER_REMOVE_VALUES, fun queue_member_remove/1),
     amqp_util:kapps_publish(queue_member_routing_key(API), Payload, ContentType).
-
--spec publish_call_position_req(api_terms()) -> 'ok'.
--spec publish_call_position_req(api_terms(), ne_binary()) -> 'ok'.
-publish_call_position_req(JObj) ->
-    publish_call_position_req(JObj, ?DEFAULT_CONTENT_TYPE).
-publish_call_position_req(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?CALL_POSITION_REQ_VALUES, fun call_position_req/1),
-    amqp_util:kapps_publish(queue_member_routing_key(API), Payload, ContentType).
-
--spec publish_call_position_resp(ne_binary(), api_terms()) -> 'ok'.
--spec publish_call_position_resp(ne_binary(), api_terms(), ne_binary()) -> 'ok'.
-publish_call_position_resp(RespQ, JObj) ->
-    publish_call_position_resp(RespQ, JObj, ?DEFAULT_CONTENT_TYPE).
-publish_call_position_resp(RespQ, API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?CALL_POSITION_RESP_VALUES, fun call_position_resp/1),
-    amqp_util:targeted_publish(RespQ, Payload, ContentType).
 
 -spec publish_member_callback_reg(api_terms()) -> 'ok'.
 -spec publish_member_callback_reg(api_terms(), ne_binary()) -> 'ok'.
