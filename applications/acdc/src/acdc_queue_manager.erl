@@ -17,12 +17,12 @@
 %% API
 -export([start_link/2, start_link/3
         ,handle_member_call/2
+        ,handle_member_call_success/2
         ,handle_member_call_cancel/2
         ,handle_agent_change/2
         ,handle_agents_available_req/2
         ,handle_queue_member_add/2
         ,handle_queue_member_remove/2
-        ,handle_manager_success_notify/2
         ,handle_member_callback_reg/2
         ,are_agents_available/1
         ,handle_config_change/2
@@ -64,8 +64,8 @@
                                   ,{'id', Q}
                                   ,'federate'
                                   ]}
-                        ,{'acdc_queue', [{'restrict_to', ['member_call_result', 'stats_req', 'agent_change', 'agents_availability'
-                                                         ,'member_addremove', 'member_callback_reg'
+                        ,{'acdc_queue', [{'restrict_to', ['stats_req', 'agent_change', 'agents_availability'
+                                                         ,'member_addremove', 'member_call_result', 'member_callback_reg'
                                                          ]}
                                         ,{'account_id', A}
                                         ,{'queue_id', Q}
@@ -90,6 +90,9 @@
                     ,{{?MODULE, 'handle_member_call'}
                      ,[{<<"member">>, <<"call">>}]
                      }
+                    ,{{?MODULE, 'handle_member_call_success'}
+                     ,[{<<"member">>, <<"call_success">>}]
+                     }
                     ,{{?MODULE, 'handle_member_call_cancel'}
                      ,[{<<"member">>, <<"call_cancel">>}]
                      }
@@ -104,9 +107,6 @@
                      }
                     ,{{?MODULE, 'handle_queue_member_remove'}
                      ,[{<<"queue">>, <<"member_remove">>}]
-                     }
-                    ,{{?MODULE, 'handle_manager_success_notify'}
-                     ,[{<<"member">>, <<"call_success">>}]
                      }
                     ,{{?MODULE, 'handle_member_callback_reg'}
                      ,[{<<"member">>, <<"callback_reg">>}]
@@ -209,6 +209,10 @@ start_queue_call(JObj, Props, Call) ->
     %% Add member to queue for tracking position
     gen_listener:cast(props:get_value('server', Props), {'add_queue_member', JObj2}).
 
+-spec handle_member_call_success(kz_json:object(), kz_proplist()) -> 'ok'.
+handle_member_call_success(JObj, Prop) ->
+    gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_remove', JObj}).
+
 handle_member_call_cancel(JObj, Props) ->
     kz_util:put_callid(JObj),
     lager:debug("cancel call ~p", [JObj]),
@@ -245,10 +249,6 @@ handle_queue_member_add(JObj, Prop) ->
 -spec handle_queue_member_remove(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_queue_member_remove(JObj, Prop) ->
     gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_remove', kz_json:get_value(<<"JObj">>, JObj)}).
-
--spec handle_manager_success_notify(kz_json:object(), kz_proplist()) -> 'ok'.
-handle_manager_success_notify(JObj, Prop) ->
-    gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_remove', JObj}).
 
 -spec handle_member_callback_reg(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_member_callback_reg(JObj, Prop) ->
