@@ -7,9 +7,11 @@
 %%% @end
 %%% @contributors
 %%%   Karl Anderson
+%%%   Daniel Finke
 %%%-------------------------------------------------------------------
 -module(knm_wikibuli).
 
+-export([is_local/0]).
 -export([find_numbers/3]).
 -export([acquire_number/1]).
 -export([disconnect_number/1]).
@@ -21,18 +23,28 @@
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
+%% Is this carrier handling numbers local to the system?
+%% Note: a non-local (foreign) carrier module makes HTTP requests.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_local() -> boolean().
+is_local() -> 'true'.
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
 %% Query the local system for a quanity of available numbers
 %% in a rate center
 %% @end
 %%--------------------------------------------------------------------
--spec find_numbers(ne_binary(), pos_integer(), kz_proplist()) ->
-                          {'error', 'non_available'}.
+-spec find_numbers(ne_binary(), pos_integer(), knm_carriers:options()) ->
+                          {'error', 'not_available'}.
 find_numbers(Number, Quanity, Opts) when size(Number) < 5 ->
     find_numbers(<<"+1", Number/binary>>, Quanity, Opts);
 find_numbers(_Number, _Quanity, _Opts) ->
     %% TODO: given the requestors account number discovery wnm_wikibuli numbers that are
     %%       available but managed by accendants of the account.
-    {'error', 'non_available'}.
+    {'error', 'not_available'}.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -55,9 +67,7 @@ acquire_number(Number) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec disconnect_number(knm_number:knm_number()) -> knm_number:knm_number().
-disconnect_number(Number) ->
-    {'ok', Number1} = knm_number:release(Number, [{'should_delete', 'true'}]),
-    Number1.
+disconnect_number(Number) -> Number.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -67,5 +77,5 @@ disconnect_number(Number) ->
 -spec should_lookup_cnam() -> boolean().
 should_lookup_cnam() -> 'true'.
 
--spec is_number_billable(knm_number:knm_number()) -> 'false'.
+-spec is_number_billable(knm_phone_number:knm_phone_number()) -> 'false'.
 is_number_billable(_Number) -> 'false'.
