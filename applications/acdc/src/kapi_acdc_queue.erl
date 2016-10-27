@@ -662,7 +662,7 @@ queue_member_routing_key(JObj) ->
 queue_member_routing_key(AcctId, QID) ->
     <<"acdc.queue.position.", AcctId/binary, ".", QID/binary>>.
 
--define(QUEUE_MEMBER_ADD_HEADERS, [<<"Account-ID">>, <<"Queue-ID">>, <<"JObj">>]).
+-define(QUEUE_MEMBER_ADD_HEADERS, [<<"Account-ID">>, <<"Queue-ID">>, <<"Call">>]).
 -define(OPTIONAL_QUEUE_MEMBER_ADD_HEADERS, []).
 -define(QUEUE_MEMBER_ADD_VALUES, [{<<"Event-Category">>, <<"queue">>}
                                  ,{<<"Event-Name">>, <<"member_add">>}
@@ -670,8 +670,8 @@ queue_member_routing_key(AcctId, QID) ->
 -define(QUEUE_MEMBER_ADD_TYPES, []).
 
 -spec queue_member_add(api_terms()) ->
-                          {'ok', iolist()} |
-                          {'error', string()}.
+                              {'ok', iolist()} |
+                              {'error', string()}.
 queue_member_add(Prop) when is_list(Prop) ->
     case queue_member_add_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?QUEUE_MEMBER_ADD_HEADERS, ?OPTIONAL_QUEUE_MEMBER_ADD_HEADERS);
@@ -684,7 +684,7 @@ queue_member_add_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?QUEUE_MEMBER_ADD_HEADERS, ?QUEUE_MEMBER_ADD_VALUES, ?QUEUE_MEMBER_ADD_TYPES);
 queue_member_add_v(JObj) -> queue_member_add_v(kz_json:to_proplist(JObj)).
 
--define(QUEUE_MEMBER_REMOVE_HEADERS, [<<"Account-ID">>, <<"Queue-ID">>, <<"JObj">>]).
+-define(QUEUE_MEMBER_REMOVE_HEADERS, [<<"Account-ID">>, <<"Queue-ID">>, <<"Call-ID">>]).
 -define(OPTIONAL_QUEUE_MEMBER_REMOVE_HEADERS, []).
 -define(QUEUE_MEMBER_REMOVE_VALUES, [{<<"Event-Category">>, <<"queue">>}
                                     ,{<<"Event-Name">>, <<"member_remove">>}
@@ -798,8 +798,10 @@ bind_q(Q, AcctId, QID, CallId, 'undefined') ->
     amqp_util:bind_q_to_kapps(Q, agent_change_routing_key(AcctId, QID)),
     amqp_util:bind_q_to_kapps(Q, agents_availability_routing_key(AcctId, QID)),
     amqp_util:bind_q_to_callmgr(Q, member_call_routing_key(AcctId, QID)),
+    amqp_util:bind_q_to_callmgr(Q, member_call_result_routing_key(AcctId, QID, CallId)),
     amqp_util:bind_q_to_callmgr(Q, member_connect_req_routing_key(AcctId, QID)),
-    amqp_util:bind_q_to_callmgr(Q, member_callback_reg_routing_key(AcctId, QID, CallId));
+    amqp_util:bind_q_to_callmgr(Q, member_callback_reg_routing_key(AcctId, QID, CallId)),
+    amqp_util:bind_q_to_kapps(Q, queue_member_routing_key(AcctId, QID));
 bind_q(Q, AcctId, QID, CallId, ['member_call'|T]) ->
     amqp_util:bind_q_to_callmgr(Q, member_call_routing_key(AcctId, QID)),
     bind_q(Q, AcctId, QID, CallId, T);
@@ -840,8 +842,10 @@ unbind_q(Q, AcctId, QID, CallId, 'undefined') ->
     _ = amqp_util:unbind_q_from_kapps(Q, agent_change_routing_key(AcctId, QID)),
     _ = amqp_util:unbind_q_from_kapps(Q, agents_availability_routing_key(AcctId, QID)),
     _ = amqp_util:unbind_q_from_callmgr(Q, member_call_routing_key(AcctId, QID)),
+    _ = amqp_util:unbind_q_from_callmgr(Q, member_call_result_routing_key(AcctId, QID, CallId)),
     _ = amqp_util:unbind_q_from_callmgr(Q, member_connect_req_routing_key(AcctId, QID)),
-    _ = amqp_util:unbind_q_from_callmgr(Q, member_callback_reg_routing_key(AcctId, QID, CallId));
+    _ = amqp_util:unbind_q_from_callmgr(Q, member_callback_reg_routing_key(AcctId, QID, CallId)),
+    _ = amqp_util:unbind_q_from_kapps(Q, queue_member_routing_key(AcctId, QID));
 unbind_q(Q, AcctId, QID, CallId, ['member_call'|T]) ->
     _ = amqp_util:unbind_q_from_callmgr(Q, member_call_routing_key(AcctId, QID)),
     unbind_q(Q, AcctId, QID, CallId, T);
@@ -859,6 +863,9 @@ unbind_q(Q, AcctId, QID, CallId, ['agent_change'|T]) ->
     unbind_q(Q, AcctId, QID, CallId, T);
 unbind_q(Q, AcctId, QID, CallId, ['agents_availability'|T]) ->
     _ = amqp_util:unbind_q_from_kapps(Q, agents_availability_routing_key(AcctId, QID)),
+    unbind_q(Q, AcctId, QID, CallId, T);
+unbind_q(Q, AcctId, QID, CallId, ['member_addremove'|T]) ->
+    _ = amqp_util:unbind_q_from_kapps(Q, queue_member_routing_key(AcctId, QID)),
     unbind_q(Q, AcctId, QID, CallId, T);
 unbind_q(Q, AcctId, QID, CallId, ['member_callback_reg'|T]) ->
     _ = amqp_util:unbind_q_from_callmgr(Q, member_callback_reg_routing_key(AcctId, QID, CallId)),

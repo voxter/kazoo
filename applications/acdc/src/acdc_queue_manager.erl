@@ -211,7 +211,7 @@ start_queue_call(JObj, Props, Call) ->
 
 -spec handle_member_call_success(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_member_call_success(JObj, Prop) ->
-    gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_remove', JObj}).
+    gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_remove', kz_json:get_value(<<"Call-ID">>, JObj)}).
 
 handle_member_call_cancel(JObj, Props) ->
     kz_util:put_callid(JObj),
@@ -221,7 +221,6 @@ handle_member_call_cancel(JObj, Props) ->
                        ,kz_json:get_value(<<"Queue-ID">>, JObj)
                        ,kz_json:get_value(<<"Call-ID">>, JObj)
                        ),
-
     gen_listener:cast(props:get_value('server', Props), {'member_call_cancel', K, JObj}).
 
 handle_agent_change(JObj, Prop) ->
@@ -248,7 +247,7 @@ handle_queue_member_add(JObj, Prop) ->
 
 -spec handle_queue_member_remove(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_queue_member_remove(JObj, Prop) ->
-    gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_remove', kz_json:get_value(<<"JObj">>, JObj)}).
+    gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_remove', kz_json:get_value(<<"Call-ID">>, JObj)}).
 
 -spec handle_member_callback_reg(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_member_callback_reg(JObj, Prop) ->
@@ -363,8 +362,7 @@ handle_call({'should_ignore_member_call', {AccountId, QueueId, CallId}=K}, _, #s
     case catch dict:fetch(K, Dict) of
         {'EXIT', _} -> {'reply', 'false', State};
         _Res ->
-            publish_queue_member_remove(AccountId, QueueId
-                                       ,kz_json:set_value(<<"Call-ID">>, CallId, kz_json:new())),
+            publish_queue_member_remove(AccountId, QueueId, CallId),
             {'reply', 'true', State#state{ignored_member_calls=dict:erase(K, Dict)}}
     end;
 
@@ -626,7 +624,7 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
                            ,kz_json:get_integer_value(<<"Member-Priority">>, JObj)
                            ),
 
-    publish_queue_member_add(AccountId, QueueId, JObj),
+    publish_queue_member_add(AccountId, QueueId, Call),
 
     %% Add call to shared queue
     kapi_acdc_queue:publish_shared_member_call(AccountId, QueueId, JObj),
@@ -649,17 +647,16 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
                            ,pos_announce_pids=UpdatedAnnouncePids
                            }};
 
-handle_cast({'handle_queue_member_add', JObj, _Queue}, #state{current_member_calls=CurrentCalls}=State) ->
-    JObj2 = kz_json:get_value(<<"JObj">>, JObj),
-    Call = kapps_call:from_json(kz_json:get_value(<<"Call">>, JObj2)),
+handle_cast({'handle_queue_member_add', JObj}, #state{current_member_calls=CurrentCalls}=State) ->
+    Call = kapps_call:from_json(kz_json:get_value(<<"Call">>, JObj)),
     CallId = kapps_call:call_id(Call),
     lager:debug("received notification of new queue member ~s", [CallId]),
 
     {'noreply', State#state{current_member_calls = [Call | lists:keydelete(CallId, 2, CurrentCalls)]}};
 
-handle_cast({'handle_queue_member_remove', JObj}, State) ->
-    State1 = maybe_remove_queue_member(kz_json:get_value(<<"Call-ID">>, JObj), State),
-    State2 = maybe_remove_callback_reg(kz_json:get_value(<<"Call-ID">>, JObj), State1),
+handle_cast({'handle_queue_member_remove', CallId}, State) ->
+    State1 = maybe_remove_queue_member(CallId, State),
+    State2 = maybe_remove_callback_reg(CallId, State1),
     {'noreply', State2};
 
 handle_cast({'handle_member_callback_reg', JObj}, #state{current_member_calls=CurrentCalls
@@ -757,20 +754,20 @@ lookup_priority_levels(AccountDB, QueueId) ->
 make_ignore_key(AccountId, QueueId, CallId) ->
     {AccountId, QueueId, CallId}.
 
--spec publish_queue_member_add(ne_binary(), ne_binary(), kz_json:object()) -> 'ok'.
-publish_queue_member_add(AccountId, QueueId, JObj) ->
+-spec publish_queue_member_add(ne_binary(), ne_binary(), kapps_call:call()) -> 'ok'.
+publish_queue_member_add(AccountId, QueueId, Call) ->
     Prop = [{<<"Account-ID">>, AccountId}
            ,{<<"Queue-ID">>, QueueId}
-           ,{<<"JObj">>, JObj}
+           ,{<<"Call">>, kapps_call:to_json(Call)}
             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
     kapi_acdc_queue:publish_queue_member_add(Prop).
 
--spec publish_queue_member_remove(ne_binary(), ne_binary(), kz_json:object()) -> 'ok'.
-publish_queue_member_remove(AccountId, QueueId, JObj) ->
+-spec publish_queue_member_remove(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+publish_queue_member_remove(AccountId, QueueId, CallId) ->
     Prop = [{<<"Account-ID">>, AccountId}
            ,{<<"Queue-ID">>, QueueId}
-           ,{<<"JObj">>, JObj}
+           ,{<<"Call-ID">>, CallId}
             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
     kapi_acdc_queue:publish_queue_member_remove(Prop).
