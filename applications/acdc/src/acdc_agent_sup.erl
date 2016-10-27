@@ -5,6 +5,7 @@
 %%% @end
 %%% @contributors
 %%%   James Aimonetti
+%%%   Daniel Finke
 %%%-------------------------------------------------------------------
 -module(acdc_agent_sup).
 

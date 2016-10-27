@@ -76,18 +76,12 @@ maybe_agent_queue_change(AccountId, AgentId, <<"login_queue">>, QueueId, JObj) -
     end;
 maybe_agent_queue_change(AccountId, AgentId, <<"logout_queue">>, QueueId, JObj) ->
     lager:debug("queue logout for agent ~s into ~s", [AgentId, QueueId]),
-    update_agent(acdc_agents_sup:find_agent_supervisor(AccountId, AgentId)
-                ,QueueId
-                ,fun acdc_agent_listener:rm_acdc_queue/2
-                ,JObj
-                ).
-
-update_agent('undefined', _QueueId, _F, _JObj) ->
-    lager:debug("agent's supervisor not around, ignoring for queue ~s", [_QueueId]);
-update_agent(Sup, Q, F, JObj) when is_pid(Sup) ->
-    APid = acdc_agent_sup:listener(Sup),
-    maybe_update_presence(Sup, JObj),
-    F(APid, Q).
+    case acdc_agents_sup:find_agent_supervisor(AccountId, AgentId) of
+        'undefined' -> lager:debug("agent process for ~s already stopped");
+        Sup ->
+            maybe_update_presence(Sup, JObj),
+            acdc_agent_listener:rm_acdc_queue(acdc_agent_sup:listener(Sup), QueueId)
+    end.
 
 -spec maybe_start_agent(ne_binary(), ne_binary(), kz_json:object()) -> pid() | 'fail'.
 maybe_start_agent(AccountId, AgentId, JObj) ->

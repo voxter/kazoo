@@ -589,7 +589,7 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
         {'error', 'no_endpoints'} ->
             lager:info("agent ~s has no endpoints assigned; logging agent out", [AgentId]),
             acdc_agent_stats:agent_logged_out(AccountId, AgentId),
-            ?MODULE:agent_logout(self()),
+            agent_logout(self()),
             acdc_agent_listener:member_connect_retry(AgentListener, JObj),
             {'next_state', 'paused', State};
         {'error', _E} ->
@@ -677,7 +677,7 @@ ready({'member_connect_req', _}, #state{max_connect_failures=Max
                                        }=State) when is_integer(Max), Fails >= Max ->
     lager:info("agent has failed to connect ~b times, logging out", [Fails]),
     acdc_agent_stats:agent_logged_out(AccountId, AgentId),
-    ?MODULE:agent_logout(self()),
+    agent_logout(self()),
     {'next_state', 'paused', State};
 ready({'member_connect_req', JObj}, #state{agent_listener=AgentListener}=State) ->
     acdc_agent_listener:member_connect_resp(AgentListener, JObj),
@@ -819,7 +819,7 @@ ringing({'agent_timeout', _JObj}, #state{agent_listener=AgentListener
 
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
     NewFSMState = clear_call(State, 'failed'),
-    NextState = return_to_state(Fails+1, MaxFails, AccountId, AgentId),
+    NextState = return_to_state(Fails+1, MaxFails),
     case NextState of
         'paused' -> {'next_state', 'paused', NewFSMState};
         'ready' -> apply_state_updates(NewFSMState)
@@ -846,12 +846,10 @@ ringing({'channel_bridged', MemberCallId}, #state{member_call_id=MemberCallId
 ringing({'channel_bridged', _CallId}, State) ->
     {'next_state', 'ringing', State};
 ringing({'channel_hungup', AgentCallId, _Cause}, #state{agent_listener=AgentListener
-                                                      ,agent_call_id=AgentCallId
-                                                      ,account_id=AccountId
-                                                      ,agent_id=AgentId
-                                                      ,connect_failures=Fails
-                                                      ,max_connect_failures=MaxFails
-                                                      }=State) ->
+                                                       ,agent_call_id=AgentCallId
+                                                       ,connect_failures=Fails
+                                                       ,max_connect_failures=MaxFails
+                                                       }=State) ->
     lager:debug("agent's channel (~s) down", [AgentCallId]),
 
     acdc_agent_listener:hangup_call(AgentListener),
@@ -859,7 +857,7 @@ ringing({'channel_hungup', AgentCallId, _Cause}, #state{agent_listener=AgentList
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
 
     NewFSMState = clear_call(State, 'failed'),
-    NextState = return_to_state(Fails+1, MaxFails, AccountId, AgentId),
+    NextState = return_to_state(Fails+1, MaxFails),
     case NextState of
         'paused' -> {'next_state', 'paused', NewFSMState};
         'ready' -> apply_state_updates(NewFSMState)
@@ -933,15 +931,13 @@ ringing({'originate_resp', ACallId}, #state{agent_listener=AgentListener
     acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNumber),
 
     {'next_state', 'ringing', State};
-ringing({'shared_failure', _JObj}, #state{account_id=AccountId
-                                         ,agent_id=AgentId
-                                         ,connect_failures=Fails
+ringing({'shared_failure', _JObj}, #state{connect_failures=Fails
                                          ,max_connect_failures=MaxFails
                                          }=State) ->
     lager:debug("shared originate failure"),
 
     NewFSMState = clear_call(State, 'failed'),
-    NextState = return_to_state(Fails+1, MaxFails, AccountId, AgentId),
+    NextState = return_to_state(Fails+1, MaxFails),
     case NextState of
         'paused' -> {'next_state', 'paused', NewFSMState};
         'ready' -> apply_state_updates(NewFSMState)
@@ -1066,15 +1062,13 @@ ringing_callback({'originate_failed', JObj}, #state{agent_listener=AgentListener
             {'next_state', 'ringing_callback', State};
         'false' -> {'next_state', 'ringing_callback', State}
     end;
-ringing_callback({'shared_failure', _JObj}, #state{account_id=AccountId
-                                                  ,agent_id=AgentId
-                                                  ,connect_failures=Fails
+ringing_callback({'shared_failure', _JObj}, #state{connect_failures=Fails
                                                   ,max_connect_failures=MaxFails
                                                   }=State) ->
     lager:debug("shared originate failure"),
 
     NewFSMState = clear_call(State, 'failed'),
-    NextState = return_to_state(Fails+1, MaxFails, AccountId, AgentId),
+    NextState = return_to_state(Fails+1, MaxFails),
     case NextState of
         'paused' -> {'next_state', 'paused', NewFSMState};
         'ready' -> apply_state_updates(NewFSMState)
@@ -1263,14 +1257,12 @@ awaiting_callback({'channel_hungup', ACallId, _Cause}, #state{account_id=Account
     acdc_stats:call_handled(AccountId, QueueId, OriginalMemberCallId, AgentId),
 
     {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'agent')}};
-awaiting_callback({'channel_hungup', _ACallId, _Cause}, #state{account_id=AccountId
-                                                              ,agent_id=AgentId
-                                                              ,connect_failures=Fails
+awaiting_callback({'channel_hungup', _ACallId, _Cause}, #state{connect_failures=Fails
                                                               ,max_connect_failures=MaxFails
                                                               ,monitoring='true'
                                                               }=State) ->
     NewFSMState = clear_call(State, 'failed'),
-    NextState = return_to_state(Fails+1, MaxFails, AccountId, AgentId),
+    NextState = return_to_state(Fails+1, MaxFails),
     case NextState of
         'paused' -> {'next_state', 'paused', NewFSMState};
         'ready' -> apply_state_updates(NewFSMState)
@@ -1336,7 +1328,7 @@ agent_hungup_awaiting(ACallId, Cause, TempMemberCall, #state{account_id=AccountI
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
 
     NewFSMState = clear_call(State, 'failed'),
-    NextState = return_to_state(Fails+1, MaxFails, AccountId, AgentId),
+    NextState = return_to_state(Fails+1, MaxFails),
     case NextState of
         'paused' -> {'next_state', 'paused', NewFSMState};
         'ready' -> apply_state_updates(NewFSMState)
@@ -1989,7 +1981,7 @@ clear_call(#state{connect_failures=Fails
                  ,agent_id=AgentId
                  }=State, 'failed') when is_integer(Max), (Max - Fails) =< 1 ->
     acdc_agent_stats:agent_logged_out(AccountId, AgentId),
-    ?MODULE:agent_logout(self()),
+    agent_logout(self()),
     lager:debug("agent has failed to connect ~b times, logging out", [Fails+1]),
     clear_call(State#state{connect_failures=Fails+1}, 'paused');
 clear_call(#state{connect_failures=Fails
@@ -2102,7 +2094,7 @@ start_outbound_call_handling(Call, State) ->
 
 -spec outbound_hungup(fsm_state()) ->
                              {'next_state', atom(), fsm_state()}
-                             | {'stop', 'normal', fsm_state()}.
+                                 | {'stop', 'normal', fsm_state()}.
 outbound_hungup(#state{agent_listener=AgentListener
                       ,wrapup_ref=WRef
                       ,pause_ref=PRef
@@ -2215,14 +2207,14 @@ get_endpoints(OrigEPs, AgentListener, Call, AgentId, QueueId) ->
             {'error', E}
     end.
 
--spec return_to_state(non_neg_integer(), pos_integer(), ne_binary(), ne_binary()) ->
-                             'paused' | 'ready'.
-return_to_state(Fails, MaxFails, _, _) when is_integer(MaxFails), Fails >= MaxFails ->
+-spec return_to_state(non_neg_integer(), pos_integer()) -> 'paused' | 'ready'.
+return_to_state(Fails, MaxFails) ->
     lager:debug("fails ~b max ~b going to pause", [Fails, MaxFails]),
-    'paused';
-return_to_state(_Fails, _MaxFails, _AccountId, _AgentId) ->
-    lager:debug("fails ~b max ~b going to pause", [_Fails, _MaxFails]),
-    'ready'.
+    case is_integer(MaxFails)
+         andalso Fails >= MaxFails of
+        'true' -> 'paused';
+        'false' -> 'ready'
+    end.
 
 %% {Add, Rm}
 %% Orig [] Curr [] => {[], []}
@@ -2355,7 +2347,7 @@ uri(URI, QueryString) ->
 
 -spec apply_state_updates(fsm_state()) ->
                                  {'next_state', atom(), fsm_state()}
-                                 | {'stop', 'normal', fsm_state()}.
+                                     | {'stop', 'normal', fsm_state()}.
 apply_state_updates(#state{agent_state_updates=Q
                           ,wrapup_ref=WRef
                           ,pause_ref=PRef
@@ -2374,7 +2366,7 @@ apply_state_updates(#state{agent_state_updates=Q
 
 -spec apply_state_updates_fold({'next_state', atom(), fsm_state()}, list()) ->
                                       {'next_state', atom(), fsm_state()}
-                                      | {'stop', 'normal', fsm_state()}.
+                                          | {'stop', 'normal', fsm_state()}.
 apply_state_updates_fold({_, StateName, #state{account_id=AccountId
                                               ,agent_id=AgentId
                                               ,agent_listener=AgentListener
@@ -2474,3 +2466,4 @@ originate_failed_for_this_call([EP|EPs], AmbiguousUUIDs) ->
         'true' -> 'true';
         'false' -> originate_failed_for_this_call(EPs, AmbiguousUUIDs)
     end.
+

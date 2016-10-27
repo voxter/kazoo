@@ -6,6 +6,7 @@
 %%% @end
 %%% @contributors
 %%%   James Aimonetti
+%%%   Daniel Finke
 %%%-------------------------------------------------------------------
 -module(acdc_init).
 
