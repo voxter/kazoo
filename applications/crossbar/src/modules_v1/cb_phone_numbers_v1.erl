@@ -32,6 +32,7 @@
 
 -define(ACTIVATE, <<"activate">>).
 -define(RESERVE, <<"reserve">>).
+-define(PORT, <<"port">>).
 
 -define(CLASSIFIERS, <<"classifiers">>).
 -define(IDENTIFY, <<"identify">>).
@@ -97,6 +98,8 @@ allowed_methods(_, ?ACTIVATE) ->
     [?HTTP_PUT];
 allowed_methods(_, ?RESERVE) ->
     [?HTTP_PUT];
+allowed_methods(_, ?PORT) ->
+    [?HTTP_PUT];
 allowed_methods(_, ?IDENTIFY) ->
     [?HTTP_GET];
 allowed_methods(_, ?CHANGE_CARRIER) ->
@@ -121,6 +124,7 @@ resource_exists(_) -> 'true'.
 
 resource_exists(_, ?ACTIVATE) -> 'true';
 resource_exists(_, ?RESERVE) -> 'true';
+resource_exists(_, ?PORT) -> 'true';
 resource_exists(_, ?IDENTIFY) -> 'true';
 resource_exists(_, ?CHANGE_CARRIER) -> 'true';
 resource_exists(_, _) -> 'false'.
@@ -229,6 +233,8 @@ validate_3(Context, ?HTTP_PUT, _Number, ?ACTIVATE) ->
     end;
 validate_3(Context, ?HTTP_PUT, _Number, ?RESERVE) ->
     validate_request(Context);
+validate_3(Context, ?HTTP_PUT, _Number, ?PORT) ->
+    validate_request(Context);
 validate_3(Context, ?HTTP_GET, Number, ?IDENTIFY) ->
     identify(Context, Number);
 validate_3(Context, ?HTTP_PUT, _Number, ?CHANGE_CARRIER) ->
@@ -280,6 +286,14 @@ put(Context, Number, ?RESERVE) ->
               ,{'public_fields', cb_context:doc(Context)}
               ],
     Result = knm_number:reserve(Number, Options),
+    set_response(Result, Number, Context);
+put(Context, Number, ?PORT) ->
+    Options = [{'assign_to', cb_context:account_id(Context)}
+              ,{'auth_by', cb_context:auth_account_id(Context)}
+              ,{'public_fields', cb_context:doc(Context)}
+              ,{'state', ?NUMBER_STATE_PORT_IN}
+              ],
+    Result = knm_number:create(Number, Options),
     set_response(Result, Number, Context).
 
 -spec delete(cb_context:context(), path_token()) -> cb_context:context().
