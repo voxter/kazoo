@@ -545,11 +545,11 @@ in_service_from_reserved_authorize(#number{assign_to=AssignTo
     end.
 
 -spec in_service_from_in_service_authorize(wnm_number()) -> wnm_number().
-in_service_from_in_service_authorize(#number{assign_to=AssignTo
-                                             ,auth_by=AuthBy
+in_service_from_in_service_authorize(#number{auth_by=AuthBy
+                                            ,assigned_to=AssignedTo
                                             }=N) ->
-    case (wh_util:is_in_account_hierarchy(AssignTo, AuthBy, 'true')
-          orelse wh_util:is_in_account_hierarchy(AuthBy, AssignTo)
+    case (wh_util:is_in_account_hierarchy(AssignedTo, AuthBy, 'true')
+          orelse wh_util:is_in_account_hierarchy(AuthBy, AssignedTo)
          )
     of
         'false' -> error_unauthorized(N);
