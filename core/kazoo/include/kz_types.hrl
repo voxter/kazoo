@@ -253,6 +253,8 @@
           ,"-", (kz_util:rand_hex_binary(4))/binary
         >>).
 
+-define(BRIDGE_DEFAULT_SYSTEM_TIMEOUT_S, 20).
+
 -type xml_thing() :: xml_el() | xml_text().
 -type xml_things() :: xml_els() | xml_texts().
 
