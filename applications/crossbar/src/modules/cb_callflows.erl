@@ -103,12 +103,11 @@ validate_callflow(Context, DocId, ?HTTP_DELETE) ->
 
 -spec post(cb_context:context(), path_token()) -> cb_context:context().
 post(Context, _DocId) ->
-    Context1 = crossbar_doc:save(Context),
+    'ok' = track_assignment('post', Context),
+    Context1 = maybe_reconcile_numbers(Context),
     case cb_context:resp_status(Context1) of
-        'success' ->
-            'ok' = track_assignment('post', Context),
-            maybe_reconcile_numbers(Context1);
-        _Status -> Context1
+        'success' -> crossbar_doc:save(Context1);
+        _ -> Context1
     end.
 
 -spec patch(cb_context:context(), path_token()) -> cb_context:context().
@@ -379,11 +378,20 @@ maybe_reconcile_numbers(Context) ->
             AssignTo = cb_context:account_id(Context),
             AuthBy = cb_context:auth_account_id(Context),
 
-            _ = [wh_number_manager:reconcile_number(Number, AssignTo, AuthBy)
-                 || Number <- sets:to_list(NewNumbers)
-                ],
-            Context
+            reconcile_numbers_fold(sets:to_list(NewNumbers), AssignTo, AuthBy, Context)
     end.
+
+-spec reconcile_numbers_fold(ne_binaries(), ne_binary(), ne_binary(), cb_context:context()) ->
+                                    cb_context:context().
+reconcile_numbers_fold([], _, _, Context) -> cb_context:set_resp_status(Context, 'success');
+reconcile_numbers_fold([Number|Numbers], AssignTo, AuthBy, Context) ->
+    case wh_number_manager:reconcile_number(Number, AssignTo, AuthBy) of
+        {'ok', _} -> reconcile_numbers_fold(Numbers, AssignTo, AuthBy, Context);
+        {'dry_run', _} -> reconcile_numbers_fold(Numbers, AssignTo, AuthBy, Context);
+        {'not_reconcilable', _} -> reconcile_numbers_fold(Numbers, AssignTo, AuthBy, Context);
+        {Error, Reason} -> cb_context:add_system_error(Error, Reason, Context)
+    end.
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
