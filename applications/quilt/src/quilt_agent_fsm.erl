@@ -75,6 +75,12 @@ handle_sync_event({'transfer', JObj}, _From, 'incall', State) ->
     J1 = wh_json:set_value(<<"Event-Category">>, <<"call_event">>, JObj),
     J2 = wh_json:set_value(<<"Event-Name">>, <<"transfer">>, J1),
     JObj1 = wh_json:set_value(<<"Call-ID">>, CallId, J2),
+
+    %% If the transfer tries to read Talk-Time before stat processed, queue_log
+    %% proc will crash. But we must block so that the hangup event does not
+    %% occur before this one or we get COMPLETEAGENT instead of TRANSFER
+    sleep_until_call_stat_processed(CallId),
+
     _ = wh_util:spawn('quilt_log', 'handle_event', [JObj1]),
     {'reply', 'ok', 'ready', #state{member_call_id='undefined'}};
 handle_sync_event({'hangup', JObj}, _From, 'incall', _State) ->
@@ -102,3 +108,15 @@ code_change(_, StateName, State, _) ->
 %% gen_fsm states
 %%
 
+%%
+%% Private functions
+%%
+-spec sleep_until_call_stat_processed(ne_binary()) -> 'ok'.
+sleep_until_call_stat_processed(CallId) ->
+    Stat = acdc_stats:find_call(CallId),
+    case wh_json:get_value(<<"Status">>, Stat) of
+        <<"processed">> -> 'ok';
+        _ ->
+            timer:sleep(1000),
+            sleep_until_call_stat_processed(CallId)
+    end.
