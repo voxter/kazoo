@@ -26,7 +26,7 @@ responders(_Props) ->
     [{<<"directory">>, <<"reg_success">>}
      ,{<<"notification">>, <<"deregister">>}].
 
-handle_event(EventJObj, Props) ->
+handle_event(EventJObj, _Props) ->
     {_EventType, EventName} = wh_util:get_event_type(EventJObj),
     handle_specific_event(EventName, EventJObj).
 
@@ -35,7 +35,6 @@ handle_event(EventJObj, Props) ->
 %%
 
 handle_specific_event(<<"reg_success">>, EventJObj) ->
-    %lager:debug("reg success ~p", [EventJObj]);
     Realm = wh_json:get_value(<<"Realm">>, EventJObj),
     case couch_mgr:get_results(<<"accounts">>, <<"accounts/listing_by_realm">>, [{key, Realm}]) of
         {ok, [Result]} ->
@@ -53,7 +52,6 @@ handle_specific_event(<<"reg_success">>, EventJObj) ->
             ok
     end;
 handle_specific_event(<<"deregister">>, EventJObj) ->
-    %lager:debug("deregister ~p", [EventJObj]);
     AccountId = wh_json:get_value(<<"Account-ID">>, EventJObj),
     handle_unregister(AccountId, EventJObj);
 handle_specific_event(_, _EventJObj) ->
@@ -72,14 +70,14 @@ handle_register(AccountId, EventJObj) ->
 
     case couch_mgr:get_results(AccountDb, <<"devices/sip_credentials">>, [{key, wh_json:get_value(<<"Username">>, EventJObj)}]) of
         {ok, [Result]} ->
-        	EndpointId = wh_json:get_value(<<"id">>, Result),
-        	{'ok', EndpointDoc} = couch_mgr:open_doc(AccountDb, EndpointId),
+            EndpointId = wh_json:get_value(<<"id">>, Result),
+            {'ok', EndpointDoc} = couch_mgr:open_doc(AccountDb, EndpointId),
             Exten = amimulator_util:endpoint_exten(EndpointDoc),
-    		Reg = cb_registrations:normalize_registration(EventJObj),
-    		ContactIP = wh_json:get_value(<<"contact_ip">>, Reg),
-    		ContactPort = wh_json:get_value(<<"contact_port">>, Reg),
+            Reg = cb_registrations:normalize_registration(EventJObj),
+            ContactIP = wh_json:get_value(<<"contact_ip">>, Reg),
+            ContactPort = wh_json:get_value(<<"contact_port">>, Reg),
 
-    		ami_sm:add_registration(AccountId, EndpointId, ContactIP, ContactPort),
+            ami_sm:add_registration(AccountId, EndpointId, ContactIP, ContactPort),
 
             Peer = <<"SIP/", Exten/binary>>,
             Payload = [[
@@ -105,8 +103,7 @@ handle_register(AccountId, EventJObj) ->
                 {<<"Time">>, <<"2">>}
             ]],
             amimulator_event_listener:publish_amqp_event({publish, Payload}, AccountId);
-        _ ->
-            ok
+        _ -> 'ok'
     end.
 
 handle_unregister(AccountId, EventJObj) ->
