@@ -2141,7 +2141,8 @@ find_endpoint_id(EP) ->
 find_endpoint_id(EP, 'undefined') -> wh_json:get_value(<<"Endpoint-ID">>, EP);
 find_endpoint_id(_EP, EPId) -> EPId.
 
--spec monitor_endpoint(wh_json:object(), ne_binary(), server_ref()) -> _.
+-spec monitor_endpoint(api_object(), ne_binary(), server_ref()) -> _.
+monitor_endpoint('undefined', _, _) -> 'ok';
 monitor_endpoint(EP, AccountId, AgentListener) ->
     %% Bind for outbound call requests
     acdc_agent_listener:add_endpoint_bindings(AgentListener
@@ -2160,7 +2161,7 @@ unmonitor_endpoint(EP, AccountId, AgentListener) ->
                                         ,find_username(EP)
                                        ),
     %% Inform us of device changes
-    catch gproc:unreg(?ENDPOINT_UPDATE_REG(AccountId, wh_doc:id(EP))),
+    catch gproc:unreg(?ENDPOINT_UPDATE_REG(AccountId, find_endpoint_id(EP))),
     catch gproc:unreg(?NEW_CHANNEL_REG(AccountId, find_username(EP))).
 
 -spec maybe_add_endpoint(ne_binary(), wh_json:object(), wh_json:objects(), ne_binary(), server_ref()) -> _.
@@ -2168,7 +2169,7 @@ maybe_add_endpoint(EPId, EP, EPs, AccountId, AgentListener) ->
     case lists:partition(fun(E) -> find_endpoint_id(E) =:= EPId end, EPs) of
         {[], _} ->
             lager:debug("endpoint ~s not in our list, adding it", [EPId]),
-            [begin monitor_endpoint(EP, AccountId, AgentListener), EP end | EPs];
+            [begin monitor_endpoint(convert_to_endpoint(EP, 'undefined'), AccountId, AgentListener), EP end | EPs];
         {_, _} -> EPs
     end.
 
@@ -2178,8 +2179,23 @@ maybe_remove_endpoint(EPId, EPs, AccountId, AgentListener) ->
         {[], _} -> EPs; %% unknown endpoint
         {[RemoveEP], EPs1} ->
             lager:debug("endpoint ~s in our list, removing it", [EPId]),
-            _ = unmonitor_endpoint(RemoveEP, AccountId, AgentListener),
+            _ = unmonitor_endpoint(convert_to_endpoint(RemoveEP, RemoveEP), AccountId, AgentListener),
             EPs1
+    end.
+
+-spec convert_to_endpoint(wh_json:object(), any()) ->
+                                 wh_json:object().
+convert_to_endpoint(EPDoc, Default) ->
+    Setters = [{fun whapps_call:set_account_id/2, wh_doc:account_id(EPDoc)}
+               ,{fun whapps_call:set_account_db/2, wh_doc:account_db(EPDoc)}
+               ,{fun whapps_call:set_owner_id/2, kz_device:owner_id(EPDoc)}
+               ,{fun whapps_call:set_resource_type/2, ?RESOURCE_TYPE_AUDIO}
+              ],
+
+    Call = whapps_call:exec(Setters, whapps_call:new()),
+    case cf_endpoint:build(wh_doc:id(EPDoc), [], Call) of
+        {'ok', EP} -> EP;
+        {'error', _} -> Default
     end.
 
 -spec get_endpoints(wh_json:objects(), server_ref(), whapps_call:call(), api_binary(), api_binary()) ->
