@@ -467,6 +467,7 @@ store_recording_meta(#state{call=Call
                            ,cdr_id=CdrId
                            ,interaction_id=InteractionId
                            ,url=Url
+                           ,extra_metadata=ExtraMetadata
                            }) ->
     CallId = kapps_call:call_id(Call),
     MediaDoc = kz_doc:update_pvt_parameters(
@@ -488,7 +489,11 @@ store_recording_meta(#state{call=Call
                      ,{<<"url">>, Url}
                      ,{<<"cdr_id">>, CdrId}
                      ,{<<"interaction_id">>, InteractionId}
+                     ,{<<"queue_id">>, kapps_call:custom_channel_var(<<"Queue-ID">>, Call)}
+                     ,{<<"language">>, kapps_call:language(Call)}
+                     ,{<<"custom_kvs">>, kapps_call:custom_kvs(Call)}
                      ,{<<"_id">>, DocId}
+                      | ExtraMetadata
                      ]))
                                            ,Db
                 ),
@@ -547,6 +552,8 @@ store_url(#state{doc_db=Db
                                   ,{field, <<"cdr_id">>}
                                   ,<<"&interaction_id=">>
                                   ,{field, <<"interaction_id">>}
+                                  ,<<"&recording_id=">>
+                                  ,{field, <<"_id">>}
                                   ]
                    },
     Handler = #{att_proxy => 'true'
