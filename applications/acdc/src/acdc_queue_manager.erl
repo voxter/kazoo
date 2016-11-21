@@ -243,7 +243,7 @@ handle_agents_available_req(JObj, Prop) ->
 
 -spec handle_queue_member_add(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_queue_member_add(JObj, Prop) ->
-    gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_add', JObj, props:get_value('queue', Prop)}).
+    gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_add', JObj}).
 
 -spec handle_queue_member_remove(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_queue_member_remove(JObj, Prop) ->
