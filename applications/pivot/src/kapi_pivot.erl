@@ -138,7 +138,7 @@ publish_succeeded(Target, JObj) ->
     {'ok', Payload} = kz_api:prepare_api_payload(JObj, ?PIVOT_SUCCEEDED_VALUES, fun succeeded/1),
     amqp_util:targeted_publish(Target, Payload).
 
--spec publish_failed(ne_binary(), ne_binary()) -> 'ok'.
+-spec publish_failed(ne_binary(), api_terms()) -> 'ok'.
 publish_failed(Target, JObj) ->
     {'ok', Payload} = kz_api:prepare_api_payload(JObj, ?PIVOT_FAILED_VALUES, fun failed/1),
     amqp_util:targeted_publish(Target, Payload).

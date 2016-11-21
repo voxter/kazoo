@@ -213,17 +213,19 @@ find_path(Req, Opts) ->
             {Magic, Req}
     end.
 
+-spec terminate(cowboy_req:req(), cb_context:context()) -> 'ok'.
 terminate(_Req, _Context) ->
     lager:debug("session finished").
 
+-spec rest_terminate(cowboy_req:req(), cb_context:context()) -> 'ok'.
 rest_terminate(Req, Context) ->
     rest_terminate(Req, Context, cb_context:method(Context)).
 
 rest_terminate(Req, Context, ?HTTP_OPTIONS) ->
     lager:info("OPTIONS request fulfilled in ~p ms"
-              ,[kz_util:elapsed_ms(cb_context:start(Context))]
-              ),
-    _ = api_util:finish_request(Req, Context);
+              ,[kz_util:elapsed_ms(cb_context:start(Context))]),
+    _ = api_util:finish_request(Req, Context),
+    'ok';
 rest_terminate(Req, Context, Verb) ->
     {ABin, AMem} = metrics(),
     {BBin, BMem} = cb_context:fetch(Context, 'metrics'),
@@ -231,9 +233,9 @@ rest_terminate(Req, Context, Verb) ->
               ,[Verb, kz_util:elapsed_ms(cb_context:start(Context))
                ,pretty_metric(AMem - BMem)
                ,pretty_metric(ABin - BBin)
-               ]
-              ),
-    _ = api_util:finish_request(Req, Context).
+               ]),
+    _ = api_util:finish_request(Req, Context),
+    'ok'.
 
 -spec pretty_metric(integer()) -> ne_binary().
 -spec pretty_metric(integer(), boolean()) -> ne_binary().
@@ -579,6 +581,7 @@ languages_provided(Req0, Context0) ->
             {cb_context:languages_provided(Context1) ++ [A], Req1, Context1}
     end.
 
+-spec charsets_provided(cowboy_req:req(), cb_context:context()) -> 'no_call'.
 charsets_provided(_Req, _Context) ->
     'no_call'.
 
@@ -878,20 +881,23 @@ maybe_flatten_jobj(Context) ->
                              )
     of
         [] ->
-            Routines = [fun(J) -> check_integrity(J) end
-                       ,fun(J) -> create_csv_header(J) end
-                       ,fun(J) -> json_objs_to_csv(J) end
+            Routines = [fun check_integrity/1
+                       ,fun create_csv_header/1
+                       ,fun json_objs_to_csv/1
                        ],
             lists:foldl(fun fold_over_funs/2, cb_context:resp_data(Context), Routines);
         Identifier ->
             Depth = kz_json:get_integer_value(<<"depth">>, cb_context:query_string(Context), 1),
             JObj = kz_json:flatten(cb_context:resp_data(Context), Depth, Identifier),
-            Routines = [fun(J) -> check_integrity(J) end
-                       ,fun(J) -> create_csv_header(J) end
-                       ,fun(J) -> json_objs_to_csv(J) end
+            Routines = [fun check_integrity/1
+                       ,fun create_csv_header/1
+                       ,fun json_objs_to_csv/1
                        ],
             lists:foldl(fun fold_over_funs/2, JObj, Routines)
     end.
+
+-spec fold_over_funs(fun((kz_json:object() | kz_json:objects()) -> kz_json:object() | kz_json:objects()), kz_json:object() | kz_json:objects()) ->
+                            kz_json:object() | kz_json:objects().
 fold_over_funs(F, J) -> F(J).
 
 -spec check_integrity(list()) -> kz_json:objects().
@@ -899,20 +905,23 @@ check_integrity(JObjs) ->
     Headers = get_headers(JObjs),
     check_integrity(JObjs, Headers, []).
 
--spec check_integrity(kz_json:objects(), ne_binaries(), kz_json:objects()) -> kz_json:objects().
+-spec check_integrity(kz_json:objects(), ne_binaries(), kz_json:objects()) ->
+                             kz_json:objects().
 check_integrity([], _, Acc) ->
     lists:reverse(Acc);
 check_integrity([JObj|JObjs], Headers, Acc) ->
-    NJObj = lists:foldl(
-              fun(Header, J) ->
-                      case kz_json:get_value(Header, J) of
-                          'undefined' ->
-                              kz_json:set_value(Header, <<>>, J);
-                          _ -> J
-                      end
-              end, JObj, Headers),
+    NJObj = lists:foldl(fun check_integrity_fold/2, JObj, Headers),
     NJObj1 = kz_json:from_list(lists:keysort(1, kz_json:to_proplist(NJObj))),
     check_integrity(JObjs, Headers, [NJObj1|Acc]).
+
+-spec check_integrity_fold(kz_json:path(), kz_json:object()) ->
+                                  kz_json:json_term().
+check_integrity_fold(Header, JObj) ->
+    case kz_json:get_value(Header, JObj) of
+        'undefined' ->
+            kz_json:set_value(Header, <<>>, JObj);
+        _ -> JObj
+    end.
 
 -spec get_headers(kz_json:objects()) -> ne_binaries().
 get_headers(JObjs) ->

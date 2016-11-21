@@ -244,6 +244,7 @@ to_props(Channel) ->
       ,{<<"loopback_leg_name">>, Channel#channel.loopback_leg_name}
       ,{<<"loopback_other_leg">>, Channel#channel.loopback_other_leg}
       ,{<<"callflow_id">>, Channel#channel.callflow_id}
+      ,{<<"is_onhold">>, Channel#channel.is_onhold}
       ]).
 
 -spec to_api_json(channel()) -> kz_json:object().
@@ -288,6 +289,7 @@ to_api_props(Channel) ->
       ,{<<"Loopback-Other-Leg">>, Channel#channel.loopback_other_leg}
       ,{<<"CallFlow-ID">>, Channel#channel.callflow_id}
       ,{<<"caller_id">>, Channel#channel.caller_id}
+      ,{<<"Is-On-Hold">>, Channel#channel.is_onhold}
       ]).
 
 -spec channel_ccvs(channel() | kz_json:object() | kz_proplist()) -> kz_proplist().
@@ -351,6 +353,7 @@ channel_ccvs(JObj) ->
 %%--------------------------------------------------------------------
 -spec init(list()) -> {'ok', state()}.
 init([Node, Options]) ->
+    process_flag('trap_exit', 'true'),
     kz_util:put_callid(Node),
     lager:info("starting new fs channel listener for ~s", [Node]),
     gen_server:cast(self(), 'bind_to_events'),
@@ -431,6 +434,10 @@ handle_info({_Fetch, _Section, _Something, _Key, _Value, ID, _Data}, #state{node
     {'noreply', State};
 handle_info({'option', K, V}, #state{options=Options}=State) ->
     {'noreply', State#state{options=props:set_value(K, V, Options)}};
+handle_info({'EXIT', _, 'noconnection'}, State) ->
+    {stop, {'shutdown', 'noconnection'}, State};
+handle_info({'EXIT', _, Reason}, State) ->
+    {stop, Reason, State};
 handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State}.

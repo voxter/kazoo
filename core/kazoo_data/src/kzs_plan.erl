@@ -11,6 +11,8 @@
 
 -export([plan/0, plan/1, plan/2, plan/3, flush/0]).
 
+-export([get_dataplan/2]).
+
 -define(IS_JSON_GUARD(Obj), is_tuple(Obj)
         andalso is_list(element(1, Obj))
        ).
@@ -72,6 +74,7 @@ get_dataplan(DBName) ->
         Else -> system_dataplan(DBName, Else)
     end.
 
+-spec get_dataplan(ne_binary(), api_ne_binary()) -> map().
 get_dataplan(DBName, 'undefined') ->
     get_dataplan(DBName);
 get_dataplan(DBName, DocType) ->

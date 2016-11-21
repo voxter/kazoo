@@ -28,14 +28,17 @@
                 ,conference_call_id :: api_binary()
                 ,early_bridge_payload :: kz_json:object() | 'undefined'
                }).
+-type state() :: #state{}.
 
 %%
 %% Public functions
 %%
 
+-spec start_link(pid(), amimulator_call:call()) -> startlink_ret().
 start_link(Super, Call) ->
     gen_fsm:start_link(?MODULE, [Super, Call], []).
 
+-spec start_link(pid(), amimulator_call:call(), 'initial') -> startlink_ret().
 start_link(Super, Call, 'initial') ->
     gen_fsm:start_link(?MODULE, [Super, Call, 'initial'], []).
 
@@ -47,14 +50,15 @@ new_call(FSM, Call) ->
 add_initial(FSM, Call) ->
     gen_fsm:send_event(FSM, {'add_initial', Call}).
 
-% -spec answer(pid(), amimulator_call:call()) -> 'ok'.
+-spec answer(pid(), ne_binary()) -> 'ok'.
 answer(FSM, CallId) ->
     gen_fsm:send_event(FSM, {'answer', CallId}).
 
+-spec bridge(pid(), kz_json:object()) -> 'ok'.
 bridge(FSM, EventJObj) ->
     gen_fsm:send_event(FSM, {'bridge', EventJObj}).
 
-% -spec destroy(pid(), api_binary(), amimulator_call:call()) -> 'ok'.
+-spec destroy(pid(), api_binary(), ne_binary()) -> 'ok'.
 destroy(FSM, Reason, CallId) ->
     gen_fsm:send_event(FSM, {'destroy', Reason, CallId}).
 
@@ -62,6 +66,7 @@ destroy(FSM, Reason, CallId) ->
 monitoring(FSM, Call) ->
     gen_fsm:sync_send_all_state_event(FSM, {'monitoring', amimulator_call:channel(Call)}).
 
+-spec accepts(pid(), ne_binary()) -> term().
 accepts(FSM, CallId) ->
     gen_fsm:sync_send_all_state_event(FSM, {'accepts', CallId}).
 
@@ -69,6 +74,7 @@ accepts(FSM, CallId) ->
 %% gen_fsm callbacks
 %%
 
+-spec init(list()) -> {'ok', 'pre_create' | 'created' | 'answered', state()}.
 init([Super, Call]) ->
     {'ok', 'pre_create', #state{supervisor=Super
                                 ,monitored_channel = amimulator_call:channel(Call)
@@ -77,10 +83,12 @@ init([Super, Call, 'initial']) ->
     lager:debug("catching up to correct start for call ~p", [amimulator_call:call_id(Call)]),
     initialize(Super, Call).
 
+-spec handle_event(any(), atom(), state()) -> handle_fsm_ret(state()).
 handle_event(Event, StateName, State) ->
     lager:debug("unhandled event in state ~s: ~p", [StateName, Event]),
     {'next_state', StateName, State}.
 
+-spec handle_sync_event(any(), {pid(),any()}, atom(), state()) -> handle_sync_event_ret(state()).
 handle_sync_event({'monitoring', Channel}, _From, StateName, #state{monitored_channel=Channel}=State) ->
     {'reply', 'true', StateName, State};
 handle_sync_event({'monitoring', _}, _From, StateName, State) ->
@@ -91,15 +99,18 @@ handle_sync_event(Event, _From, StateName, State) ->
     lager:debug("unhandled sync event in state ~s: ~p", [StateName, Event]),
     {'reply', 'ok', StateName, State}.
 
+-spec handle_info(any(), atom(), state()) -> handle_fsm_ret(state()).
 handle_info({'$gen_cast', _}, StateName, State) ->
     {'next_state', StateName, State};
 handle_info(Info, StateName, State) ->
     lager:debug("unhandled info in state ~s: ~p", [StateName, Info]),
     {'next_state', StateName, State}.
 
+-spec terminate(any(), atom(), state()) -> 'ok'.
 terminate(Reason, StateName, _) ->
     lager:debug("terminating in state ~s (~s)", [StateName, Reason]).
 
+-spec code_change(any(), atom(), state(), any()) -> {'ok', atom(), state()}.
 code_change(_, StateName, State, _) ->
     {'ok', StateName, State}.
 
@@ -107,6 +118,10 @@ code_change(_, StateName, State, _) ->
 %% gen_fsm states
 %%
 
+-spec pre_create({'new_call' | 'answer'
+                 ,amimulator_call:call() | ne_binary()}
+                ,state()
+                ) -> handle_fsm_ret(state()).
 pre_create({'new_call', Call}, #state{call_ids=CallIds}=State) ->
     CallId = amimulator_call:call_id(Call),
 
@@ -125,6 +140,8 @@ pre_create({'answer', CallId}, State) ->
     ami_sm:flag_early_answer(CallId),
     {'next_state', 'pre_create', State#state{answered=CallId}}.
 
+-spec created({'new_call' | 'add_initial' | 'answer' | 'bridge' | 'destroy'}
+             ,state()) -> handle_fsm_ret(state()).
 created({'new_call', Call}, #state{call_ids=CallIds}=State) ->
     CallId = amimulator_call:call_id(Call),
     {'next_state', 'created', State#state{call_ids = add_call_id(CallId, CallIds)}};
@@ -177,6 +194,8 @@ created({'destroy', Reason, CallId}, #state{monitored_channel=Channel
             {'next_state', 'created', State#state{call_ids=CallIds2}}
     end.
 
+-spec answered({'new_call' | 'add_initial' | 'answer' | 'bridge' | 'destroy'}
+              ,state()) -> handle_fsm_ret(state()).
 answered({'new_call', Call}, #state{call_ids=CallIds}=State) ->
     CallId = amimulator_call:call_id(Call),
     {'next_state', 'answered', State#state{call_ids = add_call_id(CallId, CallIds)}};

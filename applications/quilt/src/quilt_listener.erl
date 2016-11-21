@@ -55,6 +55,9 @@
     ]
 }]).
 
+-type state() :: [].
+
+-spec start_link() -> startlink_ret().
 start_link() ->
     gen_listener:start_link(?MODULE, [
         {'bindings', ?BINDINGS},
@@ -65,17 +68,21 @@ start_link() ->
 handle_quilt_event(JObj, _Props) ->
     handle_specific_event(kz_json:get_value(<<"Event-Name">>, JObj), JObj).
 
+-spec init([]) -> {'ok', []}.
 init([]) -> 
     {'ok', []}.
 
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call(Request, _From, State) ->
     lager:debug("unhandled call: ~p", [Request]),
     {'reply', {'error', 'not_implemented'}, State}.
 
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast(Msg, State) ->
     lager:debug("unhandled cast: ~p", [Msg]),
     {'noreply', State}.
 
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info(Info, State) ->
     case Info of
         {'EXIT', Pid, 'shutdown'} ->
@@ -86,13 +93,16 @@ handle_info(Info, State) ->
     end,
     {'noreply', State}.
 
+-spec handle_event(kz_json:object(), state()) -> gen_listener:handle_event_return().
 handle_event(_JObj, _State) ->
     {'reply', []}.
 
+-spec terminate(any(), state()) -> 'ok'.
 terminate(Reason, _State) ->
     lager:debug("~p listener on pid ~p terminating: ~p", [?MODULE, self(), Reason]),
     'ok'.
 
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
@@ -100,6 +110,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% event-specific handlers
 %%
 
+-spec handle_specific_event(ne_binary(), kz_json:object()) -> 'ok'.
 handle_specific_event(<<"waiting">>, JObj) ->
     CallId = kz_json:get_value(<<"Call-ID">>, JObj),
     case quilt_sup:retrieve_member_fsm(CallId) of

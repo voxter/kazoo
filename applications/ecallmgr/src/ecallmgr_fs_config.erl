@@ -51,14 +51,11 @@ start_link(Node, Options) ->
 %% @private
 %% @doc
 %% Initializes the server
-%%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
+-spec init([atom() | kz_proplist()]) -> {'ok', state()}.
 init([Node, Options]) ->
+    process_flag('trap_exit', 'true'),
     kz_util:put_callid(Node),
     lager:info("starting new fs config listener for ~s", [Node]),
     gen_server:cast(self(), 'bind_to_configuration'),
@@ -127,6 +124,10 @@ handle_info({_Fetch, _Section, _Something, _Key, _Value, ID, _Data}, #state{node
     {'ok', Resp} = ecallmgr_fs_xml:not_found(),
     _ = freeswitch:fetch_reply(Node, ID, 'configuration', iolist_to_binary(Resp)),
     {'noreply', State};
+handle_info({'EXIT', _, 'noconnection'}, State) ->
+    {stop, {'shutdown', 'noconnection'}, State};
+handle_info({'EXIT', _, Reason}, State) ->
+    {stop, Reason, State};
 handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State}.
@@ -396,11 +397,12 @@ fix_conference_profile(Resp) ->
 
 -spec fix_conference_profile(kz_json:path(), kz_json:object()) -> {kz_json:path(), kz_json:object()}.
 fix_conference_profile(Name, Profile) ->
+    [AccountId | _] = binary:split(Name, <<"_">>),
     Routines = [fun maybe_fix_profile_tts/1
                ,fun conference_sounds/1
                ,fun set_verbose_events/1
-               ,{fun kz_json:set_value/3, <<"caller-controls">>, <<"caller-controls">>}
-               ,{fun kz_json:set_value/3, <<"moderator-controls">>, <<"moderator-controls">>}
+               ,{fun kz_json:set_value/3, <<"caller-controls">>, <<AccountId/binary, "_caller-controls">>}
+               ,{fun kz_json:set_value/3, <<"moderator-controls">>, <<AccountId/binary, "_moderator-controls">>}
                ],
     {Name, kz_json:exec(Routines, Profile)}.
 

@@ -26,7 +26,7 @@ get_uri(Media, JObj) when is_binary(Media) ->
     kz_util:put_callid(JObj),
     Paths = [Path
              || Path <- binary:split(Media, <<"/">>, ['global', 'trim']),
-                (not kz_util:is_empty(Path))
+                not kz_util:is_empty(Path)
             ],
     get_uri(Paths, JObj);
 get_uri(Paths, JObj) ->
@@ -99,7 +99,7 @@ proxy_uri(JObj, #media_store_path{db = Db
 
 
 
--spec find_attachment(ne_binaries() | ne_binary()) ->
+-spec find_attachment(ne_binaries() | ne_binary() | kz_proplist()) ->
                              {'ok', media_store_path()} |
                              {'error', 'not_found'}.
 find_attachment(Media) when is_binary(Media) ->

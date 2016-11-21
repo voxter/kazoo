@@ -184,6 +184,8 @@
 %% @doc Starts the server
 %%--------------------------------------------------------------------
 -spec start_link(pid(), kz_json:object()) -> startlink_ret().
+-spec start_link(pid(), kz_json:object(), ne_binary(), ne_binary(), ne_binaries()) -> startlink_ret().
+-spec start_link(pid(), kapps_call:call(), ne_binary()) -> startlink_ret().
 start_link(Supervisor, AgentJObj) ->
     AgentId = kz_doc:id(AgentJObj),
     AcctId = account_id(AgentJObj),
@@ -211,18 +213,23 @@ start_link(Supervisor, ThiefCall, QueueId) ->
                            ,[Supervisor, ThiefCall, [QueueId]]
                            ).
 
+-spec stop(pid()) -> 'ok'.
 stop(Srv) -> gen_listener:cast(Srv, {'stop_agent', self()}).
 
 -spec member_connect_resp(pid(), kz_json:object()) -> 'ok'.
 member_connect_resp(Srv, ReqJObj) ->
     gen_listener:cast(Srv, {'member_connect_resp', ReqJObj}).
 
+-spec member_connect_retry(pid(), kz_json:object()) -> 'ok'.
 member_connect_retry(Srv, WinJObj) ->
     gen_listener:cast(Srv, {'member_connect_retry', WinJObj}).
 
 -spec agent_timeout(pid()) -> 'ok'.
 agent_timeout(Srv) -> gen_listener:cast(Srv, 'agent_timeout').
 
+-spec member_connect_accepted(pid()) -> 'ok'.
+-spec member_connect_accepted(pid(), ne_binary()) -> 'ok'.
+-spec member_connect_accepted(pid(), ne_binary(), kapps_call:call()) -> 'ok'.
 member_connect_accepted(Srv) ->
     gen_listener:cast(Srv, {'member_connect_accepted'}).
 member_connect_accepted(Srv, ACallId) ->
@@ -230,6 +237,7 @@ member_connect_accepted(Srv, ACallId) ->
 member_connect_accepted(Srv, ACallId, MemberCall) ->
     gen_listener:cast(Srv, {'member_connect_accepted', ACallId, MemberCall}).
 
+-spec monitor_connect_accepted(pid(), ne_binary()) -> 'ok'.
 monitor_connect_accepted(Srv, ACallId) ->
     gen_listener:cast(Srv, {'monitor_connect_accepted', ACallId}).
 
@@ -245,6 +253,7 @@ hangup_call(Srv) ->
 hangup_call(Srv, Call) ->
     gen_listener:cast(Srv, {'hangup_call', Call}).
 
+-spec monitor_call(pid(), kapps_call:call(), kz_json:object(), api_binary()) -> 'ok'.
 monitor_call(Srv, Call, WinJObj, RecordingUrl) ->
     gen_listener:cast(Srv, {'monitor_call', Call, WinJObj, RecordingUrl}).
 
@@ -276,12 +285,15 @@ unbind_from_events(Srv, CallId) ->
 rebind_events(Srv, OldCallId, NewCallId) ->
     gen_listener:cast(Srv, {'rebind_events', OldCallId, NewCallId}).
 
+-spec originate_execute(pid(), kz_json:object()) -> 'ok'.
 originate_execute(Srv, JObj) ->
     gen_listener:cast(Srv, {'originate_execute', JObj}).
 
+-spec originate_uuid(pid(), ne_binary(), ne_binary()) -> 'ok'.
 originate_uuid(Srv, UUID, CtlQ) ->
     gen_listener:cast(Srv, {'originate_uuid', UUID, CtlQ}).
 
+-spec outbound_call(pid(), ne_binary()) -> 'ok'.
 outbound_call(Srv, CallId) ->
     gen_listener:cast(Srv, {'outbound_call', CallId}).
 
@@ -293,8 +305,11 @@ send_agent_available(Srv) ->
 send_agent_busy(Srv) ->
     gen_listener:cast(Srv, 'send_agent_busy').
 
+-spec send_sync_req(pid()) -> 'ok'.
 send_sync_req(Srv) -> gen_listener:cast(Srv, {'send_sync_req'}).
 
+-spec send_sync_resp(pid(), text(), kz_json:object()) -> 'ok'.
+-spec send_sync_resp(pid(), text(), kz_json:object(), kz_proplist()) -> 'ok'.
 send_sync_resp(Srv, Status, ReqJObj) -> send_sync_resp(Srv, Status, ReqJObj, []).
 send_sync_resp(Srv, Status, ReqJObj, Options) ->
     gen_listener:cast(Srv, {'send_sync_resp', Status, ReqJObj, Options}).
@@ -302,29 +317,37 @@ send_sync_resp(Srv, Status, ReqJObj, Options) ->
 -spec config(pid()) -> config().
 config(Srv) -> gen_listener:call(Srv, 'config').
 
+-spec refresh_config(pid(), api_ne_binaries()) -> 'ok'.
 refresh_config(_, 'undefined') -> 'ok';
 refresh_config(Srv, Qs) -> gen_listener:cast(Srv, {'refresh_config', Qs}).
 
 -spec agent_info(pid(), kz_json:path()) -> kz_json:api_json_term().
 agent_info(Srv, Field) -> gen_listener:call(Srv, {'agent_info', Field}).
 
+-spec send_status_resume(pid()) -> 'ok'.
 send_status_resume(Srv) ->
     gen_listener:cast(Srv, {'send_status_update', 'resume'}).
 
+-spec add_acdc_queue(pid(), ne_binary()) -> 'ok'.
 add_acdc_queue(Srv, Q) ->
     gen_listener:cast(Srv, {'add_acdc_queue', Q}).
 
+-spec rm_acdc_queue(pid(), ne_binary()) -> 'ok'.
 rm_acdc_queue(Srv, Q) ->
     gen_listener:cast(Srv, {'rm_acdc_queue', Q}).
 
+-spec call_status_req(pid()) -> 'ok'.
+-spec call_status_req(pid(), ne_binary()) -> 'ok'.
 call_status_req(Srv) ->
     gen_listener:cast(Srv, 'call_status_req').
 call_status_req(Srv, CallId) ->
     gen_listener:cast(Srv, {'call_status_req', CallId}).
 
+-spec fsm_started(pid(), pid()) -> 'ok'.
 fsm_started(Srv, FSM) ->
     gen_listener:cast(Srv, {'fsm_started', FSM}).
 
+-spec add_endpoint_bindings(pid(), ne_binary(), api_ne_binary()) -> 'ok'.
 add_endpoint_bindings(_Srv, _Realm, 'undefined') ->
     lager:debug("ignoring adding endpoint bindings for undefined user @ ~s", [_Realm]);
 add_endpoint_bindings(Srv, Realm, User) ->
@@ -332,24 +355,31 @@ add_endpoint_bindings(Srv, Realm, User) ->
     gen_listener:add_binding(Srv, 'route', [{'realm', Realm}
                                            ,{'user', User}
                                            ]).
+
+-spec remove_endpoint_bindings(pid(), ne_binary(), ne_binary()) -> 'ok'.
 remove_endpoint_bindings(Srv, Realm, User) ->
     lager:debug("removing route bindings to ~p for endpoint ~s@~s", [Srv, User, Realm]),
     gen_listener:rm_binding(Srv, 'route', [{'realm', Realm}
                                           ,{'user', User}
                                           ]).
 
+-spec remove_cdr_urls(pid(), ne_binary()) -> 'ok'.
 remove_cdr_urls(Srv, CallId) -> gen_listener:cast(Srv, {'remove_cdr_urls', CallId}).
 
+-spec logout_agent(pid()) -> 'ok'.
 logout_agent(Srv) -> gen_listener:cast(Srv, 'logout_agent').
 
+-spec maybe_update_presence_id(pid(), api_ne_binary()) -> 'ok'.
 maybe_update_presence_id(_Srv, 'undefined') -> 'ok';
 maybe_update_presence_id(Srv, Id) ->
     gen_listener:cast(Srv, {'presence_id', Id}).
 
+-spec maybe_update_presence_state(pid(), api_ne_binary()) -> 'ok'.
 maybe_update_presence_state(_Srv, 'undefined') -> 'ok';
 maybe_update_presence_state(Srv, State) ->
     presence_update(Srv, State).
 
+-spec presence_update(pid(), api_ne_binary()) -> 'ok'.
 presence_update(_, 'undefined') -> 'ok';
 presence_update(Srv, PresenceState) ->
     gen_listener:cast(Srv, {'presence_update', PresenceState}).
@@ -385,6 +415,7 @@ id(Srv) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
+-spec init([atom() | agent() | ne_binaries()]) -> {'ok', state()}.
 init([Supervisor, Agent, Queues]) ->
     AgentId = agent_id(Agent),
     kz_util:put_callid(AgentId),
@@ -1379,10 +1410,13 @@ maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Number) ->
     kapi_resource:publish_originate_req(Prop),
     ACallIds.
 
+-spec outbound_call_id(kapps_call:call() | ne_binary(), ne_binary()) -> ne_binary().
 outbound_call_id(CallId, AgentId) when is_binary(CallId) ->
+    Hash = kz_util:to_hex_binary(erlang:md5(CallId)),
     Rnd = kz_util:rand_hex_binary(4),
-    <<(kz_util:to_hex_binary(erlang:md5(CallId)))/binary, "-", AgentId/binary, "-", Rnd/binary>>;
-outbound_call_id(Call, AgentId) -> outbound_call_id(kapps_call:call_id(Call), AgentId).
+    <<Hash/binary, "-", AgentId/binary, "-", Rnd/binary>>;
+outbound_call_id(Call, AgentId) ->
+    outbound_call_id(kapps_call:call_id(Call), AgentId).
 
 %%--------------------------------------------------------------------
 %% @doc Complete a callback to the callback number (in CCV)

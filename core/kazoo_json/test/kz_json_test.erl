@@ -20,8 +20,16 @@
 -ifdef(PROPER).
 
 is_json_object_proper_test_() ->
-    {"Runs kz_json PropEr tests for is_json_object/1",
-     {'timeout', 10000, [?_assertEqual([], proper:module(?MODULE))]}}.
+    {"Runs kz_json PropEr tests"
+    ,{'timeout'
+     ,10000
+     ,[?_assertEqual([], proper:module(?MODULE, [{'to_file', 'user'}
+                                                ,{'numtests', 500}
+                                                ]
+                                      ))
+      ]
+     }
+    }.
 
 prop_is_object() ->
     ?FORALL(JObj
@@ -55,8 +63,6 @@ prop_get_value() ->
                       end)
            ).
 
--define(DO_NOT_RUN_QC_SET_VALUE, true).
--ifndef(DO_NOT_RUN_QC_SET_VALUE).
 prop_set_value() ->
     ?FORALL({JObj, Key, Value}
            ,{object(), keys(), json_term()}
@@ -66,7 +72,6 @@ prop_set_value() ->
                           Value =:= kz_json:get_value(Key, JObj1)
                       end)
            ).
--endif.
 
 prop_to_proplist() ->
     ?FORALL(Prop, json_proplist(),
@@ -103,13 +108,25 @@ prop_to_proplist() ->
 -define(SP, kz_json:decode(<<"{\"plan\":{\"phone_numbers\":{\"did_us\":{\"discounts\":{\"cumulative\":{\"rate\":1}}}}}}">>)).
 -define(O, kz_json:decode(<<"{\"phone_numbers\":{\"did_us\":{\"discounts\":{\"cumulative\":{\"rate\":20}}}}}">>)).
 
-merge_overrides_test_() ->
+merge_recursive_overrides_test_() ->
     AP = kz_json:merge_recursive(?SP, kz_json:from_list([{<<"plan">>, ?O}])),
 
     Key = [<<"plan">>, <<"phone_numbers">>, <<"did_us">>, <<"discounts">>, <<"cumulative">>, <<"rate">>],
 
     [?_assertEqual(1, kz_json:get_value(Key, ?SP))
     ,?_assertEqual(20, kz_json:get_value(Key, AP))
+    ].
+
+merge_overrides_test_() ->
+    %% default merges left onto right
+    Left = kz_json:merge(fun kz_json:merge_left/2, ?SP, kz_json:from_list([{<<"plan">>, ?O}])),
+    Right = kz_json:merge(fun kz_json:merge_right/2, ?SP, kz_json:from_list([{<<"plan">>, ?O}])),
+
+    Key = [<<"plan">>, <<"phone_numbers">>, <<"did_us">>, <<"discounts">>, <<"cumulative">>, <<"rate">>],
+
+    [?_assertEqual(1, kz_json:get_value(Key, ?SP))
+    ,?_assertEqual(20, kz_json:get_value(Key, Right))
+    ,?_assertEqual(1, kz_json:get_value(Key, Left))
     ].
 
 is_empty_test_() ->

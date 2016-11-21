@@ -312,6 +312,13 @@ baseurl_oauth(OAuthJObj, URL, BaseUrl, Params) ->
             [oauth_header(URL, Params, ConsumerKey, ConsumerSecret, AccessToken, AccessSecret)]
     end.
 
+-spec oauth_header(ne_binary()
+                  ,kz_proplist()
+                  ,ne_binary()
+                  ,ne_binary()
+                  ,ne_binary()
+                  ,ne_binary()
+                  ) -> {string(), ne_binary()}.
 oauth_header(URL, CustomParams, ConsumerKey, ConsumerSecret, AccessToken, AccessSecret) ->
     OAuthParams = oauth_params(ConsumerKey, ConsumerSecret, AccessToken, AccessSecret),
     BaseParams = lists:ukeysort(1, OAuthParams ++ include_other_params(CustomParams)),
@@ -332,6 +339,8 @@ oauth_header(URL, CustomParams, ConsumerKey, ConsumerSecret, AccessToken, Access
     ), ","),
     {"Authorization", AuthString}.
 
+-spec oauth_params(ne_binary(), ne_binary(), ne_binary(), ne_binary()) ->
+                          kz_proplist().
 oauth_params(ConsumerKey, _ConsumerSecret, AccessToken, _AccessSecret) ->
     Nonce = binary_to_list(base64:encode(crypto:rand_bytes(32))),
     {MegaSecs, Secs, _} = os:timestamp(),
@@ -346,6 +355,7 @@ oauth_params(ConsumerKey, _ConsumerSecret, AccessToken, _AccessSecret) ->
         {"oauth_version", "1.0"}
     ].
 
+-spec include_other_params(kz_proplist()) -> kz_proplist().
 include_other_params(OtherParams) ->
     lists:foldl(fun(Key, Acc) ->
         Value = kz_json:get_value(Key, OtherParams),
@@ -357,6 +367,7 @@ include_other_params(OtherParams) ->
         end
     end, [], kz_json:get_keys(OtherParams)).
 
+-spec url_param_array(ne_binary(), kz_json:object()) -> kz_proplist().
 url_param_array(BaseKey, JsonValue) ->
     lists:foldl(fun(Key, Acc) ->
         Value = kz_json:get_value(Key, JsonValue),

@@ -36,16 +36,19 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+-spec init() -> ok.
 init() ->
-    [crossbar_bindings:bind(Binding, ?MODULE, F)
-     || {Binding, F} <- [{<<"*.allowed_methods.resource_selectors">>, 'allowed_methods'}
-                        ,{<<"*.resource_exists.resource_selectors">>, 'resource_exists'}
-                        ,{<<"*.validate.resource_selectors">>, 'validate'}
-                        ,{<<"*.execute.post.resource_selectors">>, 'post'}
-                        ,{<<"*.execute.delete.resource_selectors">>, 'delete'}
-                        ,{<<"*.authorize">>, 'authorize'}
-                        ]
-    ].
+    _ = [crossbar_bindings:bind(Binding, ?MODULE, F)
+         || {Binding, F} <- [{<<"*.allowed_methods.resource_selectors">>, 'allowed_methods'}
+                            ,{<<"*.resource_exists.resource_selectors">>, 'resource_exists'}
+                            ,{<<"*.validate.resource_selectors">>, 'validate'}
+                            ,{<<"*.execute.post.resource_selectors">>, 'post'}
+                            ,{<<"*.execute.delete.resource_selectors">>, 'delete'}
+                            ,{<<"*.authorize">>, 'authorize'}
+                            ]
+        ],
+    ok.
 
 -spec authorize(cb_context:context()) ->
                        boolean() | {'halt', cb_context:context()}.
@@ -258,14 +261,14 @@ summary(Context, Prefix, ViewName, Reduce) ->
     RespEnvelope = fix_envelope_start_keys(cb_context:resp_envelope(Context1), Prefix),
     cb_context:set_resp_envelope(Context1, RespEnvelope).
 
--spec build_start_key(cb_cntext:context(), api_binaries()) -> api_binaries().
+-spec build_start_key(cb_context:context(), api_binaries()) -> api_binaries().
 build_start_key(Context, PrefixKeys) ->
     case cb_context:req_value(Context, <<"start_key">>) of
         'undefined' -> PrefixKeys;
         StartKey -> build_key(PrefixKeys, StartKey)
     end.
 
--spec build_end_key(cb_cntext:context(), api_binaries()) -> api_binaries().
+-spec build_end_key(cb_context:context(), api_binaries()) -> api_binaries().
 build_end_key(Context, PrefixKeys) ->
     case cb_context:req_value(Context, <<"end_key">>) of
         'undefined' -> build_key(PrefixKeys, <<16#fff0/utf8>>);
@@ -273,7 +276,8 @@ build_end_key(Context, PrefixKeys) ->
     end.
 
 -spec build_key(api_binaries(), api_binary()) -> api_binaries().
-build_key(PrefixKeys, Suffix) -> lists:reverse([Suffix | lists:reverse(PrefixKeys)]).
+build_key(PrefixKeys, Suffix) ->
+    lists:reverse([Suffix | lists:reverse(PrefixKeys)]).
 
 -spec fix_envelope_start_keys(kz_json:object(), api_binaries()) -> kz_json:object().
 fix_envelope_start_keys(JObj, Prefix) ->
@@ -288,7 +292,8 @@ fix_envelope_start_keys(JObj, Prefix) ->
                         end
                 end
                ,JObj
-               ,[<<"start_key">>, <<"next_start_key">>]).
+               ,[<<"start_key">>, <<"next_start_key">>]
+               ).
 
 %%--------------------------------------------------------------------
 %% @private

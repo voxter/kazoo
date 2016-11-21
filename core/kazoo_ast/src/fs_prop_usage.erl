@@ -12,6 +12,7 @@
 -define(DEBUG(_Fmt, _Args), 'ok').
 %% -define(DEBUG(Fmt, Args), io:format([$~, $p, $  | Fmt], [?LINE | Args])).
 
+-spec to_header_file() -> ok.
 to_header_file() ->
     Usage = process(),
     write_usage_to_header(Usage).
@@ -464,7 +465,9 @@ arg_list_has_data_var(DataName, Aliases, [_H|T]) ->
 
 arg_to_key(?STRING(Value)) -> Value;
 arg_to_key(?BINARY_MATCH(Arg)) ->
-    kz_ast_util:binary_match_to_binary(Arg);
+    try kz_ast_util:binary_match_to_binary(Arg)
+    catch error:function_clause -> undefined
+    end;
 arg_to_key(?TUPLE([Key, _Value])) ->
     arg_to_key(Key);
 arg_to_key(?ATOM(Arg)) ->

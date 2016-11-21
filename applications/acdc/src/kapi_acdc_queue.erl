@@ -207,7 +207,7 @@ member_call_result_routing_key(Props) when is_list(Props) ->
 member_call_result_routing_key(JObj) ->
     AcctId = kz_json:get_value(<<"Account-ID">>, JObj),
     QueueId = kz_json:get_value(<<"Queue-ID">>, JObj, <<"*">>),
-    CallId = props:get_value(<<"Call-ID">>, JObj, <<"#">>),
+    CallId = kz_json:get_value(<<"Call-ID">>, JObj, <<"#">>),
     member_call_result_routing_key(AcctId, QueueId, CallId).
 
 member_call_result_routing_key(AcctId, QueueId, CallId) ->
@@ -556,6 +556,10 @@ agent_change_routing_key(AcctId, QueueId) ->
                        ,?AGENT_CHANGE_UNAVAILABLE
                        ]).
 
+-spec agent_change_available() -> ne_binary().
+-spec agent_change_ringing() -> ne_binary().
+-spec agent_change_busy() -> ne_binary().
+-spec agent_change_unavailable() -> ne_binary().
 agent_change_available() -> ?AGENT_CHANGE_AVAILABLE.
 agent_change_ringing() -> ?AGENT_CHANGE_RINGING.
 agent_change_busy() -> ?AGENT_CHANGE_BUSY.

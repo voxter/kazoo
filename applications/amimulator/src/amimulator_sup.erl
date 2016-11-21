@@ -16,18 +16,22 @@
 %% Public functions
 %%
 
+-spec start_link() -> startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?MODULE}, ?MODULE, []).
 
+-spec start_listeners(gen_tcp:socket()) -> 'ok'.
 start_listeners(ListenSocket) ->
     start_listeners(ListenSocket, 20).
 
+-spec start_listeners(gen_tcp:socket(), pos_integer()) -> 'ok'.
 start_listeners(ListenSocket, Count) ->
     lager:debug("Starting ~p socket listener processes", [Count]),
     [start_listener(ListenSocket, Num) || Num <- lists:seq(1, Count)],
     'ok'.
-    
+
 %% Launch a client handler process listening on the given socket
+-spec start_listener(gen_tcp:socket(), pos_integer()) -> sup_startchild_ret().
 start_listener(ListenSocket, Num) ->
     supervisor:start_child(?MODULE, {"amimulator_socket_listener-" ++ kz_util:to_list(Num)
                                      ,{'amimulator_socket_listener', 'start_link', [ListenSocket]}
@@ -88,7 +92,8 @@ stop_event_listener(_, {_, WorkerName}, _) ->
 %%
 %% supervisor callbacks
 %%
-        
+
+-spec init([]) -> sup_init_ret().
 init([]) ->
     RestartStrategy = 'one_for_one',
     MaxRestarts = 3,

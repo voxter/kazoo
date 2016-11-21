@@ -60,7 +60,9 @@ start_link(Node, Options) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
+-spec init([atom() | kz_proplist()]) -> {'ok', state()}.
 init([Node, Options]) ->
+    process_flag('trap_exit', 'true'),
     kz_util:put_callid(Node),
     lager:info("starting new fs route text listener for ~s", [Node]),
     gen_server:cast(self(), 'bind_to_chatplan'),
@@ -130,6 +132,10 @@ handle_info({'route', Section, <<"MESSAGE">>, _SubClass, _Context, FSId, MsgId, 
 handle_info({'route', Section, <<"CUSTOM">>, <<"KZ::", _/binary>>, _Context, FSId, MsgId, FSData}, #state{node=Node}=State) ->
     _ = kz_util:spawn(fun process_route_req/5, [Section, Node, FSId, MsgId, FSData]),
     {'noreply', State, 'hibernate'};
+handle_info({'EXIT', _, 'noconnection'}, State) ->
+    {stop, {'shutdown', 'noconnection'}, State};
+handle_info({'EXIT', _, Reason}, State) ->
+    {stop, Reason, State};
 handle_info(_Other, State) ->
     lager:debug("unhandled msg: ~p", [_Other]),
     {'noreply', State}.

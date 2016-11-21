@@ -244,19 +244,23 @@ move_to_vmbox(AccountId, Msgs, OldBoxId, NewBoxId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec copy_to_vmboxes(ne_binary(), ne_binaries(), ne_binary(), ne_binary() | ne_binaries()) ->
-                             dict:dict().
+                             kz_json:object().
 -spec copy_to_vmboxes(ne_binary(), ne_binaries(), ne_binary(), ne_binaries(), dict:dict()) ->
-                             dict:dict().
+                             kz_json:object().
 copy_to_vmboxes(AccountId, Ids, OldBoxId, ?NE_BINARY = NewBoxId) ->
     copy_to_vmboxes(AccountId, Ids, OldBoxId, [NewBoxId]);
 copy_to_vmboxes(AccountId, Ids, OldBoxId, NewBoxIds) ->
-    copy_to_vmboxes(AccountId, Ids, OldBoxId, NewBoxIds, dict:new()).
+    kz_json:from_list(
+      dict:to_list(
+        copy_to_vmboxes(AccountId, Ids, OldBoxId, NewBoxIds, dict:new())
+       )
+     ).
 
-copy_to_vmboxes(AccountId, Ids, OldBoxId, NewBoxIds, Copied) ->
-    lists:foldl(fun(Id, Acc) ->
-                        kvm_message:copy_to_vmboxes(AccountId, Id, OldBoxId, NewBoxIds, Acc)
+copy_to_vmboxes(AccountId, Ids, OldBoxId, NewBoxIds, CopiedDict) ->
+    lists:foldl(fun(Id, AccDict) ->
+                        kvm_message:copy_to_vmboxes(AccountId, Id, OldBoxId, NewBoxIds, AccDict)
                 end
-               ,Copied
+               ,CopiedDict
                ,Ids
                ).
 
@@ -353,7 +357,7 @@ normalize_bulk_results1(Method, BoxId, RetenTimestamp, [JObj | JObjs], Dict) ->
               end,
     normalize_bulk_results1(Method, BoxId, RetenTimestamp, JObjs, NewDict).
 
--spec is_prior_to_retention(pos_integer(), api_seconds()) -> boolean().
+-spec is_prior_to_retention(non_neg_integer(), api_seconds()) -> boolean().
 is_prior_to_retention(0, _RetenTimestamp) -> 'false';
 is_prior_to_retention(_UtcSeconds, 'undefined') -> 'false';
 is_prior_to_retention(UtcSeconds, RetenTimestamp) when UtcSeconds > RetenTimestamp -> 'false';
@@ -365,10 +369,10 @@ is_prior_to_retention(_UtcSeconds, _RetenTimestamp) -> 'true'.
 %% @end
 %%--------------------------------------------------------------------
 -spec normalize_count(kz_json:objects()) -> kz_json:object().
--spec normalize_count_fold(kz_json:object(), kz_json:object()) -> kz_json:object().
 normalize_count(ViewRes) ->
     lists:foldl(fun normalize_count_fold/2, kz_json:new(), ViewRes).
 
+-spec normalize_count_fold(kz_json:object(), kz_json:object()) -> kz_json:object().
 normalize_count_fold(M, Acc) ->
     VMBoxId = kz_json:get_value([<<"key">>, ?BOX_ID_KEY_INDEX], M),
     Folder = kz_json:get_value([<<"key">>, ?FOLDER_KEY_INDEX], M),

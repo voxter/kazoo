@@ -29,7 +29,7 @@
                ,iodevice :: file:io_device()
                ,logip :: ne_binary()
                ,logport :: pos_integer()
-               ,timer :: reference()
+               ,timer :: api_reference()
                ,counter :: pos_integer()
                }
        ).
@@ -42,9 +42,9 @@
 %%--------------------------------------------------------------------
 %% @doc Starts the server
 %%--------------------------------------------------------------------
--spec start_link(list()) -> startlink_ret().
-start_link(Args) ->
-    ServerName = ci_parsers_util:make_name(Args),
+-spec start_link([ci_parsers_util:parser_args()]) -> startlink_ret().
+start_link([Parser]=Args) ->
+    ServerName = ci_parsers_util:make_name(Parser),
     gen_server:start_link({'local', ServerName}, ?MODULE, Args, []).
 
 %%%===================================================================
@@ -62,6 +62,7 @@ start_link(Args) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
+-spec init({'parser_args', file:filename_all(), ne_binary(), pos_integer()}) -> {'ok', state()}.
 init({'parser_args', LogFile, LogIP, LogPort} = Args) ->
     ParserId = ci_parsers_util:make_name(Args),
     _ = kz_util:put_callid(ParserId),
@@ -72,6 +73,7 @@ init({'parser_args', LogFile, LogIP, LogPort} = Args) ->
                   ,logip = LogIP
                   ,logport = LogPort
                   ,counter = 1
+                  ,timer = 'undefined'
                   },
     self() ! 'start_parsing',
     {'ok', State}.

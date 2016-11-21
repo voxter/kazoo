@@ -192,17 +192,20 @@
 -spec start_link(atom()) -> startlink_ret().
 -spec start_link(atom(), kz_proplist()) -> startlink_ret().
 start_link(Node) -> start_link(Node, []).
-start_link(Node, Options) ->
+start_link(Node, Options) when is_atom(Node) ->
     QueueName = <<(kz_util:to_binary(Node))/binary
                   ,"-"
                   ,(kz_util:to_binary(?MODULE))/binary
                 >>,
-    gen_listener:start_link(?SERVER, [{'responders', ?RESPONDERS}
-                                     ,{'bindings', ?BINDINGS(Node)}
-                                     ,{'queue_name', QueueName}
-                                     ,{'queue_options', ?QUEUE_OPTIONS}
-                                     ,{'consume_options', ?CONSUME_OPTIONS}
-                                     ], [Node, Options]).
+    gen_listener:start_link(?SERVER
+                           ,[{'responders', ?RESPONDERS}
+                            ,{'bindings', ?BINDINGS(Node)}
+                            ,{'queue_name', QueueName}
+                            ,{'queue_options', ?QUEUE_OPTIONS}
+                            ,{'consume_options', ?CONSUME_OPTIONS}
+                            ]
+                           ,[Node, Options]
+                           ).
 
 -spec sync_channels(fs_node()) -> 'ok'.
 sync_channels(Srv) ->
@@ -293,14 +296,11 @@ fetch_timeout(_Node) ->
 %% @private
 %% @doc
 %% Initializes the server
-%%
-%% @spec init(Args) -> {ok, State} |
-%%                     {ok, State, Timeout} |
-%%                     ignore |
-%%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
+-spec init([atom() | kz_proplist()]) -> {'ok', state()}.
 init([Node, Options]) ->
+    process_flag('trap_exit', 'true'),
     kz_util:put_callid(Node),
     process_flag('priority', 'high'), %% Living dangerously!
     lager:info("starting new fs node listener for ~s", [Node]),
@@ -308,7 +308,6 @@ init([Node, Options]) ->
     sync_channels(self()),
     PidRef = run_start_cmds(Node, Options),
     lager:debug("running start commands in ~p", [PidRef]),
-
     {'ok', #state{node=Node
                  ,options=Options
                  ,start_cmds_pid_ref=PidRef
@@ -394,6 +393,10 @@ handle_info({'bgerror', _Job, _Result}, State) ->
     {'noreply', State};
 handle_info({'DOWN', Ref, 'process', Pid, _Reason}, #state{start_cmds_pid_ref={Pid, Ref}}=State) ->
     {'noreply', State#state{start_cmds_pid_ref='undefined'}};
+handle_info({'EXIT', _, 'noconnection'}, State) ->
+    {stop, {'shutdown', 'noconnection'}, State};
+handle_info({'EXIT', _, Reason}, State) ->
+    {stop, Reason, State};
 handle_info(_Msg, State) ->
     lager:debug("unhandled message: ~p", [_Msg]),
     {'noreply', State}.
@@ -452,10 +455,10 @@ code_change(_OldVsn, State, _Extra) ->
                        {'error', 'retry'}.
 
 -spec run_start_cmds(atom(), kz_proplist()) -> pid_ref().
+-spec run_start_cmds(atom(), kz_proplist(), pid()) -> any().
 run_start_cmds(Node, Options) ->
     kz_util:spawn_monitor(fun run_start_cmds/3, [Node, Options, self()]).
 
--spec run_start_cmds(atom(), kz_proplist(), pid()) -> any().
 run_start_cmds(Node, Options, Parent) ->
     kz_util:put_callid(Node),
     timer:sleep(ecallmgr_config:get_integer(<<"fs_cmds_wait_ms">>, 5 * ?MILLISECONDS_IN_SECOND, Node)),
@@ -463,7 +466,7 @@ run_start_cmds(Node, Options, Parent) ->
     run_start_cmds(Node, Options, Parent, is_restarting(Node)).
 
 -spec is_restarting(atom()) -> boolean().
-is_restarting(Node) ->
+is_restarting(Node) when is_atom(Node) ->
     case freeswitch:api(Node, 'status', <<>>) of
         {'ok', Status} ->
             [UP|_] = binary:split(Status, <<"\n">>),
@@ -503,8 +506,7 @@ run_start_cmds(Node, Options, Parent, 'false') ->
 run_start_cmds(Node, Options, Parent, Cmds) ->
     Res = process_cmds(Node, Options, Cmds),
 
-    case
-        is_list(Res)
+    case is_list(Res)
         andalso [R || R <- Res, was_not_successful_cmd(R)]
     of
         [] -> sync(Parent);

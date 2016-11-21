@@ -28,7 +28,7 @@
 -export([is_node_up/1, is_node_up/2]).
 -export([build_bridge_string/1, build_bridge_string/2]).
 -export([build_channel/1]).
--export([build_simple_channels/1]).
+-export([build_bridge_channels/1, build_simple_channels/1]).
 -export([create_masquerade_event/2, create_masquerade_event/3]).
 -export([media_path/1, media_path/2, media_path/3, media_path/4
         ,lookup_media/4
@@ -295,10 +295,11 @@ map_fs_path_to_sip_profile(FsPath, NetworkMap) ->
                                              kz_network_utils:verify_cidr(FsPath, K)
                                      end, NetworkMap),
     case kz_json:get_values(SIPInterfaceObj) of
-        [] -> 'undefined';
-        [V|_] -> kz_json:get_ne_value(<<"custom_sip_interface">>, V)
+        {[], _Keys} -> 'undefined';
+        {[V|_], _Keys} -> kz_json:get_ne_value(<<"custom_sip_interface">>, V)
     end.
 
+-spec conference_channel_vars(kz_proplist()) -> kz_proplist().
 conference_channel_vars(Props) ->
     [conference_channel_var_map(KV) || KV <- conference_channel_vars(Props, [])].
 
@@ -977,11 +978,12 @@ append_channel_vars(Contact, #bridge_endpoint{channel_vars=ChannelVars}) ->
     list_to_binary([ChannelVars, Contact]).
 
 %%--------------------------------------------------------------------
-%% @private
+%% @public
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
 -spec create_masquerade_event(ne_binary(), ne_binary()) -> ne_binary().
+-spec create_masquerade_event(ne_binary(), ne_binary(), boolean()) -> ne_binary().
 create_masquerade_event(Application, EventName) ->
     create_masquerade_event(Application, EventName, 'true').
 

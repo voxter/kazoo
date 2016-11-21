@@ -254,8 +254,8 @@ find_agent_call_ids(Call) ->
             end, [], RespJObjs)
     end.
 
-% -spec
-% -spec
+-spec fork_agent_call_leg1(amimulator_call:call(), amimulator_call:call()) ->
+                                  amimulator_call:call().
 fork_agent_call_leg1(SipAgentCall, Call) ->
     fork_agent_call_leg1(amimulator_call:answered(SipAgentCall), SipAgentCall, Call).
 
@@ -284,8 +284,8 @@ fork_agent_call_leg1(_, SipAgentCall, Call) ->
                ],
     lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, SipAgentCall, Updaters).
 
-% -spec
-% -spec
+-spec fork_agent_call_leg2(amimulator_call:call(), amimulator_call:call()) ->
+                                  amimulator_call:call().
 fork_agent_call_leg2(SipAgentCall, Call) ->
     fork_agent_call_leg2(amimulator_call:answered(SipAgentCall), SipAgentCall, Call).
 
@@ -392,6 +392,7 @@ queue_number(AccountDb, QueueId) ->
             hd(Value)
     end.
 
+-spec maybe_leave_conference(ne_binary()) -> list().
 maybe_leave_conference(CallId) ->
     case ami_sm:conf_cache(CallId) of
         'undefined' ->
@@ -859,7 +860,7 @@ maybe_leave_conference(CallId) ->
 
 
 
-
+-spec find_id_number(ne_binary(), ne_binary()) -> {'ok', ne_binary()} | {'error', 'not_found'}.
 find_id_number(Id, AccountDb) ->
     {ok, Results} = kz_datamgr:get_results(AccountDb, <<"callflows/crossbar_listing">>),
     maybe_id_in_callflows(Id, Results, AccountDb).
@@ -909,7 +910,8 @@ recurse_to_child_callflow(Id, Flow) ->
    
 
 
-
+-spec queue_for_number(ne_binary(), ne_binary()) ->
+                              {'ok', kz_json:object()} | {'error', atom()}.
 queue_for_number(Number, AccountDb) ->
     case kz_datamgr:get_results(AccountDb, <<"callflow/listing_by_number">>, [{key, Number}]) of
         {ok, []} ->

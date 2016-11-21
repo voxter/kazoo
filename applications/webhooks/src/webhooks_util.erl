@@ -77,11 +77,11 @@ from_json(Hook) ->
     jobj_to_rec(Hook).
 
 -spec to_json(webhook()) -> kz_json:object().
-to_json(Hook) ->
+to_json(#webhook{}=Hook) ->
     kz_json:from_list(
       [{<<"_id">>, Hook#webhook.id}
       ,{<<"uri">>, Hook#webhook.uri}
-      ,{<<"http_verb">>, Hook#webhook.http_verb}
+      ,{<<"http_verb">>, kz_util:to_binary(Hook#webhook.http_verb)}
       ,{<<"retries">>, Hook#webhook.retries}
       ,{<<"account_id">>, Hook#webhook.account_id}
       ,{<<"include_subaccounts">>, Hook#webhook.include_subaccounts}
@@ -92,7 +92,7 @@ to_json(Hook) ->
 -spec find_webhooks(ne_binary(), api_binary()) -> webhooks().
 find_webhooks(_HookEvent, 'undefined') -> [];
 find_webhooks(HookEvent, AccountId) ->
-    case kz_account:fetch(AccountId) of
+    case kz_account:fetch(AccountId, 'accounts') of
         {'ok', JObj} ->
             Accounts = kz_account:tree(JObj) -- [AccountId],
             find_webhooks(HookEvent, AccountId, Accounts);
@@ -442,7 +442,7 @@ load_hook(Srv, WebHook) ->
 jobj_to_rec(Hook) ->
     #webhook{id = hook_id(Hook)
             ,uri = kzd_webhook:uri(Hook)
-            ,http_verb = kzd_webhook:verb(Hook)
+            ,http_verb = kz_util:to_atom(kzd_webhook:verb(Hook), 'true')
             ,hook_event = hook_event(kzd_webhook:event(Hook))
             ,hook_id = kz_doc:id(Hook)
             ,retries = kzd_webhook:retries(Hook)

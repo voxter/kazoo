@@ -153,6 +153,7 @@ start_link(Super, AccountId, QueueId) ->
                            ,[Super, AccountId, QueueId]
                            ).
 
+-spec handle_member_call(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_member_call(JObj, Props) ->
     'true' = kapi_acdc_queue:member_call_v(JObj),
     _ = kz_util:put_callid(JObj),
@@ -213,6 +214,7 @@ start_queue_call(JObj, Props, Call) ->
 handle_member_call_success(JObj, Prop) ->
     gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_remove', kz_json:get_value(<<"Call-ID">>, JObj)}).
 
+-spec handle_member_call_cancel(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_member_call_cancel(JObj, Props) ->
     kz_util:put_callid(JObj),
     lager:debug("cancel call ~p", [JObj]),
@@ -223,6 +225,7 @@ handle_member_call_cancel(JObj, Props) ->
                        ),
     gen_listener:cast(props:get_value('server', Props), {'member_call_cancel', K, JObj}).
 
+-spec handle_agent_change(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_agent_change(JObj, Prop) ->
     'true' = kapi_acdc_queue:agent_change_v(JObj),
     Server = props:get_value('server', Prop),
@@ -279,8 +282,10 @@ config(Srv) -> gen_listener:call(Srv, 'config').
 -spec current_agents(server_ref()) -> ne_binaries().
 current_agents(Srv) -> gen_listener:call(Srv, 'current_agents').
 
+-spec status(pid()) -> ne_binaries().
 status(Srv) -> gen_listener:call(Srv, 'status').
 
+-spec refresh(pid(), kz_json:object()) -> 'ok'.
 refresh(Mgr, QueueJObj) -> gen_listener:cast(Mgr, {'refresh', QueueJObj}).
 
 strategy(Srv) -> gen_listener:call(Srv, 'strategy').
@@ -288,6 +293,9 @@ next_winner(Srv) -> gen_listener:call(Srv, 'next_winner').
 
 agents_available(Srv) -> gen_listener:call(Srv, 'agents_available').
 
+-spec pick_winner(pid(), kz_json:objects()) ->
+                         'undefined' |
+                         {kz_json:objects(), kz_json:objects()}.
 pick_winner(Srv, Resps) -> pick_winner(Srv, Resps, strategy(Srv), next_winner(Srv)).
 
 -spec callback_number(pid(), ne_binary()) -> api_binary().
@@ -302,6 +310,7 @@ callback_number(Srv, CallId) ->
 %% @private
 %% @doc Initializes the server
 %%--------------------------------------------------------------------
+-spec init([pid() | kz_json:object() | ne_binary()]) -> {'ok', mgr_state()}.
 init([Super, QueueJObj]) ->
     AccountId = kz_doc:account_id(QueueJObj),
     QueueId = kz_doc:id(QueueJObj),
@@ -1156,6 +1165,10 @@ queue_media_list(#state{position_media=PositionMedia
     ,{<<"estimated_wait_time_media">>, EstimatedWaitTimeMedia}
     ].
 
+-spec announce_position_loop(pid(), kapps_call:call(), ne_binary()
+                            ,{boolean(), boolean()}, non_neg_integer()
+                            ,proplist(), non_neg_integer() | 'undefined'
+                            ) -> no_return().
 announce_position_loop(Srv, Call, QueueId, AnnouncesEnabled, AnnouncementsTimer, Media, LastAverage) ->
     Position = gen_listener:call(Srv, {'queue_position', kapps_call:call_id(Call)}),
     NewAverage = announce_position(Call, QueueId, Position, AnnouncesEnabled, Media, LastAverage),

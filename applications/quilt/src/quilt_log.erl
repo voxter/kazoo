@@ -16,6 +16,7 @@
 %% public functions
 %%
 
+-spec handle_event(kz_json:object()) -> 'ok' | {'error', term()}.
 handle_event(JObj) ->
     Event = {kz_json:get_value(<<"Event-Category">>, JObj), kz_json:get_value(<<"Event-Name">>, JObj)},
     lager:debug("processing event: ~p, ~p", [Event, JObj]),

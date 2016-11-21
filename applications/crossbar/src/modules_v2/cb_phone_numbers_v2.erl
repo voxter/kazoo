@@ -72,6 +72,7 @@
 %%% API
 %%%===================================================================
 
+-spec init() -> ok.
 init() ->
     _ = crossbar_bindings:bind(<<"v2_resource.authenticate">>, ?MODULE, 'authenticate'),
     _ = crossbar_bindings:bind(<<"v2_resource.authorize">>, ?MODULE, 'authorize'),
@@ -81,7 +82,8 @@ init() ->
     _ = crossbar_bindings:bind(<<"v2_resource.validate.phone_numbers">>, ?MODULE, 'validate'),
     _ = crossbar_bindings:bind(<<"v2_resource.execute.put.phone_numbers">>, ?MODULE, 'put'),
     _ = crossbar_bindings:bind(<<"v2_resource.execute.post.phone_numbers">>, ?MODULE, 'post'),
-    crossbar_bindings:bind(<<"v2_resource.execute.delete.phone_numbers">>, ?MODULE, 'delete').
+    _ = crossbar_bindings:bind(<<"v2_resource.execute.delete.phone_numbers">>, ?MODULE, 'delete'),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -465,7 +467,7 @@ maybe_find_port_number(Context, Number, 'true') ->
     end.
 
 %% @private
--spec port_number_summary(kz_json:object(), cb_context:context(), boolean()) -> boolean().
+-spec port_number_summary(kz_json:object(), cb_context:context(), boolean()) -> cb_context:context().
 port_number_summary(PhoneNumber, Context, 'true') ->
     crossbar_util:response(PhoneNumber, Context);
 port_number_summary(_PhoneNumber, Context, 'false') ->
@@ -570,9 +572,14 @@ normalize_view_results(JObj, Acc) ->
 
 %% @private
 -spec normalize_port_view_result(kz_json:object()) -> kz_json:object().
+-spec normalize_port_view_result(kz_json:key(), kz_json:json_term()) -> kz_json:object().
 normalize_port_view_result(JObj) ->
     Number = kz_json:get_value([<<"key">>, ?PORT_NUMBER_KEY_INDEX], JObj),
     Properties = kz_json:get_value(<<"value">>, JObj),
+
+    normalize_port_view_result(Number, Properties).
+
+normalize_port_view_result(Number, Properties) ->
     kz_json:from_list([{Number, Properties}]).
 
 %%--------------------------------------------------------------------

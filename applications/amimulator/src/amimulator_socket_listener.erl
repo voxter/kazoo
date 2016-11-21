@@ -15,11 +15,13 @@
                 ,event_mask = 'on' :: list() | 'on' | 'off'
                 ,challenge
                }).
+-type state() :: #state{}.
 
 %%
 %% Public functions
 %%
 
+-spec start_link(gen_tcp:socket()) -> startlink_ret().
 start_link(Socket) ->
     gen_server:start_link(?MODULE, Socket, []).
 
@@ -31,6 +33,7 @@ login(AccountId) ->
 %% gen_server and gen_tcp callbacks
 %%
 
+-spec init(gen_tcp:socket()) -> {'ok', state()}.
 init(Socket) ->
     process_flag('trap_exit', 'true'),
     %% Random seed used to change md5 challenge
@@ -40,11 +43,13 @@ init(Socket) ->
     gen_server:cast(self(), 'accept'),
     {'ok', #state{listen_socket=Socket}}.
 
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call(Request, _From, State) ->
     lager:debug("unhandled call"),
     {'stop', {'unknown_call', Request}, State}.
 
 %% Start the listener waiting for socket accept
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast('accept', #state{listen_socket=Socket}=State) ->
     case gen_tcp:accept(Socket) of
         {'ok', AcceptSocket} ->
@@ -94,6 +99,7 @@ handle_cast(Event, State) ->
     {'noreply', State}.
     
 %% Route socket data to command processor
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info({'tcp', _Socket, Data}, #state{bundle=Bundle
                                            ,account_id=AccountId
                                            ,event_mask=EventMask
@@ -129,6 +135,7 @@ handle_info({'tcp_error', _Socket, _}, State) ->
 handle_info(_Info, State) ->
     {'noreply', State}.
 
+-spec terminate(any(), state()) -> 'ok'.
 terminate('shutdown', #state{accept_socket=AcceptSocket}) ->
 	% TODO: actually close these accept sockets on restart
     case AcceptSocket of
@@ -144,6 +151,7 @@ terminate(Reason, #state{account_id=AccountId}=State) ->
     amimulator_sup:unregister_event_listener(AccountId, self()),
     terminate('shutdown', State).
 
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 

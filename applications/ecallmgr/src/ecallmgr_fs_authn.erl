@@ -61,7 +61,9 @@ start_link(Node, Options) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
+-spec init([atom() | kz_proplist()]) -> {'ok', state()}.
 init([Node, Options]) ->
+    process_flag('trap_exit', 'true'),
     kz_util:put_callid(Node),
     lager:info("starting new fs authn listener for ~s", [Node]),
     gen_server:cast(self(), 'bind_to_directory'),
@@ -134,6 +136,10 @@ handle_info({'fetch', _Section, _Something, _Key, _Value, Id, ['undefined' | _Pr
               freeswitch:fetch_reply(Node, Id, 'directory', Resp)
       end),
     {'noreply', State};
+handle_info({'EXIT', _, 'noconnection'}, State) ->
+    {stop, {'shutdown', 'noconnection'}, State};
+handle_info({'EXIT', _, Reason}, State) ->
+    {stop, Reason, State};
 handle_info(_Info, State) ->
     lager:debug("unhandled msg: ~p", [_Info]),
     {'noreply', State}.
@@ -168,6 +174,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+-spec handle_directory_lookup(ne_binary(), kz_proplist(), atom()) -> 'ok' |
+                                                                     fs_handlecall_ret().
 handle_directory_lookup(Id, Props, Node) ->
     kz_util:put_callid(Id),
     case props:get_value(<<"sip_auth_method">>, Props) of

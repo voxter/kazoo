@@ -31,6 +31,8 @@
 start_link() ->
     supervisor:start_link({'local', ?MODULE}, ?MODULE, []).
 
+-spec handle_metaflow(kz_json:object(), kz_proplist()) ->
+                             sup_startchild_ret() | 'ok'.
 handle_metaflow(JObj, Props) ->
     CallId = kz_json:get_value([<<"Call">>, <<"Call-ID">>], JObj),
     create_or_update_call(pid_for_callid(CallId), JObj, Props).

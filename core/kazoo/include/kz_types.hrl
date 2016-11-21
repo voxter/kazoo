@@ -239,6 +239,7 @@
         ,<<"CHANNEL_PROGRESS_MEDIA">>,<<"CHANNEL_REPLACED">>
         ,<<"CHANNEL_TRANSFEREE">>,<<"CHANNEL_TRANSFEROR">>
         ,<<"CHANNEL_BRIDGE">>, <<"CHANNEL_UNBRIDGE">>
+        ,<<"CHANNEL_HOLD">>, <<"CHANNEL_UNHOLD">>
         ,<<"DETECTED_TONE">>,<<"DTMF">>
         ,<<"LEG_CREATED">>, <<"LEG_DESTROYED">>
         ,<<"RECORD_START">>,<<"RECORD_STOP">>
@@ -386,7 +387,7 @@
 -type kz_node() :: #kz_node{}.
 -type kz_nodes() :: [kz_node()].
 
--type task_return() :: 'ok' | ne_binary() | kz_csv:row() | [kz_csv:row()].
+-type task_return() :: 'ok' | api_ne_binary() | kz_csv:row() | [kz_csv:row()].
 -type task_iterator() :: 'init' | 'stop' | any().
 
 -define(KAZOO_TYPES_INCLUDED, 'true').

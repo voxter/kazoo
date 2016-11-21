@@ -112,6 +112,7 @@ running_apps_list() ->
         Resp -> lists:sort([App || {App, _Desc, _Vsn} <- Resp])
     end.
 
+-spec app_running(atom()) -> boolean().
 app_running(AppName) ->
     case [App
           || App <- running_apps_list(),

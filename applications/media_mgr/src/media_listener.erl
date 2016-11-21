@@ -47,16 +47,15 @@ start_link() ->
                                                      ]}
                                      ], []).
 
+-spec handle_media_req(kz_json:object(), kz_proplist()) -> kz_amqp_worker:cast_return().
 handle_media_req(JObj, _Props) ->
     'true' = kapi_media:req_v(JObj),
     _ = kz_util:put_callid(JObj),
-    lager:debug("recv media req for msg id: ~s", [kz_json:get_value(<<"Msg-ID">>, JObj)]),
+    lager:debug("recv media req for msg id: ~s", [kz_api:msg_id(JObj)]),
     MediaName = kz_json:get_value(<<"Media-Name">>, JObj),
     case kz_media_url:playback(MediaName, JObj) of
-        {'error', ErrorMessage} ->
-            send_error_resp(JObj, ErrorMessage);
-        StreamURL ->
-            send_media_resp(JObj, StreamURL)
+        {'error', ErrorMessage} -> send_error_resp(JObj, ErrorMessage);
+        StreamURL -> send_media_resp(JObj, StreamURL)
     end.
 
 %%%===================================================================
@@ -74,6 +73,7 @@ handle_media_req(JObj, _Props) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
+-spec init([]) -> {'ok', state()}.
 init([]) ->
     lager:debug("starting media_mgr listener"),
     {'ok', #state{}}.
@@ -158,7 +158,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
--spec send_error_resp(kz_json:object(), ne_binary()) -> 'ok'.
+-spec send_error_resp(kz_json:object(), atom() | ne_binary()) ->
+                             kz_amqp_worker:cast_return().
 send_error_resp(JObj, ErrMsg) ->
     MediaName = kz_json:get_value(<<"Media-Name">>, JObj),
     Error = [{<<"Media-Name">>, MediaName}
@@ -170,9 +171,10 @@ send_error_resp(JObj, ErrMsg) ->
     lager:debug("sending error reply ~s for ~s", [ErrMsg, MediaName]),
     ServerId = kz_json:get_value(<<"Server-ID">>, JObj),
     Publisher = fun(P) -> kapi_media:publish_error(ServerId, P) end,
-    kapps_util:amqp_pool_send(Error, Publisher).
+    kz_amqp_worker:cast(Error, Publisher).
 
--spec send_media_resp(kz_json:object(), ne_binary()) -> 'ok'.
+-spec send_media_resp(kz_json:object(), ne_binary()) ->
+                             kz_amqp_worker:cast_return().
 send_media_resp(JObj, StreamURL) ->
     lager:debug("media stream URL: ~s", [StreamURL]),
     Resp = [{<<"Media-Name">>, kz_json:get_value(<<"Media-Name">>, JObj)}
@@ -182,4 +184,4 @@ send_media_resp(JObj, StreamURL) ->
            ],
     ServerId = kz_json:get_value(<<"Server-ID">>, JObj),
     Publisher = fun(P) -> kapi_media:publish_resp(ServerId, P) end,
-    kapps_util:amqp_pool_send(Resp, Publisher).
+    kz_amqp_worker:cast(Resp, Publisher).

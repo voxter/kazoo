@@ -54,6 +54,7 @@ start_link(Node, Options) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
+-spec init([atom() | kz_proplist()]) -> {'ok', state()}.
 init([Node, Props]) ->
     kz_util:put_callid(Node),
     self() ! 'initialize_pinger',
@@ -115,7 +116,7 @@ handle_info('initialize_pinger', #state{node=Node, options=Props}=State) ->
         end,
     GracePeriod = kz_util:to_integer(ecallmgr_config:get(<<"node_down_grace_period">>, 10 * ?MILLISECONDS_IN_SECOND)),
     erlang:send_after(GracePeriod, self(), {'flush_channels', Node}),
-    self() ! 'check_node_status',
+    erlang:send_after(3 * ?MILLISECONDS_IN_SECOND, self(), 'check_node_status'),
     {'noreply', State};
 handle_info({'flush_channels', Node}, State) ->
     lager:info("node ~s has been down past the grace period, flushing channels", [Node]),

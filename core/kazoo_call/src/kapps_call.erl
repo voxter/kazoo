@@ -177,6 +177,8 @@
 -type call() :: #kapps_call{}.
 -export_type([call/0]).
 
+-export_type([kapps_api_std_return/0]).
+
 -type kapps_helper_function() :: fun((api_binary(), call()) -> api_binary()).
 
 -define(SPECIAL_VARS, [{<<"Caller-ID-Name">>, #kapps_call.caller_id_name}
@@ -918,6 +920,7 @@ bridge_id(#kapps_call{bridge_id=BridgeId}) -> BridgeId.
 set_language(Language, #kapps_call{}=Call) when is_binary(Language) ->
     Call#kapps_call{language=Language}.
 
+-spec ccvs(call()) -> kz_json:object().
 ccvs(#kapps_call{ccvs=CCVs}) ->
 	CCVs.
 
@@ -1021,8 +1024,8 @@ custom_channel_vars(#kapps_call{ccvs=CCVs}) ->
 set_custom_sip_header(Key, Value, #kapps_call{sip_headers=SHs}=Call) ->
     Call#kapps_call{sip_headers=kz_json:set_value(Key, Value, SHs)}.
 
--spec custom_sip_header(kz_json:path(), call()) -> kz_json:json_term().
--spec custom_sip_header(kz_json:path(), kz_json:json_term(), call()) -> kz_json:json_term().
+-spec custom_sip_header(kz_json:path(), call()) -> kz_json:api_json_term().
+-spec custom_sip_header(kz_json:path(), Default, call()) -> kz_json:json_term() | Default.
 custom_sip_header(Key, #kapps_call{}=Call) ->
     custom_sip_header(Key, 'undefined', Call).
 custom_sip_header(Key, Default, #kapps_call{sip_headers=SHs}) ->
@@ -1072,8 +1075,8 @@ kvs_erase(Key, #kapps_call{kvs=Dict}=Call) ->
 -spec kvs_flush(call()) -> call().
 kvs_flush(#kapps_call{}=Call) -> Call#kapps_call{kvs=orddict:new()}.
 
--spec kvs_fetch(kz_json:path(), call()) -> any().
--spec kvs_fetch(kz_json:path(), Default, call()) -> any() | Default.
+-spec kvs_fetch(any(), call()) -> any().
+-spec kvs_fetch(any(), Default, call()) -> any() | Default.
 kvs_fetch(Key, Call) -> kvs_fetch(Key, 'undefined', Call).
 kvs_fetch(Key, Default, #kapps_call{kvs=Dict}) ->
     try orddict:fetch(kz_util:to_binary(Key), Dict)

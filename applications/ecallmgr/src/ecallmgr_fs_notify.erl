@@ -264,8 +264,10 @@ ensure_contact_user(OriginalContact, Username, Realm) ->
 %% Initializes the server
 %% @end
 %%--------------------------------------------------------------------
+-spec init([atom() | kz_proplist()]) -> {'ok', state()}.
 init([Node, Options]) ->
-    put(callid, Node),
+    process_flag('trap_exit', 'true'),
+    kz_util:put_callid(Node),
     lager:debug("starting new ecallmgr notify process"),
     gproc:reg({'p', 'l', 'fs_notify'}),
     {'ok', #state{node=Node, options=Options}}.
@@ -313,6 +315,10 @@ handle_cast(_Msg, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_info(any(), state()) -> handle_info_ret_state(state()).
+handle_info({'EXIT', _, 'noconnection'}, State) ->
+    {stop, {'shutdown', 'noconnection'}, State};
+handle_info({'EXIT', _, Reason}, State) ->
+    {stop, Reason, State};
 handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State}.

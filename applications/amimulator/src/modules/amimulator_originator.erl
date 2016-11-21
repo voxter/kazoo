@@ -14,7 +14,9 @@
 -include("../amimulator.hrl").
 
 -record(state, {}).
+-type state() :: #state{}.
 
+-spec start_link() -> startlink_ret().
 start_link() ->
     gen_listener:start_link({'local', ?MODULE}
     	                    ,?MODULE
@@ -22,14 +24,17 @@ start_link() ->
                             ,[]
 	                       ).
 
+-spec init([]) -> {'ok', state()}.
 init([]) ->
     lager:debug("AMI: Started originator for handling AMI dials ~p", [self()]),
     {'ok', #state{}}.
 
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
     lager:debug("AMI: unhandled call"),
     {'reply', {'error', 'not_implemented'}, State}.
 
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast({"originate", Props}, State) ->
 	dial(update_props(Props)),
 	{'noreply', State};
@@ -430,15 +435,19 @@ send_originate_execute(JObj, Q) ->
            ],
     kapi_dialplan:publish_originate_execute(kz_json:get_value(<<"Server-ID">>, JObj), Prop).
 
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info(_Info, State) ->
     lager:debug("AMI: unhandled info"),
     {'noreply', State}.
 
+-spec handle_event(kz_json:object(), state()) -> gen_listener:handle_event_return().
 handle_event(_JObj, _State) ->
     {'reply', []}.
 
+-spec terminate(any(), state()) -> 'ok'.
 terminate(Reason, _State) ->
     lager:debug("AMI: Originator on pid ~p terminating: ~p", [self(), Reason]).
 
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.

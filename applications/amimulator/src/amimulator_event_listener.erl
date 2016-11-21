@@ -38,11 +38,13 @@
                 ,prune_timer_pid :: api_pid()
                 ,extra_props = [] :: proplist()
                }).
+-type state() :: #state{}.
 
 %%
 %% Public functions
 %%
 
+-spec start_link(ne_binary()) -> startlink_ret().
 start_link(AccountId) ->
     Props = [{"AccountId", AccountId}],
     {Bindings, Responders} = load_bindings(Props),
@@ -69,6 +71,7 @@ unregister(Listener, Consumer) ->
 account_id(Listener) ->
     gen_listener:call(Listener, 'account_id').
 
+-spec handle_amqp_event(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_amqp_event(EventJObj, Props) ->
     ParsedEvents = case kz_json:get_value(<<"Events">>, EventJObj) of
         [{Event}] ->
@@ -88,6 +91,7 @@ handle_amqp_event(EventJObj, Props) ->
             'ok'
     end.
 
+-spec publish_amqp_event({atom(), list()}, ne_binary()) -> 'ok'.
 publish_amqp_event({_, []}, _) ->
     lager:debug("not publishing empty payload"),
     'ok';
@@ -107,6 +111,7 @@ amqp_event(Prop) when is_list(Prop) ->
 %% gen_listener callbacks
 %%
 
+-spec init([ne_binary()]) -> {'ok', state()}.
 init([AccountId]) ->
     lager:debug("event listener started with pid ~p", [self()]),
     amqp_util:new_exchange(?EXCHANGE_AMI, ?TYPE_AMI),
@@ -116,12 +121,14 @@ init([AccountId]) ->
     gen_listener:cast(self(), {'init_modules', AccountId}),
     {'ok', #state{account_id=AccountId}}.
 
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call('account_id', _From, #state{account_id=AccountId}=State) ->
     {'reply', AccountId, State};
 handle_call(_Request, _From, State) ->
     lager:debug("unhandled call"),
     {'reply', {'error', 'not_implemented'}, State}.
 
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast({'get_module_extra_props', AccountId}, State) ->
     Props = lists:foldl(fun(Module, Acc) ->
         case erlang:function_exported(Module, 'get_extra_props', 1) of
@@ -168,12 +175,14 @@ handle_cast(_Msg, State) ->
     lager:debug("unhandled cast"),
     {'noreply', State}.
 
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info(?HOOK_EVT(_AccountId, _EventType, JObj), State) ->
     amimulator_call_hook:handle_event(JObj),
     {'noreply', State};
 handle_info(_Info, State) ->
     {'noreply', State}.
 
+-spec handle_event(kz_json:object(), state()) -> gen_listener:handle_event_return().
 handle_event(_JObj, #state{account_id=AccountId
                            ,pids=Pids
                            ,extra_props=ExtraProps
@@ -183,6 +192,7 @@ handle_event(_JObj, #state{account_id=AccountId
                | ExtraProps
               ]}.
 
+-spec terminate(any(), state()) -> 'ok'.
 terminate('normal', #state{prune_timer_pid=PrunePid}) ->
     stop_prune_timer(PrunePid),
     'ok';
@@ -190,6 +200,7 @@ terminate(Reason, #state{prune_timer_pid=PrunePid}) ->
     stop_prune_timer(PrunePid),
     lager:debug("terminating: ~p", [Reason]).
 
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 

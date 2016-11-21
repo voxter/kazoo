@@ -16,10 +16,13 @@
 
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
+-type state() :: #state{}.
+
 %%
 %% Public functions
 %%
 
+-spec start_link(state()) -> startlink_ret().
 start_link(Agent) ->
     gen_fsm:start_link(?MODULE, Agent, []).
 
@@ -27,14 +30,17 @@ start_link(Agent) ->
 %% gen_fsm callbacks
 %%
 
+-spec init(state()) -> {'ok', 'started', state()}.
 init(Agent) ->
     process_flag('trap_exit', 'true'),
     {'ok', 'started', Agent}.
 
+-spec handle_event(any(), atom(), state()) -> handle_fsm_ret(state()).
 handle_event(Event, StateName, State) ->
     lager:debug("unhandled event ~p from current state of ~s with state record: ~p", [Event, StateName, State]),
     {'next_state', StateName, State}.
 
+-spec handle_sync_event(any(), {pid(),any()}, atom(), state()) -> handle_sync_event_ret(state()).
 handle_sync_event({'agentlogin', JObj}, _From, 'started', _State) ->
     _ = kz_util:spawn('quilt_log', 'handle_event', [JObj]),
     {'reply', 'ok', 'ready', #state{member_call_id='undefined'}};
@@ -84,6 +90,7 @@ handle_sync_event(Event, _From, StateName, State) ->
     lager:debug("unhandled sync event ~p from current state of ~s with state record: ~p", [Event, StateName, State]),
     {'reply', 'ok', StateName, State}.
 
+-spec handle_info(any(), atom(), state()) -> handle_fsm_ret(state()).
 handle_info({'$gen_cast', _}, StateName, State) ->
     {'next_state', StateName, State};
 handle_info({'EXIT', _Pid, _Reason}, StateName, State) ->
@@ -92,9 +99,11 @@ handle_info(Info, StateName, State) ->
     lager:debug("unhandled info in state ~s: ~p", [StateName, Info]),
     {'next_state', StateName, State}.
 
+-spec terminate(any(), atom(), state()) -> 'ok'.
 terminate(Reason, StateName, _) ->
     lager:debug("terminating in state ~s (~s)", [StateName, Reason]).
 
+-spec code_change(any(), atom(), state(), any()) -> {'ok', atom(), state()}.
 code_change(_, StateName, State, _) ->
     {'ok', StateName, State}.
 

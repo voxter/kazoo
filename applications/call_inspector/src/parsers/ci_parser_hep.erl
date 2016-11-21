@@ -39,9 +39,9 @@
 %%--------------------------------------------------------------------
 %% @doc Starts the server
 %%--------------------------------------------------------------------
--spec start_link(list()) -> startlink_ret().
-start_link(Args) ->
-    ServerName = ci_parsers_util:make_name(Args),
+-spec start_link([ci_parsers_util:parser_args()]) -> startlink_ret().
+start_link([Parser]=Args) ->
+    ServerName = ci_parsers_util:make_name(Parser),
     gen_server:start_link({'local', ServerName}, ?MODULE, Args, []).
 
 %%%===================================================================
@@ -59,6 +59,7 @@ start_link(Args) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
+-spec init({'parser_args', ne_binary(), pos_integer()}) -> {'ok', state()}.
 init({'parser_args', IP, Port} = Args) ->
     ParserId = ci_parsers_util:make_name(Args),
     _ = kz_util:put_callid(ParserId),

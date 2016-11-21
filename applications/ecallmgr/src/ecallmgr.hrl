@@ -92,6 +92,7 @@
                  ,loopback_other_leg :: api_binary() | '_'
                  ,callflow_id :: api_binary() | '_'
                  ,caller_id :: api_binary() | '_'
+                 ,is_onhold = 'false' :: boolean() | '_'
                  }).
 
 -type channel() :: #channel{}.
@@ -346,6 +347,7 @@
                    ,['CHANNEL_BRIDGE', 'CHANNEL_UNBRIDGE', 'CHANNEL_EXECUTE_COMPLETE']
                    ,['CHANNEL_DATA','CALL_UPDATE', 'CALL_SECURE']
                    ,['PLAYBACK_START', 'PLAYBACK_STOP']
+                   ,['CHANNEL_HOLD', 'CHANNEL_UNHOLD']
                    ]).
 
 -define(FS_SOFIA_TRANSFER_EVENTS, ['sofia::transferor'

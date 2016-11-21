@@ -13,6 +13,7 @@
         ]).
 -export([init/1]).
 
+-spec start_link() -> startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?MODULE}, ?MODULE, []).
 
@@ -24,19 +25,20 @@ relay_new_call(Call) ->
     end,
     relay_new_call(FSM2, Call).
 
-% -spec relay_answer() -> 'ok'.
+-spec relay_answer(ne_binary()) -> 'ok'.
 relay_answer(CallId) ->
     lists:foreach(fun(Pid) ->
         amimulator_call_fsm:answer(Pid, CallId)
     end, find_call_handlers(CallId)).
 
+-spec relay_bridge(kz_json:object()) -> 'ok'.
 relay_bridge(EventJObj) ->
     CallId = kz_json:get_value(<<"Call-ID">>, EventJObj),
     lists:foreach(fun(Pid) ->
         amimulator_call_fsm:bridge(Pid, EventJObj)
     end, find_call_handlers(CallId)).
 
-% -spec relay_destroy(api_binary(), amimulator_call:call()) -> 'ok'.
+-spec relay_destroy(api_binary(), ne_binary()) -> 'ok'.
 relay_destroy(Reason, CallId) ->
     lists:foreach(fun(Pid) ->
         amimulator_call_fsm:destroy(Pid, Reason, CallId)
@@ -53,6 +55,7 @@ initial_call(Call) ->
 %% supervisor callbacks
 %%
 
+-spec init([]) -> sup_init_ret().
 init([]) ->
     RestartStrategy = 'simple_one_for_one',
     MaxRestarts = 3,

@@ -23,6 +23,7 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {table_id :: integer()}).
+-type state() :: #state{}.
 
 %%%===================================================================
 %%% API
@@ -35,6 +36,7 @@
 %% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
+-spec start_link() -> startlink_ret().
 start_link() ->
     gen_server:start_link({'local', ?SERVER}, ?MODULE, [], []).
 
@@ -57,6 +59,7 @@ register(Call, RecordingJObj) ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
+-spec init([]) -> {'ok', state()}.
 init([]) ->
     process_flag('trap_exit', 'true'),
     TabId = ets:new('map', []),
@@ -76,6 +79,7 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call({'register', Call, RecordingJObj}, _From, #state{table_id=TabId}=State) ->
     case ets:lookup(TabId, kapps_call:call_id(Call)) of
         [] ->
@@ -102,6 +106,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast(_Msg, State) ->
     {'noreply', State}.
 
@@ -115,6 +120,7 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info({'EXIT', Pid, _Reason}, #state{table_id=TabId}=State) ->
     ets:match_delete(TabId, {'$1', Pid}),
     {'noreply', State};
@@ -132,6 +138,7 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
+-spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, _State) ->
     'ok'.
 
@@ -143,6 +150,7 @@ terminate(_Reason, _State) ->
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 

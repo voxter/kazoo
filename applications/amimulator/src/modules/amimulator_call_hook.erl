@@ -18,25 +18,31 @@
 %% Public functions
 %%
 
+-spec init(ne_binary()) -> 'ok'.
 init(AccountId) ->
     kz_hooks:register(AccountId).
 
+-spec bindings(kz_proplist()) -> kz_proplist().
 bindings(Props) ->
     AccountId = props:get_value("AccountId", Props),
     [{'route', [{'realm', get_realm(AccountId)}]}].
 
+-spec responders(kz_proplist()) -> kz_proplist().
 responders(_Props) ->
     [{<<"dialplan">>, <<"route_req">>}].
 
+-spec get_extra_props(ne_binary()) -> 'ok' | proplist().
 get_extra_props(AccountId) ->
     case kz_datamgr:get_results(kz_util:format_account_id(AccountId, 'encoded'), <<"callflows/crossbar_listing">>) of
         {'ok', JObjs} -> extract_featurecodes(JObjs);
         {'error', E} -> lager:debug("could not open callflows/crossbar_listing to get featurecodes (~p)", [E])
     end.
 
+-spec handle_event(kz_json:object()) -> 'ok'.
 handle_event(EventJObj) ->
     handle_event(EventJObj, []).
 
+-spec handle_event(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_event(EventJObj, Props) ->
     {_EventType, EventName} = kz_util:get_event_type(EventJObj),
     handle_specific_event(EventName, EventJObj, Props).

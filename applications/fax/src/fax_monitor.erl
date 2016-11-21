@@ -62,6 +62,7 @@ start_link() ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
+-spec init([]) -> {'ok', state(), kz_timeout()}.
 init([]) ->
     _ = kz_util:spawn(fun cleanup_jobs/0),
     {'ok', #state{}, ?POLLING_INTERVAL}.
@@ -175,8 +176,7 @@ maybe_start_account('false', AccountId) ->
 
 -spec cleanup_jobs() -> 'ok'.
 cleanup_jobs() ->
-    ViewOptions = [{<<"key">>, kz_util:to_binary(node())}],
-    case kz_datamgr:get_results(?KZ_FAXES_DB, <<"faxes/processing_by_node">>, ViewOptions) of
+    case kz_datamgr:get_results(?KZ_FAXES_DB, <<"faxes/processing_by_node">>) of
         {'ok', JObjs} ->
             _ = [begin
                      DocId = kz_doc:id(JObj),

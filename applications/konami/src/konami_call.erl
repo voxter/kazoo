@@ -24,10 +24,13 @@
                 ,endpoint_numbers = [] :: kz_proplist()
                 ,endpoint_patterns = [] :: kz_proplist()
                }).
+-type state() :: #state{}.
 
+-spec start_link(kz_json:object(), kz_proplist()) -> startlink_ret().
 start_link(JObj, Props) ->
     gen_server:start_link(?MODULE, [JObj, Props], []).
 
+-spec init(list()) -> {'ok', state()}.
 init([JObj, Props]) ->
     process_flag('trap_exit', 'true'),
     EndpointId = kz_json:get_value(<<"Endpoint-ID">>, JObj),
@@ -35,18 +38,23 @@ init([JObj, Props]) ->
     lager:debug("started new konami call for endpoint ~s on call ~s", [EndpointId, CallId]),
     init_state(JObj, Props).
 
+-spec call_id(pid()) -> term().
 call_id(Srv) ->
     gen_server:call(Srv, 'get_call_id').
 
+-spec update(pid(), kz_json:object(), kz_proplist()) -> 'ok'.
 update(Srv, JObj, Props) ->
     gen_server:cast(Srv, {'update', JObj, Props}).
 
+-spec numbers(pid(), ne_binary()) -> term().
 numbers(Srv, EndpointId) ->
     gen_server:call(Srv, {'get_numbers', EndpointId}).
 
+-spec patterns(pid(), ne_binary()) -> term().
 patterns(Srv, EndpointId) ->
     gen_server:call(Srv, {'get_patterns', EndpointId}).
-    
+
+-spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
 handle_call('get_call_id', _, #state{call_id=CallId}=State) ->
     {'reply', CallId, State};
 handle_call({'get_numbers', EndpointId}, _, #state{endpoint_numbers=Ns}=State) ->
@@ -55,7 +63,8 @@ handle_call({'get_patterns', EndpointId}, _, #state{endpoint_patterns=Ps}=State)
     {'reply', props:get_value(EndpointId, Ps), State};
 handle_call(_Request, _From, State) ->
     {'noreply', State}.
-    
+
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).  
 handle_cast({'update', JObj, _Props}, #state{code_fsm_pid=FSM
                                              ,endpoint_numbers=Ns
                                              ,endpoint_patterns=Ps
@@ -70,18 +79,21 @@ handle_cast({'update', JObj, _Props}, #state{code_fsm_pid=FSM
 handle_cast(_Request, State) ->
     {'noreply', State}.
 
+-spec handle_info(any(), state()) -> handle_info_ret_state(state()).
 handle_info({'EXIT', FSM, Reason}, #state{code_fsm_pid=FSM}=State) ->
     lager:debug("going to die alongside my baby"),
     {'stop', Reason, State};
 handle_info(_Info, State) ->
     {'noreply', State}.
-    
+
+-spec terminate(any(), state()) -> 'ok'.
 terminate('normal', _) ->
     'ok';
 terminate(Reason, _State) ->
     lager:debug("terminating (~p)", [Reason]),
     'ok'.
-    
+
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 

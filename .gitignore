@@ -54,3 +54,4 @@ compile_commands.json
 /applications/pivot/doc/kazoocon2016.tex
 /doc/kazoocon/*.pdf
 /doc/kazoocon/*.tex
+*.coverdata

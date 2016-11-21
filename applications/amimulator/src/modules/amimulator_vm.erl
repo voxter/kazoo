@@ -8,9 +8,11 @@
 %% Public functions
 %%
 
+-spec init(ne_binary()) -> 'ok'.
 init(_AccountId) ->
     ok.
 
+-spec bindings(kz_proplist()) -> kz_proplist().
 bindings(Props) ->
     [
         {notifications, [
@@ -19,11 +21,13 @@ bindings(Props) ->
         ]}
     ].
 
+-spec responders(kz_proplist()) -> kz_proplist().
 responders(_Props) ->
     [
         {<<"notification">>, <<"voicemail_saved">>}
     ].
 
+-spec handle_event(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_event(EventJObj, _Props) ->
     {_EventType, EventName} = kz_util:get_event_type(EventJObj),
     handle_specific_event(EventName, EventJObj).

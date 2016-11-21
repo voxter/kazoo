@@ -9,6 +9,10 @@
 -define(AMI_DB, <<"ami">>).
     
 %% Handle a payload sent as an AMI command
+-spec handle(binary(), ne_binary(), pos_integer()) ->
+                    {'ok', {kz_proplist(), 'n'}}
+                    | {'logoff', 'ok'} | kz_proplist()
+                    | {'error', 'no_action'}.
 handle(Payload, AccountId, 'undefined') ->
     Props = amimulator_util:parse_payload(Payload),
     handle_event(update_props(Props, AccountId));
@@ -37,6 +41,10 @@ handle_event(Props) ->
 % TODO: add AMI username lookup db initialization
 % TODO: validate md5 key on login
 % TODO: validate secret mode login (secret in TCP payload)
+-spec handle_event(string(), kz_proplist()) ->
+                          {'ok', {kz_proplist(), 'n'}}
+                          | {'logoff', 'ok'} | kz_proplist()
+                          | {'error', 'no_action'}.
 handle_event("login", Props) ->
     Username = proplists:get_value(<<"Username">>, Props),
     Secret = proplists:get_value(<<"Secret">>, Props),
@@ -1081,6 +1089,7 @@ command(CommandName, Props) ->
         <<"--END COMMAND--\r\n\r\n">>
     ], raw}.
 
+-spec parse_command(string()) -> string().
 parse_command(Command) ->
 	parse_command(Command, [], []).
 

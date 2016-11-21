@@ -8,9 +8,11 @@
 %% Public functions
 %%
 
+-spec init(ne_binary()) -> 'ok'.
 init(_AccountId) ->
     ok.
 
+-spec bindings(kz_proplist()) -> kz_proplist().
 bindings(Props) ->
     AccountId = props:get_value("AccountId", Props),
     [
@@ -19,9 +21,11 @@ bindings(Props) ->
         ]}
     ].
 
+-spec responders(kz_proplist()) -> kz_proplist().
 responders(_Props) ->
     [{<<"conference">>, <<"participants_event">>}].
 
+-spec handle_event(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_event(EventJObj, Props) ->
     AccountId = props:get_value(<<"AccountId">>, Props),
     {_EventType, EventName} = kz_util:get_event_type(EventJObj),

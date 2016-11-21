@@ -27,6 +27,9 @@ handle(Data, Call) ->
     cf_exe:set_call(Call2),
     cf_exe:continue(Call2).
 
+-spec get_kv(ne_binary(), kapps_call:call()) -> kz_json:json_term() | 'undefined'.
+-spec get_kv(ne_binary(), ne_binary(), kapps_call:call()) ->
+                    kz_json:json_term() | 'undefined'.
 get_kv(Key, Call) ->
     get_kv(?COLLECTION_KVS, Key, Call).
 
@@ -109,7 +112,8 @@ set_collection(Collection, Key, Value, Call) ->
         kz_json:set_value(Collection, NewCollection, Collections),
         Call
     ).
-    
+
+-spec add_kvs_to_props(kz_proplist(), kapps_call:call()) -> kz_proplist().
 add_kvs_to_props(Props, Call) ->
     case kz_json:get_value(<<"kvs_mode">>, get_collection(?COLLECTION_MODE, Call), undefined) of
         <<"json">> ->
@@ -122,7 +126,8 @@ add_kvs_to_props(Props, Call) ->
         _ ->
             [{<<"Custom-KVS">>, get_kvs_collection(Call)}] ++ Props
     end.
-    
+
+-spec format_json(kz_json:json_term()) -> string().
 format_json(Data) ->
     Proplist = case kz_json:is_json_object(Data) of
         true ->

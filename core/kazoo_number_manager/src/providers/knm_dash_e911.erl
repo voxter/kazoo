@@ -117,7 +117,7 @@ maybe_update_e911(Number) ->
         'false' ->
             lager:debug("information has been changed: ~s", [kz_json:encode(E911)]),
             _NewFeature = maybe_update_e911(Number, E911),
-            lager:debug("using address ~s", [_NewFeature]),
+            lager:debug("using address ~p", [_NewFeature]),
             knm_services:activate_feature(Number, {?FEATURE_E911, E911})
     end.
 
@@ -361,7 +361,7 @@ emergency_provisioning_request(Verb, Props) ->
         {'ok', Code, _, Response} ->
             ?DEBUG("Response:~n~p~n~s~n", [Code, Response]),
             lager:debug("received response from upstream"),
-            try xmerl_scan:string(Response) of
+            try xmerl_scan:string(kz_util:to_list(Response)) of
                 {Xml, _} -> {'ok', Xml}
             catch
                 _:R ->

@@ -42,6 +42,8 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+-spec init() -> ok.
 init() ->
     _ = crossbar_bindings:bind(<<"v1_resource.allowed_methods.devices">>, ?MODULE, 'allowed_methods'),
     _ = crossbar_bindings:bind(<<"v1_resource.resource_exists.devices">>, ?MODULE, 'resource_exists'),
@@ -52,7 +54,8 @@ init() ->
     _ = crossbar_bindings:bind(<<"v1_resource.execute.put.devices">>, ?MODULE, 'put'),
     _ = crossbar_bindings:bind(<<"v1_resource.execute.post.devices">>, ?MODULE, 'post'),
     _ = crossbar_bindings:bind(<<"v1_resource.execute.delete.devices">>, ?MODULE, 'delete'),
-    crossbar_bindings:bind(<<"v1_resource.finish_request.*.devices">>, 'crossbar_services', 'reconcile').
+    _ = crossbar_bindings:bind(<<"v1_resource.finish_request.*.devices">>, 'crossbar_services', 'reconcile'),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -106,6 +109,7 @@ resource_exists(_, ?QUICKCALL_PATH_TOKEN, _) -> 'true'.
 %% Ensure we will be able to bill for devices
 %% @end
 %%--------------------------------------------------------------------
+-spec billing(cb_context:context()) -> cb_context:context().
 billing(Context) ->
     process_billing(Context, cb_context:req_nouns(Context), cb_context:req_verb(Context)).
 
@@ -152,6 +156,7 @@ authorize(_Nouns, _Verb) -> 'false'.
 %%--------------------------------------------------------------------
 -spec validate(cb_context:context()) -> cb_context:context().
 -spec validate(cb_context:context(), path_token()) -> cb_context:context().
+-spec validate(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 validate(Context) ->
     validate_devices(Context, cb_context:req_verb(Context)).
 
@@ -177,6 +182,7 @@ validate_device(Context, DeviceId, ?HTTP_DELETE) ->
 validate(Context, ?OWNED_BY_PATH_TOKEN, UserId) ->
     load_users_device_summary(Context, UserId).
 
+-spec validate(cb_context:context(), ne_binary(), ne_binary(), any()) -> cb_context:context().
 validate(Context, DeviceId, ?QUICKCALL_PATH_TOKEN, _) ->
     Context1 = crossbar_util:maybe_validate_quickcall(load_device(DeviceId, Context)),
     case cb_context:has_errors(Context1) of
