@@ -2566,7 +2566,7 @@ wait_for_bridge(Timeout, Fun, Call, Start, {'ok', JObj}) ->
             %%    basing the Result on Disposition
             lager:info("bridge channel destroy completed with result ~s(~s)", [Disposition, Result]),
             {Result, JObj};
-        {<<"call_event">>, <<"LEG_DESTROYED">>, _} ->
+        {<<"call_event">>, <<"LEG_DESTROYED">>, _} when Cause =:= <<"PICKED_OFF">> ->
             lager:info("bridge completed with result ~s(~s)", [Disposition, Result]),
             {Result, JObj};
         {<<"call_event">>, <<"CHANNEL_EXECUTE_COMPLETE">>, <<"bridge">>} ->

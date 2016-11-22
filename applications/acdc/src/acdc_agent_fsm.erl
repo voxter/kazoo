@@ -2169,7 +2169,8 @@ find_endpoint_id(EP) ->
 find_endpoint_id(EP, 'undefined') -> kz_json:get_value(<<"Endpoint-ID">>, EP);
 find_endpoint_id(_EP, EPId) -> EPId.
 
--spec monitor_endpoint(kz_json:object(), ne_binary(), server_ref()) -> any().
+-spec monitor_endpoint(api_object(), ne_binary(), server_ref()) -> _.
+monitor_endpoint('undefined', _, _) -> 'ok';
 monitor_endpoint(EP, AccountId, AgentListener) ->
     %% Bind for outbound call requests
     acdc_agent_listener:add_endpoint_bindings(AgentListener
@@ -2188,7 +2189,7 @@ unmonitor_endpoint(EP, AccountId, AgentListener) ->
                                                 ,find_username(EP)
                                                 ),
     %% Inform us of device changes
-    catch gproc:unreg(?ENDPOINT_UPDATE_REG(AccountId, kz_doc:id(EP))),
+    catch gproc:unreg(?ENDPOINT_UPDATE_REG(AccountId, find_endpoint_id(EP))),
     catch gproc:unreg(?NEW_CHANNEL_REG(AccountId, find_username(EP))).
 
 -spec maybe_add_endpoint(ne_binary(), kz_json:object(), kz_json:objects(), ne_binary(), server_ref()) -> any().
@@ -2196,7 +2197,7 @@ maybe_add_endpoint(EPId, EP, EPs, AccountId, AgentListener) ->
     case lists:partition(fun(E) -> find_endpoint_id(E) =:= EPId end, EPs) of
         {[], _} ->
             lager:debug("endpoint ~s not in our list, adding it", [EPId]),
-            [begin monitor_endpoint(EP, AccountId, AgentListener), EP end | EPs];
+            [begin monitor_endpoint(convert_to_endpoint(EP, 'undefined'), AccountId, AgentListener), EP end | EPs];
         {_, _} -> EPs
     end.
 
@@ -2206,8 +2207,23 @@ maybe_remove_endpoint(EPId, EPs, AccountId, AgentListener) ->
         {[], _} -> EPs; %% unknown endpoint
         {[RemoveEP], EPs1} ->
             lager:debug("endpoint ~s in our list, removing it", [EPId]),
-            _ = unmonitor_endpoint(RemoveEP, AccountId, AgentListener),
+            _ = unmonitor_endpoint(convert_to_endpoint(RemoveEP, RemoveEP), AccountId, AgentListener),
             EPs1
+    end.
+
+-spec convert_to_endpoint(kz_json:object(), any()) ->
+                                 kz_json:object().
+convert_to_endpoint(EPDoc, Default) ->
+    Setters = [{fun kapps_call:set_account_id/2, kz_doc:account_id(EPDoc)}
+               ,{fun kapps_call:set_account_db/2, kz_doc:account_db(EPDoc)}
+               ,{fun kapps_call:set_owner_id/2, kz_device:owner_id(EPDoc)}
+               ,{fun kapps_call:set_resource_type/2, ?RESOURCE_TYPE_AUDIO}
+              ],
+
+    Call = kapps_call:exec(Setters, kapps_call:new()),
+    case kz_endpoint:build(kz_doc:id(EPDoc), [], Call) of
+        {'ok', EP} -> EP;
+        {'error', _} -> Default
     end.
 
 -spec get_endpoints(kz_json:objects(), server_ref(), kapps_call:call(), api_binary(), api_binary()) ->

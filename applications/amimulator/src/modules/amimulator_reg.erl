@@ -39,7 +39,6 @@ handle_event(EventJObj, _Props) ->
 %%
 
 handle_specific_event(<<"reg_success">>, EventJObj) ->
-    %lager:debug("reg success ~p", [EventJObj]);
     Realm = kz_json:get_value(<<"Realm">>, EventJObj),
     case kz_datamgr:get_results(<<"accounts">>, <<"accounts/listing_by_realm">>, [{key, Realm}]) of
         {ok, [Result]} ->
@@ -57,7 +56,6 @@ handle_specific_event(<<"reg_success">>, EventJObj) ->
             ok
     end;
 handle_specific_event(<<"deregister">>, EventJObj) ->
-    %lager:debug("deregister ~p", [EventJObj]);
     AccountId = kz_json:get_value(<<"Account-ID">>, EventJObj),
     handle_unregister(AccountId, EventJObj);
 handle_specific_event(_, _EventJObj) ->
@@ -76,14 +74,14 @@ handle_register(AccountId, EventJObj) ->
 
     case kz_datamgr:get_results(AccountDb, <<"devices/sip_credentials">>, [{key, kz_json:get_value(<<"Username">>, EventJObj)}]) of
         {ok, [Result]} ->
-        	EndpointId = kz_json:get_value(<<"id">>, Result),
-        	{'ok', EndpointDoc} = kz_datamgr:open_doc(AccountDb, EndpointId),
+            EndpointId = kz_json:get_value(<<"id">>, Result),
+            {'ok', EndpointDoc} = kz_datamgr:open_doc(AccountDb, EndpointId),
             Exten = amimulator_util:endpoint_exten(EndpointDoc),
-    		Reg = cb_registrations:normalize_registration(EventJObj),
-    		ContactIP = kz_json:get_value(<<"contact_ip">>, Reg),
-    		ContactPort = kz_json:get_value(<<"contact_port">>, Reg),
+            Reg = cb_registrations:normalize_registration(EventJObj),
+            ContactIP = kz_json:get_value(<<"contact_ip">>, Reg),
+            ContactPort = kz_json:get_value(<<"contact_port">>, Reg),
 
-    		ami_sm:add_registration(AccountId, EndpointId, ContactIP, ContactPort),
+            ami_sm:add_registration(AccountId, EndpointId, ContactIP, ContactPort),
 
             Peer = <<"SIP/", Exten/binary>>,
             Payload = [[
@@ -109,8 +107,7 @@ handle_register(AccountId, EventJObj) ->
                 {<<"Time">>, <<"2">>}
             ]],
             amimulator_event_listener:publish_amqp_event({publish, Payload}, AccountId);
-        _ ->
-            ok
+        _ -> 'ok'
     end.
 
 handle_unregister(AccountId, EventJObj) ->

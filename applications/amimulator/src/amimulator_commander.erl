@@ -2,12 +2,11 @@
 
 -export([handle/3]).
 -export([handle_event/2]).
--export([parse_command/1]).
 
 -include("amimulator.hrl").
 
 -define(AMI_DB, <<"ami">>).
-    
+
 %% Handle a payload sent as an AMI command
 -spec handle(binary(), ne_binary(), pos_integer()) ->
                     {'ok', {kz_proplist(), 'n'}}
@@ -32,15 +31,12 @@ update_props(Props, AccountId) ->
         end end
     ],
     lists:foldl(fun(F, Props2) -> F(Props2) end, Props, Routines).
-    
+
 handle_event(Props) ->
-    %lager:debug("AMI event params: ~p", [Parameters]),
     Action = string:to_lower(kz_util:to_list(proplists:get_value(<<"Action">>, Props))),
     handle_event(Action, Props).
-    
+
 % TODO: add AMI username lookup db initialization
-% TODO: validate md5 key on login
-% TODO: validate secret mode login (secret in TCP payload)
 -spec handle_event(string(), kz_proplist()) ->
                           {'ok', {kz_proplist(), 'n'}}
                           | {'logoff', 'ok'} | kz_proplist()
@@ -95,16 +91,19 @@ handle_event("queuestatus", Props) ->
 	{'ok', {Header ++ queues_status(Props) ++ Footer, 'n'}};
 
 handle_event("sippeers", Props) ->
-	SipPeers = sip_peers(Props),
+    ActionId = props:get_value(<<"ActionID">>, Props),
+    SipPeers = sip_peers(Props),
 
     Payload = [[
         {<<"Response">>, <<"Success">>},
+        {<<"ActionID">>, ActionId},
         {<<"EventList">>, <<"start">>},
         {<<"Message">>, <<"Peer status list will follow">>}
     ]] ++ SipPeers ++ [[
         {<<"Event">>, <<"PeerlistComplete">>},
         {<<"EventList">>, <<"Complete">>},
-        {<<"ListItems">>, length(SipPeers)}
+        {<<"ListItems">>, length(SipPeers)},
+        {<<"ActionID">>, ActionId}
     ]],
     {ok, {Payload, n}};
 handle_event("sipshowpeer", Props) ->
@@ -821,30 +820,32 @@ translate_status(Status) ->
     end.
 
 sip_peers(Props) ->
-	AccountId = props:get_value(<<"AccountId">>, Props),
-	AccountDb = props:get_value(<<"AccountDb">>, Props),
-	{'ok', Results} = kz_datamgr:get_results(AccountDb, <<"devices/listing_by_owner">>),
+    AccountId = props:get_value(<<"AccountId">>, Props),
+    AccountDb = props:get_value(<<"AccountDb">>, Props),
+    ActionId = props:get_value(<<"ActionID">>, Props),
+    {'ok', Results} = kz_datamgr:get_results(AccountDb, <<"devices/listing_by_owner">>),
         lists:foldl(fun(Result, Registrations) ->
-        	Value = kz_json:get_value(<<"value">>, Result),
-        	case kz_json:get_value(<<"key">>, Result) of
-        		'null' ->
-        			[reg_entry(AccountId, kz_json:get_value(<<"id">>, Value), kz_json:get_value(<<"name">>, Value))] ++ Registrations;
-        		OwnerId ->
-        			case kz_datamgr:open_doc(AccountDb, OwnerId) of
-        				{'error', 'not_found'} ->
-        					lager:debug("Missing owner ~p for endpoint with username ~p", [OwnerId, kz_json:get_value(<<"name">>, Value)]),
-        					Registrations;
-        				{'ok', Endpoint} ->
-	            			[reg_entry(AccountId, kz_json:get_value(<<"_id">>, Endpoint), kz_json:get_value(<<"username">>, Endpoint))] ++ Registrations
-	            	end
-        	end
+            Value = kz_json:get_value(<<"value">>, Result),
+            case kz_json:get_value(<<"key">>, Result) of
+                'null' ->
+                    [reg_entry(AccountId, kz_json:get_value(<<"id">>, Value), kz_json:get_value(<<"name">>, Value), ActionId)] ++ Registrations;
+                OwnerId ->
+                    case kz_datamgr:open_doc(AccountDb, OwnerId) of
+                        {'error', 'not_found'} ->
+                            lager:debug("Missing owner ~p for endpoint with username ~p", [OwnerId, kz_json:get_value(<<"name">>, Value)]),
+                            Registrations;
+                        {'ok', Endpoint} ->
+                            [reg_entry(AccountId, kz_json:get_value(<<"id">>, Value), kz_json:get_value(<<"username">>, Endpoint), ActionId)] ++ Registrations
+                    end
+            end
         end, [], Results).
 
-reg_entry(AccountId, EndpointId, EndpointName) ->
-	case ami_sm:registration(AccountId, EndpointId) of
-		'not_registered' ->
-			[
-				{<<"Event">>, <<"PeerEntry">>},
+reg_entry(AccountId, EndpointId, EndpointName, ActionId) ->
+    case ami_sm:registration(AccountId, EndpointId) of
+        'not_registered' ->
+            props:filter_undefined([
+                {<<"Event">>, <<"PeerEntry">>},
+                {<<"ActionID">>, ActionId},
                 {<<"Channeltype">>, <<"SIP">>},
                 {<<"ObjectName">>, EndpointName},
                 {<<"ChanObjectType">>, <<"peer">>},
@@ -857,10 +858,11 @@ reg_entry(AccountId, EndpointId, EndpointName) ->
                 {<<"ACL">>, <<"yes">>},
                 {<<"Status">>, <<"UNKNOWN">>},
                 {<<"RealtimeDevice">>, <<"no">>}
-			];
-		RegProps ->
-			[
-				{<<"Event">>, <<"PeerEntry">>},
+            ]);
+        RegProps ->
+            props:filter_undefined([
+                {<<"Event">>, <<"PeerEntry">>},
+                {<<"ActionID">>, ActionId},
                 {<<"Channeltype">>, <<"SIP">>},
                 {<<"ObjectName">>, EndpointName},
                 {<<"ChanObjectType">>, <<"peer">>},
@@ -873,8 +875,8 @@ reg_entry(AccountId, EndpointId, EndpointName) ->
                 {<<"ACL">>, <<"yes">>},
                 {<<"Status">>, <<"OK (1 ms)">>},
                 {<<"RealtimeDevice">>, <<"no">>}
-			]
-	end.
+            ])
+    end.
 
 mailbox_count_error(ActionId, Mailbox) ->
     [
@@ -1089,7 +1091,7 @@ command(CommandName, Props) ->
         <<"--END COMMAND--\r\n\r\n">>
     ], raw}.
 
--spec parse_command(string()) -> string().
+-spec parse_command(list()) -> list().
 parse_command(Command) ->
 	parse_command(Command, [], []).
 
@@ -1340,86 +1342,86 @@ participant_payloads(Participants, RunTime, ActionId) ->
 list_commands(Props) ->
     Payload = [{<<"Response">>, <<"Success">>}
                ,{<<"ActionID">>, props:get_value(<<"ActionID">>, Props)}
-               ,{<<"WaitEvent">>, <<"Wait for an event to occur.  (Priv: <none>)">>}
-               ,{<<"QueueReset">>, <<"Reset queue statistics.  (Priv: <none>)">>}
-               ,{<<"QueueReload">>, <<"Reload a queue, queues, or any sub-section of a queue or queues.  (Priv: <none>)">>}
-               ,{<<"QueueRule">>, <<"Queue Rules.  (Priv: <none>)">>}
-               ,{<<"QueuePenalty">>, <<"Set the penalty for a queue member.  (Priv: agent,all)">>}
-               ,{<<"QueueLog">>, <<"Adds custom entry in queue_log.  (Priv: agent,all)">>}
-               ,{<<"QueuePause">>, <<"Makes a queue member temporarily unavailable.  (Priv: agent,all)">>}
-               ,{<<"QueueRemove">>, <<"Remove interface from queue.  (Priv: agent,all)">>}
-               ,{<<"QueueAdd">>, <<"Add interface to queue.  (Priv: agent,all)">>}
-               ,{<<"QueueSummary">>, <<"Show queue summary.  (Priv: <none>)">>}
-               ,{<<"QueueStatus">>, <<"Show queue status.  (Priv: <none>)">>}
-               ,{<<"Queues">>, <<"Queues.  (Priv: <none>)">>}
-               ,{<<"VoicemailUsersList">>, <<"List All Voicemail User Information.  (Priv: call,reporting,all)">>}
+%               ,{<<"WaitEvent">>, <<"Wait for an event to occur.  (Priv: <none>)">>}
+%               ,{<<"QueueReset">>, <<"Reset queue statistics.  (Priv: <none>)">>}
+%               ,{<<"QueueReload">>, <<"Reload a queue, queues, or any sub-section of a queue or queues.  (Priv: <none>)">>}
+%               ,{<<"QueueRule">>, <<"Queue Rules.  (Priv: <none>)">>}
+%               ,{<<"QueuePenalty">>, <<"Set the penalty for a queue member.  (Priv: agent,all)">>}
+%               ,{<<"QueueLog">>, <<"Adds custom entry in queue_log.  (Priv: agent,all)">>}
+%               ,{<<"QueuePause">>, <<"Makes a queue member temporarily unavailable.  (Priv: agent,all)">>}
+%               ,{<<"QueueRemove">>, <<"Remove interface from queue.  (Priv: agent,all)">>}
+%               ,{<<"QueueAdd">>, <<"Add interface to queue.  (Priv: agent,all)">>}
+%               ,{<<"QueueSummary">>, <<"Show queue summary.  (Priv: <none>)">>}
+%               ,{<<"QueueStatus">>, <<"Show queue status.  (Priv: <none>)">>}
+%               ,{<<"Queues">>, <<"Queues.  (Priv: <none>)">>}
+%               ,{<<"VoicemailUsersList">>, <<"List All Voicemail User Information.  (Priv: call,reporting,all)">>}
                ,{<<"PlayDTMF">>, <<"Play DTMF signal on a specific channel.  (Priv: call,all)">>}
-               ,{<<"MixMonitorMute">>, <<"Mute / unMute a Mixmonitor recording.  (Priv: <none>)">>}
-               ,{<<"MuteAudio">>, <<"Mute an audio stream (Priv: system,all)">>}
-               ,{<<"MeetmeList">>, <<"List participants in a conference.  (Priv: reporting,all)">>}
-               ,{<<"MeetmeUnmute">>, <<"Unmute a Meetme user.  (Priv: call,all)">>}
-               ,{<<"MeetmeMute">>, <<"Mute a Meetme user.  (Priv: call,all)">>}
+%               ,{<<"MixMonitorMute">>, <<"Mute / unMute a Mixmonitor recording.  (Priv: <none>)">>}
+%               ,{<<"MuteAudio">>, <<"Mute an audio stream (Priv: system,all)">>}
+%               ,{<<"MeetmeList">>, <<"List participants in a conference.  (Priv: reporting,all)">>}
+%               ,{<<"MeetmeUnmute">>, <<"Unmute a Meetme user.  (Priv: call,all)">>}
+%               ,{<<"MeetmeMute">>, <<"Mute a Meetme user.  (Priv: call,all)">>}
                ,{<<"SIPnotify">>, <<"Send a SIP notify.  (Priv: system,all)">>}
-               ,{<<"SIPshowregistry">>, <<"Show SIP registrations (text format).  (Priv: system,reporting,all)">>}
-               ,{<<"SIPqualifypeer">>, <<"Qualify SIP peers.  (Priv: system,reporting,all)">>}
+%               ,{<<"SIPshowregistry">>, <<"Show SIP registrations (text format).  (Priv: system,reporting,all)">>}
+%               ,{<<"SIPqualifypeer">>, <<"Qualify SIP peers.  (Priv: system,reporting,all)">>}
                ,{<<"SIPshowpeer">>, <<"show SIP peer (text format).  (Priv: system,reporting,all)">>}
-               ,{<<"SIPpeers">>, <<"List SIP peers (text format).  (Priv: system,reporting,all)">>}
-               ,{<<"DAHDIRestart">>, <<"Fully Restart DAHDI channels (terminates calls).  (Priv: <none>)">>}
-               ,{<<"DAHDIShowChannels">>, <<"Show status of DAHDI channels.  (Priv: <none>)">>}
-               ,{<<"DAHDIDNDoff">>, <<"Toggle DAHDI channel Do Not Disturb status OFF.  (Priv: <none>)">>}
-               ,{<<"DAHDIDNDon">>, <<"Toggle DAHDI channel Do Not Disturb status ON.  (Priv: <none>)">>}
-               ,{<<"DAHDIDialOffhook">>, <<"Dial over DAHDI channel while offhook.  (Priv: <none>)">>}
-               ,{<<"DAHDIHangup">>, <<"Hangup DAHDI Channel.  (Priv: <none>)">>}
-               ,{<<"DAHDITransfer">>, <<"Transfer DAHDI Channel.  (Priv: <none>)">>}
-               ,{<<"IAXregistry">>, <<"Show IAX registrations.  (Priv: system,reporting,all)">>}
-               ,{<<"IAXnetstats">>, <<"Show IAX Netstats.  (Priv: system,reporting,all)">>}
-               ,{<<"IAXpeerlist">>, <<"List IAX Peers.  (Priv: system,reporting,all)">>}
-               ,{<<"IAXpeers">>, <<"List IAX peers.  (Priv: system,reporting,all)">>}
-               ,{<<"UnpauseMonitor">>, <<"Unpause monitoring of a channel.  (Priv: call,all)">>}
-               ,{<<"PauseMonitor">>, <<"Pause monitoring of a channel.  (Priv: call,all)">>}
-               ,{<<"ChangeMonitor">>, <<"Change monitoring filename of a channel.  (Priv: call,all)">>}
-               ,{<<"StopMonitor">>, <<"Stop monitoring a channel.  (Priv: call,all)">>}
-               ,{<<"Monitor">>, <<"Monitor a channel.  (Priv: call,all)">>}
-               ,{<<"DBDelTree">>, <<"Delete DB Tree.  (Priv: system,all)">>}
-               ,{<<"DBDel">>, <<"Delete DB entry.  (Priv: system,all)">>}
-               ,{<<"DBPut">>, <<"Put DB entry.  (Priv: system,all)">>}
-               ,{<<"DBGet">>, <<"Get DB Entry.  (Priv: system,reporting,all)">>}
-               ,{<<"Bridge">>, <<"Bridge two channels already in the PBX.  (Priv: call,all)">>}
-               ,{<<"Park">>, <<"Park a channel.  (Priv: call,all)">>}
-               ,{<<"ParkedCalls">>, <<"List parked calls.  (Priv: <none>)">>}
-               ,{<<"ShowDialPlan">>, <<"Show dialplan contexts and extensions  (Priv: config,reporting,all)">>}
-               ,{<<"ModuleCheck">>, <<"Check if module is loaded.  (Priv: system,all)">>}
-               ,{<<"ModuleLoad">>, <<"Module management.  (Priv: system,all)">>}
-               ,{<<"CoreShowChannels">>, <<"List currently active channels.  (Priv: system,reporting,all)">>}
-               ,{<<"Reload">>, <<"Send a reload event.  (Priv: system,config,all)">>}
-               ,{<<"CoreStatus">>, <<"Show PBX core status variables.  (Priv: system,reporting,all)">>}
-               ,{<<"CoreSettings">>, <<"Show PBX core settings (version etc).  (Priv: system,reporting,all)">>}
-               ,{<<"UserEvent">>, <<"Send an arbitrary event.  (Priv: user,all)">>}
-               ,{<<"UpdateConfig">>, <<"Update basic configuration.  (Priv: config,all)">>}
-               ,{<<"SendText">>, <<"Send text message to channel.  (Priv: call,all)">>}
-               ,{<<"ListCommands">>, <<"List available manager commands.  (Priv: <none>)">>}
-               ,{<<"MailboxCount">>, <<"Check Mailbox Message Count.  (Priv: call,reporting,all)">>}
-               ,{<<"MailboxStatus">>, <<"Check mailbox.  (Priv: call,reporting,all)">>}
-               ,{<<"AbsoluteTimeout">>, <<"Set absolute timeout.  (Priv: system,call,all)">>}
-               ,{<<"ExtensionState">>, <<"Check Extension Status.  (Priv: call,reporting,all)">>}
-               ,{<<"Command">>, <<"Execute Asterisk CLI Command.  (Priv: command,all)">>}
+%               ,{<<"SIPpeers">>, <<"List SIP peers (text format).  (Priv: system,reporting,all)">>}
+%               ,{<<"DAHDIRestart">>, <<"Fully Restart DAHDI channels (terminates calls).  (Priv: <none>)">>}
+%               ,{<<"DAHDIShowChannels">>, <<"Show status of DAHDI channels.  (Priv: <none>)">>}
+%               ,{<<"DAHDIDNDoff">>, <<"Toggle DAHDI channel Do Not Disturb status OFF.  (Priv: <none>)">>}
+%               ,{<<"DAHDIDNDon">>, <<"Toggle DAHDI channel Do Not Disturb status ON.  (Priv: <none>)">>}
+%               ,{<<"DAHDIDialOffhook">>, <<"Dial over DAHDI channel while offhook.  (Priv: <none>)">>}
+%               ,{<<"DAHDIHangup">>, <<"Hangup DAHDI Channel.  (Priv: <none>)">>}
+%               ,{<<"DAHDITransfer">>, <<"Transfer DAHDI Channel.  (Priv: <none>)">>}
+%               ,{<<"IAXregistry">>, <<"Show IAX registrations.  (Priv: system,reporting,all)">>}
+%               ,{<<"IAXnetstats">>, <<"Show IAX Netstats.  (Priv: system,reporting,all)">>}
+%               ,{<<"IAXpeerlist">>, <<"List IAX Peers.  (Priv: system,reporting,all)">>}
+%               ,{<<"IAXpeers">>, <<"List IAX peers.  (Priv: system,reporting,all)">>}
+%               ,{<<"UnpauseMonitor">>, <<"Unpause monitoring of a channel.  (Priv: call,all)">>}
+%               ,{<<"PauseMonitor">>, <<"Pause monitoring of a channel.  (Priv: call,all)">>}
+%               ,{<<"ChangeMonitor">>, <<"Change monitoring filename of a channel.  (Priv: call,all)">>}
+%               ,{<<"StopMonitor">>, <<"Stop monitoring a channel.  (Priv: call,all)">>}
+%               ,{<<"Monitor">>, <<"Monitor a channel.  (Priv: call,all)">>}
+%               ,{<<"DBDelTree">>, <<"Delete DB Tree.  (Priv: system,all)">>}
+%               ,{<<"DBDel">>, <<"Delete DB entry.  (Priv: system,all)">>}
+%               ,{<<"DBPut">>, <<"Put DB entry.  (Priv: system,all)">>}
+%               ,{<<"DBGet">>, <<"Get DB Entry.  (Priv: system,reporting,all)">>}
+%               ,{<<"Bridge">>, <<"Bridge two channels already in the PBX.  (Priv: call,all)">>}
+%               ,{<<"Park">>, <<"Park a channel.  (Priv: call,all)">>}
+%               ,{<<"ParkedCalls">>, <<"List parked calls.  (Priv: <none>)">>}
+%               ,{<<"ShowDialPlan">>, <<"Show dialplan contexts and extensions  (Priv: config,reporting,all)">>}
+%               ,{<<"ModuleCheck">>, <<"Check if module is loaded.  (Priv: system,all)">>}
+%               ,{<<"ModuleLoad">>, <<"Module management.  (Priv: system,all)">>}
+%               ,{<<"CoreShowChannels">>, <<"List currently active channels.  (Priv: system,reporting,all)">>}
+%               ,{<<"Reload">>, <<"Send a reload event.  (Priv: system,config,all)">>}
+%               ,{<<"CoreStatus">>, <<"Show PBX core status variables.  (Priv: system,reporting,all)">>}
+%               ,{<<"CoreSettings">>, <<"Show PBX core settings (version etc).  (Priv: system,reporting,all)">>}
+%               ,{<<"UserEvent">>, <<"Send an arbitrary event.  (Priv: user,all)">>}
+%               ,{<<"UpdateConfig">>, <<"Update basic configuration.  (Priv: config,all)">>}
+%               ,{<<"SendText">>, <<"Send text message to channel.  (Priv: call,all)">>}
+%               ,{<<"ListCommands">>, <<"List available manager commands.  (Priv: <none>)">>}
+%               ,{<<"MailboxCount">>, <<"Check Mailbox Message Count.  (Priv: call,reporting,all)">>}
+%               ,{<<"MailboxStatus">>, <<"Check mailbox.  (Priv: call,reporting,all)">>}
+%               ,{<<"AbsoluteTimeout">>, <<"Set absolute timeout.  (Priv: system,call,all)">>}
+%               ,{<<"ExtensionState">>, <<"Check Extension Status.  (Priv: call,reporting,all)">>}
+%               ,{<<"Command">>, <<"Execute Asterisk CLI Command.  (Priv: command,all)">>}
                ,{<<"Originate">>, <<"Originate a call.  (Priv: originate,all)">>}
-               ,{<<"Atxfer">>, <<"Attended transfer.  (Priv: call,all)">>}
+%               ,{<<"Atxfer">>, <<"Attended transfer.  (Priv: call,all)">>}
                ,{<<"Redirect">>, <<"Redirect (transfer) a call.  (Priv: call,all)">>}
-               ,{<<"ListCategories">>, <<"List categories in configuration file.  (Priv: config,all)">>}
-               ,{<<"CreateConfig">>, <<"Creates an empty file in the configuration directory.  (Priv: config,all)">>}
+%               ,{<<"ListCategories">>, <<"List categories in configuration file.  (Priv: config,all)">>}
+%               ,{<<"CreateConfig">>, <<"Creates an empty file in the configuration directory.  (Priv: config,all)">>}
                ,{<<"Status">>, <<"List channel status.  (Priv: system,call,reporting,all)">>}
-               ,{<<"GetConfigJSON">>, <<"Retrieve configuration (JSON format).  (Priv: system,config,all)">>}
-               ,{<<"GetConfig">>, <<"Retrieve configuration.  (Priv: system,config,all)">>}
-               ,{<<"Getvar">>, <<"Gets a channel variable.  (Priv: call,reporting,all)">>}
-               ,{<<"Setvar">>, <<"Set a channel variable.  (Priv: call,all)">>}
-               ,{<<"Ping">>, <<"Keepalive command.  (Priv: <none>)">>}
+%               ,{<<"GetConfigJSON">>, <<"Retrieve configuration (JSON format).  (Priv: system,config,all)">>}
+%               ,{<<"GetConfig">>, <<"Retrieve configuration.  (Priv: system,config,all)">>}
+%               ,{<<"Getvar">>, <<"Gets a channel variable.  (Priv: call,reporting,all)">>}
+%               ,{<<"Setvar">>, <<"Set a channel variable.  (Priv: call,all)">>}
+%               ,{<<"Ping">>, <<"Keepalive command.  (Priv: <none>)">>}
                ,{<<"Hangup">>, <<"Hangup channel.  (Priv: system,call,all)">>}
-               ,{<<"Challenge">>, <<"Generate Challenge for MD5 Auth.  (Priv: <none>)">>}
-               ,{<<"Login">>, <<"Login Manager.  (Priv: <none>)">>}
-               ,{<<"Logoff">>, <<"Logoff Manager.  (Priv: <none>)">>}
-               ,{<<"Events">>, <<"Control Event Flow.  (Priv: <none>)">>}
-               ,{<<"LocalOptimizeAway">>, <<"Optimize away a local channel when possible.  (Priv: system,call,all)">>}
-               ,{<<"DataGet">>, <<"Retrieve the data api tree.  (Priv: <none>)">>}
+%               ,{<<"Challenge">>, <<"Generate Challenge for MD5 Auth.  (Priv: <none>)">>}
+%               ,{<<"Login">>, <<"Login Manager.  (Priv: <none>)">>}
+%               ,{<<"Logoff">>, <<"Logoff Manager.  (Priv: <none>)">>}
+%               ,{<<"Events">>, <<"Control Event Flow.  (Priv: <none>)">>}
+%               ,{<<"LocalOptimizeAway">>, <<"Optimize away a local channel when possible.  (Priv: system,call,all)">>}
+%               ,{<<"DataGet">>, <<"Retrieve the data api tree.  (Priv: <none>)">>}
               ],
     {'ok', {props:filter_undefined(Payload), 'n'}}.
