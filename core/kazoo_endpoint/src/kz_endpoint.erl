@@ -598,6 +598,7 @@ evaluate_rules_for_creation(Endpoint, Properties, Call) ->
                ,fun maybe_endpoint_called_self/3
                ,fun maybe_endpoint_disabled/3
                ,fun maybe_do_not_disturb/3
+               ,fun maybe_follow_me_off/3
                ,fun maybe_exclude_from_queues/3
                ],
     lists:foldl(fun should_create_endpoint_fold/2
@@ -735,6 +736,14 @@ maybe_do_not_disturb(Endpoint, _Properties, _Call) ->
             {'error', 'do_not_disturb'}
     end.
 
+-spec maybe_follow_me_off(kz_json:object(), kz_json:object(), kapps_call:call()) ->
+                                 'ok' | {'error', 'follow_me_off'}.
+maybe_follow_me_off(Endpoint, _, _) ->
+    case kz_json:is_true(<<"follow_me">>, Endpoint) of
+        'true' -> 'ok';
+        'false' -> {'error', 'follow_me_off'}
+    end.
+
 -spec maybe_exclude_from_queues(kz_json:object(), kz_json:object(), kapps_call:call()) ->
                                        'ok' |
                                        {'error', 'exclude_from_queues'}.
@@ -848,13 +857,11 @@ maybe_create_fwd_endpoint(Endpoint, Properties, Call) ->
                                    kz_json:object() |
                                    {'error', 'call_forward_substitute'}.
 maybe_create_endpoint(Endpoint, Properties, Call) ->
-    case {is_call_forward_enabled(Endpoint, Properties)
+    case is_call_forward_enabled(Endpoint, Properties)
         andalso kz_json:is_true([<<"call_forward">>, <<"substitute">>], Endpoint)
-        ,is_follow_me_on(Endpoint)}
     of
-        {'true', _} -> {'error', 'call_forward_substitute'};
-        {'false', false} -> {'error', 'follow_me_not_on'};
-        {'false', _} ->
+        'true' -> {'error', 'call_forward_substitute'};
+        'false' ->
             EndpointType = get_endpoint_type(Endpoint),
             maybe_create_endpoint(EndpointType, Endpoint, Properties, Call)
     end.
@@ -869,17 +876,6 @@ is_call_forward_enabled(Endpoint, Properties) ->
         andalso (kz_json:is_false(<<"direct_calls_only">>, CallForwarding, 'true')
                  orelse (not lists:member(Source, ?NON_DIRECT_MODULES))
                 ).
-
--spec is_follow_me_on(wh_json:object()) -> true | false.
-is_follow_me_on(Endpoint) ->
-	% Turns out endpoints are just devices
-    case kz_json:get_value(<<"follow_me">>, Endpoint) of
-		false ->
-			lager:info("Device follow me is off. Not including in routing."),
-			false;
-		_ ->
-			true
-	end.
 
 -spec maybe_create_endpoint(ne_binary(), kz_json:object(), kz_json:object(), kapps_call:call()) ->
                                    kz_json:object() | {'error', ne_binary()}.
