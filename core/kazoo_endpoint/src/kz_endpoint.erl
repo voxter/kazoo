@@ -739,7 +739,7 @@ maybe_do_not_disturb(Endpoint, _Properties, _Call) ->
 -spec maybe_follow_me_off(kz_json:object(), kz_json:object(), kapps_call:call()) ->
                                  'ok' | {'error', 'follow_me_off'}.
 maybe_follow_me_off(Endpoint, _, _) ->
-    case kz_json:is_true(<<"follow_me">>, Endpoint) of
+    case kz_json:is_true(<<"follow_me">>, Endpoint, 'true') of
         'true' -> 'ok';
         'false' -> {'error', 'follow_me_off'}
     end.
