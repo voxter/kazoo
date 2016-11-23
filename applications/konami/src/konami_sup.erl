@@ -10,6 +10,7 @@
 -behaviour(supervisor).
 
 -export([start_link/0]).
+-export([start_konami_code_fsm/3]).
 -export([init/1]).
 
 -include("konami.hrl").
@@ -34,6 +35,16 @@
 -spec start_link() -> startlink_ret().
 start_link() ->
     supervisor:start_link({'local', ?SERVER}, ?MODULE, []).
+
+-spec start_konami_code_fsm(kapps_call:call(), kz_json:object(), pid()) ->
+                                   sup_startchild_ret().
+start_konami_code_fsm(Call, JObj, KonamiCallPid) ->
+    supervisor:start_child(?SERVER
+                          ,?WORKER_NAME_ARGS_TYPE("konami_code_fsm_" ++ pid_to_list(KonamiCallPid)
+                                                 ,'konami_code_fsm'
+                                                 ,[Call, JObj, KonamiCallPid]
+                                                 ,'transient'
+                                                 )).
 
 %% ===================================================================
 %% Supervisor callbacks
