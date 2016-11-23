@@ -10,7 +10,7 @@
 -behaviour(gen_fsm).
 
 %% API
--export([start_fsm/3
+-export([start_link/3
         ,add_endpoint/2
         ,event/4
         ,transfer_to/2
@@ -85,8 +85,8 @@
 %%% API
 %%%===================================================================
 
--spec start_fsm(kapps_call:call(), kz_json:object(), pid()) -> any().
-start_fsm(Call, JObj, KonamiCallPid) ->
+-spec start_link(kapps_call:call(), kz_json:object(), pid()) -> any().
+start_link(Call, JObj, KonamiCallPid) ->
     gen_fsm:start_link(?MODULE, {Call, JObj, KonamiCallPid}, []).
 
 -spec event(pid(), ne_binary(), ne_binary(), kz_json:object()) -> 'ok'.

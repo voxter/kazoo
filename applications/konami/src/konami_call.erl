@@ -30,7 +30,7 @@
 start_link(JObj, Props) ->
     gen_server:start_link(?MODULE, [JObj, Props], []).
 
--spec init(list()) -> {'ok', state()}.
+-spec init(list()) -> {'ok', state()} | {'stop', 'failed_to_start_konami_code_fsm'}.
 init([JObj, Props]) ->
     process_flag('trap_exit', 'true'),
     EndpointId = kz_json:get_value(<<"Endpoint-ID">>, JObj),
@@ -97,22 +97,39 @@ terminate(Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {'ok', State}.
 
+-spec init_state(kz_json:object(), kz_proplist()) ->
+                        {'ok', state()} |
+                        {'stop', 'failed_to_start_konami_code_fsm'}.
 init_state(JObj, Props) ->
+    try_create_konami_code_fsm(JObj, Props).
+
+-spec try_create_konami_code_fsm(kz_json:object(), kz_proplist()) ->
+                                        {'ok', state()} |
+                                        {'stop', 'failed_to_start_konami_code_fsm'}.
+try_create_konami_code_fsm(JObj, Props) ->
+    case start_fsm(JObj, Props) of
+        {'ok', FSM} -> finish_init_state(JObj, FSM);
+        {'ok', FSM, _} -> finish_init_state(JObj, FSM);
+        {'error', _} -> {'stop', 'failed_to_start_konami_code_fsm'}
+    end.
+
+-spec finish_init_state(kz_json:object(), pid()) -> {'ok', state()}.
+finish_init_state(JObj, KonamiCodeFSM) ->
     AuthorizingId = kz_json:get_value([<<"Call">>, <<"Custom-Channel-Vars">>, <<"Authorizing-ID">>], JObj),
     EndpointId = kz_json:get_value(<<"Endpoint-ID">>, JObj),
-    {'ok', #state{call_id = kz_json:get_value([<<"Call">>, <<"Call-ID">>], JObj)
-                  ,code_fsm_pid = start_fsm(JObj, Props)
-                  ,endpoint_numbers = [{AuthorizingId, kz_json:get_value(<<"Numbers">>, JObj)}
-                                       ,{EndpointId, kz_json:get_value(<<"Numbers">>, JObj)}
-                                      ]
-                  ,endpoint_patterns = [{AuthorizingId, kz_json:get_value(<<"Patterns">>, JObj)}
-                                        ,{EndpointId, kz_json:get_value(<<"Patterns">>, JObj)}
-                                       ]
+    {'ok', #state{call_id=kz_json:get_value([<<"Call">>, <<"Call-ID">>], JObj)
+                 ,code_fsm_pid=KonamiCodeFSM
+                 ,endpoint_numbers=[{AuthorizingId, kz_json:get_value(<<"Numbers">>, JObj)}
+                                   ,{EndpointId, kz_json:get_value(<<"Numbers">>, JObj)}
+                                   ]
+                 ,endpoint_patterns=[{AuthorizingId, kz_json:get_value(<<"Patterns">>, JObj)}
+                                    ,{EndpointId, kz_json:get_value(<<"Patterns">>, JObj)}
+                                    ]
                  }}.
 
+-spec start_fsm(kz_json:object(), kz_proplist()) -> sup_startchild_ret().
 start_fsm(JObj, Props) ->
     Call = kapps_call:from_json(kz_json:get_value(<<"Call">>, JObj)),
-    proc_lib:spawn_link('konami_code_fsm', 'start_fsm', [kapps_call:kvs_store('consumer_pid', props:get_value('server', Props), Call)
-                                                         ,JObj
-                                                         ,self()
-                                                        ]).
+    konami_sup:start_konami_code_fsm(kapps_call:kvs_store('consumer_pid', props:get_value('server', Props), Call)
+                                    ,JObj
+                                    ,self()).
