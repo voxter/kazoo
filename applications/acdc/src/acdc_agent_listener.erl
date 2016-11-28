@@ -1321,6 +1321,7 @@ maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Number) ->
                                    ,{<<"Request-ID">>, ReqId}
                                    ,{<<"Retain-CID">>, <<"true">>}
                                    ,{<<"Agent-ID">>, AgentId}
+                                   ,{<<"Member-Call-ID">>, MCallId}
                                    ,{<<"Callback-Number">>, Number}
                                   ]),
 
