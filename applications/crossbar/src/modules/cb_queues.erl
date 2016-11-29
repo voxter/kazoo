@@ -470,7 +470,7 @@ post(Context, Id) ->
     read(Id, crossbar_doc:save(unset_agents_key(Context))).
 post(Context, Id, ?ROSTER_PATH_TOKEN) ->
     activate_account_for_acdc(Context),
-    read(Id, crossbar_doc:save(unset_agents_key(Context))).
+    read(Id, crossbar_doc:save(Context)).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -494,7 +494,7 @@ delete(Context, _) ->
     crossbar_doc:delete(Context).
 delete(Context, Id, ?ROSTER_PATH_TOKEN) ->
     activate_account_for_acdc(Context),
-    read(Id, crossbar_doc:save(unset_agents_key(Context))).
+    read(Id, crossbar_doc:save(Context)).
 
 -spec delete_account(cb_context:context(), path_token()) -> cb_context:context().
 delete_account(Context, AccountId) ->
