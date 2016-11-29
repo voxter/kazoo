@@ -26,8 +26,11 @@
          ,sync_req/2, sync_resp/2
          ,pause/3
          ,resume/1
+
+         ,add_acdc_queue/2, rm_acdc_queue/2
          ,update_presence/3
          ,agent_logout/1
+
          ,refresh/2
          ,current_call/1
          ,status/1
@@ -301,6 +304,26 @@ pause(FSM, Timeout, Alias) ->
 -spec resume(server_ref()) -> 'ok'.
 resume(FSM) ->
     gen_fsm:send_all_state_event(FSM, {'resume'}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Request the agent listener bind to queue and conditionally send an
+%% availability update depending on agent state
+%% @end
+%%--------------------------------------------------------------------
+-spec add_acdc_queue(server_ref(), ne_binary()) -> 'ok'.
+add_acdc_queue(FSM, QueueId) ->
+    gen_fsm:send_all_state_event(FSM, {'add_acdc_queue', QueueId}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Request the agent listener unbind from queue and send an
+%% unavailability update
+%% @end
+%%--------------------------------------------------------------------
+-spec rm_acdc_queue(server_ref(), ne_binary()) -> 'ok'.
+rm_acdc_queue(FSM, QueueId) ->
+    gen_fsm:send_all_state_event(FSM, {'rm_acdc_queue', QueueId}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1774,6 +1797,12 @@ handle_event({'pause', _, _}=Event, StateName, #state{agent_state_updates=Queue}
     lager:debug("recv pause during ~p, delaying", [StateName]),
     NewQueue = [Event | Queue],
     {'next_state', StateName, State#state{agent_state_updates=NewQueue}};
+handle_event({'add_acdc_queue', QueueId}, StateName, #state{agent_listener=AgentListener}=State) ->
+    acdc_agent_listener:add_acdc_queue(AgentListener, QueueId, StateName),
+    {'next_state', StateName, State};
+handle_event({'rm_acdc_queue', QueueId}, StateName, #state{agent_listener=AgentListener}=State) ->
+    acdc_agent_listener:rm_acdc_queue(AgentListener, QueueId),
+    {'next_state', StateName, State};
 handle_event({'update_presence', PresenceId, PresenceState}, 'ready', State) ->
     handle_presence_update(PresenceId, PresenceState, State),
     {'next_state', 'ready', State};
@@ -1781,7 +1810,7 @@ handle_event({'update_presence', _, _}=Event, StateName, #state{agent_state_upda
     NewQueue = [Event | Queue],
     {'next_state', StateName, State#state{agent_state_updates=NewQueue}};
 handle_event({'refresh', AgentJObj}, StateName, #state{agent_listener=AgentListener}=State) ->
-    acdc_agent_listener:refresh_config(AgentListener, wh_json:get_value(<<"queues">>, AgentJObj)),
+    acdc_agent_listener:refresh_config(AgentListener, wh_json:get_value(<<"queues">>, AgentJObj), StateName),
     {'next_state', StateName, State};
 handle_event('load_endpoints', StateName, #state{agent_listener='undefined'}=State) ->
     lager:debug("agent proc not ready, not loading endpoints yet"),

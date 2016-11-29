@@ -34,9 +34,9 @@
          ,send_agent_busy/1
          ,send_sync_req/1
          ,send_sync_resp/3, send_sync_resp/4
-         ,config/1, refresh_config/2
+         ,config/1, refresh_config/3
          ,send_status_resume/1
-         ,add_acdc_queue/2
+         ,add_acdc_queue/3
          ,rm_acdc_queue/2
          ,call_status_req/1, call_status_req/2
          ,stop/1
@@ -303,8 +303,10 @@ send_sync_resp(Srv, Status, ReqJObj, Options) ->
 -spec config(pid()) -> config().
 config(Srv) -> gen_listener:call(Srv, 'config').
 
-refresh_config(_, 'undefined') -> 'ok';
-refresh_config(Srv, Qs) -> gen_listener:cast(Srv, {'refresh_config', Qs}).
+-spec refresh_config(pid(), api_binaries(), fsm_state_name()) -> 'ok'.
+refresh_config(_, 'undefined', _) -> 'ok';
+refresh_config(Srv, Qs, StateName) ->
+  gen_listener:cast(Srv, {'refresh_config', Qs, StateName}).
 
 -spec agent_info(pid(), wh_json:key()) -> wh_json:json_term() | 'undefined'.
 agent_info(Srv, Field) -> gen_listener:call(Srv, {'agent_info', Field}).
@@ -312,9 +314,11 @@ agent_info(Srv, Field) -> gen_listener:call(Srv, {'agent_info', Field}).
 send_status_resume(Srv) ->
     gen_listener:cast(Srv, {'send_status_update', 'resume'}).
 
-add_acdc_queue(Srv, Q) ->
-    gen_listener:cast(Srv, {'add_acdc_queue', Q}).
+-spec add_acdc_queue(pid(), ne_binary(), fsm_state_name()) -> 'ok'.
+add_acdc_queue(Srv, Q, StateName) ->
+    gen_listener:cast(Srv, {'add_acdc_queue', Q, StateName}).
 
+-spec rm_acdc_queue(pid(), ne_binary()) -> 'ok'.
 rm_acdc_queue(Srv, Q) ->
     gen_listener:cast(Srv, {'rm_acdc_queue', Q}).
 
@@ -449,11 +453,11 @@ handle_call(_Request, _From, #state{}=State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({'refresh_config', Qs}, #state{agent_queues=Queues}=State) ->
+handle_cast({'refresh_config', Qs, StateName}, #state{agent_queues=Queues}=State) ->
     {Add, Rm} = acdc_agent_util:changed(Queues, Qs),
 
     Self = self(),
-    _ = [gen_listener:cast(Self, {'add_acdc_queue', A}) || A <- Add],
+    _ = [gen_listener:cast(Self, {'add_acdc_queue', A, StateName}) || A <- Add],
     _ = [gen_listener:cast(Self, {'rm_acdc_queue', R}) || R <- Rm],
     {'noreply', State};
 handle_cast({'stop_agent', Req}, #state{supervisor=Supervisor}=State) ->
@@ -471,16 +475,16 @@ handle_cast({'fsm_started', FSMPid}, State) ->
 handle_cast({'gen_listener', {'created_queue', Q}}, State) ->
     {'noreply', State#state{my_q=Q}, 'hibernate'};
 
-handle_cast({'add_acdc_queue', Q}, #state{agent_queues=Qs
-                                          ,acct_id=AcctId
-                                          ,agent_id=AgentId
-                                         }=State) when is_binary(Q) ->
+handle_cast({'add_acdc_queue', Q, StateName}, #state{agent_queues=Qs
+                                                     ,acct_id=AcctId
+                                                     ,agent_id=AgentId
+                                                    }=State) when is_binary(Q) ->
     case lists:member(Q, Qs) of
         'true' ->
             lager:debug("queue ~s already added", [Q]),
             {'noreply', State};
         'false' ->
-            add_queue_binding(AcctId, AgentId, Q),
+            add_queue_binding(AcctId, AgentId, Q, StateName),
             {'noreply', State#state{agent_queues=[Q|Qs]}}
     end;
 
@@ -510,7 +514,7 @@ handle_cast('bind_to_member_reqs', #state{agent_queues=Qs
                                           ,acct_id=AcctId
                                           ,agent_id=AgentId
                                          }=State) ->
-    _ = [add_queue_binding(AcctId, AgentId, Q) || Q <- Qs],
+    _ = [add_queue_binding(AcctId, AgentId, Q, 'ready') || Q <- Qs],
     {'noreply', State};
 
 handle_cast({'rebind_events', OldCallId, NewCallId}, State) ->
@@ -1445,8 +1449,9 @@ do_originate_callback_return(MyQ, Call) ->
 create_call_id() ->
     <<"callback-", (wh_util:rand_hex_binary(4))/binary>>.
 
--spec add_queue_binding(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
-add_queue_binding(AcctId, AgentId, QueueId) ->
+-spec add_queue_binding(ne_binary(), ne_binary(), ne_binary(), fsm_state_name()) ->
+                               'ok'.
+add_queue_binding(AcctId, AgentId, QueueId, StateName) ->
     lager:debug("adding queue binding for ~s", [QueueId]),
     gen_listener:add_binding(self()
                              ,'acdc_queue'
@@ -1454,7 +1459,7 @@ add_queue_binding(AcctId, AgentId, QueueId) ->
                                ,{'queue_id', QueueId}
                                ,{'account_id', AcctId}
                               ]),
-    send_agent_available(AcctId, AgentId, QueueId).
+    send_availability_update(AcctId, AgentId, QueueId, StateName).
 
 -spec rm_queue_binding(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
 rm_queue_binding(AcctId, AgentId, QueueId) ->
@@ -1466,6 +1471,13 @@ rm_queue_binding(AcctId, AgentId, QueueId) ->
                               ,{'account_id', AcctId}
                              ]),
     send_agent_unavailable(AcctId, AgentId, QueueId).
+
+-spec send_availability_update(ne_binary(), ne_binary(), ne_binary(), fsm_state_name()) ->
+                                      'ok'.
+send_availability_update(AcctId, AgentId, QueueId, 'ready') ->
+    send_agent_available(AcctId, AgentId, QueueId);
+send_availability_update(AcctId, AgentId, QueueId, _) ->
+    send_agent_busy(AcctId, AgentId, QueueId).
 
 -spec send_agent_available(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
 send_agent_available(AcctId, AgentId, QueueId) ->
