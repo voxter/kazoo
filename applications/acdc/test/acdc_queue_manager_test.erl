@@ -18,6 +18,7 @@
 -include("../src/acdc_queue_manager.hrl").
 
 -define(AGENT_ID, <<"agent_id">>).
+-define(AGENTS, [<<"95101aa694278465cdea6c6c097778b1">>]).
 -define(QUEUE_JOBJ, kz_json:from_list([{<<"_id">>, <<"0e279b77f708747e91f644df7beaa679">>}
                                        %,{<<"_rev">>, <<"20-e2bbc5d2f91d51318f3dee45bb1c9fe1">>}
                                        ,{<<"connection_timeout">>, <<"0">>}
@@ -25,24 +26,19 @@
                                        ,{<<"agent_wrapup_time">>, <<"30">>}
                                        ,{<<"record_caller">>, true}
                                        ,{<<"moh">>, <<"">>}
-                                       ,{<<"notifications">>, [{<<"hangup">>, <<"">>}
-                                                               ,{<<"pickup">>, <<"https://api.paylution.com/rest/voxter/answeredcalls">>}
-                                                               ,{<<"method">>, <<"POST">>}
-                                                              ]}
+                                       ,{<<"notifications">>, []}
                                        ,{<<"max_queue_size">>, <<"0">>}
                                        ,{<<"position_announcements_enabled">>, false}
                                        ,{<<"holdtime_announcements_enabled">>, false}
                                        ,{<<"announcements_timer">>, <<"30">>}
                                        ,{<<"name">>, <<"PL English">>}
                                        ,{<<"strategy">>, <<"most_idle">>}
-                                       ,{<<"call_recording_url">>, <<"http://awe02.van2.voxter.net/hyperwallet/callrecordings">>}
                                        ,{<<"preserve_metadata">>, true}
                                        ,{<<"enter_when_empty">>, true}
                                        ,{<<"ui_metadata">>, [{<<"ui">>, <<"kazoo-ui">>}]}
                                        ,{<<"agent_ring_timeout">>, 15}
                                        ,{<<"ring_simultaneously">>, 1}
                                        ,{<<"caller_exit_key">>, <<"#">>}
-                                       ,{<<"agents">>, [<<"95101aa694278465cdea6c6c097778b1">>]}
                                        % ,{<<"_id">>, <<"0e279b77f708747e91f644df7beaa679">>}
                                        % ,{<<"pvt_is_authenticated">>, true}
                                        % ,{<<"pvt_auth_account_id">>, <<"8ffdf424a9f2a32e09e042ddc603d9b5">>}
@@ -127,7 +123,7 @@ start_deps() ->
 
 %%% Actual test functions
 t_init(Pid) ->
-    ?_assertEqual(kz_json:get_value(<<"agents">>, ?QUEUE_JOBJ), acdc_queue_manager:current_agents(Pid)).
+    ?_assertEqual(?AGENTS, acdc_queue_manager:current_agents(Pid)).
 
 t_ss_size_empty() ->
     SS = #strategy_state{agents=[]},
@@ -193,6 +189,6 @@ handle_cast(Req, State) -> meck:passthrough([Req, State]).
 create_strategy_state('mi', #strategy_state{agents='undefined'}=SS, AcctDb, QueueId) ->
     create_strategy_state('mi', SS#strategy_state{agents=[]}, AcctDb, QueueId);
 create_strategy_state('mi', SS, _, _) ->
-    SS#strategy_state{agents=kz_json:get_value(<<"agents">>, ?QUEUE_JOBJ)}.
+    SS#strategy_state{agents=?AGENTS}.
 
 most_recent_status(_, _) -> {'ok', <<"ready">>}.
