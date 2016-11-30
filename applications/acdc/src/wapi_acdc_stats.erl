@@ -16,6 +16,8 @@
          ,call_handled/1, call_handled_v/1
          ,call_processed/1, call_processed_v/1
 
+         ,call_exited_position/1, call_exited_position_v/1
+
          ,call_id_change/1, call_id_change_v/1
 
          ,call_flush/1, call_flush_v/1
@@ -63,6 +65,8 @@
          ,publish_call_handled/1, publish_call_handled/2
          ,publish_call_processed/1, publish_call_processed/2
 
+         ,publish_call_exited_position/1, publish_call_exited_position/2
+
          ,publish_call_id_change/1, publish_call_id_change/2
 
          ,publish_call_flush/1, publish_call_flush/2
@@ -107,7 +111,7 @@
                                ]).
 
 -define(WAITING_HEADERS, [<<"Caller-ID-Name">>, <<"Caller-ID-Number">>
-                          ,<<"Entered-Timestamp">>, <<"Caller-Priority">>
+                          ,<<"Entered-Timestamp">>, <<"Entered-Position">>, <<"Caller-Priority">>
                          ]).
 -define(WAITING_VALUES, ?CALL_REQ_VALUES(<<"waiting">>)).
 -define(WAITING_TYPES, []).
@@ -127,6 +131,10 @@
 -define(PROCESS_HEADERS, [<<"Agent-ID">>, <<"Processed-Timestamp">>, <<"Hung-Up-By">>]).
 -define(PROCESS_VALUES, ?CALL_REQ_VALUES(<<"processed">>)).
 -define(PROCESS_TYPES, []).
+
+-define(EXITED_HEADERS, [<<"Exited-Position">>]).
+-define(EXITED_VALUES, ?CALL_REQ_VALUES(<<"exited-position">>)).
+-define(EXITED_TYPES, []).
 
 -define(ID_CHANGE_HEADERS, [<<"Old-Call-ID">>]).
 -define(ID_CHANGE_VALUES, ?CALL_REQ_VALUES(<<"id-change">>)).
@@ -221,6 +229,23 @@ call_processed_v(Prop) when is_list(Prop) ->
 call_processed_v(JObj) ->
     call_processed_v(wh_json:to_proplist(JObj)).
 
+-spec call_exited_position(api_terms()) ->
+                            {'ok', iolist()} |
+                            {'error', string()}.
+call_exited_position(Props) when is_list(Props) ->
+    case call_exited_position_v(Props) of
+        'true' -> wh_api:build_message(Props, ?CALL_REQ_HEADERS, ?EXITED_HEADERS);
+        'false' -> {'error', "Proplist failed validation for call_exited_position"}
+    end;
+call_exited_position(JObj) ->
+    call_exited_position(wh_json:to_proplist(JObj)).
+
+-spec call_exited_position_v(api_terms()) -> boolean().
+call_exited_position_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?CALL_REQ_HEADERS, ?EXITED_VALUES, ?EXITED_TYPES);
+call_exited_position_v(JObj) ->
+    call_exited_position_v(wh_json:to_proplist(JObj)).
+
 -spec call_id_change(api_terms()) ->
                             {'ok', iolist()} |
                             {'error', string()}.
@@ -309,6 +334,7 @@ current_calls_err_v(JObj) ->
 -define(CURRENT_CALLS_RESP_HEADERS, [<<"Query-Time">>]).
 -define(OPTIONAL_CURRENT_CALLS_RESP_HEADERS, [<<"Waiting">>, <<"Handled">>
                                               ,<<"Abandoned">>, <<"Processed">>
+                                              ,<<"Entered-Position">>, <<"Exited-Position">>
                                              ]).
 -define(CURRENT_CALLS_RESP_VALUES, [{<<"Event-Category">>, <<"acdc_stat">>}
                                     ,{<<"Event-Name">>, <<"current_calls_resp">>}
@@ -633,7 +659,7 @@ agent_cur_status_resp_v(JObj) ->
     agent_cur_status_resp_v(wh_json:to_proplist(JObj)).
 
 -define(STATUS_HEADERS, [<<"Account-ID">>, <<"Agent-ID">>, <<"Timestamp">>]).
--define(STATUS_OPTIONAL_HEADERS, [<<"Wait-Time">>, <<"Pause-Time">>, <<"Call-ID">>
+-define(STATUS_OPTIONAL_HEADERS, [<<"Wait-Time">>, <<"Pause-Time">>, <<"Pause-Alias">>, <<"Call-ID">>
                                   ,<<"Caller-ID-Name">>, <<"Caller-ID-Number">>
                                  ]).
 -define(STATUS_VALUES(Name), [{<<"Event-Category">>, <<"acdc_status_stat">>}
@@ -911,6 +937,12 @@ publish_call_processed(JObj) ->
     publish_call_processed(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_call_processed(API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?PROCESS_VALUES, fun call_processed/1),
+    amqp_util:whapps_publish(call_stat_routing_key(API), Payload, ContentType).
+
+publish_call_exited_position(JObj) ->
+    publish_call_exited_position(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_call_exited_position(API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?EXITED_VALUES, fun call_exited_position/1),
     amqp_util:whapps_publish(call_stat_routing_key(API), Payload, ContentType).
 
 publish_call_id_change(JObj) ->

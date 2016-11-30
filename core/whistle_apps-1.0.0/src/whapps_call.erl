@@ -884,6 +884,9 @@ set_language(Language, #whapps_call{}=Call) when is_binary(Language) ->
 ccvs(#whapps_call{ccvs=CCVs}) ->
 	CCVs.
 
+-ifdef(TEST).
+language(#whapps_call{language=Lang}) -> Lang.
+-else.
 -spec language(call()) -> api_binary().
 language(#whapps_call{language='undefined', account_id=AccountId}) ->
     wh_media_util:prompt_language(AccountId);

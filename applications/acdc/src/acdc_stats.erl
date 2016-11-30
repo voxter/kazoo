@@ -30,7 +30,7 @@
          ,agent_connecting/3, agent_connecting/5
          ,agent_connected/3, agent_connected/5
          ,agent_wrapup/3
-         ,agent_paused/3
+         ,agent_paused/4
          ,agent_outbound/3
 
          ,agent_statuses/0
@@ -238,15 +238,16 @@ agent_wrapup(AcctId, AgentId, WaitTime) ->
              ]),
     whapps_util:amqp_pool_send(Prop, fun wapi_acdc_stats:publish_status_wrapup/1).
 
-agent_paused(AcctId, AgentId, 'undefined') ->
+agent_paused(AcctId, AgentId, 'undefined', _) ->
     lager:debug("undefined pause time for ~s(~s)", [AgentId, AcctId]);
-agent_paused(AcctId, AgentId, PauseTime) ->
+agent_paused(AcctId, AgentId, PauseTime, Alias) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AcctId}
               ,{<<"Agent-ID">>, AgentId}
               ,{<<"Timestamp">>, wh_util:current_tstamp()}
               ,{<<"Status">>, <<"paused">>}
               ,{<<"Pause-Time">>, PauseTime}
+              ,{<<"Pause-Alias">>, Alias}
               | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     whapps_util:amqp_pool_send(Prop, fun wapi_acdc_stats:publish_status_paused/1).
@@ -748,6 +749,19 @@ call_summary_build_match_spec(JObj, AccountMatch) ->
     end.
 
 call_summary_match_builder_fold(_, _, {'error', _Err}=E) -> E;
+call_summary_match_builder_fold(<<"Queue-ID">>, QueueId, {CallStat, Contstraints}) ->
+    {CallStat#call_summary_stat{queue_id='$2'}
+     ,[{'=:=', '$2', {'const', QueueId}} | Contstraints]
+    };
+call_summary_match_builder_fold(<<"Status">>, Status, {CallStat, Contstraints}) ->
+    case is_valid_call_status(Status) of
+        {'true', Normalized} ->
+            {CallStat#call_summary_stat{status='$3'}
+             ,[{'=:=', '$3', {'const', Normalized}} | Contstraints]
+            };
+        'false' ->
+            {'error', wh_json:from_list([{<<"Status">>, <<"unknown status supplied">>}])}
+    end;
 call_summary_match_builder_fold(_, _, Acc) -> Acc.
 
 agent_call_build_match_spec(JObj) ->

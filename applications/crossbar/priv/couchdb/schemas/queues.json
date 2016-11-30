@@ -26,8 +26,61 @@
             "required": false,
             "type": "string"
         },
+        "announcements_timer": {
+            "default": 30,
+            "description": "Time between position and hold time announcements.",
+            "minimum": 30,
+            "name": "Announce Time (s)",
+            "required": false,
+            "type": "integer"
+        },
+        "breakout": {
+            "name": "Breakout Menu Config",
+            "properties": {
+                "dtmf": {
+                    "description": "Digit that puts caller into breakout menu",
+                    "name": "Breakout Menu DTMF",
+                    "required": false,
+                    "type": "string"
+                },
+                "media": {
+                    "description": "Media overrides for breakout menu prompts",
+                    "name": "Breakout Menu Media",
+                    "properties": {
+                        "call_back_at": {
+                            "description": "You will be called back at:",
+                            "required": false,
+                            "type": "string"
+                        },
+                        "callback_registered": {
+                            "description": "Your callback has been registered. Goodbye!",
+                            "required": false,
+                            "type": "string"
+                        },
+                        "enter_callback_number": {
+                            "description": "Enter a callback number, followed by the pound sign.",
+                            "required": false,
+                            "type": "string"
+                        },
+                        "number_correct": {
+                            "description": "If this is correct, press 1. Otherwise, press 2.",
+                            "required": false,
+                            "type": "string"
+                        },
+                        "prompt": {
+                            "description": "Press 1 to receive a callback.",
+                            "required": false,
+                            "type": "string"
+                        }
+                    },
+                    "required": false,
+                    "type": "object"
+                }
+            },
+            "required": false,
+            "type": "object"
+        },
         "caller_exit_key": {
-            "default": "#",
             "description": "Key caller can press while on hold to exit the queue and continue in the callflow",
             "enum": [
                 "1",
@@ -69,6 +122,13 @@
             "required": false,
             "type": "boolean"
         },
+        "holdtime_announcements_enabled": {
+            "default": false,
+            "description": "Enable periodic average hold time announcements to caller.",
+            "name": "Hold Time Announcements Enabled",
+            "required": false,
+            "type": "boolean"
+        },
         "max_priority": {
             "description": "Maximum possible priority level queue will support. Can not be redefined for existing queue.",
             "maximum": 255,
@@ -97,6 +157,13 @@
             "name": "Name",
             "required": true,
             "type": "string"
+        },
+        "position_announcements_enabled": {
+            "default": false,
+            "description": "Enable periodic position announcements to caller.",
+            "name": "Position Announcements Enabled",
+            "required": false,
+            "type": "boolean"
         },
         "record_caller": {
             "default": false,

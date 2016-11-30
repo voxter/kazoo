@@ -1,65 +1,28 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2014, 2600Hz
+%%% @copyright (C) 2016, Voxter Communications Inc.
 %%% @doc
-%%% Manages agent processes:
-%%%   starting when an agent logs in
-%%%   stopping when an agent logs out
-%%%   collecting stats from agents
-%%%   and more!!!
+%%%
 %%% @end
 %%% @contributors
-%%%   James Aimonetti
+%%%   Daniel Finke
 %%%-------------------------------------------------------------------
--module(acdc_agent_manager).
+-module(acdc_recordings_map_srv).
 
--behaviour(gen_listener).
+-behaviour(gen_server).
 
 %% API
 -export([start_link/0]).
+-export([register/2]).
 
 %% gen_server callbacks
--export([init/1
-         ,handle_call/3
-         ,handle_cast/2
-         ,handle_info/2
-         ,handle_event/2
-         ,terminate/2
-         ,code_change/3
-        ]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+     terminate/2, code_change/3]).
 
 -include("acdc.hrl").
--include_lib("whistle_apps/include/wh_hooks.hrl").
 
 -define(SERVER, ?MODULE).
 
--define(BINDINGS, [{'acdc_agent', [{'restrict_to', ['status']}]}
-                   ,{'presence', [{'restrict_to', ['probe']}]}
-                   ,{'conf', [{'type', <<"user">>}
-                              ,'federate'
-                             ]}
-                   ,{'conf', [{'type', <<"device">>}
-                              ,'federate'
-                             ]}
-                  ]).
--define(RESPONDERS, [{{'acdc_agent_handler', 'handle_status_update'}
-                      ,[{<<"agent">>, <<"login">>}
-                        ,{<<"agent">>, <<"logout">>}
-                        ,{<<"agent">>, <<"pause">>}
-                        ,{<<"agent">>, <<"resume">>}
-                        ,{<<"agent">>, <<"login_queue">>}
-                        ,{<<"agent">>, <<"logout_queue">>}
-                       ]
-                     }
-                     ,{{'acdc_agent_handler', 'handle_stats_req'}
-                       ,[{<<"agent">>, <<"stats_req">>}]
-                      }
-                     ,{{'acdc_agent_handler', 'handle_presence_probe'}
-                       ,[{<<"presence">>, <<"probe">>}]
-                      }
-                     ,{{'acdc_agent_handler', 'handle_config_change'}
-                       ,[{<<"configuration">>, <<"*">>}]
-                      }
-                    ]).
+-record(state, {table_id :: integer()}).
 
 %%%===================================================================
 %%% API
@@ -73,12 +36,11 @@
 %% @end
 %%--------------------------------------------------------------------
 start_link() ->
-    gen_listener:start_link({'local', ?SERVER}, ?MODULE
-                            ,[{'bindings', ?BINDINGS}
-                              ,{'responders', ?RESPONDERS}
-                             ]
-                            ,[]
-                           ).
+    gen_server:start_link({'local', ?SERVER}, ?MODULE, [], []).
+
+-spec register(whapps_call:call(), wh_json:object()) -> pid().
+register(Call, RecordingJObj) ->
+    gen_server:call(?SERVER, {'register', Call, RecordingJObj}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -96,8 +58,9 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    wh_hooks:register(),
-    {'ok', 'ok'}.
+    process_flag('trap_exit', 'true'),
+    TabId = ets:new('map', []),
+    {'ok', #state{table_id=TabId}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -113,6 +76,18 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_call({'register', Call, RecordingJObj}, _From, #state{table_id=TabId}=State) ->
+    case ets:lookup(TabId, whapps_call:call_id(Call)) of
+        [] ->
+            {'ok', Pid} = acdc_recordings_sup:new(Call, RecordingJObj),
+            link(Pid),
+            ets:insert(TabId, {whapps_call:call_id(Call), Pid}),
+            Pid;
+        [{_, Pid}] ->
+            wh_media_recording:update_control_queue(Pid, whapps_call:control_queue(Call)),
+            Pid
+    end,
+    {'reply', Pid, State};
 handle_call(_Request, _From, State) ->
     Reply = 'ok',
     {'reply', Reply, State}.
@@ -127,12 +102,7 @@ handle_call(_Request, _From, State) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
-    {'noreply', State};
-handle_cast({'gen_listener',{'created_queue',_QueueName}}, State) ->
-    {'noreply', State};
 handle_cast(_Msg, State) ->
-    lager:debug("unhandled cast: ~p", [_Msg]),
     {'noreply', State}.
 
 %%--------------------------------------------------------------------
@@ -145,19 +115,11 @@ handle_cast(_Msg, State) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(?HOOK_EVT(AccountId, <<"CHANNEL_CREATE">>, JObj), State) ->
-    lager:debug("channel_create event"),
-    _ = wh_util:spawn('acdc_agent_handler', 'handle_new_channel', [JObj, AccountId]),
-    {'noreply', State};
-handle_info(?HOOK_EVT(_AccountId, _EventName, _JObj), State) ->
-    lager:debug("ignoring ~s for account ~s on call ~s", [_EventName, _AccountId, wh_json:get_value(<<"Call-ID">>, _JObj)]),
+handle_info({'EXIT', Pid, _Reason}, #state{table_id=TabId}=State) ->
+    ets:match_delete(TabId, {'$1', Pid}),
     {'noreply', State};
 handle_info(_Info, State) ->
-    lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State}.
-
-handle_event(_JObj, _State) ->
-    {'reply', []}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -171,7 +133,7 @@ handle_event(_JObj, _State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, _State) ->
-    lager:debug("agent manager terminating: ~p", [_Reason]).
+    'ok'.
 
 %%--------------------------------------------------------------------
 %% @private

@@ -10,6 +10,7 @@
 
 -export([get_endpoints/2
          ,bind_to_call_events/1, bind_to_call_events/2
+         ,b_bind_to_call_events/2
          ,unbind_from_call_events/1
          ,unbind_from_call_events/2
          ,agents_in_queue/2
@@ -19,6 +20,7 @@
          ,agent_presence_update/2
          ,presence_update/3, presence_update/4
          ,send_cdr/2
+         ,caller_id/1
         ]).
 
 -include("acdc.hrl").
@@ -117,6 +119,11 @@ bind_to_call_events(?NE_BINARY = CallId, Pid) ->
 bind_to_call_events({CallId, _}, Pid) -> bind_to_call_events(CallId, Pid);
 bind_to_call_events(Call, Pid) -> bind_to_call_events(whapps_call:call_id(Call), Pid).
 
+-spec b_bind_to_call_events(api_binary(), pid()) -> 'ok'.
+b_bind_to_call_events('undefined', _) -> 'ok';
+b_bind_to_call_events(CallId, Pid) ->
+    gen_listener:b_add_binding(Pid, 'call', [{'callid', CallId}]).
+
 -spec unbind_from_call_events(api_binary() | {api_binary(), any()} | whapps_call:call()) -> 'ok'.
 unbind_from_call_events(Call) ->
     unbind_from_call_events(Call, self()).
@@ -124,7 +131,10 @@ unbind_from_call_events(Call) ->
 -spec unbind_from_call_events(api_binary() | {api_binary(), any()} | whapps_call:call(), pid()) -> 'ok'.
 unbind_from_call_events('undefined', _Pid) -> 'ok';
 unbind_from_call_events(?NE_BINARY = CallId, Pid) ->
-    gen_listener:rm_binding(Pid, 'call', [{'callid', CallId}]);
+    gen_listener:rm_binding(Pid, 'call', [{'callid', CallId}]),
+    gen_listener:rm_binding(Pid, 'acdc_agent', [{'callid', CallId}
+                                                ,{'restrict_to', ['stats_req']}
+                                               ]);
 unbind_from_call_events({CallId, _}, Pid) -> unbind_from_call_events(CallId, Pid);
 unbind_from_call_events(Call, Pid) -> unbind_from_call_events(whapps_call:call_id(Call), Pid).
 
@@ -134,3 +144,11 @@ unbind_from_call_events(Call, Pid) -> unbind_from_call_events(whapps_call:call_i
 proc_id() -> proc_id(self()).
 proc_id(Pid) -> proc_id(Pid, node()).
 proc_id(Pid, Node) -> list_to_binary([wh_util:to_binary(Node), "-", pid_to_list(Pid)]).
+
+-spec caller_id(whapps_call:call()) -> {api_binary(), api_binary()}.
+caller_id(Call) ->
+    CallerIdType = case whapps_call:inception(Call) of
+                       'undefined' -> <<"internal">>;
+                       _Else -> <<"external">>
+                   end,
+    cf_attributes:caller_id(CallerIdType, Call).

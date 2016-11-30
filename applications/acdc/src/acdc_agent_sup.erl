@@ -126,8 +126,8 @@ init(Args) ->
 
     SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
 
-    {'ok', {SupFlags, [?WORKER_ARGS('acdc_agent_listener', [self() | Args])
-                       ,?WORKER_ARGS('acdc_agent_fsm', [self() | Args])
+    {'ok', {SupFlags, [?WORKER_ARGS_TYPE('acdc_agent_listener', [self() | Args], 'transient')
+                       ,?WORKER_ARGS_TYPE('acdc_agent_fsm', [self() | Args], 'transient')
                       ]}}.
 
 %%%===================================================================

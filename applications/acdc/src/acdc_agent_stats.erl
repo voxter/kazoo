@@ -16,7 +16,7 @@
          ,agent_connecting/3, agent_connecting/5
          ,agent_connected/3, agent_connected/5
          ,agent_wrapup/3
-         ,agent_paused/3
+         ,agent_paused/4
          ,agent_outbound/3
 
          ,handle_status_stat/2
@@ -162,16 +162,17 @@ agent_wrapup(AccountId, AgentId, WaitTime) ->
                                ,fun wapi_acdc_stats:publish_status_wrapup/1
                               ).
 
--spec agent_paused(ne_binary(), ne_binary(), api_integer()) -> 'ok'.
-agent_paused(AccountId, AgentId, 'undefined') ->
+-spec agent_paused(ne_binary(), ne_binary(), api_integer(), api_binary()) -> 'ok'.
+agent_paused(AccountId, AgentId, 'undefined', _) ->
     lager:debug("undefined pause time for ~s(~s)", [AgentId, AccountId]);
-agent_paused(AccountId, AgentId, PauseTime) ->
+agent_paused(AccountId, AgentId, PauseTime, Alias) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AccountId}
               ,{<<"Agent-ID">>, AgentId}
               ,{<<"Timestamp">>, wh_util:current_tstamp()}
               ,{<<"Status">>, <<"paused">>}
               ,{<<"Pause-Time">>, PauseTime}
+              ,{<<"Pause-Alias">>, Alias}
               | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     whapps_util:amqp_pool_send(Prop
@@ -223,6 +224,7 @@ handle_status_stat(JObj, Props) ->
                             ,callid=wh_json:get_value(<<"Call-ID">>, JObj)
                             ,wait_time=acdc_stats_util:wait_time(EventName, JObj)
                             ,pause_time=acdc_stats_util:pause_time(EventName, JObj)
+                            ,pause_alias=wh_json:get_value(<<"Pause-Alias">>, JObj)
                             ,caller_id_name=acdc_stats_util:caller_id_name(EventName, JObj)
                             ,caller_id_number=acdc_stats_util:caller_id_number(EventName, JObj)
                            }
@@ -455,6 +457,7 @@ status_stat_to_doc(#status_stat{id=Id
                                 ,timestamp=Timestamp
                                 ,wait_time=WT
                                 ,pause_time=PT
+                                ,pause_alias=Alias
                                 ,callid=CallId
                                 ,caller_id_name=CIDName
                                 ,caller_id_number=CIDNum
@@ -466,6 +469,7 @@ status_stat_to_doc(#status_stat{id=Id
             ,{<<"status">>, Status}
             ,{<<"wait_time">>, WT}
             ,{<<"pause_time">>, PT}
+            ,{<<"pause_alias">>, Alias}
             ,{<<"caller_id_name">>, CIDName}
             ,{<<"caller_id_number">>, CIDNum}
            ],

@@ -25,7 +25,7 @@
          ,login_resp/1, login_resp_v/1
 
          ,shared_originate_failure/1, shared_originate_failure_v/1
-         ,agent_call_id/1, agent_call_id_v/1
+         ,shared_call_id/1, shared_call_id_v/1
         ]).
 
 -export([bind_q/2
@@ -47,7 +47,7 @@
          ,publish_login_resp/2, publish_login_resp/3
 
          ,publish_shared_originate_failure/1, publish_shared_originate_failure/2
-         ,publish_agent_call_id/1, publish_agent_call_id/2
+         ,publish_shared_call_id/1, publish_shared_call_id/2
         ]).
 
 -include_lib("whistle/include/wh_api.hrl").
@@ -140,8 +140,8 @@ sync_resp_v(JObj) ->
 %% agent.stats_req.ACCTID.AGENT_ID
 -define(STATS_REQ_KEY, "acdc.agent.stats_req.").
 
--define(STATS_REQ_HEADERS, [<<"Account-ID">>]).
--define(OPTIONAL_STATS_REQ_HEADERS, [<<"Agent-ID">>]).
+-define(STATS_REQ_HEADERS, []).
+-define(OPTIONAL_STATS_REQ_HEADERS, [<<"Account-ID">>, <<"Agent-ID">>, <<"Call-ID">>]).
 -define(STATS_REQ_VALUES, [{<<"Event-Category">>, <<"agent">>}
                            ,{<<"Event-Name">>, <<"stats_req">>}
                           ]).
@@ -168,32 +168,45 @@ stats_req_v(JObj) ->
 stats_req_routing_key(Props) when is_list(Props) ->
     Id = props:get_value(<<"Account-ID">>, Props, <<"*">>),
     AgentId = props:get_value(<<"Agent-ID">>, Props, <<"*">>),
-    stats_req_routing_key(Id, AgentId);
+    CallId = props:get_value(<<"Call-ID">>, Props, <<"*">>),
+    stats_req_routing_key(Id, AgentId, CallId);
 stats_req_routing_key(Id) when is_binary(Id) ->
     <<?STATS_REQ_KEY, Id/binary>>;
 stats_req_routing_key(JObj) ->
     Id = wh_json:get_value(<<"Account-ID">>, JObj, <<"*">>),
     AgentId = wh_json:get_value(<<"Agent-ID">>, JObj, <<"*">>),
-    stats_req_routing_key(Id, AgentId).
+    CallId = wh_json:get_value(<<"Call-ID">>, JObj, <<"*">>),
+    stats_req_routing_key(Id, AgentId, CallId).
 
 -spec stats_req_publish_key(wh_json:object() | wh_proplist() | ne_binary()) -> ne_binary().
 stats_req_publish_key(Props) when is_list(Props) ->
     stats_req_routing_key(props:get_value(<<"Account-ID">>, Props)
                           ,props:get_value(<<"Agent-ID">>, Props)
+                          ,props:get_value(<<"Call-ID">>, Props)
                          );
 stats_req_publish_key(JObj) ->
     stats_req_routing_key(wh_json:get_value(<<"Account-ID">>, JObj)
                           ,wh_json:get_value(<<"Agent-ID">>, JObj)
+                          ,wh_json:get_value(<<"Call-ID">>, JObj)
                          ).
 
 stats_req_routing_key(Id, 'undefined') ->
-    stats_req_routing_key(Id);
+    stats_req_routing_key(Id, 'undefined', 'undefined');
 stats_req_routing_key(Id, AgentId) ->
-    <<?STATS_REQ_KEY, Id/binary, ".", AgentId/binary>>.
+    stats_req_routing_key(Id, AgentId, 'undefined').
+
+stats_req_routing_key(Id, 'undefined', 'undefined') ->
+    stats_req_routing_key(Id);
+stats_req_routing_key(Id, AgentId, 'undefined') ->
+    <<?STATS_REQ_KEY, Id/binary, ".", AgentId/binary>>;
+stats_req_routing_key('undefined', 'undefined', CallId) ->
+    <<?STATS_REQ_KEY, "*.*.", CallId/binary>>;
+stats_req_routing_key(Id, AgentId, CallId) ->
+    <<?STATS_REQ_KEY, Id/binary, ".", AgentId/binary, ".", CallId/binary>>.
 
 %% And the response
 -define(STATS_RESP_HEADERS, [<<"Account-ID">>]).
--define(OPTIONAL_STATS_RESP_HEADERS, [<<"Current-Calls">>, <<"Current-Stats">>, <<"Current-Statuses">>]).
+-define(OPTIONAL_STATS_RESP_HEADERS, [<<"Current-Calls">>, <<"Current-Stats">>, <<"Current-Statuses">>, <<"Agent-Call-IDs">>]).
 -define(STATS_RESP_VALUES, [{<<"Event-Category">>, <<"agent">>}
                             ,{<<"Event-Name">>, <<"stats_resp">>}
                            ]).
@@ -227,6 +240,8 @@ stats_resp_v(JObj) ->
                        ,{<<"Presence-State">>, wapi_presence:presence_states()}
                       ]).
 -define(AGENT_TYPES, []).
+
+-define(OPTIONAL_PAUSE_HEADERS, [<<"Alias">>]).
 
 -define(LOGIN_VALUES, [{<<"Event-Name">>, <<"login">>} | ?AGENT_VALUES]).
 -define(LOGOUT_VALUES, [{<<"Event-Name">>, <<"logout">>} | ?AGENT_VALUES]).
@@ -309,7 +324,7 @@ logout_queue_v(JObj) ->
                          {'error', string()}.
 pause(Props) when is_list(Props) ->
     case pause_v(Props) of
-        'true' -> wh_api:build_message(Props, ?AGENT_HEADERS, ?OPTIONAL_AGENT_HEADERS);
+        'true' -> wh_api:build_message(Props, ?AGENT_HEADERS, ?OPTIONAL_AGENT_HEADERS ++ ?OPTIONAL_PAUSE_HEADERS);
         'false' -> {'error', "Proplist failed validation for agent_pause"}
     end;
 pause(JObj) ->
@@ -410,29 +425,29 @@ shared_originate_failure_v(Prop) when is_list(Prop) ->
 shared_originate_failure_v(JObj) -> shared_originate_failure_v(wh_json:to_proplist(JObj)).
 
 %%------------------------------------------------------------------------------
-%% Sharing of agent's answered call id to all agent FSMs
+%% Sharing of answered call id to all agent FSMs
 %%------------------------------------------------------------------------------
--define(AGENT_CALL_ID_HEADERS, [<<"Account-ID">>, <<"Agent-ID">>, <<"Agent-Call-ID">>]).
--define(OPTIONAL_AGENT_CALL_ID_HEADERS, []).
--define(AGENT_CALL_ID_VALUES, [{<<"Event-Category">>, <<"agent">>}
-                               ,{<<"Event-Name">>, <<"agent_call_id">>}
-                              ]).
--define(AGENT_CALL_ID_TYPES, []).
+-define(SHARED_CALL_ID_HEADERS, [<<"Account-ID">>, <<"Agent-ID">>]).
+-define(OPTIONAL_SHARED_CALL_ID_HEADERS, [<<"Agent-Call-ID">>, <<"Member-Call-ID">>]).
+-define(SHARED_CALL_ID_VALUES, [{<<"Event-Category">>, <<"agent">>}
+                                ,{<<"Event-Name">>, <<"shared_call_id">>}
+                               ]).
+-define(SHARED_CALL_ID_TYPES, []).
 
--spec agent_call_id(api_terms()) ->
+-spec shared_call_id(api_terms()) ->
                           {'ok', iolist()} |
                           {'error', string()}.
-agent_call_id(Props) when is_list(Props) ->
-    case agent_call_id_v(Props) of
-        'true' -> wh_api:build_message(Props, ?AGENT_CALL_ID_HEADERS, ?OPTIONAL_AGENT_CALL_ID_HEADERS);
-        'false' -> {'error', "Proplist failed validation for agent_call_id"}
+shared_call_id(Props) when is_list(Props) ->
+    case shared_call_id_v(Props) of
+        'true' -> wh_api:build_message(Props, ?SHARED_CALL_ID_HEADERS, ?OPTIONAL_SHARED_CALL_ID_HEADERS);
+        'false' -> {'error', "Proplist failed validation for shared_call_id"}
     end;
-agent_call_id(JObj) -> agent_call_id(wh_json:to_proplist(JObj)).
+shared_call_id(JObj) -> shared_call_id(wh_json:to_proplist(JObj)).
 
--spec agent_call_id_v(api_terms()) -> boolean().
-agent_call_id_v(Prop) when is_list(Prop) ->
-    wh_api:validate(Prop, ?AGENT_CALL_ID_HEADERS, ?AGENT_CALL_ID_VALUES, ?AGENT_CALL_ID_TYPES);
-agent_call_id_v(JObj) -> agent_call_id_v(wh_json:to_proplist(JObj)).
+-spec shared_call_id_v(api_terms()) -> boolean().
+shared_call_id_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?SHARED_CALL_ID_HEADERS, ?SHARED_CALL_ID_VALUES, ?SHARED_CALL_ID_TYPES);
+shared_call_id_v(JObj) -> shared_call_id_v(wh_json:to_proplist(JObj)).
 
 %%------------------------------------------------------------------------------
 %% Shared routing key for member_connect_win
@@ -452,70 +467,78 @@ member_connect_win_routing_key(JObj) ->
 %%------------------------------------------------------------------------------
 
 -spec bind_q(binary(), wh_proplist()) -> 'ok'.
--spec bind_q(binary(), {ne_binary(), ne_binary(), ne_binary()}, 'undefined' | list()) -> 'ok'.
+-spec bind_q(binary(), {ne_binary(), ne_binary(), ne_binary(), ne_binary()}, 'undefined' | list()) -> 'ok'.
 bind_q(Q, Props) ->
     AgentId = props:get_value('agent_id', Props, <<"*">>),
     AcctId = props:get_value('account_id', Props, <<"*">>),
+    CallId = props:get_value('callid', Props, <<"*">>),
     Status = props:get_value('status', Props, <<"*">>),
-    bind_q(Q, {AcctId, AgentId, Status}, props:get_value('restrict_to', Props)).
+    bind_q(Q, {AcctId, AgentId, CallId, Status}, props:get_value('restrict_to', Props)).
 
-bind_q(Q, {AcctId, AgentId, Status}, 'undefined') ->
+bind_q(Q, {AcctId, AgentId, _, Status}, 'undefined') ->
     amqp_util:bind_q_to_whapps(Q, agent_status_routing_key(AcctId, AgentId, Status)),
     amqp_util:bind_q_to_whapps(Q, fsm_shared_routing_key(AcctId, AgentId)),
     amqp_util:bind_q_to_whapps(Q, sync_req_routing_key(AcctId, AgentId)),
     amqp_util:bind_q_to_whapps(Q, stats_req_routing_key(AcctId)),
     amqp_util:bind_q_to_whapps(Q, stats_req_routing_key(AcctId, AgentId));
-bind_q(Q, {_, AgentId, _}=Ids, ['member_connect_win'|T]) ->
+bind_q(Q, {_, AgentId, _, _}=Ids, ['member_connect_win'|T]) ->
     amqp_util:bind_q_to_callmgr(Q, member_connect_win_routing_key(AgentId)),
     bind_q(Q, Ids, T);
-bind_q(Q, {AcctId, AgentId, Status}=Ids, ['status'|T]) ->
+bind_q(Q, {AcctId, AgentId, _, Status}=Ids, ['status'|T]) ->
     amqp_util:bind_q_to_whapps(Q, agent_status_routing_key(AcctId, AgentId, Status)),
     bind_q(Q, Ids, T);
-bind_q(Q, {AcctId, AgentId, _}=Ids, ['fsm_shared'|T]) ->
+bind_q(Q, {AcctId, AgentId, _, _}=Ids, ['fsm_shared'|T]) ->
     amqp_util:bind_q_to_whapps(Q, fsm_shared_routing_key(AcctId, AgentId)),
     bind_q(Q, Ids, T);
-bind_q(Q, {AcctId, AgentId, _}=Ids, ['sync'|T]) ->
+bind_q(Q, {AcctId, AgentId, _, _}=Ids, ['sync'|T]) ->
     amqp_util:bind_q_to_whapps(Q, sync_req_routing_key(AcctId, AgentId)),
     bind_q(Q, Ids, T);
-bind_q(Q, {AcctId, <<"*">>, _}=Ids, ['stats_req'|T]) ->
+bind_q(Q, {<<"*">>, <<"*">>, CallId, _}=Ids, ['stats_req'|T]) ->
+    amqp_util:bind_q_to_whapps(Q, stats_req_routing_key('undefined', 'undefined', CallId)),
+    bind_q(Q, Ids, T);
+bind_q(Q, {AcctId, <<"*">>, <<"*">>, _}=Ids, ['stats_req'|T]) ->
     amqp_util:bind_q_to_whapps(Q, stats_req_routing_key(AcctId)),
     bind_q(Q, Ids, T);
-bind_q(Q, {AcctId, AgentId, _}=Ids, ['stats_req'|T]) ->
+bind_q(Q, {AcctId, AgentId, <<"*">>, _}=Ids, ['stats_req'|T]) ->
     amqp_util:bind_q_to_whapps(Q, stats_req_routing_key(AcctId, AgentId)),
     bind_q(Q, Ids, T);
 bind_q(Q, Ids, [_|T]) -> bind_q(Q, Ids, T);
 bind_q(_, _, []) -> 'ok'.
 
 -spec unbind_q(binary(), wh_proplist()) -> 'ok'.
--spec unbind_q(binary(), {ne_binary(), ne_binary(), ne_binary()}, 'undefined' | list()) -> 'ok'.
+-spec unbind_q(binary(), {ne_binary(), ne_binary(), ne_binary(), ne_binary()}, 'undefined' | list()) -> 'ok'.
 unbind_q(Q, Props) ->
     AgentId = props:get_value('agent_id', Props, <<"*">>),
     AcctId = props:get_value('account_id', Props, <<"*">>),
+    CallId = props:get_value('callid', Props, <<"*">>),
     Status = props:get_value('status', Props, <<"*">>),
 
-    unbind_q(Q, {AcctId, AgentId, Status}, props:get_value('restrict_to', Props)).
+    unbind_q(Q, {AcctId, AgentId, CallId, Status}, props:get_value('restrict_to', Props)).
 
-unbind_q(Q, {AcctId, AgentId, Status}, 'undefined') ->
+unbind_q(Q, {AcctId, AgentId, _, Status}, 'undefined') ->
     _ = amqp_util:unbind_q_from_whapps(Q, agent_status_routing_key(AcctId, AgentId, Status)),
     _ = amqp_util:unbind_q_from_whapps(Q, fsm_shared_routing_key(AcctId, AgentId)),
     _ = amqp_util:unbind_q_from_whapps(Q, sync_req_routing_key(AcctId, AgentId)),
     amqp_util:unbind_q_from_whapps(Q, stats_req_routing_key(AcctId));
-unbind_q(Q, {_, AgentId, _}=Ids, ['member_connect_win'|T]) ->
+unbind_q(Q, {_, AgentId, _, _}=Ids, ['member_connect_win'|T]) ->
     amqp_util:unbind_q_from_callmgr(Q, member_connect_win_routing_key(AgentId)),
     unbind_q(Q, Ids, T);
-unbind_q(Q, {AcctId, AgentId, Status}=Ids, ['status'|T]) ->
+unbind_q(Q, {AcctId, AgentId, _, Status}=Ids, ['status'|T]) ->
     _ = amqp_util:unbind_q_from_whapps(Q, agent_status_routing_key(AcctId, AgentId, Status)),
     unbind_q(Q, Ids, T);
-unbind_q(Q, {AcctId, AgentId, _}=Ids, ['fsm_shared'|T]) ->
+unbind_q(Q, {AcctId, AgentId, _, _}=Ids, ['fsm_shared'|T]) ->
     _ = amqp_util:unbind_q_from_whapps(Q, fsm_shared_routing_key(AcctId, AgentId)),
     unbind_q(Q, Ids, T);
-unbind_q(Q, {AcctId, AgentId, _}=Ids, ['sync'|T]) ->
+unbind_q(Q, {AcctId, AgentId, _, _}=Ids, ['sync'|T]) ->
     _ = amqp_util:unbind_q_from_whapps(Q, sync_req_routing_key(AcctId, AgentId)),
     unbind_q(Q, Ids, T);
-unbind_q(Q, {AcctId, <<"*">>, _}=Ids, ['stats'|T]) ->
+unbind_q(Q, {<<"*">>, <<"*">>, CallId, _}=Ids, ['stats_req'|T]) ->
+    _ = amqp_util:unbind_q_from_whapps(Q, stats_req_routing_key('undefined', 'undefined', CallId)),
+    unbind_q(Q, Ids, T);
+unbind_q(Q, {AcctId, <<"*">>, <<"*">>, _}=Ids, ['stats'|T]) ->
     _ = amqp_util:unbind_q_from_whapps(Q, stats_req_routing_key(AcctId)),
     unbind_q(Q, Ids, T);
-unbind_q(Q, {AcctId, AgentId, _}=Ids, ['stats'|T]) ->
+unbind_q(Q, {AcctId, AgentId, <<"*">>, _}=Ids, ['stats'|T]) ->
     _ = amqp_util:unbind_q_from_whapps(Q, stats_req_routing_key(AcctId, AgentId)),
     unbind_q(Q, Ids, T);
 unbind_q(Q, Ids, [_|T]) -> unbind_q(Q, Ids, T);
@@ -630,10 +653,10 @@ publish_shared_originate_failure(API, ContentType) ->
     {'ok', Payload} = shared_originate_failure((API1 = wh_api:prepare_api_payload(API, ?SHARED_FAILURE_VALUES))),
     amqp_util:whapps_publish(fsm_shared_routing_key(API1), Payload, ContentType).
 
--spec publish_agent_call_id(api_terms()) -> 'ok'.
--spec publish_agent_call_id(api_terms(), ne_binary()) -> 'ok'.
-publish_agent_call_id(JObj) ->
-    publish_agent_call_id(JObj, ?DEFAULT_CONTENT_TYPE).
-publish_agent_call_id(API, ContentType) ->
-    {'ok', Payload} = agent_call_id((API1 = wh_api:prepare_api_payload(API, ?AGENT_CALL_ID_VALUES))),
+-spec publish_shared_call_id(api_terms()) -> 'ok'.
+-spec publish_shared_call_id(api_terms(), ne_binary()) -> 'ok'.
+publish_shared_call_id(JObj) ->
+    publish_shared_call_id(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_shared_call_id(API, ContentType) ->
+    {'ok', Payload} = shared_call_id((API1 = wh_api:prepare_api_payload(API, ?SHARED_CALL_ID_VALUES))),
     amqp_util:whapps_publish(fsm_shared_routing_key(API1), Payload, ContentType).

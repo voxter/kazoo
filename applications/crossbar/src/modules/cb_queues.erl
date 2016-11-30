@@ -464,9 +464,9 @@ filter_response_fields(JObj) ->
 %%--------------------------------------------------------------------
 -spec post(cb_context:context(), path_token()) -> cb_context:context().
 -spec post(cb_context:context(), path_token(), path_token()) -> cb_context:context().
-post(Context, _) ->
+post(Context, Id) ->
     activate_account_for_acdc(Context),
-    crossbar_doc:save(Context).
+    read(Id, crossbar_doc:save(unset_agents_key(Context))).
 post(Context, Id, ?ROSTER_PATH_TOKEN) ->
     activate_account_for_acdc(Context),
     read(Id, crossbar_doc:save(Context)).
@@ -685,7 +685,7 @@ fetch_stats_summary(Context) ->
     Req = props:filter_undefined(
             [{<<"Account-ID">>, cb_context:account_id(Context)}
              ,{<<"Status">>, cb_context:req_value(Context, <<"status">>)}
-             ,{<<"Agent-ID">>, cb_context:req_value(Context, <<"agent_id">>)}
+             ,{<<"Queue-ID">>, cb_context:req_value(Context, <<"queue_id">>)}
              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
     case whapps_util:amqp_pool_request(Req
@@ -855,3 +855,17 @@ deactivate_account_for_acdc(AccountId) ->
                     lager:debug("failed to remove ~s: ~p", [AccountId, _E])
             end
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Remove deprecated agents key from the queues jobj
+%% @end
+%%--------------------------------------------------------------------
+-spec unset_agents_key(cb_context:context()) -> cb_context:context().
+unset_agents_key(Context) ->
+    cb_context:update_doc(Context
+                          ,fun(Doc) ->
+                                   wh_json:delete_key(<<"agents">>, Doc)
+                           end
+                         ).

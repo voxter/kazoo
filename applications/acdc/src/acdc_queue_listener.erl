@@ -14,6 +14,7 @@
 %%% @contributors
 %%%   James Aimonetti
 %%%   KAZOO-3596: Sponsored by GTNetwork LLC, implemented by SIPLABS LLC
+%%%   Daniel Finke
 %%%-------------------------------------------------------------------
 -module(acdc_queue_listener).
 
@@ -37,9 +38,6 @@
          ,send_sync_resp/4
 
          ,delivery/1
-
-         ,maybe_enter_callback_mode/3
-         ,callback_update/2
         ]).
 
 %% gen_server callbacks
@@ -73,8 +71,6 @@
           ,call :: whapps_call:call()
           ,agent_id :: ne_binary()
           ,delivery :: gen_listener:basic_deliver()
-
-          ,awaiting_callback = [] :: callback_list()
          }).
 -type state() :: #state{}.
 
@@ -84,6 +80,9 @@
                      }
                      ,{{'acdc_queue_handler', 'handle_call_event'}
                        ,[{<<"error">>, <<"*">>}]
+                      }
+                     ,{{'acdc_queue_handler', 'handle_member_call_cancel'}
+                       ,[{<<"member">>, <<"call_cancel">>}]
                       }
                      ,{{'acdc_queue_handler', 'handle_member_resp'}
                        ,[{<<"member">>, <<"connect_resp">>}]
@@ -100,8 +99,8 @@
                      ,{{'acdc_queue_handler', 'handle_member_callback_reg'}
                        ,[{<<"member">>, <<"callback_reg">>}]
                       }
-                     ,{{'acdc_queue_handler', 'handle_member_callback_update'}
-                       ,[{<<"member">>, <<"callback_update">>}]
+                     ,{{'acdc_queue_handler', 'handle_member_callback_accepted'}
+                       ,[{<<"member">>, <<"callback_accepted">>}]
                       }
                     ]).
 
@@ -119,7 +118,7 @@
 -spec start_link(pid(), pid(), ne_binary(), ne_binary()) -> startlink_ret().
 start_link(WorkerSup, MgrPid, AccountId, QueueId) ->
     gen_listener:start_link(?MODULE
-                            ,[{'bindings', [{'acdc_queue', [{'restrict_to', ['sync_req', 'member_callback_reg']}
+                            ,[{'bindings', [{'acdc_queue', [{'restrict_to', ['sync_req']}
                                                             ,{'account_id', AccountId}
                                                             ,{'queue_id', QueueId}
                                                            ]}
@@ -202,12 +201,6 @@ send_sync_resp(Srv, Strategy, StrategyState, ReqJObj) ->
 
 delivery(Srv) ->
     gen_listener:call(Srv, 'delivery').
-
-maybe_enter_callback_mode(Srv, CallId, Number) ->
-    gen_listener:cast(Srv, {'maybe_enter_callback_mode', CallId, Number}).
-
-callback_update(Srv, CallJObj) ->
-    gen_listener:cast(Srv, {'callback_update', CallJObj}).
 
 %%%===================================================================
 %%% gen_listener callbacks
@@ -327,15 +320,31 @@ handle_cast({'member_connect_req', MemberCallJObj, Delivery, _Url}
             ,#state{my_q=MyQ
                     ,my_id=MyId
                     ,account_id=AccountId
+                    ,mgr_pid=MgrPid
                     ,queue_id=QueueId
                    }=State) ->
     Call = whapps_call:from_json(wh_json:get_value(<<"Call">>, MemberCallJObj)),
+    CallId = whapps_call:call_id(Call),
 
     wh_util:put_callid(whapps_call:call_id(Call)),
 
-    acdc_util:bind_to_call_events(Call),
-    lager:debug("bound to call events for ~s", [whapps_call:call_id(Call)]),
-    send_member_connect_req(whapps_call:call_id(Call), AccountId, QueueId, MyQ, MyId),
+    %% If a callback is registered before queue_fsm gets the call,
+    %% do not bind to events (as we don't care about hangups)
+    case acdc_queue_manager:callback_number(MgrPid, CallId) of
+        'undefined' ->
+            acdc_util:bind_to_call_events(Call),
+            lager:debug("bound to call events for ~s", [CallId]);
+        _ ->
+            'ok'
+    end,
+    send_member_connect_req(CallId, AccountId, QueueId, MyQ, MyId),
+
+    %% Be ready in case a callback or cancel comes in while queue_listener is handling call
+    gen_listener:add_binding(self(), 'acdc_queue', [{'restrict_to', ['member_callback_reg', 'member_call_result']}
+                                                    ,{'account_id', AccountId}
+                                                    ,{'queue_id', QueueId}
+                                                    ,{'callid', CallId}
+                                                   ]),
 
     {'noreply', State#state{call=Call
                             ,delivery=Delivery
@@ -354,12 +363,10 @@ handle_cast({'member_connect_win', RespJObj, QueueOpts}, #state{my_q=MyQ
                                                                 ,my_id=MyId
                                                                 ,call=Call
                                                                 ,queue_id=QueueId
-                                                                ,awaiting_callback=Awaiting
                                                                }=State) ->
     lager:debug("agent process won the call, sending the win"),
 
-    CallbackNumber = lists:keyfind(whapps_call:call_id(Call), 1, Awaiting),
-    send_member_connect_win(RespJObj, Call, QueueId, MyQ, MyId, QueueOpts, CallbackNumber),
+    send_member_connect_win(RespJObj, Call, QueueId, MyQ, MyId, QueueOpts),
 
     {'noreply', State#state{agent_id=wh_json:get_value(<<"Agent-ID">>, RespJObj)}, 'hibernate'};
 handle_cast({'timeout_agent', RespJObj}, #state{queue_id=QueueId
@@ -384,6 +391,7 @@ handle_cast({'timeout_member_call', JObj}, #state{delivery=Delivery
 
     maybe_timeout_agent(AgentId, QueueId, Call, JObj),
 
+    publish_queue_member_remove(AccountId, QueueId, whapps_call:call_id(Call)),
     acdc_queue_shared:ack(Pid, Delivery),
     send_member_call_failure(Q, AccountId, QueueId, whapps_call:call_id(Call), MyId, AgentId),
 
@@ -407,6 +415,7 @@ handle_cast({'exit_member_call'}, #state{delivery=Delivery
 
     acdc_util:unbind_from_call_events(Call),
     lager:debug("unbound from call events for ~s", [whapps_call:call_id(Call)]),
+    publish_queue_member_remove(AccountId, QueueId, whapps_call:call_id(Call)),
     acdc_queue_shared:ack(Pid, Delivery),
     send_member_call_failure(Q, AccountId, QueueId, whapps_call:call_id(Call), MyId, AgentId, <<"Caller exited the queue via DTMF">>),
 
@@ -424,6 +433,7 @@ handle_cast({'exit_member_call_empty'}, #state{delivery=Delivery
 
     acdc_util:unbind_from_call_events(Call),
     lager:debug("unbound from call events for ~s", [whapps_call:call_id(Call)]),
+    publish_queue_member_remove(AccountId, QueueId, whapps_call:call_id(Call)),
     acdc_queue_shared:ack(Pid, Delivery),
     send_member_call_failure(Q, AccountId, QueueId, whapps_call:call_id(Call), MyId, AgentId, <<"No agents left in queue">>),
 
@@ -478,12 +488,15 @@ handle_cast({'cancel_member_call'}, #state{delivery=Delivery
 handle_cast({'cancel_member_call', _RejectJObj}, #state{delivery='undefined'}=State) ->
     lager:debug("cancel a member_call that I don't have delivery info for"),
     {'noreply', State};
-handle_cast({'cancel_member_call', _RejectJObj}, #state{delivery=Delivery
+handle_cast({'cancel_member_call', _RejectJObj}, #state{queue_id=QueueId
+                                                        ,account_id=AccountId
+                                                        ,delivery=Delivery
                                                         ,call=Call
                                                         ,shared_pid=Pid
                                                        }=State) ->
     lager:debug("agent failed to handle the call, nack"),
 
+    publish_queue_member_remove(AccountId, QueueId, whapps_call:call_id(Call)),
     _ = maybe_nack(Call, Delivery, Pid),
     {'noreply', clear_call_state(State), 'hibernate'};
 handle_cast({'cancel_member_call', _MemberCallJObj, Delivery}, #state{shared_pid=Pid}=State) ->
@@ -502,24 +515,6 @@ handle_cast({'send_sync_resp', Strategy, StrategyState, ReqJObj}, #state{my_id=I
     {'noreply', State};
 handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
     {'noreply', State};
-handle_cast({'maybe_enter_callback_mode', CallId, Number}, #state{awaiting_callback=AC
-                                                                 }=State) ->
-    lager:debug("Member callback reg received by queue"),
-    UpdatedAC = [{CallId, Number} | AC],
-
-    {'noreply', State#state{awaiting_callback=UpdatedAC}};
-handle_cast({'callback_update', CallJObj}, #state{call=Call
-                                                  ,fsm_pid=FSM
-                                                  ,mgr_pid=MgrPid
-                                                 }=State) ->
-    acdc_util:unbind_from_call_events(Call),
-    NewCall = whapps_call:from_json(CallJObj),
-    acdc_util:bind_to_call_events(NewCall),
-
-    acdc_queue_fsm:replace_call(FSM, NewCall),
-    acdc_queue_manager:replace_call(MgrPid, Call, NewCall),
-
-    {'noreply', State#state{call=NewCall}};
 handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p", [_Msg]),
     {'noreply', State}.
@@ -597,9 +592,8 @@ send_member_connect_req(CallId, AccountId, QueueId, MyQ, MyId) ->
             ]),
     publish(Req, fun wapi_acdc_queue:publish_member_connect_req/1).
 
--spec send_member_connect_win(wh_json:object(), whapps_call:call(), ne_binary(), ne_binary(), ne_binary(), wh_proplist()
-                              ,boolean() | {api_binary(), binary()}) -> 'ok'.
-send_member_connect_win(RespJObj, Call, QueueId, MyQ, MyId, QueueOpts, 'false') ->
+-spec send_member_connect_win(wh_json:object(), whapps_call:call(), ne_binary(), ne_binary(), ne_binary(), wh_proplist()) -> 'ok'.
+send_member_connect_win(RespJObj, Call, QueueId, MyQ, MyId, QueueOpts) ->
     CallJSON = whapps_call:to_json(Call),
     Win = props:filter_undefined(
             [{<<"Call">>, CallJSON}
@@ -607,18 +601,6 @@ send_member_connect_win(RespJObj, Call, QueueId, MyQ, MyId, QueueOpts, 'false') 
              ,{<<"Agent-Process-ID">>, wh_json:get_value(<<"Agent-Process-ID">>, RespJObj)}
              ,{<<"Queue-ID">>, QueueId}
              ,{<<"Agent-ID">>, wh_json:get_value(<<"Agent-ID">>, RespJObj)}
-             | QueueOpts ++ wh_api:default_headers(MyQ, ?APP_NAME, ?APP_VERSION)
-            ]),
-    publish(Win, fun wapi_acdc_queue:publish_member_connect_win/1);
-send_member_connect_win(RespJObj, Call, QueueId, MyQ, MyId, QueueOpts, {_, CallbackNumber}) ->
-    CallJSON = whapps_call:to_json(Call),
-    Win = props:filter_undefined(
-            [{<<"Call">>, CallJSON}
-             ,{<<"Process-ID">>, MyId}
-             ,{<<"Agent-Process-ID">>, wh_json:get_value(<<"Agent-Process-ID">>, RespJObj)}
-             ,{<<"Queue-ID">>, QueueId}
-             ,{<<"Agent-ID">>, wh_json:get_value(<<"Agent-ID">>, RespJObj)}
-             ,{<<"Callback-Number">>, CallbackNumber}
              | QueueOpts ++ wh_api:default_headers(MyQ, ?APP_NAME, ?APP_VERSION)
             ]),
     publish(Win, fun wapi_acdc_queue:publish_member_connect_win/1).
@@ -658,6 +640,15 @@ send_member_call_failure(Q, AccountId, QueueId, CallId, MyId, AgentId, Reason) -
               | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     publish(Q, Resp, fun wapi_acdc_queue:publish_member_call_failure/2).
+
+-spec publish_queue_member_remove(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
+publish_queue_member_remove(AccountId, QueueId, CallId) ->
+    Prop = [{<<"Account-ID">>, AccountId}
+            ,{<<"Queue-ID">>, QueueId}
+            ,{<<"JObj">>, wh_json:from_list([{<<"Call-ID">>, CallId}])}
+            | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+    wapi_acdc_queue:publish_queue_member_remove(Prop).
 
 send_sync_req(MyQ, MyId, AccountId, QueueId, Type) ->
     Resp = props:filter_undefined(
@@ -714,20 +705,25 @@ is_call_alive(Call) ->
 clear_call_state(#state{call=Call
                         ,account_id=AccountId
                         ,queue_id=QueueId
-                        ,awaiting_callback=AC
                        }=State) ->
-    CallId = case Call of
-        'undefined' -> 'undefined';
-        _ -> whapps_call:call_id(Call)
-    end,
     _ = acdc_util:queue_presence_update(AccountId, QueueId),
+
+    case Call of
+        'undefined' -> 'ok';
+        _ ->
+            CallId = whapps_call:call_id(Call),
+            gen_listener:rm_binding(self(), 'acdc_queue', [{'restrict_to', ['member_callback_reg', 'member_call_result']}
+                                                           ,{'account_id', AccountId}
+                                                           ,{'queue_id', QueueId}
+                                                           ,{'callid', CallId}
+                                                          ])
+    end,
 
     wh_util:put_callid(QueueId),
     State#state{call='undefined'
                 ,member_call_queue='undefined'
                 ,agent_id='undefined'
                 ,delivery='undefined'
-                ,awaiting_callback = lists:keydelete(CallId, 1, AC)
                }.
 
 -spec publish(api_terms(), wh_amqp_worker:publish_fun()) -> 'ok'.
