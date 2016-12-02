@@ -1397,7 +1397,6 @@ do_originate_callback_return(MyQ, Call) ->
               ,{<<"Authorizing-Type">>, whapps_call:authorizing_type(Call)}
               ,{<<"Channel-Authorized">>, 'true'}
               ,{<<"From-URI">>, <<FromUser/binary, "@", (whapps_call:account_realm(Call))/binary>>}
-              ,{<<"Ignore-Early-Media">>, 'true'}
              ]),
 
     TargetCallId = create_call_id(),
@@ -1411,7 +1410,6 @@ do_originate_callback_return(MyQ, Call) ->
                     ,{<<"To-Realm">>, whapps_call:account_realm(Call)}
                     ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
                     ,{<<"Outbound-Call-ID">>, TargetCallId}
-                    ,{<<"Ignore-Early-Media">>, 'true'}
                     ,{<<"Existing-Call-ID">>, TransferorLeg}
                    ])),
 
@@ -1437,8 +1435,6 @@ do_originate_callback_return(MyQ, Call) ->
                  ,{<<"Existing-Call-ID">>, TransferorLeg}
                  ,{<<"Resource-Type">>, <<"originate">>}
                  ,{<<"Originate-Immediate">>, 'true'}
-                 ,{<<"Simplify-Loopback">>, 'true'}
-                 ,{<<"Ignore-Early-Media">>, 'true'}
                  | wh_api:default_headers(MyQ, ?APP_NAME, ?APP_VERSION)
                 ]),
 
