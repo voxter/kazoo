@@ -17,12 +17,11 @@
          ,member_connect_accepted/1, member_connect_accepted/2, member_connect_accepted/3
          ,monitor_connect_accepted/2
          ,member_callback_accepted/2
-         %% TODO add monitor_callback_accepted
          ,agent_timeout/1
          ,bridge_to_member/6
          ,originate_callback_to_agent/7
          ,originate_callback_return/2
-         ,hangup_call/1, hangup_call/2
+         ,hangup_call/1
          ,monitor_call/4
          ,channel_hungup/2
          ,rebind_events/3
@@ -239,12 +238,8 @@ member_callback_accepted(Srv, ACall) ->
     gen_listener:cast(Srv, {'member_callback_accepted', ACall}).
 
 -spec hangup_call(pid()) -> 'ok'.
--spec hangup_call(pid(), whapps_call:call()) -> 'ok'.
 hangup_call(Srv) ->
     gen_listener:cast(Srv, {'hangup_call'}).
-
-hangup_call(Srv, Call) ->
-    gen_listener:cast(Srv, {'hangup_call', Call}).
 
 monitor_call(Srv, Call, WinJObj, RecordingUrl) ->
     gen_listener:cast(Srv, {'monitor_call', Call, WinJObj, RecordingUrl}).
@@ -903,16 +898,6 @@ handle_cast({'hangup_call'}, #state{my_id=MyId
                            }
      ,'hibernate'};
 
-handle_cast({'hangup_call', Call}, State) ->
-    CallId = whapps_call:call_id(Call),
-    lager:debug("agent FSM requested a hangup of call ~s", [CallId]),
-
-    acdc_util:unbind_from_call_events(CallId),
-    %% Reusing this function
-    stop_agent_leg(CallId, whapps_call:control_queue(Call)),
-
-    {'noreply', State};
-
 handle_cast({'originate_execute', JObj}, #state{my_q=Q}=State) ->
     lager:debug("execute the originate for agent: ~p", [JObj]),
     send_originate_execute(JObj, Q),
@@ -1397,7 +1382,6 @@ do_originate_callback_return(MyQ, Call) ->
               ,{<<"Authorizing-Type">>, whapps_call:authorizing_type(Call)}
               ,{<<"Channel-Authorized">>, 'true'}
               ,{<<"From-URI">>, <<FromUser/binary, "@", (whapps_call:account_realm(Call))/binary>>}
-              ,{<<"Ignore-Early-Media">>, 'true'}
              ]),
 
     TargetCallId = create_call_id(),
@@ -1411,7 +1395,6 @@ do_originate_callback_return(MyQ, Call) ->
                     ,{<<"To-Realm">>, whapps_call:account_realm(Call)}
                     ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
                     ,{<<"Outbound-Call-ID">>, TargetCallId}
-                    ,{<<"Ignore-Early-Media">>, 'true'}
                     ,{<<"Existing-Call-ID">>, TransferorLeg}
                    ])),
 
@@ -1437,8 +1420,6 @@ do_originate_callback_return(MyQ, Call) ->
                  ,{<<"Existing-Call-ID">>, TransferorLeg}
                  ,{<<"Resource-Type">>, <<"originate">>}
                  ,{<<"Originate-Immediate">>, 'true'}
-                 ,{<<"Simplify-Loopback">>, 'true'}
-                 ,{<<"Ignore-Early-Media">>, 'true'}
                  | wh_api:default_headers(MyQ, ?APP_NAME, ?APP_VERSION)
                 ]),
 
