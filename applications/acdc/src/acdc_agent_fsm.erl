@@ -1196,13 +1196,20 @@ awaiting_callback({'originate_failed', JObj}, #state{account_id=AccountId
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
 
     {'next_state', 'awaiting_callback', State#state{wrapup_ref=hangup_call(State, 'member')}};
-awaiting_callback({'shared_failure', _JObj}, #state{agent_listener=AgentListener
-                                                    ,agent_call_id=ACallId
-                                                   }=State) ->
-    lager:debug("shared originate failure"),
-    acdc_agent_listener:channel_hungup(AgentListener, ACallId),
+awaiting_callback({'shared_failure', JObj}, #state{agent_listener=AgentListener
+                                                   ,agent_call_id=ACallId
+                                                  }=State) ->
+    Blame = wh_json:get_value(<<"Blame">>, JObj),
+    case Blame of
+        'undefined' ->
+            lager:debug("shared originate failure"),
+            acdc_agent_listener:channel_hungup(AgentListener, ACallId),
 
-    {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'member')}};
+            {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'member')}};
+        <<"member">> ->
+            %% Synchronize member_callback_flag across nodes
+            {'next_state', 'awaiting_callback', State#state{member_callback_flag='true'}}
+    end;
 awaiting_callback({'shared_call_id', JObj}, #state{agent_listener=AgentListener
                                                    ,member_call=MemberCall
                                                    ,member_call_id=MemberCallId
@@ -1362,13 +1369,13 @@ maybe_member_no_answer(CallId, Cause, #state{account_id=AccountId
     case props:get_value(CallId, Candidates) of
         'undefined' -> {'next_state', 'awaiting_callback', State};
         _ ->
-            lager:debug("member did not answer callback ~s (~s)", [CallId, Cause]),
-            % ErrReason = missed_reason(Cause),
-            % lager:debug("originate failed (~s), broadcasting", [ErrReason]),
-            % wapi_acdc_agent:publish_shared_originate_failure([{<<"Account-ID">>, AccountId}
-            %                                                   ,{<<"Agent-ID">>, AgentId}
-            %                                                   | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-            %                                                  ]),
+            ErrReason = missed_reason(Cause),
+            lager:debug("member did not answer callback ~s (~s), broadcasting", [CallId, ErrReason]),
+            wapi_acdc_agent:publish_shared_originate_failure([{<<"Account-ID">>, AccountId}
+                                                              ,{<<"Agent-ID">>, AgentId}
+                                                              ,{<<"Blame">>, <<"member">>}
+                                                              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                                             ]),
 
             acdc_agent_listener:member_connect_accepted(AgentListener, ACallId, MemberCall),
 
