@@ -1242,12 +1242,15 @@ awaiting_callback({'channel_answered', JObj}=Evt, #state{account_id=AccountId
                                                          ,agent_call_id=ACallId
                                                         }=State) ->
     CallId = call_id(JObj),
-    case props:is_defined(CallId, Candidates) of
-        'false' -> awaiting_callback_unhandled_event(Evt, State);
-        'true' ->
+    case props:get_value(CallId, Candidates) of
+        'undefined' -> awaiting_callback_unhandled_event(Evt, State);
+        CtrlQ ->
             lager:info("member answered phone on ~s", [CallId]),
 
-            MemberCall = whapps_call:set_account_id(AccountId, whapps_call:from_json(JObj)),
+            %% Update control queue so call recordings work
+            MemberCall = whapps_call:exec([fun(Call) -> whapps_call:set_account_id(AccountId, Call) end
+                                           ,fun(Call) -> whapps_call:set_control_queue(CtrlQ, Call) end
+                                          ], whapps_call:from_json(JObj)),
 
             wapi_acdc_agent:publish_shared_call_id([{<<"Account-ID">>, AccountId}
                                                     ,{<<"Agent-ID">>, AgentId}
@@ -1320,12 +1323,12 @@ awaiting_callback({'leg_created', CallId, OtherLegCallId}=Evt, #state{agent_list
                                                                      }=State) ->
     case props:get_value(CallId, Candidates) of
         'undefined' -> awaiting_callback_unhandled_event(Evt, State);
-        _ ->
+        CtrlQ ->
             %% Unbind from originate UUID, bind to bridge of loopback
             lager:debug("rebinding from ~s to ~s due to loopback", [CallId, OtherLegCallId]),
             acdc_agent_listener:rebind_events(AgentListener, CallId, OtherLegCallId),
 
-            Candidates1 = props:insert_value(OtherLegCallId, []),
+            Candidates1 = props:set_value(OtherLegCallId, CtrlQ, []),
             {'next_state', 'awaiting_callback', State#state{member_callback_candidates=Candidates1}}
     end;
 awaiting_callback({'usurp_control', _}, State) ->
