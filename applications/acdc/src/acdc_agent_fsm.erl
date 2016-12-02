@@ -1247,7 +1247,6 @@ awaiting_callback({'channel_answered', JObj}=Evt, #state{account_id=AccountId
         'true' ->
             lager:info("member answered phone on ~s", [CallId]),
 
-            %% TODO update control queue with the agent's control queue
             MemberCall = whapps_call:set_account_id(AccountId, whapps_call:from_json(JObj)),
 
             wapi_acdc_agent:publish_shared_call_id([{<<"Account-ID">>, AccountId}
@@ -1302,8 +1301,6 @@ awaiting_callback({'channel_hungup', ACallId, Cause}, #state{account_id=AccountI
                                                             }=State) ->
     lager:info("agent hungup ~s while they were supposed to wait for a callback", [ACallId]),
 
-    %% TODO need to hang up callback
-    % acdc_agent_listener:hangup_call(AgentListener, TempMemberCall),
     acdc_agent_listener:member_connect_retry(AgentListener, OriginalMemberCallId),
 
     acdc_stats:call_missed(AccountId, QueueId, AgentId, OriginalMemberCallId, Cause),
