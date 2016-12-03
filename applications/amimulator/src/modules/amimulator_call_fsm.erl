@@ -247,9 +247,7 @@ answered({'destroy', Reason, CallId}, #state{monitored_channel=Channel
             'undefined' -> 'ok';
             _ ->
                 lager:debug("deleting conference bridge ~s", [ConferenceCallId]),
-                ami_sm:delete_call(ConferenceCallId),
-                Payload = amimulator_util:maybe_leave_conference(ConferenceCallId),
-                amimulator_event_listener:publish_amqp_event({'publish', Payload}, amimulator_call:account_id(Call))
+                ami_sm:delete_call(ConferenceCallId)
         end,
 
         {'stop', 'normal', State};
