@@ -7,6 +7,7 @@
         ]).
 
 -include("../amimulator.hrl").
+-include_lib("kazoo_sip/include/kzsip_uri.hrl").
 
 %%
 %% Public functions
@@ -77,11 +78,11 @@ handle_register(AccountId, EventJObj) ->
             EndpointId = kz_json:get_value(<<"id">>, Result),
             {'ok', EndpointDoc} = kz_datamgr:open_doc(AccountDb, EndpointId),
             Exten = amimulator_util:endpoint_exten(EndpointDoc),
-            Reg = cb_registrations:normalize_registration(EventJObj),
-            ContactIP = kz_json:get_value(<<"contact_ip">>, Reg),
-            ContactPort = kz_json:get_value(<<"contact_port">>, Reg),
+            Contact = kz_json:get_value(<<"Contact">>, EventJObj),
+            [#uri{domain=Domain,port=Port}] = kzsip_uri:uris(Contact),
+            Port1 = kz_util:to_binary(Port),
 
-            ami_sm:add_registration(AccountId, EndpointId, ContactIP, ContactPort),
+            ami_sm:add_registration(AccountId, EndpointId, Domain, Port1),
 
             Peer = <<"SIP/", Exten/binary>>,
             Payload = [[
@@ -90,7 +91,7 @@ handle_register(AccountId, EventJObj) ->
                 {<<"ChannelType">>, <<"SIP">>},
                 {<<"Peer">>, Peer},
                 {<<"PeerStatus">>, <<"Registered">>},
-                {<<"Address">>, <<ContactIP/binary, ":", ContactPort/binary>>}
+                {<<"Address">>, <<Domain/binary, ":", Port1/binary>>}
             ],[
                 {<<"Event">>, <<"ExtensionStatus">>},
                 {<<"Privilege">>, <<"call,all">>},
