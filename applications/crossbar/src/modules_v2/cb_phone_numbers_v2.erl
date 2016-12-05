@@ -350,9 +350,8 @@ post(Context, Number) ->
     Options = [{'assign_to', cb_context:account_id(Context)}
               ,{'auth_by', cb_context:auth_account_id(Context)}
               ],
-    Updaters = [{fun knm_phone_number:reset_doc/2, cb_context:doc(Context)}
-               ],
-    Result = knm_number:update(Number, Updaters, Options),
+    JObj = cb_context:doc(Context),
+    Result = knm_number:update(Number, [{fun knm_phone_number:reset_doc/2, JObj}], Options),
     set_response(Result, Context).
 
 -spec put(cb_context:context(), path_token()) -> cb_context:context().
@@ -604,20 +603,29 @@ maybe_find_numbers(Context) ->
 -spec find_numbers(cb_context:context(), ne_binary(), ne_binary()) -> cb_context:context().
 find_numbers(Context, AccountId, ResellerId) ->
     QS = cb_context:query_string(Context),
+    Country = kz_json:get_ne_value(?COUNTRY, QS, ?KNM_DEFAULT_COUNTRY),
+    Prefix = kz_util:remove_white_spaces(kz_json:get_ne_value(?PREFIX, QS)),
+    Offset = kz_json:get_integer_value(?OFFSET, QS, 0),
+    Token = cb_context:auth_token(Context),
+    HashKey = <<AccountId/binary, "-", Token/binary>>,
+    Hash = kz_base64url:encode(crypto:hash(sha, HashKey)),
+    QueryId = list_to_binary([Country, "-", Prefix, "-", Hash]),
+    Dialcode = knm_util:prefix_for_country(Country),
+    NormalizedPrefix = <<Dialcode/binary, Prefix/binary>>,
     Options = props:filter_undefined(
                 [{'quantity', max(1, kz_json:get_integer_value(?QUANTITY, QS, 1))}
-                ,{'prefix', kz_json:get_ne_value(?PREFIX, QS)}
-                ,{'country', kz_json:get_ne_value(?COUNTRY, QS, ?KNM_DEFAULT_COUNTRY)}
-                ,{'offset', kz_json:get_integer_value(?OFFSET, QS, 0)}
+                ,{'prefix', Prefix}
+                ,{'normalized_prefix', NormalizedPrefix}
+                ,{'country', Country}
+                ,{'dialcode', Dialcode}
+                ,{'offset', Offset}
                 ,{'account_id', AccountId}
                 ,{'reseller_id', ResellerId}
+                ,{'query_id', QueryId}
                 ]),
     OnSuccess =
         fun(C) ->
-                lager:debug("carriers find: ~p", [Options]),
-                Prefix = knm_carriers:prefix(Options),
-                Quantity = knm_carriers:quantity(Options),
-                Found = knm_carriers:find(Prefix, Quantity, Options),
+                Found = knm_search:find(Options),
                 cb_context:setters(C
                                   ,[{fun cb_context:set_resp_data/2, Found}
                                    ,{fun cb_context:set_resp_status/2, 'success'}
@@ -916,8 +924,8 @@ set_response({?COLLECTION, ServicesList, ResultJObj}, Context, CB) ->
                         'false' -> crossbar_util:response_402(RespJObj, Context)
                     end
             end;
-        Errors ->
-            crossbar_util:response_400(<<"client error">>, Errors, Context)
+        _Errors ->
+            crossbar_util:response_400(<<"client error">>, ResultJObj, Context)
     end;
 
 set_response({'dry_run', Services, _ActivationCharges}, Context, CB) ->
@@ -1022,9 +1030,8 @@ numbers_action(Context, ?HTTP_POST, Numbers) ->
     Options = [{'assign_to', cb_context:account_id(Context)}
               ,{'auth_by', cb_context:auth_account_id(Context)}
               ],
-    Routines = [{fun knm_phone_number:reset_doc/2, cb_context:req_data(Context)}
-               ],
-    knm_numbers:update(Numbers, Routines, Options);
+    JObj = cb_context:req_data(Context),
+    knm_numbers:update(Numbers, [{fun knm_phone_number:reset_doc/2, JObj}], Options);
 numbers_action(Context, ?HTTP_DELETE, Numbers) ->
     Options = [{'auth_by', cb_context:auth_account_id(Context)}
               ],

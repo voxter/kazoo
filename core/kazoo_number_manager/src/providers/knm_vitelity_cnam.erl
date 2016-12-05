@@ -12,7 +12,6 @@
 
 -export([save/1]).
 -export([delete/1]).
--export([has_emergency_services/1]).
 
 -include("knm.hrl").
 
@@ -53,14 +52,6 @@ delete(Number) ->
                                      ]
                                     ).
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
--spec has_emergency_services(knm_number:knm_number()) -> boolean().
-has_emergency_services(_Number) -> 'false'.
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -83,8 +74,7 @@ handle_outbound_cnam(Number) ->
             Number1 = knm_services:deactivate_feature(Number, ?FEATURE_CNAM_OUTBOUND),
             handle_inbound_cnam(Number1);
         CurrentCNAM ->
-            Number1 = knm_services:deactivate_feature(Number, ?FEATURE_CNAM_OUTBOUND),
-            handle_inbound_cnam(Number1);
+            handle_inbound_cnam(Number);
         NewCNAM when IsDryRun ->
             lager:debug("dry run: cnam display name changed to ~s", [NewCNAM]),
             Number1 = knm_services:activate_feature(Number, {?FEATURE_CNAM_OUTBOUND, NewCNAM}),

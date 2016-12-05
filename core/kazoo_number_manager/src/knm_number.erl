@@ -41,6 +41,7 @@
 -export([ensure_can_load_to_create/1]).
 -export([ensure_can_create/2]).
 -export([create_or_load/3]).
+-export([update_phone_number/2]).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
@@ -136,30 +137,25 @@ create_or_load(Num, Options0) ->
 
 -spec state_for_create(ne_binary(), knm_number_options:options()) -> ne_binary().
 -ifdef(TEST).
-state_for_create(?MASTER_ACCOUNT_ID, Options) ->
-    case knm_number_options:state(Options) =:= ?NUMBER_STATE_PORT_IN of
-        'true' -> ?NUMBER_STATE_PORT_IN;
-        'false' -> ?NUMBER_STATE_AVAILABLE
-    end;
-state_for_create(?RESELLER_ACCOUNT_ID, Options) ->
-    case knm_number_options:state(Options) =:= ?NUMBER_STATE_PORT_IN of
-        'true' -> ?NUMBER_STATE_PORT_IN;
-        'false' -> ?NUMBER_STATE_RESERVED
-    end;
-state_for_create(_AccountId, _) -> ?NUMBER_STATE_IN_SERVICE.
+state_for_create(AccountId, Options) ->
+    case {knm_number_options:state(Options), AccountId} of
+        {?NUMBER_STATE_PORT_IN=PortIn, _} -> PortIn;
+        {_, ?MASTER_ACCOUNT_ID} -> ?NUMBER_STATE_AVAILABLE;
+        {_, ?RESELLER_ACCOUNT_ID} -> ?NUMBER_STATE_RESERVED;
+        _ -> ?NUMBER_STATE_IN_SERVICE
+    end.
 -else.
 state_for_create(AccountId, Options) ->
-    case kz_services:is_reseller(AccountId) of
-        'false' -> ?NUMBER_STATE_IN_SERVICE;
-        'true' ->
-            state_for_create_reseller(AccountId, knm_number_options:state(Options))
-    end.
-
-state_for_create_reseller(_, ?NUMBER_STATE_PORT_IN) -> ?NUMBER_STATE_PORT_IN;
-state_for_create_reseller(AccountId, _) ->
-    case kapps_util:get_master_account_id() of
-        {'ok', AccountId} -> ?NUMBER_STATE_AVAILABLE;
-        {'ok', _} -> ?NUMBER_STATE_RESERVED
+    case knm_number_options:state(Options) of
+        ?NUMBER_STATE_PORT_IN=PortIn -> PortIn;
+        _ ->
+            case kz_services:is_reseller(AccountId)
+                andalso kapps_util:get_master_account_id()
+            of
+                'false' -> ?NUMBER_STATE_IN_SERVICE;
+                {'ok', AccountId} -> ?NUMBER_STATE_AVAILABLE;
+                {'ok', _} -> ?NUMBER_STATE_RESERVED
+            end
     end.
 -endif.
 
@@ -305,14 +301,25 @@ move(Num, MoveTo) ->
 move(Num, ?MATCH_ACCOUNT_RAW(MoveTo), Options0) ->
     Options = [{'assign_to', MoveTo} | Options0],
     case get(Num, Options) of
-        {'ok', Number} ->
-            attempt(fun move_to/1, [Number]);
-        {'error', 'not_found'} ->
-            PN = knm_phone_number:new(Num, Options),
-            Number = set_phone_number(new(), PN),
-            attempt(fun move_to/1, [Number]);
+        {'ok', Number} -> attempt(fun move_to/1, [Number]);
+        {'error', 'not_found'} -> maybe_from_discovery(Num, Options);
         {'error', _R}=E -> E
     end.
+
+
+-spec maybe_from_discovery(ne_binary(), knm_number_options:options()) -> knm_number_return().
+maybe_from_discovery(Num, Options) ->
+    case knm_search:discovery(Num, Options) of
+        {'ok', Number} -> attempt(fun move_to/1, [Number]);
+        {'error', 'not_found'} -> from_not_found(Num, Options);
+        {'error', _R}=E -> E
+    end.
+
+-spec from_not_found(ne_binary(), knm_number_options:options()) -> knm_number_return().
+from_not_found(Num, Options) ->
+    PN = knm_phone_number:new(Num, Options),
+    Number = set_phone_number(new(), PN),
+    attempt(fun move_to/1, [Number]).
 
 -spec move_to(knm_number()) -> knm_number_return().
 move_to(Number) ->
@@ -349,7 +356,7 @@ update_phone_number(Number, Routines) ->
     case knm_phone_number:setters(PhoneNumber, Routines) of
         {'error', _R}=Error -> Error;
         {'ok', NewPN} ->
-            save_number(set_phone_number(Number, NewPN))
+            {'ok', save_number(set_phone_number(Number, NewPN))}
     end.
 
 %%--------------------------------------------------------------------
@@ -387,8 +394,7 @@ is_carrier_search_result(Number) ->
 %% Note: option 'assign_to' needs to be set.
 %% @end
 %%--------------------------------------------------------------------
--spec reconcile(ne_binary(), knm_number_options:options()) ->
-                       knm_number_return().
+-spec reconcile(ne_binary(), knm_number_options:options()) -> knm_number_return().
 reconcile(DID, Options) ->
     knm_number_options:assign_to(Options) == 'undefined'
         andalso knm_errors:assign_failure(Options, 'field_undefined'),
@@ -405,8 +411,7 @@ reconcile(DID, Options) ->
         {'error', _}=E -> E
     end.
 
--spec reconcile_number(knm_number(), knm_number_options:options()) ->
-                              knm_number_return().
+-spec reconcile_number(knm_number(), knm_number_options:options()) -> knm_number_return().
 reconcile_number(Number, Options) ->
     PhoneNumber = phone_number(Number),
     Updaters = [{knm_number_options:assign_to(Options)
@@ -421,6 +426,10 @@ reconcile_number(Number, Options) ->
                 ,knm_phone_number:doc(PhoneNumber)
                 ,fun knm_phone_number:update_doc/2
                 }
+               ,{knm_number_options:module_name(Options)
+                ,knm_phone_number:module_name(PhoneNumber)
+                ,fun knm_phone_number:set_module_name/2
+                }
                ,{?NUMBER_STATE_IN_SERVICE
                 ,knm_phone_number:state(PhoneNumber)
                 ,fun knm_phone_number:set_state/2
@@ -432,13 +441,10 @@ reconcile_number(Number, Options) ->
             save_wrap_phone_number(UpdatedPhoneNumber, Number)
     end.
 
--spec updates_require_save(knm_phone_number:knm_phone_number(), up_req_els()) ->
-                                  up_req_acc().
+-spec updates_require_save(knm_phone_number:knm_phone_number(), up_req_els()) -> up_req_acc().
 updates_require_save(PhoneNumber, Updaters) ->
-    lists:foldl(fun update_requires_save/2
-               ,{'false', PhoneNumber}
-               ,Updaters
-               ).
+    Acc0 = {'false', PhoneNumber},
+    lists:foldl(fun update_requires_save/2, Acc0, Updaters).
 
 -type set_fun() :: fun((knm_phone_number:knm_phone_number(), any()) -> knm_phone_number:knm_phone_number()).
 
@@ -531,11 +537,10 @@ maybe_age(Number) ->
 %% @public
 %% @doc
 %% Remove a number from the system without doing any checking.
-%% Sounds too harsh for you? you are looking for release/1,2.
+%% Sounds too harsh for you? You are looking for release/1,2.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(ne_binary(), knm_number_options:options()) ->
-                    knm_number_return().
+-spec delete(ne_binary(), knm_number_options:options()) -> knm_number_return().
 delete(Num, Options) ->
     case get(Num, Options) of
         {'error', _R}=E -> E;
@@ -561,10 +566,8 @@ delete_number(Number, AuthBy) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec assign_to_app(ne_binary(), api_binary()) ->
-                           knm_number_return().
--spec assign_to_app(ne_binary(), api_binary(), knm_number_options:options()) ->
-                           knm_number_return().
+-spec assign_to_app(ne_binary(), api_binary()) -> knm_number_return().
+-spec assign_to_app(ne_binary(), api_binary(), knm_number_options:options()) -> knm_number_return().
 assign_to_app(Num, App) ->
     assign_to_app(Num, App, knm_number_options:default()).
 

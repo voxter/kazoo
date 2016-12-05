@@ -12,7 +12,6 @@
 
 -export([save/1]).
 -export([delete/1]).
--export([has_emergency_services/1]).
 
 -include("knm.hrl").
 
@@ -52,14 +51,6 @@ delete(Number) ->
                                      ,?FEATURE_CNAM
                                      ]
                                     ).
-
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
--spec has_emergency_services(knm_number:knm_number()) -> boolean().
-has_emergency_services(_Number) -> 'false'.
 
 %%%===================================================================
 %%% Internal functions
@@ -108,13 +99,11 @@ handle_inbound_cnam(Number) ->
                                  ,knm_phone_number:doc(PN)),
     NotChanged = CurrentInboundCNAM =:= InboundCNAM,
     case InboundCNAM of
-        false when NotChanged ->
-            knm_services:deactivate_feature(Number, ?CNAM_INBOUND_LOOKUP);
+        false when NotChanged -> Number;
         false ->
             _ = disable_inbound(Number),
             knm_services:deactivate_feature(Number, ?CNAM_INBOUND_LOOKUP);
-        true when NotChanged ->
-            Number;
+        true when NotChanged -> Number;
         true ->
             _ = enable_inbound(Number),
             FeatureData = kz_json:from_list([{?CNAM_INBOUND_LOOKUP, true}]),

@@ -5,6 +5,7 @@
 %%% @end
 %%% @contributors
 %%%   Peter Defebvre
+%%%   Pierre Fenoll
 %%%-------------------------------------------------------------------
 -module(knm_providers).
 
@@ -12,10 +13,10 @@
 
 -export([save/1]).
 -export([delete/1]).
--export([has_emergency_services/1]).
 -export([allowed_features/1
         ,service_name/2
         ]).
+-export([e911_caller_name/2]).
 
 -define(DEFAULT_CNAM_PROVIDER, <<"knm_cnam_notifier">>).
 -define(DEFAULT_E911_PROVIDER, <<"knm_dash_e911">>).
@@ -57,21 +58,6 @@ delete(Number) ->
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
-%% Return whether a number has emergency services enabled
-%% @end
-%%--------------------------------------------------------------------
--spec has_emergency_services(knm_number:number()) -> boolean().
-has_emergency_services(Number) ->
-    Providers = provider_modules(Number),
-    F = fun (Provider) -> apply_action(Number, 'has_emergency_services', Provider) end,
-    lists:foldl(fun erlang:'or'/2
-               ,'false'
-               ,lists:filtermap(F, Providers)
-               ).
-
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
 %% List features a number is allowedby its reseller to enable.
 %% @end
 %%--------------------------------------------------------------------
@@ -89,6 +75,7 @@ maybe_fix_e911(Features) ->
         'true' -> Features ++ [<<"e911">>];
         'false' -> Features
     end.
+
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
@@ -102,6 +89,28 @@ service_name(?FEATURE_CNAM, AccountId) ->
     service_name(?CNAM_PROVIDER(AccountId));
 service_name(Feature, _) ->
     service_name(Feature).
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Util function to get E911 caller name defaults.
+%% @end
+%%--------------------------------------------------------------------
+-spec e911_caller_name(knm_number:knm_number(), api_ne_binary()) -> ne_binary().
+-ifdef(TEST).
+e911_caller_name(_Number, ?NE_BINARY=Name) -> Name;
+e911_caller_name(_Number, 'undefined') -> ?E911_NAME_DEFAULT.
+-else.
+e911_caller_name(_Number, ?NE_BINARY=Name) -> Name;
+e911_caller_name(Number, 'undefined') ->
+    AccountId = knm_phone_number:assigned_to(knm_number:phone_number(Number)),
+    case kz_account:fetch(AccountId) of
+        {'ok', JObj} -> kz_account:name(JObj, ?E911_NAME_DEFAULT);
+        {'error', _Error} ->
+            lager:error('error opening account doc ~p', [AccountId]),
+            ?E911_NAME_DEFAULT
+    end.
+-endif.
 
 %%%===================================================================
 %%% Internal functions
@@ -125,9 +134,10 @@ service_name(Feature) -> Feature.
 provider_modules(Number) ->
     PhoneNumber = knm_number:phone_number(Number),
     AccountId = knm_phone_number:assigned_to(PhoneNumber),
-    Possible = kz_json:get_keys(knm_phone_number:doc(PhoneNumber)),
+    Possible0 = kz_json:get_keys(knm_phone_number:doc(PhoneNumber)),
+    Possible = lists:usort(Possible0 ++ knm_phone_number:features_list(PhoneNumber)),
     AllowedBase = allowed_features(PhoneNumber),
-    Allowed = case lists:member(?FEATURE_E911, Possible) of
+    Allowed = case lists:member(?FEATURE_E911, Possible0) of
                   true -> AllowedBase;
                   false ->
                       %% For backward compatibility
@@ -178,7 +188,7 @@ cnam_provider(AccountId) -> ?CNAM_PROVIDER(AccountId).
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--type exec_action() :: 'save' | 'delete' | 'has_emergency_services'.
+-type exec_action() :: 'save' | 'delete'.
 -spec exec(knm_number:knm_number(), exec_action()) ->
                   knm_number:knm_number().
 -spec exec(knm_number:knm_number(), exec_action(), ne_binaries()) ->
@@ -194,11 +204,10 @@ fix_old_fields_names(Number) ->
     Doc = knm_phone_number:doc(PN),
     Values = props:filter_undefined(
                [{?FEATURE_E911, kz_json:get_ne_value(<<"dash_e911">>, Doc)}
-               ,{<<"dash_e911">>, null}
                ,{?FEATURE_E911, kz_json:get_ne_value(<<"vitelity_e911">>, Doc)}
-               ,{<<"vitelity_e911">>, null}
                ]),
-    NewDoc = kz_json:set_values(Values, Doc),
+    ToDelete = [<<"dash_e911">>, <<"vitelity_e911">>],
+    NewDoc = kz_json:set_values(Values, kz_json:delete_keys(ToDelete, Doc)),
     NewPN = knm_phone_number:update_doc(PN, NewDoc),
     knm_number:set_phone_number(Number, NewPN).
 

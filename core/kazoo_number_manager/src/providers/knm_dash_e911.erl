@@ -13,7 +13,6 @@
 
 -export([save/1]).
 -export([delete/1]).
--export([has_emergency_services/1]).
 
 -include("knm.hrl").
 
@@ -78,15 +77,6 @@ delete(Number) ->
             knm_services:deactivate_feature(Number, ?FEATURE_E911)
     end.
 
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
--spec has_emergency_services(knm_number:knm_number()) -> boolean().
-has_emergency_services(Number) ->
-    feature(Number) =/= 'undefined'.
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -113,7 +103,7 @@ maybe_update_e911(Number) ->
             _ = remove_number(Number),
             knm_services:deactivate_feature(Number, ?FEATURE_E911);
         'false' when NotChanged  ->
-            knm_services:deactivate_feature(Number, ?FEATURE_E911);
+            Number;
         'false' ->
             lager:debug("information has been changed: ~s", [kz_json:encode(E911)]),
             _NewFeature = maybe_update_e911(Number, E911),
@@ -171,7 +161,8 @@ update_e911(_Number, Address, 'true') -> Address;
 update_e911(Number, Address, 'false') ->
     Num = knm_phone_number:number(knm_number:phone_number(Number)),
     Location = json_address_to_xml_location(Address),
-    CallerName = kz_json:get_ne_value(<<"caller_name">>, Address, <<"Valued Customer">>),
+    E911Name = kz_json:get_ne_binary_value(?E911_NAME, Address),
+    CallerName = knm_providers:e911_caller_name(Number, E911Name),
     case add_location(Num, Location, CallerName) of
         {'provisioned', E911} ->
             lager:debug("provisioned address"),
@@ -416,7 +407,7 @@ location_xml_to_json_address(Xml) ->
         [{?E911_STREET1, kz_util:get_xml_value("address1/text()", Xml)}
         ,{?E911_STREET2, kz_util:get_xml_value("address2/text()", Xml)}
         ,{<<"activated_time">>, kz_util:get_xml_value("activated_time/text()", Xml)}
-        ,{<<"caller_name">>, kz_util:get_xml_value("callername/text()", Xml)}
+        ,{?E911_NAME, kz_util:get_xml_value("callername/text()", Xml)}
         ,{<<"comments">>, kz_util:get_xml_value("comments/text()", Xml)}
         ,{?E911_CITY, kz_util:get_xml_value("community/text()", Xml)}
         ,{<<"order_id">>, kz_util:get_xml_value("customerorderid/text()", Xml)}

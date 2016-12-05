@@ -80,7 +80,7 @@
         ,normalize_jobj/3
         ,normalize/1
         ,normalize_key/1
-        ,are_identical/2
+        ,are_identical/2, are_equal/2
         ]).
 -export([public_fields/1
         ,private_fields/1
@@ -232,6 +232,19 @@ are_identical(JObj1, JObj2) ->
                not kz_util:is_empty(V)
         ].
 
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Finds out wether 2 JSON objects are recursively identical.
+%% @end
+%%--------------------------------------------------------------------
+-spec are_equal(api_object(), api_object()) -> boolean().
+are_equal('undefined', 'undefined') -> 'true';
+are_equal('undefined', _) -> 'false';
+are_equal(_, 'undefined') -> 'false';
+are_equal(JObj1, JObj2) ->
+    to_map(JObj1) =:= to_map(JObj2).
+
 %% converts top-level proplist to json object, but only if sub-proplists have been converted
 %% first.
 %% For example:
@@ -330,18 +343,11 @@ merge_recursive(?JSON_WRAPPER(_)=JObj1, ?JSON_WRAPPER(_)=JObj2, Pred, Keys) when
          ,JObj1
          ,JObj2
          );
-merge_recursive(?JSON_WRAPPER(_)=JObj1, 'null', Pred, Keys) when is_function(Pred, 2) ->
-    delete_key(lists:reverse(Keys), JObj1);
 merge_recursive(?JSON_WRAPPER(_)=JObj1, Value, Pred, Keys) when is_function(Pred, 2) ->
     Syek = lists:reverse(Keys),
-    V = get_value(Syek, JObj1),
-    case 'null' =:= V of
-        'true' -> delete_key(Syek, JObj1);
-        'false' ->
-            case Pred(V, Value) of
-                'false' -> JObj1;
-                'true' -> set_value(Syek, Value, JObj1)
-            end
+    case Pred(get_value(Syek, JObj1), Value) of
+        'false' -> JObj1;
+        'true' -> set_value(Syek, Value, JObj1)
     end.
 
 -spec to_proplist(object() | objects()) -> json_proplist() | json_proplists().
@@ -361,9 +367,14 @@ recursive_to_proplist(Props) when is_list(Props) ->
     [recursive_to_proplist(V) || V <- Props];
 recursive_to_proplist(Else) -> Else.
 
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Convert a json object to a map
+%% @end
+%%--------------------------------------------------------------------
 -spec to_map(object() | objects()) -> map().
 -spec to_map(path(), object() | objects()) -> map().
-%% Convert a json object to a map
 to_map(JObjs) when is_list(JObjs) ->
     lists:foldl(fun to_map_fold/2, #{}, JObjs);
 to_map(JObj) ->
@@ -379,22 +390,26 @@ to_map_fold(JObj, #{}=Map) ->
 -spec recursive_to_map(object() | objects() | kz_proplist()) -> map().
 recursive_to_map(?JSON_WRAPPER(Props)) ->
     maps:from_list([{K, recursive_to_map(V)} || {K, V} <- Props]);
+recursive_to_map(List) when is_list(List) ->
+    [recursive_to_map(Item) || Item <- List];
 recursive_to_map(Else) -> Else.
 
--spec from_map(map()) -> object().
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
 %% Convert a map to a json object
+%% @end
+%%--------------------------------------------------------------------
+-spec from_map(map()) -> object().
 from_map(Map) when is_map(Map) ->
     recursive_from_map(Map).
 
 -spec recursive_from_map(map()) -> object().
 recursive_from_map(Map) when is_map(Map) ->
     from_list([{K, recursive_from_map(V)} || {K, V} <- maps:to_list(Map)]);
+recursive_from_map(List) when is_list(List) ->
+    [recursive_from_map(Item) || Item <- List];
 recursive_from_map(Else) -> Else.
-
-
-
-
-
 
 
 %% Convert {key1:val1,key2:[v2_1, v2_2],key3:{k3_1:v3_1}} =>
@@ -828,7 +843,8 @@ set_value(Keys, Value, JObj) when is_list(Keys) -> set_value1(Keys, Value, JObj)
 set_value(Key, Value, JObj) -> set_value1([Key], Value, JObj).
 
 -spec set_value1(keys(), json_term(), object() | objects()) -> object() | objects().
-set_value1([Key|_]=Keys, Value, []) when not is_integer(Key) -> set_value1(Keys, Value, new());
+set_value1([Key|_]=Keys, Value, []) when not is_integer(Key) ->
+    set_value1(Keys, Value, new());
 set_value1([Key|T], Value, JObjs) when is_list(JObjs) ->
     Key1 = kz_util:to_integer(Key),
     case Key1 > length(JObjs) of
@@ -855,6 +871,7 @@ set_value1([Key|T], Value, JObjs) when is_list(JObjs) ->
     end;
 
 %% Figure out how to set the current key in an existing object
+set_value1([_|_]=Keys, null, JObj) -> delete_key(Keys, JObj);
 set_value1([Key1|T], Value, ?JSON_WRAPPER(Props)) ->
     case lists:keyfind(Key1, 1, Props) of
         {Key1, ?JSON_WRAPPER(_)=V1} ->

@@ -5487,6 +5487,7 @@
                         },
                         "caller_name": {
                             "description": "The name that will show to emergency services",
+                            "minLength": 3,
                             "type": "string"
                         },
                         "extended_address": {
@@ -9557,6 +9558,10 @@
                     "description": "media normalize source args",
                     "type": "string"
                 },
+                "proxy_hostname": {
+                    "description": "media proxy hostname to be used with haproxy",
+                    "type": "string"
+                },
                 "proxy_listeners": {
                     "default": 25,
                     "description": "media proxy listeners",
@@ -10259,6 +10264,11 @@
                     "description": "number_manager force port out outbound",
                     "type": "boolean"
                 },
+                "maximum_search_quantity": {
+                    "default": 50,
+                    "description": "maximum number of returned DIDs in search query",
+                    "type": "integer"
+                },
                 "porting_module_name": {
                     "default": "knm_local",
                     "description": "number manager porting module name",
@@ -10376,7 +10386,7 @@
                     "type": "boolean"
                 },
                 "max_search_quantity": {
-                    "default": 120,
+                    "default": 500,
                     "description": "number_manager.bandwidth2 max search quantity",
                     "type": "integer"
                 },
@@ -21030,6 +21040,11 @@
         },
         "/auth/callback": {
             "put": {}
+        },
+        "/auth/links": {
+            "delete": {},
+            "get": {},
+            "post": {}
         },
         "/auth/tokeninfo": {
             "get": {}

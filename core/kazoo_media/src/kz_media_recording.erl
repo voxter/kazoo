@@ -68,6 +68,7 @@
                ,store_attempted = 'false' :: boolean()
                ,is_recording = 'false'    :: boolean()
                ,retries = 0               :: integer()
+               ,verb = 'put'              :: atom()
                ,preserve_metadata = 'false' :: boolean()
                ,extra_metadata            :: kz_proplist() | 'undefined'
                }).
@@ -181,6 +182,7 @@ init([Call, Data]) ->
     MediaName = kz_json:get_value(?RECORDING_ID_KEY, Data, DefaultMediaName),
     Url = kz_json:get_value(<<"url">>, Data),
     ShouldStore = should_store_recording(AccountId, Url),
+    Verb = kz_json:get_atom_value(<<"method">>, Data, 'put'),
 
     {'ok', #state{url=Url
                  ,format=Format
@@ -197,6 +199,7 @@ init([Call, Data]) ->
                  ,sample_rate = SampleRate
                  ,record_min_sec = RecordMinSec
                  ,retries = ?STORAGE_RETRY_TIMES(AccountId)
+                 ,verb = Verb
                  ,preserve_metadata = PreserveMetadata
                  ,extra_metadata = ExtraMetadata
                  }}.
@@ -531,9 +534,10 @@ store_url(#state{doc_db=Db
                 ,media={_,MediaName}
                 ,format=Ext
                 ,should_store={'true', 'other', Url}
+                ,verb=Verb
                 }, _Rev) ->
     HttpOptions = #{url => Url
-                   ,verb => 'put'
+                   ,verb => Verb
                    ,field_separator => <<>>
                    ,field_list => [<<"call_recording_">>
                                   ,{field, <<"call_id">>}
@@ -597,8 +601,7 @@ save_recording(#state{call=Call, media=Media}=State, _) ->
             lager:warning("error storing metadata : ~p", [Err]),
             gen_server:cast(self(), 'store_failed');
         Rev ->
-            StoreUrl = store_url(State, Rev),
-            lager:info("store url: ~s", [StoreUrl]),
+            StoreUrl = fun()-> store_url(State, Rev) end,
             store_recording(Media, StoreUrl, Call)
     end.
 
@@ -614,7 +617,7 @@ start_recording(Call, MediaName, TimeLimit, MediaDocId, SampleRate, RecordMinSec
     kapps_call_command:start_record_call(Props, TimeLimit, Call),
     gen_server:cast(self(), 'recording_started').
 
--spec store_recording({ne_binary(), ne_binary()}, ne_binary(), kapps_call:call()) -> 'ok'.
+-spec store_recording({ne_binary(), ne_binary()}, ne_binary() | function(), kapps_call:call()) -> 'ok'.
 store_recording({DirName, MediaName}, StoreUrl, Call) ->
     Filename = filename:join(DirName, MediaName),
     case kapps_call_command:store_file(Filename, StoreUrl, Call) of

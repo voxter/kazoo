@@ -12,7 +12,7 @@
 -include_lib("kazoo_json/include/kazoo_json.hrl").
 -include("knm.hrl").
 
--export([find/1, find/2, find/3
+-export([find/1, find/2
         ,check/1, check/2
         ,available_carriers/1
         ,default_carriers/0, default_carrier/0
@@ -82,25 +82,24 @@ option_to_kv({K, V}, JObj) ->
 -define(CARRIER_MODULES(AccountId)
        ,kapps_account_config:get(AccountId, ?KNM_CONFIG_CAT, <<"carrier_modules">>, ?CARRIER_MODULES)).
 
+-define(MAX_QUANTITY, kapps_config:get_integer(?KNM_CONFIG_CAT, <<"maximum_search_quantity">>, 50)).
+
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
 -spec find(ne_binary()) -> kz_json:objects().
--spec find(ne_binary(), integer()) -> kz_json:objects().
--spec find(ne_binary(), integer(), options()) -> kz_json:objects().
+-spec find(ne_binary(), options()) -> kz_json:objects().
 
 find(Prefix) ->
-    find(Prefix, 1).
+    find(Prefix, []).
 
-find(Prefix, Quantity) ->
-    find(Prefix, Quantity, []).
-
-find(Prefix, Quantity, Options0) ->
+find(Prefix, Options0) ->
     Dialcode = knm_util:prefix_for_country(country(Options0)),
     Options = [{'dialcode', Dialcode} | Options0],
     NormalizedPrefix = <<Dialcode/binary, (prefix(Options, Prefix))/binary>>,
+    Quantity = quantity(Options),
     Carriers = available_carriers(Options),
     lager:debug("contacting, in order: ~p", [Carriers]),
     Acc0 = #{found => []
@@ -374,7 +373,8 @@ create_found(DID=?NE_BINARY, Carrier, Auth, Data, State=?NE_BINARY)
 
 -spec quantity(options()) -> pos_integer().
 quantity(Options) ->
-    props:get_integer_value('quantity', Options, 1).
+    Quantity = props:get_integer_value('quantity', Options, 1),
+    min(Quantity, ?MAX_QUANTITY).
 
 -spec prefix(options()) -> ne_binary().
 -spec prefix(options(), ne_binary()) -> ne_binary().

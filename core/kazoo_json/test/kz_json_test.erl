@@ -57,7 +57,7 @@ prop_get_value() ->
                               andalso hd(Prop)
                           of
                               {K,V} ->
-                                  V =:= kz_json:get_value([K], JObj);
+                                  V =:= kz_json:get_value([K], JObj, V);
                               'false' -> kz_json:new() =:= JObj
                           end
                       end)
@@ -69,7 +69,7 @@ prop_set_value() ->
            ,?WHENFAIL(io:format("Failed prop_set_value with ~p:~p -> ~p~n", [Key, Value, JObj]),
                       begin
                           JObj1 = kz_json:set_value(Key, Value, JObj),
-                          Value =:= kz_json:get_value(Key, JObj1)
+                          Value =:= kz_json:get_value(Key, JObj1, Value)
                       end)
            ).
 
@@ -88,10 +88,20 @@ prop_to_proplist() ->
                           ,{<<"d1k2">>, 'd1v2'}
                           ,{<<"d1k3">>, [<<"d1v3.1">>, <<"d1v3.2">>, <<"d1v3.3">>]}
                           ])).
+-define(D1_MERGE, ?JSON_WRAPPER([{<<"d1k1">>, 'd2k2'}
+                                ,{<<"d1k2">>, 'd1v2'}
+                                ,{<<"d1k3">>, [<<"d1v3.1">>, <<"d1v3.2">>, <<"d1v3.3">>]}
+                                ])).
 -define(D2, ?JSON_WRAPPER([{<<"d2k1">>, 1}
                           ,{<<"d2k2">>, 3.14}
                           ,{<<"sub_d1">>, ?D1}
                           ])).
+-define(D2_MERGE, ?JSON_WRAPPER([{<<"d2k1">>, 1}
+                                ,{<<"d2k2">>, 3.14}
+                                ,{<<"sub_d1">>, ?D1_MERGE}
+                                ,{<<"blip">>, ?JSON_WRAPPER([{<<"blop">>, null}])}
+                                ])).
+
 -define(D3, ?JSON_WRAPPER([{<<"d3k1">>, <<"d3v1">>}
                           ,{<<"d3k2">>, []}
                           ,{<<"sub_docs">>, [?D1, ?D2]}
@@ -148,11 +158,7 @@ merge_jobjs_test_() ->
 
 merge_recursive_test_() ->
     Base = kz_json:set_value([<<"blip">>, <<"blop">>], 42, ?D2),
-    New = kz_json:set_values([{[<<"sub_d1">>, <<"d1k1">>], 'd2k2'}
-                             ,{[<<"blip">>, <<"blop">>], 'null'}
-                             ]
-                            ,Base
-                            ),
+    New = ?D2_MERGE,
     JObj = kz_json:merge_recursive(Base, New),
     JObj1 = kz_json:merge_recursive([Base, New]),
     lists:flatmap(fun do_merge_recursive/1, [JObj, JObj1]).
@@ -489,4 +495,39 @@ get_ne_json_object_test_() ->
     ,?_assertEqual('undefined'
                   ,kz_json:get_ne_json_value(<<"o2">>, JObj)
                   )
+    ].
+
+-define(MAP_JSON,
+        kz_json:from_list([{a, <<"zero">>}
+                          ,{<<"B">>, true}
+                          ,{<<"c">>, [1
+                                     ,2
+                                     ,kz_json:from_list([{42, 24}
+                                                        ,{<<"42">>, 24}
+                                                        ])
+                                     ]}
+                          ])).
+
+-define(JSON_MAP, #{a => <<"zero">>
+                   ,<<"B">> => true
+                   ,<<"c">> => [1
+                               ,2
+                               ,#{<<"42">> => 24
+                                 ,42 => 24
+                                 }
+                               ]
+                   }).
+
+to_map_test_() ->
+    io:format(user, "\n>1> ~p\n", [kz_json:to_map(?MAP_JSON)]),
+    io:format(user, "\n>2> ~p\n", [kz_json:from_map(?JSON_MAP)]),
+    [?_assertEqual(?JSON_MAP, kz_json:to_map(?MAP_JSON))
+    ,?_assertEqual(?MAP_JSON, kz_json:from_map(?JSON_MAP))
+    ,?_assertEqual(?JSON_MAP, kz_json:to_map(kz_json:from_map(?JSON_MAP)))
+    ,?_assertEqual(?MAP_JSON, kz_json:from_map(kz_json:to_map(?MAP_JSON)))
+    ].
+
+are_equal_test_() ->
+    JObj = kz_json:from_map(kz_json:to_map(?MAP_JSON)),
+    [?_assertEqual(true, kz_json:are_equal(?MAP_JSON, JObj))
     ].
