@@ -713,6 +713,6 @@ destroy_channel(Reason, Call) ->
         {<<"ConnectedLineName">>, OtherCID},
         {<<"Cause">>, Cause},
         {<<"Cause-txt">>, CauseText}
-    ]] ++ amimulator_util:maybe_leave_conference(CallId),
+    ]],
 
     amimulator_event_listener:publish_amqp_event({publish, Payload}, amimulator_call:account_id(Call)).
