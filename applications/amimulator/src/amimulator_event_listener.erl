@@ -30,6 +30,7 @@
                   ,'amimulator_acdc'
                   ,'amimulator_reg'
                   ,'amimulator_conf'
+                  ,'amimulator_presence'
                   ,'amimulator_vm'
                  ]).
 
