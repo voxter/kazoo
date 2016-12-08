@@ -38,6 +38,10 @@
 
 -type announce_pid_list() :: [{api_binary(), pid()},...] | [].
 
+-type fsm_state_name() :: 'wait' | 'sync' | 'ready' | 'ringing' |
+                          'ringing_callback' | 'awaiting_callback' |
+                          'answered' | 'wrapup' | 'paused' | 'outbound'.
+
 %% Check for cleanup every 5 minutes
 -define(CLEANUP_PERIOD, whapps_config:get_integer(?CONFIG_CAT, <<"cleanup_period_ms">>, 360000)).
 
