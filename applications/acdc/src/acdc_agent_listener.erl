@@ -1410,7 +1410,7 @@ do_originate_callback_return(MyQ, Call) ->
                                                       ,<<"Channel-Authorized">>
                                                      ]}
                  ,{<<"Application-Name">>, <<"bridge">>}
-                 ,{<<"Timeout">>, 30}
+                 ,{<<"Timeout">>, 60}
 
                  ,{<<"Outbound-Caller-ID-Name">>, whapps_call:callee_id_name(Call)}
                  ,{<<"Outbound-Caller-ID-Number">>, whapps_call:callee_id_number(Call)}
