@@ -234,11 +234,17 @@ in_service_from_reserved_authorize(Number) ->
 in_service_from_in_service_authorize(Number) ->
     PhoneNumber = knm_number:phone_number(Number),
     AssignTo = knm_phone_number:assign_to(PhoneNumber),
+    AssignedTo = knm_phone_number:assigned_to(PhoneNumber),
     AuthBy = knm_phone_number:auth_by(PhoneNumber),
     Sudo = ?KNM_DEFAULT_AUTH_BY =:= AuthBy,
     case Sudo
-        orelse ?ACCT_HIERARCHY(AssignTo, AuthBy, 'true')
-        orelse ?ACCT_HIERARCHY(AuthBy, AssignTo, 'false')
+        %% Assign to self or parent
+        %% Allowed when account is parent of owner or owner
+        orelse (?ACCT_HIERARCHY(AssignTo, AuthBy, 'true')
+                andalso ?ACCT_HIERARCHY(AuthBy, AssignedTo, 'true'))
+        %% Assign to another child
+        %% Allowed when account is parent of owner
+        orelse ?ACCT_HIERARCHY(AuthBy, AssignedTo, 'false')
     of
         'false' -> knm_errors:unauthorized();
         'true' ->
