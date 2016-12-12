@@ -40,7 +40,14 @@
             orelse Prefix == <<"88*">>
        ).
 
--define(DEFAULT_E911_FEATURE, ?DASH_KEY).
+
+-define(DEFAULT_ALLOWED_FEATURES, [?FEATURE_CNAM
+                                  ,?FEATURE_E911
+                                  ,?FEATURE_FAILOVER
+                                  ,?FEATURE_PORT
+                                  ,?FEATURE_PREPEND
+                                  ]).
+
 
 
 -ifdef(TEST).
@@ -55,6 +62,8 @@
 -define(TEST_IN_SERVICE_WITH_HISTORY_NUM, <<"+15551255693">>).
 -define(TEST_CREATE_TOLL, <<"+18887771111">>).
 -define(TEST_EXISTING_TOLL, <<"+18005551212">>).
+-define(TEST_OLD_NUM, <<"+15045551226">>).
+-define(TEST_OLD2_NUM, <<"+12014370855">>).
 
 -define(MASTER_ACCOUNT_ID,   <<"master_account_6992af0e9504d0b27">>).
 -define(RESELLER_ACCOUNT_ID, <<"reseller_account_b113394f16cb76d">>).

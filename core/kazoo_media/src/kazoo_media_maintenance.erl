@@ -207,7 +207,7 @@ maybe_retry_upload(ID, AttachmentName, Contents, Options, Retries) ->
                     timer:sleep(?MILLISECONDS_IN_SECOND),
                     upload_prompt(ID, AttachmentName, Contents, Options, Retries-1);
                 _Attachment ->
-                    io:format("  attachment appears to have uploaded successfully!")
+                    io:format("  attachment appears to have uploaded successfully!~n")
             end;
         {'error', E}=Error ->
             io:format("  failed to open the media doc again: ~p~n", [E]),
@@ -378,8 +378,12 @@ fix_media_name(JObj) ->
 
 -spec fix_media_names() -> any().
 fix_media_names() ->
-    {'ok', JObjs} = kz_datamgr:all_docs(?KZ_MEDIA_DB),
-    case [ JObj || JObj <- JObjs, filter_media_names(JObj)] of
-        [] -> kapps_config:set(?CONFIG_CAT, <<"fix_media_names">>, 'false');
-        List -> lists:foreach(fun fix_media_name/1, List)
+    case kz_datamgr:all_docs(?KZ_MEDIA_DB) of
+        {'ok', JObjs} ->
+            case [ JObj || JObj <- JObjs, filter_media_names(JObj)] of
+                [] -> kapps_config:set(?CONFIG_CAT, <<"fix_media_names">>, 'false');
+                List -> lists:foreach(fun fix_media_name/1, List)
+            end;
+        {'error', Error} ->
+            lager:debug("error '~p' getting media names", [Error])
     end.

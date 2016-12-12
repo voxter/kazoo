@@ -14,7 +14,7 @@
 
 -export([find/1, find/2
         ,check/1, check/2
-        ,available_carriers/1
+        ,available_carriers/1, all_modules/0
         ,default_carriers/0, default_carrier/0
         ,acquire/1
         ,disconnect/1
@@ -30,9 +30,6 @@
 
         ,is_number_billable/1
         ]).
-
-%%% For knm carriers only
--export([create_found/4, create_found/5]).
 
 -export([options_to_jobj/1]).
 
@@ -259,7 +256,9 @@ check(Numbers, Options) ->
 
 %%--------------------------------------------------------------------
 %% @public
-%% @doc Create a list of all available carrier modules
+%% @doc
+%% Create a list of all carrier modules available to a subaccount.
+%% @end
 %%--------------------------------------------------------------------
 -spec available_carriers(options()) -> atoms().
 -ifdef(TEST).
@@ -291,6 +290,28 @@ default_carriers() ->
 -spec default_carrier() -> ne_binary().
 default_carrier() ->
     ?DEFAULT_CARRIER_MODULE.
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% List all carrier modules.
+%% @end
+%%--------------------------------------------------------------------
+-spec all_modules() -> ne_binaries().
+all_modules() ->
+    [<<"knm_bandwidth2">>
+    ,<<"knm_bandwidth">>
+    ,<<"knm_inum">>
+    ,<<"knm_local">>
+    ,<<"knm_managed">>
+    ,<<"knm_mdn">>
+    ,<<"knm_other">>
+    ,<<"knm_reserved">>
+    ,<<"knm_reserved_reseller">>
+    ,<<"knm_simwood">>
+    ,<<"knm_telnyx">>
+    ,<<"knm_vitelity">>
+    ,<<"knm_voip_innovations">>
+    ].
 
 %%--------------------------------------------------------------------
 %% @public
@@ -333,41 +354,6 @@ disconnect(Number) ->
         _Mod ->
             lager:debug("non-existant carrier module ~p, allowing disconnect", [_Mod]),
             Number
-    end.
-
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%% Create a number in a discovery (or given) state.
-%% @end
-%%--------------------------------------------------------------------
--spec create_found(ne_binary(), module(), api_ne_binary(), kz_json:object()) ->
-                          knm_number_return().
--spec create_found(ne_binary(), module(), api_ne_binary(), kz_json:object(), ne_binary()) ->
-                          knm_number_return().
-create_found(DID, Carrier, AuthBy, Data) ->
-    create_found(DID, Carrier, AuthBy, Data, ?NUMBER_STATE_DISCOVERY).
-
-create_found(DID=?NE_BINARY, Carrier, Auth, Data, State=?NE_BINARY)
-  when is_atom(Carrier) ->
-    AuthBy =
-        case Auth of
-            'undefined' -> ?KNM_DEFAULT_AUTH_BY;
-            ?MATCH_ACCOUNT_RAW(AccountId) -> AccountId
-        end,
-    case knm_number:get(DID) of
-        {'ok', _Number}=Ok -> Ok;
-        {'error', 'not_found'} ->
-            Options = [{'auth_by', AuthBy}
-                      ,{'assign_to', 'undefined'}
-                      ,{'state', State}
-                      ,{'module_name', kz_util:to_binary(Carrier)}
-                      ],
-            {'ok', PhoneNumber} =
-                knm_phone_number:setters(knm_phone_number:new(DID, Options)
-                                        ,[{fun knm_phone_number:set_carrier_data/2, Data}
-                                         ]),
-            knm_number:save(knm_number:set_phone_number(knm_number:new(), PhoneNumber))
     end.
 
 

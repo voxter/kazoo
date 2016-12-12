@@ -640,30 +640,8 @@
                     "type": "object"
                 },
                 "flow": {
-                    "description": "A callflow node defines a module to execute, data to provide to that module, and one or more children to branch to",
-                    "properties": {
-                        "children": {
-                            "default": {},
-                            "description": "Children callflows",
-                            "required": false,
-                            "type": "object"
-                        },
-                        "data": {
-                            "default": {},
-                            "description": "The data/arguments of the callflow module",
-                            "required": true,
-                            "type": "object"
-                        },
-                        "module": {
-                            "description": "The name of the callflow module to excute at this node",
-                            "maxLength": 64,
-                            "minLength": 1,
-                            "required": true,
-                            "type": "string"
-                        }
-                    },
-                    "required": true,
-                    "type": "object"
+                    "$ref": "callflows.action",
+                    "description": "A callflow node defines a module to execute, data to provide to that module, and zero or more children to branch to"
                 },
                 "metaflow": {
                     "$ref": "metaflows",
@@ -741,6 +719,37 @@
             "properties": {
                 "action": {
                     "description": ""
+                }
+            },
+            "required": true,
+            "type": "object"
+        },
+        "callflows.action": {
+            "description": "Call flows describe steps to take in order to process a phone call. They are trees of information related to a phone call such as \"answer, play file, record file\" etc. that are logically grouped together and ordered.",
+            "properties": {
+                "children": {
+                    "default": {},
+                    "description": "Children callflows",
+                    "patternProperties": {
+                        ".+": {
+                            "$ref": "callflows.action"
+                        }
+                    },
+                    "required": false,
+                    "type": "object"
+                },
+                "data": {
+                    "default": {},
+                    "description": "The data/arguments of the callflow module",
+                    "required": true,
+                    "type": "object"
+                },
+                "module": {
+                    "description": "The name of the callflow module to excute at this node",
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "required": true,
+                    "type": "string"
                 }
             },
             "required": true,
@@ -1463,6 +1472,10 @@
         "callflows.page_group": {
             "description": "Validator for the page_group callflow's data object",
             "properties": {
+                "barge_calls": {
+                    "description": "",
+                    "type": "boolean"
+                },
                 "endpoints": {
                     "default": [],
                     "description": "",
@@ -1514,6 +1527,7 @@
             "properties": {
                 "cdr_url": {
                     "description": "Optional URL to send the CDR to at the end of the call",
+                    "pattern": "^https?://",
                     "required": false,
                     "type": "string"
                 },
@@ -1547,6 +1561,7 @@
                 },
                 "voice_url": {
                     "description": "What URL to request the initial Pivot callflow",
+                    "pattern": "^https?://",
                     "required": true,
                     "type": "string"
                 }
@@ -1669,7 +1684,6 @@
                     "type": "integer"
                 },
                 "time_limit": {
-                    "default": 3600,
                     "description": "Time limit, in seconds, for the recording",
                     "maximum": 3600,
                     "minimum": 5,
@@ -1678,6 +1692,7 @@
                 },
                 "url": {
                     "description": "The URL to use when sending the recording for storage",
+                    "format": "uri",
                     "required": false,
                     "type": "string"
                 }
@@ -1715,6 +1730,7 @@
                 },
                 "url": {
                     "description": "The URL to use when sending the recording for storage",
+                    "format": "uri",
                     "required": false,
                     "type": "string"
                 }
@@ -3666,6 +3682,7 @@
                                         },
                                         "url": {
                                             "description": "The URL to call back with the results",
+                                            "pattern": "^https?://",
                                             "required": false,
                                             "type": "string"
                                         }
@@ -3743,6 +3760,7 @@
                                         },
                                         "url": {
                                             "description": "The URL to call back with the results",
+                                            "pattern": "^https?://",
                                             "required": false,
                                             "type": "string"
                                         }
@@ -3867,6 +3885,7 @@
                         },
                         "url": {
                             "description": "The url of the fax document",
+                            "pattern": "^https?://",
                             "required": true,
                             "type": "string"
                         }
@@ -4724,7 +4743,8 @@
                 "module": {
                     "enum": [
                         "audio_level"
-                    ]
+                    ],
+                    "type": "string"
                 }
             },
             "required": [
@@ -9192,12 +9212,12 @@
                     "description": "jonny5 default twoway trunks"
                 },
                 "flat_rate_blacklist": {
-                    "default": "^\\+?1(684|264|268|242|246|441|284|345|767|809|829|849|473|671|876|664|670|787|939|869|758|784|721|868|649|340|900|8(?:[0,2,3,4,5,6,7]{2}|8[0-9]))\\d{7}$",
+                    "default": "^\\+1(684|264|268|242|246|441|284|345|767|809|829|849|473|671|876|664|670|787|939|869|758|784|721|868|649|340|900|800|888|877|866|855|844)\\d{7}$",
                     "description": "jonny5 flat rate blacklist",
                     "type": "string"
                 },
                 "flat_rate_whitelist": {
-                    "default": "^\\+?1\\d{10}$",
+                    "default": "^\\+1\\d{10}$",
                     "description": "jonny5 flat rate whitelist",
                     "type": "string"
                 }
@@ -10604,11 +10624,6 @@
         "system_config.omnipresence": {
             "description": "Schema for omnipresence system_config",
             "properties": {
-                "cache_terminated_callid_s": {
-                    "default": 60,
-                    "description": "omnipresence cache terminated callid in seconds",
-                    "type": "integer"
-                },
                 "expire_check_ms": {
                     "default": 1000,
                     "description": "omnipresence expire check in milliseconds",

@@ -22,84 +22,64 @@ find_local_test_() ->
     ].
 
 find_other_test_() ->
-    [find_no_phonebook()
-    ,find_blocks()
-    ,find_numbers()
-    ].
-
-find_no_phonebook() ->
-    Options = [{'carriers', [?CARRIER_OTHER]}
-              ,{'quantity', 1}
+    Options = [{carriers, [?CARRIER_OTHER]}
+              ,{'query_id', <<"QID">>}
               ],
+    {setup
+    ,fun () -> {'ok', Pid} = knm_search:start_link(), Pid end
+    ,fun gen_server:stop/1
+    ,fun (_ReturnOfSetup) ->
+             [find_no_phonebook(Options)
+             ,?_assertEqual([], knm_search:find([{prefix, <<"415">>}]))
+             ,find_numbers(Options)
+             ,find_blocks(Options)
+             ]
+     end
+    }.
+
+find_no_phonebook(Options0) ->
     Prefix = <<"415">>,
+    Options = [{prefix, Prefix}
+               |Options0
+              ],
     [{"Verify no phonebook url yields no results"
-     ,?_assertEqual([], knm_carriers:find(Prefix, Options))
+     ,?_assertEqual([], knm_search:find(Options))
      }
     ].
 
-find_blocks() ->
+find_blocks(Options0) ->
     Prefix = <<"415">>,
     Limit = 10,
     Options = [{'phonebook_url', ?BLOCK_PHONEBOOK_URL}
               ,{'blocks', 'true'}
               ,{'account_id', ?RESELLER_ACCOUNT_ID}
-              ,{'carriers', [?CARRIER_OTHER]}
               ,{'quantity', Limit}
+              ,{prefix, Prefix}
+               | Options0
               ],
 
-    {'bulk', [StartNumber, EndNumber]=Numbers} =
-        knm_other:find_numbers(Prefix, Limit, Options),
-    [StartJObj, EndJObj]=Results = knm_carriers:find(Prefix, Options),
+    {'bulk', [StartNumber, EndNumber]=Numbers} = knm_other:find_numbers(Prefix, Limit, Options),
+    [StartRep, EndRep]=Results = knm_search:find(Options),
 
-    [{"Verify the same amount of numbers and results"
-     ,?_assertEqual(length(Numbers), length(Results))
-     }
-     | verify_start(StartNumber, StartJObj)
-     ++ verify_end(EndNumber, EndJObj)
+    [?_assertEqual(length(Numbers), length(Results))
+    ,?_assertEqual(?START_BLOCK, kz_json:get_value(<<"number">>, StartRep))
+    ,?_assertEqual(?END_BLOCK, kz_json:get_value(<<"number">>, EndRep))
+    ,?_assertEqual(?START_BLOCK, element(1,element(2,StartNumber)))
+    ,?_assertEqual(?END_BLOCK, element(1,element(2,EndNumber)))
+    ,?_assertEqual(?CARRIER_OTHER, kz_util:to_binary(element(2,element(2,StartNumber))))
+    ,?_assertEqual(?CARRIER_OTHER, kz_util:to_binary(element(2,element(2,EndNumber))))
     ].
 
-verify_start(StartNumber, StartJObj) ->
-    PhoneNumber = knm_number:phone_number(StartNumber),
-    verify_block(PhoneNumber, StartJObj, ?START_BLOCK, 5.0).
-
-verify_end(EndNumber, EndJObj) ->
-    PhoneNumber = knm_number:phone_number(EndNumber),
-    verify_block(PhoneNumber, EndJObj, ?END_BLOCK, 'undefined').
-
-verify_block(PhoneNumber, JObj, DID, Activation) ->
-    [{"Verify start number matches start of block"
-     ,?_assertEqual(DID, knm_phone_number:number(PhoneNumber))
-     }
-    ,{"Verify start number carrier module"
-     ,?_assertEqual(?CARRIER_OTHER, knm_phone_number:module_name(PhoneNumber))
-     }
-    ,{"Verify auth_by account id"
-     ,?_assertEqual(?RESELLER_ACCOUNT_ID, knm_phone_number:auth_by(PhoneNumber))
-     }
-    ,{"Verify assigned_to account id"
-     ,?_assertEqual('undefined', knm_phone_number:assigned_to(PhoneNumber))
-     }
-    ,{"Verify phone number database"
-     ,?_assertEqual(<<"numbers%2F%2B1415">>, knm_phone_number:number_db(PhoneNumber))
-     }
-
-    ,{"Verify JObj number is start number"
-     ,?_assertEqual(DID, kz_json:get_value(<<"number">>, JObj))
-     }
-    ,{"Verify JObj activation charge"
-     ,?_assertEqual(Activation, kz_json:get_value(<<"activation_charge">>, JObj))
-     }
-    ].
-
-find_numbers() ->
+find_numbers(Options0) ->
     Prefix = <<"415">>,
     Limit = 10,
     Options = [{'phonebook_url', ?NUMBER_PHONEBOOK_URL}
               ,{'account_id', ?MASTER_ACCOUNT_ID}
-              ,{'carriers', [?CARRIER_OTHER]}
               ,{'quantity', 10}
+              ,{prefix, Prefix}
+               | Options0
               ],
-    Results = knm_carriers:find(Prefix, Options),
+    Results = knm_search:find(Options),
     [{"Verify results returned is the expected amount"
      ,?_assertEqual(Limit, length(Results))
      }
@@ -116,23 +96,7 @@ verify_number_result(Result, {Tests, N}) ->
                     ,kz_json:get_value(<<"number">>, Result)
                     )
       }
-     ,{"Verify result activation charge"
-      ,activation_charge_test(Result, <<"+1415886790", (N+$0)>>)
-      }
       | Tests
      ]
     ,N+1
-    }.
-
-activation_charge_test(Result, ?START_BLOCK) ->
-    {"Verify start of range activation"
-    ,?_assertEqual(5.0, kz_json:get_value(<<"activation_charge">>, Result))
-    };
-activation_charge_test(Result, ?END_BLOCK) ->
-    {"Verify end of range activation"
-    ,?_assertEqual('undefined', kz_json:get_value(<<"activation_charge">>, Result))
-    };
-activation_charge_test(Result, _DID) ->
-    {"Verify inner range activation"
-    ,?_assertEqual(1.0, kz_json:get_value(<<"activation_charge">>, Result))
     }.

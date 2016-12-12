@@ -267,6 +267,7 @@ do_find(Options, 'false') ->
 -spec first(options()) -> kz_json:objects().
 first(Options) ->
     Carriers = knm_carriers:available_carriers(Options),
+    lager:debug("contacting, in order: ~p", [Carriers]),
     QID = query_id(Options),
     gen_listener:cast(?MODULE, {'reset_search', QID}),
     Self = self(),
@@ -281,24 +282,32 @@ first(Options) ->
 
 -spec search_spawn(pid(), atom(), kz_proplist()) -> any().
 search_spawn(Pid, Carrier, Options) ->
-    F = fun() -> Pid ! search_carrier(Carrier, Options) end,
+    F = fun() -> Pid ! {Carrier, search_carrier(Carrier, Options)} end,
     kz_util:spawn(F).
 
 -spec search_carrier(atom(), kz_proplist()) -> any().
 search_carrier(Carrier, Options) ->
     Prefix = normalized_prefix(Options),
     Quantity = quantity(Options),
-    catch(Carrier:find_numbers(Prefix, Quantity, Options)).
+    catch (Carrier:find_numbers(Prefix, Quantity, Options)).
 
 -spec wait_for_search(integer(), options()) -> 'ok'.
 wait_for_search(0, _Options) -> 'ok';
 wait_for_search(N, Options) ->
     receive
-        {'ok', Numbers} ->
+        {_Carrier, {'ok', Numbers}} ->
+            lager:debug("~s found numbers", [_Carrier]),
             gen_listener:cast(?MODULE, {'add_result', Numbers}),
             wait_for_search(N - 1, Options);
+        {_Carrier, {bulk, Numbers}} ->
+            lager:debug("~s found bulk numbers", [_Carrier]),
+            gen_listener:cast(?MODULE, {'add_result', Numbers}),
+            wait_for_search(N - 1, Options);
+        {_Carrier, {error, not_available}} ->
+            lager:debug("~s had no results", [_Carrier]),
+            wait_for_search(N - 1, Options);
         _Other ->
-            lager:debug("unexpected search result ~p~n", [_Other]),
+            lager:debug("unexpected search result ~p", [_Other]),
             wait_for_search(N - 1, Options)
     after 5000 ->
             lager:debug("timeout (~B) collecting responses from search providers", [5000]),
@@ -313,10 +322,8 @@ next(Options) ->
     MatchSpec = [{{QID,'$1'},[],['$1']}],
     QLH = qlc:keysort(1, ets:table(?ETS_DISCOVERY_CACHE, [{'traverse', {'select', MatchSpec}}])),
     QLC = qlc:cursor(QLH),
-    _ = case Offset > 0 of
-            'true' -> qlc:next_answers(QLC, Offset);
-            _ -> 'true'
-        end,
+    _ = Offset > 0
+        andalso qlc:next_answers(QLC, Offset),
     Results = qlc:next_answers(QLC, Quantity),
     qlc:delete_cursor(QLC),
     lager:debug("returning ~B results", [length(Results)]),
@@ -438,7 +445,7 @@ remote_discovery(Number, Options) ->
                             ,fun kapi_discovery:resp_v/1
                             )
     of
-        {'ok', JObj} -> create_discovery(kapi_discovery:results(JObj), Options);
+        {'ok', JObj} -> {'ok', create_discovery(kapi_discovery:results(JObj), Options)};
         {'error', _Error} ->
             lager:debug("error requesting number from amqp : ~p", [_Error]),
             {'error', 'not_found'}

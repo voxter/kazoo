@@ -536,7 +536,7 @@ store_url(#state{doc_db=Db
                 ,should_store={'true', 'other', Url}
                 ,verb=Verb
                 }, _Rev) ->
-    HttpOptions = #{url => Url
+    HandlerOpts = #{url => Url
                    ,verb => Verb
                    ,field_separator => <<>>
                    ,field_list => [<<"call_recording_">>
@@ -560,18 +560,35 @@ store_url(#state{doc_db=Db
                                   ,{field, <<"_id">>}
                                   ]
                    },
+    AttHandler = handler_from_url(Url),
     Handler = #{att_proxy => 'true'
                ,att_post_handler => 'external'
-               ,att_handler => {'kz_att_http', HttpOptions}
+               ,att_handler => {AttHandler, HandlerOpts}
                },
     Options = [{'plan_override', Handler}],
     kz_media_url:store(Db, {<<"call_recording">>, MediaId}, MediaName, Options).
+
+-spec handler_from_url(ne_binary()) -> 'kz_att_ftp' | 'kz_att_http' | 'undefined'.
+handler_from_url(Url) ->
+    case kz_http_util:urlsplit(Url) of
+        {<<"ftp">>, _, _, _, _} -> 'kz_att_ftp';
+        {<<"ftps">>, _, _, _, _} -> 'kz_att_ftp';
+        {<<"http">>, _, _, _, _} -> 'kz_att_http';
+        {<<"https">>, _, _, _, _} -> 'kz_att_http';
+        _ -> 'undefined'
+    end.
 
 -spec should_store_recording(ne_binary(), api_binary()) -> store_url().
 should_store_recording(AccountId, Url) ->
     case kz_util:is_empty(Url) of
         'true' -> maybe_storage_plan(AccountId);
-        'false' -> {'true', 'other', Url}
+        'false' ->
+            case handler_from_url(Url) of
+                'undefined' ->
+                    lager:debug("invalid protocol for url ~s : not saving attachment"),
+                    'false';
+                _ -> {'true', 'other', Url}
+            end
     end.
 
 -spec maybe_storage_plan(ne_binary()) -> store_url().
@@ -620,10 +637,14 @@ start_recording(Call, MediaName, TimeLimit, MediaDocId, SampleRate, RecordMinSec
 -spec store_recording({ne_binary(), ne_binary()}, ne_binary() | function(), kapps_call:call()) -> 'ok'.
 store_recording({DirName, MediaName}, StoreUrl, Call) ->
     Filename = filename:join(DirName, MediaName),
+    kz_util:spawn(fun store_recording/4, [self(), Filename, StoreUrl, Call]).
+
+-spec store_recording(pid(), ne_binary(), ne_binary() | function(), kapps_call:call()) -> 'ok'.
+store_recording(Pid, Filename, StoreUrl, Call) ->
     case kapps_call_command:store_file(Filename, StoreUrl, Call) of
-        {'error', 'timeout'} -> gen_server:cast(self(), 'store_failed');
+        {'error', 'timeout'} -> gen_server:cast(Pid, 'store_failed');
         {'error', Error} ->
             lager:error("error storing recording : ~p", [Error]),
-            gen_server:cast(self(), 'store_failed');
-        'ok' -> gen_server:cast(self(), 'store_succeeded')
+            gen_server:cast(Pid, 'store_failed');
+        'ok' -> gen_server:cast(Pid, 'store_succeeded')
     end.

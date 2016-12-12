@@ -48,6 +48,7 @@
         ]).
 
 -export([list_attachments/2]).
+
 -ifndef(TEST).
 -export([push_stored/0]).
 -endif.
@@ -75,8 +76,8 @@
                           ,doc = kz_json:new() :: kz_json:object()
                           ,modified :: gregorian_seconds()
                           ,created :: gregorian_seconds()
-                          ,is_billable = 'false' :: boolean()
-                          ,is_dirty = 'true' :: boolean()
+                          ,is_billable = undefined :: api_boolean()
+                          ,is_dirty = 'false' :: boolean()
                           }).
 -opaque knm_phone_number() :: #knm_phone_number{}.
 
@@ -138,6 +139,12 @@ fetch(?TEST_IN_SERVICE_WITH_HISTORY_NUM, Options) ->
     handle_fetched_result(?IN_SERVICE_WITH_HISTORY_NUMBER, Options);
 fetch(?BW_EXISTING_DID, Options) ->
     handle_fetched_result(?BW_EXISTING_JSON, Options);
+fetch(?TEST_OLD_NUM, Options) ->
+    JObj = kz_json:decode(list_to_binary(knm_util:fixture("old_vsn_1_in.json"))),
+    handle_fetched_result(JObj, Options);
+fetch(?TEST_OLD2_NUM, Options) ->
+    JObj = kz_json:decode(list_to_binary(knm_util:fixture("old_vsn_2_in.json"))),
+    handle_fetched_result(JObj, Options);
 fetch(_DID, _Options) ->
     {'error', 'not_found'}.
 -else.
@@ -371,7 +378,7 @@ from_json(JObj) ->
                 ,{fun set_modified/2, kz_doc:modified(JObj, Now)}
                 ,{fun set_created/2, kz_doc:created(JObj, Now)}
                 ]),
-    PhoneNumber#knm_phone_number{is_dirty = false}.
+    PhoneNumber.
 
 %% Handle 3.22 -> 4.0 features migration.
 %% Note: if a feature matches here that means it was enabled in 3.22.
@@ -566,6 +573,8 @@ set_assigned_to(N, AssignedTo=?MATCH_ACCOUNT_RAW(_)) ->
                       }.
 
 -spec set_assigned_to(knm_phone_number(), api_ne_binary(), api_ne_binary()) -> knm_phone_number().
+set_assigned_to(N=#knm_phone_number{assigned_to = V}, V, UsedBy) ->
+    set_used_by(N, UsedBy);
 set_assigned_to(N0, AssignedTo='undefined', UsedBy) ->
     N = set_used_by(N0, UsedBy),
     N#knm_phone_number{assigned_to = AssignedTo};
@@ -654,7 +663,7 @@ set_feature(N, Feature=?NE_BINARY, Data) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec state(knm_phone_number()) -> api_binary().
+-spec state(knm_phone_number()) -> api_ne_binary().
 state(#knm_phone_number{state=State}) -> State.
 
 -spec set_state(knm_phone_number(), ne_binary()) -> knm_phone_number().
@@ -729,7 +738,7 @@ set_ported_in(N, Ported) when is_boolean(Ported) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec module_name(knm_phone_number()) -> api_binary().
+-spec module_name(knm_phone_number()) -> api_ne_binary().
 module_name(#knm_phone_number{module_name = Name}) -> Name.
 
 -spec set_module_name(knm_phone_number(), ne_binary()) -> knm_phone_number().
@@ -740,12 +749,20 @@ set_module_name(N0, ?CARRIER_LOCAL=Name) ->
             LocalFeature -> LocalFeature
         end,
     N = set_feature(N0, ?FEATURE_LOCAL, Feature),
-    case N0#knm_phone_number.module_name =:= Name of
-        true -> N;
-        false ->
+    case N#knm_phone_number.is_billable of
+        undefined ->
             N#knm_phone_number{is_dirty = true
                               ,module_name = Name
-                              }
+                              ,is_billable = false
+                              };
+        _ ->
+            case N0#knm_phone_number.module_name =:= Name of
+                true -> N;
+                false ->
+                    N#knm_phone_number{is_dirty = true
+                                      ,module_name = Name
+                                      }
+            end
     end;
 %% knm_bandwidth is deprecated, updating to the new module
 set_module_name(N, <<"wnm_bandwidth">>) ->
@@ -763,12 +780,21 @@ set_module_name(N, Name=?NE_BINARY) ->
                               }
     end.
 
-%% Do not override is_billable when field is already set on doc.
 -spec set_module_name(knm_phone_number(), ne_binary(), api_boolean()) -> knm_phone_number().
+%% Some old docs have these as module name
+set_module_name(N, <<"undefined">>, IsBillable) ->
+    set_module_name(N, ?CARRIER_LOCAL, IsBillable);
 set_module_name(N0, Name, IsBillable)
   when is_boolean(IsBillable) ->
     N = set_module_name(N0, Name),
-    N#knm_phone_number{is_billable = IsBillable};
+    %% Do not override is_billable when field is already set on doc.
+    case N#knm_phone_number.is_billable of
+        IsBillable -> N;
+        _ ->
+            N#knm_phone_number{is_dirty = true
+                              ,is_billable = IsBillable
+                              }
+    end;
 set_module_name(N0, Name, 'undefined') ->
     set_module_name(N0, Name).
 
@@ -935,7 +961,8 @@ reset_doc(N=#knm_phone_number{doc = Doc}, JObj) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec modified(knm_phone_number()) -> gregorian_seconds().
-modified(#knm_phone_number{modified=Modified}) -> Modified.
+modified(#knm_phone_number{is_dirty = true}) -> kz_util:current_tstamp();
+modified(#knm_phone_number{modified = Modified}) -> Modified.
 
 -spec set_modified(knm_phone_number(), gregorian_seconds()) -> knm_phone_number().
 set_modified(PN, Modified)
@@ -960,7 +987,7 @@ set_created(PN, Created)
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec is_billable(knm_phone_number()) -> boolean().
+-spec is_billable(knm_phone_number()) -> api_boolean().
 is_billable(#knm_phone_number{is_billable = IsBillable}) -> IsBillable.
 
 %%--------------------------------------------------------------------

@@ -22,7 +22,6 @@
 -export([find_invalid_acccount_dbs/0]).
 -export([refresh/0, refresh/1
         ,refresh_account_db/1
-        ,refresh_numbers_db/1
         ]).
 -export([blocking_refresh/0
         ,blocking_refresh/1
@@ -100,9 +99,9 @@ rebuild_token_auth(Pause) ->
 -spec migrate_to_4_0() -> no_return.
 migrate_to_4_0() ->
     %% Number migration
-    knm_maintenance:migrate(),
+    kazoo_number_manager_maintenance:migrate(),
     %% Voicemail migration
-    kvm_maintenance:migrate(),
+    kazoo_voicemail_maintenance:migrate(),
     no_return.
 
 %%--------------------------------------------------------------------
@@ -175,7 +174,7 @@ refresh(Databases, Pause) ->
 
 refresh([], _, _) -> 'no_return';
 refresh([Database|Databases], Pause, Total) ->
-    io:format("refreshing database (~p/~p) '~s'~n"
+    io:format("(~p/~p) refreshing database '~s'~n"
              ,[length(Databases) + 1, Total, Database]),
     _ = refresh(Database),
     _ = case Pause < 1 of
@@ -187,10 +186,11 @@ refresh([Database|Databases], Pause, Total) ->
 -spec get_databases() -> ne_binaries().
 get_databases() ->
     {'ok', Databases} = kz_datamgr:db_info(),
-    ?KZ_SYSTEM_DBS
-        ++ [Db || Db <- Databases,
-                  not lists:member(Db, ?KZ_SYSTEM_DBS)
-           ].
+    lists:sort(fun get_database_sort/2, lists:usort(Databases ++ ?KZ_SYSTEM_DBS)).
+
+-spec get_database_sort(ne_binary(), ne_binary()) -> boolean().
+get_database_sort(Db1, Db2) ->
+    kzs_util:db_priority(Db1) < kzs_util:db_priority(Db2).
 
 refresh(?KZ_CONFIG_DB) ->
     kz_datamgr:db_create(?KZ_CONFIG_DB),
@@ -285,7 +285,7 @@ refresh(Database) when is_binary(Database) ->
     case kz_datamgr:db_classification(Database) of
         'account' -> refresh_account_db(Database);
         'modb' -> kazoo_modb:refresh_views(Database);
-        'numbers' -> refresh_numbers_db(Database);
+        'numbers' -> kazoo_number_manager_maintenance:refresh_numbers_db(Database);
         'system' ->
             kz_datamgr:db_create(Database),
             'ok';
@@ -322,21 +322,6 @@ maybe_remove_invalid_notify_doc(<<"notification">>, _, JObj) ->
     _ = kz_datamgr:del_doc(?KZ_CONFIG_DB, JObj),
     'ok';
 maybe_remove_invalid_notify_doc(_Type, _Id, _Doc) -> 'ok'.
-
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec refresh_numbers_db(ne_binary()) -> 'ok'.
-refresh_numbers_db(<<?KNM_DB_PREFIX, Suffix/binary>>) ->
-    NumberDb = <<?KNM_DB_PREFIX_ENCODED, Suffix/binary>>,
-    {'ok',_} = kz_datamgr:revise_doc_from_file(NumberDb
-                                              ,'kazoo_number_manager'
-                                              ,<<"views/numbers.json">>
-                                              ),
-    'ok'.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -402,8 +387,8 @@ refresh_account_db(Database) ->
     AccountId = kz_util:format_account_id(Database, 'raw'),
     _ = remove_depreciated_account_views(AccountDb),
     _ = ensure_account_definition(AccountDb, AccountId),
-    Views = get_all_account_views(),
-    _ = kapps_util:update_views(AccountDb, Views, 'true'),
+    _ = kapps_util:update_views(AccountDb, get_all_account_views(), 'true'),
+    _ = kazoo_number_manager_maintenance:update_number_services_view(AccountDb),
     kapps_account_config:migrate(AccountDb),
     _ = kazoo_bindings:map(binding({'refresh_account', AccountDb}), AccountId),
     'ok'.

@@ -51,7 +51,7 @@ is_number_billable(_Number) -> 'true'.
 %% Query the system for a quantity of available numbers in a rate center
 %% @end
 %%--------------------------------------------------------------------
--spec find_numbers(ne_binary(), pos_integer(), knm_carriers:options()) ->
+-spec find_numbers(ne_binary(), pos_integer(), knm_search:options()) ->
                           {'ok', knm_number:knm_numbers()}.
 find_numbers(<<"+1", Prefix:3/binary, _/binary>>, Quantity, Options)
   when ?IS_US_TOLLFREE(Prefix) ->
@@ -67,7 +67,7 @@ find_numbers(<<"+1", NPA:3/binary, _/binary>>=Num, Quantity, Options) ->
     {'ok', numbers(Results, Options)};
 
 find_numbers(<<"+",_/binary>>=_InternationalNum, Quantity, Options) ->
-    Country = knm_carriers:country(Options),
+    Country = knm_search:country(Options),
     Results = numbers('region', Quantity, Country, 'undefined'),
     {'ok', international_numbers(Results, Options)}.
 
@@ -146,24 +146,20 @@ numbers(SearchKind, Quantity, Prefix, NXX) ->
         _ -> kz_json:get_value(<<"result">>, Rep)
     end.
 
--spec numbers(kz_json:objects(), knm_carriers:options()) -> knm_number:knm_numbers().
 numbers(JObjs, Options) ->
-    AccountId = knm_carriers:account_id(Options),
-    [Number
+    QID = knm_search:query_id(Options),
+    [{QID, {Num, ?MODULE, ?NUMBER_STATE_DISCOVERY, Data}}
      || Data <- JObjs,
-        Num <- [kz_json:get_ne_binary_value(<<"number_e164">>, Data)],
-        {'ok', Number} <- [knm_carriers:create_found(Num, ?MODULE, AccountId, Data)]
+        Num <- [kz_json:get_ne_binary_value(<<"number_e164">>, Data)]
     ].
 
--spec international_numbers(kz_json:objects(), knm_carriers:options()) -> knm_number:knm_numbers().
 international_numbers(JObjs, Options) ->
-    AccountId = knm_carriers:account_id(Options),
-    Dialcode = knm_carriers:dialcode(Options),
-    [Number
+    Dialcode = knm_search:dialcode(Options),
+    QID = knm_search:query_id(Options),
+    [{QID, {Num, ?MODULE, ?NUMBER_STATE_DISCOVERY, Data}}
      || Data <- JObjs,
         Num0 <- [kz_json:get_ne_binary_value(<<"area_code">>, Data)],
-        Num <- [ugly_hack(Dialcode, Num0)],
-        {'ok', Number} <- [knm_carriers:create_found(Num, ?MODULE, AccountId, Data)]
+        Num <- [ugly_hack(Dialcode, Num0)]
     ].
 
 %%TODO: once Telnyx gives back real numbers, remove this.
