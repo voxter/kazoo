@@ -45,11 +45,11 @@
                                                         ,{<<"acdc_call_stat">>, <<"processed">>}
                                                 %,{<<"acdc_status_stat">>, <<"wrapup">>}
                                                         ,{<<"acdc_status_stat">>, <<"logged_in">>}
-                                                        ,{<<"acdc_status_stat">>, <<"logged_out">>}
+                                                %,{<<"acdc_status_stat">>, <<"logged_out">>}
                                                         ,{<<"acdc_status_stat">>, <<"paused">>}
                                                         ,{<<"acdc_status_stat">>, <<"resume">>}
-                                                %,{<<"agent">>, <<"login_queue">>}
-                                                %,{<<"agent">>, <<"logout_queue">>}
+                                                        ,{<<"agent">>, <<"login_queue">>}
+                                                        ,{<<"agent">>, <<"logout_queue">>}
                                                 %,{<<"call_event">>, <<"CHANNEL_BRIDGE">>}
                                                         ,{<<"call_event">>, <<"CHANNEL_DESTROY">>}
                                                         ]
@@ -69,7 +69,7 @@ handle_quilt_event(JObj, _Props) ->
     handle_specific_event(kz_json:get_value(<<"Event-Name">>, JObj), JObj).
 
 -spec init([]) -> {'ok', []}.
-init([]) -> 
+init([]) ->
     {'ok', []}.
 
 -spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
@@ -210,6 +210,33 @@ handle_specific_event(<<"processed">>, JObj) ->
             gen_fsm:sync_send_all_state_event(FSM, {'hangup', JObj});
         Else ->
             lager:debug("unable to find FSM to record processed call: ~p", [Else])
+    end;
+
+handle_specific_event(<<"login_queue">>, JObj) ->
+    AccountId = kz_json:get_value(<<"Account-ID">>, JObj),
+    AgentId = kz_json:get_value(<<"Agent-ID">>, JObj),
+    case quilt_sup:retrieve_agent_fsm(AccountId, AgentId) of
+        {'error', 'not_found'} ->
+            {'ok', FSM} = quilt_sup:start_agent_fsm(AccountId, AgentId),
+            lager:debug("started FSM: ~p for account/agent: ~p, ~p", [FSM, AccountId, AgentId]),
+            gen_fsm:sync_send_all_state_event(FSM, {'queuelogin', JObj});
+        {'ok', FSM} ->
+            lager:debug("found FSM: ~p this account/agent: ~p, ~p", [FSM, AccountId, AgentId]),
+            gen_fsm:sync_send_all_state_event(FSM, {'queuelogin', JObj});
+        Else ->
+            lager:debug("unexpected return value when looking up FSM: ~p", [Else])
+    end;
+
+handle_specific_event(<<"logout_queue">>, JObj) ->
+    AccountId = kz_json:get_value(<<"Account-ID">>, JObj),
+    AgentId = kz_json:get_value(<<"Agent-ID">>, JObj),
+    case quilt_sup:retrieve_agent_fsm(AccountId, AgentId) of
+        {'error', 'not_found'} -> 'ok';
+        {'ok', FSM} ->
+            lager:debug("found FSM: ~p this account/agent: ~p, ~p", [FSM, AccountId, AgentId]),
+            gen_fsm:sync_send_all_state_event(FSM, {'queuelogoff', JObj});
+        Else ->
+            lager:debug("unexpected return value when looking up FSM: ~p", [Else])
     end;
 
 handle_specific_event(<<"logged_in">>, JObj) ->

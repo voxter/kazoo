@@ -36,17 +36,23 @@ handle_specific_event({<<"acdc_call_stat">>, <<"waiting">>}, JObj) ->
     write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
 
 handle_specific_event({<<"acdc_call_stat">>, <<"exited-position">>}, JObj) ->
-    {AccountId, CallId, QueueId, QueueName, BridgedChannel} = get_common_props(JObj),
+    {AccountId, CallId, _, QueueName, BridgedChannel} = get_common_props(JObj),
     Call = acdc_stats:find_call(CallId),
     lager:debug("exited queue call lookup: ~p", [Call]),
     Ev = {kz_json:get_value(<<"Status">>, Call), kz_json:get_value(<<"Abandoned-Reason">>, Call)},
     case Ev of
+        {<<"abandoned">>, <<"No agents left in queue">>} ->
+            quilt_sup:stop_member_fsm(CallId),
+            EventName = "EXITEMPTY",
+            WaitTime = integer_to_list(kz_json:get_value(<<"Wait-Time">>, Call)),
+            OriginalPos = integer_to_list(kz_json:get_value(<<"Entered-Position">>, Call)),
+            Position = integer_to_list(kz_json:get_value(<<"Exited-Position">>, JObj)),
+            EventParams = {Position, OriginalPos, WaitTime},
+            lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
+            write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
         {<<"abandoned">>, <<"member_hangup">>} ->
             quilt_sup:stop_member_fsm(CallId),
-            case maybe_queue_empty(AccountId, QueueId) of
-                'true' -> EventName = "EXITEMPTY"; % EXITEMPTY(position|origposition|waittime)
-                _ -> EventName = "ABANDON" % ABANDON(position|origposition|waittime)
-            end,
+            EventName = "ABANDON", % ABANDON(position|origposition|waittime)
             WaitTime = integer_to_list(kz_json:get_value(<<"Wait-Time">>, Call)),
             OriginalPos = integer_to_list(kz_json:get_value(<<"Entered-Position">>, Call)),
             Position = integer_to_list(kz_json:get_value(<<"Exited-Position">>, JObj)),
@@ -133,16 +139,25 @@ handle_specific_event({<<"acdc_call_stat">>, <<"processed">>}, JObj) ->
     write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
 
 handle_specific_event({<<"agent">>, <<"login_queue">>}, JObj) ->
-    EventName = "ADDMEMBER", % ADDMEMBER
-    {AccountId, CallId, _, QueueName, BridgedChannel} = get_common_props(JObj),
-    EventParams = {<<"">>},
+    EventName = "AGENTLOGIN", % AGENTLOGIN(channel)
+    {AccountId, CallId, QueueId, _, BridgedChannel} = get_common_props(JObj),
+    AgentId = kz_json:get_value(<<"Agent-ID">>, JObj),
+    ChannelName = lookup_agent_name(AccountId, AgentId),
+    QueueName = lookup_queue_name(AccountId, QueueId),
+    EventParams = {ChannelName},
     lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
     write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
 
 handle_specific_event({<<"agent">>, <<"logout_queue">>}, JObj) ->
-    EventName = "REMOVEMEMBER", % REMOVEMEMBER
-    {AccountId, CallId, _, QueueName, BridgedChannel} = get_common_props(JObj),
-    EventParams = {<<"">>},
+    EventName = "AGENTLOGOFF", % AGENTLOGOFF(channel|logintime)
+    {AccountId, CallId, QueueId, _, BridgedChannel} = get_common_props(JObj),
+    AgentId = kz_json:get_value(<<"Agent-ID">>, JObj),
+    ChannelName = lookup_agent_name(AccountId, AgentId),
+    LogoutTimestamp = kz_json:get_integer_value(<<"Timestamp">>, JObj, kz_util:current_tstamp()),
+    LoginTimestamp = list_to_integer(binary_to_list(get_agent_login_timestamp(AccountId, AgentId, LogoutTimestamp))),
+    LoginTime = list_to_binary(integer_to_list(LogoutTimestamp - LoginTimestamp)),
+    QueueName = lookup_queue_name(AccountId, QueueId),
+    EventParams = {ChannelName, LoginTime},
     lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
     write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
 
@@ -166,33 +181,6 @@ handle_specific_event({<<"acdc_status_stat">>, <<"resume">>}, JObj) ->
                           write_log(AccountId, CallId, QueueName, BridgedChannel, EventName)
                   end, get_queue_list_by_agent_id(AccountId, AgentId));
 
-handle_specific_event({<<"acdc_status_stat">>, <<"logged_in">>}, JObj) ->
-    EventName = "AGENTLOGIN", % AGENTLOGIN(channel)
-    {AccountId, CallId, _, _, BridgedChannel} = get_common_props(JObj),
-    AgentId = kz_json:get_value(<<"Agent-ID">>, JObj),
-    ChannelName = lookup_agent_name(AccountId, AgentId),
-    lists:foreach(fun(Q) -> % Agent will log in to all queues that they are a member of
-                          QueueName = lookup_queue_name(AccountId, Q),
-                          EventParams = {ChannelName},
-                          lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
-                          write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams)
-                  end, get_queue_list_by_agent_id(AccountId, AgentId));
-
-handle_specific_event({<<"acdc_status_stat">>, <<"logged_out">>}, JObj) ->
-    EventName = "AGENTLOGOFF", % AGENTLOGOFF(channel|logintime)
-    {AccountId, CallId, _, _, BridgedChannel} = get_common_props(JObj),
-    AgentId = kz_json:get_value(<<"Agent-ID">>, JObj),
-    ChannelName = lookup_agent_name(AccountId, AgentId),
-    LogoutTimestamp = kz_json:get_value(<<"Timestamp">>, JObj),
-    LoginTimestamp = list_to_integer(binary_to_list(get_agent_login_timestamp(AccountId, AgentId, LogoutTimestamp))),
-    LoginTime = list_to_binary(integer_to_list(LogoutTimestamp - LoginTimestamp)),
-    lists:foreach(fun(Q) -> % Agent will log out of all queues that they are a member of
-                          QueueName = lookup_queue_name(AccountId, Q),
-                          EventParams = {ChannelName, LoginTime},
-                          lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
-                          write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams)
-                  end, get_queue_list_by_agent_id(AccountId, AgentId));
-
 handle_specific_event(Event, _JObj) -> lager:debug("unhandled event: ~p", [Event]).
 
 %%
@@ -214,18 +202,6 @@ get_common_props(JObj) ->
                          'undefined' -> "NONE";
                          _ -> lookup_agent_name(AccountId, kz_json:get_value(<<"Agent-ID">>, JObj)) end,
     {AccountId, CallId, QueueId, QueueName, BridgedChannel}.
-
-maybe_queue_empty(AccountId, QueueId) ->
-    LoggedIn = lists:filter(fun(Agent) ->
-                                    case acdc_agent_util:most_recent_status(AccountId, Agent) of
-                                        {'ok', <<"logged_out">>} -> 'false';
-                                        _ -> 'true'
-                                    end
-                            end, acdc_util:agents_in_queue(kz_util:format_account_id(AccountId, 'encoded'), QueueId)),
-    case length(LoggedIn) of
-        0 -> 'true';
-        _ -> 'false'
-    end.
 
 get_agent_login_timestamp(AccountId, AgentId, Default) ->
     Request = props:filter_undefined(
