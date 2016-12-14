@@ -353,8 +353,6 @@ is_queue_full(MaxQueueSize, CurrQueueSize) -> CurrQueueSize >= MaxQueueSize.
 cancel_member_call(Call, <<"timeout">>) ->
     lager:info("update reason from `timeout` to `member_timeout`"),
     cancel_member_call(Call, ?MEMBER_TIMEOUT);
-cancel_member_call(_, <<"no agents">>) ->
-    'ok';
 cancel_member_call(Call, Reason) ->
     AcctId = kapps_call:account_id(Call),
     {'ok', QueueId} = kapps_call:kvs_find('queue_id', Call),
