@@ -45,7 +45,7 @@
                                                         ,{<<"acdc_call_stat">>, <<"processed">>}
                                                 %,{<<"acdc_status_stat">>, <<"wrapup">>}
                                                         ,{<<"acdc_status_stat">>, <<"logged_in">>}
-                                                %,{<<"acdc_status_stat">>, <<"logged_out">>}
+                                                        ,{<<"acdc_status_stat">>, <<"logged_out">>}
                                                         ,{<<"acdc_status_stat">>, <<"paused">>}
                                                         ,{<<"acdc_status_stat">>, <<"resume">>}
                                                         ,{<<"agent">>, <<"login_queue">>}
