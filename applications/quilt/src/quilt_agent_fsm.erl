@@ -30,15 +30,10 @@ start_link(Agent) ->
 %% gen_fsm callbacks
 %%
 
--spec init(state()) -> {'ok', 'started' | 'ready', state()}.
-init(#state{account_id=AccountId
-           ,agent_id=AgentId
-           }=State) ->
+-spec init(state()) -> {'ok', 'started', state()}.
+init(State) ->
     process_flag('trap_exit', 'true'),
-    case agent_queues(AccountId, AgentId) of
-        [] -> {'ok', 'started', State};
-        Queues -> {'ok', 'ready', State#state{queues=Queues}}
-    end.
+    {'ok', 'started', State}.
 
 -spec handle_event(any(), atom(), state()) -> handle_fsm_ret(state()).
 handle_event(Event, StateName, State) ->
