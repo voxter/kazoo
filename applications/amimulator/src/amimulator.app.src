@@ -13,6 +13,7 @@
 
                  , kazoo
                  , kazoo_amqp
+                 , kazoo_apps
                  , kazoo_bindings
                  , kazoo_data
 

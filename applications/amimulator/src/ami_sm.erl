@@ -3,16 +3,16 @@
 
 -export([start_link/0]).
 -export([init_state/1, purge_state/1
-	     ,registration/2, add_registration/4, delete_registration/1
-	     ,call/1, call_by_channel/1, new_call/1, update_call/1, delete_call/1
-	     ,queue_call/3, queue_calls/1, queue_pos/2, fetch_queue_call_data/2, queue_leave/2
-	     ,conf_parts/1, update_conf_parts/2, conf_cache/1, cache_conf_part/2
-	     ,calls/1, channel_call_ids/1, add_channel_call_id/2, call_id_in_channel/2
-	     ,maybe_ringing/2
-	     ,answer/2, answered_or_ignored/2, flag_early_answer/1
-	     ,db_put/4, db_del/3
-	     ,debug/1, debug_clear_call/1
-	    ]).
+        ,registration/2, add_registration/4, delete_registration/1
+        ,call/1, call_by_channel/1, new_call/1, update_call/1, delete_call/1
+        ,queue_call/3, queue_calls/1, queue_pos/2, fetch_queue_call_data/2, queue_leave/2
+        ,conf_cache/1, cache_conf_part/2, delete_cached_conf_part/1
+        ,calls/1, channel_call_ids/1, add_channel_call_id/2, call_id_in_channel/2
+        ,maybe_ringing/2
+        ,answer/2, answered_or_ignored/2, flag_early_answer/1
+        ,db_put/4, db_del/3
+        ,debug/1, debug_clear_call/1
+        ]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -include("amimulator.hrl").
@@ -91,14 +91,6 @@ fetch_queue_call_data(QueueId, CallId) ->
 queue_leave(QueueId, CallId) ->
 	gen_server:cast(?MODULE, {'queue_leave', QueueId, CallId}).
 
--spec conf_parts(ne_binary()) -> term().
-conf_parts(ConfId) ->
-    gen_server:call(?MODULE, {'conf_parts', ConfId}).
-
--spec update_conf_parts(ne_binary(), [ne_binaries()]) -> 'ok'.
-update_conf_parts(ConfId, Data) ->
-    gen_server:cast(?MODULE, {'update_conf_parts', ConfId, Data}).
-
 -spec conf_cache(ne_binary()) -> term().
 conf_cache(CallId) ->
     gen_server:call(?MODULE, {'conf_cache', CallId}).
@@ -106,6 +98,10 @@ conf_cache(CallId) ->
 -spec cache_conf_part(ne_binary(), kz_proplist()) -> 'ok'.
 cache_conf_part(CallId, Data) ->
     gen_server:cast(?MODULE, {'cache_conf_part', CallId, Data}).
+
+-spec delete_cached_conf_part(ne_binary()) -> 'ok'.
+delete_cached_conf_part(CallId) ->
+    gen_server:cast(?MODULE, {'delete_cached_conf_part', CallId}).
 
 -spec calls(ne_binary()) -> term().
 calls(AccountId) ->
@@ -171,7 +167,6 @@ init([]) ->
     ets:new('ringing_channels', ['named_table']),
     ets:new('answered_channels', ['named_table']),
     ets:new('queue_calls', ['named_table', 'bag']),
-    ets:new('conference_participants', ['named_table']),
     ets:new('conference_cache_data', ['named_table']),
     ets:new('database', ['named_table', 'bag']),
     {'ok', #state{}}.
@@ -185,7 +180,7 @@ handle_call({'get_registration', AccountId, EndpointId}, _From, State) ->
 			[{<<"IP">>, IP}, {<<"Port">>, Port}]
 	end,
 	{'reply', Reply, State};
-   
+
 handle_call({'get_call', CallId}, _From, State) ->
     Spec = new_call_match_spec(),
     Reply = case ets:select('calls', [{Spec#call{call_id=CallId}, [], ['$_']}]) of
@@ -241,7 +236,7 @@ handle_call({'queue_call', QueueId, CallId, Call}, _From, State) ->
 	ets:insert('queue_calls', {QueueId, CallId, Call}),
     handle_cast({'update_call', Call}, State),
     {'reply', Size+1, State};
-    
+
 handle_call({'queue_calls', QueueId}, _From, State) ->
     Reply = ets:select('queue_calls', [{{QueueId, '$1', '_'}, [], ['$1']}]),
     {'reply', Reply, State};
@@ -263,10 +258,6 @@ handle_call({'get_queue_call', QueueId, CallId}, _From, State) ->
 			Match
 	end,
 	{'reply', Reply, State};
-
-handle_call({'conf_parts', ConfId}, _From, State) ->
-	Reply = lists:flatten(ets:match('conference_participants', {ConfId, '$1'})),
-    {'reply', Reply, State};
 
 handle_call({'conf_cache', CallId}, _From, State) ->
 	Reply = case ets:match('conference_cache_data', {CallId, '$1'}) of
@@ -372,12 +363,12 @@ handle_cast({'queue_leave', QueueId, CallId}, State) ->
 	end,
 	{'noreply', State};
 
-handle_cast({'update_conf_parts', ConfId, Data}, State) ->
-	ets:insert('conference_participants', {ConfId, Data}),
-    {'noreply', State};
-
 handle_cast({'cache_conf_part', CallId, Data}, State) ->
 	ets:insert('conference_cache_data', {CallId, Data}),
+    {'noreply', State};
+
+handle_cast({'delete_cached_conf_part', CallId}, State) ->
+    ets:delete('conference_cache_data', CallId),
     {'noreply', State};
 
 handle_cast({'answer', Channel, CallId}, State) ->
@@ -429,7 +420,6 @@ handle_cast({'db_del', AccountId, Family, Key}, State) ->
 %     ets:new('ringing_channels', ['named_table']),
 %     ets:new('answered_channels', ['named_table']),
 %     ets:new('queue_calls', ['named_table', 'bag']),
-%     ets:new('conference_participants', ['named_table', 'bag']),
 %     ets:new('conference_cache_data', ['named_table']),
 
 handle_cast(_Request, State) ->

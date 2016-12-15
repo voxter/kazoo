@@ -18,9 +18,8 @@
          ,channel_string/1
          ,endpoint_exten/1
          ,queue_number/2
-         ,maybe_leave_conference/1
 ,
-   
+
     find_id_number/2, queue_for_number/2]).
 
 %% AMI commands broken up by newlines
@@ -33,7 +32,7 @@ parse_payload(Payload) ->
         Prop = {K, binary:replace(V, <<" ">>, <<>>)},
         [Prop] ++ Acc
         end, [], Lines).
-    
+
 %% Eliminates trailing lines from client payload
 -spec filter_empty(list()) -> list().
 filter_empty(Parameters) ->
@@ -392,31 +391,6 @@ queue_number(AccountDb, QueueId) ->
             hd(Value)
     end.
 
--spec maybe_leave_conference(ne_binary()) -> list().
-maybe_leave_conference(CallId) ->
-    case ami_sm:conf_cache(CallId) of
-        'undefined' ->
-            [];
-        Cache ->
-            CallerId = props:get_value(<<"CallerIDnum">>, Cache),
-            Timestamp = props:get_value(<<"Timestamp">>, Cache),
-            {MegaSecs, Secs, _MicroSecs} = os:timestamp(),
-            Duration = (MegaSecs * 1000000 + Secs) - Timestamp,
-            [[
-                {<<"Event">>, <<"MeetmeLeave">>},
-                {<<"Privilege">>, <<"call,all">>},
-                {<<"Channel">>, props:get_value(<<"Channel">>, Cache)},
-                {<<"Uniqueid">>, props:get_value(<<"Uniqueid">>, Cache)},
-                {<<"Meetme">>, props:get_value(<<"Meetme">>, Cache)},
-                {<<"Usernum">>, props:get_value(<<"Usernum">>, Cache)},
-                {<<"CallerIDNum">>, CallerId},
-                {<<"CallerIDName">>, CallerId},
-                {<<"ConnectedLineNum">>, <<"<unknown>">>},
-                {<<"ConnectedLineName">>, <<"<unknown>">>},
-                {<<"Duration">>, Duration}
-            ]]
-    end.
-
 % initial_calls2(AccountId) ->
 % 	Req = [
 %         {<<"Account-ID">>, AccountId},
@@ -634,7 +608,7 @@ maybe_leave_conference(CallId) ->
 %     Call = props:get_value(CallId, BasicCalls),
 
 %     Routines = [
-%         % fun(Call2, JObj2, _BC) -> 
+%         % fun(Call2, JObj2, _BC) ->
 %         %     CallDirection = kz_json:get_first_defined([<<"direction">>, <<"Call-Direction">>], JObj2,
 %         %         <<"inbound">>),
 %         %     props:set_value(<<"direction">>, CallDirection, Call2) end,
@@ -644,11 +618,11 @@ maybe_leave_conference(CallId) ->
 %         fun bleg_cid/3,
 %         fun bleg_exten/3,
 %         fun bleg_ami_channel/3,
-%         % fun(Call2, JObj2, _BC) -> props:set_value(<<"username">>, 
+%         % fun(Call2, JObj2, _BC) -> props:set_value(<<"username">>,
 %         %     kz_json:get_first_defined([<<"username">>, <<"Username">>], JObj2), Call2) end,
-%         % fun(Call2, JObj2, _BC) -> props:set_value(<<"answered">>, 
+%         % fun(Call2, JObj2, _BC) -> props:set_value(<<"answered">>,
 %         %     kz_json:get_first_defined([<<"answered">>], JObj2), Call2) end,
-%         % fun(Call2, JObj2, _BC) -> props:set_value(<<"elapsed_s">>, 
+%         % fun(Call2, JObj2, _BC) -> props:set_value(<<"elapsed_s">>,
 %         %     kz_json:get_first_defined([<<"elapsed_s">>], JObj2), Call2) end
 %     ],
 %     lists:foldl(
@@ -884,7 +858,7 @@ maybe_id_in_callflow(Id, CFId, AccountDb) ->
         true ->
             hd(kz_json:get_value(<<"numbers">>, CFDoc))
     end.
-    
+
 maybe_id_in_callflow(Id, Flow) ->
     Data = kz_json:get_value(<<"data">>, Flow),
     %% Skipping queue login and queue logout possibilities
@@ -907,7 +881,7 @@ recurse_to_child_callflow(Id, Flow) ->
     end.
 
 
-   
+
 
 
 -spec queue_for_number(ne_binary(), ne_binary()) ->
@@ -925,7 +899,7 @@ queue_for_number(Number, AccountDb) ->
                     kz_datamgr:open_doc(AccountDb, QueueId)
             end
     end.
-    
+
 maybe_queue_in_flow(Flow) ->
     case kz_json:get_value(<<"module">>, Flow) of
         <<"acdc_member">> ->

@@ -30,12 +30,13 @@
                   ,'amimulator_acdc'
                   ,'amimulator_reg'
                   ,'amimulator_conf'
+                  ,'amimulator_presence'
                   ,'amimulator_vm'
                  ]).
 
 -record(state, {account_id :: ne_binary()
                 ,pids = [] :: pids()
-                ,prune_timer_pid :: api_pid()
+                ,prune_timer_ref :: timer:tref() | 'undefined'
                 ,extra_props = [] :: proplist()
                }).
 -type state() :: #state{}.
@@ -145,18 +146,18 @@ handle_cast({'init_modules', AccountId}, State) ->
     ),
     {'noreply', State};
 handle_cast({'register', Pid}, #state{pids=Pids
-                                      ,prune_timer_pid=PrunePid
+                                      ,prune_timer_ref=PruneRef
                                      }=State) ->
-    stop_prune_timer(PrunePid),
-    {'noreply', State#state{pids = [Pid | Pids], prune_timer_pid='undefined'}};
+    stop_prune_timer(PruneRef),
+    {'noreply', State#state{pids = [Pid | Pids], prune_timer_ref='undefined'}};
 handle_cast({'unregister', Pid}, #state{account_id=AccountId
                                         ,pids=Pids
-                                        ,prune_timer_pid=PrunePid
+                                        ,prune_timer_ref=PruneRef
                                        }=State) ->
-    stop_prune_timer(PrunePid),
+    stop_prune_timer(PruneRef),
     NewPids = lists:delete(Pid, Pids),
-    NewPrunePid = maybe_start_prune_timer(length(NewPids), AccountId),
-    {'noreply', State#state{pids=NewPids, prune_timer_pid=NewPrunePid}};
+    NewPruneRef = maybe_start_prune_timer(length(NewPids), AccountId),
+    {'noreply', State#state{pids=NewPids, prune_timer_ref=NewPruneRef}};
 handle_cast({'gen_listener', {'created_queue', _QueueName}}, #state{account_id=AccountId}=State) ->
     amqp_util:bind_q_to_exchange(?QUEUE_NAME(AccountId), <<"amimulator.events.", AccountId/binary>>, ?EXCHANGE_AMI),
 
@@ -193,11 +194,11 @@ handle_event(_JObj, #state{account_id=AccountId
               ]}.
 
 -spec terminate(any(), state()) -> 'ok'.
-terminate('normal', #state{prune_timer_pid=PrunePid}) ->
-    stop_prune_timer(PrunePid),
+terminate('normal', #state{prune_timer_ref=PruneRef}) ->
+    stop_prune_timer(PruneRef),
     'ok';
-terminate(Reason, #state{prune_timer_pid=PrunePid}) ->
-    stop_prune_timer(PrunePid),
+terminate(Reason, #state{prune_timer_ref=PruneRef}) ->
+    stop_prune_timer(PruneRef),
     lager:debug("terminating: ~p", [Reason]).
 
 -spec code_change(any(), state(), any()) -> {'ok', state()}.
@@ -223,12 +224,13 @@ load_bindings(Props, [Mod|Mods], {Bindings, Responders}=Acc) ->
             load_bindings(Props, Mods, {NewBindings ++ Bindings, [{{Mod, 'handle_event'}, NewResponders} | Responders]})
     end.
 
--spec maybe_start_prune_timer(non_neg_integer(), ne_binary()) -> api_pid().
+-spec maybe_start_prune_timer(non_neg_integer(), ne_binary()) ->
+                                     timer:tref() | 'undefined'.
 maybe_start_prune_timer(0, AccountId) ->
     case timer:apply_after(?PRUNE_TIMEOUT, 'amimulator_sup', 'stop_event_listener', [AccountId, 'pruned']) of
-        {'ok', Pid} ->
+        {'ok', PruneRef} ->
             lager:debug("event listener for account ~p to be pruned in ~ps", [AccountId, ?PRUNE_TIMEOUT div 1000]),
-            Pid;
+            PruneRef;
         {'error', E} ->
             lager:debug("could not start prune timer for event listener for account ~p (~p)", [AccountId, E]),
             'undefined'
@@ -236,13 +238,13 @@ maybe_start_prune_timer(0, AccountId) ->
 maybe_start_prune_timer(_, _) ->
     'undefined'.
 
--spec stop_prune_timer(api_pid()) -> 'ok'.
+-spec stop_prune_timer(timer:tref() | 'undefined') -> 'ok'.
 stop_prune_timer('undefined') ->
     'ok';
-stop_prune_timer(Pid) ->
-    case timer:cancel(Pid) of
+stop_prune_timer(PruneRef) ->
+    case timer:cancel(PruneRef) of
         {'ok', 'cancel'} -> 'ok';
         {'error', E} ->
-            lager:debug("could not cancel prune timer ~p (~p)", [Pid, E]),
+            lager:debug("could not cancel prune timer ~p (~p)", [PruneRef, E]),
             'ok'
     end.

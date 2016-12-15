@@ -42,7 +42,7 @@ handle_cast({"blindxfer", Props}, State) ->
     control_queue_exec(update_props(Props), fun blind_transfer/2),
     {'noreply', State};
 handle_cast({"atxfer", Props}, State) ->
-    attended_transfer(update_props(Props)),
+    control_queue_exec(update_props(Props), fun attended_transfer/2),
     {'noreply', State};
 handle_cast({"vmxfer", Props}, State) ->
     control_queue_exec(update_props(Props), fun vm_transfer/2),
@@ -252,23 +252,10 @@ blind_transfer(Props, Call) ->
 
     kapi_resource:publish_originate_req(Request).
 
-attended_transfer(Props) ->
-    Call = props:get_value(<<"Call">>, Props),
-
-    CallId = amimulator_call:call_id(Call),
+attended_transfer(Props, Call) ->
+    KappsCall = amimulator_call:to_kapps_call(Call),
     DestExten = props:get_value(<<"Exten">>, Props),
-
-    API = [{<<"Call-ID">>, CallId}
-           ,{<<"Action">>, <<"transfer">>}
-           ,{<<"Data">>, kz_json:from_list(
-                           [{<<"target">>, DestExten}
-                           ])
-            }
-           | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-          ],
-
-    lager:debug("Attempting to transfer ~s to ~s", [CallId, DestExten]),
-    kz_amqp_worker:cast(API, fun kapi_metaflow:publish_action/1).
+    kapps_call_command:attended_transfer(DestExten, KappsCall).
 
 vm_transfer(Props, Call) ->
     WhappsCall = amimulator_call:to_kapps_call(Call),
