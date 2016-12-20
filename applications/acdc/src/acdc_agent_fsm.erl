@@ -2218,7 +2218,7 @@ maybe_add_endpoint(EPId, EP, EPs, AccountId, AgentListener) ->
     case lists:partition(fun(E) -> find_endpoint_id(E) =:= EPId end, EPs) of
         {[], _} ->
             lager:debug("endpoint ~s not in our list, adding it", [EPId]),
-            [begin monitor_endpoint(convert_to_endpoint(EP, 'undefined'), AccountId, AgentListener), EP end | EPs];
+            [begin monitor_endpoint(convert_to_endpoint(EP), AccountId, AgentListener), EP end | EPs];
         {_, _} -> EPs
     end.
 
@@ -2228,13 +2228,12 @@ maybe_remove_endpoint(EPId, EPs, AccountId, AgentListener) ->
         {[], _} -> EPs; %% unknown endpoint
         {[RemoveEP], EPs1} ->
             lager:debug("endpoint ~s in our list, removing it", [EPId]),
-            _ = unmonitor_endpoint(convert_to_endpoint(RemoveEP, RemoveEP), AccountId, AgentListener),
+            _ = unmonitor_endpoint(RemoveEP, AccountId, AgentListener),
             EPs1
     end.
 
--spec convert_to_endpoint(wh_json:object(), any()) ->
-                                 wh_json:object().
-convert_to_endpoint(EPDoc, Default) ->
+-spec convert_to_endpoint(wh_json:object()) -> api_object().
+convert_to_endpoint(EPDoc) ->
     Setters = [{fun whapps_call:set_account_id/2, wh_doc:account_id(EPDoc)}
                ,{fun whapps_call:set_account_db/2, wh_doc:account_db(EPDoc)}
                ,{fun whapps_call:set_owner_id/2, kz_device:owner_id(EPDoc)}
@@ -2244,7 +2243,7 @@ convert_to_endpoint(EPDoc, Default) ->
     Call = whapps_call:exec(Setters, whapps_call:new()),
     case cf_endpoint:build(wh_doc:id(EPDoc), [], Call) of
         {'ok', EP} -> EP;
-        {'error', _} -> Default
+        {'error', _} -> 'undefined'
     end.
 
 -spec get_endpoints(wh_json:objects(), server_ref(), whapps_call:call(), api_binary(), api_binary()) ->
