@@ -16,7 +16,6 @@
 
 %% API
 -export([start_link/1, start_link/2, start_link/4
-        ,restart/1
         ,listener/1
         ,fsm/1
         ,stop/1
@@ -50,11 +49,6 @@ start_link(AcctId, AgentId, AgentJObj, Queues) ->
 -spec stop(pid()) -> 'ok' | {'error', 'not_found'}.
 stop(Supervisor) ->
     supervisor:terminate_child('acdc_agents_sup', Supervisor).
-
--spec restart(pid()) -> sup_startchild_ret().
-restart(Supervisor) ->
-    _ = stop(Supervisor),
-    supervisor:restart_child('acdc_agents_sup', Supervisor).
 
 -spec status(pid()) -> 'ok'.
 status(Supervisor) ->

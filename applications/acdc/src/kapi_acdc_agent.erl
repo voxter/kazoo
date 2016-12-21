@@ -21,6 +21,7 @@
         ,resume/1, resume_v/1
         ,login_queue/1, login_queue_v/1
         ,logout_queue/1, logout_queue_v/1
+        ,restart/1, restart_v/1
 
         ,login_resp/1, login_resp_v/1
 
@@ -43,6 +44,7 @@
         ,publish_resume/1, publish_resume/2
         ,publish_login_queue/1, publish_login_queue/2
         ,publish_logout_queue/1, publish_logout_queue/2
+        ,publish_restart/1, publish_restart/2
 
         ,publish_login_resp/2, publish_login_resp/3
 
@@ -251,6 +253,7 @@ stats_resp_v(JObj) ->
 -define(RESUME_VALUES, [{<<"Event-Name">>, <<"resume">>} | ?AGENT_VALUES]).
 -define(LOGIN_QUEUE_VALUES, [{<<"Event-Name">>, <<"login_queue">>} | ?AGENT_VALUES]).
 -define(LOGOUT_QUEUE_VALUES, [{<<"Event-Name">>, <<"logout_queue">>} | ?AGENT_VALUES]).
+-define(RESTART_VALUES, [{<<"Event-Name">>, <<"restart">>} | ?AGENT_VALUES]).
 
 -spec login(api_terms()) ->
                    {'ok', iolist()} |
@@ -353,6 +356,21 @@ resume_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?AGENT_HEADERS, ?RESUME_VALUES, ?AGENT_TYPES);
 resume_v(JObj) -> resume_v(kz_json:to_proplist(JObj)).
 
+-spec restart(api_terms()) ->
+                     {'ok', iolist()} |
+                     {'error', string()}.
+restart(Props) when is_list(Props) ->
+    case restart_v(Props) of
+        'true' -> kz_api:build_message(Props, ?AGENT_HEADERS, ?OPTIONAL_AGENT_HEADERS);
+        'false' -> {'error', "Proplist failed validation for agent_restart"}
+    end;
+restart(JObj) -> restart(kz_json:to_proplist(JObj)).
+
+-spec restart_v(api_terms()) -> boolean().
+restart_v(Prop) when is_list(Prop) ->
+    kz_api:validate(Prop, ?AGENT_HEADERS, ?RESTART_VALUES, ?AGENT_TYPES);
+restart_v(JObj) -> restart_v(kz_json:to_proplist(JObj)).
+
 -spec agent_status_routing_key(kz_proplist()) -> ne_binary().
 -spec agent_status_routing_key(ne_binary(), ne_binary(), ne_binary()) -> ne_binary().
 agent_status_routing_key(Props) when is_list(Props) ->
@@ -412,8 +430,8 @@ fsm_shared_routing_key(AcctId, AgentId) ->
 -define(SHARED_FAILURE_TYPES, []).
 
 -spec shared_originate_failure(api_terms()) ->
-                          {'ok', iolist()} |
-                          {'error', string()}.
+                                      {'ok', iolist()} |
+                                      {'error', string()}.
 shared_originate_failure(Props) when is_list(Props) ->
     case shared_originate_failure_v(Props) of
         'true' -> kz_api:build_message(Props, ?SHARED_FAILURE_HEADERS, ?OPTIONAL_SHARED_FAILURE_HEADERS);
@@ -437,8 +455,8 @@ shared_originate_failure_v(JObj) -> shared_originate_failure_v(kz_json:to_propli
 -define(SHARED_CALL_ID_TYPES, []).
 
 -spec shared_call_id(api_terms()) ->
-                          {'ok', iolist()} |
-                          {'error', string()}.
+                            {'ok', iolist()} |
+                            {'error', string()}.
 shared_call_id(Props) when is_list(Props) ->
     case shared_call_id_v(Props) of
         'true' -> kz_api:build_message(Props, ?SHARED_CALL_ID_HEADERS, ?OPTIONAL_SHARED_CALL_ID_HEADERS);
@@ -637,6 +655,14 @@ publish_resume(JObj) ->
     publish_resume(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_resume(API, ContentType) ->
     {'ok', Payload} = resume((API1 = kz_api:prepare_api_payload(API, ?RESUME_VALUES))),
+    amqp_util:kapps_publish(agent_status_routing_key(API1), Payload, ContentType).
+
+-spec publish_restart(api_terms()) -> 'ok'.
+-spec publish_restart(api_terms(), ne_binary()) -> 'ok'.
+publish_restart(JObj) ->
+    publish_restart(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_restart(API, ContentType) ->
+    {'ok', Payload} = restart((API1 = kz_api:prepare_api_payload(API, ?RESTART_VALUES))),
     amqp_util:kapps_publish(agent_status_routing_key(API1), Payload, ContentType).
 
 -spec publish_login_resp(ne_binary(), api_terms()) -> 'ok'.

@@ -17,6 +17,9 @@
 %%% /agents/AID/queue_status
 %%%   POST: login/logout agent to/from queue
 %%%
+%%% /agents/AID/restart
+%%%   POST: force-restart a stuck agent
+%%%
 %%% /agents/AID/status
 %%%   GET: last 10 status updates
 %%%
@@ -29,6 +32,7 @@
 -module(cb_agents).
 
 -export([init/0
+        ,authorize/3
         ,allowed_methods/0, allowed_methods/1, allowed_methods/2
         ,resource_exists/0, resource_exists/1, resource_exists/2
         ,content_types_provided/1, content_types_provided/2, content_types_provided/3
@@ -49,6 +53,7 @@
 -define(STATS_SUMMARY_PATH_TOKEN, <<"stats_summary">>).
 -define(STATUS_PATH_TOKEN, <<"status">>).
 -define(QUEUE_STATUS_PATH_TOKEN, <<"queue_status">>).
+-define(RESTART_PATH_TOKEN, <<"restart">>).
 
 %%%===================================================================
 %%% API
@@ -66,7 +71,24 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.resource_exists.agents">>, ?MODULE, 'resource_exists'),
     _ = crossbar_bindings:bind(<<"*.content_types_provided.agents">>, ?MODULE, 'content_types_provided'),
     _ = crossbar_bindings:bind(<<"*.execute.post.agents">>, ?MODULE, 'post'),
-    _ = crossbar_bindings:bind(<<"*.validate.agents">>, ?MODULE, 'validate').
+    _ = crossbar_bindings:bind(<<"*.validate.agents">>, ?MODULE, 'validate'),
+    _ = crossbar_bindings:bind(<<"*.authorize.agents">>, ?MODULE, 'authorize').
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Authorizes the incoming request, returning true if the requestor is
+%% allowed to access the resource, or false if not.
+%% @end
+%%--------------------------------------------------------------------
+-spec authorize(cb_context:context(), path_token(), path_token()) -> boolean().
+authorize(Context, _, ?RESTART_PATH_TOKEN) ->
+    case cb_context:is_superduper_admin(Context) of
+        'true' -> 'true';
+        'false' ->
+            Context1 = cb_context:add_system_error('forbidden', Context),
+            {'halt', Context1}
+    end.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -87,7 +109,8 @@ allowed_methods(_UserId) -> [?HTTP_GET].
 
 allowed_methods(?STATUS_PATH_TOKEN, _UserId) -> [?HTTP_GET, ?HTTP_POST];
 allowed_methods(_UserId, ?STATUS_PATH_TOKEN) -> [?HTTP_GET, ?HTTP_POST];
-allowed_methods(_UserId, ?QUEUE_STATUS_PATH_TOKEN) -> [?HTTP_GET, ?HTTP_POST].
+allowed_methods(_UserId, ?QUEUE_STATUS_PATH_TOKEN) -> [?HTTP_GET, ?HTTP_POST];
+allowed_methods(_UserId, ?RESTART_PATH_TOKEN) -> [?HTTP_POST].
 
 %%--------------------------------------------------------------------
 %% @public
@@ -105,7 +128,8 @@ resource_exists() -> 'true'.
 resource_exists(_) -> 'true'.
 resource_exists(_, ?STATUS_PATH_TOKEN) -> 'true';
 resource_exists(?STATUS_PATH_TOKEN, _) -> 'true';
-resource_exists(_, ?QUEUE_STATUS_PATH_TOKEN) -> 'true'.
+resource_exists(_, ?QUEUE_STATUS_PATH_TOKEN) -> 'true';
+resource_exists(_, ?RESTART_PATH_TOKEN) -> 'true'.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -133,7 +157,8 @@ content_types_provided(Context, ?STATS_PATH_TOKEN) ->
     end.
 content_types_provided(Context, ?STATUS_PATH_TOKEN, _) -> Context;
 content_types_provided(Context, _, ?STATUS_PATH_TOKEN) -> Context;
-content_types_provided(Context, _, ?QUEUE_STATUS_PATH_TOKEN) -> Context.
+content_types_provided(Context, _, ?QUEUE_STATUS_PATH_TOKEN) -> Context;
+content_types_provided(Context, _, ?RESTART_PATH_TOKEN) -> Context.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -179,7 +204,9 @@ validate_agent_action(Context, AgentId, ?QUEUE_STATUS_PATH_TOKEN, ?HTTP_POST) ->
     OnSuccess = fun (C) -> maybe_queues_change(read(AgentId, C)) end,
     cb_context:validate_request_data(<<"queue_update">>, Context, OnSuccess);
 validate_agent_action(Context, AgentId, ?QUEUE_STATUS_PATH_TOKEN, ?HTTP_GET) ->
-    fetch_agent_queues(read(AgentId, Context)).
+    fetch_agent_queues(read(AgentId, Context));
+validate_agent_action(Context, AgentId, ?RESTART_PATH_TOKEN, ?HTTP_POST) ->
+    read(AgentId, Context).
 
 -spec maybe_queues_change(cb_context:context()) -> cb_context:context().
 maybe_queues_change(Context) ->
@@ -226,7 +253,10 @@ post(Context, AgentId, ?QUEUE_STATUS_PATH_TOKEN) ->
             cb_context:set_resp_data(Context1, Queues);
         _Status ->
             Context1
-    end.
+    end;
+post(Context, AgentId, ?RESTART_PATH_TOKEN) ->
+    publish_restart(Context, AgentId),
+    crossbar_util:response(kz_json:new(), Context).
 
 -spec publish_action(cb_context:context(), ne_binary()) -> 'ok'.
 publish_action(Context, AgentId) ->
@@ -256,6 +286,14 @@ publish_update(Context, AgentId, PubFun) ->
                 | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                ]),
     kz_amqp_worker:cast(Update, PubFun).
+
+-spec publish_restart(cb_context:context(), ne_binary()) -> 'ok'.
+publish_restart(Context, AgentId) ->
+    Payload = [{<<"Account-ID">>, cb_context:account_id(Context)}
+              ,{<<"Agent-ID">>, AgentId}
+               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+              ],
+    kz_amqp_worker:cast(Payload, fun kapi_acdc_agent:publish_restart/1).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -303,18 +341,18 @@ fetch_all_agent_stats(Context) ->
 fetch_stats_summary(Context) ->
     Req = props:filter_undefined(
             [{<<"Account-ID">>, cb_context:account_id(Context)}
-             ,{<<"Agent-ID">>, cb_context:req_value(Context, <<"agent_id">>)}
+            ,{<<"Agent-ID">>, cb_context:req_value(Context, <<"agent_id">>)}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
     case kapps_util:amqp_pool_request(Req
-                                       ,fun kapi_acdc_stats:publish_agent_calls_req/1
-                                       ,fun kapi_acdc_stats:agent_calls_resp_v/1
-                                      )
+                                     ,fun kapi_acdc_stats:publish_agent_calls_req/1
+                                     ,fun kapi_acdc_stats:agent_calls_resp_v/1
+                                     )
     of
         {'error', E} ->
             crossbar_util:response('error', <<"stat request had errors">>, 400
-                                   ,kz_json:get_value(<<"Error-Reason">>, E)
-                                   ,Context
+                                  ,kz_json:get_value(<<"Error-Reason">>, E)
+                                  ,Context
                                   );
         {'ok', Resp} -> crossbar_util:response(kz_json:get_value(<<"Data">>, Resp, []), Context)
     end.
@@ -361,7 +399,7 @@ fetch_current_status(Context, AgentId) ->
         {'ok', Resp} ->
             Agents = kz_json:get_value(<<"Agents">>, Resp, kz_json:new()),
             Results = kz_json:foldl(fun(K, V, Acc) ->
-                                      kz_json:set_value(K, kz_doc:public_fields(V), Acc)
+                                            kz_json:set_value(K, kz_doc:public_fields(V), Acc)
                                     end, kz_json:new(), Agents),
             crossbar_util:response(Results, Context)
     end.

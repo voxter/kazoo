@@ -54,6 +54,10 @@ handle_status_update(JObj, _Props) ->
         <<"resume">> ->
             'true' = kapi_acdc_agent:resume_v(JObj),
             maybe_resume_agent(AccountId, AgentId, JObj);
+        <<"restart">> ->
+            'true' = kapi_acdc_agent:restart_v(JObj),
+            _ = acdc_agents_sup:restart_agent(AccountId, AgentId),
+            'ok';
         Event -> maybe_agent_queue_change(AccountId, AgentId, Event
                                          ,kz_json:get_value(<<"Queue-ID">>, JObj)
                                          ,JObj

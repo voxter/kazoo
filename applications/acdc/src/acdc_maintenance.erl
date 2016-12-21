@@ -29,7 +29,6 @@
         ,agent_resume/2
         ,agent_queue_login/3
         ,agent_queue_logout/3
-        ,agent_restart/2
         ]).
 
 -include("acdc.hrl").
@@ -504,12 +503,3 @@ agent_queue_logout(AcctId, AgentId, QueueId) ->
                ]),
     kapps_util:amqp_pool_send(Update, fun kapi_acdc_agent:publish_logout_queue/1),
     lager:info("published logout update for agent").
-
--spec agent_restart(ne_binary(), ne_binary()) -> 'ok' | {'error', term()}.
-agent_restart(AcctId, AgentId) ->
-    kz_util:put_callid(?MODULE),
-    case acdc_agents_sup:restart_agent(AcctId, AgentId) of
-        {'ok', _} -> 'ok';
-        {'error', _}=E -> E;
-        E -> {'error', E}
-    end.

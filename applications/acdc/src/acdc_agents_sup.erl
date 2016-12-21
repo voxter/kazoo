@@ -5,6 +5,7 @@
 %%% @end
 %%% @contributors
 %%%   James Aimonetti
+%%%   Daniel Finke
 %%%-------------------------------------------------------------------
 -module(acdc_agents_sup).
 
@@ -81,9 +82,13 @@ new_thief(Call, QueueId) -> supervisor:start_child(?SERVER, [Call, QueueId]).
 workers() -> [Pid || {_, Pid, 'supervisor', [_]} <- supervisor:which_children(?SERVER)].
 
 -spec restart_acct(ne_binary()) -> [sup_startchild_ret()].
-restart_acct(AcctId) -> [acdc_agent_sup:restart(S) || S <- workers(), is_agent_in_acct(S, AcctId)].
+restart_acct(AcctId) ->
+    [restart_agent(AcctId, AgentId)
+     || {_, {AcctId1, AgentId, _}} <- agents_running()
+            ,AcctId =:= AcctId1
+    ].
 
--spec restart_agent(ne_binary(), ne_binary()) -> sup_startchild_ret() | 'ok'.
+-spec restart_agent(ne_binary(), ne_binary()) -> sup_startchild_ret().
 restart_agent(AcctId, AgentId) ->
     case find_agent_supervisor(AcctId, AgentId) of
         'undefined' ->
