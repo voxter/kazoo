@@ -9,6 +9,7 @@
 %%% @end
 %%% @contributors
 %%%   James Aimonetti
+%%%   Daniel Finke
 %%%-------------------------------------------------------------------
 -module(acdc_agent_manager).
 -behaviour(gen_listener).
@@ -50,6 +51,7 @@
                       ,{<<"agent">>, <<"resume">>}
                       ,{<<"agent">>, <<"login_queue">>}
                       ,{<<"agent">>, <<"logout_queue">>}
+                      ,{<<"agent">>, <<"restart">>}
                       ]
                      }
                     ,{{'acdc_agent_handler', 'handle_stats_req'}
