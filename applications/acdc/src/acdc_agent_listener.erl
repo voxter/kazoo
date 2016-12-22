@@ -563,6 +563,9 @@ handle_cast({'channel_hungup', CallId}, #state{call=Call
                     lager:debug("unknown call id ~s for channel_hungup, ignoring", [CallId]),
                     lager:debug("listening for call id(~s) and agents (~p)", [CCallId, ACallIds]),
                     {'noreply', State};
+                {'undefined', _} ->
+                    lager:debug("~s will have to be cancelled when ctrl queue arrives", CallId),
+                    {'noreply', State};
                 {CtrlQ, _} ->
                     lager:debug("agent channel ~s hungup, stop call on ctlq ~s", [CallId, CtrlQ]),
                     acdc_util:unbind_from_call_events(CallId),
@@ -1602,7 +1605,10 @@ find_account_id(JObj) ->
 -spec filter_out_agent_calls_for_member_call(agent_call_ids(), ne_binary()) ->
                                                     agent_call_ids().
 filter_out_agent_calls_for_member_call(ACallIds, MemberCallId) ->
-    lists:filter(fun({ACancelId, {ACtrlQ, MemberCallId1}}) when MemberCallId =:= MemberCallId1 ->
+    lists:filter(fun({ACancelId, {'undefined', MemberCallId1}}) when MemberCallId =:= MemberCallId1 ->
+                         lager:debug("~s will have to be cancelled when ctrl queue arrives", [ACancelId]),
+                         'true';
+                    ({ACancelId, {ACtrlQ, MemberCallId1}}) when MemberCallId =:= MemberCallId1 ->
                          lager:debug("cancelling and stopping leg ~s", [ACancelId]),
                          acdc_util:unbind_from_call_events(ACancelId),
                          stop_agent_leg(ACancelId, ACtrlQ),
@@ -1628,6 +1634,11 @@ filter_agent_calls([], _, _, Acc) -> Acc;
 %% Keep the ACallId
 filter_agent_calls([{ACallId, _}=Keep|ACallIds]
                    ,ACallId, MemberCallId, Acc) ->
+    filter_agent_calls(ACallIds, ACallId, MemberCallId, [Keep | Acc]);
+%% This call should be cancelled, but need to wait for CtrlQ
+filter_agent_calls([{ACancelId, {'undefined', MemberCallId}}=Keep|ACallIds]
+                   ,ACallId, MemberCallId, Acc) ->
+    lager:debug("~s will have to be cancelled when ctrl queue arrives", [ACancelId]),
     filter_agent_calls(ACallIds, ACallId, MemberCallId, [Keep | Acc]);
 %% Calls that are for MemberCallId but aren't ACallId are cancelled
 filter_agent_calls([{ACancelId, {CtrlQ, MemberCallId}}|ACallIds]
