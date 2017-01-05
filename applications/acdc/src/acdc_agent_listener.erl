@@ -532,7 +532,7 @@ handle_cast({'channel_hungup', CallId}, #state{call=Call
             lager:debug("member channel hungup, done with this call"),
             acdc_util:unbind_from_call_events(Call),
 
-            _ = filter_agent_calls(ACallIds, CallId),
+            ACallIds1 = filter_agent_calls(ACallIds, CallId),
 
             wh_util:put_callid(AgentId),
             case IsThief of
@@ -541,7 +541,7 @@ handle_cast({'channel_hungup', CallId}, #state{call=Call
                                             ,original_call='undefined'
                                             ,msg_queue_id='undefined'
                                             ,acdc_queue_id='undefined'
-                                            ,agent_call_ids=[]
+                                            ,agent_call_ids=ACallIds1
                                             ,recording_url='undefined'
                                             ,last_connect=os:timestamp()
                                            }
@@ -574,12 +574,12 @@ handle_cast('agent_timeout', #state{agent_call_ids=ACallIds
                                    }=State) ->
     lager:debug("agent timeout recv, stopping agent call"),
 
-    _ = filter_agent_calls(ACallIds, AgentId),
+    ACallIds1 = filter_agent_calls(ACallIds, AgentId),
 
     wh_util:put_callid(AgentId),
     {'noreply', State#state{msg_queue_id='undefined'
                             ,acdc_queue_id='undefined'
-                            ,agent_call_ids=[]
+                            ,agent_call_ids=ACallIds1
                             ,call='undefined'
                            }
      ,'hibernate'};
@@ -594,7 +594,7 @@ handle_cast({'member_connect_retry', CallId}, #state{my_id=MyId
             lager:debug("need to retry member connect, agent isn't able to take it"),
             send_member_connect_retry(Server, CallId, MyId, AgentId),
 
-            _ = [acdc_util:unbind_from_call_events(ACallId) || ACallId <- ACallIds],
+            ACallIds1 = filter_agent_calls(ACallIds, AgentId),
             acdc_util:unbind_from_call_events(CallId),
 
             wh_util:put_callid(AgentId),
@@ -602,7 +602,7 @@ handle_cast({'member_connect_retry', CallId}, #state{my_id=MyId
             {'noreply', State#state{original_call='undefined'
                                     ,msg_queue_id='undefined'
                                     ,acdc_queue_id='undefined'
-                                    ,agent_call_ids=[]
+                                    ,agent_call_ids=ACallIds1
                                     ,call='undefined'
                                    }
              ,'hibernate'
@@ -617,36 +617,13 @@ handle_cast({'member_connect_retry', WinJObj}, #state{my_id=MyId
     lager:debug("cannot process this win, sending a retry: ~s", [call_id(WinJObj)]),
     send_member_connect_retry(WinJObj, MyId, AgentId),
     {'noreply', State};
-handle_cast({'monitor_connect_retry', CallId}, #state{call=Call
-                                                      ,agent_id=AgentId
-                                                      ,agent_call_ids=ACallIds
-                                                     }=State) ->
-    case catch whapps_call:call_id(Call) of
-        CallId ->
-            lager:debug("retry while monitoring"),
-
-            _ = [acdc_util:unbind_from_call_events(ACallId) || ACallId <- ACallIds],
-            acdc_util:unbind_from_call_events(CallId),
-
-            wh_util:put_callid(AgentId),
-
-            {'noreply', State#state{msg_queue_id='undefined'
-                                    ,acdc_queue_id='undefined'
-                                    ,agent_call_ids=[]
-                                    ,call='undefined'
-                                   }
-             ,'hibernate'
-            };
-        _MCallId ->
-            lager:debug("retry call id(~s) is not our member call id ~p, ignoring", [CallId, _MCallId]),
-            {'noreply', State}
-    end;
 
 handle_cast({'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}, #state{is_thief='false'
                                                                                    ,agent_queues=Qs
                                                                                    ,acct_id=AcctId
                                                                                    ,agent_id=AgentId
                                                                                    ,my_q=MyQ
+                                                                                   ,agent_call_ids=ACallIds
                                                                                    ,cdr_urls=Urls
                                                                                    ,agent=Agent
                                                                                   }=State) ->
@@ -660,7 +637,8 @@ handle_cast({'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}, #sta
                                            ,wh_json:is_true(<<"Record-Caller">>, WinJObj, 'false')
                                           ),
 
-    AgentCallIds = maybe_connect_to_agent(MyQ, EPs, Call, RingTimeout, AgentId, CDRUrl),
+    AgentCallIds = lists:append(maybe_connect_to_agent(MyQ, EPs, Call, RingTimeout, AgentId, CDRUrl)
+                                ,ACallIds),
 
     gen_listener:add_binding(self(), 'acdc_agent', [{'callid', call_id(Call)}
                                                     ,{'restrict_to', ['stats_req']}
@@ -684,6 +662,7 @@ handle_cast({'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}, #sta
 handle_cast({'bridge_to_member', Call, WinJObj, _, CDRUrl, RecordingUrl}, #state{is_thief='true'
                                                                                  ,agent=Agent
                                                                                  ,agent_id=AgentId
+                                                                                 ,agent_call_ids=ACallIds
                                                                                  ,cdr_urls=Urls
                                                                                 }=State) ->
     _ = whapps_call:put_callid(Call),
@@ -700,7 +679,7 @@ handle_cast({'bridge_to_member', Call, WinJObj, _, CDRUrl, RecordingUrl}, #state
     {'noreply', State#state{call=Call
                             ,acdc_queue_id=wh_json:get_value(<<"Queue-ID">>, WinJObj)
                             ,msg_queue_id=wh_json:get_value(<<"Server-ID">>, WinJObj)
-                            ,agent_call_ids=[AgentCallId]
+                            ,agent_call_ids=[AgentCallId | ACallIds]
                             ,cdr_urls=dict:store(whapps_call:call_id(Call), CDRUrl,
                                                  dict:store(AgentCallId, CDRUrl, Urls)
                                                 )
@@ -718,7 +697,6 @@ handle_cast({'monitor_call', Call, WinJObj, RecordingUrl}, State) ->
     {'noreply', State#state{call=Call
                             ,acdc_queue_id=wh_json:get_value(<<"Queue-ID">>, WinJObj)
                             ,msg_queue_id=wh_json:get_value(<<"Server-ID">>, WinJObj)
-                            ,agent_call_ids=[]
                             ,recording_url=RecordingUrl
                            }
      ,'hibernate'};
@@ -727,6 +705,7 @@ handle_cast({'originate_callback_to_agent', Call, WinJObj, EPs, CDRUrl, Recordin
                                                                                                       ,acct_id=AcctId
                                                                                                       ,agent_id=AgentId
                                                                                                       ,my_q=MyQ
+                                                                                                      ,agent_call_ids=ACallIds
                                                                                                       ,cdr_urls=Urls
                                                                                                       ,agent=Agent
                                                                                                      }=State) ->
@@ -740,7 +719,8 @@ handle_cast({'originate_callback_to_agent', Call, WinJObj, EPs, CDRUrl, Recordin
                                            ,wh_json:is_true(<<"Record-Caller">>, WinJObj, 'false')
                                           ),
 
-    AgentCallIds = maybe_originate_callback(MyQ, EPs, Call, RingTimeout, AgentId, CDRUrl, Number),
+    AgentCallIds = lists:append(maybe_originate_callback(MyQ, EPs, Call, RingTimeout, AgentId, CDRUrl, Number)
+                                ,ACallIds),
 
     lager:debug("originate sent, waiting on bridge of agent and callback call"),
     update_my_queues_of_change(AcctId, AgentId, Qs),
@@ -833,9 +813,9 @@ handle_cast({'member_connect_accepted', ACallId, NewCall}, #state{msg_queue_id=A
                             ,agent_call_ids=ACallIds1
                            }, 'hibernate'};
 
-handle_cast({'monitor_connect_accepted', ACallId}, State) ->
+handle_cast({'monitor_connect_accepted', ACallId}, #state{agent_call_ids=ACallIds}=State) ->
     lager:debug("monitoring ~s", [ACallId]),
-    {'noreply', State#state{agent_call_ids=[ACallId]}, 'hibernate'};
+    {'noreply', State#state{agent_call_ids=[ACallId | ACallIds]}, 'hibernate'};
 
 handle_cast({'member_callback_accepted', ACall}, #state{msg_queue_id=AmqpQueue
                                                         ,call=Call
@@ -882,7 +862,7 @@ handle_cast({'hangup_call'}, #state{my_id=MyId
                                    }=State) ->
     %% Hangup this agent's calls
     lager:debug("agent FSM requested a hangup of the agent call, sending retry"),
-    _ = filter_agent_calls(ACallIds, AgentId),
+    ACallIds1 = filter_agent_calls(ACallIds, AgentId),
 
     %% Pass the call on to another agent
     CallId = whapps_call:call_id(Call),
@@ -893,7 +873,7 @@ handle_cast({'hangup_call'}, #state{my_id=MyId
     {'noreply', State#state{call='undefined'
                             ,msg_queue_id='undefined'
                             ,acdc_queue_id='undefined'
-                            ,agent_call_ids=[]
+                            ,agent_call_ids=ACallIds1
                             ,recording_url='undefined'
                            }
      ,'hibernate'};
@@ -905,7 +885,7 @@ handle_cast({'originate_execute', JObj}, #state{my_q=Q}=State) ->
 
 handle_cast({'originate_uuid', UUID, CtlQ}, #state{agent_call_ids=ACallIds}=State) ->
     lager:debug("updating ~s with ~s in ~p", [UUID, CtlQ, ACallIds]),
-    {'noreply', State#state{agent_call_ids=[{UUID, CtlQ} | props:delete(UUID, ACallIds)]}};
+    {'noreply', State#state{agent_call_ids=props:set_value(UUID, CtlQ, ACallIds)}};
 
 handle_cast({'outbound_call', CallId}, #state{agent_id=AgentId
                                               ,acct_id=AcctId
@@ -1292,7 +1272,7 @@ maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
     lager:debug("sending originate request with agent call-ids ~p", [ACallIds]),
 
     wapi_resource:publish_originate_req(Prop),
-    ACallIds.
+    lists:map(fun(ACallId) -> {ACallId, 'undefined'} end, ACallIds).
 
 -spec maybe_originate_callback(ne_binary(), wh_json:objects(), whapps_call:call(), api_integer(), ne_binary(), api_binary()
     ,api_binary()) ->
@@ -1356,7 +1336,7 @@ maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Number) ->
     lager:debug("sending originate request with agent call-ids ~p", [ACallIds]),
 
     wapi_resource:publish_originate_req(Prop),
-    ACallIds.
+    lists:map(fun(ACallId) -> {ACallId, 'undefined'} end, ACallIds).
 
 outbound_call_id(CallId, AgentId) when is_binary(CallId) ->
     Rnd = wh_util:rand_hex_binary(4),
@@ -1589,11 +1569,18 @@ find_account_id(JObj) ->
 
 -spec filter_agent_calls(wh_proplist(), ne_binary()) -> wh_proplist().
 filter_agent_calls(ACallIds, ACallId) ->
-    lists:filter(fun({ACancelId, ACtrlQ}) when ACancelId =/= ACallId ->
+                 %% These calls should be cancelled, but need to wait for CtrlQ
+    lists:filter(fun({ACancelId, 'undefined'}) when ACancelId =/= ACallId ->
+                         lager:debug("~s will have to be cancelled when ctrl queue arrives"
+                                     ,[ACancelId]),
+                         'true';
+                 %% Cancel all calls =/= ACallId that have CtrlQs
+                    ({ACancelId, ACtrlQ}) when ACancelId =/= ACallId ->
                          lager:debug("cancelling and stopping leg ~s", [ACancelId]),
                          acdc_util:unbind_from_call_events(ACancelId),
                          stop_agent_leg(ACancelId, ACtrlQ),
                          'false';
+                 %% Keep ACallId
                     ({_, _}) -> 'true';
                     (ACancelId) when ACancelId =/= ACallId ->
                          lager:debug("cancelling leg ~s", [ACancelId]),
