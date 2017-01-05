@@ -165,6 +165,13 @@
             "required": false,
             "type": "boolean"
         },
+        "preserve_metadata": {
+            "default": false,
+            "description": "Keep metadata about call recording so it is retrievable by media API",
+            "name": "Preserve Call Recording Metadata",
+            "required": false,
+            "type": "boolean"
+        },
         "record_caller": {
             "default": false,
             "description": "When enabled, a caller's audio will be recorded",
