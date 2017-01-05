@@ -99,28 +99,42 @@ running_apps_verbose() ->
     end.
 
 -spec get_running_apps() -> [{atom(), string(), _}].
+-spec get_running_apps(boolean()) -> [{atom(), string(), _}].
 get_running_apps() ->
+    get_running_apps('false').
+
+get_running_apps(IncludeHidden) ->
     [AppData
      || {App, _Desc, _Vsn}=AppData <- application:which_applications(),
-        is_kapp(App)
+        IncludeHidden orelse is_kapp(App)
     ].
 
 -spec running_apps_list() -> atoms() | string().
+-spec running_apps_list(boolean()) -> atoms() | string().
 running_apps_list() ->
-    case get_running_apps() of
+    running_apps_list('false').
+
+running_apps_list(IncludeHidden) ->
+    case get_running_apps(IncludeHidden) of
         [] -> "kapps have not started yet, check that rabbitmq and bigcouch/haproxy are running at the configured addresses";
         Resp -> lists:sort([App || {App, _Desc, _Vsn} <- Resp])
     end.
 
--spec app_running(atom()) -> boolean().
-app_running(AppName) ->
+-spec app_running(atom() | text()) -> boolean().
+app_running(AppName) when is_atom(AppName) ->
     case [App
-          || App <- running_apps_list(),
+          || App <- running_apps_list('true'),
              AppName =:= App
          ]
     of
         [] -> false;
         _ -> true
+    end;
+app_running(AppName) ->
+    try
+        app_running(kz_util:to_atom(AppName))
+    catch
+        'error':'badarg' -> 'false'
     end.
 
 -spec initialize_kapps() -> 'ok'.
