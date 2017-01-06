@@ -224,8 +224,7 @@ in_service_from_reserved_authorize(Number) ->
             Number
     end.
 
--spec in_service_from_in_service_authorize(kn(), knm_numbers:options()) -> kn();
-                                          (t()) -> t().
+-spec in_service_from_in_service_authorize(t()) -> t().
 in_service_from_in_service_authorize(T0=#{todo := Ns, options := Options}) ->
     F = fun (N, T) ->
                 case knm_number:attempt(fun in_service_from_in_service_authorize/2, [N, Options]) of
@@ -233,7 +232,9 @@ in_service_from_in_service_authorize(T0=#{todo := Ns, options := Options}) ->
                     {error, R} -> knm_numbers:ko(N, R, T)
                 end
         end,
-    lists:foldl(F, T0, Ns);
+    lists:foldl(F, T0, Ns).
+
+-spec in_service_from_in_service_authorize(kn(), knm_numbers:options()) -> kn().
 in_service_from_in_service_authorize(Number, Options) ->
     PhoneNumber = knm_number:phone_number(Number),
     AssignedTo = knm_phone_number:assigned_to(PhoneNumber),
@@ -249,13 +250,11 @@ in_service_from_in_service_authorize(Number, Options) ->
         %% Allowed when account is parent of owner
         orelse ?ACCT_HIERARCHY(AuthBy, AssignedTo, 'false')
     of
-        false ->
-            Reason = knm_errors:to_json(unauthorized),
-            knm_numbers:ko(Ns, Reason, T);
+        false -> knm_errors:unauthorized();
         true ->
             Sudo
                 andalso lager:info("bypassing auth"),
-            knm_numbers:ok(Ns, T)
+            Number
     end.
 
 -spec not_assigning_to_self(kn()) -> kn();
