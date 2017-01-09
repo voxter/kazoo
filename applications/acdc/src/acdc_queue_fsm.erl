@@ -860,42 +860,6 @@ elapsed(Ref) when is_reference(Ref) ->
     end;
 elapsed(Time) -> kz_util:elapsed_s(Time).
 
-%% If some agents are busy, the manager will tell us to delay our
-%% connect reqs
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec maybe_delay_connect_req(kapps_call:call(), kz_json:object(), gen_listener:basic_deliver(), state()) ->
-                                {'next_state', 'ready' | 'connect_req', state()}.
-maybe_delay_connect_req(Call, CallJObj, Delivery, #state{queue_proc=QueueSrv
-                                                        ,manager_proc=MgrSrv
-                                                        ,connection_timeout=ConnTimeout
-                                                        ,connection_timer_ref=ConnRef
-                                                        ,cdr_url=Url
-                                                        }=State) ->
-    CallId = kapps_call:call_id(Call),
-    case acdc_queue_manager:up_next(MgrSrv, CallId) of
-        'true' ->
-            lager:debug("member call received: ~s", [CallId]),
-
-            webseq:note(?WSD_ID, self(), 'right', [CallId, <<": member call">>]),
-            webseq:evt(?WSD_ID, CallId, self(), <<"member call received">>),
-
-            acdc_queue_listener:member_connect_req(QueueSrv, CallJObj, Delivery, Url),
-
-            maybe_stop_timer(ConnRef), % stop the old one, maybe
-
-            {'next_state', 'connect_req', State#state{collect_ref=start_collect_timer()
-                                                     ,member_call=Call
-                                                     ,member_call_start=kz_util:current_tstamp()
-                                                     ,connection_timer_ref=start_connection_timer(ConnTimeout)
-                                                     }};
-        'false' ->
-            lager:debug("connect_req delayed (not up next)"),
-            gen_fsm:send_event_after(1000, {'member_call', CallJObj, Delivery}),
-            {'next_state', 'ready', State}
-    end.
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -964,22 +928,6 @@ maybe_connect_re_req(MgrSrv, ListenerSrv, #state{account_id=AccountId
 maybe_connect_re_req(MgrSrv, ListenerSrv, State) ->
     %% Don't cancel calls when they are a callback - save them for a long time
     maybe_delay_connect_re_req(MgrSrv, ListenerSrv, State).
-
--spec maybe_delay_connect_re_req(pid(), pid(), state()) ->
-                                   {'next_state', 'connect_req', state()}.
-maybe_delay_connect_re_req(MgrSrv, ListenerSrv, #state{member_call=Call}=State) ->
-    CallId = kapps_call:call_id(Call),
-    case acdc_queue_manager:up_next(MgrSrv, CallId) of
-        'true' ->
-            lager:debug("done waiting, no agents responded, let's ask again"),
-            webseq:note(?WSD_ID, self(), 'right', <<"no agents responded, trying again">>),
-            acdc_queue_listener:member_connect_re_req(ListenerSrv),
-            {'next_state', 'connect_req', State#state{collect_ref=start_collect_timer()}};
-        'false' ->
-            lager:debug("connect_re_req delayed (not up next)"),
-            gen_fsm:send_event_after(1000, {'timeout', 'undefined', ?COLLECT_RESP_MESSAGE}),
-            {'next_state', 'connect_req', State#state{collect_ref='undefined'}}
-    end.
 
 -spec maybe_delay_connect_re_req(pid(), pid(), state()) ->
                                         {'next_state', 'connect_req', state()}.
