@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2016, 2600Hz INC
+%%% @copyright (C) 2012-2017, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -320,7 +320,7 @@ config(Srv) -> gen_listener:call(Srv, 'config').
 -spec refresh_config(pid(), api_ne_binaries(), fsm_state_name()) -> 'ok'.
 refresh_config(_, 'undefined', _) -> 'ok';
 refresh_config(Srv, Qs, StateName) ->
-  gen_listener:cast(Srv, {'refresh_config', Qs, StateName}).
+    gen_listener:cast(Srv, {'refresh_config', Qs, StateName}).
 
 -spec agent_info(pid(), kz_json:path()) -> kz_json:api_json_term().
 agent_info(Srv, Field) -> gen_listener:call(Srv, {'agent_info', Field}).

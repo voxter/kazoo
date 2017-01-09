@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2016, 2600Hz
+%%% @copyright (C) 2011-2017, 2600Hz
 %%% @doc
 %%% Account module
 %%%
@@ -345,12 +345,11 @@ normalize_upload(Context, MediaId, FileJObj, UploadContentType) ->
                            ,MediaId
                            ,NewFileJObj
              );
-        {'error', Reason} ->
-            lager:warning("failed to convert to ~s: ~s", [ToExt, Reason]),
-
+        {'error', _R} ->
+            lager:warning("failed to convert to ~s: ~p", [ToExt, _R]),
+            Reason = <<"failed to communicate with conversion utility">>,
             validate_upload(cb_context:set_doc(Context
                                               ,kz_json:set_value(<<"normalization_error">>, Reason, cb_context:doc(Context))
-
                                               )
                            ,MediaId
                            ,FileJObj
@@ -577,13 +576,23 @@ maybe_merge_tts(Context, MediaId, Text, Voice, 'success') ->
 maybe_merge_tts(Context, _MediaId, _Text, _Voice, _Status) ->
     Context.
 
+-spec delete_type(boolean() | cb_context:context()) -> 'permanent' | 'soft'.
+delete_type('true') ->
+    'permanent';
+
+delete_type('false') ->
+    'soft';
+
+delete_type(Context) ->
+    Prompt = kzd_media:is_prompt(cb_context:resp_data(Context)),
+    Hard   = kz_json:is_true(<<"hard_delete">>, cb_context:req_data(Context)),
+
+    delete_type(Prompt or Hard).
+
 -spec delete(cb_context:context(), path_token()) -> cb_context:context().
 -spec delete(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 delete(Context, _MediaId) ->
-    case kzd_media:is_prompt(cb_context:resp_data(Context)) of
-        'true' -> crossbar_doc:delete(Context, 'permanent');
-        'false' -> crossbar_doc:delete(Context)
-    end.
+    crossbar_doc:delete(Context, delete_type(Context)).
 
 delete(Context, MediaId, ?BIN_DATA) ->
     delete_media_binary(kz_http_util:urlencode(MediaId), Context, cb_context:account_id(Context)).

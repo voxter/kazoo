@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2013-2016, 2600Hz
+%%% @copyright (C) 2013-2017, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -263,6 +263,7 @@ build_originate(#state{endpoints=Endpoints
                    [{<<"Global-Resource">>, <<"true">>}
                    ,{<<"Account-ID">>, AccountId}
                    ,{<<"From-URI">>, originate_from_uri(CIDNum, OffnetReq)}
+                   ,{<<"Realm">>, stepswitch_util:default_realm(OffnetReq)}
                    ,{<<"Reseller-ID">>, kz_services:find_reseller_id(AccountId)}
                    ]),
     Application = kz_json:get_value(<<"Application-Name">>, OffnetReq, <<"park">>),

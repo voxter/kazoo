@@ -4,6 +4,8 @@
 
 #### Schema
 
+Call Detail Records
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `app_name` | The Kazoo application that issued the CDR | `string` |   | `false`
@@ -50,6 +52,8 @@ Key | Description | Type | Default | Required
 `user_agent` | User agent header from SIP packet | `string` |   | `false`
 
 
+
+
 #### Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/cdrs
@@ -68,6 +72,16 @@ curl -v -X GET \
 curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/cdrs/{CDR_ID}
+```
+
+#### Fetch
+
+> GET /v2/accounts/{ACCOUNT_ID}/cdrs/summary
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/cdrs/summary
 ```
 
 #### Fetch

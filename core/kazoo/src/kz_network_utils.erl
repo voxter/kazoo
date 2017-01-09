@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2016, 2600Hz INC
+%%% @copyright (C) 2010-2017, 2600Hz INC
 %%% @doc
 %%% Various utilities - a veritable cornicopia
 %%% @end
@@ -17,7 +17,6 @@
 -export([to_cidr/1
         ,to_cidr/2
         ,verify_cidr/2
-%%        ,expand_cidr/1
         ]).
 -export([find_nameservers/1
         ,find_nameservers/2

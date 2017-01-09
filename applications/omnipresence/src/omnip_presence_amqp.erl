@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2016, 2600Hz
+%%% @copyright (C) 2017, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -23,6 +23,10 @@
 -include("omnipresence.hrl").
 
 -define(SERVER, ?MODULE).
+
+-define(DEFAULT_VM_NUMBER, <<"*98">>).
+-define(VM_NUMBER_KEY, <<"presence_subscribed_mwi_prefix">>).
+-define(VM_NUMBER(A), kapps_account_config:get_global(A, ?CONFIG_CAT, ?VM_NUMBER_KEY, ?DEFAULT_VM_NUMBER)).
 
 -record(state, {}).
 -type state() :: #state{}.
@@ -110,6 +114,10 @@ handle_cast({'omnipresence',{'channel_event', JObj}}, State) ->
     kz_util:put_callid(JObj),
     EventType = kz_json:get_value(<<"Event-Name">>, JObj),
     _ = kz_util:spawn(fun channel_event/2, [EventType, JObj]),
+    {'noreply', State};
+handle_cast({'omnipresence',{'mwi_update', JObj}}, State) ->
+    kz_util:put_callid(JObj),
+    _ = kz_util:spawn(fun mwi_event/1, [JObj]),
     {'noreply', State};
 handle_cast({'omnipresence', _}, State) ->
     {'noreply', State};
@@ -222,11 +230,11 @@ presence_event(JObj) ->
 
 -spec maybe_handle_presence_state(kz_json:object(), api_binary()) -> 'ok'.
 maybe_handle_presence_state(JObj, <<"online">>=State) ->
-    handle_update(JObj, State, 0);
+    handle_update(JObj, State, ?OTHER_TIME);
 maybe_handle_presence_state(JObj, <<"offline">>=State) ->
-    handle_update(JObj, State, 0);
+    handle_update(JObj, State, ?OTHER_TIME);
 maybe_handle_presence_state(JObj, State) ->
-    handle_update(kz_json:delete_keys([<<"From">>, <<"To">>], JObj), State, 0).
+    handle_update(kz_json:delete_keys([<<"From">>, <<"To">>], JObj), State, ?OTHER_TIME).
 
 -spec handle_update(kz_json:object(), ne_binary()) -> 'ok'.
 handle_update(JObj, ?PRESENCE_HANGUP) ->
@@ -331,3 +339,20 @@ presence_reset(JObj) ->
 set_presence_state(PresenceId, State) ->
     Headers = [{<<"Presence-ID">>, PresenceId }],
     handle_update(kz_json:from_list(Headers), State, 0).
+
+-spec mwi_event(kz_json:object()) -> 'ok'.
+mwi_event(JObj) ->
+    To = kz_json:get_value(<<"To">>, JObj),
+    [_, ToRealm] = binary:split(To, <<"@">>),
+    {ok, AccountDb} = kapps_util:get_account_by_realm(ToRealm),
+    AccountId = kz_util:format_account_id(AccountDb),
+    State = case kz_json:get_integer_value(<<"Messages-New">>, JObj, 0) of
+                0 -> ?PRESENCE_HANGUP;
+                _ -> ?PRESENCE_ANSWERED
+            end,
+    Props = props:filter_undefined(
+              [{<<"Presence-ID">>, <<(?VM_NUMBER(AccountId))/binary, To/binary>>}
+              ,{<<"Flush-Level">>, 1}
+              ,{<<"Call-Direction">>, <<"inbound">>}
+              ]),
+    handle_update(kz_json:from_list(Props), State, 60 * ?SECONDS_IN_DAY).

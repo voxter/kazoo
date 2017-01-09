@@ -4,12 +4,16 @@
 
 #### Schema
 
+Validator for the group
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `endpoints` | Endpoints included into group | `object` | `{}` | `true`
 `music_on_hold` | The music on hold parameters | `object` | `{}` | `false`
 `music_on_hold.media_id` | The ID of a media object that should be used as music on hold | `string(0..128)` |   | `false`
 `name` | A friendly name for the group | `string(1..128)` |   | `true`
+
+
 
 
 #### Fetch
@@ -32,22 +36,22 @@ curl -v -X PUT \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/groups
 ```
 
-#### Remove
-
-> DELETE /v2/accounts/{ACCOUNT_ID}/groups/{GROUP_ID}
-
-```shell
-curl -v -X DELETE \
-    -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/groups/{GROUP_ID}
-```
-
 #### Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/groups/{GROUP_ID}
 
 ```shell
 curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/groups/{GROUP_ID}
+```
+
+#### Change
+
+> POST /v2/accounts/{ACCOUNT_ID}/groups/{GROUP_ID}
+
+```shell
+curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/groups/{GROUP_ID}
 ```
@@ -62,12 +66,12 @@ curl -v -X PATCH \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/groups/{GROUP_ID}
 ```
 
-#### Change
+#### Remove
 
-> POST /v2/accounts/{ACCOUNT_ID}/groups/{GROUP_ID}
+> DELETE /v2/accounts/{ACCOUNT_ID}/groups/{GROUP_ID}
 
 ```shell
-curl -v -X POST \
+curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/groups/{GROUP_ID}
 ```

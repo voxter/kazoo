@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2016, 2600Hz, INC
+%%% @copyright (C) 2012-2017, 2600Hz, INC
 %%% @doc
 %%%
 %%% @end
@@ -14,16 +14,20 @@
 -include("kazoo_services.hrl").
 -include_lib("kazoo_number_manager/include/knm_phone_number.hrl").
 
--define(PHONE_NUMBERS, <<"phone_numbers">>).
--define(PHONE_NUMBERS_NON_BILLABLE, <<"phone_numbers_non_billable">>).
 -define(NUMBER_SERVICES, <<"number_services">>).
+-define(PHONE_NUMBERS, <<"phone_numbers">>).
 -define(NUMBER_CARRIERS, <<"number_carriers">>).
 
 -define(KEY_VALUE, <<"value">>).
--define(BILLABLE, [?KEY_VALUE, <<"classifications">>, <<"billable">>]).
--define(NON_BILLABLE, [?KEY_VALUE, <<"classifications">>, <<"non_billable">>]).
+-define(CLASSIFICATIONS, [?KEY_VALUE, <<"classifications">>]).
 -define(FEATURES, [?KEY_VALUE, <<"features">>]).
--define(MODULES, [?KEY_VALUE, <<"modules">>]).
+
+-define(MAP_CATEGORIES, #{?CLASSIFICATIONS => ?PHONE_NUMBERS
+                         ,?FEATURES => ?NUMBER_SERVICES
+                         }).
+
+%% ?NUMBER_CARRIERS is nested under ?CLASSIFICATIONS, so we add it "manually".
+-define(DEFAULT_RESET_CATEGORIES, [?NUMBER_CARRIERS | maps:keys(?MAP_CATEGORIES)]).
 
 -type pn() :: knm_phone_number:knm_phone_number().
 -type pns() :: [pn()].
@@ -42,20 +46,23 @@ reconcile(Services) ->
         {error, _R} ->
             lager:debug("unable to get reconcile_services for phone numbers: ~p", [_R]),
             Services;
+        {ok, []} -> reset(Services);
         {ok, [JObj]} ->
-            Categories = #{?BILLABLE => ?PHONE_NUMBERS
-                          ,?NON_BILLABLE => ?PHONE_NUMBERS_NON_BILLABLE
-                          ,?FEATURES => ?NUMBER_SERVICES
-                          ,?MODULES => ?NUMBER_CARRIERS
-                          },
-            F = fun (P, C, S) -> update_categories_fold(P, C, S, JObj) end,
-            maps:fold(F, Services, Categories)
+            F = fun (Path, Cat, S) -> update_categories_fold(Path, Cat, S, JObj) end,
+            maps:fold(F, reset(Services), ?MAP_CATEGORIES)
     end.
 
 reconcile(Services, PNs) ->
-    S1 = kz_services:reset_category(?PHONE_NUMBERS, Services),
-    S2 = kz_services:reset_category(?NUMBER_SERVICES, S1),
-    update_numbers(S2, PNs).
+    update_numbers(reset(Services), PNs).
+
+-spec reset(kz_services:services()) -> kz_services:services().
+reset(Services) ->
+    reset(Services, ?DEFAULT_RESET_CATEGORIES).
+
+-spec reset(kz_services:services(), ne_binaries()) -> kz_services:services().
+reset(Services, []) -> Services;
+reset(Services, [Category | Categories]) ->
+    reset(kz_services:reset_category(Category, Services), Categories).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -98,14 +105,21 @@ update_quantities_fold(Feature, Count, Services, ?NUMBER_SERVICES=Category) ->
     Name = knm_providers:service_name(Feature, kz_services:account_id(Services)),
     Quantity = kz_services:updated_quantity(Category, Name, Services),
     kz_services:update(Category, Name, Quantity + Count, Services);
-update_quantities_fold(SubCategory, Count, Services, Category) ->
-    Quantity = kz_services:updated_quantity(Category, SubCategory, Services),
-    kz_services:update(Category, SubCategory, Quantity + Count, Services).
+
+update_quantities_fold(Classification, Carriers, Services, ?PHONE_NUMBERS=Category) ->
+    CountPerClass = kz_json:foldl(fun (_Carrier, Count, Sum) -> Count + Sum end, 0, Carriers),
+    Quantity = kz_services:updated_quantity(Category, Classification, Services),
+    S0 = kz_services:update(Category, Classification, Quantity + CountPerClass, Services),
+    kz_json:foldl(fun manually_update_nested_quantities_fold/3, S0, Carriers).
+
+manually_update_nested_quantities_fold(Carrier, Count, S) ->
+    Cat = ?NUMBER_CARRIERS,
+    Q = kz_services:updated_quantity(Cat, Carrier, S),
+    kz_services:update(Cat, Carrier, Q + Count, S).
 
 %% @private
 -spec update_numbers(kz_services:services(), pns()) -> kz_services:services().
-update_numbers(Services, []) ->
-    Services;
+update_numbers(Services, []) -> Services;
 update_numbers(Services, [PN|PNs]) ->
     case knm_converters:is_reconcilable(knm_phone_number:number(PN)) of
         'false' -> Services;
@@ -137,7 +151,7 @@ update_number_quantities(Services, PN) ->
 %% @private
 -spec is_number_billable(pn()) -> boolean().
 is_number_billable(PN) ->
-    IsBillable = knm_phone_number:is_billable(PN),
+    IsBillable = knm_carriers:is_number_billable(PN),
     lager:debug("is ~s's ~s billable: ~p", [knm_phone_number:module_name(PN)
                                            ,knm_phone_number:number(PN)
                                            ,IsBillable

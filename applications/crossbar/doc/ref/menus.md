@@ -4,6 +4,8 @@
 
 #### Schema
 
+Schema for a menus
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `allow_record_from_offnet` | Determines if the record pin can be used by external calls | `boolean` | `false` | `false`
@@ -21,6 +23,8 @@ Key | Description | Type | Default | Required
 `record_pin` | The pin number used to record the menu prompt | `string(3..6)` |   | `false`
 `retries` | The number of times a menu should be played until a valid entry is collected | `integer` | `3` | `false`
 `timeout` | The amount of time (in milliseconds) to wait for the caller to beging entering digits | `integer` |   | `false`
+
+
 
 
 #### Fetch
@@ -43,22 +47,22 @@ curl -v -X PUT \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/menus
 ```
 
-#### Remove
-
-> DELETE /v2/accounts/{ACCOUNT_ID}/menus/{MENU_ID}
-
-```shell
-curl -v -X DELETE \
-    -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/menus/{MENU_ID}
-```
-
 #### Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/menus/{MENU_ID}
 
 ```shell
 curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/menus/{MENU_ID}
+```
+
+#### Change
+
+> POST /v2/accounts/{ACCOUNT_ID}/menus/{MENU_ID}
+
+```shell
+curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/menus/{MENU_ID}
 ```
@@ -73,12 +77,12 @@ curl -v -X PATCH \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/menus/{MENU_ID}
 ```
 
-#### Change
+#### Remove
 
-> POST /v2/accounts/{ACCOUNT_ID}/menus/{MENU_ID}
+> DELETE /v2/accounts/{ACCOUNT_ID}/menus/{MENU_ID}
 
 ```shell
-curl -v -X POST \
+curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/menus/{MENU_ID}
 ```

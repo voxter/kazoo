@@ -728,31 +728,29 @@
             "description": "Call flows describe steps to take in order to process a phone call. They are trees of information related to a phone call such as \"answer, play file, record file\" etc. that are logically grouped together and ordered.",
             "properties": {
                 "children": {
-                    "default": {},
                     "description": "Children callflows",
                     "patternProperties": {
                         ".+": {
                             "$ref": "callflows.action"
                         }
                     },
-                    "required": false,
                     "type": "object"
                 },
                 "data": {
-                    "default": {},
                     "description": "The data/arguments of the callflow module",
-                    "required": true,
                     "type": "object"
                 },
                 "module": {
                     "description": "The name of the callflow module to excute at this node",
                     "maxLength": 64,
                     "minLength": 1,
-                    "required": true,
                     "type": "string"
                 }
             },
-            "required": true,
+            "required": [
+                "data",
+                "module"
+            ],
             "type": "object"
         },
         "callflows.after_bridge": {
@@ -1097,6 +1095,9 @@
                 "action": {
                     "description": ""
                 },
+                "caller_id": {
+                    "description": ""
+                },
                 "enforce_call_restriction": {
                     "default": true,
                     "description": "",
@@ -1112,7 +1113,13 @@
                     "description": "",
                     "type": "integer"
                 },
+                "max_digits": {
+                    "description": ""
+                },
                 "media_id": {
+                    "description": ""
+                },
+                "min_digits": {
                     "description": ""
                 }
             },
@@ -1685,7 +1692,7 @@
                 },
                 "time_limit": {
                     "description": "Time limit, in seconds, for the recording",
-                    "maximum": 3600,
+                    "maximum": 10800,
                     "minimum": 5,
                     "required": false,
                     "type": "integer"
@@ -4199,7 +4206,7 @@
             "properties": {
                 "allow_prepay": {
                     "default": true,
-                    "description": "Determines if the account would like to allow per-minute calls if they have credit",
+                    "description": "Determines if the account would like to allow per-minute calls if they have no available credit",
                     "required": false,
                     "type": "boolean"
                 },
@@ -6772,6 +6779,7 @@
             "additionalProperties": false,
             "patternProperties": {
                 "^_": {
+                    "description": "Ignores CouchDB fields prefixed by underscores",
                     "type": [
                         "string",
                         "integer",
@@ -6780,6 +6788,7 @@
                     ]
                 },
                 "^pvt_": {
+                    "description": "Ignores Kazoo private fields prefixed by pvt_",
                     "type": [
                         "string",
                         "integer",
@@ -6789,43 +6798,59 @@
             },
             "properties": {
                 "attachments": {
-                    "$ref": "storage.attachments"
+                    "$ref": "storage.attachments",
+                    "description": "Defines where and how to store attachments"
                 },
                 "connections": {
-                    "$ref": "storage.connections"
+                    "$ref": "storage.connections",
+                    "description": "Describes alternative connections to use (such as alternative CouchDB instances"
+                },
+                "id": {
+                    "description": "ID of the storage document",
+                    "type": "string"
                 },
                 "plan": {
-                    "$ref": "storage.plan"
+                    "$ref": "storage.plan",
+                    "description": "Describes how to store documents depending on the database or document type"
                 }
             },
             "type": "object"
         },
         "storage.attachment.aws": {
-            "description": "schema for aws attachment entry",
+            "description": "schema for AWS attachment entry",
             "properties": {
                 "handler": {
+                    "description": "What AWS service to use",
                     "enum": [
                         "s3"
-                    ]
+                    ],
+                    "type": "string"
                 },
                 "name": {
+                    "description": "Friendly name for this configuration",
                     "type": "string"
                 },
                 "settings": {
+                    "description": "AWS API settings",
                     "properties": {
                         "bucket": {
+                            "description": "Bucket name to store data to",
                             "type": "string"
                         },
                         "host": {
+                            "description": "Region-specific hostname to use, if applicable",
                             "type": "string"
                         },
                         "key": {
+                            "description": "AWS Key to use",
                             "type": "string"
                         },
                         "path": {
+                            "description": "Custom path to use as a prefix when saving files",
                             "type": "string"
                         },
                         "secret": {
+                            "description": "AWS Secret to use",
                             "type": "string"
                         }
                     },
@@ -6847,19 +6872,25 @@
             "description": "schema for google drive attachment entry",
             "properties": {
                 "handler": {
+                    "description": "What handler module to use",
                     "enum": [
                         "google_drive"
-                    ]
+                    ],
+                    "type": "string"
                 },
                 "name": {
+                    "description": "Friendly name for this configuration",
                     "type": "string"
                 },
                 "settings": {
+                    "description": "Settings for the Google Drive account",
                     "properties": {
-                        "oauth_doc_id": {
+                        "folder_id": {
+                            "description": "Folder ID in which to store the file, if any",
                             "type": "string"
                         },
-                        "path": {
+                        "oauth_doc_id": {
+                            "description": "Doc ID in the system 'oauth' database",
                             "type": "string"
                         }
                     },
@@ -6876,8 +6907,10 @@
             "type": "object"
         },
         "storage.attachments": {
+            "description": "Keys are 32-character identifiers to be used in storage plans",
             "patternProperties": {
                 "^[a-z,0-9]{32}$": {
+                    "description": "Configuration for the supported storage backends",
                     "oneOf": [
                         {
                             "$ref": "storage.attachment.aws"
@@ -7550,6 +7583,17 @@
             },
             "type": "object"
         },
+        "system_config.callflow.dynamic_cid": {
+            "description": "Schema for callflow.dynamic_cid system_config",
+            "properties": {
+                "reject_prompt": {
+                    "default": "dynamic-cid-invalid_using_default",
+                    "description": "callflow.dynamic_cid reject prompt",
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
         "system_config.callflow.hotdesk": {
             "description": "Schema for callflow.hotdesk system_config",
             "properties": {
@@ -7814,6 +7858,10 @@
                     "default": 75,
                     "description": "crossbar expiry percentage",
                     "type": "integer"
+                },
+                "ip": {
+                    "description": "crossbar ip",
+                    "type": "string"
                 },
                 "magic_path_patterns": {
                     "default": [
@@ -8623,9 +8671,6 @@
                     "description": "ecallmgr capabilities",
                     "type": "array"
                 },
-                "configuration_handlers": {
-                    "description": "ecallmgr configuration handlers"
-                },
                 "debug_channel": {
                     "default": false,
                     "description": "ecallmgr debug channel",
@@ -8733,48 +8778,6 @@
                     "default": 10000,
                     "description": "ecallmgr maximum timeout for node restart",
                     "type": "integer"
-                },
-                "modules": {
-                    "default": {
-                        "authn": {
-                            "type": "worker"
-                        },
-                        "channel": {
-                            "type": "worker"
-                        },
-                        "channel_hold": {
-                            "type": "worker"
-                        },
-                        "conference": {
-                            "type": "worker"
-                        },
-                        "config": {
-                            "type": "worker"
-                        },
-                        "event_stream_sup": {
-                            "type": "supervisor"
-                        },
-                        "msg": {
-                            "type": "worker"
-                        },
-                        "node": {
-                            "type": "worker"
-                        },
-                        "notify": {
-                            "type": "worker"
-                        },
-                        "recordings": {
-                            "type": "worker"
-                        },
-                        "resource": {
-                            "type": "worker"
-                        },
-                        "route_sup": {
-                            "type": "supervisor"
-                        }
-                    },
-                    "description": "ecallmgr modules",
-                    "type": "object"
                 },
                 "network_map": {
                     "default": {},
@@ -8915,7 +8918,6 @@
                 }
             },
             "required": [
-                "configuration_handlers",
                 "default_ringback",
                 "fs_reconnect_cmds",
                 "node_commands",
@@ -10264,6 +10266,15 @@
                 "e164_converters": {
                     "description": "number_manager e164 converters"
                 },
+                "features": {
+                    "properties": {
+                        "allow": {
+                            "properties": {
+                                "description": "Number features a number is allowed to enable or disable"
+                            }
+                        }
+                    }
+                },
                 "fetch_account_from_ports": {
                     "default": true,
                     "description": "number_manager fetch account from ports",
@@ -10289,10 +10300,18 @@
                     "description": "maximum number of returned DIDs in search query",
                     "type": "integer"
                 },
+                "number_search_timeout_ms": {
+                    "default": 5000,
+                    "description": "number manager number search timeout in milliseconds",
+                    "type": "integer"
+                },
                 "porting_module_name": {
                     "default": "knm_local",
                     "description": "number manager porting module name",
                     "type": "string"
+                },
+                "providers": {
+                    "description": "Number features sub accounts are allowed to enable or disable"
                 },
                 "reconcile_regex": {
                     "default": "^\\+?1?\\d{10}$|^\\+[2-9]\\d{7,}$|^011\\d*$|^00\\d*$",
@@ -10330,6 +10349,8 @@
             },
             "required": [
                 "e164_converters",
+                "features",
+                "providers",
                 "released_state",
                 "should_permanently_delete"
             ],
@@ -14443,6 +14464,19 @@
                     {
                         "$ref": "#/parameters/interaction_id"
                     },
+                    {
+                        "$ref": "#/parameters/auth_token_header",
+                        "required": true
+                    },
+                    {
+                        "$ref": "#/parameters/account_id"
+                    }
+                ]
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/cdrs/summary": {
+            "get": {
+                "parameters": [
                     {
                         "$ref": "#/parameters/auth_token_header",
                         "required": true
@@ -19426,6 +19460,17 @@
                     }
                 ]
             },
+            "patch": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header",
+                        "required": true
+                    },
+                    {
+                        "$ref": "#/parameters/account_id"
+                    }
+                ]
+            },
             "post": {
                 "parameters": [
                     {
@@ -19513,6 +19558,20 @@
                 ]
             },
             "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/storage_plan_id"
+                    },
+                    {
+                        "$ref": "#/parameters/auth_token_header",
+                        "required": true
+                    },
+                    {
+                        "$ref": "#/parameters/account_id"
+                    }
+                ]
+            },
+            "patch": {
                 "parameters": [
                     {
                         "$ref": "#/parameters/storage_plan_id"

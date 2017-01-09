@@ -4,10 +4,14 @@
 
 #### Schema
 
+Provides an auth-token via Ubiquiti's SSO
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `password` | Ubiquiti SSO Password | `string(1..64)` |   | `true`
 `username` | Ubiquiti SSO Username | `string(1..64)` |   | `true`
+
+
 
 
 #### Create

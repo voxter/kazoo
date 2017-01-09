@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2016, 2600Hz
+%%% @copyright (C) 2012-2017, 2600Hz
 %%% @doc
 %%% Manages queue processes:
 %%%   starting when a queue is created
@@ -50,14 +50,16 @@
 
 -export([announce_position_loop/7]).
 
+-ifdef(TEST).
+-export([ss_size/2
+        ,update_strategy_with_agent/5
+        ]).
+-endif.
+
 -include("acdc.hrl").
 -include("acdc_queue_manager.hrl").
 
 -define(SERVER, ?MODULE).
-
--ifdef(TEST).
--compile('export_all').
--endif.
 
 -define(BINDINGS(A, Q), [{'conf', [{'type', <<"queue">>}
                                   ,{'db', kz_util:format_account_id(A, 'encoded')}
@@ -888,11 +890,13 @@ remove_agent('mi', AgentId, #strategy_state{agents=AgentL
                              }
     end.
 
--spec incr_agent(ne_binary(), dict(ne_binary(), ss_details())) -> dict(ne_binary(), ss_details()).
+-spec incr_agent(ne_binary(), dict:dict(ne_binary(), ss_details())) ->
+                        dict:dict(ne_binary(), ss_details()).
 incr_agent(AgentId, Details) ->
     dict:update(AgentId, fun({Count, Busy}) -> {Count + 1, Busy} end, {1, 'undefined'}, Details).
 
--spec decr_agent(ne_binary(), dict(ne_binary(), ss_details())) -> dict(ne_binary(), ss_details()).
+-spec decr_agent(ne_binary(), dict:dict(ne_binary(), ss_details())) ->
+                        dict:dict(ne_binary(), ss_details()).
 decr_agent(AgentId, Details) ->
     dict:update(AgentId, fun({Count, Busy}) when Count > 1 -> {Count - 1, Busy};
                             ({_, Busy}) -> {0, Busy} end

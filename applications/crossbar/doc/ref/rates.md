@@ -4,6 +4,8 @@
 
 #### Schema
 
+Defines a rate for a given prefix
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `carrier` | Friendly name for the carrier providing this rate | `string` |   | `false`
@@ -26,22 +28,14 @@ Key | Description | Type | Default | Required
 `weight` | Ordering against other rates, 1 being most preferred, 100 being least preferred | `integer` |   | `false`
 
 
+
+
 #### Fetch
 
 > GET /v2/rates
 
 ```shell
 curl -v -X GET \
-    -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/rates
-```
-
-#### Change
-
-> POST /v2/rates
-
-```shell
-curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/rates
 ```
@@ -56,14 +50,14 @@ curl -v -X PUT \
     http://{SERVER}:8000/v2/rates
 ```
 
-#### Remove
+#### Change
 
-> DELETE /v2/rates/{RATE_ID}
+> POST /v2/rates
 
 ```shell
-curl -v -X DELETE \
+curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/rates/{RATE_ID}
+    http://{SERVER}:8000/v2/rates
 ```
 
 #### Fetch
@@ -72,6 +66,16 @@ curl -v -X DELETE \
 
 ```shell
 curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/rates/{RATE_ID}
+```
+
+#### Change
+
+> POST /v2/rates/{RATE_ID}
+
+```shell
+curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/rates/{RATE_ID}
 ```
@@ -86,12 +90,12 @@ curl -v -X PATCH \
     http://{SERVER}:8000/v2/rates/{RATE_ID}
 ```
 
-#### Change
+#### Remove
 
-> POST /v2/rates/{RATE_ID}
+> DELETE /v2/rates/{RATE_ID}
 
 ```shell
-curl -v -X POST \
+curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/rates/{RATE_ID}
 ```

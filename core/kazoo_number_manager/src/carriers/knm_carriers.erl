@@ -1,19 +1,22 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2016, 2600Hz INC
+%%% @copyright (C) 2017, 2600Hz INC
 %%% @doc
 %%%
 %%%
 %%% @end
 %%% @contributors
 %%%   Peter Defebvre
+%%%   Pierre Fenoll
 %%%-------------------------------------------------------------------
 -module(knm_carriers).
 
 -include_lib("kazoo_json/include/kazoo_json.hrl").
 -include("knm.hrl").
 
+-compile({no_auto_import,[apply/3]}).
+
 -export([find/1, find/2
-        ,check/1, check/2
+        ,check/1
         ,available_carriers/1, all_modules/0
         ,default_carriers/0, default_carrier/0
         ,acquire/1
@@ -130,7 +133,7 @@ find_fold(_Carrier, _, _, Acc=#{should_continue := ShouldContinue
     lager:debug("stopping ~s with ~p (~p) numbers found", [_Carrier, _Count, Left]),
     Acc;
 find_fold(Carrier, Prefix, Options, Acc=#{left := Quantity}) ->
-    try Carrier:find_numbers(Prefix, Quantity, Options) of
+    try apply(Carrier, find_numbers, [Prefix, Quantity, Options]) of
         {'ok', []} -> Acc;
         {'ok', Numbers} -> process_carrier_results(Numbers, Acc);
         {'bulk', []} -> Acc;
@@ -146,7 +149,7 @@ find_fold(Carrier, Prefix, Options, Acc=#{left := Quantity}) ->
             ST = erlang:get_stacktrace(),
             ?LOG_WARN("failed to query carrier ~s for ~p numbers: ~s: ~p"
                      ,[Carrier, Quantity, _E, _R]),
-            log_stacktrace(ST),
+            kz_util:log_stacktrace(ST),
             Acc
     end.
 
@@ -156,7 +159,7 @@ process_bulk_carrier_results(Numbers, Acc) ->
 
 -spec process_carrier_results(knm_number:knm_numbers(), find_acc()) -> find_acc().
 process_carrier_results(Numbers, Acc) ->
-    acc_found(Acc, lists:foldl(fun process_number_result/2, [], Numbers)).
+    acc_found(Acc, [process_number_result(Number) || Number <- Numbers]).
 
 -spec acc_found(find_acc(), kz_json:objects()) -> find_acc().
 acc_found(Acc=#{found := Found
@@ -169,49 +172,42 @@ acc_found(Acc=#{found := Found
         ,left => Left - NewNumbersCount
         }.
 
--spec process_number_result(knm_number:knm_number(), kz_json:objects()) ->
-                                   kz_json:objects().
-process_number_result(Number, Acc) ->
+-spec process_number_result(knm_number:knm_number()) -> kz_json:object().
+process_number_result(Number) ->
     PhoneNumber = knm_number:phone_number(Number),
     Carrier = knm_phone_number:module_name(PhoneNumber),
     case is_local(Carrier) of
-        'true' -> [found_number_to_jobj(Number) | Acc];
+        'true' -> found_number_to_jobj(Number);
         'false' ->
             DID = knm_phone_number:number(PhoneNumber),
-            check_for_existing_did(Number, Acc, Carrier, knm_phone_number:fetch(DID))
+            check_for_existing_did(Number, Carrier, knm_phone_number:fetch(DID))
     end.
 
--spec check_for_existing_did(knm_number:knm_number(), kz_json:objects(), ne_binary()
-                            ,knm_phone_number_return()) -> kz_json:objects().
-check_for_existing_did(Number, Acc, _Carrier, {'error', 'not_found'}) ->
+-spec check_for_existing_did(knm_number:knm_number(), ne_binary(), knm_phone_number_return()) -> kz_json:object().
+check_for_existing_did(Number, _Carrier, {'error', 'not_found'}) ->
     %% This case is only possible for -dTEST: tests don't save to DB (yet)
     %% and we make sure that non-local carriers save discovered numbers to DB.
     io:format(user, "number ~s was not in db\n"
              ,[knm_phone_number:number(knm_number:phone_number(Number))]),
-    [found_number_to_jobj(Number) | Acc];
-check_for_existing_did(Number, Acc, Carrier, {'ok', ExistingPhoneNumber}) ->
+    found_number_to_jobj(Number);
+check_for_existing_did(Number, Carrier, {'ok', ExistingPhoneNumber}) ->
     case knm_phone_number:module_name(ExistingPhoneNumber) of
-        Carrier -> [found_number_to_jobj(Number) | Acc];
+        Carrier -> found_number_to_jobj(Number);
         _OtherCarrier ->
-            transition_existing_to_discovery(Number, ExistingPhoneNumber, Acc)
+            transition_existing_to_discovery(Number, ExistingPhoneNumber)
     end.
 
--spec transition_existing_to_discovery(knm_number:knm_number(), knm_phone_number:knm_phone_number()
-                                      ,kz_json:objects()) -> kz_json:objects().
-transition_existing_to_discovery(Number, ExistingPhoneNumber, Acc) ->
+-spec transition_existing_to_discovery(knm_number:knm_number(), knm_phone_number:knm_phone_number()) ->
+                                              kz_json:object().
+transition_existing_to_discovery(Number, ExistingPhoneNumber) ->
     PhoneNumber0 = knm_number:phone_number(Number),
     Setters = [{fun knm_phone_number:set_module_name/2, knm_phone_number:module_name(PhoneNumber0)}
               ,{fun knm_phone_number:set_carrier_data/2, knm_phone_number:carrier_data(PhoneNumber0)}
               ,{fun knm_phone_number:set_state/2, ?NUMBER_STATE_DISCOVERY}
               ],
-    {'ok', PhoneNumber} =
-        knm_phone_number:setters(ExistingPhoneNumber, Setters),
-    case knm_number:save(knm_number:set_phone_number(Number, PhoneNumber)) of
-        {'ok', SavedNumber} -> [found_number_to_jobj(SavedNumber) | Acc];
-        {'error', _R} ->
-            lager:debug("skipping number ~s: ~p", [knm_phone_number:number(PhoneNumber), _R]),
-            Acc
-    end.
+    {'ok', PhoneNumber} = knm_phone_number:setters(ExistingPhoneNumber, Setters),
+    found_number_to_jobj(
+      knm_number:set_phone_number(Number, knm_phone_number:save(PhoneNumber))).
 
 -spec found_number_to_jobj(knm_number:knm_number()) -> kz_json:object().
 found_number_to_jobj(Number) ->
@@ -237,22 +233,36 @@ activation_charge(DID, AccountId) ->
 
 %%--------------------------------------------------------------------
 %% @public
-%% @doc Normalize then query the various providers for available numbers.
+%% @doc
+%% Normalize then query the various providers for available numbers.
+%% @end
 %%--------------------------------------------------------------------
--type checked_numbers() :: [{module(), {'ok', kz_json:object()} |
-                             {'error', any()} |
-                             {'EXIT', any()}
-                            }].
--spec check(ne_binaries()) -> checked_numbers().
--spec check(ne_binaries(), options()) -> checked_numbers().
-check(Numbers) -> check(Numbers, []).
+-spec check(ne_binaries()) -> kz_json:object().
+check(Numbers) ->
+    Nums = lists:usort([knm_converters:normalize(Num) || Num <- Numbers]),
+    lager:info("attempting to check ~p ", [Nums]),
+    {_, OKs, KOs} =
+        lists:foldl(fun check_fold/2, {Nums, #{}, #{}}, available_carriers([])),
+    kz_json:from_map(maps:merge(KOs, OKs)).
 
-check(Numbers, Options) ->
-    FormattedNumbers = [knm_converters:normalize(Num) || Num <- Numbers],
-    lager:info("attempting to check ~p ", [FormattedNumbers]),
-    [{Module, catch(Module:check_numbers(FormattedNumbers, Options))}
-     || Module <- available_carriers(Options)
-    ].
+check_fold(_, {[], _, _}=Acc) -> Acc;
+check_fold(Module, {Nums, OKs0, KOs0}) ->
+    {OKs, KOs} = check_numbers(Module, Nums),
+    OKNums = maps:keys(OKs0),
+    {Nums -- OKNums
+    ,maps:merge(OKs, OKs0)
+    ,maps:merge(maps:without(OKNums, KOs), KOs0)
+    }.
+
+check_numbers(Module, Nums) ->
+    try apply(Module, check_numbers, [Nums]) of
+        {ok, JObj} -> {kz_json:to_map(JObj), #{}};
+        {error, _} -> {#{}, maps:from_list([{Num,<<"error">>} || Num <- Nums])}
+    catch
+        _:_ ->
+            kz_util:log_stacktrace(),
+            {#{}, maps:from_list([{Num,<<"error">>} || Num <- Nums])}
+    end.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -274,10 +284,11 @@ available_carriers(Options) ->
 
 -spec get_available_carriers(options()) -> atoms().
 get_available_carriers(Options) ->
-    case account_id(Options) of
-        'undefined' ->
-            keep_only_reachable(?CARRIER_MODULES);
-        _AccountId ->
+    case account_id(Options) =:= undefined
+        orelse reseller_id(Options) =:= undefined
+    of
+        true -> keep_only_reachable(?CARRIER_MODULES);
+        false ->
             ResellerId = reseller_id(Options),
             First = [?CARRIER_RESERVED, ?CARRIER_RESERVED_RESELLER, ?CARRIER_LOCAL],
             keep_only_reachable(First ++ (?CARRIER_MODULES(ResellerId) -- First))
@@ -290,6 +301,7 @@ default_carriers() ->
 -spec default_carrier() -> ne_binary().
 default_carrier() ->
     ?DEFAULT_CARRIER_MODULE.
+
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
@@ -319,7 +331,16 @@ all_modules() ->
 %% Buy a number from its carrier module
 %% @end
 %%--------------------------------------------------------------------
--spec acquire(knm_number:knm_number()) -> knm_number:knm_number().
+-spec acquire(knm_number:knm_number()) -> knm_number:knm_number();
+             (knm_numbers:collection()) -> knm_numbers:collection().
+acquire(T0=#{todo := Ns}) ->
+    F = fun (N, T) ->
+                case knm_number:attempt(fun acquire/1, [N]) of
+                    {ok, NewN} -> knm_numbers:ok(NewN, T);
+                    {error, R} -> knm_numbers:ko(N, R, T)
+                end
+        end,
+    lists:foldl(F, T0, Ns);
 acquire(Number) ->
     PhoneNumber = knm_number:phone_number(Number),
     Module = knm_phone_number:module_name(PhoneNumber),
@@ -333,29 +354,34 @@ acquire(Number, 'undefined', _DryRun) ->
 acquire(Number, _Mod, 'true') ->
     Number;
 acquire(Number, ?NE_BINARY=Mod, 'false') ->
-    Module = carrier_module(Mod),
-    lager:debug("contacting carrier ~s", [Module]),
-    Module:acquire_number(Number).
+    apply(Mod, acquire_number, [Number]).
 
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
-%% Create a list of all available carrier modules
 %% @end
 %%--------------------------------------------------------------------
--spec disconnect(knm_number:knm_number()) ->
-                        knm_number:knm_number().
+-spec disconnect(knm_number:knm_number()) -> knm_number:knm_number();
+                (knm_numbers:collection()) -> knm_numbers:collection().
+disconnect(T0=#{todo := Ns}) ->
+    F = fun (N, T) ->
+                case knm_number:attempt(fun disconnect/1, [N]) of
+                    {ok, NewN} -> knm_numbers:ok(NewN, T);
+                    {error, R} ->
+                        Num = knm_phone_number:number(knm_number:phone_number(N)),
+                        knm_numbers:ko(Num, R, T)
+                end
+        end,
+    lists:foldl(F, T0, Ns);
 disconnect(Number) ->
-    case knm_phone_number:module_name(knm_number:phone_number(Number)) of
-        ?NE_BINARY=Mod ->
-            Module = kz_util:to_atom(Mod, 'true'),
-            lager:debug("contacting carrier ~s", [Module]),
-            Module:disconnect_number(Number);
-        _Mod ->
-            lager:debug("non-existant carrier module ~p, allowing disconnect", [_Mod]),
+    Module = knm_phone_number:module_name(knm_number:phone_number(Number)),
+    try apply(Module, disconnect_number, [Number]) of
+        Result -> Result
+    catch
+        'error':_ ->
+            lager:debug("non-existant carrier module ~p, allowing disconnect", [Module]),
             Number
     end.
-
 
 -spec quantity(options()) -> pos_integer().
 quantity(Options) ->
@@ -394,7 +420,7 @@ blocks(Options) ->
 account_id(Options) ->
     props:get_value('account_id', Options).
 
--spec reseller_id(options()) -> ne_binary().
+-spec reseller_id(options()) -> api_ne_binary().
 reseller_id(Options) ->
     props:get_value('reseller_id', Options).
 
@@ -408,9 +434,10 @@ reseller_id(Options) ->
 -spec is_number_billable(knm_phone_number:knm_phone_number()) -> boolean().
 is_number_billable(PhoneNumber) ->
     Carrier = knm_phone_number:module_name(PhoneNumber),
-    Module = erlang:binary_to_existing_atom(Carrier, 'utf8'),
-    Module:is_number_billable(PhoneNumber).
-
+    try apply(Carrier, is_number_billable, [PhoneNumber])
+    catch
+        'error':_R -> 'true'
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -435,20 +462,28 @@ sort_find_result(A, B) ->
 %%--------------------------------------------------------------------
 -spec is_local(ne_binary()) -> boolean().
 is_local(Carrier) ->
-    Module = erlang:binary_to_existing_atom(Carrier, 'utf8'),
-    Module:is_local().
+    try apply(Carrier, is_local, [])
+    catch
+        _E:_R ->
+            kz_util:log_stacktrace(),
+            true
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec carrier_module(knm_number:knm_number() | ne_binary()) -> atom().
-carrier_module(?NE_BINARY = Module) ->
-    kz_util:to_atom(Module, 'true');
-carrier_module(Number) ->
-    PhoneNumber = knm_number:phone_number(Number),
-    carrier_module(knm_phone_number:module_name(PhoneNumber)).
+-spec apply(module() | ne_binary() | knm_number:knm_number(), atom(), list()) -> any().
+apply(Module, FName, Args) when is_atom(Module), Module =/= undefined ->
+    lager:debug("contacting carrier ~s for ~s", [Module, FName]),
+    erlang:apply(Module, FName, Args);
+apply(?NE_BINARY=Carrier, FName, Args) ->
+    Module = erlang:binary_to_existing_atom(Carrier, 'utf8'),
+    apply(Module, FName, Args);
+apply(Number, FName, Args) ->
+    Carrier = knm_phone_number:module_name(knm_number:phone_number(Number)),
+    apply(Carrier, FName, Args).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -462,24 +497,3 @@ keep_only_reachable(ModuleNames) ->
      || M <- ModuleNames,
         (Module = kz_util:try_load_module(M)) =/= 'false'
     ].
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
-log_stacktrace(ST) ->
-    ?LOG_DEBUG("stacktrace:", []),
-    _ = [log_stacktrace_mfa(M, F, A, Info)
-         || {M, F, A, Info} <- ST
-        ],
-    'ok'.
-
-log_stacktrace_mfa(M, F, Arity, Info) when is_integer(Arity) ->
-    ?LOG_DEBUG("st: ~s:~s/~b at (~b)"
-              ,[M, F, Arity, props:get_value('line', Info, 0)]
-              );
-log_stacktrace_mfa(M, F, Args, Info) ->
-    ?LOG_DEBUG("st: ~s:~s at ~p", [M, F, props:get_value('line', Info, 0)]),
-    _ = [?LOG_DEBUG("args: ~p", [Arg]) || Arg <- Args],
-    'ok'.

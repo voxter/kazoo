@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2015-2016, 2600Hz INC
+%%% @copyright (C) 2015-2017, 2600Hz INC
 %%% @doc
 %%%
 %%% Handle client requests for phone_number at Simwood (UK based provider)
@@ -19,6 +19,7 @@
 -export([disconnect_number/1]).
 -export([is_number_billable/1]).
 -export([should_lookup_cnam/0]).
+-export([check_numbers/1]).
 
 -include("knm.hrl").
 
@@ -45,6 +46,16 @@
 %%--------------------------------------------------------------------
 -spec is_local() -> boolean().
 is_local() -> 'false'.
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Check with carrier if these numbers are registered with it.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_numbers(ne_binaries()) -> {ok, kz_json:object()} |
+                                      {error, any()}.
+check_numbers(_Numbers) -> {error, not_implemented}.
 
 %%--------------------------------------------------------------------
 %% @public

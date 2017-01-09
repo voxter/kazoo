@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2016, 2600Hz
+%%% @copyright (C) 2017, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -101,7 +101,7 @@ count_by_owner(AccountId, OwnerId) ->
             {0, 0}
     end.
 
--spec sum_owner_mailboxes(kz_json:objects(), ne_binaries(), count_result()) -> count_result().
+-spec sum_owner_mailboxes(kz_json:object(), ne_binaries(), count_result()) -> count_result().
 sum_owner_mailboxes(_, [], Results) -> Results;
 sum_owner_mailboxes(FolderQuantities, [BoxId|BoxIds], {New, Saved}) ->
     {BoxNew, BoxSaved} = normalize_count_none_deleted(BoxId, FolderQuantities),
@@ -196,13 +196,11 @@ fetch(AccountId, MsgIds, BoxId) ->
         dict:fold(Fun, dict:new(), DbsRange)
        )
      ).
+
 -spec fetch_fun(ne_binary(), ne_binary(), ne_binaries(), dict:dict(), gregorian_seconds()) -> dict:dict().
 fetch_fun(Db, BoxId, Ids, ResDict, RetenTimestamp) ->
-    ViewOpts = [{'keys', Ids}
-               ,'include_docs'
-               ],
     case kz_datamgr:db_exists(Db)
-        andalso kz_datamgr:all_docs(Db, ViewOpts)
+        andalso kz_datamgr:open_cache_docs(Db, Ids)
     of
         'false' ->
             fetch_faild_with_reason("not_found", Db, Ids, ResDict);
@@ -214,8 +212,7 @@ fetch_fun(Db, BoxId, Ids, ResDict, RetenTimestamp) ->
 
 -spec fetch_faild_with_reason(any(), ne_binary(), ne_binaries(), dict:dict()) -> dict:dict().
 fetch_faild_with_reason(Reason, Db, Ids, ResDict) ->
-    lager:warning("failed to bulk fetch voicemail messages from db ~s: ~p"
-                 ,[Db, Reason]),
+    lager:warning("failed to bulk fetch voicemail messages from db ~s: ~p", [Db, Reason]),
     Failed = kz_json:from_list([{Id, kz_util:to_binary(Reason)}
                                 || Id <- Ids
                                ]),

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2016, 2600Hz
+%%% @copyright (C) 2010-2017, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -13,7 +13,7 @@
         ]).
 
 -include("crossbar.hrl").
--include_lib("kazoo_number_manager/include/knm_phone_number.hrl"). %% PVT_FEATURES
+-include_lib("kazoo_number_manager/include/knm_phone_number.hrl"). %% FEATURE_PORT
 
 %%--------------------------------------------------------------------
 %% @public
@@ -197,9 +197,10 @@ calc_service_updates(Context, <<"limits">>) ->
           ]),
     kz_service_limits:reconcile(Services, Updates);
 calc_service_updates(Context, <<"port_request">>) ->
+    PortNumbers = kz_json:get_value(<<"numbers">>, cb_context:doc(Context)),
     PhoneNumbers =
-        [knm_phone_number:set_feature(knm_phone_number:from_json(JObj), ?FEATURE_PORT, kz_json:new())
-         || JObj <- kz_json:values(<<"numbers">>, cb_context:doc(Context))
+        [knm_phone_number:set_feature(create_phone_number(Num, kz_json:values(Num, PortNumbers)), ?FEATURE_PORT, kz_json:new())
+         || Num <- kz_json:get_keys(PortNumbers)
         ],
     kz_service_phone_numbers:reconcile(fetch_service(Context), PhoneNumbers);
 calc_service_updates(Context, <<"app">>) ->
@@ -232,6 +233,16 @@ calc_service_updates(Context, Type, []) ->
 calc_service_updates(_Context, _Type, _Props) ->
     lager:warning("unknown type ~p, cannot execute dry run", [_Type]),
     'undefined'.
+
+-spec create_phone_number(ne_binary(), list() | kz_json:object()) ->
+                                 knm_phone_number:knm_phone_number().
+create_phone_number(Number, Features) ->
+    JObj = kz_json:from_list(
+             [{<<"_id">>, Number}
+             ,{<<"features">>, Features}
+             ]
+            ),
+    knm_phone_number:from_json(JObj).
 
 %%--------------------------------------------------------------------
 %% @private

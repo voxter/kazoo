@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2016, 2600Hz
+%%% @copyright (C) 2011-2017, 2600Hz
 %%% @doc
 %%% Util functions used by kazoo_couch
 %%% @end
@@ -90,7 +90,7 @@ retry504s(Fun, Cnt) ->
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
--spec new_connection(couch_connection() | #{}) ->
+-spec new_connection(couch_connection() | map()) ->
                             server() |
                             {'error', 'timeout' | 'ehostunreach' | _}.
 new_connection(#{}=Map) ->
@@ -112,7 +112,7 @@ check_options(Options) ->
 maybe_default_recv_timeout(Options) ->
     case props:get_value('recv_timeout', Options) of
         'undefined' -> [{'recv_timeout', 20000} | Options];
-         _Else -> Options
+        _Else -> Options
     end.
 
 filter_options(Options) ->
@@ -203,7 +203,7 @@ db_url(#server{}=Conn, DbName) ->
 %% returns the #db{} record
 %% @end
 %%------------------------------------------------------------------------------
--spec get_db(server(), ne_binary()) -> db().
+-spec get_db(kz_data:connection(), ne_binary()) -> db().
 get_db(#server{}=Conn, DbName) ->
     {'ok', Db} = couchbeam:open_db(Conn, DbName),
     Db.

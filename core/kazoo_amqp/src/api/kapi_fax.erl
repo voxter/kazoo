@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2012-2016, 2600Hz INC
+%%% @copyright (C) 2012-2017, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -8,7 +8,11 @@
 %%%-------------------------------------------------------------------
 -module(kapi_fax).
 
--export([account_id/1, job_id/1, to_number/1, state/1]).
+-export([account_id/1
+        ,job_id/1
+        ,to_number/1
+        ,state/1
+        ]).
 
 -export([req/1, req_v/1
         ,query_status/1, query_status_v/1

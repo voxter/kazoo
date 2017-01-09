@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2016, 2600Hz
+%%% @copyright (C) 2011-2017, 2600Hz
 %%% @doc
 %%% kazoo data utils
 %%% @end
@@ -69,7 +69,7 @@ db_classification(?MATCH_ACCOUNT_encoded(_AccountId)) -> 'account';
 db_classification(?MATCH_ACCOUNT_ENCODED(_AccountId)) -> 'account';
 db_classification(_Database) ->
     lager:warning("unknown type for database ~s", [_Database]),
-    lager:debug("unknown database classification : ~p", [erlang:process_info(self(),current_stacktrace)]),
+    lager:debug("unknown database classification: ~p", [erlang:process_info(self(),current_stacktrace)]),
     'undefined'.
 
 %%------------------------------------------------------------------------------

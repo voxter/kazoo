@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2016, 2600Hz INC
+%%% @copyright (C) 2011-2017, 2600Hz INC
 %%% @doc
 %%%
 %%% When implementing carrier modules, these callbacks are a must!
@@ -32,3 +32,7 @@
 
 -callback is_local() ->
     boolean().
+
+-callback check_numbers(ne_binaries()) ->
+    {'ok', kz_json:object()} |
+    {'error', any()}.

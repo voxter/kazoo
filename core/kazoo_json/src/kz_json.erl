@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2016, 2600Hz
+%%% @copyright (C) 2011-2017, 2600Hz
 %%% @doc
 %%% proplists-like interface to json objects
 %%% @end
@@ -80,7 +80,7 @@
         ,normalize_jobj/3
         ,normalize/1
         ,normalize_key/1
-        ,are_identical/2, are_equal/2
+        ,are_equal/2
         ]).
 -export([public_fields/1
         ,private_fields/1
@@ -92,6 +92,9 @@
 -export([unsafe_decode/1, unsafe_decode/2]).
 
 -export([flatten/3]).
+
+-export([sum/2, sum/3]).
+-export_type([sumer/0]).
 
 -include_lib("kazoo/include/kz_log.hrl").
 -include_lib("kazoo_json/include/kazoo_json.hrl").
@@ -216,25 +219,6 @@ is_json_term(MaybeJObj) ->
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec are_identical(api_object(), api_object()) -> boolean().
-are_identical('undefined', 'undefined') -> 'true';
-are_identical('undefined', _) -> 'false';
-are_identical(_, 'undefined') -> 'false';
-are_identical(JObj1, JObj2) ->
-    [KV || {_, V}=KV <- to_proplist(JObj1),
-           not kz_util:is_empty(V)
-    ]
-        =:=
-        [KV || {_, V}=KV <- to_proplist(JObj2),
-               not kz_util:is_empty(V)
-        ].
-
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
 %% Finds out wether 2 JSON objects are recursively identical.
 %% @end
 %%--------------------------------------------------------------------
@@ -245,13 +229,18 @@ are_equal(_, 'undefined') -> 'false';
 are_equal(JObj1, JObj2) ->
     to_map(JObj1) =:= to_map(JObj2).
 
-%% converts top-level proplist to json object, but only if sub-proplists have been converted
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Converts top-level proplist to json object, but only if sub-proplists have been converted
 %% first.
 %% For example:
 %% [{a, b}, {c, [{d, e}]}]
 %% would be converted to json by
 %% kz_json:from_list([{a,b}, {c, kz_json:from_list([{d, e}])}]).
 %% the sub-proplist [{d,e}] needs converting before being passed to the next level
+%% @end
+%%--------------------------------------------------------------------
 -spec from_list(json_proplist()) -> object().
 from_list([]) -> new();
 from_list(L) when is_list(L) -> ?JSON_WRAPPER(L).
@@ -301,8 +290,11 @@ merge_right(_K, {'both', ?JSON_WRAPPER(_)=Left, ?JSON_WRAPPER(_)=Right}) ->
     {'ok', merge(fun merge_right/2, Left, Right)};
 merge_right(_K, {'both', _Left, Right}) -> {'ok', Right}.
 
-%% only a top-level merge
-%% merges JObj1 into JObj2
+%% @public
+%% @doc
+%% Only a top-level merge.
+%% Merges JObj1 into JObj2
+%% @end
 -spec merge_jobjs(object(), object()) -> object().
 merge_jobjs(?JSON_WRAPPER(Props1), ?JSON_WRAPPER(_)=JObj2) ->
     lists:foldr(fun({K, V}, JObj2Acc) ->
@@ -349,6 +341,42 @@ merge_recursive(?JSON_WRAPPER(_)=JObj1, Value, Pred, Keys) when is_function(Pred
         'false' -> JObj1;
         'true' -> set_value(Syek, Value, JObj1)
     end.
+
+%% @public
+%% @doc
+%% Sum two (deep) JSON objects.
+%% Default sumer function only sums numbers. For other kinds of values,
+%% the value from JObj1 is kept untouched. If it is undefined it's the one from JObj2.
+%% @end
+-spec sum(object(), object()) -> object().
+sum(?JSON_WRAPPER(_)=JObj1, ?JSON_WRAPPER(_)=JObj2) ->
+    sum(JObj1, JObj2, fun default_sumer/2).
+
+-type sumer() :: fun((json_term(), json_term()) -> json_term()).
+-spec default_sumer(json_term(), json_term()) -> json_term().
+default_sumer(Value1, undefined) -> Value1;
+default_sumer(undefined, Value2) -> Value2;
+default_sumer(Value1, Value2) when is_number(Value1),
+                                   is_number(Value2) ->
+    Value1 + Value2;
+default_sumer(Value1, _) ->
+    Value1.
+
+-spec sum(object(), object(), sumer()) -> object().
+sum(?JSON_WRAPPER(_)=JObj1, ?JSON_WRAPPER(_)=JObj2, Sumer)
+  when is_function(Sumer, 2) ->
+    sum(JObj1, JObj2, Sumer, []).
+
+-spec sum(object(), object(), sumer(), keys()) -> object().
+sum(?JSON_WRAPPER(_)=JObj1, ?JSON_WRAPPER(_)=JObj2, Sumer, Keys)
+  when is_function(Sumer, 2) ->
+    F = fun(Key2, Value2, JObj1Acc) -> sum(JObj1Acc, Value2, Sumer, [Key2|Keys]) end,
+    foldl(F, JObj1, JObj2);
+sum(?JSON_WRAPPER(_)=JObj1, Value, Sumer, Keys)
+  when is_function(Sumer, 2) ->
+    Syek = lists:reverse(Keys),
+    V = get_value(Syek, JObj1),
+    set_value(Syek, Sumer(V, Value), JObj1).
 
 -spec to_proplist(object() | objects()) -> json_proplist() | json_proplists().
 -spec to_proplist(path(), object() | objects()) -> json_proplist() | json_proplists().

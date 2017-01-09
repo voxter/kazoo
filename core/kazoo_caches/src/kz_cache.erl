@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2016, 2600Hz INC
+%%% @copyright (C) 2011-2017, 2600Hz INC
 %%% @doc
 %%% Simple cache server
 %%% @end
@@ -209,7 +209,6 @@ fetch_local(Srv, K) ->
         {'error', 'not_found'}=E -> E;
         {'ok', _Value}=Ok ->
             ets:update_element(Srv, K, {#cache_obj.timestamp, kz_util:current_tstamp()}),
-                                                %            gen_server:cast(Srv, {'update_timestamp', K, }),
             Ok
     end.
 

@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2016, 2600Hz
+%%% @copyright (C) 2011-2017, 2600Hz
 %%% @doc
 %%% data adapter behaviour
 %%% @end
@@ -131,7 +131,7 @@ put_attachment(#{server := {App, Conn}}, DbName, DocId, AName, Contents, Options
 attachment_from_handler(AName, AttHandler, Size, CT) ->
     Props = [{<<"content_type">>, kz_util:to_binary(CT)}
             ,{<<"length">>, Size}
-            ,{<<"stub">>, false}
+            ,{<<"stub">>, 'false'}
             ,{<<"handler">>, AttHandler}
             ],
     kz_json:set_value(AName, kz_json:from_list(Props), kz_json:new()).

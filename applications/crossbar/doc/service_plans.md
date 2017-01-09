@@ -6,12 +6,25 @@ Handle the service plans you can subscribe to.
 
 #### Schema
 
+Describes services offered to sub-accounts
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `bookkeepers` |   | `object` |   | `false`
 `description` | Describes the service plan offering | `string` |   | `false`
 `name` | A friendly name for the service plan | `string(1..128)` |   | `true`
 `plan` | Outlines the service plan for various services | `object` |   | `true`
+
+
+##### bookkeepers
+
+The bookkeeper modules provided by Kazoo
+
+Key | Description | Type | Default | Required
+--- | ----------- | ---- | ------- | --------
+`braintree` |   | `object` |   | `false`
+`local` |   | `object` |   | `false`
+
 
 
 #### Retrieving your service plans.
@@ -224,7 +237,7 @@ curl -v -X GET \
 ```shell
 curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    -d '{"data":{"id":"service_plan_id"}' \
+    -d '{"data": {"id":"{PLAN_ID}"}}' \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/service_plans/{PLAN_ID}
 ```
 

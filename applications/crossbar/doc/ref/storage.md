@@ -6,40 +6,49 @@
 
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
-`attachments` |   | [#/definitions/storage.attachments](#storageattachments) |   | `false`
-`connections` |   | [#/definitions/storage.connections](#storageconnections) |   | `false`
-`plan` |   | [#/definitions/storage.plan](#storageplan) |   | `false`
+`attachments` | Defines where and how to store attachments | [#/definitions/storage.attachments](#storageattachments) |   | `false`
+`connections` | Describes alternative connections to use (such as alternative CouchDB instances | [#/definitions/storage.connections](#storageconnections) |   | `false`
+`id` | ID of the storage document | `string` |   | `false`
+`plan` | Describes how to store documents depending on the database or document type | [#/definitions/storage.plan](#storageplan) |   | `false`
 
 
 ##### storage.attachment.aws
 
+schema for AWS attachment entry
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
-`handler` |   | `string('s3')` |   | `true`
-`name` |   | `string` |   | `false`
-`settings` |   | `object` |   | `true`
-`settings.bucket` |   | `string` |   | `true`
-`settings.host` |   | `string` |   | `false`
-`settings.key` |   | `string` |   | `true`
-`settings.path` |   | `string` |   | `false`
-`settings.secret` |   | `string` |   | `true`
+`handler` | What AWS service to use | `string('s3')` |   | `true`
+`name` | Friendly name for this configuration | `string` |   | `false`
+`settings` | AWS API settings | `object` |   | `true`
+`settings.bucket` | Bucket name to store data to | `string` |   | `true`
+`settings.host` | Region-specific hostname to use, if applicable | `string` |   | `false`
+`settings.key` | AWS Key to use | `string` |   | `true`
+`settings.path` | Custom path to use as a prefix when saving files | `string` |   | `false`
+`settings.secret` | AWS Secret to use | `string` |   | `true`
 
 ##### storage.attachment.google_drive
 
+schema for google drive attachment entry
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
-`handler` |   | `string('google_drive')` |   | `true`
-`name` |   | `string` |   | `false`
-`settings` |   | `object` |   | `true`
-`settings.oauth_doc_id` |   | `string` |   | `true`
-`settings.path` |   | `string` |   | `false`
+`handler` | What handler module to use | `string('google_drive')` |   | `true`
+`name` | Friendly name for this configuration | `string` |   | `false`
+`settings` | Settings for the Google Drive account | `object` |   | `true`
+`settings.folder_id` | Folder ID in which to store the file, if any | `string` |   | `false`
+`settings.oauth_doc_id` | Doc ID in the system 'oauth' database | `string` |   | `true`
 
 ##### storage.attachments
+
+Keys are 32-character identifiers to be used in storage plans
 
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 
 ##### storage.connection.couchdb
+
+schema for couchdb connection entry
 
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
@@ -63,6 +72,8 @@ Key | Description | Type | Default | Required
 
 ##### storage.plan
 
+schema for storage plan
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `account` |   | [#/definitions/storage.plan.database](#storageplan.database) |   | `false`
@@ -70,6 +81,8 @@ Key | Description | Type | Default | Required
 `system` |   | [#/definitions/storage.plan.database](#storageplan.database) |   | `false`
 
 ##### storage.plan.database
+
+schema for database storage plan
 
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
@@ -84,6 +97,8 @@ Key | Description | Type | Default | Required
 
 ##### storage.plan.database.attachment
 
+schema for attachment ref type storage plan
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `handler` |   | `string` |   | `false`
@@ -92,20 +107,14 @@ Key | Description | Type | Default | Required
 
 ##### storage.plan.database.document
 
+schema for document type storage plan
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `attachments` |   | [#/definitions/storage.plan.database.attachment](#storageplan.database.attachment) |   | `false`
 `connection` |   | `string` |   | `false`
 
-#### Remove
 
-> DELETE /v2/accounts/{ACCOUNT_ID}/storage
-
-```shell
-curl -v -X DELETE \
-    -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/storage
-```
 
 #### Fetch
 
@@ -113,6 +122,16 @@ curl -v -X DELETE \
 
 ```shell
 curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/storage
+```
+
+#### Create
+
+> PUT /v2/accounts/{ACCOUNT_ID}/storage
+
+```shell
+curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/storage
 ```
@@ -127,12 +146,22 @@ curl -v -X POST \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/storage
 ```
 
-#### Create
+#### Patch
 
-> PUT /v2/accounts/{ACCOUNT_ID}/storage
+> PATCH /v2/accounts/{ACCOUNT_ID}/storage
 
 ```shell
-curl -v -X PUT \
+curl -v -X PATCH \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/storage
+```
+
+#### Remove
+
+> DELETE /v2/accounts/{ACCOUNT_ID}/storage
+
+```shell
+curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/storage
 ```
@@ -157,16 +186,6 @@ curl -v -X PUT \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/storage/plans
 ```
 
-#### Remove
-
-> DELETE /v2/accounts/{ACCOUNT_ID}/storage/plans/{STORAGE_PLAN_ID}
-
-```shell
-curl -v -X DELETE \
-    -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/storage/plans/{STORAGE_PLAN_ID}
-```
-
 #### Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/storage/plans/{STORAGE_PLAN_ID}
@@ -183,6 +202,26 @@ curl -v -X GET \
 
 ```shell
 curl -v -X POST \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/storage/plans/{STORAGE_PLAN_ID}
+```
+
+#### Patch
+
+> PATCH /v2/accounts/{ACCOUNT_ID}/storage/plans/{STORAGE_PLAN_ID}
+
+```shell
+curl -v -X PATCH \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/storage/plans/{STORAGE_PLAN_ID}
+```
+
+#### Remove
+
+> DELETE /v2/accounts/{ACCOUNT_ID}/storage/plans/{STORAGE_PLAN_ID}
+
+```shell
+curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/storage/plans/{STORAGE_PLAN_ID}
 ```

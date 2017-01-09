@@ -4,6 +4,8 @@
 
 #### Schema
 
+Schema for media
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `content_length` | Length, in bytes, of the file | `integer` |   | `false`
@@ -19,6 +21,8 @@ Key | Description | Type | Default | Required
 `tts` | Text-to-speech options used to create audio files from text | `object` | `{}` | `false`
 `tts.text` | The text to be converted into audio | `string(1..)` |   | `false`
 `tts.voice` | The voice to be used during the conversion | `string('female/en-US', 'male/en-US', 'female/en-CA', 'female/en-AU', 'female/en-GB', 'male/en-GB', 'female/es-US', 'male/es-US', 'female/us-US', 'female/zh-CN', 'male/zh-CN', 'female/zh-HK', 'female/zh-TW', 'female/ja-JP', 'male/ja-JP', 'female/ko-KR', 'male/ko-KR', 'female/da-DK', 'female/de-DE', 'male/de-DE', 'female/ca-ES', 'female/es-ES', 'male/es-ES', 'female/fi-FI', 'female/fr-CA', 'male/fr-CA', 'female/fr-FR', 'male/fr-FR', 'female/it-IT', 'male/it-IT', 'female/nb-NO', 'female/nl-NL', 'female/pl-PL', 'female/pt-BR', 'female/pt-PT', 'male/pt-PT', 'female/ru-RU', 'male/ru-RU', 'female/sv-SE', 'female/hu-HU', 'female/cs-CZ', 'female/tr-TR', 'male/tr-TR', 'male/ru-RU/Vladimir', 'female/ru-RU/Julia', 'female/ru-RU/Anna', 'female/ru-RU/Viktoria', 'male/ru-RU/Alexander', 'female/ru-RU/Maria', 'female/ru-RU/Lidia')` | `female/en-US` | `false`
+
+
 
 
 #### Fetch
@@ -41,16 +45,6 @@ curl -v -X PUT \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/media
 ```
 
-#### Remove
-
-> DELETE /v2/accounts/{ACCOUNT_ID}/media/{MEDIA_ID}
-
-```shell
-curl -v -X DELETE \
-    -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/media/{MEDIA_ID}
-```
-
 #### Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/media/{MEDIA_ID}
@@ -67,6 +61,16 @@ curl -v -X GET \
 
 ```shell
 curl -v -X POST \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/media/{MEDIA_ID}
+```
+
+#### Remove
+
+> DELETE /v2/accounts/{ACCOUNT_ID}/media/{MEDIA_ID}
+
+```shell
+curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/media/{MEDIA_ID}
 ```

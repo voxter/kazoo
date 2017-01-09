@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2010-2016, 2600Hz INC
+%%% @copyright (C) 2010-2017, 2600Hz INC
 %%% @doc
 %%% Store routing keys/pid bindings. When a binding is fired,
 %%% pass the payload to the pid for evaluation, accumulating
@@ -194,7 +194,7 @@ modules_loaded() ->
 
 -spec is_bh_module(ne_binary() | atom()) -> boolean().
 is_bh_module(<<"bh_", _/binary>>) -> 'true';
-is_bh_module(<<"blackhole_", _binary>>) -> 'true';
+is_bh_module(<<"blackhole_", _/binary>>) -> 'true';
 is_bh_module(<<_/binary>>) -> 'false';
 is_bh_module(Mod) -> is_bh_module(kz_util:to_binary(Mod)).
 

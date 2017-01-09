@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2016, 2600Hz INC
+%%% @copyright (C) 2011-2017, 2600Hz INC
 %%% @doc
 %%% Renders a custom account email template, or the system default,
 %%% and sends the email with voicemail attachment to the user.
@@ -54,7 +54,7 @@ handle_req(JObj, _Props) ->
                 end,
 
     lager:debug("attempting to load all docs in account db ~s", [AccountDb]),
-    {'ok', AllDocs} = kz_datamgr:all_docs(AccountDb, [{<<"include_docs">>, 'true'}]),
+    {'ok', AllDocs} = kz_datamgr:all_docs(AccountDb, ['include_docs']),
     Account = find_account(AllDocs),
     Admin = find_admin(AllDocs),
 

@@ -4,6 +4,8 @@
 
 #### Schema
 
+Schema for a number
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `cnam` |   | `object` |   | `false`
@@ -44,6 +46,8 @@ Key | Description | Type | Default | Required
 `porting.service_provider` | The name of the losing carrier | `string` |   | `false`
 
 
+
+
 #### Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/phone_numbers
@@ -54,22 +58,22 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers
 ```
 
-#### Remove
-
-> DELETE /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
-
-```shell
-curl -v -X DELETE \
-    -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
-```
-
 #### Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
 
 ```shell
 curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
+```
+
+#### Create
+
+> PUT /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
+
+```shell
+curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
 ```
@@ -84,12 +88,12 @@ curl -v -X POST \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
 ```
 
-#### Create
+#### Remove
 
-> PUT /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
+> DELETE /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
 
 ```shell
-curl -v -X PUT \
+curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
 ```
@@ -124,12 +128,12 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/prefix
 ```
 
-#### Remove
+#### Create
 
-> DELETE /v2/accounts/{ACCOUNT_ID}/phone_numbers/collection
+> PUT /v2/accounts/{ACCOUNT_ID}/phone_numbers/collection
 
 ```shell
-curl -v -X DELETE \
+curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/collection
 ```
@@ -144,12 +148,12 @@ curl -v -X POST \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/collection
 ```
 
-#### Create
+#### Remove
 
-> PUT /v2/accounts/{ACCOUNT_ID}/phone_numbers/collection
+> DELETE /v2/accounts/{ACCOUNT_ID}/phone_numbers/collection
 
 ```shell
-curl -v -X PUT \
+curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/collection
 ```

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2011-2016, 2600Hz
+%%% @copyright (C) 2011-2017, 2600Hz
 %%% @doc
 %%% Notification messages, like voicemail left
 %%% @end
@@ -47,6 +47,7 @@
         ,customer_update/1, customer_update_v/1
         ,skel/1, skel_v/1
         ,headers/1
+        ,account_db/1
         ]).
 
 -export([publish_voicemail/1, publish_voicemail/2
@@ -520,6 +521,16 @@
                      ,{<<"Event-Name">>, <<"skel">>}
                      ]).
 -define(SKEL_TYPES, []).
+
+-spec account_db(kz_json:object()) -> api_binary().
+account_db(JObj) ->
+    Check = [<<"account_db">>, <<"pvt_account_db">>, <<"Account-DB">>],
+    case kz_json:get_first_defined(Check, JObj) of
+        'undefined' ->
+            kz_util:format_account_id(kz_json:get_ne_binary_value(<<"Account-ID">>, JObj), 'encoded');
+        Value ->
+            Value
+    end.
 
 -spec headers(ne_binary()) -> ne_binaries().
 headers(<<"voicemail">>) ->

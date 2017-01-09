@@ -4,6 +4,8 @@
 
 #### Schema
 
+Call Queues - FIFO call queues for serializing callers connecting to agents
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `agent_ring_timeout` | In seconds, how long to ring an agent before progressing to the next agent available | `integer` | `15` | `false`
@@ -21,6 +23,8 @@ Key | Description | Type | Default | Required
 `recording_url` | An optional HTTP URL to PUT the call recording after the call ends (and should respond to GET for retrieving the audio data) | `string` |   | `false`
 `ring_simultaneously` | The number of agents to try in parallel when connecting a caller | `integer` | `1` | `false`
 `strategy` | The queue strategy for connecting agents to callers | `string('round_robin', 'most_idle')` | `round_robin` | `false`
+
+
 
 
 #### Fetch
@@ -43,22 +47,22 @@ curl -v -X PUT \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/queues
 ```
 
-#### Remove
-
-> DELETE /v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}
-
-```shell
-curl -v -X DELETE \
-    -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}
-```
-
 #### Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}
 
 ```shell
 curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}
+```
+
+#### Change
+
+> POST /v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}
+
+```shell
+curl -v -X POST \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}
 ```
@@ -73,12 +77,12 @@ curl -v -X PATCH \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}
 ```
 
-#### Change
+#### Remove
 
-> POST /v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}
+> DELETE /v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}
 
 ```shell
-curl -v -X POST \
+curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}
 ```
@@ -113,16 +117,6 @@ curl -v -X PUT \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/eavesdrop
 ```
 
-#### Remove
-
-> DELETE /v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/roster
-
-```shell
-curl -v -X DELETE \
-    -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/roster
-```
-
 #### Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/roster
@@ -139,6 +133,16 @@ curl -v -X GET \
 
 ```shell
 curl -v -X POST \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/roster
+```
+
+#### Remove
+
+> DELETE /v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/roster
+
+```shell
+curl -v -X DELETE \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/roster
 ```
