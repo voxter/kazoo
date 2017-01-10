@@ -1031,6 +1031,8 @@ ringing('current_call', _, #state{member_call=Call
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
+-spec ringing_callback(any(), state()) -> handle_fsm_ret(state()).
+-spec ringing_callback(any(), atom(), state()) -> handle_sync_event_ret(state()).
 ringing_callback({'originate_uuid', ACallId, ACtrlQ}, #state{agent_listener=AgentListener}=State) ->
     lager:debug("recv originate_uuid for agent call ~s(~s)", [ACallId, ACtrlQ]),
     acdc_agent_listener:originate_uuid(AgentListener, ACallId, ACtrlQ),
@@ -1081,10 +1083,8 @@ ringing_callback({'originate_failed', JObj}, #state{agent_listener=AgentListener
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
 
     {'next_state', 'ringing_callback', State};
-ringing_callback({'shared_failure', _JObj}, #state{account_id=AccountId
-                                                   ,agent_id=AgentId
-                                                   ,connect_failures=Fails
-                                                   ,max_connect_failures=MaxFails
+ringing_callback({'shared_failure', _JObj}, #state{connect_failures=Fails
+                                                  ,max_connect_failures=MaxFails
                                                   }=State) ->
     lager:debug("shared originate failure"),
 
@@ -1251,8 +1251,7 @@ awaiting_callback({'channel_answered', JObj}=Evt, #state{account_id=AccountId
                                                    ]),
 
             %% Notify the queue_fsm that the call is now fully accepted
-            Call1 = kapps_call:set_call_id(ReplacedBy, props:get_value(CallId, Candidates)),
-            acdc_agent_listener:member_connect_accepted(AgentListener, ACallId, Call1),
+            acdc_agent_listener:member_connect_accepted(AgentListener, ACallId, MemberCall),
 
             {CIDNumber, CIDName} = acdc_util:caller_id(OriginalMemberCall),
 
@@ -1302,7 +1301,7 @@ awaiting_callback({'channel_hungup', ACallId, Cause}, #state{account_id=AccountI
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
 
     NewFSMState = clear_call(State, 'failed'),
-    NextState = return_to_state(Fails+1, MaxFails, AccountId, AgentId),
+    NextState = return_to_state(Fails+1, MaxFails),
     case NextState of
         'paused' -> {'next_state', 'paused', NewFSMState};
         'ready' -> apply_state_updates(NewFSMState)

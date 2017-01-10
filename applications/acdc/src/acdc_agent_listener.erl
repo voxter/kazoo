@@ -248,6 +248,8 @@ member_callback_accepted(Srv, ACall) ->
 hangup_call(Srv) ->
     gen_listener:cast(Srv, {'hangup_call'}).
 
+-spec monitor_call(pid(), kapps_call:call(), kz_json:object(), api_binary()) ->
+                          'ok'.
 monitor_call(Srv, Call, WinJObj, RecordingUrl) ->
     gen_listener:cast(Srv, {'monitor_call', Call, WinJObj, RecordingUrl}).
 
