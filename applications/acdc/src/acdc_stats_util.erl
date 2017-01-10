@@ -59,14 +59,14 @@ db_name(Account) ->
 
 -spec prev_modb(ne_binary()) -> ne_binary().
 prev_modb(Account) ->
-	{{Year, Month, _}, _} = calendar:now_to_universal_time(os:timestamp()),
-	prev_modb(Account, Year, Month-1).
+    {{Year, Month, _}, _} = calendar:now_to_universal_time(os:timestamp()),
+    prev_modb(Account, Year, Month-1).
 
 -spec prev_modb(ne_binary(), calendar:year(), integer()) -> ne_binary().
 prev_modb(Account, Year, 0) ->
-	prev_modb(Account, Year-1, 12);
+    prev_modb(Account, Year-1, 12);
 prev_modb(Account, Year, Month) ->
-	kz_util:format_account_id(Account, Year, Month).
+    kz_util:format_account_id(Account, Year, Month).
 
 -spec cleanup_old_stats() -> 'ok'.
 cleanup_old_stats() ->

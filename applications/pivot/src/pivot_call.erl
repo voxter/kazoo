@@ -188,7 +188,7 @@ handle_call(_Request, _From, State) ->
 -spec handle_cast(any(), state()) -> {'noreply', state()} |
                                      {'stop', 'normal', state()}.
 handle_cast('usurp', #state{call=Call
-                            ,requester_queue=RequesterQ
+                           ,requester_queue=RequesterQ
                            }=State) ->
     lager:debug("terminating pivot call because of usurp"),
     kapi_pivot:publish_succeeded(RequesterQ, [{<<"Call-ID">>, kapps_call:call_id(Call)}
@@ -208,7 +208,7 @@ handle_cast({'request', Uri, Method, Params}
     Call1 = kzt_util:set_voice_uri(Uri, Call),
     Headers = kazoo_oauth_util:maybe_oauth_headers(kapps_call:account_id(Call), Uri, Params),
 
-	case send_req(Call1, Uri, Method, Headers, Params, Debug) of
+    case send_req(Call1, Uri, Method, Headers, Params, Debug) of
         {'ok', ReqId, Call2} ->
             lager:debug("sent request ~p to '~s' via '~s'", [ReqId, Uri, Method]),
             {'noreply'
@@ -321,10 +321,10 @@ handle_info({'http', {ReqId, {'error', 'req_timedout'}}}
                   ,requester_queue=_RequesterQ
                   }=State) ->
     lager:debug("request ~p timed out", [ReqId]),
-    % kapi_pivot:publish_failed(RequesterQ, [{<<"Call-ID">>, kapps_call:call_id(Call)}
-    %                                        | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-    %                                       ]),
-    % {'stop', 'timeout', State};
+                                                % kapi_pivot:publish_failed(RequesterQ, [{<<"Call-ID">>, kapps_call:call_id(Call)}
+                                                %                                        | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                                %                                       ]),
+                                                % {'stop', 'timeout', State};
     {'noreply', State};
 
 handle_info({'http', {ReqId, 'stream', Chunk}}
@@ -450,12 +450,12 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-%-spec send_req(kapps_call:call(), ne_binary(), http_method(), kz_json:object() | kz_proplist(), boolean()) ->
-%                      'ok' |
-%                      {'ok', ibrowse_req_id(), kapps_call:call()} |
-%                      {'stop', kapps_call:call()}.
-%send_req(Call, Uri, Method, BaseParams, Debug) when not is_list(BaseParams) ->
-%    send_req(Call, Uri, Method, [], kz_json:to_proplist(BaseParams), Debug).
+                                                %-spec send_req(kapps_call:call(), ne_binary(), http_method(), kz_json:object() | kz_proplist(), boolean()) ->
+                                                %                      'ok' |
+                                                %                      {'ok', ibrowse_req_id(), kapps_call:call()} |
+                                                %                      {'stop', kapps_call:call()}.
+                                                %send_req(Call, Uri, Method, BaseParams, Debug) when not is_list(BaseParams) ->
+                                                %    send_req(Call, Uri, Method, [], kz_json:to_proplist(BaseParams), Debug).
 
 send_req(Call, Uri, Method, Headers, BaseParams, Debug) when not is_list(BaseParams) ->
     send_req(Call, Uri, Method, Headers, kz_json:to_proplist(BaseParams), Debug);

@@ -230,8 +230,8 @@ call_processed_v(JObj) ->
     call_processed_v(kz_json:to_proplist(JObj)).
 
 -spec call_exited_position(api_terms()) ->
-                            {'ok', iolist()} |
-                            {'error', string()}.
+                                  {'ok', iolist()} |
+                                  {'error', string()}.
 call_exited_position(Props) when is_list(Props) ->
     case call_exited_position_v(Props) of
         'true' -> kz_api:build_message(Props, ?CALL_REQ_HEADERS, ?EXITED_HEADERS);
@@ -369,8 +369,8 @@ current_calls_resp_v(JObj) ->
 -define(CALL_SUMMARY_REQ_TYPES, []).
 
 -spec call_summary_req(api_terms()) ->
-                               {'ok', iolist()} |
-                               {'error', string()}.
+                              {'ok', iolist()} |
+                              {'error', string()}.
 call_summary_req(Props) when is_list(Props) ->
     case call_summary_req_v(Props) of
         'true' -> kz_api:build_message(Props, ?CALL_SUMMARY_REQ_HEADERS, ?OPTIONAL_CALL_SUMMARY_REQ_HEADERS);
@@ -393,8 +393,8 @@ call_summary_req_v(JObj) ->
 -define(CALL_SUMMARY_ERR_TYPES, []).
 
 -spec call_summary_err(api_terms()) ->
-                               {'ok', iolist()} |
-                               {'error', string()}.
+                              {'ok', iolist()} |
+                              {'error', string()}.
 call_summary_err(Props) when is_list(Props) ->
     case call_summary_err_v(Props) of
         'true' -> kz_api:build_message(Props, ?CALL_SUMMARY_ERR_HEADERS, ?OPTIONAL_CALL_SUMMARY_ERR_HEADERS);
@@ -421,8 +421,8 @@ call_summary_err_v(JObj) ->
 -define(CALL_SUMMARY_RESP_TYPES, []).
 
 -spec call_summary_resp(api_terms()) ->
-                                {'ok', iolist()} |
-                                {'error', string()}.
+                               {'ok', iolist()} |
+                               {'error', string()}.
 call_summary_resp(Props) when is_list(Props) ->
     case call_summary_resp_v(Props) of
         'true' -> kz_api:build_message(Props, ?CALL_SUMMARY_RESP_HEADERS, ?OPTIONAL_CALL_SUMMARY_RESP_HEADERS);
@@ -443,13 +443,13 @@ call_summary_resp_v(JObj) ->
                                           ,<<"Start-Range">>, <<"End-Range">>
                                           ]).
 -define(AGENT_CALLS_REQ_VALUES, [{<<"Event-Category">>, <<"acdc_stat">>}
-                                 ,{<<"Event-Name">>, <<"agent_calls_req">>}
+                                ,{<<"Event-Name">>, <<"agent_calls_req">>}
                                 ]).
 -define(AGENT_CALLS_REQ_TYPES, []).
 
 -spec agent_calls_req(api_terms()) ->
-                               {'ok', iolist()} |
-                               {'error', string()}.
+                             {'ok', iolist()} |
+                             {'error', string()}.
 agent_calls_req(Props) when is_list(Props) ->
     case agent_calls_req_v(Props) of
         'true' -> kz_api:build_message(Props, ?AGENT_CALLS_REQ_HEADERS, ?OPTIONAL_AGENT_CALLS_REQ_HEADERS);
@@ -472,8 +472,8 @@ agent_calls_req_v(JObj) ->
 -define(AGENT_CALLS_ERR_TYPES, []).
 
 -spec agent_calls_err(api_terms()) ->
-                               {'ok', iolist()} |
-                               {'error', string()}.
+                             {'ok', iolist()} |
+                             {'error', string()}.
 agent_calls_err(Props) when is_list(Props) ->
     case agent_calls_err_v(Props) of
         'true' -> kz_api:build_message(Props, ?AGENT_CALLS_ERR_HEADERS, ?OPTIONAL_AGENT_CALLS_ERR_HEADERS);
@@ -496,8 +496,8 @@ agent_calls_err_v(JObj) ->
 -define(AGENT_CALLS_RESP_TYPES, []).
 
 -spec agent_calls_resp(api_terms()) ->
-                                {'ok', iolist()} |
-                                {'error', string()}.
+                              {'ok', iolist()} |
+                              {'error', string()}.
 agent_calls_resp(Props) when is_list(Props) ->
     case agent_calls_resp_v(Props) of
         'true' -> kz_api:build_message(Props, ?AGENT_CALLS_RESP_HEADERS, ?OPTIONAL_AGENT_CALLS_RESP_HEADERS);
@@ -594,8 +594,8 @@ status_resp_v(JObj) ->
 -define(AGENT_CUR_STATUS_REQ_TYPES, []).
 
 -spec agent_cur_status_req(api_terms()) ->
-                        {'ok', iolist()} |
-                        {'error', string()}.
+                                  {'ok', iolist()} |
+                                  {'error', string()}.
 agent_cur_status_req(Props) when is_list(Props) ->
     case agent_cur_status_req_v(Props) of
         'true' -> kz_api:build_message(Props, ?AGENT_CUR_STATUS_REQ_HEADERS, ?OPTIONAL_AGENT_CUR_STATUS_REQ_HEADERS);
@@ -618,8 +618,8 @@ agent_cur_status_req_v(JObj) ->
 -define(AGENT_CUR_STATUS_ERR_TYPES, []).
 
 -spec agent_cur_status_err(api_terms()) ->
-                        {'ok', iolist()} |
-                        {'error', string()}.
+                                  {'ok', iolist()} |
+                                  {'error', string()}.
 agent_cur_status_err(Props) when is_list(Props) ->
     case agent_cur_status_err_v(Props) of
         'true' -> kz_api:build_message(Props, ?AGENT_CUR_STATUS_ERR_HEADERS, ?OPTIONAL_AGENT_CUR_STATUS_ERR_HEADERS);
@@ -642,8 +642,8 @@ agent_cur_status_err_v(JObj) ->
 -define(AGENT_CUR_STATUS_RESP_TYPES, []).
 
 -spec agent_cur_status_resp(api_terms()) ->
-                         {'ok', iolist()} |
-                         {'error', string()}.
+                                   {'ok', iolist()} |
+                                   {'error', string()}.
 agent_cur_status_resp(Props) when is_list(Props) ->
     case agent_cur_status_resp_v(Props) of
         'true' -> kz_api:build_message(Props, ?AGENT_CUR_STATUS_RESP_HEADERS, ?OPTIONAL_AGENT_CUR_STATUS_RESP_HEADERS);

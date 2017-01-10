@@ -16,35 +16,35 @@ init(_AccountId) ->
 bindings(Props) ->
     AccountId = props:get_value("AccountId", Props),
     [
-        {'acdc_agent', [
-            {'account_id', AccountId}
-        ]},
-        {'acdc_queue', [
-            {'restrict_to', ['member_call', 'member_call_result']},
-            {'account_id', AccountId}
-        ]},
-        {'acdc_stats', [
-            {'restrict_to', ['call_stat', 'status_stat']},
-            {'account_id', AccountId}
-        ]}
+     {'acdc_agent', [
+                     {'account_id', AccountId}
+                    ]},
+     {'acdc_queue', [
+                     {'restrict_to', ['member_call', 'member_call_result']},
+                     {'account_id', AccountId}
+                    ]},
+     {'acdc_stats', [
+                     {'restrict_to', ['call_stat', 'status_stat']},
+                     {'account_id', AccountId}
+                    ]}
     ].
 
 -spec responders(kz_proplist()) -> kz_proplist().
 responders(_Props) ->
     [{<<"member">>, <<"call">>}
-     ,{<<"member">>, <<"call_cancel">>}
-     ,{<<"acdc_call_stat">>, <<"handled">>}
-     ,{<<"acdc_status_stat">>, <<"ready">>}
-     ,{<<"acdc_status_stat">>, <<"connected">>}
-     ,{<<"acdc_status_stat">>, <<"outbound">>}
-     ,{<<"acdc_status_stat">>, <<"wrapup">>}
-     ,{<<"acdc_status_stat">>, <<"connecting">>}
-     ,{<<"agent">>, <<"login">>}
-     ,{<<"agent">>, <<"logout">>}
-     ,{<<"agent">>, <<"pause">>}
-     ,{<<"agent">>, <<"resume">>}
-     ,{<<"agent">>, <<"login_queue">>}
-     ,{<<"agent">>, <<"logout_queue">>}
+    ,{<<"member">>, <<"call_cancel">>}
+    ,{<<"acdc_call_stat">>, <<"handled">>}
+    ,{<<"acdc_status_stat">>, <<"ready">>}
+    ,{<<"acdc_status_stat">>, <<"connected">>}
+    ,{<<"acdc_status_stat">>, <<"outbound">>}
+    ,{<<"acdc_status_stat">>, <<"wrapup">>}
+    ,{<<"acdc_status_stat">>, <<"connecting">>}
+    ,{<<"agent">>, <<"login">>}
+    ,{<<"agent">>, <<"logout">>}
+    ,{<<"agent">>, <<"pause">>}
+    ,{<<"agent">>, <<"resume">>}
+    ,{<<"agent">>, <<"login_queue">>}
+    ,{<<"agent">>, <<"logout_queue">>}
     ].
 
 -spec handle_event(kz_json:object(), kz_proplist()) -> 'ok'.
@@ -59,7 +59,7 @@ handle_event(EventJObj, _) ->
 %%
 %% Event type handlers
 %%
-    
+
 handle_specific_event(<<"call">>, EventJObj) ->
     CallId = kz_json:get_value([<<"Call">>, <<"Call-ID">>], EventJObj),
     AccountId = kz_json:get_value(<<"Account-ID">>, EventJObj),
@@ -74,20 +74,20 @@ handle_specific_event(<<"call">>, EventJObj) ->
         'undefined' -> 'ok';
         Number ->
             Payload = [
-		        {<<"Event">>, <<"Join">>},
-		        {<<"Privilege">>, <<"call,all">>},
-		        {<<"Channel">>, EndpointName},
-		        {<<"CallerIDNum">>, CallerIdNum},
-		        {<<"CallerIDName">>, CallerId},
-		        {<<"ConnectedLineNum">>, <<"unknown">>},
-		        {<<"ConnectedLineName">>, <<"unknown">>},
-		        {<<"Queue">>, Number},
-		        {<<"Position">>, Position},
-		        {<<"Count">>, Position},
-		        {<<"Uniqueid">>, CallId}
-		    ],
-		    amimulator_event_listener:publish_amqp_event({'publish', Payload}, AccountId)
-	end;
+                       {<<"Event">>, <<"Join">>},
+                       {<<"Privilege">>, <<"call,all">>},
+                       {<<"Channel">>, EndpointName},
+                       {<<"CallerIDNum">>, CallerIdNum},
+                       {<<"CallerIDName">>, CallerId},
+                       {<<"ConnectedLineNum">>, <<"unknown">>},
+                       {<<"ConnectedLineName">>, <<"unknown">>},
+                       {<<"Queue">>, Number},
+                       {<<"Position">>, Position},
+                       {<<"Count">>, Position},
+                       {<<"Uniqueid">>, CallId}
+                      ],
+            amimulator_event_listener:publish_amqp_event({'publish', Payload}, AccountId)
+    end;
 handle_specific_event(<<"call_cancel">>, EventJObj) ->
     AccountId = kz_json:get_value(<<"Account-ID">>, EventJObj),
     QueueId = kz_json:get_value(<<"Queue-ID">>, EventJObj),
@@ -101,25 +101,25 @@ handle_specific_event(<<"handled">>, EventJObj) ->
     Position = ami_sm:queue_pos(QueueId, CallId),
 
     ami_sm:queue_leave(QueueId, CallId),
-    
+
     case amimulator_util:queue_number(kz_util:format_account_id(AccountId, 'encoded'), QueueId) of
         'undefined' -> 'ok';
         Number ->
-		    EndpointName = amimulator_call:channel(Call),
+            EndpointName = amimulator_call:channel(Call),
 
-		    Payload = [
-		        {<<"Event">>, <<"Leave">>},
-		        {<<"Privilege">>, <<"call,all">>},
-		        {<<"Channel">>, EndpointName},
-		        {<<"Queue">>, Number},
-		        {<<"Count">>, 0},
-		        {<<"Position">>, Position},
-		        {<<"Uniqueid">>, CallId}
-		    ],
-		    amimulator_event_listener:publish_amqp_event({publish, Payload}, AccountId)
-	end;
+            Payload = [
+                       {<<"Event">>, <<"Leave">>},
+                       {<<"Privilege">>, <<"call,all">>},
+                       {<<"Channel">>, EndpointName},
+                       {<<"Queue">>, Number},
+                       {<<"Count">>, 0},
+                       {<<"Position">>, Position},
+                       {<<"Uniqueid">>, CallId}
+                      ],
+            amimulator_event_listener:publish_amqp_event({publish, Payload}, AccountId)
+    end;
 handle_specific_event(<<"login">>, EventJObj) ->
-    %lager:debug("Agent logged in to queues ~p", [EventJObj]),
+                                                %lager:debug("Agent logged in to queues ~p", [EventJObj]),
     AgentId = kz_json:get_value(<<"Agent-ID">>, EventJObj),
     AccountId = kz_json:get_value(<<"Account-ID">>, EventJObj),
     AccountDb = kz_util:format_account_id(AccountId, encoded),
@@ -127,50 +127,50 @@ handle_specific_event(<<"login">>, EventJObj) ->
     Exten = kz_json:get_value(<<"username">>, AgentDoc),
     AgentName = <<(kz_json:get_value(<<"first_name">>, AgentDoc))/binary, " ", (kz_json:get_value(<<"last_name">>, AgentDoc))/binary>>,
     WholePayload = lists:foldl(fun(QueueId, Payload) ->
-        case amimulator_util:find_id_number(QueueId, AccountDb) of
-            {error, _E} -> Payload;
-            {ok, Number2} ->
-                Payload ++ [[
-                    {<<"Event">>, <<"QueueMemberAdded">>},
-                    {<<"Privilege">>, <<"agent,all">>},
-                    {<<"Queue">>, Number2},
-                    {<<"Location">>, <<"Local/", Exten/binary, "@from-queue/n">>},
-                    {<<"MemberName">>, AgentName},
-                    {<<"Membership">>, <<"dynamic">>},
-                    {<<"Penalty">>, 0},
-                    {<<"CallsTaken">>, 0},
-                    {<<"LastCall">>, 0},
-                    {<<"Status">>, 1},
-                    {<<"Paused">>, 0}
-                ]]
-        end end, [], kz_json:get_value(<<"queues">>, AgentDoc, [])
-    ),
+                                       case amimulator_util:find_id_number(QueueId, AccountDb) of
+                                           {error, _E} -> Payload;
+                                           {ok, Number2} ->
+                                               Payload ++ [[
+                                                            {<<"Event">>, <<"QueueMemberAdded">>},
+                                                            {<<"Privilege">>, <<"agent,all">>},
+                                                            {<<"Queue">>, Number2},
+                                                            {<<"Location">>, <<"Local/", Exten/binary, "@from-queue/n">>},
+                                                            {<<"MemberName">>, AgentName},
+                                                            {<<"Membership">>, <<"dynamic">>},
+                                                            {<<"Penalty">>, 0},
+                                                            {<<"CallsTaken">>, 0},
+                                                            {<<"LastCall">>, 0},
+                                                            {<<"Status">>, 1},
+                                                            {<<"Paused">>, 0}
+                                                           ]]
+                                       end end, [], kz_json:get_value(<<"queues">>, AgentDoc, [])
+                              ),
     amimulator_event_listener:publish_amqp_event({publish, WholePayload}, AccountId);
 handle_specific_event(<<"logout">>, EventJObj) ->
-    %lager:debug("Agent logged out from queues ~p", [EventJObj]),
+                                                %lager:debug("Agent logged out from queues ~p", [EventJObj]),
     AgentId = kz_json:get_value(<<"Agent-ID">>, EventJObj),
     AccountId = kz_json:get_value(<<"Account-ID">>, EventJObj),
     AccountDb = kz_util:format_account_id(AccountId, encoded),
     {ok, AgentDoc} = kz_datamgr:open_doc(AccountDb, AgentId),
     Exten = case amimulator_util:find_id_number(AgentId, AccountDb) of
-        {error, not_found} ->
-            kz_json:get_value(<<"username">>, AgentDoc);
-        {ok, Number} ->
-            Number
-    end,
+                {error, not_found} ->
+                    kz_json:get_value(<<"username">>, AgentDoc);
+                {ok, Number} ->
+                    Number
+            end,
     AgentName = <<(kz_json:get_value(<<"first_name">>, AgentDoc))/binary, " ", (kz_json:get_value(<<"last_name">>, AgentDoc))/binary>>,
     WholePayload = lists:foldl(fun(QueueId, Payload) ->
-        case amimulator_util:find_id_number(QueueId, AccountDb) of
-            {error, _E} -> Payload;
-            {ok, Number2} -> Payload ++ [[
-                {<<"Event">>, <<"QueueMemberRemoved">>},
-                {<<"Privilege">>, <<"agent,all">>},
-                {<<"Queue">>, Number2},
-                {<<"Location">>, <<"Local/", Exten/binary, "@from-queue/n">>},
-                {<<"MemberName">>, AgentName}
-            ]]
-        end end, [], kz_json:get_value(<<"queues">>, AgentDoc, [])
-    ),
+                                       case amimulator_util:find_id_number(QueueId, AccountDb) of
+                                           {error, _E} -> Payload;
+                                           {ok, Number2} -> Payload ++ [[
+                                                                         {<<"Event">>, <<"QueueMemberRemoved">>},
+                                                                         {<<"Privilege">>, <<"agent,all">>},
+                                                                         {<<"Queue">>, Number2},
+                                                                         {<<"Location">>, <<"Local/", Exten/binary, "@from-queue/n">>},
+                                                                         {<<"MemberName">>, AgentName}
+                                                                        ]]
+                                       end end, [], kz_json:get_value(<<"queues">>, AgentDoc, [])
+                              ),
     amimulator_event_listener:publish_amqp_event({publish, WholePayload}, AccountId);
 handle_specific_event(<<"login_queue">>, EventJObj) ->
     AgentId = kz_json:get_value(<<"Agent-ID">>, EventJObj),
@@ -180,28 +180,28 @@ handle_specific_event(<<"login_queue">>, EventJObj) ->
     AccountDb = kz_util:format_account_id(AccountId, encoded),
     {ok, AgentDoc} = kz_datamgr:open_doc(AccountDb, AgentId),
     Exten = case amimulator_util:find_id_number(AgentId, AccountDb) of
-        {error, not_found} ->
-            kz_json:get_value(<<"username">>, AgentDoc);
-        {ok, Number} ->
-            Number
-    end,
+                {error, not_found} ->
+                    kz_json:get_value(<<"username">>, AgentDoc);
+                {ok, Number} ->
+                    Number
+            end,
     AgentName = <<(kz_json:get_value(<<"first_name">>, AgentDoc))/binary, " ", (kz_json:get_value(<<"last_name">>, AgentDoc))/binary>>,
     case amimulator_util:find_id_number(QueueId, AccountDb) of
         {error, _E} -> ok;
         {ok, Number2} ->
             Payload = [
-                {<<"Event">>, <<"QueueMemberAdded">>},
-                {<<"Privilege">>, <<"agent,all">>},
-                {<<"Queue">>, Number2},
-                {<<"Location">>, <<"Local/", Exten/binary, "@from-queue/n">>},
-                {<<"MemberName">>, AgentName},
-                {<<"Membership">>, <<"dynamic">>},
-                {<<"Penalty">>, 0},
-                {<<"CallsTaken">>, 0},
-                {<<"LastCall">>, 0},
-                {<<"Status">>, 1},
-                {<<"Paused">>, 0}
-            ],
+                       {<<"Event">>, <<"QueueMemberAdded">>},
+                       {<<"Privilege">>, <<"agent,all">>},
+                       {<<"Queue">>, Number2},
+                       {<<"Location">>, <<"Local/", Exten/binary, "@from-queue/n">>},
+                       {<<"MemberName">>, AgentName},
+                       {<<"Membership">>, <<"dynamic">>},
+                       {<<"Penalty">>, 0},
+                       {<<"CallsTaken">>, 0},
+                       {<<"LastCall">>, 0},
+                       {<<"Status">>, 1},
+                       {<<"Paused">>, 0}
+                      ],
             amimulator_event_listener:publish_amqp_event({publish, Payload}, AccountId)
     end;
 handle_specific_event(<<"logout_queue">>, EventJObj) ->
@@ -212,22 +212,22 @@ handle_specific_event(<<"logout_queue">>, EventJObj) ->
     AccountDb = kz_util:format_account_id(AccountId, encoded),
     {ok, AgentDoc} = kz_datamgr:open_doc(AccountDb, AgentId),
     Exten = case amimulator_util:find_id_number(AgentId, AccountDb) of
-        {error, not_found} ->
-            kz_json:get_value(<<"username">>, AgentDoc);
-        {ok, Number} ->
-            Number
-    end,
+                {error, not_found} ->
+                    kz_json:get_value(<<"username">>, AgentDoc);
+                {ok, Number} ->
+                    Number
+            end,
     AgentName = <<(kz_json:get_value(<<"first_name">>, AgentDoc))/binary, " ", (kz_json:get_value(<<"last_name">>, AgentDoc))/binary>>,
     case amimulator_util:find_id_number(QueueId, AccountDb) of
         {error, _E} -> ok;
         {ok, Number2} ->
             Payload = [
-                {<<"Event">>, <<"QueueMemberRemoved">>},
-                {<<"Privilege">>, <<"agent,all">>},
-                {<<"Queue">>, Number2},
-                {<<"Location">>, <<"Local/", Exten/binary, "@from-queue/n">>},
-                {<<"MemberName">>, AgentName}
-            ],
+                       {<<"Event">>, <<"QueueMemberRemoved">>},
+                       {<<"Privilege">>, <<"agent,all">>},
+                       {<<"Queue">>, Number2},
+                       {<<"Location">>, <<"Local/", Exten/binary, "@from-queue/n">>},
+                       {<<"MemberName">>, AgentName}
+                      ],
             amimulator_event_listener:publish_amqp_event({publish, Payload}, AccountId)
     end;
 handle_specific_event(<<"pause">>, EventJObj) ->
@@ -237,23 +237,23 @@ handle_specific_event(<<"pause">>, EventJObj) ->
 
     {ok, AgentDoc} = kz_datamgr:open_doc(AccountDb, AgentId),
     Interface = <<"Local/", (kz_json:get_value(<<"username">>, AgentDoc))/binary,
-        "@from-queue/n">>,
+                  "@from-queue/n">>,
     AgentName = <<(kz_json:get_value(<<"first_name">>, AgentDoc))/binary, " ",
-        (kz_json:get_value(<<"last_name">>, AgentDoc))/binary>>,
+                  (kz_json:get_value(<<"last_name">>, AgentDoc))/binary>>,
     Payload = lists:foldl(fun(QueueId, Acc) ->
-        case amimulator_util:find_id_number(QueueId, AccountDb) of
-            {ok, QueueNumber} ->
-                [[
-                    {<<"Event">>, <<"QueueMemberPaused">>},
-                    {<<"Privilege">>, <<"agent,all">>},
-                    {<<"Queue">>, QueueNumber},
-                    {<<"Location">>, Interface},
-                    {<<"MemberName">>, AgentName},
-                    {<<"Paused">>, 1}
-                ] | Acc];
-            _ ->
-                Acc
-        end end, [], kz_json:get_value(<<"queues">>, AgentDoc, [])),
+                                  case amimulator_util:find_id_number(QueueId, AccountDb) of
+                                      {ok, QueueNumber} ->
+                                          [[
+                                            {<<"Event">>, <<"QueueMemberPaused">>},
+                                            {<<"Privilege">>, <<"agent,all">>},
+                                            {<<"Queue">>, QueueNumber},
+                                            {<<"Location">>, Interface},
+                                            {<<"MemberName">>, AgentName},
+                                            {<<"Paused">>, 1}
+                                           ] | Acc];
+                                      _ ->
+                                          Acc
+                                  end end, [], kz_json:get_value(<<"queues">>, AgentDoc, [])),
     amimulator_event_listener:publish_amqp_event({publish, Payload}, AccountId);
 handle_specific_event(<<"resume">>, EventJObj) ->
     AccountId = kz_json:get_value(<<"Account-ID">>, EventJObj),
@@ -262,23 +262,23 @@ handle_specific_event(<<"resume">>, EventJObj) ->
 
     {ok, AgentDoc} = kz_datamgr:open_doc(AccountDb, AgentId),
     Interface = <<"Local/", (kz_json:get_value(<<"username">>, AgentDoc))/binary,
-        "@from-queue/n">>,
+                  "@from-queue/n">>,
     AgentName = <<(kz_json:get_value(<<"first_name">>, AgentDoc))/binary, " ",
-        (kz_json:get_value(<<"last_name">>, AgentDoc))/binary>>,
+                  (kz_json:get_value(<<"last_name">>, AgentDoc))/binary>>,
     Payload = lists:foldl(fun(QueueId, Acc) ->
-        case amimulator_util:find_id_number(QueueId, AccountDb) of
-            {ok, QueueNumber} ->
-                [[
-                    {<<"Event">>, <<"QueueMemberPaused">>},
-                    {<<"Privilege">>, <<"agent,all">>},
-                    {<<"Queue">>, QueueNumber},
-                    {<<"Location">>, Interface},
-                    {<<"MemberName">>, AgentName},
-                    {<<"Paused">>, 0}
-                ] | Acc];
-            _ ->
-                Acc
-        end end, [], kz_json:get_value(<<"queues">>, AgentDoc, [])),
+                                  case amimulator_util:find_id_number(QueueId, AccountDb) of
+                                      {ok, QueueNumber} ->
+                                          [[
+                                            {<<"Event">>, <<"QueueMemberPaused">>},
+                                            {<<"Privilege">>, <<"agent,all">>},
+                                            {<<"Queue">>, QueueNumber},
+                                            {<<"Location">>, Interface},
+                                            {<<"MemberName">>, AgentName},
+                                            {<<"Paused">>, 0}
+                                           ] | Acc];
+                                      _ ->
+                                          Acc
+                                  end end, [], kz_json:get_value(<<"queues">>, AgentDoc, [])),
     amimulator_event_listener:publish_amqp_event({publish, Payload}, AccountId);
 handle_specific_event(_, _EventJObj) ->
     lager:debug("AMI: unhandled acdc event").
@@ -301,14 +301,14 @@ maybe_agent_called(<<"connecting">>, EventJObj) ->
     {'ok', Owner} = kz_datamgr:open_doc(AccountDb, AgentId),
     Call = ami_sm:call(CallId),
     Payload = [
-        {<<"Event">>, <<"AgentCalled">>},
-        {<<"AgentCalled">>, <<"Local/", (kz_json:get_value(<<"username">>, Owner))/binary, "@from-queue/n">>},
-        {<<"ChannelCalling">>, amimulator_call:channel(Call)},
-        {<<"CallerID">>, amimulator_call:id_name(Call)},
-        {<<"Context">>, <<"default">>},
-        {<<"Extension">>, amimulator_call:id_number(Call)},
-        {<<"Priority">>, 1}
-    ],
+               {<<"Event">>, <<"AgentCalled">>},
+               {<<"AgentCalled">>, <<"Local/", (kz_json:get_value(<<"username">>, Owner))/binary, "@from-queue/n">>},
+               {<<"ChannelCalling">>, amimulator_call:channel(Call)},
+               {<<"CallerID">>, amimulator_call:id_name(Call)},
+               {<<"Context">>, <<"default">>},
+               {<<"Extension">>, amimulator_call:id_number(Call)},
+               {<<"Priority">>, 1}
+              ],
     amimulator_event_listener:publish_amqp_event({'publish', Payload}, AccountId);
 maybe_agent_called(_, _) ->
     'ok'.
@@ -334,26 +334,26 @@ publish_status_events(Status, AgentDoc, Queues) ->
     LastName = kz_json:get_value(<<"last_name">>, AgentDoc),
 
     Payload = lists:foldl(fun(QueueId, Acc) ->
-        case kz_datamgr:get_results(AccountDb, <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
-            {'error', _E} -> Acc;
-            {'ok', []} -> Acc;
-            {'ok', Results} ->
-                Value = kz_json:get_value(<<"value">>, hd(Results)),
-                Number = hd(Value),
-                %% TODO add the stats in here
-                [[
-                    {<<"Event">>, <<"QueueMemberStatus">>},
-                    {<<"Queue">>, Number},
-                    {<<"Location">>, <<"Local/", Username/binary, "@from-queue/n">>},
-                    {<<"MemberName">>, <<FirstName/binary, " ", LastName/binary>>},
-                    {<<"Membership">>, <<"dynamic">>},
-                    {<<"Penalty">>, 0},
-                    %{<<"CallsTaken">>, 0},
-                    %{<<"LastCall">>, LastCall},
-                    {<<"Status">>, Status},
-                    {<<"Paused">>, 0}
-                ] | Acc]
-        end end, [], Queues),
+                                  case kz_datamgr:get_results(AccountDb, <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
+                                      {'error', _E} -> Acc;
+                                      {'ok', []} -> Acc;
+                                      {'ok', Results} ->
+                                          Value = kz_json:get_value(<<"value">>, hd(Results)),
+                                          Number = hd(Value),
+                                          %% TODO add the stats in here
+                                          [[
+                                            {<<"Event">>, <<"QueueMemberStatus">>},
+                                            {<<"Queue">>, Number},
+                                            {<<"Location">>, <<"Local/", Username/binary, "@from-queue/n">>},
+                                            {<<"MemberName">>, <<FirstName/binary, " ", LastName/binary>>},
+                                            {<<"Membership">>, <<"dynamic">>},
+                                            {<<"Penalty">>, 0},
+                                                %{<<"CallsTaken">>, 0},
+                                                %{<<"LastCall">>, LastCall},
+                                            {<<"Status">>, Status},
+                                            {<<"Paused">>, 0}
+                                           ] | Acc]
+                                  end end, [], Queues),
 
     amimulator_event_listener:publish_amqp_event({'publish', Payload}, kz_json:get_value(<<"pvt_account_id">>, AgentDoc)).
 
@@ -378,11 +378,11 @@ maybe_cancel_queue_call(AccountId, QueueId, CallId, Reason, Attempts) ->
 cancel_queue_call(AccountId, QueueId, CallId, Call, Reason) ->
     Position = ami_sm:queue_pos(QueueId, CallId),
     ami_sm:queue_leave(QueueId, CallId),
-    
+
     case amimulator_util:find_id_number(
-        QueueId,
-        kz_util:format_account_id(AccountId, encoded)
-    ) of
+           QueueId,
+           kz_util:format_account_id(AccountId, encoded)
+          ) of
         {error, E} ->
             lager:debug("Could not find queue extension ~p", [E]);
         {ok, Number} ->
@@ -393,24 +393,24 @@ cancel_queue_call(AccountId, QueueId, CallId, Call, Reason) ->
 -spec cancel_queue_call_payload(binary(), ne_binary(), pos_integer(), binary(), binary()) -> list().
 cancel_queue_call_payload(Number, CallId, Position, EndpointName, <<"no agents">>) ->
     [
-        {<<"Event">>, <<"Leave">>},
-        {<<"Privilege">>, <<"call,all">>},
-        {<<"Channel">>, EndpointName},
-        {<<"Queue">>, Number},
-        {<<"Count">>, 0},
-        {<<"Position">>, Position},
-        {<<"Uniqueid">>, CallId}
+     {<<"Event">>, <<"Leave">>},
+     {<<"Privilege">>, <<"call,all">>},
+     {<<"Channel">>, EndpointName},
+     {<<"Queue">>, Number},
+     {<<"Count">>, 0},
+     {<<"Position">>, Position},
+     {<<"Uniqueid">>, CallId}
     ];
 cancel_queue_call_payload(Number, CallId, Position, EndpointName, _) ->
     [[
-        {<<"Event">>, <<"QueueCallerAbandon">>},
-        {<<"Privilege">>, <<"agent,all">>},
-        {<<"Queue">>, Number},
-        {<<"Uniqueid">>, CallId},
-        {<<"Position">>, Position},
-        {<<"OriginalPosition">>, 1},
-        {<<"HoldTime">>, 14}
-    ],[
+      {<<"Event">>, <<"QueueCallerAbandon">>},
+      {<<"Privilege">>, <<"agent,all">>},
+      {<<"Queue">>, Number},
+      {<<"Uniqueid">>, CallId},
+      {<<"Position">>, Position},
+      {<<"OriginalPosition">>, 1},
+      {<<"HoldTime">>, 14}
+     ],[
         {<<"Event">>, <<"Leave">>},
         {<<"Privilege">>, <<"call,all">>},
         {<<"Channel">>, EndpointName},
@@ -418,4 +418,4 @@ cancel_queue_call_payload(Number, CallId, Position, EndpointName, _) ->
         {<<"Count">>, 0},
         {<<"Position">>, Position},
         {<<"Uniqueid">>, CallId}
-    ]].
+       ]].

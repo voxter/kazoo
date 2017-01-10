@@ -187,26 +187,26 @@ expand_pattern(<<"^", Pattern/binary>>, Acc) ->
     expand_pattern(Pattern, Acc);
 expand_pattern(<<"$", Pattern/binary>>, Acc) ->
     expand_pattern(Pattern, Acc);
-expand_pattern(<<"\\", Escaped:1/binary, Pattern/binary>>, Acc) ->
-    expand_pattern(Pattern, pattern_acc_append(Acc, Escaped));
-expand_pattern(<<"?", Pattern/binary>>, Acc) ->
-    expand_pattern(Pattern, pattern_acc_last_optional(Acc));
+                 expand_pattern(<<"\\", Escaped:1/binary, Pattern/binary>>, Acc) ->
+                       expand_pattern(Pattern, pattern_acc_append(Acc, Escaped));
+                 expand_pattern(<<"?", Pattern/binary>>, Acc) ->
+                       expand_pattern(Pattern, pattern_acc_last_optional(Acc));
 %% We don't expand repeats so as to make finite list of expansions
 %% But we do use * as optional
-expand_pattern(<<"*", Pattern/binary>>, Acc) ->
-    expand_pattern(Pattern, pattern_acc_last_optional(Acc));
-expand_pattern(<<"+", Pattern/binary>>, Acc) ->
-    expand_pattern(Pattern, Acc);
+                 expand_pattern(<<"*", Pattern/binary>>, Acc) ->
+                       expand_pattern(Pattern, pattern_acc_last_optional(Acc));
+                 expand_pattern(<<"+", Pattern/binary>>, Acc) ->
+                       expand_pattern(Pattern, Acc);
 %% TODO handle groups
-expand_pattern(<<"(", Pattern/binary>>, Acc) ->
-    expand_pattern(Pattern, Acc);
-expand_pattern(<<")", Pattern/binary>>, Acc) ->
-    expand_pattern(Pattern, Acc);
-expand_pattern(<<"[", _/binary>>=Pattern, Acc) ->
-    {Pattern1, Characters} = expand_character_class(Pattern),
-    expand_pattern(Pattern1, pattern_acc_append_all(Acc, Characters));
-expand_pattern(<<Char:1/binary, Pattern/binary>>, Acc) ->
-    expand_pattern(Pattern, pattern_acc_append(Acc, Char)).
+                 expand_pattern(<<"(", Pattern/binary>>, Acc) ->
+                       expand_pattern(Pattern, Acc);
+                 expand_pattern(<<")", Pattern/binary>>, Acc) ->
+                       expand_pattern(Pattern, Acc);
+                 expand_pattern(<<"[", _/binary>>=Pattern, Acc) ->
+                       {Pattern1, Characters} = expand_character_class(Pattern),
+                       expand_pattern(Pattern1, pattern_acc_append_all(Acc, Characters));
+                 expand_pattern(<<Char:1/binary, Pattern/binary>>, Acc) ->
+                       expand_pattern(Pattern, pattern_acc_append(Acc, Char)).
 
 -spec pattern_acc_append(ne_binaries(), binary()) -> ne_binaries().
 pattern_acc_append([], Char) -> [Char];

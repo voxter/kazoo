@@ -683,25 +683,25 @@ fetch_all_queue_stats(Context) ->
 fetch_stats_summary(Context) ->
     Req = props:filter_undefined(
             [{<<"Account-ID">>, cb_context:account_id(Context)}
-             ,{<<"Status">>, cb_context:req_value(Context, <<"status">>)}
-             ,{<<"Queue-ID">>, cb_context:req_value(Context, <<"queue_id">>)}
+            ,{<<"Status">>, cb_context:req_value(Context, <<"status">>)}
+            ,{<<"Queue-ID">>, cb_context:req_value(Context, <<"queue_id">>)}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
     case kapps_util:amqp_pool_request(Req
-                                       ,fun kapi_acdc_stats:publish_call_summary_req/1
-                                       ,fun kapi_acdc_stats:call_summary_resp_v/1
-                                      )
+                                     ,fun kapi_acdc_stats:publish_call_summary_req/1
+                                     ,fun kapi_acdc_stats:call_summary_resp_v/1
+                                     )
     of
         {'error', E} ->
             crossbar_util:response('error', <<"stat request had errors">>, 400
-                                   ,kz_json:get_value(<<"Error-Reason">>, E)
-                                   ,Context
+                                  ,kz_json:get_value(<<"Error-Reason">>, E)
+                                  ,Context
                                   );
         {'ok', Resp} ->
             RespJObj = kz_json:set_values([{<<"current_timestamp">>, kz_util:current_tstamp()}
-                                           ,{<<"Summarized">>, kz_json:get_value(<<"Data">>, Resp, [])}
-                                           ,{<<"Waiting">>, kz_doc:public_fields(kz_json:get_value(<<"Waiting">>, Resp, []))}
-                                           ,{<<"Handled">>, kz_doc:public_fields(kz_json:get_value(<<"Handled">>, Resp, []))}
+                                          ,{<<"Summarized">>, kz_json:get_value(<<"Data">>, Resp, [])}
+                                          ,{<<"Waiting">>, kz_doc:public_fields(kz_json:get_value(<<"Waiting">>, Resp, []))}
+                                          ,{<<"Handled">>, kz_doc:public_fields(kz_json:get_value(<<"Handled">>, Resp, []))}
                                           ], kz_json:new()),
             crossbar_util:response(RespJObj, Context)
     end.
@@ -859,7 +859,7 @@ deactivate_account_for_acdc(AccountId) ->
 -spec unset_agents_key(cb_context:context()) -> cb_context:context().
 unset_agents_key(Context) ->
     cb_context:update_doc(Context
-                          ,fun(Doc) ->
-                                   kz_json:delete_key(<<"agents">>, Doc)
-                           end
+                         ,fun(Doc) ->
+                                  kz_json:delete_key(<<"agents">>, Doc)
+                          end
                          ).

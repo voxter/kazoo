@@ -4,14 +4,14 @@
 -module(kapi_amimulator).
 
 -export([control_queue_req/1, control_queue_req_v/1
-         ,control_queue_resp/1, control_queue_resp_v/1
+        ,control_queue_resp/1, control_queue_resp_v/1
         ]).
 
 -export([bind_q/2, unbind_q/2]).
 -export([declare_exchanges/0]).
 
 -export([publish_control_queue_req/1, publish_control_queue_req/2
-         ,publish_control_queue_resp/2, publish_control_queue_resp/3
+        ,publish_control_queue_resp/2, publish_control_queue_resp/3
         ]).
 
 -include_lib("amqp_util.hrl").
@@ -20,27 +20,27 @@
 -define(CONTROL_QUEUE_REQ_HEADERS, [<<"Call-ID">>]).
 -define(OPTIONAL_CONTROL_QUEUE_REQ_HEADERS, []).
 -define(CONTROL_QUEUE_REQ_VALUES, [{<<"Event-Category">>, <<"amimulator">>}
-                              	   ,{<<"Event-Name">>, <<"control_queue_req">>}
+                                  ,{<<"Event-Name">>, <<"control_queue_req">>}
                                   ]).
 -define(CONTROL_QUEUE_REQ_TYPES, []).
 
 -define(CONTROL_QUEUE_RESP_HEADERS, [<<"Call-ID">>, <<"Control-Queue">>]).
 -define(OPTIONAL_CONTROL_QUEUE_RESP_HEADERS, []).
 -define(CONTROL_QUEUE_RESP_VALUES, [{<<"Event-Category">>, <<"amimulator">>}
-									,{<<"Event-Name">>, <<"control_queue_resp">>}
-								   ]).
+                                   ,{<<"Event-Name">>, <<"control_queue_resp">>}
+                                   ]).
 -define(CONTROL_QUEUE_RESP_TYPES, []).
 
 -define(CONTROL_QUEUE_ROUTING_KEY(CallId)
-        ,<<"amimulator.control_queue.", (amqp_util:encode(CallId))/binary>>
+       ,<<"amimulator.control_queue.", (amqp_util:encode(CallId))/binary>>
        ).
 
 %%--------------------------------------------------------------------
 
 %%--------------------------------------------------------------------
 -spec control_queue_req(kz_json:object() | kz_proplist()) ->
-                 {'ok', iolist()} |
-                 {'error', string()}.
+                               {'ok', iolist()} |
+                               {'error', string()}.
 control_queue_req(Prop) when is_list(Prop) ->
     case control_queue_req_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?CONTROL_QUEUE_REQ_HEADERS, ?OPTIONAL_CONTROL_QUEUE_REQ_HEADERS);
@@ -57,8 +57,8 @@ control_queue_req_v(JObj) -> control_queue_req_v(kz_json:to_proplist(JObj)).
 
 %%--------------------------------------------------------------------
 -spec control_queue_resp(kz_json:object() | kz_proplist()) ->
-                 {'ok', iolist()} |
-                 {'error', string()}.
+                                {'ok', iolist()} |
+                                {'error', string()}.
 control_queue_resp(Prop) when is_list(Prop) ->
     case control_queue_resp_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?CONTROL_QUEUE_RESP_HEADERS, ?OPTIONAL_CONTROL_QUEUE_RESP_HEADERS);

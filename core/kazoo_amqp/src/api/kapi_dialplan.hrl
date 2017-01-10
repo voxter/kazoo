@@ -764,7 +764,7 @@
                                  ,{<<"Event-Name">>, <<"command">>}
                                  ,{<<"Application-Name">>, <<"send_display">>}
                                  ,?INSERT_AT_TUPLE
-                                ]).
+                                 ]).
 -define(SEND_DISPLAY_REQ_TYPES, []).
 
 %% Store VM Request

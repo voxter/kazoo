@@ -28,10 +28,10 @@ handle_event(EventJObj, Props) ->
     handle_specific_event(EventName, EventJObj, Props).
 
 handle_specific_event(<<"CHANNEL_CREATE">>, EventJObj, _) ->
-	lager:debug("new channel with id ~p", [kz_json:get_value(<<"Call-ID">>, EventJObj)]),
+    lager:debug("new channel with id ~p", [kz_json:get_value(<<"Call-ID">>, EventJObj)]),
 
     %% First add the sip version of the call
-	Call = amimulator_util:create_call(EventJObj),
+    Call = amimulator_util:create_call(EventJObj),
     ami_sm:new_call(Call),
 
     %% Publish the new one plus any Local/ calls that are required for queue calls
@@ -47,12 +47,12 @@ handle_specific_event(<<"CHANNEL_ANSWER">>, EventJObj, _) ->
 
 handle_specific_event(<<"CHANNEL_BRIDGE">>, EventJObj, _) ->
     lager:debug("channel bridge for channel with id ~p to ~p", [kz_json:get_value(<<"Call-ID">>, EventJObj)
-                                                                ,kz_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj)]),
+                                                               ,kz_json:get_value(<<"Other-Leg-Call-ID">>, EventJObj)]),
     amimulator_call_sup:relay_bridge(EventJObj);
 
 handle_specific_event(<<"CHANNEL_DESTROY">>, EventJObj, _) ->
     lager:debug("channel destroy for channel with id ~p", [kz_json:get_value(<<"Call-ID">>, EventJObj)]),
-    % lager:debug("channel destroy ~p", [EventJObj]),
+                                                % lager:debug("channel destroy ~p", [EventJObj]),
     CallId = kz_json:get_value(<<"Call-ID">>, EventJObj),
     HangupCause = kz_json:get_value(<<"Hangup-Cause">>, EventJObj),
 
@@ -65,16 +65,16 @@ handle_specific_event(<<"DTMF">>, EventJObj, _) ->
     Digit = kz_json:get_value(<<"DTMF-Digit">>, EventJObj),
 
     Payload = [
-        {<<"Event">>, <<"DTMF">>},
-        {<<"Privilege">>, <<"dtmf,all">>},
-        {<<"Channel">>, CallId},
-        {<<"Uniqueid">>, CallId},
-        {<<"Digit">>, Digit},
-        {<<"Direction">>, <<"Received">>},
-        {<<"Begin">>, <<"Yes">>},
-        {<<"End">>, <<"No">>}
-    ],
-    % TODO: Also need to do this with begin/end reversed
+               {<<"Event">>, <<"DTMF">>},
+               {<<"Privilege">>, <<"dtmf,all">>},
+               {<<"Channel">>, CallId},
+               {<<"Uniqueid">>, CallId},
+               {<<"Digit">>, Digit},
+               {<<"Direction">>, <<"Received">>},
+               {<<"Begin">>, <<"Yes">>},
+               {<<"End">>, <<"No">>}
+              ],
+                                                % TODO: Also need to do this with begin/end reversed
 
     amimulator_event_listener:publish_amqp_event({publish, Payload}, kz_json:get_value(<<"Account-ID">>, EventJObj));
 
@@ -115,5 +115,5 @@ create_agent_calls(MemberCall, Call) ->
 
 relay_new_calls(Calls) ->
     lists:foreach(fun(Call) ->
-        amimulator_call_sup:relay_new_call(Call)
-    end, Calls).
+                          amimulator_call_sup:relay_new_call(Call)
+                  end, Calls).

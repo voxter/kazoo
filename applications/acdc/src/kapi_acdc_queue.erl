@@ -386,8 +386,8 @@ member_connect_accepted_v(JObj) ->
 -define(MEMBER_CALLBACK_ACCEPTED_TYPES, []).
 
 -spec member_callback_accepted(api_terms()) ->
-                                {'ok', iolist()} |
-                                {'error', string()}.
+                                      {'ok', iolist()} |
+                                      {'error', string()}.
 member_callback_accepted(Props) when is_list(Props) ->
     case member_callback_accepted_v(Props) of
         'true' -> kz_api:build_message(Props, ?MEMBER_CALLBACK_ACCEPTED_HEADERS, ?OPTIONAL_MEMBER_CALLBACK_ACCEPTED_HEADERS);
@@ -738,8 +738,8 @@ member_callback_reg_routing_key(AcctId, QueueId, CallId) ->
 -define(MEMBER_CALLBACK_TYPES, []).
 
 -spec member_callback_reg(api_terms()) ->
-                                {'ok', iolist()} |
-                                {'error', string()}.
+                                 {'ok', iolist()} |
+                                 {'error', string()}.
 member_callback_reg(Props) when is_list(Props) ->
     case member_callback_reg_v(Props) of
         'true' -> kz_api:build_message(Props, ?MEMBER_CALLBACK_HEADERS, ?OPTIONAL_MEMBER_CALLBACK_HEADERS);

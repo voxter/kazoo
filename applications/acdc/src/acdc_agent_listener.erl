@@ -260,7 +260,7 @@ bridge_to_member(Srv, Call, WinJObj, EPs, CDRUrl, RecordingUrl) ->
     gen_listener:cast(Srv, {'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}).
 
 -spec originate_callback_to_agent(pid(), kapps_call:call(), kz_json:object()
-                                  ,kz_json:objects(), api_binary(), api_binary(), api_binary()
+                                 ,kz_json:objects(), api_binary(), api_binary(), api_binary()
                                  ) -> 'ok'.
 originate_callback_to_agent(Srv, Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number) ->
     gen_listener:cast(Srv, {'originate_callback_to_agent', Call, WinJObj, EPs, CDRUrl, RecordingUrl, Number}).
@@ -671,7 +671,7 @@ handle_cast({'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}, #sta
                                ,ACallIds),
 
     gen_listener:add_binding(self(), 'acdc_agent', [{'callid', call_id(Call)}
-                                                    ,{'restrict_to', ['stats_req']}
+                                                   ,{'restrict_to', ['stats_req']}
                                                    ]),
 
     lager:debug("originate sent, waiting on successful bridge now"),
@@ -720,7 +720,7 @@ handle_cast({'bridge_to_member', Call, WinJObj, _, CDRUrl, RecordingUrl}, #state
                            ,preserve_metadata=kz_json:is_true(<<"Preserve-Metadata">>, WinJObj, 'false')
                            ,recording_url=RecordingUrl
                            }
-     ,'hibernate'};
+    ,'hibernate'};
 
 handle_cast({'monitor_call', Call, WinJObj, RecordingUrl}, State) ->
     _ = kapps_call:put_callid(Call),
@@ -887,7 +887,7 @@ handle_cast({'member_connect_resp', ReqJObj}, #state{agent_id=AgentId
 
             send_member_connect_resp(ReqJObj, MyQ, AgentId, MyId, LastConn),
             {'noreply', State#state{msg_queue_id = kz_json:get_value(<<"Server-ID">>, ReqJObj)}
-             ,'hibernate'}
+            ,'hibernate'}
     end;
 
 handle_cast({'hangup_call'}, #state{my_id=MyId
@@ -1315,8 +1315,8 @@ maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
     lists:map(fun(ACallId) -> {ACallId, 'undefined'} end, ACallIds).
 
 -spec maybe_originate_callback(ne_binary(), kz_json:objects(), kapps_call:call(), api_integer(), ne_binary(), api_binary()
-    ,api_binary()) ->
-                                    kz_proplist().
+                              ,api_binary()) ->
+                                      kz_proplist().
 maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Number) ->
     MCallId = kapps_call:call_id(Call),
     put('callid', MCallId),
@@ -1610,18 +1610,18 @@ find_account_id(JObj) ->
 
 -spec filter_agent_calls(kz_proplist(), ne_binary()) -> kz_proplist().
 filter_agent_calls(ACallIds, ACallId) ->
-                 %% These calls should be cancelled, but need to wait for CtrlQ
+    %% These calls should be cancelled, but need to wait for CtrlQ
     lists:filter(fun({ACancelId, 'undefined'}) when ACancelId =/= ACallId ->
                          lager:debug("~s will have to be cancelled when ctrl queue arrives"
                                     ,[ACancelId]),
                          'true';
-                 %% Cancel all calls =/= ACallId that have CtrlQs
+                    %% Cancel all calls =/= ACallId that have CtrlQs
                     ({ACancelId, ACtrlQ}) when ACancelId =/= ACallId ->
                          lager:debug("cancelling and stopping leg ~s", [ACancelId]),
                          acdc_util:unbind_from_call_events(ACancelId),
                          stop_agent_leg(ACancelId, ACtrlQ),
                          'false';
-                 %% Keep ACallId
+                    %% Keep ACallId
                     ({_, _}) -> 'true';
                     (ACancelId) when ACancelId =/= ACallId ->
                          lager:debug("cancelling leg ~s", [ACancelId]),

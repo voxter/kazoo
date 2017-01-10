@@ -603,7 +603,7 @@ get_fs_app(_Node, _UUID, JObj, <<"send_display">>) ->
         'false' -> {'error', <<"send display failed to execute as JObj did not validate">>};
         'true' ->
             Message = <<(kz_json:get_value(<<"Caller-ID-Name">>, JObj, <<>>))/binary, "|"
-                       ,(kz_json:get_value(<<"Caller-ID-Number">>, JObj, <<>>))/binary
+                        ,(kz_json:get_value(<<"Caller-ID-Number">>, JObj, <<>>))/binary
                       >>,
             {<<"send_display">>, Message}
     end;

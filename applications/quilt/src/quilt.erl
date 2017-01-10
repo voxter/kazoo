@@ -11,8 +11,8 @@
 -include_lib("kazoo/include/kz_types.hrl").
 
 -export([start_link/0
-         ,start/0
-         ,stop/0
+        ,start/0
+        ,stop/0
         ]).
 
 %%--------------------------------------------------------------------

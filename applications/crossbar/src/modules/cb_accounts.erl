@@ -656,8 +656,8 @@ maybe_disallow_direct_clients(_AccountId, Context, 'false') ->
 -spec validate_wnm_allow_additions(api_binary(), cb_context:context()) -> cb_context:context().
 validate_wnm_allow_additions(_, Context) ->
     AllowAdditions = kz_json:get_value(<<"pvt_wnm_allow_additions">>
-                                       ,cb_context:doc(Context)
-                                       ,'false'
+                                      ,cb_context:doc(Context)
+                                      ,'false'
                                       ),
     case cb_context:req_value(Context, <<"wnm_allow_additions">>) of
         'undefined' -> Context;
@@ -673,16 +673,16 @@ validate_wnm_allow_additions(Context) ->
         'true' ->
             JObj = cb_context:doc(Context),
             UpdatedJObj = kz_json:set_value(<<"pvt_wnm_allow_additions">>
-                            ,kz_json:get_value(<<"wnm_allow_additions">>, JObj)
-                            ,JObj
-                           ),
+                                           ,kz_json:get_value(<<"wnm_allow_additions">>, JObj)
+                                           ,JObj
+                                           ),
             unset_wnm_allow_additions(cb_context:set_doc(Context, UpdatedJObj))
     end.
 
 -spec unset_wnm_allow_additions(cb_context:context()) -> cb_context:context().
 unset_wnm_allow_additions(Context) ->
     cb_context:set_doc(Context, kz_json:delete_key(<<"wnm_allow_additions">>
-                                                   ,cb_context:doc(Context)
+                                                  ,cb_context:doc(Context)
                                                   )).
 
 %%--------------------------------------------------------------------

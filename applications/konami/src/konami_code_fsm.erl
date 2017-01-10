@@ -233,14 +233,14 @@ handle_event(?EVENT(CallId, <<"metaflow_exe">>, Metaflow), StateName, #state{cal
     {'next_state', StateName, State};
 handle_event({'add_endpoint', EndpointId}, StateName, #state{b_endpoint_ids=BEndpointIds}=State) ->
     {'next_state', StateName, State#state{b_endpoint_ids = [EndpointId | BEndpointIds]}};
-% handle_event(?EVENT(CallId, <<"update">>, JObj), StateName, #state{call_id=CallId}=State) ->
-%     NewNumbers = kz_json:get_value(<<"Data">>, JObj),
-%     lager:debug("trying to update FSM ~p numbers to ~p", [self(), NewNumbers]),
-%     {'next_state', StateName, State#state{numbers=NewNumbers
-%                                      ,digit_timeout=0
-%                                     }};
-% handle_event(?EVENT(_CallId, <<"update">>, _JObj), StateName, State) ->
-%     {'next_state', StateName, State};
+                                                % handle_event(?EVENT(CallId, <<"update">>, JObj), StateName, #state{call_id=CallId}=State) ->
+                                                %     NewNumbers = kz_json:get_value(<<"Data">>, JObj),
+                                                %     lager:debug("trying to update FSM ~p numbers to ~p", [self(), NewNumbers]),
+                                                %     {'next_state', StateName, State#state{numbers=NewNumbers
+                                                %                                      ,digit_timeout=0
+                                                %                                     }};
+                                                % handle_event(?EVENT(_CallId, <<"update">>, _JObj), StateName, State) ->
+                                                %     {'next_state', StateName, State};
 handle_event(?EVENT(_CallId, <<"CHANNEL_ANSWER">>, Evt)
             ,StateName
             ,State
@@ -333,25 +333,25 @@ binding_digit(Call, JObj) ->
             BindingDigit
     end.
 
-% -spec numbers(kapps_call:call(), kz_json:object()) -> kz_json:object().
-% numbers(Call, JObj) ->
-%     case kz_json:get_value(<<"Numbers">>, JObj) of
-%         'undefined' ->
-%             lager:debug("loading default account metaflow numbers"),
-%             konami_config:numbers(kapps_call:account_id(Call));
-%         Numbers ->
-%             lager:debug("loading numbers from api: ~p", [Numbers]),
-%             Numbers
-%     end.
+                                                % -spec numbers(kapps_call:call(), kz_json:object()) -> kz_json:object().
+                                                % numbers(Call, JObj) ->
+                                                %     case kz_json:get_value(<<"Numbers">>, JObj) of
+                                                %         'undefined' ->
+                                                %             lager:debug("loading default account metaflow numbers"),
+                                                %             konami_config:numbers(kapps_call:account_id(Call));
+                                                %         Numbers ->
+                                                %             lager:debug("loading numbers from api: ~p", [Numbers]),
+                                                %             Numbers
+                                                %     end.
 
-% -spec patterns(kapps_call:call(), kz_json:object()) -> kz_json:object().
-% patterns(Call, JObj) ->
-%     case kz_json:get_value(<<"Patterns">>, JObj) of
-%         'undefined' -> konami_config:patterns(kapps_call:account_id(Call));
-%         Patterns ->
-%             lager:debug("loading patterns from api: ~p", [Patterns]),
-%             Patterns
-%     end.
+                                                % -spec patterns(kapps_call:call(), kz_json:object()) -> kz_json:object().
+                                                % patterns(Call, JObj) ->
+                                                %     case kz_json:get_value(<<"Patterns">>, JObj) of
+                                                %         'undefined' -> konami_config:patterns(kapps_call:account_id(Call));
+                                                %         Patterns ->
+                                                %             lager:debug("loading patterns from api: ~p", [Patterns]),
+                                                %             Patterns
+                                                %     end.
 numbers(Pid, EndpointId) ->
     konami_call:numbers(Pid, EndpointId).
 
@@ -593,14 +593,14 @@ handle_channel_answer(State
                             ,kz_call_event:authorizing_id(Evt)
                             ,kz_call_event:other_leg_call_id(Evt)
                             ).
-% handle_channel_answer(#state{call_id=_CallId
-%                              ,other_leg=_OtherLeg
-%                             }=State
-%                       ,_AnsweredId
-%                       ,_Evt
-%                      ) ->
-%     lager:debug("channel ~s answered while on ~s and ~s", [_AnsweredId, _CallId, _OtherLeg]),
-%     State.
+                                                % handle_channel_answer(#state{call_id=_CallId
+                                                %                              ,other_leg=_OtherLeg
+                                                %                             }=State
+                                                %                       ,_AnsweredId
+                                                %                       ,_Evt
+                                                %                      ) ->
+                                                %     lager:debug("channel ~s answered while on ~s and ~s", [_AnsweredId, _CallId, _OtherLeg]),
+                                                %     State.
 
 -spec maybe_other_leg_answered(state(), ne_binary(), ne_binary(), ne_binary()) -> state().
 maybe_other_leg_answered(#state{b_endpoint_ids=EndpointIds

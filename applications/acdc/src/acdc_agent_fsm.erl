@@ -223,7 +223,7 @@ call_event(FSM, <<"call_event">>, <<"CHANNEL_TRANSFEREE">>, JObj) ->
 call_event(FSM, <<"call_event">>, <<"PLAYBACK_STOP">>, JObj) ->
     gen_fsm:send_event(FSM, {'playback_stop', JObj});
 call_event(_FSM, <<"call_event">>, <<"CALL_UPDATE">>, _JObj) ->
-    % lager:debug("Unhandled CALL_UPDATE: ~p", [JObj]);
+                                                % lager:debug("Unhandled CALL_UPDATE: ~p", [JObj]);
     'ok';
 call_event(_, _C, _E, _) ->
     lager:info("Unhandled combo: ~s/~s", [_C, _E]).
@@ -636,13 +636,13 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
 
             %% Need to check if a callback is required to the caller
             NextState = case kz_json:get_value(<<"Callback-Number">>, JObj) of
-                'undefined' ->
-                    acdc_agent_listener:bridge_to_member(AgentListener, Call, JObj, UpdatedEPs, CDRUrl, RecordingUrl),
-                    'ringing';
-                Number ->
-                    acdc_agent_listener:originate_callback_to_agent(AgentListener, Call, JObj, UpdatedEPs, CDRUrl, RecordingUrl, Number),
-                    'ringing_callback'
-            end,
+                            'undefined' ->
+                                acdc_agent_listener:bridge_to_member(AgentListener, Call, JObj, UpdatedEPs, CDRUrl, RecordingUrl),
+                                'ringing';
+                            Number ->
+                                acdc_agent_listener:originate_callback_to_agent(AgentListener, Call, JObj, UpdatedEPs, CDRUrl, RecordingUrl, Number),
+                                'ringing_callback'
+                        end,
 
             {CIDNumber, CIDName} = acdc_util:caller_id(Call),
 
@@ -689,9 +689,9 @@ ready({'member_connect_win', JObj, 'different_node'}, #state{agent_listener=Agen
             acdc_agent_listener:monitor_call(AgentListener, Call, JObj, RecordingUrl),
             %% Need to check if a callback is required to the caller
             NextState = case kz_json:get_value(<<"Callback-Number">>, JObj) of
-                'undefined' -> 'ringing';
-                _Number -> 'ringing_callback'
-            end,
+                            'undefined' -> 'ringing';
+                            _Number -> 'ringing_callback'
+                        end,
 
             lager:debug("monitoring agent ~s to connect to caller in queue ~s", [AgentId, QueueId]),
             {'next_state', NextState, State#state{wrapup_timeout=WrapupTimer
@@ -830,7 +830,7 @@ ringing({'originate_failed', E}, #state{agent_listener=AgentListener
     lager:debug("originate failed (~s), broadcasting", [ErrReason]),
     kapi_acdc_agent:publish_shared_originate_failure([{<<"Account-ID">>, AccountId}
                                                      ,{<<"Agent-ID">>, AgentId}
-                                                     | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                                      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                                      ]),
 
     acdc_agent_listener:member_connect_retry(AgentListener, CallId),
@@ -953,8 +953,8 @@ ringing({'originate_resp', ACallId}, #state{agent_listener=AgentListener
                                            }=State) ->
     lager:debug("originate resp on ~s, broadcasting", [ACallId]),
     kapi_acdc_agent:publish_shared_call_id([{<<"Account-ID">>, AccountId}
-                                            ,{<<"Agent-ID">>, AgentId}
-                                            ,{<<"Agent-Call-ID">>, ACallId}
+                                           ,{<<"Agent-ID">>, AgentId}
+                                           ,{<<"Agent-Call-ID">>, ACallId}
                                             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                            ]),
 
@@ -1050,7 +1050,7 @@ ringing_callback({'originate_resp', ACallId}, #state{account_id=AccountId
     kapi_acdc_agent:publish_shared_call_id([{<<"Account-ID">>, AccountId}
                                            ,{<<"Agent-ID">>, AgentId}
                                            ,{<<"Agent-Call-ID">>, ACallId}
-                                           | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                            ]),
 
     maybe_notify(Ns, ?NOTIFY_PICKUP, State),
@@ -1058,22 +1058,22 @@ ringing_callback({'originate_resp', ACallId}, #state{account_id=AccountId
     {CIDNumber, CIDName} = acdc_util:caller_id(MemberCall),
 
     %% TODO: remove if unnecessary
-    % acdc_util:b_bind_to_call_events(ACallId, AgentListener),
+                                                % acdc_util:b_bind_to_call_events(ACallId, AgentListener),
     acdc_agent_listener:member_callback_accepted(AgentListener, ACall),
     acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNumber),
 
     {'next_state', 'ringing_callback', State#state{connect_failures=0}};
 ringing_callback({'originate_failed', JObj}, #state{agent_listener=AgentListener
-                                                    ,account_id=AccountId
-                                                    ,agent_id=AgentId
-                                                    ,member_call_queue_id=QueueId
-                                                    ,member_call_id=CallId
+                                                   ,account_id=AccountId
+                                                   ,agent_id=AgentId
+                                                   ,member_call_queue_id=QueueId
+                                                   ,member_call_id=CallId
                                                    }=State) ->
     ErrReason = missed_reason(kz_json:get_value(<<"Error-Message">>, JObj)),
     lager:debug("originate failed (~s), broadcasting", [ErrReason]),
     kapi_acdc_agent:publish_shared_originate_failure([{<<"Account-ID">>, AccountId}
                                                      ,{<<"Agent-ID">>, AgentId}
-                                                     | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                                      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                                      ]),
 
     acdc_agent_listener:member_connect_retry(AgentListener, CallId),
@@ -1148,7 +1148,7 @@ ringing_callback(_Evt, State) ->
 
 ringing_callback('status', _, State) ->
     {'reply', [{'state', <<"ringing_callback">>}]
-     ,'ringing', State};
+    ,'ringing', State};
 ringing_callback('current_call', _, #state{member_call=Call
                                           ,member_call_queue_id=QueueId
                                           }=State) ->
@@ -1178,7 +1178,7 @@ awaiting_callback({'originate_failed', JObj}, #state{account_id=AccountId
     lager:debug("originate failed (~s), broadcasting", [ErrReason]),
     kapi_acdc_agent:publish_shared_originate_failure([{<<"Account-ID">>, AccountId}
                                                      ,{<<"Agent-ID">>, AgentId}
-                                                     | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                                      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                                      ]),
 
     acdc_agent_listener:member_connect_accepted(AgentListener, ACallId, MemberCall),
@@ -1247,7 +1247,7 @@ awaiting_callback({'channel_answered', JObj}=Evt, #state{account_id=AccountId
             kapi_acdc_agent:publish_shared_call_id([{<<"Account-ID">>, AccountId}
                                                    ,{<<"Agent-ID">>, AgentId}
                                                    ,{<<"Member-Call-ID">>, CallId}
-                                                   | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                                    | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                                    ]),
 
             %% Notify the queue_fsm that the call is now fully accepted
@@ -1364,7 +1364,7 @@ maybe_member_no_answer(CallId, Cause, #state{account_id=AccountId
             kapi_acdc_agent:publish_shared_originate_failure([{<<"Account-ID">>, AccountId}
                                                              ,{<<"Agent-ID">>, AgentId}
                                                              ,{<<"Blame">>, <<"member">>}
-                                                             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                                              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                                              ]),
 
             acdc_agent_listener:member_connect_accepted(AgentListener, ACallId, MemberCall),
@@ -2243,9 +2243,9 @@ maybe_remove_endpoint(EPId, EPs, AccountId, AgentListener) ->
 -spec convert_to_endpoint(kz_json:object()) -> api_object().
 convert_to_endpoint(EPDoc) ->
     Setters = [{fun kapps_call:set_account_id/2, kz_doc:account_id(EPDoc)}
-               ,{fun kapps_call:set_account_db/2, kz_doc:account_db(EPDoc)}
-               ,{fun kapps_call:set_owner_id/2, kz_device:owner_id(EPDoc)}
-               ,{fun kapps_call:set_resource_type/2, ?RESOURCE_TYPE_AUDIO}
+              ,{fun kapps_call:set_account_db/2, kz_doc:account_db(EPDoc)}
+              ,{fun kapps_call:set_owner_id/2, kz_device:owner_id(EPDoc)}
+              ,{fun kapps_call:set_resource_type/2, ?RESOURCE_TYPE_AUDIO}
               ],
 
     Call = kapps_call:exec(Setters, kapps_call:new()),
@@ -2361,11 +2361,11 @@ notify(Url, Method, Key, #state{account_id=AccountId
                ,{<<"agent_username">>, AgentName}
                ]),
     Headers = case Method of
-        'get' -> kazoo_oauth_util:maybe_oauth_headers(AccountId, Url, Params);
-        'post' ->
-            %% No params when using application/json content type
-            kazoo_oauth_util:maybe_oauth_headers(AccountId, Url, [])
-    end,
+                  'get' -> kazoo_oauth_util:maybe_oauth_headers(AccountId, Url, Params);
+                  'post' ->
+                      %% No params when using application/json content type
+                      kazoo_oauth_util:maybe_oauth_headers(AccountId, Url, [])
+              end,
     notify_method(Url, Method, Headers, kz_json:from_list(Params)).
 
 -spec notify_method(ne_binary(), 'get' | 'post', kz_proplist(), kz_json:object()) -> 'ok'.
@@ -2422,14 +2422,14 @@ apply_state_updates(#state{agent_state_updates=Q
                           ,pause_ref=PRef
                           }=State) ->
     FoldDefaultState = case time_left(WRef) of
-        N when is_integer(N), N > 0 -> 'wrapup';
-        _W ->
-            case time_left(PRef) of
-                N when is_integer(N), N > 0 -> 'paused';
-                <<"infinity">> -> 'paused';
-                _P -> 'ready'
-            end
-    end,
+                           N when is_integer(N), N > 0 -> 'wrapup';
+                           _W ->
+                               case time_left(PRef) of
+                                   N when is_integer(N), N > 0 -> 'paused';
+                                   <<"infinity">> -> 'paused';
+                                   _P -> 'ready'
+                               end
+                       end,
     lager:debug("default state for applying state updates ~s", [FoldDefaultState]),
     apply_state_updates_fold({'next_state', FoldDefaultState, State#state{agent_state_updates=[]}}, lists:reverse(Q)).
 
@@ -2505,16 +2505,16 @@ handle_resume(#state{agent_listener=AgentListener
 handle_pause(Timeout, Alias, #state{agent_listener=AgentListener}=State) ->
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_RED_FLASH),
     State1 = case Timeout of
-        'infinity' ->
-            State#state{pause_ref='infinity'
-                       ,pause_alias=Alias
-                       };
-        _ ->
-            Ref = start_pause_timer(Timeout),
-            State#state{pause_ref=Ref
-                       ,pause_alias=Alias
-                       }
-    end,
+                 'infinity' ->
+                     State#state{pause_ref='infinity'
+                                ,pause_alias=Alias
+                                };
+                 _ ->
+                     Ref = start_pause_timer(Timeout),
+                     State#state{pause_ref=Ref
+                                ,pause_alias=Alias
+                                }
+             end,
     {'next_state', 'paused', State1}.
 
 -spec original_call_id(state()) -> ne_binary().

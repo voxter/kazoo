@@ -20,9 +20,9 @@
 -include("konami.hrl").
 
 -record(state, {call_id :: api_binary()
-                ,code_fsm_pid :: api_pid()
-                ,endpoint_numbers = [] :: kz_proplist()
-                ,endpoint_patterns = [] :: kz_proplist()
+               ,code_fsm_pid :: api_pid()
+               ,endpoint_numbers = [] :: kz_proplist()
+               ,endpoint_patterns = [] :: kz_proplist()
                }).
 -type state() :: #state{}.
 
@@ -66,15 +66,15 @@ handle_call(_Request, _From, State) ->
 
 -spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).  
 handle_cast({'update', JObj, _Props}, #state{code_fsm_pid=FSM
-                                             ,endpoint_numbers=Ns
-                                             ,endpoint_patterns=Ps
+                                            ,endpoint_numbers=Ns
+                                            ,endpoint_patterns=Ps
                                             }=State) ->
     EndpointId = kz_json:get_value(<<"Endpoint-ID">>, JObj),
     CallId = kz_json:get_value([<<"Call">>, <<"Call-ID">>], JObj),
     lager:debug("adding endpoint ~s to konami call ~s", [EndpointId, CallId]),
     konami_code_fsm:add_endpoint(FSM, EndpointId),
     {'noreply', State#state{endpoint_numbers = [{EndpointId, kz_json:get_value(<<"Numbers">>, JObj)} | Ns]
-                            ,endpoint_patterns = [{EndpointId, kz_json:get_value(<<"Patterns">>, JObj)} | Ps]
+                           ,endpoint_patterns = [{EndpointId, kz_json:get_value(<<"Patterns">>, JObj)} | Ps]
                            }};
 handle_cast(_Request, State) ->
     {'noreply', State}.

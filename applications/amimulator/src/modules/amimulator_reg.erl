@@ -1,9 +1,9 @@
 -module(amimulator_reg).
 
 -export([init/1
-         ,bindings/1
-         ,responders/1
-         ,handle_event/2
+        ,bindings/1
+        ,responders/1
+        ,handle_event/2
         ]).
 
 -include("../amimulator.hrl").
@@ -21,14 +21,14 @@ init(_AccountId) ->
 bindings(Props) ->
     AccountId = props:get_value("AccountId", Props),
     [{notifications, [{restrict_to, [deregister]}]}
-     ,{registration, [{restrict_to, [reg_success]}
-        			  ,{realm, get_realm(AccountId)}
-     				 ]}].
+    ,{registration, [{restrict_to, [reg_success]}
+                    ,{realm, get_realm(AccountId)}
+                    ]}].
 
 -spec responders(kz_proplist()) -> kz_proplist().
 responders(_Props) ->
     [{<<"directory">>, <<"reg_success">>}
-     ,{<<"notification">>, <<"deregister">>}].
+    ,{<<"notification">>, <<"deregister">>}].
 
 -spec handle_event(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_event(EventJObj, _Props) ->
@@ -86,27 +86,27 @@ handle_register(AccountId, EventJObj) ->
 
             Peer = <<"SIP/", Exten/binary>>,
             Payload = [[
-                {<<"Event">>, <<"PeerStatus">>},
-                {<<"Privilege">>, "system,all"},
-                {<<"ChannelType">>, <<"SIP">>},
-                {<<"Peer">>, Peer},
-                {<<"PeerStatus">>, <<"Registered">>},
-                {<<"Address">>, <<Domain/binary, ":", Port1/binary>>}
-            ],[
-                {<<"Event">>, <<"ExtensionStatus">>},
-                {<<"Privilege">>, <<"call,all">>},
-                {<<"Exten">>, Exten},
-                {<<"Context">>, <<"from-internal">>},
-                {<<"Hint">>, <<Peer/binary, ",CustomPresence:", Exten/binary>>},
-                {<<"Status">>, 0}
-            ],[
-                {<<"Event">>, <<"PeerStatus">>},
-                {<<"Privilege">>, "system,all"},
-                {<<"ChannelType">>, <<"SIP">>},
-                {<<"Peer">>, Peer},
-                {<<"PeerStatus">>, <<"Reachable">>},
-                {<<"Time">>, <<"2">>}
-            ]],
+                        {<<"Event">>, <<"PeerStatus">>},
+                        {<<"Privilege">>, "system,all"},
+                        {<<"ChannelType">>, <<"SIP">>},
+                        {<<"Peer">>, Peer},
+                        {<<"PeerStatus">>, <<"Registered">>},
+                        {<<"Address">>, <<Domain/binary, ":", Port1/binary>>}
+                       ],[
+                          {<<"Event">>, <<"ExtensionStatus">>},
+                          {<<"Privilege">>, <<"call,all">>},
+                          {<<"Exten">>, Exten},
+                          {<<"Context">>, <<"from-internal">>},
+                          {<<"Hint">>, <<Peer/binary, ",CustomPresence:", Exten/binary>>},
+                          {<<"Status">>, 0}
+                         ],[
+                            {<<"Event">>, <<"PeerStatus">>},
+                            {<<"Privilege">>, "system,all"},
+                            {<<"ChannelType">>, <<"SIP">>},
+                            {<<"Peer">>, Peer},
+                            {<<"PeerStatus">>, <<"Reachable">>},
+                            {<<"Time">>, <<"2">>}
+                           ]],
             amimulator_event_listener:publish_amqp_event({publish, Payload}, AccountId);
         _ -> 'ok'
     end.
@@ -130,20 +130,20 @@ handle_unregister(AccountId, EventJObj) ->
 
             Peer = <<"SIP/", Exten/binary>>,
             Payload = [[
-                {<<"Event">>, <<"PeerStatus">>},
-                {<<"Privilege">>, "system,all"},
-                {<<"ChannelType">>, <<"SIP">>},
-                {<<"Peer">>, Peer},
-                {<<"PeerStatus">>, <<"Unregistered">>},
-                {<<"Cause">>, <<"Expired">>}
-            ],[
-                {<<"Event">>, <<"ExtensionStatus">>},
-                {<<"Privilege">>, <<"call,all">>},
-                {<<"Exten">>, Exten},
-                {<<"Context">>, <<"from-internal">>},
-                {<<"Hint">>, <<Peer/binary, ",CustomPresence:", Exten/binary>>},
-                {<<"Status">>, 4}
-            ]],
+                        {<<"Event">>, <<"PeerStatus">>},
+                        {<<"Privilege">>, "system,all"},
+                        {<<"ChannelType">>, <<"SIP">>},
+                        {<<"Peer">>, Peer},
+                        {<<"PeerStatus">>, <<"Unregistered">>},
+                        {<<"Cause">>, <<"Expired">>}
+                       ],[
+                          {<<"Event">>, <<"ExtensionStatus">>},
+                          {<<"Privilege">>, <<"call,all">>},
+                          {<<"Exten">>, Exten},
+                          {<<"Context">>, <<"from-internal">>},
+                          {<<"Hint">>, <<Peer/binary, ",CustomPresence:", Exten/binary>>},
+                          {<<"Status">>, 4}
+                         ]],
             amimulator_event_listener:publish_amqp_event({publish, Payload}, AccountId);
         _ ->
             ok

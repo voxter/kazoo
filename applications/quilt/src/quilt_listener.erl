@@ -10,59 +10,59 @@
 -behaviour(gen_listener).
 
 -export([start_link/0
-         ,handle_quilt_event/2
+        ,handle_quilt_event/2
         ]).
 -export([init/1
-    ,handle_call/3
-    ,handle_cast/2
-    ,handle_info/2
-    ,handle_event/2
-    ,terminate/2
-    ,code_change/3
-    ]).
+        ,handle_call/3
+        ,handle_cast/2
+        ,handle_info/2
+        ,handle_event/2
+        ,terminate/2
+        ,code_change/3
+        ]).
 
 -include("quilt.hrl").
 
 -define(BINDINGS, [
-    {'self', []}
-    ,{'acdc_agent', []}
-    ,{'acdc_stats', [
-        {'restrict_to', ['call_stat', 'status_stat']}
-    ]}
-    ,{'call', [
-        %{'restrict_to', [<<"CHANNEL_BRIDGE">>, <<"CHANNEL_DESTROY">>]}
-        {'restrict_to', [<<"CHANNEL_DESTROY">>]}
-    ]}
-]).
+                   {'self', []}
+                  ,{'acdc_agent', []}
+                  ,{'acdc_stats', [
+                                   {'restrict_to', ['call_stat', 'status_stat']}
+                                  ]}
+                  ,{'call', [
+                                                %{'restrict_to', [<<"CHANNEL_BRIDGE">>, <<"CHANNEL_DESTROY">>]}
+                             {'restrict_to', [<<"CHANNEL_DESTROY">>]}
+                            ]}
+                  ]).
 
 -define(RESPONDERS, [{
-    {?MODULE, 'handle_quilt_event'}, [
-        {<<"acdc_call_stat">>, <<"waiting">>}
-        ,{<<"acdc_call_stat">>, <<"abandoned">>}
-        ,{<<"acdc_call_stat">>, <<"missed">>}
-        ,{<<"acdc_call_stat">>, <<"handled">>}
-        ,{<<"acdc_call_stat">>, <<"exited-position">>}
-        ,{<<"acdc_call_stat">>, <<"processed">>}
-        %,{<<"acdc_status_stat">>, <<"wrapup">>}
-        ,{<<"acdc_status_stat">>, <<"logged_in">>}
-        ,{<<"acdc_status_stat">>, <<"logged_out">>}
-        ,{<<"acdc_status_stat">>, <<"paused">>}
-        ,{<<"acdc_status_stat">>, <<"resume">>}
-        %,{<<"agent">>, <<"login_queue">>}
-        %,{<<"agent">>, <<"logout_queue">>}
-        %,{<<"call_event">>, <<"CHANNEL_BRIDGE">>}
-        ,{<<"call_event">>, <<"CHANNEL_DESTROY">>}
-    ]
-}]).
+                       {?MODULE, 'handle_quilt_event'}, [
+                                                         {<<"acdc_call_stat">>, <<"waiting">>}
+                                                        ,{<<"acdc_call_stat">>, <<"abandoned">>}
+                                                        ,{<<"acdc_call_stat">>, <<"missed">>}
+                                                        ,{<<"acdc_call_stat">>, <<"handled">>}
+                                                        ,{<<"acdc_call_stat">>, <<"exited-position">>}
+                                                        ,{<<"acdc_call_stat">>, <<"processed">>}
+                                                %,{<<"acdc_status_stat">>, <<"wrapup">>}
+                                                        ,{<<"acdc_status_stat">>, <<"logged_in">>}
+                                                        ,{<<"acdc_status_stat">>, <<"logged_out">>}
+                                                        ,{<<"acdc_status_stat">>, <<"paused">>}
+                                                        ,{<<"acdc_status_stat">>, <<"resume">>}
+                                                %,{<<"agent">>, <<"login_queue">>}
+                                                %,{<<"agent">>, <<"logout_queue">>}
+                                                %,{<<"call_event">>, <<"CHANNEL_BRIDGE">>}
+                                                        ,{<<"call_event">>, <<"CHANNEL_DESTROY">>}
+                                                        ]
+                     }]).
 
 -type state() :: [].
 
 -spec start_link() -> startlink_ret().
 start_link() ->
     gen_listener:start_link(?MODULE, [
-        {'bindings', ?BINDINGS},
-        {'responders', ?RESPONDERS}
-    ], []).
+                                      {'bindings', ?BINDINGS},
+                                      {'responders', ?RESPONDERS}
+                                     ], []).
 
 -spec handle_quilt_event(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_quilt_event(JObj, _Props) ->

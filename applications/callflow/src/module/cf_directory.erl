@@ -145,10 +145,10 @@ handle(Data, Call) ->
 directory_start(Call, State, CurrUsers) ->
     _ = kapps_call_command:flush_dtmf(Call),
     case play_directory_instructions(Call, search_fields(State)) of
-	{'ok', DTMF} -> collect_digits(Call, State, CurrUsers, DTMF);
-	{'error', _Error} ->
-	    lager:error("failed to collect digits: ~p", [_Error]),
-	    cf_exe:stop(Call)
+        {'ok', DTMF} -> collect_digits(Call, State, CurrUsers, DTMF);
+        {'error', _Error} ->
+            lager:error("failed to collect digits: ~p", [_Error]),
+            cf_exe:stop(Call)
     end.
 
 -spec collect_digits(kapps_call:call(), directory(), directory_users(), binary()) -> 'ok'.
@@ -418,16 +418,16 @@ sort_users(Users, Order) ->
                            'first' ->
                                name_compare(
                                  kz_util:to_list(User1#directory_user.first_name)
-                                 ,kz_util:to_list(User1#directory_user.last_name)
-                                 ,kz_util:to_list(User2#directory_user.first_name)
-                                 ,kz_util:to_list(User2#directory_user.last_name)
+                                           ,kz_util:to_list(User1#directory_user.last_name)
+                                           ,kz_util:to_list(User2#directory_user.first_name)
+                                           ,kz_util:to_list(User2#directory_user.last_name)
                                 );
                            'last' ->
                                name_compare(
                                  kz_util:to_list(User1#directory_user.last_name)
-                                 ,kz_util:to_list(User1#directory_user.first_name)
-                                 ,kz_util:to_list(User2#directory_user.last_name)
-                                 ,kz_util:to_list(User2#directory_user.first_name)
+                                           ,kz_util:to_list(User1#directory_user.first_name)
+                                           ,kz_util:to_list(User2#directory_user.last_name)
+                                           ,kz_util:to_list(User2#directory_user.first_name)
                                 )
                        end
                end, Users).

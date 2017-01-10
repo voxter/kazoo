@@ -169,17 +169,17 @@ try_match_digits(Digits, Menu, Call) ->
 %%--------------------------------------------------------------------
 -spec is_callflow_child(ne_binary(), menu(), kapps_call:call()) -> boolean().
 is_callflow_child(Digits, #cf_menu_data{menu_id=MenuId
-                                        ,name=Name
+                                       ,name=Name
                                        }, Call) ->
     case cf_exe:attempt(Digits, Call) of
         {'attempt_resp', 'ok'} ->
             lager:info("selection is a callflow child"),
             lager:info("ivr options account ~s menu ~s ~s option ~s"
-                       ,[kapps_call:account_id(Call)
-                         ,Name
-                         ,MenuId
-                         ,Digits
-                        ]),
+                      ,[kapps_call:account_id(Call)
+                       ,Name
+                       ,MenuId
+                       ,Digits
+                       ]),
             'true';
         {'attempt_resp', {'error', _}} -> 'false'
     end.
@@ -250,7 +250,7 @@ is_hunt_denied(Digits, #cf_menu_data{hunt_deny=RegEx}, _) ->
 %%--------------------------------------------------------------------
 -spec hunt_for_callflow(ne_binary(), menu(), kapps_call:call()) -> boolean().
 hunt_for_callflow(Digits, #cf_menu_data{menu_id=MenuId
-                                        ,name=Name
+                                       ,name=Name
                                        }=Menu, Call) ->
     AccountId = kapps_call:account_id(Call),
     lager:info("hunting for ~s in account ~s", [Digits, AccountId]),
@@ -258,11 +258,11 @@ hunt_for_callflow(Digits, #cf_menu_data{menu_id=MenuId
         {'ok', Flow, 'false'} ->
             lager:info("callflow hunt succeeded, branching"),
             lager:info("ivr options account ~s menu ~s ~s extension dialed ~s"
-                       ,[kapps_call:account_id(Call)
-                         ,Name
-                         ,MenuId
-                         ,Digits
-                        ]),
+                      ,[kapps_call:account_id(Call)
+                       ,Name
+                       ,MenuId
+                       ,Digits
+                       ]),
             _ = kapps_call_command:flush_dtmf(Call),
             _ = play_transferring_prompt(Menu, Call),
             Props = [{'cf_capture_group', kz_json:get_ne_value(<<"capture_group">>, Flow)}

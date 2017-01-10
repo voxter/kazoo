@@ -2201,14 +2201,14 @@ collect_digits(MaxDigits, Timeout, Interdigit, NoopId, Call) ->
 
 %% When noop id is undefined, do not wait for the noop_complete before applying timeout
 collect_digits(MaxDigits, Timeout, Interdigit, 'undefined', Terminators, Call) ->
-	do_collect_digits(#wcc_collect_digits{max_digits=kz_util:to_integer(MaxDigits)
-                                          ,timeout=kz_util:to_integer(Timeout)
-                                          ,interdigit=kz_util:to_integer(Interdigit)
-                                          ,noop_id='undefined'
-                                          ,terminators=Terminators
-                                          ,call=Call
-                                          ,after_timeout=kz_util:to_integer(Timeout)
-										 });
+    do_collect_digits(#wcc_collect_digits{max_digits=kz_util:to_integer(MaxDigits)
+                                         ,timeout=kz_util:to_integer(Timeout)
+                                         ,interdigit=kz_util:to_integer(Interdigit)
+                                         ,noop_id='undefined'
+                                         ,terminators=Terminators
+                                         ,call=Call
+                                         ,after_timeout=kz_util:to_integer(Timeout)
+                                         });
 collect_digits(MaxDigits, Timeout, Interdigit, NoopId, Terminators, Call) ->
     do_collect_digits(#wcc_collect_digits{max_digits=kz_util:to_integer(MaxDigits)
                                          ,timeout=kz_util:to_integer(Timeout)
@@ -2733,9 +2733,9 @@ wait_for_application_or_dtmf(Application, Timeout) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec wait_for_playback_timeout_or_dtmf(api_binary(), kz_timeout()) ->
-                                            {'error', 'channel_hungup'} | {'ok', binary()}.
+                                               {'error', 'channel_hungup'} | {'ok', binary()}.
 -spec wait_for_playback_timeout_or_dtmf(api_binary(), kz_timeout(), kz_timeout(), binary()) ->
-                                            {'error', 'channel_hungup'} | {'ok', binary()}.
+                                               {'error', 'channel_hungup'} | {'ok', binary()}.
 wait_for_playback_timeout_or_dtmf(NoopId, Timeout) ->
     wait_for_playback_timeout_or_dtmf(NoopId, 300000, Timeout, <<>>).
 
@@ -3043,26 +3043,26 @@ send_display(CallerIdName, CallerIdNumber, Call) ->
     Commands = [kz_json:from_list(
                   props:filter_undefined(
                     [{<<"Application-Name">>, <<"send_display">>}
-                     ,{<<"Call-ID">>, kapps_call:call_id(Call)}
-                     ,{<<"Insert-At">>, <<"now">>}
-                     ,{<<"Caller-ID-Name">>, CallerIdName}
-                     ,{<<"Caller-ID-Number">>, CallerIdNumber}
-                    ]))
-                ,kz_json:from_list(
-                   [{<<"Application-Name">>, <<"set">>}
+                    ,{<<"Call-ID">>, kapps_call:call_id(Call)}
                     ,{<<"Insert-At">>, <<"now">>}
-                    ,{<<"Custom-Channel-Vars">>, kz_json:set_value(<<"Ignore-Display-Updates">>, 'false', kz_json:new())}
-                    ,{<<"Custom-Call-Vars">>, kz_json:new()}
-                   ])
+                    ,{<<"Caller-ID-Name">>, CallerIdName}
+                    ,{<<"Caller-ID-Number">>, CallerIdNumber}
+                    ]))
+               ,kz_json:from_list(
+                  [{<<"Application-Name">>, <<"set">>}
+                  ,{<<"Insert-At">>, <<"now">>}
+                  ,{<<"Custom-Channel-Vars">>, kz_json:set_value(<<"Ignore-Display-Updates">>, 'false', kz_json:new())}
+                  ,{<<"Custom-Call-Vars">>, kz_json:new()}
+                  ])
                ],
     Command = [{<<"Application-Name">>, <<"queue">>}
-               ,{<<"Commands">>, Commands}
+              ,{<<"Commands">>, Commands}
               ],
     send_command(Command, Call).
 
 send_display(CallerIdName, CallerIdNumber, CallId, CtrlQ) ->
     JObj = kz_json:from_list([{<<"Call-ID">>, CallId}
-                              ,{<<"Control-Queue">>, CtrlQ}
+                             ,{<<"Control-Queue">>, CtrlQ}
                              ]),
     Call = kapps_call:from_json(JObj),
     send_display(CallerIdName, CallerIdNumber, Call).

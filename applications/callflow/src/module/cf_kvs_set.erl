@@ -22,7 +22,7 @@
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     Call2 = set_kvs(kz_json:delete_key(<<"kvs_mode">>, Data)
-                    ,set_kvs_mode(kz_json:get_value(<<"kvs_mode">>, Data), Call)
+                   ,set_kvs_mode(kz_json:get_value(<<"kvs_mode">>, Data), Call)
                    ),
     cf_exe:set_call(Call2),
     cf_exe:continue(Call2).
@@ -41,8 +41,8 @@ set_kvs(Data, Call) ->
                         Value = evaluate(kz_json:get_value(Key, Data), Call1),
                         set_kvs_collection(Key, Value, Call1)
                 end
-                ,Call
-                ,kz_json:get_keys(Data)).
+               ,Call
+               ,kz_json:get_keys(Data)).
 
 set_kvs_mode(Mode, Call) -> set_collection(?COLLECTION_MODE, <<"kvs_mode">>, Mode, Call).
 
@@ -55,8 +55,8 @@ evaluate(Key, Call) ->
 
 evaluate2(<<"$", Key/binary>>, Call) ->
     get_kv(Key, Call);
-evaluate2(Value, Call) ->
-    evaluate_ui(Value, Call).
+            evaluate2(Value, Call) ->
+                  evaluate_ui(Value, Call).
 
 -spec digits_key(ne_binary()) -> ne_binary() | {'error', kz_json:object()} | 'false'.
 digits_key(<<"$_digits">>) ->
@@ -75,7 +75,7 @@ digit_evaluation_error(Key) ->
     Msg = "invalid kv lookup key used",
     lager:info(Msg ++ ": ~s", [Key]),
     {'error', kz_json:from_list([{<<"error">>, kz_util:to_binary(Msg)}
-                                 ,{<<"key">>, Key}
+                                ,{<<"key">>, Key}
                                 ])}.
 
 -spec evaluate_ui(kz_json:json_term() | 'undefined', kapps_call:call()) -> kz_json:json_term() | 'undefined'.
@@ -102,16 +102,16 @@ get_collection(Collection, Call) ->
 -spec set_kvs_collection(ne_binary(), ne_binary(), kapps_call:call()) -> kapps_call:call().
 set_kvs_collection(Key, Value, Call) ->
     set_collection(?COLLECTION_KVS, Key, Value, Call).
-    
+
 set_collection(Collection, Key, Value, Call) ->
     Collections = kapps_call:kvs_fetch(?KVS_DB, kz_json:new(), Call),
     OldCollection = get_collection(Collection, Call),
     NewCollection = kz_json:set_value(Key, Value, OldCollection),
     kapps_call:kvs_store(
-    	?KVS_DB,
-        kz_json:set_value(Collection, NewCollection, Collections),
-        Call
-    ).
+      ?KVS_DB,
+      kz_json:set_value(Collection, NewCollection, Collections),
+      Call
+     ).
 
 -spec add_kvs_to_props(kz_proplist(), kapps_call:call()) -> kz_proplist().
 add_kvs_to_props(Props, Call) ->
@@ -119,10 +119,10 @@ add_kvs_to_props(Props, Call) ->
         <<"json">> ->
             Collection = get_kvs_collection(Call),
             Keys = kz_json:get_keys(Collection),
-            
+
             lists:foldl(fun(Key, Props2) ->
-                [{Key, list_to_binary(format_json(kz_json:get_value(Key, Collection)))}] ++ Props2
-                end, Props, Keys);
+                                [{Key, list_to_binary(format_json(kz_json:get_value(Key, Collection)))}] ++ Props2
+                        end, Props, Keys);
         _ ->
             [{<<"Custom-KVS">>, get_kvs_collection(Call)}] ++ Props
     end.
@@ -130,50 +130,50 @@ add_kvs_to_props(Props, Call) ->
 -spec format_json(kz_json:json_term()) -> string().
 format_json(Data) ->
     Proplist = case kz_json:is_json_object(Data) of
-        true ->
-            kz_json:to_proplist(Data);
-        _ ->
-            Data
-    end,
-    
+                   true ->
+                       kz_json:to_proplist(Data);
+                   _ ->
+                       Data
+               end,
+
     format_json_rec(Proplist).
-    
+
 format_json_rec(Proplist) ->
     format_json_rec(Proplist, []).
-    
+
 format_json_rec([{K,V}], []) ->
     "{" ++ format_json_rec({K, V}) ++ "}";
-    
+
 format_json_rec([{K,V}], _) ->
     format_json_rec({K, V}) ++ "}";
-    
+
 format_json_rec([{K,V}=KV|Others], []) ->
     "{" ++ format_json_rec({K, V}) ++ "," ++ format_json_rec(Others, [KV]);
-    
+
 format_json_rec([{K,V}=KV|Others], Done) ->
     format_json_rec({K, V}) ++ "," ++ format_json_rec(Others, [KV] ++ Done);
-    
+
 format_json_rec({K, V}, _) ->
     "\"" ++ binary_to_list(K) ++ "\":" ++ format_json_rec(V, []);
-    
+
 format_json_rec([Prim], []) ->
     "[" ++ format_type(Prim) ++ "]";
-    
+
 format_json_rec([Prim], _) ->
     format_type(Prim) ++ "]";
-    
+
 format_json_rec([Prim|Others], []) ->
     "[" ++ format_type(Prim) ++ "," ++ format_json_rec(Others, [Prim]);
-    
+
 format_json_rec([Prim|Others], _) ->
     format_type(Prim) ++ "," ++ format_json_rec(Others, [Prim]);
 
 format_json_rec(V, _) ->
     "\"" ++ kz_util:to_list(V) ++ "\"".
-    
+
 format_type(Data) when not is_binary(Data) ->
     kz_util:to_list(Data);
-    
+
 format_type(<<Data/binary>>) ->
     "\"" ++ binary_to_list(Data) ++ "\"".
- 
+

@@ -348,9 +348,9 @@ handle_cast({'update_control_queue', JObj}, #state{call=Call}=State) ->
                                   | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                  ]),
     case kapps_util:amqp_pool_request(Req
-                                       ,fun kapi_amimulator:publish_control_queue_req/1
-                                       ,fun kapi_amimulator:control_queue_resp_v/1
-                                      ) of
+                                     ,fun kapi_amimulator:publish_control_queue_req/1
+                                     ,fun kapi_amimulator:control_queue_resp_v/1
+                                     ) of
         {'error', 'timeout'} ->
             lager:debug("timed out acquiring new control queue - this recording will probably be lost"),
             {'noreply', State};

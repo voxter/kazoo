@@ -34,7 +34,7 @@ handle_specific_event({<<"acdc_call_stat">>, <<"waiting">>}, JObj) ->
     EventParams = {<<"">>, CallerIdName},
     lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
     write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
-    
+
 handle_specific_event({<<"acdc_call_stat">>, <<"exited-position">>}, JObj) ->
     {AccountId, CallId, QueueId, QueueName, BridgedChannel} = get_common_props(JObj),
     Call = acdc_stats:find_call(CallId),
@@ -79,11 +79,11 @@ handle_specific_event({<<"acdc_call_stat">>, <<"missed">>}, JObj) ->
     [Missed|Misses] = kz_json:get_value(<<"Misses">>, Call),
     MissedTimestamp = kz_json:get_integer_value(<<"timestamp">>, Missed),
     RingStartTimestamp = case length(Misses) of
-        % Get ring time from start of call
-        0 -> kz_json:get_integer_value(<<"Entered-Timestamp">>, Call);
-        % Ring time is difference of current missed timestamp and last missed timestamp
-        _ -> kz_json:get_integer_value(<<"timestamp">>, hd(Misses))
-    end,
+                                                % Get ring time from start of call
+                             0 -> kz_json:get_integer_value(<<"Entered-Timestamp">>, Call);
+                                                % Ring time is difference of current missed timestamp and last missed timestamp
+                             _ -> kz_json:get_integer_value(<<"timestamp">>, hd(Misses))
+                         end,
     RingTime = integer_to_list( (MissedTimestamp - RingStartTimestamp) * 1000 ),
     EventParams = {RingTime},
     lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
@@ -118,9 +118,9 @@ handle_specific_event({<<"acdc_call_stat">>, <<"processed">>}, JObj) ->
     Call = acdc_stats:find_call(CallId),
     HungUpBy = kz_json:get_value(<<"Hung-Up-By">>, Call),
     EventName = case HungUpBy of
-        <<"member">> -> "COMPLETECALLER"; % COMPLETECALLER(holdtime|calltime|origposition)
-        _ -> "COMPLETEAGENT" % COMPLETECALLER(holdtime|calltime|origposition)
-    end,
+                    <<"member">> -> "COMPLETECALLER"; % COMPLETECALLER(holdtime|calltime|origposition)
+                    _ -> "COMPLETEAGENT" % COMPLETECALLER(holdtime|calltime|origposition)
+                end,
     WaitTime = integer_to_list(kz_json:get_value(<<"Wait-Time">>, Call)),
     TalkTime = integer_to_list(kz_json:get_value(<<"Talk-Time">>, Call)),
     OriginalPos = integer_to_list(kz_json:get_value(<<"Entered-Position">>, Call)),
@@ -147,20 +147,20 @@ handle_specific_event({<<"acdc_status_stat">>, <<"paused">>}, JObj) ->
     {AccountId, CallId, _, _, BridgedChannel} = get_common_props(JObj),
     AgentId = kz_json:get_value(<<"Agent-ID">>, JObj),
     lists:foreach(fun(Q) ->
-        QueueName = lookup_queue_name(AccountId, Q),
-        lager:debug("writing event to queue_log: ~s", [EventName]),
-        write_log(AccountId, CallId, QueueName, BridgedChannel, EventName)
-    end, get_queue_list_by_agent_id(AccountId, AgentId));
+                          QueueName = lookup_queue_name(AccountId, Q),
+                          lager:debug("writing event to queue_log: ~s", [EventName]),
+                          write_log(AccountId, CallId, QueueName, BridgedChannel, EventName)
+                  end, get_queue_list_by_agent_id(AccountId, AgentId));
 
 handle_specific_event({<<"acdc_status_stat">>, <<"resume">>}, JObj) ->
     EventName = "UNPAUSE",
     {AccountId, CallId, _, _, BridgedChannel} = get_common_props(JObj),
     AgentId = kz_json:get_value(<<"Agent-ID">>, JObj),
     lists:foreach(fun(Q) ->
-        QueueName = lookup_queue_name(AccountId, Q),
-        lager:debug("writing event to queue_log: ~s", [EventName]),
-        write_log(AccountId, CallId, QueueName, BridgedChannel, EventName)
-    end, get_queue_list_by_agent_id(AccountId, AgentId));
+                          QueueName = lookup_queue_name(AccountId, Q),
+                          lager:debug("writing event to queue_log: ~s", [EventName]),
+                          write_log(AccountId, CallId, QueueName, BridgedChannel, EventName)
+                  end, get_queue_list_by_agent_id(AccountId, AgentId));
 
 handle_specific_event({<<"acdc_status_stat">>, <<"logged_in">>}, JObj) ->
     EventName = "AGENTLOGIN", % AGENTLOGIN(channel)
@@ -168,11 +168,11 @@ handle_specific_event({<<"acdc_status_stat">>, <<"logged_in">>}, JObj) ->
     AgentId = kz_json:get_value(<<"Agent-ID">>, JObj),
     ChannelName = lookup_agent_name(AccountId, AgentId),
     lists:foreach(fun(Q) -> % Agent will log in to all queues that they are a member of
-        QueueName = lookup_queue_name(AccountId, Q),
-        EventParams = {ChannelName}, 
-        lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
-        write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams)
-    end, get_queue_list_by_agent_id(AccountId, AgentId));
+                          QueueName = lookup_queue_name(AccountId, Q),
+                          EventParams = {ChannelName}, 
+                          lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
+                          write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams)
+                  end, get_queue_list_by_agent_id(AccountId, AgentId));
 
 handle_specific_event({<<"acdc_status_stat">>, <<"logged_out">>}, JObj) ->
     EventName = "AGENTLOGOFF", % AGENTLOGOFF(channel|logintime)
@@ -183,11 +183,11 @@ handle_specific_event({<<"acdc_status_stat">>, <<"logged_out">>}, JObj) ->
     LoginTimestamp = list_to_integer(binary_to_list(get_agent_login_timestamp(AccountId, AgentId, LogoutTimestamp))),
     LoginTime = list_to_binary(integer_to_list(LogoutTimestamp - LoginTimestamp)),
     lists:foreach(fun(Q) -> % Agent will log out of all queues that they are a member of
-        QueueName = lookup_queue_name(AccountId, Q),
-        EventParams = {ChannelName, LoginTime},
-        lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
-        write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams)
-    end, get_queue_list_by_agent_id(AccountId, AgentId));
+                          QueueName = lookup_queue_name(AccountId, Q),
+                          EventParams = {ChannelName, LoginTime},
+                          lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
+                          write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams)
+                  end, get_queue_list_by_agent_id(AccountId, AgentId));
 
 handle_specific_event(Event, _JObj) -> lager:debug("unhandled event: ~p", [Event]).
 
@@ -198,26 +198,26 @@ handle_specific_event(Event, _JObj) -> lager:debug("unhandled event: ~p", [Event
 get_common_props(JObj) ->
     AccountId = kz_json:get_value(<<"Account-ID">>, JObj),
     CallId = case kz_json:get_value(<<"Call-ID">>, JObj) of
-        'undefined' -> kz_json:get_value(<<"Msg-ID">>, JObj);
-        _ -> kz_json:get_value(<<"Call-ID">>, JObj) end,
+                 'undefined' -> kz_json:get_value(<<"Msg-ID">>, JObj);
+                 _ -> kz_json:get_value(<<"Call-ID">>, JObj) end,
     QueueId = case kz_json:get_value(<<"Queue-ID">>, JObj) of
-        'undefined' -> "NONE";
-        _ -> kz_json:get_value(<<"Queue-ID">>, JObj) end,
+                  'undefined' -> "NONE";
+                  _ -> kz_json:get_value(<<"Queue-ID">>, JObj) end,
     QueueName = case QueueId of
-        "NONE" -> "NONE";
-        _ -> lookup_queue_name(AccountId, QueueId) end,
+                    "NONE" -> "NONE";
+                    _ -> lookup_queue_name(AccountId, QueueId) end,
     BridgedChannel = case kz_json:get_value(<<"Agent-ID">>, JObj) of
-        'undefined' -> "NONE";
-        _ -> lookup_agent_name(AccountId, kz_json:get_value(<<"Agent-ID">>, JObj)) end,
+                         'undefined' -> "NONE";
+                         _ -> lookup_agent_name(AccountId, kz_json:get_value(<<"Agent-ID">>, JObj)) end,
     {AccountId, CallId, QueueId, QueueName, BridgedChannel}.
 
 maybe_queue_empty(AccountId, QueueId) ->
     LoggedIn = lists:filter(fun(Agent) -> 
-        case acdc_agent_util:most_recent_status(AccountId, Agent) of
-            {'ok', <<"logged_out">>} -> 'false';
-            _ -> 'true'
-        end
-    end, acdc_util:agents_in_queue(kz_util:format_account_id(AccountId, 'encoded'), QueueId)),
+                                    case acdc_agent_util:most_recent_status(AccountId, Agent) of
+                                        {'ok', <<"logged_out">>} -> 'false';
+                                        _ -> 'true'
+                                    end
+                            end, acdc_util:agents_in_queue(kz_util:format_account_id(AccountId, 'encoded'), QueueId)),
     case length(LoggedIn) of
         0 -> 'true';
         _ -> 'false'
@@ -225,11 +225,11 @@ maybe_queue_empty(AccountId, QueueId) ->
 
 get_agent_login_timestamp(AccountId, AgentId, Default) ->
     Request = props:filter_undefined(
-        [{<<"Account-ID">>, AccountId}
-         ,{<<"Agent-ID">>, AgentId}
-         ,{<<"Status">>, <<"logged_in">>}
-         | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-        ]),
+                [{<<"Account-ID">>, AccountId}
+                ,{<<"Agent-ID">>, AgentId}
+                ,{<<"Status">>, <<"logged_in">>}
+                 | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+                ]),
     case kapps_util:amqp_pool_request(Request, fun kapi_acdc_stats:publish_status_req/1, fun kapi_acdc_stats:status_resp_v/1) of
         {'ok', Result} ->
             lager:debug("got agent logged in status response: ~p", [Result]),
@@ -245,10 +245,10 @@ get_queue_list_by_agent_id(AccountId, AgentId) ->
     {'ok', Result} = kz_datamgr:get_results(kz_util:format_account_id(AccountId, 'encoded'), <<"agents/crossbar_listing">>, [{'key', AgentId}]),
     kz_json:get_value([<<"value">>, <<"queues">>], hd(Result)).
 
-% lookup_agent_name(AccountId, AgentId) ->
-%     AccountDb = kz_util:format_account_id(AccountId, encoded),
-%     {ok, Result} = kz_datamgr:open_doc(AccountDb, AgentId),
-%     <<"Local/", (kz_json:get_value(<<"username">>, Result))/binary, "@from-queue/n">>.
+                                                % lookup_agent_name(AccountId, AgentId) ->
+                                                %     AccountDb = kz_util:format_account_id(AccountId, encoded),
+                                                %     {ok, Result} = kz_datamgr:open_doc(AccountDb, AgentId),
+                                                %     <<"Local/", (kz_json:get_value(<<"username">>, Result))/binary, "@from-queue/n">>.
 
 lookup_agent_name(AccountId, AgentId) ->
     AccountDb = kz_util:format_account_id(AccountId, 'encoded'),

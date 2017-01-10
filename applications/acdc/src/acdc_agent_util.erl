@@ -131,23 +131,23 @@ most_recent_statuses(AccountId, Options) when is_list(Options) ->
 
 most_recent_statuses(AccountId, AgentId, Options) ->
     ETS = kz_util:spawn_monitor(fun async_most_recent_ets_statuses/4, [AccountId, AgentId, Options, self()]),
-    %DB = maybe_start_db_lookup('async_most_recent_db_statuses'
-    %                          ,fun async_most_recent_db_statuses/4
-    %                          ,AccountId, AgentId, Options, self()
-    %                          ),
+                                                %DB = maybe_start_db_lookup('async_most_recent_db_statuses'
+                                                %                          ,fun async_most_recent_db_statuses/4
+                                                %                          ,AccountId, AgentId, Options, self()
+                                                %                          ),
 
     maybe_reduce_statuses(AgentId, receive_statuses([ETS])).
 
-%-spec maybe_start_db_lookup(atom(), fun(), ne_binary(), api_binary(), list(), pid()) ->
-%                                   pid_ref() | 'undefined'.
-%maybe_start_db_lookup(F, Fun, AccountId, AgentId, Options, Self) ->
-%    case kz_cache:fetch_local(?CACHE_NAME, db_fetch_key(F, AccountId, AgentId)) of
-%        {'ok', _} -> 'undefined';
-%        {'error', 'not_found'} ->
-%            kz_util:spawn_monitor(Fun, [AccountId, AgentId, Options, Self])
-%    end.
-%
-%db_fetch_key(F, AccountId, AgentId) -> {F, AccountId, AgentId}.
+                                                %-spec maybe_start_db_lookup(atom(), fun(), ne_binary(), api_binary(), list(), pid()) ->
+                                                %                                   pid_ref() | 'undefined'.
+                                                %maybe_start_db_lookup(F, Fun, AccountId, AgentId, Options, Self) ->
+                                                %    case kz_cache:fetch_local(?CACHE_NAME, db_fetch_key(F, AccountId, AgentId)) of
+                                                %        {'ok', _} -> 'undefined';
+                                                %        {'error', 'not_found'} ->
+                                                %            kz_util:spawn_monitor(Fun, [AccountId, AgentId, Options, Self])
+                                                %    end.
+                                                %
+                                                %db_fetch_key(F, AccountId, AgentId) -> {F, AccountId, AgentId}.
 
 -spec maybe_reduce_statuses(api_binary(), kz_json:object()) ->
                                    {'ok', kz_json:object()}.
@@ -177,8 +177,8 @@ reduce_agent_statuses(_, Data, {T, _}=Acc) ->
 receive_statuses(Reqs) -> receive_statuses(Reqs, kz_json:new()).
 
 receive_statuses([], AccJObj) -> AccJObj;
-% receive_statuses(['undefined' | Reqs], AccJObj) ->
-%     receive_statuses(Reqs, AccJObj);
+                                                % receive_statuses(['undefined' | Reqs], AccJObj) ->
+                                                %     receive_statuses(Reqs, AccJObj);
 receive_statuses([{Pid, Ref} | Reqs], AccJObj) ->
     receive
         {'statuses', Statuses, Pid} ->
@@ -214,17 +214,17 @@ async_most_recent_ets_statuses(AccountId, AgentId, Options, Pid) ->
     end.
 
 %% @private
-%-spec async_most_recent_db_statuses(ne_binary(), api_binary(), kz_proplist(), pid()) -> 'ok'.
-%async_most_recent_db_statuses(AccountId, AgentId, Options, Pid) ->
-%    case most_recent_db_statuses(AccountId, AgentId, Options) of
-%        {'ok', Statuses} ->
-%            Pid ! {'statuses', Statuses, self()},
-%            kz_cache:store_local(?CACHE_NAME, db_fetch_key('async_most_recent_db_statuses', AccountId, AgentId), 'true'),
-%            'ok';
-%        {'error', _E} ->
-%            Pid ! {'statuses', kz_json:new(), self()},
-%            'ok'
-%    end.
+                                                %-spec async_most_recent_db_statuses(ne_binary(), api_binary(), kz_proplist(), pid()) -> 'ok'.
+                                                %async_most_recent_db_statuses(AccountId, AgentId, Options, Pid) ->
+                                                %    case most_recent_db_statuses(AccountId, AgentId, Options) of
+                                                %        {'ok', Statuses} ->
+                                                %            Pid ! {'statuses', Statuses, self()},
+                                                %            kz_cache:store_local(?CACHE_NAME, db_fetch_key('async_most_recent_db_statuses', AccountId, AgentId), 'true'),
+                                                %            'ok';
+                                                %        {'error', _E} ->
+                                                %            Pid ! {'statuses', kz_json:new(), self()},
+                                                %            'ok'
+                                                %    end.
 
 -spec most_recent_ets_statuses(ne_binary()) ->
                                       statuses_return() |

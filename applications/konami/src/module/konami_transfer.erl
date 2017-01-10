@@ -112,11 +112,11 @@ handle(Data, Call) ->
     add_transferor_bindings(Transferor),
     add_transferee_bindings(Transferee),
 
-    %?WSD_START(),
+                                                %?WSD_START(),
 
-    %?WSD_TITLE(["Transferee: ", Transferee, " and Transferor: ", Transferor]),
+                                                %?WSD_TITLE(["Transferee: ", Transferee, " and Transferor: ", Transferor]),
 
-    %?WSD_EVT(Transferor, Transferee, <<"bridged">>),
+                                                %?WSD_EVT(Transferor, Transferee, <<"bridged">>),
 
     lager:info("unbridge transferee ~s and transferor ~s", [Transferee, Transferor]),
     unbridge(Call),

@@ -16,7 +16,7 @@ start_link() ->
 
 -spec close_listen_socket() -> 'ok'.
 close_listen_socket() ->
-	gen_server:cast(?MODULE, 'close_listen_socket').
+    gen_server:cast(?MODULE, 'close_listen_socket').
 
 %%
 %% gen_server callbacks
@@ -38,13 +38,13 @@ handle_call(_Request, _From, State) ->
 
 -spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast('start_listeners', #state{listen_socket=ListenSocket}=State) ->
-	amimulator_supersup:start_listener_sup(),
-	amimulator_sup:start_listeners(ListenSocket),
-	{'noreply', State};
+    amimulator_supersup:start_listener_sup(),
+    amimulator_sup:start_listeners(ListenSocket),
+    {'noreply', State};
 handle_cast('close_listen_socket', #state{listen_socket=ListenSocket}=State) ->
-	gen_tcp:close(ListenSocket),
-	lager:debug("listen socket was closed"),
-	{'noreply', State};
+    gen_tcp:close(ListenSocket),
+    lager:debug("listen socket was closed"),
+    {'noreply', State};
 handle_cast(_Request, State) ->
     {'noreply', State}.
 

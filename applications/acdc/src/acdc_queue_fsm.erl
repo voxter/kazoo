@@ -329,7 +329,7 @@ connect_req({'member_call_cancel', JObj}, #state{queue_proc=Srv
                                                 }=State) ->
     CallId = kapps_call:call_id(Call),
     case kz_json:get_value(<<"Reason">>, JObj) =:= <<"dtmf_exit">> andalso
-            kz_json:get_value(<<"Call-ID">>, JObj) =:= CallId of
+        kz_json:get_value(<<"Call-ID">>, JObj) =:= CallId of
         'true' ->
             lager:debug("member pressed the exit key (~s)", [DTMF]),
 
@@ -478,7 +478,7 @@ connecting({'member_call_cancel', JObj}, #state{queue_proc=Srv
                                                }=State) ->
     CallId = kapps_call:call_id(Call),
     case kz_json:get_value(<<"Reason">>, JObj) =:= <<"dtmf_exit">> andalso
-            kz_json:get_value(<<"Call-ID">>, JObj) =:= CallId of
+        kz_json:get_value(<<"Call-ID">>, JObj) =:= CallId of
         'true' ->
             lager:debug("member pressed the exit key (~s)", [DTMF]),
 
@@ -948,7 +948,7 @@ maybe_delay_connect_re_req(MgrSrv, ListenerSrv, #state{member_call=Call}=State) 
 -spec accept_is_for_call(kz_json:object(), kapps_call:call()) -> boolean().
 accept_is_for_call(AcceptJObj, Call) ->
     (kz_json:get_value(<<"Call-ID">>, AcceptJObj) =:= kapps_call:call_id(Call)) or
-        (kz_json:get_value(<<"Old-Call-ID">>, AcceptJObj) =:= kapps_call:call_id(Call)).
+                                                                                  (kz_json:get_value(<<"Old-Call-ID">>, AcceptJObj) =:= kapps_call:call_id(Call)).
 
 -spec update_agent(kz_json:object(), kz_json:object()) -> kz_json:object().
 update_agent(Agent, Winner) ->

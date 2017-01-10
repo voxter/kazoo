@@ -43,134 +43,134 @@
 from_json(JObjs) when is_list(JObjs) ->
     lists:foldl(
       fun(JObj, Calls) ->
-        [from_json(JObj) | Calls]
+              [from_json(JObj) | Calls]
       end
-      ,[]
-      ,JObjs);
+               ,[]
+               ,JObjs);
 from_json(JObj) ->
     Call = #call{call_id = kz_json:get_first_defined([<<"uuid">>, <<"Call-ID">>], JObj)
-                 ,other_leg_call_id = kz_json:get_first_defined([<<"other_leg">>, <<"Other-Leg-Call-ID">>], JObj)
-                 ,account_id = kz_json:get_first_defined([<<"account_id">>, [<<"Custom-Channel-Vars">>, <<"Account-ID">>]], JObj)
-                 ,authorizing_id = kz_json:get_first_defined([<<"authorizing_id">>, [<<"Custom-Channel-Vars">>, <<"Authorizing-ID">>]], JObj)
-                 ,authorizing_type = kz_json:get_first_defined([<<"authorizing_type">>, <<"Authorizing-Type">>], JObj)
-                 ,custom_channel_vars = kz_json:get_value(<<"Custom-Channel-Vars">>, JObj, kz_json:new())
-                 ,control_q = kz_json:get_value(<<"Control-Queue">>, JObj)
-                 ,acdc_queue_id = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], JObj)
-                 ,agent_id = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Agent-ID">>], JObj)
-                 %,conference_id
-                 ,username = kz_json:get_first_defined([<<"username">>, <<"Username">>], JObj)
-                 ,to = case binary:split(kz_json:get_first_defined([<<"destination">>, <<"To">>], JObj, <<"@">>), <<"@">>) of
-                           [ToUser, ToRealm] -> <<ToUser/binary, "@", ToRealm/binary>>;
-                           [ToUser] -> <<ToUser/binary, "@">>
-                       end
-                 ,from = case kz_json:get_value(<<"From">>, JObj) of
-                             'undefined' ->
-                                 case kz_json:get_first_defined([<<"direction">>, <<"Call-Direction">>], JObj) of
-                                     <<"inbound">> ->
+                ,other_leg_call_id = kz_json:get_first_defined([<<"other_leg">>, <<"Other-Leg-Call-ID">>], JObj)
+                ,account_id = kz_json:get_first_defined([<<"account_id">>, [<<"Custom-Channel-Vars">>, <<"Account-ID">>]], JObj)
+                ,authorizing_id = kz_json:get_first_defined([<<"authorizing_id">>, [<<"Custom-Channel-Vars">>, <<"Authorizing-ID">>]], JObj)
+                ,authorizing_type = kz_json:get_first_defined([<<"authorizing_type">>, <<"Authorizing-Type">>], JObj)
+                ,custom_channel_vars = kz_json:get_value(<<"Custom-Channel-Vars">>, JObj, kz_json:new())
+                ,control_q = kz_json:get_value(<<"Control-Queue">>, JObj)
+                ,acdc_queue_id = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Queue-ID">>], JObj)
+                ,agent_id = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Agent-ID">>], JObj)
+                                                %,conference_id
+                ,username = kz_json:get_first_defined([<<"username">>, <<"Username">>], JObj)
+                ,to = case binary:split(kz_json:get_first_defined([<<"destination">>, <<"To">>], JObj, <<"@">>), <<"@">>) of
+                          [ToUser, ToRealm] -> <<ToUser/binary, "@", ToRealm/binary>>;
+                          [ToUser] -> <<ToUser/binary, "@">>
+                      end
+                ,from = case kz_json:get_value(<<"From">>, JObj) of
+                            'undefined' ->
+                                case kz_json:get_first_defined([<<"direction">>, <<"Call-Direction">>], JObj) of
+                                    <<"inbound">> ->
                                         case kz_json:get_first_defined([<<"Caller-ID-Number">>, <<"caller_id">>], JObj) of
                                             'undefined' ->
                                                 lager:debug("JObj ~p", [JObj]),
                                                 <<"@">>;
                                             CallerIdNumber -> <<CallerIdNumber/binary, "@">>
                                         end;
-                                     <<"outbound">> -> <<"@">>
-                                 end;
-                             From -> From
-                         end
-                 ,direction = kz_json:get_first_defined([<<"direction">>, <<"Call-Direction">>], JObj)
-                 ,answered = kz_json:is_true(<<"answered">>, JObj, 'undefined')
-                 ,timestamp = case kz_json:get_integer_value(<<"timestamp">>, JObj) of
-                                  'undefined' ->
-                                      Sec = kz_json:get_first_defined([<<"elapsed_s">>, <<"Duration-Seconds">>], JObj, 0),
-                                      kz_util:current_tstamp() - Sec;
-                                  Timestamp -> Timestamp
-                              end
-                 ,caller_id_name = kz_json:get_first_defined([<<"Caller-ID-Name">>, <<"caller_id">>], JObj, kz_util:anonymous_caller_id_name())
-                 ,caller_id_number = kz_json:get_first_defined([<<"Caller-ID-Number">>, <<"caller_id">>], JObj, kz_util:anonymous_caller_id_number())
+                                    <<"outbound">> -> <<"@">>
+                                end;
+                            From -> From
+                        end
+                ,direction = kz_json:get_first_defined([<<"direction">>, <<"Call-Direction">>], JObj)
+                ,answered = kz_json:is_true(<<"answered">>, JObj, 'undefined')
+                ,timestamp = case kz_json:get_integer_value(<<"timestamp">>, JObj) of
+                                 'undefined' ->
+                                     Sec = kz_json:get_first_defined([<<"elapsed_s">>, <<"Duration-Seconds">>], JObj, 0),
+                                     kz_util:current_tstamp() - Sec;
+                                 Timestamp -> Timestamp
+                             end
+                ,caller_id_name = kz_json:get_first_defined([<<"Caller-ID-Name">>, <<"caller_id">>], JObj, kz_util:anonymous_caller_id_name())
+                ,caller_id_number = kz_json:get_first_defined([<<"Caller-ID-Number">>, <<"caller_id">>], JObj, kz_util:anonymous_caller_id_number())
 
-                 ,callee_id_name = case kz_json:get_value(<<"Callee-ID-Name">>, JObj) of
-                    'undefined' ->
-                       case binary:split(kz_json:get_first_defined([<<"destination">>, <<"To">>], JObj, <<"@">>), <<"@">>) of
-                           [ToUser, _] -> ToUser;
-                           [ToUser] -> ToUser
-                       end;
-                    CalleeIdName -> CalleeIdName
-                  end
-                 ,callee_id_number = case kz_json:get_value(<<"Callee-ID-Number">>, JObj) of
-                    'undefined' ->
-                       case binary:split(kz_json:get_first_defined([<<"destination">>, <<"To">>], JObj, <<"@">>), <<"@">>) of
-                           [ToUser, _] -> ToUser;
-                           [ToUser] -> ToUser
-                       end;
-                    CalleeIdName -> CalleeIdName
-                  end
+                ,callee_id_name = case kz_json:get_value(<<"Callee-ID-Name">>, JObj) of
+                                      'undefined' ->
+                                          case binary:split(kz_json:get_first_defined([<<"destination">>, <<"To">>], JObj, <<"@">>), <<"@">>) of
+                                              [ToUser, _] -> ToUser;
+                                              [ToUser] -> ToUser
+                                          end;
+                                      CalleeIdName -> CalleeIdName
+                                  end
+                ,callee_id_number = case kz_json:get_value(<<"Callee-ID-Number">>, JObj) of
+                                        'undefined' ->
+                                            case binary:split(kz_json:get_first_defined([<<"destination">>, <<"To">>], JObj, <<"@">>), <<"@">>) of
+                                                [ToUser, _] -> ToUser;
+                                                [ToUser] -> ToUser
+                                            end;
+                                        CalleeIdName -> CalleeIdName
+                                    end
                 },
     update_post_create(Call).
 
 -spec to_kapps_call(call()) -> kapps_call:call().
 to_kapps_call(#call{call_id=CallId
-                     ,other_leg_call_id=OtherLegCallId
-                     ,account_id=AccountId
-                     ,authorizing_id=AuthorizingId
-                     ,authorizing_type=AuthorizingType
-                     ,custom_channel_vars=CCVs
-                     ,control_q=ControlQueue
-                     ,to=To
-                     ,from=From
-                     ,caller_id_name=CIDName
-                     ,caller_id_number=CIDNumber
-                     ,callee_id_name=CalleeIdName
-                     ,callee_id_number=CalleeIdNumber
-                    }) ->
+                   ,other_leg_call_id=OtherLegCallId
+                   ,account_id=AccountId
+                   ,authorizing_id=AuthorizingId
+                   ,authorizing_type=AuthorizingType
+                   ,custom_channel_vars=CCVs
+                   ,control_q=ControlQueue
+                   ,to=To
+                   ,from=From
+                   ,caller_id_name=CIDName
+                   ,caller_id_number=CIDNumber
+                   ,callee_id_name=CalleeIdName
+                   ,callee_id_number=CalleeIdNumber
+                   }) ->
     Setters = [fun(Call) -> kapps_call:set_call_id(CallId, Call) end
-               ,fun(Call) -> kapps_call:set_other_leg_call_id(OtherLegCallId, Call) end
-               ,fun(Call) -> kapps_call:set_account_id(AccountId, Call) end
-               ,fun(Call) ->
-                    case AuthorizingId of
-                        'undefined' -> Call;
-                        _ -> kapps_call:set_authorizing_id(AuthorizingId, Call) end
-                    end
-               ,fun(Call) ->
-                    case AuthorizingType of
-                        'undefined' -> Call;
-                        _ -> kapps_call:set_authorizing_type(AuthorizingType, Call)
-                    end
-                end
-               ,fun(Call) -> kapps_call:set_custom_channel_vars(kz_json:to_proplist(CCVs), Call) end
-               ,fun(Call) ->
-                    case ControlQueue of
-                        'undefined' -> Call;
-                        _ -> kapps_call:set_control_queue(ControlQueue, Call)
-                    end
-                end
-               ,fun(Call) -> kapps_call:set_to(To, Call) end
-               ,fun(Call) ->
-                    case binary:split(From, <<"@">>) of
-                        [_ToUser, _ToRealm] ->
-                            kapps_call:set_from(From, Call);
-                        [_ToUser] ->
-                            kapps_call:set_from(<<From/binary, "@">>, Call)
-                    end
-                end
-               ,fun(Call) ->
-                    case CIDName of
-                        'undefined' -> Call;
-                        _ -> kapps_call:set_caller_id_name(CIDName, Call)
-                    end
-                end
-               ,fun(Call) -> kapps_call:set_caller_id_number(CIDNumber, Call) end
-               ,fun(Call) ->
-                    case CalleeIdName of
-                        'undefined' -> Call;
-                        _ -> kapps_call:set_callee_id_name(CalleeIdName, Call)
-                    end
-                end
-               ,fun(Call) ->
-                    case CalleeIdNumber of
-                        'undefined' -> Call;
-                        _ -> kapps_call:set_callee_id_number(CalleeIdNumber, Call)
-                    end
-                end
+              ,fun(Call) -> kapps_call:set_other_leg_call_id(OtherLegCallId, Call) end
+              ,fun(Call) -> kapps_call:set_account_id(AccountId, Call) end
+              ,fun(Call) ->
+                       case AuthorizingId of
+                           'undefined' -> Call;
+                           _ -> kapps_call:set_authorizing_id(AuthorizingId, Call) end
+               end
+              ,fun(Call) ->
+                       case AuthorizingType of
+                           'undefined' -> Call;
+                           _ -> kapps_call:set_authorizing_type(AuthorizingType, Call)
+                       end
+               end
+              ,fun(Call) -> kapps_call:set_custom_channel_vars(kz_json:to_proplist(CCVs), Call) end
+              ,fun(Call) ->
+                       case ControlQueue of
+                           'undefined' -> Call;
+                           _ -> kapps_call:set_control_queue(ControlQueue, Call)
+                       end
+               end
+              ,fun(Call) -> kapps_call:set_to(To, Call) end
+              ,fun(Call) ->
+                       case binary:split(From, <<"@">>) of
+                           [_ToUser, _ToRealm] ->
+                               kapps_call:set_from(From, Call);
+                           [_ToUser] ->
+                               kapps_call:set_from(<<From/binary, "@">>, Call)
+                       end
+               end
+              ,fun(Call) ->
+                       case CIDName of
+                           'undefined' -> Call;
+                           _ -> kapps_call:set_caller_id_name(CIDName, Call)
+                       end
+               end
+              ,fun(Call) -> kapps_call:set_caller_id_number(CIDNumber, Call) end
+              ,fun(Call) ->
+                       case CalleeIdName of
+                           'undefined' -> Call;
+                           _ -> kapps_call:set_callee_id_name(CalleeIdName, Call)
+                       end
+               end
+              ,fun(Call) ->
+                       case CalleeIdNumber of
+                           'undefined' -> Call;
+                           _ -> kapps_call:set_callee_id_number(CalleeIdNumber, Call)
+                       end
+               end
               ],
     lists:foldl(fun(Setter, Call) -> Setter(Call) end, kapps_call:new(), Setters).
 
@@ -179,21 +179,21 @@ update_from_other('undefined', Call) ->
     Call;
 update_from_other(OtherCall, #call{direction=Direction}=Call) ->
     Updaters = [fun(Call2) -> set_other_leg_call_id(call_id(OtherCall), Call2) end
-                ,fun(Call2) -> set_other_channel(channel(OtherCall), Call2) end
+               ,fun(Call2) -> set_other_channel(channel(OtherCall), Call2) end
                ],
     case {ccv(<<"Flip-Direction-On-Bridge">>, OtherCall), ccv(<<"Device-QuickCall">>, OtherCall)} of
         {<<"true">>, _} ->
             set_other_channel(channel(OtherCall), Call);
         {_, <<"true">>} ->
             Updaters2 = [fun(Call2) -> set_caller_id_name(callee_id_name(OtherCall), Call2) end
-                         ,fun(Call2) -> set_caller_id_number(callee_id_number(OtherCall), Call2) end
-                         ,fun(Call2) -> set_other_channel(channel(OtherCall), Call2) end
+                        ,fun(Call2) -> set_caller_id_number(callee_id_number(OtherCall), Call2) end
+                        ,fun(Call2) -> set_other_channel(channel(OtherCall), Call2) end
                         ],
             lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters2);
         _ ->
             directional_update_from_other(Direction
-                                          ,OtherCall
-                                          ,lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters))
+                                         ,OtherCall
+                                         ,lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters))
     end.
 
 -spec call_id(call()) -> api_binary().
@@ -268,32 +268,32 @@ delete_ccv(Key, #call{custom_channel_vars=CCVs}=Call) ->
 
 -spec control_queue(call()) -> api_binary().
 control_queue(#call{call_id=CallId
-                    ,control_q='undefined'
+                   ,control_q='undefined'
                    }) ->
     Req = props:filter_undefined([{<<"Call-ID">>, CallId}
                                   | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                  ]),
     ReqResp = kapps_util:amqp_pool_request(Req
-                                            ,fun kapi_amimulator:publish_control_queue_req/1
-                                            ,fun kapi_amimulator:control_queue_resp_v/1
-                                           ),
+                                          ,fun kapi_amimulator:publish_control_queue_req/1
+                                          ,fun kapi_amimulator:control_queue_resp_v/1
+                                          ),
     case ReqResp of
         {'error', 'timeout'} ->
             'undefined';
-            % case kapps_call:other_leg_call_id(WhappsCall) of
-            %     'undefined' ->
-            %         {'error', 'not_found'};
-            %     OtherCallId ->
-            %         ReqResp2 = kapps_util:amqp_pool_request(props:set_value(<<"Call-ID">>, OtherCallId, Req)
-            %                                                  ,fun kapi_amimulator:publish_control_queue_req/1
-            %                                                  ,fun kapi_amimulator:control_queue_resp_v/1
-            %                                                 ),
-            %         case ReqResp2 of
-            %             {'error', _E}=Error -> Error;
-            %             {'ok', Resp} ->
-            %                 {'ok', Resp}
-            %         end
-            % end;
+                                                % case kapps_call:other_leg_call_id(WhappsCall) of
+                                                %     'undefined' ->
+                                                %         {'error', 'not_found'};
+                                                %     OtherCallId ->
+                                                %         ReqResp2 = kapps_util:amqp_pool_request(props:set_value(<<"Call-ID">>, OtherCallId, Req)
+                                                %                                                  ,fun kapi_amimulator:publish_control_queue_req/1
+                                                %                                                  ,fun kapi_amimulator:control_queue_resp_v/1
+                                                %                                                 ),
+                                                %         case ReqResp2 of
+                                                %             {'error', _E}=Error -> Error;
+                                                %             {'ok', Resp} ->
+                                                %                 {'ok', Resp}
+                                                %         end
+                                                % end;
         {'error', E} ->
             lager:debug("could not fetch control queue for ~p (~p)", [CallId, E]),
             'undefined';
@@ -337,42 +337,42 @@ from_user(#call{from=From}) ->
 
 -spec id_name(call()) -> api_binary().
 id_name(#call{direction = <<"inbound">>
-              ,caller_id_name=CIDName
+             ,caller_id_name=CIDName
              }) ->
     CIDName;
 id_name(#call{direction = <<"outbound">>
-              ,callee_id_name=CIDName
+             ,callee_id_name=CIDName
              }) ->
     CIDName.
 
 -spec id_number(call()) -> api_binary().
 id_number(#call{direction = <<"inbound">>
-                ,caller_id_number=CIDNumber
+               ,caller_id_number=CIDNumber
                }) ->
     CIDNumber;
 id_number(#call{direction = <<"outbound">>
-                ,callee_id_number=CIDNumber
+               ,callee_id_number=CIDNumber
                }) ->
     CIDNumber.
 
 -spec other_id_name(call()) -> api_binary().
 other_id_name(#call{direction = <<"inbound">>
-              ,callee_id_name=CIDName
-             }) ->
+                   ,callee_id_name=CIDName
+                   }) ->
     CIDName;
 other_id_name(#call{direction = <<"outbound">>
-              ,caller_id_name=CIDName
-             }) ->
+                   ,caller_id_name=CIDName
+                   }) ->
     CIDName.
 
 -spec other_id_number(call()) -> api_binary().
 other_id_number(#call{direction = <<"inbound">>
-                ,callee_id_number=CIDNumber
-               }) ->
+                     ,callee_id_number=CIDNumber
+                     }) ->
     CIDNumber;
 other_id_number(#call{direction = <<"outbound">>
-                ,caller_id_number=CIDNumber
-               }) ->
+                     ,caller_id_number=CIDNumber
+                     }) ->
     CIDNumber.
 
 -spec direction(call()) -> api_binary().
@@ -447,31 +447,31 @@ user(Call) ->
 -spec update_post_create(call()) -> call().
 update_post_create(Call) ->
     Updaters = [fun unset_other_leg_self/1
-                ,fun set_quickcall_ccv/1
-                ,fun unset_offnet_authorizing_id/1
-                ,fun set_id/1
-                ,fun set_other_id/1
-                ,fun set_channel/1
+               ,fun set_quickcall_ccv/1
+               ,fun unset_offnet_authorizing_id/1
+               ,fun set_id/1
+               ,fun set_other_id/1
+               ,fun set_channel/1
                ],
     lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters).
 
 -spec directional_update_from_other(api_binary(), call(), call()) -> call().
 directional_update_from_other(<<"inbound">>, OtherCall, Call) ->
     Updaters = [fun(Call2) -> set_callee_id_name(callee_id_name(OtherCall), Call2) end
-                ,fun(Call2) -> set_callee_id_number(callee_id_number(OtherCall), Call2) end
-                ,fun(Call2) -> set_other_channel(channel(OtherCall), Call2) end
+               ,fun(Call2) -> set_callee_id_number(callee_id_number(OtherCall), Call2) end
+               ,fun(Call2) -> set_other_channel(channel(OtherCall), Call2) end
                ],
     lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters);
 directional_update_from_other(<<"outbound">>, OtherCall, Call) ->
     Updaters = [fun(Call2) -> set_caller_id_name(caller_id_name(OtherCall), Call2) end
-                ,fun(Call2) -> set_caller_id_number(caller_id_number(OtherCall), Call2) end
-                ,fun(Call2) -> set_other_channel(channel(OtherCall), Call2) end
+               ,fun(Call2) -> set_caller_id_number(caller_id_number(OtherCall), Call2) end
+               ,fun(Call2) -> set_other_channel(channel(OtherCall), Call2) end
                ],
     lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters).
 
 -spec unset_other_leg_self(call()) -> call().
 unset_other_leg_self(#call{call_id=CallId
-                           ,other_leg_call_id=CallId
+                          ,other_leg_call_id=CallId
                           }=Call) ->
     Call#call{other_leg_call_id='undefined'};
 unset_other_leg_self(Call) ->
@@ -491,7 +491,7 @@ unset_offnet_authorizing_id(#call{custom_channel_vars=CCVs}=Call) ->
     case kz_json:get_value(<<"E164-Destination">>, CCVs) of
         'undefined' -> Call;
         _ -> Call#call{authorizing_id='undefined'
-                       ,custom_channel_vars=kz_json:delete_key(<<"Authorizing-ID">>, CCVs)
+                      ,custom_channel_vars=kz_json:delete_key(<<"Authorizing-ID">>, CCVs)
                       }
     end.
 
@@ -499,21 +499,21 @@ unset_offnet_authorizing_id(#call{custom_channel_vars=CCVs}=Call) ->
 -spec set_id(api_binary(), {api_binary(), api_binary()} | 'undefined', call()) -> call().
 set_id(#call{direction=Direction}=Call) ->
     CallerId = case endpoint(Call) of
-        'undefined' -> 'undefined';
-        Endpoint -> endpoint_caller_id(Endpoint, Call)
-    end,
+                   'undefined' -> 'undefined';
+                   Endpoint -> endpoint_caller_id(Endpoint, Call)
+               end,
     set_id(Direction, CallerId, Call).
 
 set_id(_, 'undefined', Call) ->
     Call;
 set_id(<<"inbound">>, {Name, Number}, Call) ->
     Updaters = [fun(Call2) -> set_caller_id_name(Name, Call2) end
-                ,fun(Call2) -> set_caller_id_number(Number, Call2) end
+               ,fun(Call2) -> set_caller_id_number(Number, Call2) end
                ],
     lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters);
 set_id(<<"outbound">>, {Name, Number}, Call) ->
     Updaters = [fun(Call2) -> set_callee_id_name(Name, Call2) end
-                ,fun(Call2) -> set_callee_id_number(Number, Call2) end
+               ,fun(Call2) -> set_callee_id_number(Number, Call2) end
                ],
     lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters).
 
@@ -523,19 +523,19 @@ set_other_id(#call{direction=Direction}=Call) ->
     set_other_id(Direction, Call).
 
 set_other_id(<<"inbound">>, #call{callee_id_name=CIDName
-                                  ,callee_id_number=CIDNumber
+                                 ,callee_id_number=CIDNumber
                                  }=Call) when (CIDName =:= 'undefined') or (CIDNumber =:= 'undefined') ->
     Updaters = [fun(Call2) -> set_callee_id_name(amimulator_call:to_user(Call2), Call2) end
-                ,fun(Call2) -> set_callee_id_number(amimulator_call:to_user(Call2), Call2) end
+               ,fun(Call2) -> set_callee_id_number(amimulator_call:to_user(Call2), Call2) end
                ],
     lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters);
 set_other_id(<<"inbound">>, Call) ->
     Call;
 set_other_id(<<"outbound">>, #call{caller_id_name=CIDName
                                   ,caller_id_number=CIDNumber
-                                 }=Call) when (CIDName =:= 'undefined') or (CIDNumber =:= 'undefined') ->
+                                  }=Call) when (CIDName =:= 'undefined') or (CIDNumber =:= 'undefined') ->
     Updaters = [fun(Call2) -> set_caller_id_name(amimulator_call:from_user(Call2), Call2) end
-                ,fun(Call2) -> set_caller_id_number(amimulator_call:from_user(Call2), Call2) end
+               ,fun(Call2) -> set_caller_id_number(amimulator_call:from_user(Call2), Call2) end
                ],
     lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters);
 set_other_id(<<"outbound">>, Call) ->
@@ -550,7 +550,7 @@ endpoint_caller_id(Endpoint, Call) ->
             {<<(kz_json:get_value(<<"username">>, Owner))/binary, " ",
                (kz_json:get_value(<<"first_name">>, Owner))/binary, " ",
                (kz_json:get_value(<<"last_name">>, Owner))/binary>>
-             ,<<(kz_json:get_value(<<"username">>, Owner))/binary>>}
+            ,<<(kz_json:get_value(<<"username">>, Owner))/binary>>}
     end.
 
 
@@ -568,14 +568,14 @@ parse_user_at_realm('user', Data) ->
 maybe_cellphone_endpoint(Call) ->
     AccountDb = account_db(Call),
     E164 = case direction(Call) of
-        <<"inbound">> -> knm_converter_regex:to_e164(from_user(Call));
-        <<"outbound">> -> knm_converter_regex:to_e164(to_user(Call))
-    end,
+               <<"inbound">> -> knm_converter_regex:to_e164(from_user(Call));
+               <<"outbound">> -> knm_converter_regex:to_e164(to_user(Call))
+           end,
 
     Results1 = case kz_datamgr:get_results(AccountDb, <<"devices/call_forwards">>) of
-        {'ok', Results} -> Results;
-        {'error', _} -> []
-    end,
+                   {'ok', Results} -> Results;
+                   {'error', _} -> []
+               end,
     find_cellphone_endpoint_fold(AccountDb, E164, Results1).
 
 -spec find_cellphone_endpoint_fold(api_binary(), ne_binary(), kz_json:objects()) -> api_object().

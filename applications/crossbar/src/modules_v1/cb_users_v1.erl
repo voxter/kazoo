@@ -743,52 +743,52 @@ update_voicemail_creds(_, _, #cb_context{db_name='undefined'}) ->
 update_voicemail_creds(Username, Password, #cb_context{db_name=AccountDb}) ->
     lager:info("Updating PIN after password change"),
     {'ok', UserJObjs} = kz_datamgr:get_results(AccountDb,
-        <<"users/list_by_username">>,
-        [{key, Username}]
-    ),
+                                               <<"users/list_by_username">>,
+                                               [{key, Username}]
+                                              ),
     UserJObj =
         if UserJObjs == [] -> 'undefined';
-        true -> hd(UserJObjs)
+           true -> hd(UserJObjs)
         end,
 
     if UserJObj == 'undefined' ->
-        lager:info("New user"),
-        'ok';
-    true ->
-        lager:info("Detected user doc with id: ~p", [kz_json:get_value(<<"id">>, UserJObj)]),
-
-        {'ok', UserFullDoc} = kz_datamgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, UserJObj)),
-
-        VMJObj = try
-            {'ok', VMJObjs} = kz_datamgr:get_results(AccountDb,
-                <<"vmboxes/listing_by_mailbox">>,
-                [{key, list_to_integer(binary_to_list(Username))}]
-            ),
-            VMJObj1 =
-                if VMJObjs == [] -> 'undefined';
-                true -> hd(VMJObjs)
-                end,
-            lager:info("Detected vmbox doc with id: ~p", [kz_json:get_value(<<"id">>, VMJObj1)]),
-            VMJObj1
-        catch error:badarg ->
-            'undefined'
-        end,
-
-        if VMJObj == 'undefined' ->
-            lager:info("No voicemail box to update for the user"),
+            lager:info("New user"),
             'ok';
-        true ->
-            {'ok', VMFullDoc} = kz_datamgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, VMJObj)),
+       true ->
+            lager:info("Detected user doc with id: ~p", [kz_json:get_value(<<"id">>, UserJObj)]),
 
-            case should_update_voicemail_creds(Username, VMFullDoc, UserFullDoc) of
-                false ->
+            {'ok', UserFullDoc} = kz_datamgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, UserJObj)),
+
+            VMJObj = try
+                         {'ok', VMJObjs} = kz_datamgr:get_results(AccountDb,
+                                                                  <<"vmboxes/listing_by_mailbox">>,
+                                                                  [{key, list_to_integer(binary_to_list(Username))}]
+                                                                 ),
+                         VMJObj1 =
+                             if VMJObjs == [] -> 'undefined';
+                                true -> hd(VMJObjs)
+                             end,
+                         lager:info("Detected vmbox doc with id: ~p", [kz_json:get_value(<<"id">>, VMJObj1)]),
+                         VMJObj1
+                     catch error:badarg ->
+                             'undefined'
+                     end,
+
+            if VMJObj == 'undefined' ->
+                    lager:info("No voicemail box to update for the user"),
                     'ok';
-                true ->
-                    lager:info("Updating user password"),
-                    kz_datamgr:save_doc(AccountDb,
-                        kz_json:set_value(<<"pin">>, Password, VMFullDoc))
+               true ->
+                    {'ok', VMFullDoc} = kz_datamgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, VMJObj)),
+
+                    case should_update_voicemail_creds(Username, VMFullDoc, UserFullDoc) of
+                        false ->
+                            'ok';
+                        true ->
+                            lager:info("Updating user password"),
+                            kz_datamgr:save_doc(AccountDb,
+                                                kz_json:set_value(<<"pin">>, Password, VMFullDoc))
+                    end
             end
-        end
     end.
 
 should_update_voicemail_creds(Username, VMJObj, UserFullDoc) ->
@@ -797,14 +797,14 @@ should_update_voicemail_creds(Username, VMJObj, UserFullDoc) ->
 
         case {VMJObj, UserFullDoc} of
             {'undefined', _} -> lager:info("No voicemail box to update for the user"),
-                false;
+                                false;
             {_, 'undefined'} -> lager:info("Could not find user"),
-                false;
+                                false;
             _ -> true
         end
     catch error:badarg ->
-        lager:info("Did not save user pass as PIN because they do not have an extension username"),
-        false
+            lager:info("Did not save user pass as PIN because they do not have an extension username"),
+            false
     end.
 
 %%--------------------------------------------------------------------

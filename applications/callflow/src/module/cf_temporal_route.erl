@@ -154,16 +154,16 @@ update_candidates(#temporal{local_date={Y, M, D}}=T
 replace_candidates(#temporal{local_sec=LSec
                             ,local_date={Y, M, D}
                             }=T
-                   ,[#rule{id=Id
-                          ,name=Name
-                          ,wtime_start=TStart
-                          ,wtime_stop=TStop
-                          ,rule_set=RuleSet
-                          }=Rule
-                     |Rules
-                    ]
-                   ,Call
-                   ,Candidates) ->
+                  ,[#rule{id=Id
+                         ,name=Name
+                         ,wtime_start=TStart
+                         ,wtime_stop=TStop
+                         ,rule_set=RuleSet
+                         }=Rule
+                    |Rules
+                   ]
+                  ,Call
+                  ,Candidates) ->
     lager:info("processing temporal rule ~s (~s) part of rule set? ~p", [Id, Name, RuleSet]),
     PrevDay = normalize_date({Y, M, D - 1}),
     BaseDate = next_rule_date(Rule, PrevDay),

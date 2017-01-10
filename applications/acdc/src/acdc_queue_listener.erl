@@ -303,12 +303,12 @@ handle_cast({'gen_listener', {'created_queue', Q}}, #state{my_q='undefined'}=Sta
     {'noreply', State#state{my_q=Q}, 'hibernate'};
 
 handle_cast({'member_connect_req', MemberCallJObj, Delivery, _Url}
-            ,#state{my_q=MyQ
-                   ,my_id=MyId
-                   ,account_id=AccountId
-                   ,mgr_pid=MgrPid
-                   ,queue_id=QueueId
-                   }=State) ->
+           ,#state{my_q=MyQ
+                  ,my_id=MyId
+                  ,account_id=AccountId
+                  ,mgr_pid=MgrPid
+                  ,queue_id=QueueId
+                  }=State) ->
     Call = kapps_call:from_json(kz_json:get_value(<<"Call">>, MemberCallJObj)),
     CallId = kapps_call:call_id(Call),
 

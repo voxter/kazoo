@@ -185,9 +185,9 @@ on_successful_validation('undefined', Context) ->
 on_successful_validation(Id, Context) ->
     Context1 = crossbar_doc:load_merge(Id, Context, ?TYPE_CHECK_OPTION(<<"temporal_rule">>)),
     Doc = case kz_json:get_value(<<"enabled">>, cb_context:doc(Context)) of
-        'undefined' -> kz_json:delete_key(<<"enabled">>, cb_context:doc(Context1));
-        _ -> cb_context:doc(Context1)
-    end,
+              'undefined' -> kz_json:delete_key(<<"enabled">>, cb_context:doc(Context1));
+              _ -> cb_context:doc(Context1)
+          end,
     cb_context:set_doc(Context, Doc).
 
 %%--------------------------------------------------------------------

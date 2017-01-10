@@ -26,13 +26,13 @@ start_link() ->
 %% @public
 %% @doc
 %% Perform pre-shutdown cleanup
-%%		This includes closing listening sockets for the translator
+%%              This includes closing listening sockets for the translator
 %% @end
 %%--------------------------------------------------------------------
 -spec before_stop() -> 'ok'.
 before_stop() ->
-	amimulator_supersup:before_stop(),
-	'ok'.
+    amimulator_supersup:before_stop(),
+    'ok'.
 
 %%--------------------------------------------------------------------
 %% @public

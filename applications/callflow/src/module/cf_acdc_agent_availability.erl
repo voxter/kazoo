@@ -28,13 +28,13 @@
 handle(Data, Call) ->
     QueueId = maybe_use_variable(Data, Call),
     Req = props:filter_undefined([{<<"Account-ID">>, kapps_call:account_id(Call)}
-                                  ,{<<"Queue-ID">>, QueueId}
+                                 ,{<<"Queue-ID">>, QueueId}
                                   | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                  ]),
     case kapps_util:amqp_pool_request(Req
-                                       ,fun kapi_acdc_queue:publish_agents_available_req/1
-                                       ,fun kapi_acdc_queue:agents_available_resp_v/1
-                                      ) of
+                                     ,fun kapi_acdc_queue:publish_agents_available_req/1
+                                     ,fun kapi_acdc_queue:agents_available_resp_v/1
+                                     ) of
         {'error', E} ->
             lager:debug("error ~p when getting agents availability in queue ~s", [E, QueueId]),
             cf_exe:attempt(?AVAILABLE_BRANCH_KEY, Call);

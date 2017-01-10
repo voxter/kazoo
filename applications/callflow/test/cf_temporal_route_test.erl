@@ -12,7 +12,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(ROUTES, [<<"6a7bf6405e15d69827f27eba905f54da">>
-                 ,<<"549b60e65d6ef3910fd8c9d3f861ca5b">>
+                ,<<"549b60e65d6ef3910fd8c9d3f861ca5b">>
                 ]).
 -define(ROUTE_NO(No), lists:nth(No, ?ROUTES)).
 -define(TIMEZONE, <<"America/Los_Angeles">>).
@@ -40,7 +40,7 @@ get_temporal_route() ->
     Timezone = ?TIMEZONE,
     {LocalDate, LocalTime} = localtime:utc_to_local(
                                ?DATETIME
-                               ,kz_util:to_list(Timezone)
+                                                   ,kz_util:to_list(Timezone)
                               ),
     #temporal{local_sec=calendar:datetime_to_gregorian_seconds({LocalDate, LocalTime})
              ,local_date=LocalDate
@@ -66,20 +66,20 @@ get_temporal_rules() ->
           ,wtime_stop=?FIVE_PM_STOP
           ,rule_set='false'
           }
-     ,#rule{id=?ROUTE_NO(2)
-           ,enabled='true'
-           ,name= <<"Open Hours">>
-           ,cycle= <<"weekly">>
-           ,interval=?RULE_DEFAULT_INTERVAL
-           ,days=?RULE_DEFAULT_DAYS
-           ,wdays=[<<"monday">>, <<"tuesday">>, <<"wensday">>, <<"thursday">>, <<"friday">>]
-           ,ordinal=?RULE_DEFAULT_ORDINAL
-           ,month=?RULE_DEFAULT_MONTH
-           ,start_date=cf_temporal_route:get_date(?YEAR_2000, ?TIMEZONE)
-           ,wtime_start=?NINE_AM_START
-           ,wtime_stop=?FIVE_PM_STOP
-           ,rule_set='false'
-           }
+    ,#rule{id=?ROUTE_NO(2)
+          ,enabled='true'
+          ,name= <<"Open Hours">>
+          ,cycle= <<"weekly">>
+          ,interval=?RULE_DEFAULT_INTERVAL
+          ,days=?RULE_DEFAULT_DAYS
+          ,wdays=[<<"monday">>, <<"tuesday">>, <<"wensday">>, <<"thursday">>, <<"friday">>]
+          ,ordinal=?RULE_DEFAULT_ORDINAL
+          ,month=?RULE_DEFAULT_MONTH
+          ,start_date=cf_temporal_route:get_date(?YEAR_2000, ?TIMEZONE)
+          ,wtime_start=?NINE_AM_START
+          ,wtime_stop=?FIVE_PM_STOP
+          ,rule_set='false'
+          }
     ].
 
 daily_recurrence_test_() ->

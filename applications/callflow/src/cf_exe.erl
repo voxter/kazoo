@@ -504,8 +504,8 @@ stop_if_inactive(Call, Flow, Flows, State) ->
                     {'noreply', launch_cf_module(State#state{flow=Flow, flows=Flows})}
             end
     catch _:_ ->
-        lager:info("channel no longer active, hard stop!"),
-        {'stop', 'normal', State}
+            lager:info("channel no longer active, hard stop!"),
+            {'stop', 'normal', State}
     end.
 
 %%--------------------------------------------------------------------

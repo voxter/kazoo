@@ -368,8 +368,8 @@ cur_status_build_match_spec(JObj) ->
     end.
 
 -spec cur_status_build_match_spec(kz_json:object(), {status_stat(), list()}) ->
-                                     {'ok', ets:match_spec()} |
-                                     {'error', kz_json:object()}.
+                                         {'ok', ets:match_spec()} |
+                                         {'error', kz_json:object()}.
 cur_status_build_match_spec(JObj, AcctMatch) ->
     case kz_json:foldl(fun cur_status_match_builder_fold/3, AcctMatch, JObj) of
         {'error', _Errs}=Errors -> Errors;
@@ -420,7 +420,7 @@ query_cur_statuses(RespQ, MsgId, Match) ->
         Stats ->
             QueryResults = lists:foldl(fun query_status_fold/2, kz_json:new(), Stats),
             Results = kz_json:map(fun(AgentId, {[{_Timestamp, StatusJObj}]}) ->
-                                      {AgentId, StatusJObj}
+                                          {AgentId, StatusJObj}
                                   end, QueryResults),
             Resp = [{<<"Agents">>, Results}
                    ,{<<"Msg-ID">>, MsgId}

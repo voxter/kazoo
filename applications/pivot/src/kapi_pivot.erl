@@ -42,7 +42,7 @@
 -define(PIVOT_SUCCEEDED_HEADERS, [<<"Call-ID">>]).
 -define(OPTIONAL_PIVOT_SUCCEEDED_HEADERS, []).
 -define(PIVOT_SUCCEEDED_VALUES, [{<<"Event-Category">>,<<"pivot">>}
-                                 ,{<<"Event-Name">>, <<"succeeded">>}
+                                ,{<<"Event-Name">>, <<"succeeded">>}
                                 ]).
 -define(PIVOT_SUCCEEDED_TYPES, []).
 
@@ -70,7 +70,7 @@ req_v(JObj) ->
     req_v(kz_json:to_proplist(JObj)).
 
 -spec succeeded(api_terms()) -> {'ok', iolist()} |
-                          {'error', string()}.
+                                {'error', string()}.
 succeeded(Prop) when is_list(Prop) ->
     case succeeded_v(Prop) of
         'false' -> {'error', "Proplist failed validation for pivot_succeeded"};

@@ -20,9 +20,9 @@ init(_AccountId) ->
 bindings(Props) ->
     AccountId = props:get_value("AccountId", Props),
     [
-        {conference, [
-            {restrict_to, conference_bindings(account_conferences(AccountId), [])}
-        ]}
+     {conference, [
+                   {restrict_to, conference_bindings(account_conferences(AccountId), [])}
+                  ]}
     ].
 
 -spec responders(kz_proplist()) -> kz_proplist().
@@ -102,8 +102,8 @@ account_conferences(AccountId) ->
     AccountDb = kz_util:format_account_id(AccountId, encoded),
     {ok, Conferences} = kz_datamgr:get_results(AccountDb, <<"conferences/crossbar_listing">>),
     lists:foldl(fun(Conference, Ids) ->
-        [kz_json:get_value(<<"id">>, Conference) | Ids]
-    end, [], Conferences).
+                        [kz_json:get_value(<<"id">>, Conference) | Ids]
+                end, [], Conferences).
 
 conference_bindings([], Bindings) ->
     Bindings;

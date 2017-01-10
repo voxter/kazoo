@@ -117,8 +117,8 @@
         ]).
 
 -export([custom_kv/2, set_custom_kv/3
-         ,custom_kvs/1
-         ,custom_kvs_mode/1, set_custom_kvs_mode/2
+        ,custom_kvs/1
+        ,custom_kvs_mode/1, set_custom_kvs_mode/2
         ]).
 
 -export([flush/0
@@ -825,7 +825,7 @@ set_to(To, #kapps_call{}=Call) when is_binary(To) ->
 
 -spec set_to_user(ne_binary(), call()) -> call().
 set_to_user(To, #kapps_call{}=Call) when is_binary(To) ->
-	Call#kapps_call{to=To, to_user=To}.
+        Call#kapps_call{to=To, to_user=To}.
 
 -spec to(call()) -> ne_binary().
 to(#kapps_call{to=To}) ->
@@ -973,7 +973,7 @@ set_language(Language, #kapps_call{}=Call) when is_binary(Language) ->
 
 -spec ccvs(call()) -> kz_json:object().
 ccvs(#kapps_call{ccvs=CCVs}) ->
-	CCVs.
+        CCVs.
 
 -spec language(call()) -> api_binary().
 -ifdef(TEST).

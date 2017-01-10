@@ -30,12 +30,12 @@ handle(Data, Call) ->
 
     NoopId = kapps_call_command:noop(Call),
     kapps_call_command:say(
-       kz_json:get_value(<<"text">>, Data)
-       ,kz_json:get_value(<<"type">>, Data, <<"name_spelled">>)
-       ,kz_json:get_value(<<"method">>, Data, <<"pronounced">>)
-       ,kz_json:get_value(<<"language">>, Data, kapps_call:language(Call))
-       ,Call
-      ),
+      kz_json:get_value(<<"text">>, Data)
+                          ,kz_json:get_value(<<"type">>, Data, <<"name_spelled">>)
+                          ,kz_json:get_value(<<"method">>, Data, <<"pronounced">>)
+                          ,kz_json:get_value(<<"language">>, Data, kapps_call:language(Call))
+                          ,Call
+     ),
 
     case cf_util:wait_for_noop(Call, NoopId) of
         {'error', 'channel_hungup'} -> cf_exe:stop(Call);

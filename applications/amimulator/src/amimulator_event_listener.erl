@@ -3,9 +3,9 @@
 -behaviour(gen_listener).
 
 -export([start_link/1
-         ,register/2, unregister/2
-         ,account_id/1
-         ,handle_amqp_event/2, publish_amqp_event/2
+        ,register/2, unregister/2
+        ,account_id/1
+        ,handle_amqp_event/2, publish_amqp_event/2
         ]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, handle_event/2, terminate/2, code_change/3]).
 
@@ -14,7 +14,7 @@
 -define(BINDINGS(AccountId), [{'self', []}
                              ]).
 -define(RESPONDERS, [{{?MODULE, 'handle_amqp_event'}
-                      ,[{<<"amimulator">>, <<"*">>}]
+                     ,[{<<"amimulator">>, <<"*">>}]
                      }
                     ]).
 -define(QUEUE_NAME(AccountId), <<"amimulator-queue", AccountId/binary>>).
@@ -27,17 +27,17 @@
 -define(PRUNE_TIMEOUT, 60000).
 
 -define(MODULES, ['amimulator_call_hook'
-                  ,'amimulator_acdc'
-                  ,'amimulator_reg'
-                  ,'amimulator_conf'
-                  ,'amimulator_presence'
-                  ,'amimulator_vm'
+                 ,'amimulator_acdc'
+                 ,'amimulator_reg'
+                 ,'amimulator_conf'
+                 ,'amimulator_presence'
+                 ,'amimulator_vm'
                  ]).
 
 -record(state, {account_id :: ne_binary()
-                ,pids = [] :: pids()
-                ,prune_timer_ref :: timer:tref() | 'undefined'
-                ,extra_props = [] :: proplist()
+               ,pids = [] :: pids()
+               ,prune_timer_ref :: timer:tref() | 'undefined'
+               ,extra_props = [] :: proplist()
                }).
 -type state() :: #state{}.
 
@@ -51,13 +51,13 @@ start_link(AccountId) ->
     {Bindings, Responders} = load_bindings(Props),
 
     gen_listener:start_link(?MODULE
-                            ,[{'bindings', ?BINDINGS(AccountId) ++ Bindings}
-                              ,{'responders', ?RESPONDERS ++ Responders}
-                              ,{'queue_name', ?QUEUE_NAME(AccountId)}
-                              ,{'queue_options', ?QUEUE_OPTIONS} % optional to include
-                              ,{'consume_options', ?CONSUME_OPTIONS} % optional to include
-                             ]
-                            ,[AccountId]
+                           ,[{'bindings', ?BINDINGS(AccountId) ++ Bindings}
+                            ,{'responders', ?RESPONDERS ++ Responders}
+                            ,{'queue_name', ?QUEUE_NAME(AccountId)}
+                            ,{'queue_options', ?QUEUE_OPTIONS} % optional to include
+                            ,{'consume_options', ?CONSUME_OPTIONS} % optional to include
+                            ]
+                           ,[AccountId]
                            ).
 
 -spec register(pid(), pid()) -> 'ok'.
@@ -75,19 +75,19 @@ account_id(Listener) ->
 -spec handle_amqp_event(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_amqp_event(EventJObj, Props) ->
     ParsedEvents = case kz_json:get_value(<<"Events">>, EventJObj) of
-        [{Event}] ->
-            Event;
-        Events ->
-            lists:foldl(fun({Event}, Acc) ->
-                Acc ++ [Event]
-            end, [], Events)
-    end,
+                       [{Event}] ->
+                           Event;
+                       Events ->
+                           lists:foldl(fun({Event}, Acc) ->
+                                               Acc ++ [Event]
+                                       end, [], Events)
+                   end,
 
     case kz_json:get_value(<<"RequestType">>, EventJObj) of
         <<"publish">> ->
             lists:foreach(fun(Pid) ->
-                gen_server:cast(Pid, {'publish', {ParsedEvents, 'n'}})
-            end, props:get_value(<<"Pids">>, Props));
+                                  gen_server:cast(Pid, {'publish', {ParsedEvents, 'n'}})
+                          end, props:get_value(<<"Pids">>, Props));
         _ ->
             'ok'
     end.
@@ -98,10 +98,10 @@ publish_amqp_event({_, []}, _) ->
     'ok';
 publish_amqp_event({'publish', Events}=_Req, AccountId) ->
     {'ok', Payload} = kz_api:prepare_api_payload(
-        [{<<"RequestType">>, <<"publish">>},
-         {<<"Events">>, amimulator_util:format_json_events(Events)} |
-         kz_api:default_headers(<<"amimulator">>, <<"events">>, ?APP_NAME, ?APP_VERSION)],
-         [], fun amqp_event/1),
+                        [{<<"RequestType">>, <<"publish">>},
+                         {<<"Events">>, amimulator_util:format_json_events(Events)} |
+                         kz_api:default_headers(<<"amimulator">>, <<"events">>, ?APP_NAME, ?APP_VERSION)],
+                        [], fun amqp_event/1),
     amqp_util:basic_publish(?EXCHANGE_AMI, <<"amimulator.events.", AccountId/binary>>, Payload).
 
 -define(OPTIONAL_HEADERS, [<<"RequestType">>, <<"Events">>]).
@@ -132,27 +132,27 @@ handle_call(_Request, _From, State) ->
 -spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast({'get_module_extra_props', AccountId}, State) ->
     Props = lists:foldl(fun(Module, Acc) ->
-        case erlang:function_exported(Module, 'get_extra_props', 1) of
-            'true' -> Module:get_extra_props(AccountId) ++ Acc;
-            'false' -> Acc
-        end
-    end, [], ?MODULES),
+                                case erlang:function_exported(Module, 'get_extra_props', 1) of
+                                    'true' -> Module:get_extra_props(AccountId) ++ Acc;
+                                    'false' -> Acc
+                                end
+                        end, [], ?MODULES),
     {'noreply', State#state{extra_props=Props}};
 %% Register bindings of handler modules for varying event types
 handle_cast({'init_modules', AccountId}, State) ->
     lists:foreach(fun(Module) ->
-        Module:init(AccountId) end,
-        ?MODULES
-    ),
+                          Module:init(AccountId) end,
+                  ?MODULES
+                 ),
     {'noreply', State};
 handle_cast({'register', Pid}, #state{pids=Pids
-                                      ,prune_timer_ref=PruneRef
+                                     ,prune_timer_ref=PruneRef
                                      }=State) ->
     stop_prune_timer(PruneRef),
     {'noreply', State#state{pids = [Pid | Pids], prune_timer_ref='undefined'}};
 handle_cast({'unregister', Pid}, #state{account_id=AccountId
-                                        ,pids=Pids
-                                        ,prune_timer_ref=PruneRef
+                                       ,pids=Pids
+                                       ,prune_timer_ref=PruneRef
                                        }=State) ->
     stop_prune_timer(PruneRef),
     NewPids = lists:delete(Pid, Pids),
@@ -163,10 +163,10 @@ handle_cast({'gen_listener', {'created_queue', _QueueName}}, #state{account_id=A
 
     %% Send fully booted event to client
     Payload = [
-        {<<"Event">>, <<"FullyBooted">>},
-        {<<"Privilege">>, <<"system,all">>},
-        {<<"Status">>, <<"Fully Booted">>}
-    ],
+               {<<"Event">>, <<"FullyBooted">>},
+               {<<"Privilege">>, <<"system,all">>},
+               {<<"Status">>, <<"Fully Booted">>}
+              ],
     publish_amqp_event({'publish', Payload}, AccountId),
 
     {'noreply', State};
@@ -185,11 +185,11 @@ handle_info(_Info, State) ->
 
 -spec handle_event(kz_json:object(), state()) -> gen_listener:handle_event_return().
 handle_event(_JObj, #state{account_id=AccountId
-                           ,pids=Pids
-                           ,extra_props=ExtraProps
+                          ,pids=Pids
+                          ,extra_props=ExtraProps
                           }) ->
     {'reply', [{<<"AccountId">>, AccountId}
-               ,{<<"Pids">>, Pids}
+              ,{<<"Pids">>, Pids}
                | ExtraProps
               ]}.
 

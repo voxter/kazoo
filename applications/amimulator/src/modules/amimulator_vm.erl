@@ -15,16 +15,16 @@ init(_AccountId) ->
 -spec bindings(kz_proplist()) -> kz_proplist().
 bindings(Props) ->
     [
-        {notifications, [
-            {restrict_to, ['new_voicemail']},
-            {account_id, props:get_value("AccountId", Props)}
-        ]}
+     {notifications, [
+                      {restrict_to, ['new_voicemail']},
+                      {account_id, props:get_value("AccountId", Props)}
+                     ]}
     ].
 
 -spec responders(kz_proplist()) -> kz_proplist().
 responders(_Props) ->
     [
-        {<<"notification">>, <<"voicemail_saved">>}
+     {<<"notification">>, <<"voicemail_saved">>}
     ].
 
 -spec handle_event(kz_json:object(), kz_proplist()) -> 'ok'.
@@ -37,15 +37,15 @@ handle_event(EventJObj, _Props) ->
 %%
 
 %% Start of a VM has the following:
-% 127.0.0.1            <- Event: Newexten
-% 127.0.0.1            <- Privilege: dialplan,all
-% 127.0.0.1            <- Channel: SIP/102-00000004
-% 127.0.0.1            <- Context: macro-vm
-% 127.0.0.1            <- Extension: s-NOANSWER
-% 127.0.0.1            <- Priority: 2
-% 127.0.0.1            <- Application: VoiceMail
-% 127.0.0.1            <- AppData: 100@default,u
-% 127.0.0.1            <- Uniqueid: 1433191552.4
+                                                % 127.0.0.1            <- Event: Newexten
+                                                % 127.0.0.1            <- Privilege: dialplan,all
+                                                % 127.0.0.1            <- Channel: SIP/102-00000004
+                                                % 127.0.0.1            <- Context: macro-vm
+                                                % 127.0.0.1            <- Extension: s-NOANSWER
+                                                % 127.0.0.1            <- Priority: 2
+                                                % 127.0.0.1            <- Application: VoiceMail
+                                                % 127.0.0.1            <- AppData: 100@default,u
+                                                % 127.0.0.1            <- Uniqueid: 1433191552.4
 
 handle_specific_event(<<"voicemail_saved">>, EventJObj) ->
     new_voicemail(EventJObj);
@@ -63,14 +63,14 @@ new_voicemail(JObj) ->
                 {'ok', [Result]} ->
                     Value = kz_json:get_value(<<"value">>, Result),
                     Payload = [
-                        {<<"Event">>, <<"MessageWaiting">>},
-                        {<<"Privilege">>, <<"call,all">>},
-                        {<<"Mailbox">>, <<Mailbox/binary, "@default">>},
-                        {<<"Waiting">>, 1},
-                        %% Assuming that this will always be behind by 1
-                        {<<"New">>, kz_json:get_value(<<"new_messages">>, Value) + 1},
-                        {<<"Old">>, kz_json:get_value(<<"old_messages">>, Value)}
-                    ],
+                               {<<"Event">>, <<"MessageWaiting">>},
+                               {<<"Privilege">>, <<"call,all">>},
+                               {<<"Mailbox">>, <<Mailbox/binary, "@default">>},
+                               {<<"Waiting">>, 1},
+                               %% Assuming that this will always be behind by 1
+                               {<<"New">>, kz_json:get_value(<<"new_messages">>, Value) + 1},
+                               {<<"Old">>, kz_json:get_value(<<"old_messages">>, Value)}
+                              ],
                     amimulator_event_listener:publish_amqp_event({'publish', Payload}, kz_json:get_value(<<"Account-ID">>, JObj));
                 _ ->
                     lager:debug("Could not get voicemail count")

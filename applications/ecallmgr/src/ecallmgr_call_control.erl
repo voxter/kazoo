@@ -101,7 +101,7 @@
 -type state() :: #state{}.
 
 -define(RESPONDERS, [{{?MODULE, 'handle_control_queue_req'}
-                      ,[{<<"amimulator">>, <<"control_queue_req">>}]
+                     ,[{<<"amimulator">>, <<"control_queue_req">>}]
                      }]).
 -define(QUEUE_NAME, <<>>).
 -define(QUEUE_OPTIONS, []).
@@ -267,15 +267,15 @@ handle_cast({'usurp_control', _}, State) ->
     lager:debug("the call has been usurped by an external process"),
     {'stop', 'normal', State};
 handle_cast({'control_queue_req', JObj}, #state{call_id=CallId
-										,control_q=CtrlQ
-									   }=State) ->
-	Props = props:filter_undefined([{<<"Call-ID">>, CallId}
-									,{<<"Control-Queue">>, CtrlQ}
-									,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
-									| kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-								   ]),
-	kapi_amimulator:publish_control_queue_resp(kz_json:get_value(<<"Server-ID">>, JObj), Props),
-	{'noreply', State};
+                                               ,control_q=CtrlQ
+                                               }=State) ->
+    Props = props:filter_undefined([{<<"Call-ID">>, CallId}
+                                   ,{<<"Control-Queue">>, CtrlQ}
+                                   ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
+                                    | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                   ]),
+    kapi_amimulator:publish_control_queue_resp(kz_json:get_value(<<"Server-ID">>, JObj), Props),
+    {'noreply', State};
 handle_cast({'update_node', Node}, #state{node=OldNode}=State) ->
     lager:debug("channel has moved from ~s to ~s", [OldNode, Node]),
     {'noreply', State#state{node=Node}};

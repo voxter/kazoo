@@ -359,8 +359,8 @@ is_account_db(Db) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_account_by_id(ne_binary()) ->
-                                  {'ok', ne_binary()} |
-                                  {'error', 'not_found'}.
+                               {'ok', ne_binary()} |
+                               {'error', 'not_found'}.
 get_account_by_id(Id) ->
     case kz_datamgr:open_doc(?KZ_ACCOUNTS_DB, Id) of
         {'ok', JObj} ->

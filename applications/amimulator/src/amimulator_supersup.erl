@@ -11,13 +11,13 @@ start_link() ->
 
 -spec start_listener_sup() -> supervisor:startchild_ret().
 start_listener_sup() ->
-	ChildSpec = {'amimulator_sup', {'amimulator_sup', 'start_link', []}, 'permanent', 'infinity', 'supervisor', ['amimulator_sup']},
-	supervisor:start_child(?MODULE, ChildSpec).
+    ChildSpec = {'amimulator_sup', {'amimulator_sup', 'start_link', []}, 'permanent', 'infinity', 'supervisor', ['amimulator_sup']},
+    supervisor:start_child(?MODULE, ChildSpec).
 
 -spec before_stop() -> 'ok'.
 before_stop() ->
-	lager:debug("Running pre-stop cleanup"),
-	amimulator_serv:close_listen_socket().
+    lager:debug("Running pre-stop cleanup"),
+    amimulator_serv:close_listen_socket().
 
 %%
 %% supervisor callbacks

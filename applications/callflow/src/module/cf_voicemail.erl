@@ -501,8 +501,8 @@ play_instructions(#mailbox{skip_instructions='false'}, Call) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_hunt(mailbox(), kapps_call:call()) ->
-                               'ok' | {'branch', _} |
-                               {'error', 'channel_hungup'}.
+                        'ok' | {'branch', _} |
+                        {'error', 'channel_hungup'}.
 maybe_hunt(#mailbox{hunt='false'}=Mailbox, Call) ->
     do_compose_voicemail(Mailbox, Call);
 maybe_hunt(Mailbox, Call) ->
@@ -521,8 +521,8 @@ maybe_hunt(Mailbox, Call) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec do_compose_voicemail(mailbox(), kapps_call:call()) ->
-                               'ok' | {'branch', _} |
-                               {'error', 'channel_hungup'}.
+                                  'ok' | {'branch', _} |
+                                  {'error', 'channel_hungup'}.
 do_compose_voicemail(#mailbox{keys=#keys{login=Login
                                         ,operator=Operator
                                         }
@@ -562,8 +562,8 @@ do_compose_voicemail(#mailbox{keys=#keys{login=Login
 %% @end
 %%--------------------------------------------------------------------
 -spec do_hunt(mailbox(), kapps_call:call(), ne_binary()) ->
-                               'ok' | {'branch', _} |
-                               {'error', 'channel_hungup'}.
+                     'ok' | {'branch', _} |
+                     {'error', 'channel_hungup'}.
 do_hunt(Mailbox, Call, Digits) ->
     case try_match_digits(Digits, Mailbox, Call) of
         'false' ->
@@ -586,9 +586,9 @@ do_hunt(Mailbox, Call, Digits) ->
 try_match_digits(Digits, Mailbox, Call) ->
     lager:info("trying to match digits ~s", [Digits]),
     case is_callflow_child(Digits, Mailbox, Call)
-           orelse (is_hunt_enabled(Digits, Mailbox, Call)
-                   andalso is_hunt_allowed(Digits, Mailbox, Call)
-                   andalso not is_hunt_denied(Digits, Mailbox, Call)) of
+        orelse (is_hunt_enabled(Digits, Mailbox, Call)
+                andalso is_hunt_allowed(Digits, Mailbox, Call)
+                andalso not is_hunt_denied(Digits, Mailbox, Call)) of
         'true' -> {'branch', hunt_for_callflow(Digits, Mailbox, Call)};
         'false' -> 'false'
     end.
@@ -1592,19 +1592,19 @@ change_pin(#mailbox{mailbox_id=Id
                 PrivLevel = kz_json:get_value(<<"priv_level">>, UserObj),
 
                 UsernameIsInteger = try
-                    _ = list_to_integer(binary_to_list(kz_json:get_value(<<"username">>, UserObj))),
-                    true
-                catch error:badarg ->
-                    false
-                end,
+                                        _ = list_to_integer(binary_to_list(kz_json:get_value(<<"username">>, UserObj))),
+                                        true
+                                    catch error:badarg ->
+                                            false
+                                    end,
 
                 case { PrivLevel, UsernameIsInteger } of
                     {<<"user">>, true} ->
                         Username = kz_json:get_value(<<"username">>, UserObj),
-                    {MD5, SHA1} = cb_modules_util:pass_hashes(Username, Pin),
+                        {MD5, SHA1} = cb_modules_util:pass_hashes(Username, Pin),
                         kz_datamgr:save_doc(AccountDb
                                            ,kz_json:set_values([{<<"pvt_md5_auth">>, MD5}, {<<"pvt_sha1_auth">>, SHA1}]
-                                           ,UserObj));
+                                                              ,UserObj));
                     {_, false} -> lager:info("Did not save user PIN as pass because they do not have an extension username");
                     {_, _} -> lager:info("Did not save user PIN as pass because they are not priv_level user")
                 end,

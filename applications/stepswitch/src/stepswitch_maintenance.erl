@@ -226,7 +226,7 @@ do_process_number(Number, 'undefined', Flags) ->
             ),
     Endpoints = stepswitch_resources:endpoints(
                   kz_util:to_binary(Number)
-                  ,kapi_offnet_resource:jobj_to_req(JObj)
+                                              ,kapi_offnet_resource:jobj_to_req(JObj)
                  ),
     pretty_print_endpoints(Endpoints);
 do_process_number(Number, AccountId, Flags) ->

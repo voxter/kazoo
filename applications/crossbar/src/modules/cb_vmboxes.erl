@@ -507,37 +507,37 @@ check_vmbox_schema(VMBoxId, Context) ->
 update_user_creds(VMBoxId, #cb_context{db_name=AccountDb, req_data=ReqData}) ->
     lager:info("Updating password after PIN change"),
     if VMBoxId == 'undefined' ->
-        lager:info("New voicemail box"),
-        'ok';
-    true ->
-        {'ok', VMJObj} = kz_datamgr:open_doc(AccountDb, VMBoxId),
-        OwnerId = kz_json:get_value(<<"owner_id">>, VMJObj),
-
-        if OwnerId == 'undefined' ->
-            lager:info("Voicemail does not have an owner"),
+            lager:info("New voicemail box"),
             'ok';
-        true ->
-            case AccountDb of
-                'undefined' ->
-                    lager:error("The AccountDb supplied wasn't correct when additionally updating voicemail creds");
-                _ ->
-                    lager:info("Detected user doc with id: ~p", [OwnerId]),
-                    {'ok', UserFullDoc} = kz_datamgr:open_doc(AccountDb, OwnerId),
+       true ->
+            {'ok', VMJObj} = kz_datamgr:open_doc(AccountDb, VMBoxId),
+            OwnerId = kz_json:get_value(<<"owner_id">>, VMJObj),
 
-                    case should_update_user_creds(UserFullDoc) of
-                        false ->
-                            'ok';
-                        true ->
-                            Username = kz_json:get_value(<<"username">>, UserFullDoc),
-                            Pin = kz_json:get_value(<<"pin">>, ReqData),
-                            {MD5, SHA1} = cb_modules_util:pass_hashes(Username, Pin),
-                            kz_datamgr:save_doc(AccountDb
-                                               ,kz_json:set_values([{<<"pvt_md5_auth">>, MD5}, {<<"pvt_sha1_auth">>, SHA1}]
-                                                                  ,UserFullDoc
-                                                                  ))
+            if OwnerId == 'undefined' ->
+                    lager:info("Voicemail does not have an owner"),
+                    'ok';
+               true ->
+                    case AccountDb of
+                        'undefined' ->
+                            lager:error("The AccountDb supplied wasn't correct when additionally updating voicemail creds");
+                        _ ->
+                            lager:info("Detected user doc with id: ~p", [OwnerId]),
+                            {'ok', UserFullDoc} = kz_datamgr:open_doc(AccountDb, OwnerId),
+
+                            case should_update_user_creds(UserFullDoc) of
+                                false ->
+                                    'ok';
+                                true ->
+                                    Username = kz_json:get_value(<<"username">>, UserFullDoc),
+                                    Pin = kz_json:get_value(<<"pin">>, ReqData),
+                                    {MD5, SHA1} = cb_modules_util:pass_hashes(Username, Pin),
+                                    kz_datamgr:save_doc(AccountDb
+                                                       ,kz_json:set_values([{<<"pvt_md5_auth">>, MD5}, {<<"pvt_sha1_auth">>, SHA1}]
+                                                                          ,UserFullDoc
+                                                                          ))
+                            end
                     end
             end
-        end
     end.
 
 should_update_user_creds(UserFullDoc) ->
@@ -551,8 +551,8 @@ should_update_user_creds(UserFullDoc) ->
             _ -> true
         end
     catch error:badarg ->
-        lager:info("Did not save user PIN as pass because they do not have an extension username"),
-        false
+            lager:info("Did not save user PIN as pass because they do not have an extension username"),
+            false
     end.
 
 %%--------------------------------------------------------------------

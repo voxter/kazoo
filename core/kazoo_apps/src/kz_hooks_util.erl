@@ -203,10 +203,10 @@ handle_call_event(JObj, Props) ->
     'true' = kapi_call:event_v(JObj),
     HookEvent = kz_json:get_value(<<"Event-Name">>, JObj),
     AccountId = kz_json:get_first_defined(
-      [[<<"Custom-Channel-Vars">>, <<"Execute-Extension-Original-Account-ID">>]
-      ,[<<"Custom-Channel-Vars">>, <<"Account-ID">>]
-      ]
-      ,JObj),
+                  [[<<"Custom-Channel-Vars">>, <<"Execute-Extension-Original-Account-ID">>]
+                  ,[<<"Custom-Channel-Vars">>, <<"Account-ID">>]
+                  ]
+                                         ,JObj),
     CallId = kz_json:get_value(<<"Call-ID">>, JObj),
     kz_util:put_callid(CallId),
     handle_call_event(JObj, AccountId, HookEvent, CallId, props:get_is_true('rr', Props)).
@@ -233,7 +233,7 @@ handle_call_event(JObj, 'undefined', <<"CHANNEL_DESTROY">>, CallId, RR) ->
         {'ok', AccountId} ->
             lager:debug("determined account id for 'channel_destroy' is ~s", [AccountId]),
             J = kz_json:set_value([<<"Custom-Channel-Vars">>
-                                   ,<<"Account-ID">>
+                                  ,<<"Account-ID">>
                                   ], AccountId, JObj),
             handle_call_event(J, AccountId, <<"CHANNEL_DESTROY">>, CallId, RR)
     end;

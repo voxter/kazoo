@@ -3,10 +3,10 @@
 
 -export([start_link/0]).
 -export([start_listeners/1, start_listener/2
-         ,register_event_listener/2
-         ,unregister_event_listener/2
-         ,start_event_listener/1
-         ,stop_event_listener/2
+        ,register_event_listener/2
+        ,unregister_event_listener/2
+        ,start_event_listener/1
+        ,stop_event_listener/2
         ]).
 -export([init/1]).
 
@@ -34,21 +34,21 @@ start_listeners(ListenSocket, Count) ->
 -spec start_listener(gen_tcp:socket(), pos_integer()) -> sup_startchild_ret().
 start_listener(ListenSocket, Num) ->
     supervisor:start_child(?MODULE, {"amimulator_socket_listener-" ++ kz_util:to_list(Num)
-                                     ,{'amimulator_socket_listener', 'start_link', [ListenSocket]}
-                                     ,'permanent'
-                                     ,2000
-                                     ,'worker'
-                                     ,['amimulator_socket_listener']
+                                    ,{'amimulator_socket_listener', 'start_link', [ListenSocket]}
+                                    ,'permanent'
+                                    ,2000
+                                    ,'worker'
+                                    ,['amimulator_socket_listener']
                                     }).
 
 -spec register_event_listener(ne_binary(), pid()) -> 'ok'.
 register_event_listener(AccountId, Consumer) ->
     ListenerPid = case find_event_listener(AccountId) of
-        'undefined' ->
-            {'ok', Pid} = start_event_listener(AccountId),
-            Pid;
-        {Pid, _} -> Pid
-    end,
+                      'undefined' ->
+                          {'ok', Pid} = start_event_listener(AccountId),
+                          Pid;
+                      {Pid, _} -> Pid
+                  end,
     amimulator_event_listener:register(ListenerPid, Consumer).
 
 -spec unregister_event_listener(ne_binary(), pid()) -> 'ok'.
@@ -62,11 +62,11 @@ unregister_event_listener(AccountId, Consumer) ->
 -spec start_event_listener(ne_binary()) -> supervisor:startchild_ret().
 start_event_listener(AccountId) ->
     supervisor:start_child(?MODULE, {"amimulator_event_listener-" ++ kz_util:to_list(AccountId)
-                                     ,{'amimulator_event_listener', 'start_link', [AccountId]}
-                                     ,'transient'
-                                     ,2000
-                                     ,'worker'
-                                     ,['amimulator_event_listener']
+                                    ,{'amimulator_event_listener', 'start_link', [AccountId]}
+                                    ,'transient'
+                                    ,2000
+                                    ,'worker'
+                                    ,['amimulator_event_listener']
                                     }).
 
 -spec stop_event_listener(ne_binary(), atom()) -> 'ok' | tuple().
@@ -104,7 +104,7 @@ init([]) ->
     StateMaster = {'ami_sm', {'ami_sm', 'start_link', []}, 'permanent', 'infinity', 'worker', ['ami_sm']},
     Originator = {'amimulator_originator', {'amimulator_originator', 'start_link', []}, 'permanent', 2000, 'worker', ['amimulator_originator']},
     CallSup = {'amimulator_call_sup', {'amimulator_call_sup', 'start_link', []}, 'permanent', 5000, 'supervisor', ['amimulator_call_sup']},
-    
+
     {'ok', {SupFlags, [StateMaster, Originator, CallSup]}}.
 
 %%

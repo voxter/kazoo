@@ -65,7 +65,7 @@
                      ,[{<<"metaflow">>, <<"action">>}]
                      }
                     ,{{?MODULE, 'handle_metaflow_update'}
-                      ,[{<<"metaflow">>, <<"update">>}]
+                     ,[{<<"metaflow">>, <<"update">>}]
                      }
                     ,{{?MODULE, 'handle_konami'}
                      ,[{?APP_NAME, <<"*">>}]

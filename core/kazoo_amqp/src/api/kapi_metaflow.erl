@@ -178,8 +178,8 @@ bind_req_v(Prop) when is_list(Prop) ->
 bind_req_v(JObj) -> bind_req_v(kz_json:to_proplist(JObj)).
 
 -spec update(kz_json:object() | kz_proplist()) ->
-                 {'ok', iolist()} |
-                 {'error', string()}.
+                    {'ok', iolist()} |
+                    {'error', string()}.
 update(Prop) when is_list(Prop) ->
     case update_v(Prop) of
         'true' -> kz_api:build_message(Prop, ?METAFLOW_UPDATE_HEADERS, ?OPTIONAL_METAFLOW_UPDATE_HEADERS);
