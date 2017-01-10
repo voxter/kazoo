@@ -137,20 +137,20 @@ record_call(Node, UUID, Args) ->
             Ret;
         {'error', <<"-ERR ", E/binary>>} ->
             lager:debug("error executing uuid_record: ~p", [E]),
-            Evt = list_to_binary([ecallmgr_util:create_masquerade_event(<<"record_call">>, <<"RECORD_STOP">>)
+            Evt = list_to_binary([ecallmgr_util:create_masquerade_event(<<"record_call">>, <<"RECORD_STOP">>, 'false')
                                  ,",kazoo_application_response="
                                  ,"'",binary:replace(E, <<"\n">>, <<>>),"'"
                                  ]),
             lager:debug("publishing event: ~p", [Evt]),
-            _ = ecallmgr_util:send_cmd(Node, UUID, "application", Evt),
+            _ = ecallmgr_util:send_cmd(Node, UUID, <<"event">>, Evt),
             {'error', E};
         {'error', _Reason}=Error ->
             lager:debug("error executing uuid_record: ~p", [_Reason]),
-            Evt = list_to_binary([ecallmgr_util:create_masquerade_event(<<"record_call">>, <<"RECORD_STOP">>)
+            Evt = list_to_binary([ecallmgr_util:create_masquerade_event(<<"record_call">>, <<"RECORD_STOP">>, 'false')
                                  ,",kazoo_application_response=timeout"
                                  ]),
             lager:debug("publishing event: ~p", [Evt]),
-            _ = ecallmgr_util:send_cmd(Node, UUID, "application", Evt),
+            _ = ecallmgr_util:send_cmd(Node, UUID, <<"event">>, Evt),
             Error
     end.
 
