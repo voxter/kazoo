@@ -1191,7 +1191,7 @@ awaiting_callback({'originate_failed', JObj}, #state{account_id=AccountId
 awaiting_callback({'shared_failure', JObj}, #state{agent_listener=AgentListener
                                                   ,agent_call_id=ACallId
                                                   }=State) ->
-    Blame = wh_json:get_value(<<"Blame">>, JObj),
+    Blame = kz_json:get_value(<<"Blame">>, JObj),
     case Blame of
         'undefined' ->
             lager:debug("shared originate failure"),
