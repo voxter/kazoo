@@ -1254,7 +1254,7 @@ call_id(Call) ->
     end.
 
 -spec maybe_connect_to_agent(ne_binary(), kz_json:objects(), kapps_call:call(), api_integer(), ne_binary(), api_binary()) ->
-                                    ne_binaries().
+                                    kz_proplist().
 maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
     MCallId = kapps_call:call_id(Call),
     kz_util:put_callid(MCallId),
@@ -1316,7 +1316,7 @@ maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
 
 -spec maybe_originate_callback(ne_binary(), kz_json:objects(), kapps_call:call(), api_integer(), ne_binary(), api_binary()
     ,api_binary()) ->
-                                    ne_binaries().
+                                    kz_proplist().
 maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Number) ->
     MCallId = kapps_call:call_id(Call),
     put('callid', MCallId),
