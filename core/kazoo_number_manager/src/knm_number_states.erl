@@ -232,8 +232,8 @@ in_service_from_in_service_authorize(T0=#{todo := Ns, options := Options}) ->
 in_service_from_in_service_authorize(Number, Options) ->
     PhoneNumber = knm_number:phone_number(Number),
     AssignedTo = knm_phone_number:assigned_to(PhoneNumber),
-    AssignTo = knm_phone_options:assign_to(Options),
-    AuthBy = knm_phone_options:auth_by(Options),
+    AssignTo = knm_number_options:assign_to(Options),
+    AuthBy = knm_number_options:auth_by(Options),
     Sudo = ?KNM_DEFAULT_AUTH_BY =:= AuthBy,
     case Sudo
         %% Allowed when number is not assigned
