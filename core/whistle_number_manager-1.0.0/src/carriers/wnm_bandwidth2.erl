@@ -44,6 +44,26 @@
 -define(BW_ORDER_NAME_PREFIX,
         whapps_config:get_binary(?WNM_BW_CONFIG_CAT, <<"order_name_prefix">>, <<"Kazoo">>)).
 
+-define(IS_US_TOLLFREE(Prefix),
+    Prefix == <<"800">> orelse
+    Prefix == <<"822">> orelse
+    Prefix == <<"833">> orelse
+    Prefix == <<"844">> orelse
+    Prefix == <<"855">> orelse
+    Prefix == <<"866">> orelse
+    Prefix == <<"877">> orelse
+    Prefix == <<"880">> orelse
+    Prefix == <<"881">> orelse
+    Prefix == <<"882">> orelse
+    Prefix == <<"883">> orelse
+    Prefix == <<"884">> orelse
+    Prefix == <<"885">> orelse
+    Prefix == <<"886">> orelse
+    Prefix == <<"887">> orelse
+    Prefix == <<"888">> orelse
+    Prefix == <<"889">>
+).
+
 %% @public
 -spec is_number_billable(wnm_number()) -> 'true'.
 is_number_billable(_Number) -> 'true'.
@@ -63,9 +83,14 @@ find_numbers(<<"+", Rest/binary>>, Quantity, Opts) ->
 find_numbers(<<"1", Rest/binary>>, Quantity, Opts) ->
     find_numbers(Rest, Quantity, Opts);
 
-find_numbers(<<"8", Second:1/binary, _/binary>>, Quantity, _) ->
+find_numbers(<<Prefix:3/binary, _/binary>>=Num, Quantity, _) when ?IS_US_TOLLFREE(Prefix) ->
+    <<"8", Second:1/binary, _/binary>> = Prefix,
+    ToSearch = case wnm_util:is_reconcilable(Num) of
+                   'true' -> Num;
+                   'false' -> Second
+               end,
     UseQuantity = list_to_binary(integer_to_list(Quantity)),
-    {'ok', Result} = search(<<"tollFreeWildCardPattern=8", Second/binary, "*&enableTNDetail=true&quantity=", UseQuantity/binary>>),
+    {'ok', Result} = search(<<"tollFreeWildCardPattern=8", ToSearch/binary, "*&enableTNDetail=true&quantity=", UseQuantity/binary>>),
     process_tollfree_response(Result);
 
 find_numbers(<<NPA:3/binary>>, Quantity, _) ->
@@ -112,7 +137,7 @@ acquire_number(#number{auth_by = AuthBy
             Error = <<"Unable to acquire numbers on this system, carrier provisioning is disabled">>,
             wnm_number:error_carrier_fault(Error, N);
         'true' ->
-            Num  = wh_json:get_string_value(<<"number">>, Data),
+            Num  = reformat_number_for_acquire(wh_json:get_string_value(<<"number">>, Data)),
             Peer = whapps_config:get_string(?WNM_BW_CONFIG_CAT, <<"sip_peer">>),
             Site = whapps_config:get_string(?WNM_BW_CONFIG_CAT, <<"site_id">>),
             ON   = list_to_binary([?BW_ORDER_NAME_PREFIX, "-", wh_util:to_binary(wh_util:current_tstamp())]),
@@ -147,6 +172,10 @@ acquire_number(#number{auth_by = AuthBy
             end
     end.
 
+-spec reformat_number_for_acquire(string()) -> string().
+reformat_number_for_acquire("+1" ++ Number) -> Number;
+reformat_number_for_acquire(Number) -> Number.
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -163,14 +192,14 @@ sites() ->
     {'ok', Xml} = api_get(SiteUrl),
 
     io:format("listing all sites for account ~p~n", [AccountId]),
-    Sites = xmerl_xpath:string("Sites", Xml),
+    Sites = xmerl_xpath:string("Sites/Site", Xml),
     [process_site(X) || X <- Sites],
     io:format("done.~n").
 
 -spec process_site(xml_el()) -> 'ok'.
 process_site(Site) ->
-    Id   = wh_util:get_xml_value("Site/Id/text()", Site),
-    Name = wh_util:get_xml_value("Site/Name/text()", Site),
+    Id   = wh_util:get_xml_value("Id/text()", Site),
+    Name = wh_util:get_xml_value("Name/text()", Site),
     io:format("Id: ~p Name: ~p~n",[Id, Name]).
 
 -spec peers(binary()) -> 'ok'.
@@ -180,14 +209,14 @@ peers(SiteId) ->
     {'ok', Xml} = api_get(PeerUrl),
 
     io:format("listing all peers for account ~p, site ~p~n", [AccountId, SiteId]),
-    Peers = xmerl_xpath:string("SipPeers", Xml),
+    Peers = xmerl_xpath:string("SipPeers/SipPeer", Xml),
     [process_peer(X) || X <- Peers],
     io:format("done.~n").
 
 -spec process_peer(xml_el()) -> 'ok'.
 process_peer(Peer) ->
-    Id   = wh_util:get_xml_value("SipPeer/PeerId/text()", Peer),
-    Name = wh_util:get_xml_value("SipPeer/PeerName/text()", Peer),
+    Id   = wh_util:get_xml_value("PeerId/text()", Peer),
+    Name = wh_util:get_xml_value("PeerName/text()", Peer),
     io:format("Id: ~p Name: ~p~n", [Id, Name]).
 
 -type api_res() :: {'ok', xml_el()} | {'error', atom()}.
@@ -300,7 +329,7 @@ number_order_response_to_json(Xml) ->
     Props = [
         {<<"order_id">>, wh_util:get_xml_value("id/text()", Xml)}
        ,{<<"order_name">>, wh_util:get_xml_value("Name/text()", Xml)}
-       ,{<<"number">>, wh_util:get_xml_value("TelephoneNumberList/TelephoneNumber/text()", Xml)}
+       ,{<<"number">>, wnm_util:to_e164(wh_util:get_xml_value("TelephoneNumberList/TelephoneNumber/text()", Xml))}
     ],
     wh_json:from_list(props:filter_undefined(Props)).
 
@@ -318,7 +347,7 @@ search_response_to_json([Xml]) ->
 search_response_to_json(Xml) ->
     Number = wh_util:get_xml_value("//FullNumber/text()", Xml),
     Props = [
-        {<<"number">>, Number}
+        {<<"number">>, wnm_util:to_e164(Number)}
        ,{<<"rate_center">>, rate_center_to_json(Xml)}
     ],
 
@@ -326,7 +355,7 @@ search_response_to_json(Xml) ->
 
 -spec tollfree_search_response_to_json(xml_el()) -> wh_json:object().
 tollfree_search_response_to_json(Xml) ->
-    Number = wh_util:get_xml_value("//TelephoneNumber/text()", Xml),
+    Number = wnm_util:to_e164(wh_util:get_xml_value("//TelephoneNumber/text()", Xml)),
     Props = [
         {<<"number">>, Number}
     ],
@@ -363,17 +392,28 @@ rate_center_to_json(Xml) ->
 -spec verify_response(xml_el()) -> {'ok', ne_binary()} |
                                    {'error', api_binary() | ne_binaries()}.
 verify_response(Xml) ->
-    case wh_util:get_xml_value("/*/status/text()", Xml) =:= <<"success">>
-        orelse wh_util:get_xml_value("//LoginResponse/LoginResult/text()", Xml) =/= 'undefined'
-        orelse wh_util:get_xml_value("//SearchTelephoneNumbersResponse/SearchTelephoneNumbersResult", Xml) =/= []
+    NPAPath = "count(//TelephoneNumberDetailList/TelephoneNumberDetail)",
+    TollFreePath = "count(//TelephoneNumberList/TelephoneNumber)",
+    case validate_xpath_value(xmerl_xpath:string(NPAPath, Xml))
+             orelse validate_xpath_value(xmerl_xpath:string(TollFreePath, Xml))
+             orelse validate_xpath_value(wh_util:get_xml_value("//OrderStatus/text()", Xml))
     of
         'true' ->
             lager:debug("request was successful"),
             {'ok', Xml};
         'false' ->
             lager:debug("request failed"),
-            {'error', wh_util:get_xml_value("/*/errors/error/message/text()", Xml)}
+            case wh_util:get_xml_value("//ErrorList/Error/Description/text()", Xml) of
+                'undefined' -> {'error', <<"Number not found">>};
+                ErrMessage -> {'error', ErrMessage}
+            end
     end.
+
+-spec validate_xpath_value(api_binary() | {atom(), atom(), non_neg_integer()}) -> boolean().
+validate_xpath_value('undefined') -> false;
+validate_xpath_value(<<>>) -> false;
+validate_xpath_value({xmlObj, number, Num}) -> Num > 0;
+validate_xpath_value(_) -> 'true'.
 
 -spec should_lookup_cnam() -> 'true'.
 should_lookup_cnam() -> 'true'.
