@@ -207,8 +207,8 @@ relay_encoded_email(To, From, Encoded) ->
                                 ),
             _ = lager:debug("relayed message: ~p", [Receipt]),
             {'ok', binary:replace(Receipt, <<"\r\n">>, <<>>, ['global'])};
-        {'relay_response', {'error', _Type, Message}} ->
-            lager:debug("error relaying message: ~p: ~p", [_Type, Message]),
+        {'relay_response', {'error', _Type, {_SubType, _FailHost, Message}}} ->
+            lager:debug("error relaying message: ~p(~p): ~p", [_Type, _SubType, Message]),
             {'error', Message};
         {'relay_response', {'exit', Reason}} ->
             lager:debug("failed to send email:"),
@@ -774,7 +774,9 @@ read_doc(File) ->
 
 -spec is_preview(wh_json:object()) -> boolean().
 is_preview(DataJObj) ->
-    wh_json:is_true(<<"preview">>, DataJObj, 'false').
+    wh_util:is_true(
+      wh_json:get_first_defined([<<"Preview">>, <<"preview">>], DataJObj, 'false')
+     ).
 
 -spec public_proplist(wh_json:key(), wh_json:object()) -> wh_proplist().
 public_proplist(Key, JObj) ->
