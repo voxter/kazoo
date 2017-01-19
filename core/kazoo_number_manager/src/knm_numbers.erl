@@ -18,6 +18,7 @@
         ,charges/1, charges/2, charge/2, charge/3
         ]).
 -export([ok/2, ko/3]).
+-export([add_oks/2]).
 -export([assigned_to/1
         ,prev_assigned_to/1
         ,to_json/1
@@ -97,8 +98,10 @@
              ,charges/0
              ]).
 
--type applier() :: fun((t()) -> t()).
+-type applier() :: applier(t()).
+-type applier(A) :: fun((A) -> A).
 -type appliers() :: [applier()].
+-type appliers(A) :: [applier(A)].
 
 %% @private
 -spec num(knm_number:knm_number()) -> num().
@@ -194,9 +197,15 @@ charge(K, V, T=#{charges := Vs}) -> T#{charges => [{K, V} | Vs]}.
 
 %% @public
 -spec ok(ok() | oks(), t()) -> t().
-ok(Numbers, T) when is_list(Numbers) ->
-    T#{ok => Numbers};
-ok(Number, T) -> T#{ok => [Number | maps:get(ok, T)]}.
+ok(Numbers, T) when is_list(Numbers) -> T#{ok => Numbers};
+ok(Number, T) when not is_list(Number) ->
+    T#{ok => [Number | maps:get(ok, T)]}.
+
+%% @public
+-spec add_oks(oks(), t()) -> t().
+%%FIXME: unify with ok/2.
+add_oks(Numbers, T=#{ok := OKs}) when is_list(Numbers) ->
+    T#{ok => Numbers ++ OKs}.
 
 %% @public
 -spec ko(num() | knm_number:knm_number() | nums(), ko(), t()) -> t().
@@ -495,7 +504,7 @@ new(Options, ToDos, KOs, Reason) ->
 %% Exported ONLY for knm_number_states use.
 %% @end
 -spec pipe(t(), appliers()) -> t();
-          (t_pn(), appliers()) -> t_pn().
+          (t_pn(), appliers(t_pn())) -> t_pn().
 pipe(T, []) -> T;
 pipe(T=#{todo := [], ok := []}, _) -> T;
 pipe(T=#{todo := [], ok := OK}, Fs) ->
@@ -522,7 +531,7 @@ do(F, T) ->
     NewT#{todo => []}.
 
 %% @private
--spec do_in_wrap(applier(), t()) -> t().
+-spec do_in_wrap(applier(t_pn()), t()) -> t().
 do_in_wrap(_, T=#{todo := [], ok := []}) -> T;
 do_in_wrap(F, T=#{todo := [], ok := OK}) ->
     %% For calls not from pipe/2
@@ -711,10 +720,8 @@ delete_maybe_age(T=#{todo := _Ns, options := Options}) ->
             merge_okkos(delete_permanently(DeleteNs), maybe_age(OtherNs))
     end.
 
-delete_permanently(T=#{options := Options}) ->
-    lager:debug("deleting permanently"),
-    NewOptions = [{state, ?NUMBER_STATE_DELETED} | Options],
-    do(fun knm_number_states:to_options_state/1, options(NewOptions, T)).
+delete_permanently(T) ->
+    do_in_wrap(fun knm_phone_number:delete/1, T).
 
 split_on(Pred, T=#{todo := Ns}) ->
     {Yes, No} = lists:partition(Pred, Ns),

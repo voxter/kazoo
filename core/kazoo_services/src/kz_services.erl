@@ -294,7 +294,7 @@ delete_service_plan(PlanId, #kz_services{jobj=JObj}=Services) ->
 %%--------------------------------------------------------------------
 -spec save_as_dirty(ne_binary() | services()) -> services().
 -spec save_as_dirty(ne_binary() | services(), pos_integer()) -> services().
-save_as_dirty(<<_/binary>> = Account) ->
+save_as_dirty(Account=?NE_BINARY) ->
     save_as_dirty(fetch(Account));
 save_as_dirty(#kz_services{}=Services) ->
     save_as_dirty(Services, ?BASE_BACKOFF).
@@ -538,12 +538,15 @@ update(CategoryId, ItemId, Quantity, #kz_services{updates=JObj}=Services)
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec activation_charges(ne_binary(), ne_binary(), services() | ne_binary()) ->
+-spec activation_charges(ne_binary(), ne_binary(), services() | ne_binary() | kz_service_plans:plans()) ->
                                 number().
 activation_charges(CategoryId, ItemId, #kz_services{jobj=ServicesJObj}) ->
     Plans = kz_service_plans:from_service_json(ServicesJObj),
     kz_service_plans:activation_charges(CategoryId, ItemId, Plans);
-activation_charges(CategoryId, ItemId, <<_/binary>> = Account) ->
+activation_charges(CategoryId, ItemId, Plans)
+  when is_list(Plans) ->
+    kz_service_plans:activation_charges(CategoryId, ItemId, Plans);
+activation_charges(CategoryId, ItemId, Account=?NE_BINARY) ->
     activation_charges(CategoryId, ItemId, fetch(Account)).
 
 %%--------------------------------------------------------------------
@@ -796,11 +799,11 @@ move_to_good_standing(<<_/binary>> = AccountId) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec reconcile_only(api_binary() | services()) -> 'false' | services().
--spec reconcile(api_binary() | services()) -> 'false' | services().
+-spec reconcile_only(api_ne_binary() | services()) -> 'false' | services().
+-spec reconcile(api_ne_binary() | services()) -> 'false' | services().
 
 reconcile_only('undefined') -> 'false';
-reconcile_only(<<_/binary>> = Account) ->
+reconcile_only(Account=?NE_BINARY) ->
     reconcile_only(fetch(Account));
 reconcile_only(#kz_services{account_id=AccountId}=Services) ->
     lager:debug("reconcile all services for ~s", [AccountId]),
@@ -1038,15 +1041,17 @@ reset_category(CategoryId, #kz_services{updates=JObj}=Services) ->
 is_reseller(#kz_services{jobj=ServicesJObj}) ->
     kzd_services:is_reseller(ServicesJObj);
 is_reseller(<<_/binary>> = Account) ->
-    {'ok', ServicesJObj} = fetch_services_doc(Account),
-    kzd_services:is_reseller(ServicesJObj);
+    case fetch_services_doc(Account) of
+        {'ok', ServicesJObj} -> kzd_services:is_reseller(ServicesJObj);
+        _ -> 'false'
+    end;
 is_reseller(ServicesJObj) ->
     kzd_services:is_reseller(ServicesJObj).
 
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
-
+%%
 %% @end
 %%--------------------------------------------------------------------
 -spec dry_run(services()) -> kz_json:object().
@@ -1096,20 +1101,15 @@ calculate_services_charges(#kz_services{jobj=ServiceJObj
     CurrentQuantities = kzd_services:quantities(ServiceJObj),
     UpdatedQuantities = kz_json:merge_jobjs(UpdatesJObj, CurrentQuantities),
 
-    UpdatedServiceJObj = kzd_services:set_quantities(ServiceJObj
-                                                    ,UpdatedQuantities
-                                                    ),
+    UpdatedServiceJObj = kzd_services:set_quantities(ServiceJObj, UpdatedQuantities),
 
     ExistingItems = kz_service_plans:create_items(ServiceJObj, ServicePlans),
     UpdatedItems = kz_service_plans:create_items(UpdatedServiceJObj, ServicePlans),
     Changed = kz_service_items:get_updated_items(UpdatedItems, ExistingItems),
 
-    lager:debug("current items: ~p items after update: ~p service diff quantities: ~p"
-               ,[kz_service_items:public_json(ExistingItems)
-                ,kz_service_items:public_json(UpdatedItems)
-                ,diff_quantities(Service)
-                ]
-               ),
+    lager:debug("current items: ~s", [kz_json:encode(kz_service_items:public_json(ExistingItems))]),
+    lager:debug("items after update: ~s", [kz_json:encode(kz_service_items:public_json(UpdatedItems))]),
+    lager:debug("service diff quantities: ~s", [kz_json:encode(diff_quantities(Service))]),
 
     lager:debug("computed service charges"),
     {'ok', kz_service_items:public_json(Changed)}.
@@ -1129,7 +1129,7 @@ calculate_transactions_charges(PlansCharges, JObjs) ->
                                                 kz_json:object().
 calculate_transactions_charge_fold(JObj, PlanCharges) ->
     Amount = kz_json:get_value(<<"amount">>, JObj, 0),
-    Quantity = kz_json:get_value(<<"quantity">>, JObj, 0),
+    Quantity = kz_json:get_value(<<"activate_quantity">>, JObj, 0),
     SubTotal = kz_json:get_value(<<"activation_charges">>, PlanCharges, 0),
 
     case SubTotal + (Amount * Quantity) of
@@ -1141,7 +1141,7 @@ calculate_transactions_charge_fold(JObj, PlanCharges) ->
             ItemId = kz_json:get_value(<<"item">>, JObj),
             Props = [{<<"activation_charges">>, Total}
                     ,{[CategoryId, ItemId, <<"activation_charges">>], Amount}
-                    ,{[CategoryId, ItemId, <<"quantity">>], Quantity}
+                    ,{[CategoryId, ItemId, <<"activate_quantity">>], Quantity}
                     ],
             kz_json:set_values(Props, PlanCharges)
     end.
@@ -1180,17 +1180,17 @@ dry_run_activation_charges(CategoryId, CategoryJObj, Services, JObjs) ->
 dry_run_activation_charges(CategoryId, ItemId, Quantity, #kz_services{jobj=JObj}=Services, JObjs) ->
     case kzd_services:item_quantity(JObj, CategoryId, ItemId) of
         Quantity -> JObjs;
-        _OldQuantity ->
-            ServicesJObj = to_json(Services),
-            Plans = kz_service_plans:from_service_json(ServicesJObj),
+        OldQuantity ->
+            Plans = kz_service_plans:from_service_json(to_json(Services)),
+            Charges = activation_charges(CategoryId, ItemId, Plans),
             ServicePlan = kz_service_plans:public_json(Plans),
             ItemPlan = get_item_plan(CategoryId, ItemId, ServicePlan),
-            Charges = activation_charges(CategoryId, ItemId, Services),
             [kz_json:from_list(
                [{<<"category">>, CategoryId}
                ,{<<"item">>, kzd_item_plan:masquerade_as(ItemPlan, ItemId)}
                ,{<<"amount">>, Charges}
                ,{<<"quantity">>, Quantity}
+               ,{<<"activate_quantity">>, Quantity - OldQuantity}
                ])
              |JObjs
             ]

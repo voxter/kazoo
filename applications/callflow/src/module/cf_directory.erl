@@ -99,7 +99,7 @@
          }).
 -type directory() :: #directory{}.
 
--type dtmf_action() :: 'route' | 'next' | 'start_over' | 'invalid' | 'continue' | 'stop'.
+-type dtmf_action() :: 'route' | 'next' | 'start_over' | 'invalid' | 'continue'.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -143,8 +143,19 @@ handle(Data, Call) ->
 
 -spec directory_start(kapps_call:call(), directory(), directory_users()) -> 'ok'.
 directory_start(Call, State, CurrUsers) ->
+    directory_start(Call, State, CurrUsers, 3).
+
+-spec directory_start(kapps_call:call(), directory(), directory_users(), non_neg_integer()) -> 'ok'.
+directory_start(Call, _State, _CurrUsers, 0) ->
+    lager:error("maximum try to collect digits"),
+    kapps_call_command:audio_macro([{'prompt', ?PROMPT_SPECIFY_MINIMUM}
+                                   ,{'prompt', ?PROMPT_NO_RESULTS_FOUND}
+                                   ], Call),
+    cf_exe:stop(Call);
+directory_start(Call, State, CurrUsers, Loop) ->
     _ = kapps_call_command:flush_dtmf(Call),
     case play_directory_instructions(Call, search_fields(State)) of
+        {'ok', <<>>} -> directory_start(Call, State, CurrUsers, Loop - 1);
         {'ok', DTMF} -> collect_digits(Call, State, CurrUsers, DTMF);
         {'error', _Error} ->
             lager:error("failed to collect digits: ~p", [_Error]),
@@ -199,7 +210,7 @@ maybe_match_users(Call, State, [], _) ->
     _ = play_no_users(Call),
     directory_start(Call, clear_dtmf(State), users(State));
 maybe_match_users(Call, State, [U|Us], MatchNum) ->
-    case maybe_match_user(Call, U, MatchNum) of
+    case maybe_match_user(Call, U, MatchNum, 3) of
         'route' ->
             route_to_match(Call, callflow(Call, U));
         'next' ->
@@ -211,12 +222,15 @@ maybe_match_users(Call, State, [U|Us], MatchNum) ->
         'invalid' ->
             lager:info("invalid key press"),
             _ = play_invalid(Call),
-            maybe_match_users(Call, State, [U|Us], MatchNum);
-        'stop' -> cf_exe:stop(Call)
+            maybe_match_users(Call, State, [U|Us], MatchNum)
     end.
 
--spec maybe_match_user(kapps_call:call(), directory_user(), pos_integer()) -> dtmf_action().
-maybe_match_user(Call, U, MatchNum) ->
+-spec maybe_match_user(kapps_call:call(), directory_user(), pos_integer(), non_neg_integer()) -> dtmf_action().
+maybe_match_user(Call, _U, _MatchNum, 0) ->
+    lager:info("maximum try to receive DTMF from caller, hanging up"),
+    _ = play_no_users(Call),
+    cf_exe:stop(Call);
+maybe_match_user(Call, U, MatchNum, Loop) ->
     UserName = username_audio_macro(Call, U),
     lager:info("playing username with: ~p", [UserName]),
 
@@ -224,17 +238,22 @@ maybe_match_user(Call, U, MatchNum) ->
         {'ok', <<>>} ->
             lager:info("nothing pressed during user prompts, wait for something"),
             case kapps_call_command:wait_for_dtmf(?TIMEOUT_DTMF) of
-                {'ok', <<>>} -> maybe_match_user(Call, U, MatchNum);
+                {'ok', <<>>} -> maybe_match_user(Call, U, MatchNum, Loop - 1);
                 {'ok', DTMF} -> interpret_user_match_dtmf(DTMF);
                 {'error', 'timeout'} ->
                     lager:info("failed to receive DTMF from caller, try again"),
-                    maybe_match_user(Call, U, MatchNum);
+                    maybe_match_user(Call, U, MatchNum, Loop - 1);
                 {'error', 'channel_hungup'} ->
                     lager:info("channel hungup, we're done"),
                     cf_exe:stop(Call)
             end;
         {'ok', DTMF} -> interpret_user_match_dtmf(DTMF);
-        {'error', 'channel_hungup'} -> 'stop'
+        {'error', 'channel_hungup'} ->
+            lager:info("channel hungup, we're done"),
+            cf_exe:stop(Call);
+        {'error', _R} ->
+            lager:info("failed to collect next action: ~p", [_R]),
+            cf_exe:stop(Call)
     end.
 
 -spec interpret_user_match_dtmf(ne_binary()) -> dtmf_action().
@@ -261,7 +280,8 @@ route_to_match(Call, Callflow) ->
 %% Audio Prompts
 %%------------------------------------------------------------------------------
 -spec play_user(kapps_call:call(), kapps_call_command:audio_macro_prompt(), any()) ->
-                       {'ok', binary()}.
+                       {'ok', binary()} |
+                       {'error', atom()}.
 play_user(Call, UsernameTuple, _MatchNum) ->
     play_and_collect(Call, [{'prompt', ?PROMPT_RESULT_NUMBER}
                            ,UsernameTuple
@@ -272,7 +292,9 @@ play_user(Call, UsernameTuple, _MatchNum) ->
 play_invalid(Call) ->
     kapps_call_command:audio_macro([{'prompt', ?PROMPT_INVALID_KEY}], Call).
 
--spec play_confirm_match(kapps_call:call(), directory_user()) -> {'ok', binary()}.
+-spec play_confirm_match(kapps_call:call(), directory_user()) ->
+                                {'ok', binary()} |
+                                {'error', atom()}.
 play_confirm_match(Call, User) ->
     UserName = username_audio_macro(Call, User),
     lager:info("playing confirm_match with username: ~p", [UserName]),
