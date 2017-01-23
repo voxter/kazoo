@@ -15,8 +15,19 @@
 
 -include("../kzt.hrl").
 
--spec exec(whapps_call:call(), wh_json:object()) -> usurp_return() | channel_down_return().
+-spec exec(whapps_call:call(), wh_json:object()) ->
+                  usurp_return() | channel_down_return() |
+                  {'error', whapps_call:call()}.
 exec(Call, FlowJObj) ->
+    %% rudimentary sanity check, to avoid crashing in amqp handler
+    case wh_json:get_value(<<"module">>, FlowJObj) of
+        'undefined' -> {'error', Call};
+        _ -> unsafe_exec(Call, FlowJObj)
+    end.
+
+-spec unsafe_exec(whapps_call:call(), wh_json:object()) ->
+                         usurp_return() | channel_down_return().
+unsafe_exec(Call, FlowJObj) ->
     case whapps_call_command:b_channel_status(Call) of
         {'error', _E} -> {'channel_down', Call};
         _ ->
@@ -54,6 +65,8 @@ req_params(Call) ->
        ,{<<"From-Realm">>, whapps_call:from_realm(Call)}
        ,{<<"To">>, whapps_call:to_user(Call)}
        ,{<<"To-Realm">>, whapps_call:to_realm(Call)}
+       ,{<<"Request">>, whapps_call:request_user(Call)}
+       ,{<<"Request-Realm">>, whapps_call:request_realm(Call)}
        ,{<<"Call-Status">>, kzt_util:get_call_status(Call)}
        ,{<<"Api-Version">>, <<"2015-03-01">>}
        ,{<<"Direction">>, <<"inbound">>}

@@ -92,6 +92,11 @@ process_rules(Temporal, [#rule{enabled='true'
     lager:info("time based rule ~s (~s) is forced active part of rule set? ~p", [Id, Name, RuleSet]),
     %% Unforced rules cannot be more specific than forced, remove them all
     process_rules(Temporal, remove_unforced_rules(Rs), Call, [R|Candidates]);
+process_rules(Temporal, [#rule{id=Id
+                               ,name=Name
+                               ,cycle = <<"">>}|Rs], Call, Candidates) ->
+    lager:error("time based rule ~s (~s) is invalid, skipping", [Id, Name]),
+    process_rules(Temporal, Rs, Call, Candidates);
 process_rules(Temporal, [_|_]=Rules, Call, Candidates) ->
     update_candidates(Temporal, Rules, Call, Candidates);
 process_rules(_, [], _, []) ->
