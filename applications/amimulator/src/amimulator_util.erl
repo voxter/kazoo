@@ -922,7 +922,7 @@ recurse_to_child_callflow(Id, Flow) ->
 
 
 queue_for_number(Number, AccountDb) ->
-    case couch_mgr:get_results(AccountDb, <<"callflow/listing_by_number">>, [{key, Number}]) of
+    case couch_mgr:get_results(AccountDb, <<"callflows/listing_by_number">>, [{key, Number}]) of
         {ok, []} ->
             {error, number_not_found};
         {ok, [Result]} ->
