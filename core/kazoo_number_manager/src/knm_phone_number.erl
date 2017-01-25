@@ -288,7 +288,7 @@ save(T0=#{todo := PNs, options := Options}) ->
             lists:foldl(F, T0, PNs)
     end;
 save(#knm_phone_number{is_dirty = false}=PhoneNumber) ->
-    lager:debug("not dirty: skip saving ~s", [number(PhoneNumber)]),
+    lager:debug("not dirty, skip saving ~s", [number(PhoneNumber)]),
     PhoneNumber;
 save(PhoneNumber) ->
     Routines = [fun save_to_number_db/1
@@ -496,7 +496,7 @@ from_json(JObj0) ->
                 ,{fun set_features/2, maybe_rename_features(Features)}
                 ,{fun set_state/2, kz_json:get_first_defined([?PVT_STATE, ?PVT_STATE_LEGACY], JObj)}
                 ,{fun set_reserve_history/2, kz_json:get_value(?PVT_RESERVE_HISTORY, JObj, [])}
-                ,{fun set_ported_in/2, kz_json:is_true(?PVT_PORTED_IN, JObj, 'false')}
+                ,{fun set_ported_in/2, kz_json:is_true(?PVT_PORTED_IN, JObj)}
                 ,{fun set_module_name/2, kz_json:get_value(?PVT_MODULE_NAME, JObj)}
                 ,{fun set_carrier_data/2, kz_json:get_value(?PVT_CARRIER_DATA, JObj)}
                 ,{fun set_region/2, kz_json:get_value(?PVT_REGION, JObj)}
@@ -1276,6 +1276,9 @@ is_in_account_hierarchy(AuthBy, AccountId) ->
 -ifdef(TEST).
 save_to_number_db(PhoneNumber) -> PhoneNumber.
 -else.
+save_to_number_db(#knm_phone_number{state = ?NUMBER_STATE_DELETED}=PhoneNumber) ->
+    lager:debug("deleted, skip saving ~s", [number(PhoneNumber)]),
+    PhoneNumber;
 save_to_number_db(PhoneNumber) ->
     NumberDb = number_db(PhoneNumber),
     JObj = to_json(PhoneNumber),
@@ -1319,8 +1322,7 @@ assign(PhoneNumber) ->
 
 -spec assign(knm_phone_number(), ne_binary()) -> knm_phone_number().
 -ifdef(TEST).
-assign(PhoneNumber, _AssignedTo) ->
-    PhoneNumber.
+assign(PhoneNumber, _AssignedTo) -> PhoneNumber.
 -else.
 assign(PhoneNumber, AssignedTo) ->
     AccountDb = kz_util:format_account_db(AssignedTo),
