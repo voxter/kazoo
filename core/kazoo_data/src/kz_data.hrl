@@ -95,7 +95,7 @@
 -type view_listing() :: {ne_binary(), kz_json:object()}.
 -type views_listing() :: [view_listing()].
 
--type db_classifications() :: 'account' | 'modb' | 'acdc' |
+-type db_classifications() :: 'account' | 'modb' |
                               'numbers' | 'aggregate' | 'system' |
                               'resource_selectors' | 'deprecated' | 'undefined'.
 

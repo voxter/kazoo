@@ -47,6 +47,7 @@ db_classification(?KZ_TOKEN_DB) -> 'aggregate';
 db_classification(?KZ_SIP_DB) -> 'aggregate';
 db_classification(?KZ_FAXES_DB) -> 'aggregate';
 db_classification(?KZ_ACDC_DB) -> 'aggregate';
+db_classification(?KZ_AMIMULATOR_DB) -> 'aggregate';
 db_classification(?KZ_SERVICES_DB) -> 'aggregate';
 db_classification(?KZ_PORT_REQUESTS_DB) -> 'aggregate';
 db_classification(?KZ_WEBHOOKS_DB) -> 'aggregate';
