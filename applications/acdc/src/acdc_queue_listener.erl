@@ -22,7 +22,6 @@
 
 %% API
 -export([start_link/4
-         ,accept_member_calls/1
          ,member_connect_req/4
          ,member_connect_re_req/1
          ,member_connect_win/3
@@ -128,10 +127,6 @@ start_link(WorkerSup, MgrPid, AccountId, QueueId) ->
                              ]
                             ,[WorkerSup, MgrPid, AccountId, QueueId]
                            ).
-
--spec accept_member_calls(pid()) -> 'ok'.
-accept_member_calls(Srv) ->
-    gen_listener:cast(Srv, {'accept_member_calls'}).
 
 -spec member_connect_req(pid(), wh_json:object(), any(), api_binary()) -> 'ok'.
 member_connect_req(Srv, MemberCallJObj, Delivery, Url) ->
