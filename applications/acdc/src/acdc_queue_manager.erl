@@ -34,7 +34,7 @@
          ,status/1
          ,current_agents/1
          ,refresh/2
-         ,callback_number/2
+         ,callback_details/2
         ]).
 
 %% FSM helpers
@@ -302,9 +302,9 @@ agents_available(Srv) -> gen_listener:call(Srv, 'agents_available').
 
 pick_winner(Srv, Resps) -> pick_winner(Srv, Resps, strategy(Srv), next_winner(Srv)).
 
--spec callback_number(pid(), ne_binary()) -> api_binary().
-callback_number(Srv, CallId) ->
-    gen_listener:call(Srv, {'callback_number', CallId}).
+-spec callback_details(pid(), ne_binary()) -> api_binary().
+callback_details(Srv, CallId) ->
+    gen_listener:call(Srv, {'callback_details', CallId}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -449,7 +449,7 @@ handle_call({'queue_position', CallId}, _, #state{current_member_calls=CurrentCa
 
     {'reply', Index, State};
 
-handle_call({'callback_number', CallId}, _, #state{registered_callbacks=Callbacks}=State) ->
+handle_call({'callback_details', CallId}, _, #state{registered_callbacks=Callbacks}=State) ->
     {'reply', props:get_value(CallId, Callbacks), State};
 
 handle_call(_Request, _From, State) ->
@@ -487,7 +487,7 @@ handle_cast({'member_call_cancel', K, JObj}, #state{ignored_member_calls=Dict}=S
         _ ->
             {'noreply', State#state{ignored_member_calls=dict:store(K, 'true', Dict)}}
     end;
-    
+
 handle_cast({'monitor_call', Call}, State) ->
     CallId = whapps_call:call_id(Call),
     gen_listener:add_binding(self(), 'call', [{'callid', CallId}
@@ -677,7 +677,9 @@ handle_cast({'handle_queue_member_remove', JObj}, State) ->
     State2 = maybe_remove_callback_reg(wh_json:get_value(<<"Call-ID">>, JObj), State1),
     {'noreply', State2};
 
-handle_cast({'handle_member_callback_reg', JObj}, #state{current_member_calls=CurrentCalls
+handle_cast({'handle_member_callback_reg', JObj}, #state{account_id=AccountId
+                                                         ,queue_id=QueueId
+                                                         ,current_member_calls=CurrentCalls
                                                          ,pos_announce_pids=Pids
                                                          ,registered_callbacks=RegCallbacks}=State) ->
     CallId = wh_json:get_value(<<"Call-ID">>, JObj),
@@ -688,8 +690,11 @@ handle_cast({'handle_member_callback_reg', JObj}, #state{current_member_calls=Cu
         Call ->
             lager:debug("call ~s marked as callback", [CallId]),
             Number = wh_json:get_value(<<"Number">>, JObj),
-            {'noreply', State#state{pos_announce_pids=maybe_cancel_position_announcements(Call, Pids)
-                                    ,registered_callbacks=[{CallId, Number} | RegCallbacks]
+            Call1 = callback_cid_update(AccountId, QueueId, Call),
+            CIDPrepend = whapps_call:kvs_fetch('prepend_cid_name', Call1),
+            {'noreply', State#state{current_member_calls=lists:keyreplace(CallId, 2, CurrentCalls, Call1)
+                                    ,pos_announce_pids=maybe_cancel_position_announcements(Call1, Pids)
+                                    ,registered_callbacks=[{CallId, {Number, CIDPrepend}} | RegCallbacks]
                                    }}
     end;
 
@@ -1143,7 +1148,7 @@ time_prompts(Time, _, Media, Language) ->
     {Time, [{'prompt', props:get_value(<<"estimated_wait_time_media">>, Media), Language, <<"A">>}
             | time_prompts2(Time, Language)
            ]}.
-    
+
 time_prompts2({0, 0, _}, Language) ->
     [{'prompt', <<"queue-less_than_1_minute">>, Language, <<"A">>}];
 time_prompts2({0, Min, _}, Language) when Min =< 5 ->
@@ -1260,6 +1265,35 @@ maybe_remove_queue_member(CallId, #state{account_id=AccountId
     State#state{current_member_calls=UpdatedMemberCalls
                 ,pos_announce_pids=UpdatedAnnouncePids
                }.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Prepend CB onto CID of callback calls and update waiting call stat
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec callback_cid_update(ne_binary(), ne_binary(), whapps_call:call()) ->
+                                 whapps_call:call().
+callback_cid_update(AccountId, QueueId, Call) ->
+    Call1 = prepend_cid_name(<<"CB:">>, Call),
+    {CIDNumber, CIDName} = acdc_util:caller_id(Call1),
+    acdc_stats:call_waiting(AccountId
+                            ,QueueId
+                            ,whapps_call:call_id(Call1)
+                            ,CIDName
+                            ,CIDNumber
+                            ,'undefined'
+                           ),
+    Call1.
+
+-spec prepend_cid_name(ne_binary(), whapps_call:call()) -> whapps_call:call().
+prepend_cid_name(Prefix, Call) ->
+    Prefix1 = case whapps_call:kvs_fetch('prepend_cid_name', Call) of
+                  'undefined' -> Prefix;
+                  Prepend -> <<Prefix/binary, Prepend/binary>>
+              end,
+    whapps_call:kvs_store('prepend_cid_name', Prefix1, Call).
 
 -spec maybe_remove_callback_reg(ne_binary(), mgr_state()) -> mgr_state().
 maybe_remove_callback_reg(CallId, #state{registered_callbacks=RegCallbacks}=State) ->
