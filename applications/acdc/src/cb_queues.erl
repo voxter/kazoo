@@ -701,7 +701,7 @@ fetch_stats_summary(Context) ->
                                   ,Context
                                   );
         {'ok', Resp} ->
-            RespJObj = kz_json:set_values([{<<"current_timestamp">>, kz_util:current_tstamp()}
+            RespJObj = kz_json:set_values([{<<"current_timestamp">>, kz_time:current_tstamp()}
                                           ,{<<"Summarized">>, kz_json:get_value(<<"Data">>, Resp, [])}
                                           ,{<<"Waiting">>, kz_doc:public_fields(kz_json:get_value(<<"Waiting">>, Resp, []))}
                                           ,{<<"Handled">>, kz_doc:public_fields(kz_json:get_value(<<"Handled">>, Resp, []))}

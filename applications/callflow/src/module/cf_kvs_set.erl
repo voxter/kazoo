@@ -74,7 +74,7 @@ digits_key(_) -> 'false'.
 digit_evaluation_error(Key) ->
     Msg = "invalid kv lookup key used",
     lager:info(Msg ++ ": ~s", [Key]),
-    {'error', kz_json:from_list([{<<"error">>, kz_util:to_binary(Msg)}
+    {'error', kz_json:from_list([{<<"error">>, kz_term:to_binary(Msg)}
                                 ,{<<"key">>, Key}
                                 ])}.
 
@@ -169,10 +169,10 @@ format_json_rec([Prim|Others], _) ->
     format_type(Prim) ++ "," ++ format_json_rec(Others, [Prim]);
 
 format_json_rec(V, _) ->
-    "\"" ++ kz_util:to_list(V) ++ "\"".
+    "\"" ++ kz_term:to_list(V) ++ "\"".
 
 format_type(Data) when not is_binary(Data) ->
-    kz_util:to_list(Data);
+    kz_term:to_list(Data);
 
 format_type(<<Data/binary>>) ->
     "\"" ++ binary_to_list(Data) ++ "\"".

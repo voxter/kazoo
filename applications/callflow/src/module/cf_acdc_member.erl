@@ -176,7 +176,7 @@ process_message(#member_call{call=Call
         'true' -> cf_exe:amqp_send(Call, MemberCall, fun kapi_acdc_queue:publish_member_call/1);
         'false' -> 'ok'
     end,
-    wait_for_bridge(MC, BreakoutState, kz_util:decr_timeout(Timeout, Wait), Start);
+    wait_for_bridge(MC, BreakoutState, kz_time:decr_timeout(Timeout, Wait), Start);
 process_message(#member_call{call=Call
                             ,queue_id=QueueId
                             }=MC, BreakoutState, Timeout, Start, Wait, JObj, {<<"member">>, <<"call_fail">>}) ->
@@ -194,14 +194,14 @@ process_message(#member_call{call=Call
             wait_for_bridge(MC, BreakoutState, kz_time:decr_timeout(Timeout, Wait), Start)
     end;
 process_message(#member_call{call=Call}, _, _, Start, _Wait, _JObj, {<<"member">>, <<"call_success">>}) ->
-    lager:info("call was processed by queue (took ~b s)", [kz_util:elapsed_s(Start)]),
+    lager:info("call was processed by queue (took ~b s)", [kz_time:elapsed_s(Start)]),
     kapps_call_command:flush(Call),
     cf_exe:control_usurped(Call);
 process_message(MC, BreakoutState, Timeout, Start, Wait, JObj, {<<"call_event">>, <<"DTMF">>}) ->
     DTMF = kz_json:get_value(<<"DTMF-Digit">>, JObj),
     process_dtmf(DTMF, MC, BreakoutState, Timeout, Start, Wait);
 process_message(MC, BreakoutState, Timeout, Start, Wait, _JObj, _Type) ->
-    wait_for_bridge(MC, BreakoutState, kz_util:decr_timeout(Timeout, Wait), Start).
+    wait_for_bridge(MC, BreakoutState, kz_time:decr_timeout(Timeout, Wait), Start).
 
 -spec process_dtmf(binary(), member_call(), breakout_state(), max_wait(), kz_now(), kz_now()) -> 'ok'.
 process_dtmf(DTMF, #member_call{call=Call

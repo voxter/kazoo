@@ -243,7 +243,7 @@ do_process_number(Number, AccountId, Flags) ->
 
 -spec parse_flags(text()) -> api_list().
 parse_flags(Flags) ->
-    Flags1 = [kz_util:to_binary(string:strip(Flag)) || Flag <- string:tokens(kz_util:to_list(Flags), ",")],
+    Flags1 = [kz_term:to_binary(string:strip(Flag)) || Flag <- string:tokens(kz_term:to_list(Flags), ",")],
     case Flags1 of
         [] -> 'undefined';
         _ -> Flags1

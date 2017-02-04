@@ -40,7 +40,7 @@ get_temporal_route() ->
     Timezone = ?TIMEZONE,
     {LocalDate, LocalTime} = localtime:utc_to_local(
                                ?DATETIME
-                                                   ,kz_util:to_list(Timezone)
+                                                   ,kz_term:to_list(Timezone)
                               ),
     #temporal{local_sec=calendar:datetime_to_gregorian_seconds({LocalDate, LocalTime})
              ,local_date=LocalDate

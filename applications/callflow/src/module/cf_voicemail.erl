@@ -988,7 +988,7 @@ play_messages([H|T]=Messages, PrevMessages, Count, #mailbox{timezone=Timezone
         {'ok', 'envelope'} ->
             lager:info("caller chose to hear envelope"),
             Prompt2 = [{'prompt', <<"vm-message_number">>}
-                      ,{'say', kz_util:to_binary(Count - length(Messages) + 1), <<"number">>}
+                      ,{'say', kz_term:to_binary(Count - length(Messages) + 1), <<"number">>}
                       ,{'prompt', <<"vm-received">>}
                       ,{'say', get_unix_epoch(kz_json:get_value(<<"timestamp">>, H), Timezone), <<"current_date_time">>}
                       ,{'tts', <<"from">>}

@@ -2201,13 +2201,13 @@ collect_digits(MaxDigits, Timeout, Interdigit, NoopId, Call) ->
 
 %% When noop id is undefined, do not wait for the noop_complete before applying timeout
 collect_digits(MaxDigits, Timeout, Interdigit, 'undefined', Terminators, Call) ->
-    do_collect_digits(#wcc_collect_digits{max_digits=kz_util:to_integer(MaxDigits)
-                                         ,timeout=kz_util:to_integer(Timeout)
-                                         ,interdigit=kz_util:to_integer(Interdigit)
+    do_collect_digits(#wcc_collect_digits{max_digits=kz_term:to_integer(MaxDigits)
+                                         ,timeout=kz_term:to_integer(Timeout)
+                                         ,interdigit=kz_term:to_integer(Interdigit)
                                          ,noop_id='undefined'
                                          ,terminators=Terminators
                                          ,call=Call
-                                         ,after_timeout=kz_util:to_integer(Timeout)
+                                         ,after_timeout=kz_term:to_integer(Timeout)
                                          });
 collect_digits(MaxDigits, Timeout, Interdigit, NoopId, Terminators, Call) ->
     do_collect_digits(#wcc_collect_digits{max_digits=kz_term:to_integer(MaxDigits)
@@ -2757,7 +2757,7 @@ wait_for_playback_timeout_or_dtmf(NoopId, RecvTimeout, Timeout, Digits) ->
                 {<<"call_event">>, <<"DTMF">>, _} ->
                     Digit = kz_json:get_value(<<"DTMF-Digit">>, JObj),
                     wait_for_playback_timeout_or_dtmf(NoopId, 1500, 1500, <<Digits/binary, Digit/binary>>);
-                _ -> wait_for_playback_timeout_or_dtmf(NoopId, kz_util:decr_timeout(RecvTimeout, Start), Timeout, Digits)
+                _ -> wait_for_playback_timeout_or_dtmf(NoopId, kz_time:decr_timeout(RecvTimeout, Start), Timeout, Digits)
             end;
         {'error', 'timeout'} ->
             lager:debug("timeout, got digits ~s", [Digits]),

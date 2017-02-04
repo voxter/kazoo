@@ -113,7 +113,7 @@ call_waiting(AccountId, QueueId, Position, CallId, CallerIdName, CallerIdNumber,
              ,{<<"Call-ID">>, CallId}
              ,{<<"Caller-ID-Name">>, CallerIdName}
              ,{<<"Caller-ID-Number">>, CallerIdNumber}
-             ,{<<"Entered-Timestamp">>, kz_util:current_tstamp()}
+             ,{<<"Entered-Timestamp">>, kz_time:current_tstamp()}
              ,{<<"Entered-Position">>, Position}
              ,{<<"Caller-Priority">>, CallerPriority}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
@@ -295,7 +295,7 @@ agent_statuses() ->
 manual_cleanup_calls(Window) ->
     {'ok', Srv} = acdc_stats_sup:stats_srv(),
 
-    Past = kz_util:current_tstamp() - Window,
+    Past = kz_time:current_tstamp() - Window,
     PastConstraint = {'=<', '$1', Past},
 
     TypeConstraints = [{'=/=', '$2', {'const', <<"waiting">>}}
@@ -327,7 +327,7 @@ manual_cleanup_calls(Window) ->
 manual_cleanup_statuses(Window) ->
     {'ok', Srv} = acdc_stats_sup:stats_srv(),
 
-    Past = kz_util:current_tstamp() - Window,
+    Past = kz_time:current_tstamp() - Window,
 
     StatusMatch = [{#status_stat{timestamp='$1', _='_'}
                    ,[{'=<', '$1', Past}]
@@ -446,7 +446,7 @@ handle_call_query(JObj, _Prop) ->
             Result = query_calls(Match, Limit),
             Resp = Result ++
                 kz_api:default_headers(?APP_NAME, ?APP_VERSION) ++
-                [{<<"Query-Time">>, kz_util:current_tstamp()}
+                [{<<"Query-Time">>, kz_time:current_tstamp()}
                 ,{<<"Msg-ID">>, MsgId}
                 ],
             kapi_acdc_stats:publish_current_calls_resp(RespQ, Resp);
@@ -534,7 +534,7 @@ handle_cast({'create_call', JObj}, State) ->
                      ,call_id = kz_json:get_value(<<"Call-ID">>, JObj)
                      ,account_id = kz_json:get_value(<<"Account-ID">>, JObj)
                      ,queue_id = kz_json:get_value(<<"Queue-ID">>, JObj)
-                     ,entered_timestamp = kz_json:get_value(<<"Entered-Timestamp">>, JObj, kz_util:current_tstamp())
+                     ,entered_timestamp = kz_json:get_value(<<"Entered-Timestamp">>, JObj, kz_time:current_tstamp())
                      ,abandoned_timestamp = kz_json:get_value(<<"Abandon-Timestamp">>, JObj)
                      ,entered_position = kz_json:get_value(<<"Entered-Position">>, JObj)
                      ,abandoned_reason = kz_json:get_value(<<"Abandon-Reason">>, JObj)
@@ -901,7 +901,7 @@ query_agent_calls(RespQ, MsgId, Match, _Limit) ->
     case ets:select(agent_call_table_id(), Match) of
         [] ->
             lager:debug("no stats found, sorry ~s", [RespQ]),
-            Resp = [{<<"Query-Time">>, kz_util:current_tstamp()}
+            Resp = [{<<"Query-Time">>, kz_time:current_tstamp()}
                    ,{<<"Msg-ID">>, MsgId}
                     | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                    ],

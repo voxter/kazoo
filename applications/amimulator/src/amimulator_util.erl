@@ -47,9 +47,9 @@ filter_empty(Parameters) ->
 %% Recursive proplist formatting for writes to socket
 -spec format_prop(tuple()) -> binary().
 format_prop({V}) ->
-    <<(kz_util:to_binary(V))/binary, "\r\n">>;
+    <<(kz_term:to_binary(V))/binary, "\r\n">>;
 format_prop({K, V}) ->
-    <<(kz_util:to_binary(K))/binary, ": ", (kz_util:to_binary(V))/binary, "\r\n">>.
+    <<(kz_term:to_binary(K))/binary, ": ", (kz_term:to_binary(V))/binary, "\r\n">>.
 
 -spec format_binary(list()) -> binary().
 format_binary([KV|Rest]) ->
@@ -339,7 +339,7 @@ channel_tail(CallId) ->
                _ ->
                    CallId
            end,
-    Digest = crypto:hash('md5', kz_util:to_binary(Seed)),
+    Digest = crypto:hash('md5', kz_term:to_binary(Seed)),
     MD5 = lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest]),
     list_to_binary(lists:sublist(MD5, length(MD5)-7, 8)).
 
@@ -352,9 +352,9 @@ channel_tail(Index, CallId) ->
                _ ->
                    CallId
            end,
-    Digest = crypto:hash('md5', kz_util:to_binary(Seed)),
+    Digest = crypto:hash('md5', kz_term:to_binary(Seed)),
     MD5 = lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest]),
-    list_to_binary(lists:sublist(MD5, length(MD5)-3, 4) ++ ";" ++ kz_util:to_list(Index)).
+    list_to_binary(lists:sublist(MD5, length(MD5)-3, 4) ++ ";" ++ kz_term:to_list(Index)).
 
 -spec endpoint_exten(kz_json:object()) -> api_binary().
 -spec endpoint_exten(api_binary(), kz_json:object()) -> api_binary().
@@ -924,7 +924,7 @@ maybe_queue_in_flow(Flow) ->
                                                 %               _ ->
                                                 %                       CallId
                                                 %       end,
-                                                %     Digest = crypto:hash('md5', kz_util:to_binary(Seed)),
+                                                %     Digest = crypto:hash('md5', kz_term:to_binary(Seed)),
                                                 %     MD5 = lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest]),
                                                 %     list_to_binary(lists:sublist(MD5, length(MD5)-7, 8)).
 

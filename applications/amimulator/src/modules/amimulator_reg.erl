@@ -80,7 +80,7 @@ handle_register(AccountId, EventJObj) ->
             Exten = amimulator_util:endpoint_exten(EndpointDoc),
             Contact = kz_json:get_value(<<"Contact">>, EventJObj),
             [#uri{domain=Domain,port=Port}] = kzsip_uri:uris(Contact),
-            Port1 = kz_util:to_binary(Port),
+            Port1 = kz_term:to_binary(Port),
 
             ami_sm:add_registration(AccountId, EndpointId, Domain, Port1),
 

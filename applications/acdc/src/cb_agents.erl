@@ -311,7 +311,7 @@ read(Id, Context) ->
 -define(CB_AGENTS_LIST, <<"users/crossbar_listing">>).
 -spec fetch_all_agent_statuses(cb_context:context()) -> cb_context:context().
 fetch_all_agent_statuses(Context) ->
-    case kz_util:is_true(cb_context:req_value(Context, <<"recent">>)) of
+    case kz_term:is_true(cb_context:req_value(Context, <<"recent">>)) of
         'false' ->
             fetch_current_status(Context, 'undefined');
         'true' ->

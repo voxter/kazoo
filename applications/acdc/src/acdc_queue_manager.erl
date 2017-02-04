@@ -1093,7 +1093,7 @@ maybe_position_announcement(_, 'false', _, _) ->
 maybe_position_announcement(Position, 'true', Media, Language) ->
     lager:debug("position ~p", [Position]),
     [{'prompt', props:get_value(<<"position_media">>, Media), Language, <<"A">>}
-    ,{'say', kz_util:to_binary(Position), <<"number">>}
+    ,{'say', kz_term:to_binary(Position), <<"number">>}
     ,{'prompt', props:get_value(<<"in_the_queue_media">>, Media), Language, <<"A">>}].
 
 -spec maybe_average_wait_announcement(kz_json:object(), boolean(), proplist(), binary(), non_neg_integer() | 'undefined') ->

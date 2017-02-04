@@ -82,11 +82,11 @@ from_json(JObj) ->
                 ,timestamp = case kz_json:get_integer_value(<<"timestamp">>, JObj) of
                                  'undefined' ->
                                      Sec = kz_json:get_first_defined([<<"elapsed_s">>, <<"Duration-Seconds">>], JObj, 0),
-                                     kz_util:current_tstamp() - Sec;
+                                     kz_time:current_tstamp() - Sec;
                                  Timestamp -> Timestamp
                              end
-                ,caller_id_name = kz_json:get_first_defined([<<"Caller-ID-Name">>, <<"caller_id">>], JObj, kz_util:anonymous_caller_id_name())
-                ,caller_id_number = kz_json:get_first_defined([<<"Caller-ID-Number">>, <<"caller_id">>], JObj, kz_util:anonymous_caller_id_number())
+                ,caller_id_name = kz_json:get_first_defined([<<"Caller-ID-Name">>, <<"caller_id">>], JObj, kz_privacy:anonymous_caller_id_name())
+                ,caller_id_number = kz_json:get_first_defined([<<"Caller-ID-Number">>, <<"caller_id">>], JObj, kz_privacy:anonymous_caller_id_number())
 
                 ,callee_id_name = case kz_json:get_value(<<"Callee-ID-Name">>, JObj) of
                                       'undefined' ->
@@ -393,7 +393,7 @@ set_answered(Answered, Call) ->
 
 -spec elapsed_s(call()) -> api_integer().
 elapsed_s(#call{timestamp=Timestamp}) ->
-    kz_util:current_tstamp() - Timestamp.
+    kz_time:current_tstamp() - Timestamp.
 
 -spec caller_id_name(call()) -> api_binary().
 caller_id_name(#call{caller_id_name=CIDName}) ->

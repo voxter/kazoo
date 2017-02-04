@@ -132,7 +132,7 @@ app_running(AppName) when is_atom(AppName) ->
     end;
 app_running(AppName) ->
     try
-        app_running(kz_util:to_atom(AppName))
+        app_running(kz_term:to_atom(AppName))
     catch
         'error':'badarg' -> 'false'
     end.

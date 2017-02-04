@@ -329,7 +329,7 @@ oauth_header(URL, CustomParams, ConsumerKey, ConsumerSecret, AccessToken, Access
     ParamsString = kz_util:uri_encode(string:join(lists:foldl(fun({K,V}, Acc) ->
                                                                       [K ++ "=" ++ V] ++ Acc end,
                                                               [], NormalizedParams), "&")),
-    SigBaseString = "POST&" ++ kz_util:to_list(kz_util:uri_encode(URL)) ++ "&" ++ ParamsString,
+    SigBaseString = "POST&" ++ kz_term:to_list(kz_util:uri_encode(URL)) ++ "&" ++ ParamsString,
     Signature = base64:encode(crypto:hmac('sha', binary_to_list(ConsumerSecret) ++ "&" ++ binary_to_list(AccessSecret), SigBaseString)),
 
     SendParams = lists:keysort(1, [{"oauth_signature", binary_to_list(Signature)}] ++ OAuthParams),
@@ -347,11 +347,11 @@ oauth_params(ConsumerKey, _ConsumerSecret, AccessToken, _AccessSecret) ->
     Timestamp = integer_to_list(MegaSecs * 1000000 + Secs),
 
     [
-     {"oauth_consumer_key", kz_util:to_list(ConsumerKey)},
+     {"oauth_consumer_key", kz_term:to_list(ConsumerKey)},
      {"oauth_nonce", Nonce},
      {"oauth_signature_method", "HMAC-SHA1"},
      {"oauth_timestamp", Timestamp},
-     {"oauth_token", kz_util:to_list(AccessToken)},
+     {"oauth_token", kz_term:to_list(AccessToken)},
      {"oauth_version", "1.0"}
     ].
 
@@ -363,7 +363,7 @@ include_other_params(OtherParams) ->
                             true ->
                                 url_param_array(Key, Value) ++ Acc;
                             false ->
-                                [{kz_util:to_list(Key), kz_util:to_list(Value)}] ++ Acc
+                                [{kz_term:to_list(Key), kz_term:to_list(Value)}] ++ Acc
                         end
                 end, [], kz_json:get_keys(OtherParams)).
 
@@ -375,6 +375,6 @@ url_param_array(BaseKey, JsonValue) ->
                             true ->
                                 url_param_array(<<BaseKey/binary, "[", Key/binary, "]">>, Value) ++ Acc;
                             false ->
-                                [{kz_util:to_list(BaseKey) ++ "[" ++ kz_util:to_list(Key) ++ "]", kz_util:to_list(Value)}] ++ Acc
+                                [{kz_term:to_list(BaseKey) ++ "[" ++ kz_term:to_list(Key) ++ "]", kz_term:to_list(Value)}] ++ Acc
                         end
                 end, [], kz_json:get_keys(JsonValue)).

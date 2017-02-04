@@ -439,17 +439,17 @@ sort_users(Users, Order) ->
                        case Order of
                            'first' ->
                                name_compare(
-                                 kz_util:to_list(User1#directory_user.first_name)
-                                           ,kz_util:to_list(User1#directory_user.last_name)
-                                           ,kz_util:to_list(User2#directory_user.first_name)
-                                           ,kz_util:to_list(User2#directory_user.last_name)
+                                 kz_term:to_list(User1#directory_user.first_name)
+                                           ,kz_term:to_list(User1#directory_user.last_name)
+                                           ,kz_term:to_list(User2#directory_user.first_name)
+                                           ,kz_term:to_list(User2#directory_user.last_name)
                                 );
                            'last' ->
                                name_compare(
-                                 kz_util:to_list(User1#directory_user.last_name)
-                                           ,kz_util:to_list(User1#directory_user.first_name)
-                                           ,kz_util:to_list(User2#directory_user.last_name)
-                                           ,kz_util:to_list(User2#directory_user.first_name)
+                                 kz_term:to_list(User1#directory_user.last_name)
+                                           ,kz_term:to_list(User1#directory_user.first_name)
+                                           ,kz_term:to_list(User2#directory_user.last_name)
+                                           ,kz_term:to_list(User2#directory_user.first_name)
                                 )
                        end
                end, Users).

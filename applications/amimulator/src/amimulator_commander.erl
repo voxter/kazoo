@@ -33,7 +33,7 @@ update_props(Props, AccountId) ->
     lists:foldl(fun(F, Props2) -> F(Props2) end, Props, Routines).
 
 handle_event(Props) ->
-    Action = string:to_lower(kz_util:to_list(proplists:get_value(<<"Action">>, Props))),
+    Action = string:to_lower(kz_term:to_list(proplists:get_value(<<"Action">>, Props))),
     handle_event(Action, Props).
 
                                                 % TODO: add AMI username lookup db initialization
@@ -304,8 +304,8 @@ login_secret(Username, Secret, ActionId) ->
 
 login_md5(Username, Md5, Challenge, ActionId) ->
     {'ok', AMIDoc} = kz_datamgr:open_doc(?AMI_DB, Username),
-    Digest = crypto:hash('md5', <<(kz_util:to_binary(Challenge))/binary, (kz_json:get_value(<<"secret">>, AMIDoc))/binary>>),
-    case kz_util:to_binary(lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest])) of
+    Digest = crypto:hash('md5', <<(kz_term:to_binary(Challenge))/binary, (kz_json:get_value(<<"secret">>, AMIDoc))/binary>>),
+    case kz_term:to_binary(lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest])) of
         Md5 -> login_success(kz_json:get_value(<<"account_id">>, AMIDoc), ActionId);
         _ -> login_fail(ActionId)
     end.
@@ -548,12 +548,12 @@ status_payload(<<"Status">>, Channel, BridgedChannel, CallerIDNum, CallerIDName,
 status_payload(<<"concise">>, Channel, BridgedChannel, _, CallerIDName, _, ConnectedLineName
               ,_, ChannelStateDesc, Application, Context, Extension, Seconds, _, _) ->
     <<Channel/binary, "!", Context/binary, "!", Extension/binary, "!1!", ChannelStateDesc/binary, "!", Application/binary
-      ,"!", ConnectedLineName/binary, "!", CallerIDName/binary, "!!!3!", (kz_util:to_binary(Seconds))/binary
+      ,"!", ConnectedLineName/binary, "!", CallerIDName/binary, "!!!3!", (kz_term:to_binary(Seconds))/binary
       ,"!", BridgedChannel/binary, "\n">>;
 status_payload(<<"verbose">>, Channel, BridgedChannel, _, CallerIDName, _, ConnectedLineName
               ,_, ChannelStateDesc, Application, Context, Extension, Seconds, _, _) ->
     {H, M, S} = {Seconds div 3600, Seconds rem 3600 div 60, Seconds rem 60},
-    TimeString = kz_util:to_binary(if H > 99 ->
+    TimeString = kz_term:to_binary(if H > 99 ->
                                            io_lib:format("~B:~2..0B:~2..0B", [H, M, S]);
                                       true ->
                                            io_lib:format("~2..0B:~2..0B:~2..0B", [H, M, S])
@@ -565,7 +565,7 @@ status_payload(<<"verbose">>, Channel, BridgedChannel, _, CallerIDName, _, Conne
       ,(fit_list(BridgedChannel, 20))/binary, "\n">>.
 
 fit_list(Binary, Size) when is_binary(Binary) ->
-    kz_util:to_binary(fit_list(kz_util:to_list(Binary), Size));
+    kz_term:to_binary(fit_list(kz_term:to_list(Binary), Size));
 fit_list(List, Size) ->
     fit_list(List, length(List), Size).
 
@@ -696,12 +696,12 @@ count_stats([Stat|Stats], {Calls, Holdtime, TalkTime, Completed, Abandoned, Agen
             count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime, Completed+1, Abandoned+1, AgentStats2});
         <<"waiting">> ->
                                                 % TODO: updated the calculation for wait can call time
-            WaitTime = kz_util:current_tstamp() - kz_json:get_value(<<"entered_timestamp">>, Stat),
+            WaitTime = kz_time:current_tstamp() - kz_json:get_value(<<"entered_timestamp">>, Stat),
             count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime, Completed, Abandoned, AgentStats2});
         <<"handled">> ->
             WaitTime = kz_json:get_value(<<"handled_timestamp">>, Stat) -
                 kz_json:get_value(<<"entered_timestamp">>, Stat),
-            CallTime = kz_util:current_tstamp() - kz_json:get_value(<<"handled_timestamp">>, Stat),
+            CallTime = kz_time:current_tstamp() - kz_json:get_value(<<"handled_timestamp">>, Stat),
             count_stats(Stats, {Calls+1, Holdtime+WaitTime, TalkTime+CallTime, Completed+1, Abandoned, AgentStats2});
         <<"processed">> ->
             case kz_json:get_value(<<"abandoned_timestamp">>, Stat) of
@@ -737,7 +737,7 @@ queue_entry(Call, Number, WaitingCallStat) ->
     ,{<<"Channel">>, amimulator_call:channel(Call)}
     ,{<<"CallerID">>, amimulator_call:id_number(Call)}
     ,{<<"CallerIDName">>, amimulator_call:id_name(Call)}
-    ,{<<"Wait">>, kz_util:current_tstamp() - kz_json:get_value(<<"entered_timestamp">>, WaitingCallStat, 0)}
+    ,{<<"Wait">>, kz_time:current_tstamp() - kz_json:get_value(<<"entered_timestamp">>, WaitingCallStat, 0)}
     ].
 
 waiting_call_stat(CallId, []) ->
@@ -1041,7 +1041,7 @@ getvar(<<"AGENTBYCALLERID_", _CallerId/binary>>=Variable, _Props) ->
      ], raw};
 getvar(<<"EPOCH">>=Variable, _Props) ->
     {MegaSecs, Secs, _MicroSecs} = os:timestamp(),
-    Timestamp = kz_util:to_binary(MegaSecs * 1000000 + Secs),
+    Timestamp = kz_term:to_binary(MegaSecs * 1000000 + Secs),
     {[
       <<"Response: Success\r\n">>,
       <<"Variable: ", Variable/binary, "\r\nValue: ", Timestamp/binary, "\r\n\r\n">>
@@ -1065,7 +1065,7 @@ command(<<"meetme kick ", MeetMeSpec/binary>>, Props) ->
 command(<<"core show channels ", Verbosity/binary>>, Props) ->
     initial_channel_status(ami_sm:calls(proplists:get_value(<<"AccountId">>, Props)), Props, Verbosity);
 command(<<"database put ", Variable/binary>>, Props) ->
-    [Family, Key, Value] = parse_command(kz_util:to_list(Variable)),
+    [Family, Key, Value] = parse_command(kz_term:to_list(Variable)),
     ami_sm:db_put(props:get_value(<<"AccountId">>, Props), Family, Key, Value),
 
     {[
@@ -1074,7 +1074,7 @@ command(<<"database put ", Variable/binary>>, Props) ->
       <<"--END COMMAND--\r\n\r\n">>
      ], raw};
 command(<<"database del ", Variable/binary>>, Props) ->
-    [Family, Key] = parse_command(kz_util:to_list(Variable)),
+    [Family, Key] = parse_command(kz_term:to_list(Variable)),
     ami_sm:db_del(props:get_value(<<"AccountId">>, Props), Family, Key),
 
     {[
@@ -1312,7 +1312,7 @@ participant_call_id(ParticipantId, [Participant|Participants]) ->
 
 participant_payloads(Participants, RunTime, ActionId) ->
     {H, M, S} = {RunTime div 3600, RunTime rem 3600 div 60, RunTime rem 60},
-    TimeString = kz_util:to_binary(if H > 99 ->
+    TimeString = kz_term:to_binary(if H > 99 ->
                                            io_lib:format("~B:~2..0B:~2..0B", [H, M, S]);
                                       true ->
                                            io_lib:format("~2..0B:~2..0B:~2..0B", [H, M, S])
@@ -1325,7 +1325,7 @@ participant_payloads(Participants, RunTime, ActionId) ->
                               CallId = kz_json:get_value(<<"Call-ID">>, Participant),
                               Call = ami_sm:call(CallId),
 
-                              ParticipantId = kz_util:to_binary(kz_json:get_value(<<"Participant-ID">>, Participant)),
+                              ParticipantId = kz_term:to_binary(kz_json:get_value(<<"Participant-ID">>, Participant)),
                                                 %ParticipantId = <<"1">>,
                               CallerId = amimulator_call:id_name(Call),
                               EndpointName = amimulator_call:channel(Call),

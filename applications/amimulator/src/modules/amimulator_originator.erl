@@ -78,7 +78,7 @@ dial(Props) ->
 
     Request = [{<<"Application-Name">>, <<"transfer">>}
               ,{<<"Application-Data">>, kz_json:from_list([{<<"Route">>, DestExten}])}
-              ,{<<"Msg-ID">>, kz_util:rand_hex_binary(16)}
+              ,{<<"Msg-ID">>, kz_binary:rand_hex(16)}
               ,{<<"Endpoints">>, get_endpoints(Props, Call)}
               ,{<<"Timeout">>, <<"30">>}
               ,{<<"Ignore-Early-Media">>, <<"true">>}
@@ -176,8 +176,8 @@ get_endpoints(_Props, Call) ->
 %% Caller ID properties for call coming from originate request
 aleg_cid(CID, Call) ->
     Routines = [fun(C) -> kapps_call:set_custom_channel_var(<<"Retain-CID">>, <<"true">>, C) end
-               ,fun(C) -> kapps_call:set_caller_id_name(kz_util:to_binary(CID), C) end
-               ,fun(C) -> kapps_call:set_caller_id_number(kz_util:to_binary(CID), C) end
+               ,fun(C) -> kapps_call:set_caller_id_name(kz_term:to_binary(CID), C) end
+               ,fun(C) -> kapps_call:set_caller_id_number(kz_term:to_binary(CID), C) end
                ],
     lists:foldl(fun(F, C) -> F(C) end, Call, Routines).
 
@@ -200,7 +200,7 @@ blind_transfer(Props, Call) ->
     SourceCID = amimulator_call:id_name(Call),
     DestExten = props:get_value(<<"Exten">>, Props),
     CallId = amimulator_call:call_id(Call),
-    TargetCallId = <<"blind-transfer-", (kz_util:rand_hex_binary(4))/binary>>,
+    TargetCallId = <<"blind-transfer-", (kz_binary:rand_hex(4))/binary>>,
 
     CCVs = props:filter_undefined([{<<"Account-ID">>, amimulator_call:account_id(Call)}
                                   ,{<<"Authorizing-ID">>, amimulator_call:authorizing_id(Call)}
@@ -227,7 +227,7 @@ blind_transfer(Props, Call) ->
                 [{<<"Endpoints">>, [Endpoint]}
                 ,{<<"Outbound-Call-ID">>, TargetCallId}
                 ,{<<"Dial-Endpoint-Method">>, <<"single">>}
-                ,{<<"Msg-ID">>, kz_util:rand_hex_binary(4)}
+                ,{<<"Msg-ID">>, kz_binary:rand_hex(4)}
                 ,{<<"Continue-On-Fail">>, 'true'}
                 ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
                 ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>, <<"Retain-CID">>
@@ -266,7 +266,7 @@ vm_transfer(Props, Call) ->
     SourceCID = amimulator_call:id_name(Call),
     DestExten = props:get_value(<<"Exten">>, Props),
     CallId = amimulator_call:call_id(Call),
-    TargetCallId = <<"vm-transfer-", (kz_util:rand_hex_binary(4))/binary>>,
+    TargetCallId = <<"vm-transfer-", (kz_binary:rand_hex(4))/binary>>,
 
     CCVs = props:filter_undefined(
              [{<<"Account-ID">>, amimulator_call:account_id(Call)}
@@ -292,7 +292,7 @@ vm_transfer(Props, Call) ->
                 [{<<"Endpoints">>, [Endpoint]}
                 ,{<<"Outbound-Call-ID">>, TargetCallId}
                 ,{<<"Dial-Endpoint-Method">>, <<"single">>}
-                ,{<<"Msg-ID">>, kz_util:rand_hex_binary(4)}
+                ,{<<"Msg-ID">>, kz_binary:rand_hex(4)}
                 ,{<<"Continue-On-Fail">>, 'true'}
                 ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
                 ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>, <<"Retain-CID">>
@@ -331,7 +331,7 @@ pickup_channel(Props) ->
 
     Request = [{<<"Application-Name">>, <<"bridge">>}
               ,{<<"Existing-Call-ID">>, amimulator_call:other_leg_call_id(Call)}
-              ,{<<"Msg-ID">>, kz_util:rand_hex_binary(16)}
+              ,{<<"Msg-ID">>, kz_binary:rand_hex(16)}
               ,{<<"Endpoints">>, get_endpoints(Props, NewCall)}
               ,{<<"Timeout">>, <<"30">>}
               ,{<<"Ignore-Early-Media">>, <<"true">>}
@@ -372,7 +372,7 @@ eavesdrop_req(Props) ->
     SourceEndpoints = get_endpoints(props:delete(<<"SourceExten">>, Props), Call),
 
     Prop = kz_json:set_values(props:filter_undefined([
-                                                      {<<"Msg-ID">>, kz_util:rand_hex_binary(16)}
+                                                      {<<"Msg-ID">>, kz_binary:rand_hex(16)}
                                                      ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
                                                      ,{<<"Timeout">>, <<"30">>}
                                                      ,{<<"Endpoints">>, SourceEndpoints}

@@ -1321,7 +1321,7 @@ maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Number) ->
     MCallId = kapps_call:call_id(Call),
     put('callid', MCallId),
 
-    ReqId = kz_util:rand_hex_binary(6),
+    ReqId = kz_binary:rand_hex(6),
     AcctId = kapps_call:account_id(Call),
 
     CCVs = props:filter_undefined([{<<"Account-ID">>, AcctId}
@@ -1352,7 +1352,7 @@ maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Number) ->
                                   ,{<<"Resource-Type">>, <<"originate">>}
                                   ,{<<"Account-ID">>, AcctId}
                                   ,{<<"Endpoints">>, Endpoints}
-                                  ,{<<"Msg-ID">>, kz_util:rand_hex_binary(6)}
+                                  ,{<<"Msg-ID">>, kz_binary:rand_hex(6)}
                                   ,{<<"Timeout">>, Timeout}
                                   ,{<<"Ignore-Display-Updates">>, <<"true">>}
                                   ,{<<"Ignore-Early-Media">>, <<"true">>}
@@ -1393,7 +1393,7 @@ outbound_call_id(Call, AgentId) ->
 %%--------------------------------------------------------------------
 -spec do_originate_callback_return(ne_binary(), kapps_call:call()) -> ne_binary().
 do_originate_callback_return(MyQ, Call) ->
-    MsgId = kz_util:rand_hex_binary(4),
+    MsgId = kz_binary:rand_hex(4),
 
     Extension = kapps_call:custom_channel_var(<<"Callback-Number">>, Call),
     TransferorLeg = kapps_call:call_id(Call),
@@ -1451,7 +1451,7 @@ do_originate_callback_return(MyQ, Call) ->
 
 -spec create_call_id() -> ne_binary().
 create_call_id() ->
-    <<"callback-", (kz_util:rand_hex_binary(4))/binary>>.
+    <<"callback-", (kz_binary:rand_hex(4))/binary>>.
 
 -spec add_queue_binding(ne_binary(), ne_binary(), ne_binary(), fsm_state_name()) ->
                                'ok'.
