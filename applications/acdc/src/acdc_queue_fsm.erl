@@ -96,7 +96,7 @@
 
           ,notifications :: api_object()
 
-          ,callback_details :: list()
+          ,callback_details :: {ne_binary(), ne_binary()}
          }).
 -type queue_fsm_state() :: #state{}.
 
