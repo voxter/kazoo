@@ -1275,9 +1275,9 @@ maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
     lists:map(fun(ACallId) -> {ACallId, 'undefined'} end, ACallIds).
 
 -spec maybe_originate_callback(ne_binary(), wh_json:objects(), whapps_call:call(), api_integer(), ne_binary(), api_binary()
-    ,api_binary()) ->
+    ,wh_json:object()) ->
                                     ne_binaries().
-maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Number) ->
+maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Details) ->
     MCallId = whapps_call:call_id(Call),
     put('callid', MCallId),
 
@@ -1291,7 +1291,7 @@ maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Number) ->
                                    ,{<<"Retain-CID">>, <<"true">>}
                                    ,{<<"Agent-ID">>, AgentId}
                                    ,{<<"Member-Call-ID">>, MCallId}
-                                   ,{<<"Callback-Number">>, Number}
+                                   ,{<<"Callback-Number">>, wh_json:get_value(<<"Callback-Number">>, Details)}
                                   ]),
 
     {ACallIds, Endpoints} = lists:foldl(fun(EP, {Cs, Es}) ->

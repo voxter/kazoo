@@ -617,12 +617,12 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
             acdc_util:bind_to_call_events(Call, AgentListener),
 
             %% Need to check if a callback is required to the caller
-            NextState = case wh_json:get_value(<<"Callback-Number">>, JObj) of
+            NextState = case wh_json:get_value(<<"Callback-Details">>, JObj) of
                 'undefined' ->
                     acdc_agent_listener:bridge_to_member(AgentListener, Call, JObj, UpdatedEPs, CDRUrl, RecordingUrl),
                     'ringing';
-                Number ->
-                    acdc_agent_listener:originate_callback_to_agent(AgentListener, Call, JObj, UpdatedEPs, CDRUrl, RecordingUrl, Number),
+                Details ->
+                    acdc_agent_listener:originate_callback_to_agent(AgentListener, Call, JObj, UpdatedEPs, CDRUrl, RecordingUrl, Details),
                     'ringing_callback'
             end,
 
@@ -671,9 +671,9 @@ ready({'member_connect_win', JObj, 'different_node'}, #state{agent_listener=Agen
 
             acdc_agent_listener:monitor_call(AgentListener, Call, JObj, RecordingUrl),
             %% Need to check if a callback is required to the caller
-            NextState = case wh_json:get_value(<<"Callback-Number">>, JObj) of
+            NextState = case wh_json:get_value(<<"Callback-Details">>, JObj) of
                 'undefined' -> 'ringing';
-                _Number -> 'ringing_callback'
+                _Details -> 'ringing_callback'
             end,
 
             lager:debug("monitoring agent ~s to connect to caller in queue ~s", [AgentId, QueueId]),
