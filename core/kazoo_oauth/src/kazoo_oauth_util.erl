@@ -318,7 +318,7 @@ baseurl_oauth(OAuthJObj, URL, BaseUrl, Params) ->
                   ,ne_binary()
                   ,ne_binary()
                   ,ne_binary()
-                  ) -> {string(), ne_binary()}.
+                  ) -> {string(), string()}.
 oauth_header(URL, CustomParams, ConsumerKey, ConsumerSecret, AccessToken, AccessSecret) ->
     OAuthParams = oauth_params(ConsumerKey, ConsumerSecret, AccessToken, AccessSecret),
     BaseParams = lists:ukeysort(1, OAuthParams ++ include_other_params(CustomParams)),

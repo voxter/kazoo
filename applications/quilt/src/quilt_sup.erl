@@ -90,7 +90,7 @@ stop_agent_fsm(AccountId, AgentId) ->
     case retrieve_agent_fsm(AccountId, AgentId) of
         {'ok', FSM} -> 
             lager:debug("terminating agent FSM: ~p", [Name]),
-            supervisor:terminate_child(?MODULE, FSM),
+            _ = supervisor:terminate_child(?MODULE, FSM),
             supervisor:delete_child(?MODULE, Name);
         _ -> 
             lager:debug("could not find agent FSM to terminate: ~p", [Name])

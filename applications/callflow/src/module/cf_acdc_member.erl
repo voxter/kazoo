@@ -236,7 +236,7 @@ process_dtmf(DTMF, #member_call{call=Call}=MC, BreakoutState, Timeout, Start, Wa
             cf_exe:control_usurped(Call)
     end.
 
--spec breakout_loop(binary(), member_call(), breakout_state()) -> breakout_state().
+-spec breakout_loop(binary(), member_call(), breakout_state()) -> breakout_state() | 'callback_registered'.
 breakout_loop(_, #member_call{call=Call}, #breakout_state{retries=0}) ->
     lager:info("maximum number of retries reached"),
     kapps_call_command:flush_dtmf(Call),

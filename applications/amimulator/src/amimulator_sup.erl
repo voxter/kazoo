@@ -27,7 +27,7 @@ start_listeners(ListenSocket) ->
 -spec start_listeners(gen_tcp:socket(), pos_integer()) -> 'ok'.
 start_listeners(ListenSocket, Count) ->
     lager:debug("Starting ~p socket listener processes", [Count]),
-    [start_listener(ListenSocket, Num) || Num <- lists:seq(1, Count)],
+    _ = [start_listener(ListenSocket, Num) || Num <- lists:seq(1, Count)],
     'ok'.
 
 %% Launch a client handler process listening on the given socket

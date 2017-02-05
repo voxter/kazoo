@@ -160,15 +160,15 @@ debug_clear_call(_CallId) ->
 -spec init([]) -> {'ok', state()}.
 init([]) ->
     process_flag('trap_exit', 'true'),
-    ets:new('registrations', ['named_table']),
-    ets:new('calls', ['named_table', {'keypos', 2}]),
-    ets:new('flags', ['named_table']),
-    ets:new('channels', ['named_table', 'bag']),
-    ets:new('ringing_channels', ['named_table']),
-    ets:new('answered_channels', ['named_table']),
-    ets:new('queue_calls', ['named_table', 'bag']),
-    ets:new('conference_cache_data', ['named_table']),
-    ets:new('database', ['named_table', 'bag']),
+    _ = ets:new('registrations', ['named_table']),
+    _ = ets:new('calls', ['named_table', {'keypos', 2}]),
+    _ = ets:new('flags', ['named_table']),
+    _ = ets:new('channels', ['named_table', 'bag']),
+    _ = ets:new('ringing_channels', ['named_table']),
+    _ = ets:new('answered_channels', ['named_table']),
+    _ = ets:new('queue_calls', ['named_table', 'bag']),
+    _ = ets:new('conference_cache_data', ['named_table']),
+    _ = ets:new('database', ['named_table', 'bag']),
     {'ok', #state{}}.
 
 -spec handle_call(any(), pid_ref(), state()) -> handle_call_ret_state(state()).
@@ -234,7 +234,7 @@ handle_call({'get_call_by_channel', Channel}, From, State) ->
 handle_call({'queue_call', QueueId, CallId, Call}, _From, State) ->
     Size = length(ets:match('queue_calls', {QueueId, '_', '_'})),
     ets:insert('queue_calls', {QueueId, CallId, Call}),
-    handle_cast({'update_call', Call}, State),
+    _ = handle_cast({'update_call', Call}, State),
     {'reply', Size+1, State};
 
 handle_call({'queue_calls', QueueId}, _From, State) ->
@@ -552,8 +552,7 @@ initial_registrations(AccountId) ->
                ),
     case ReqResp of
         {'error', E} ->
-            lager:debug("Initial registrations failed (~p)", [E]),
-            [];
+            lager:debug("Initial registrations failed (~p)", [E]);
         {_, JObjs} ->
             lager:debug("~p responses for list of registrations", [length(JObjs)]),
             lists:foreach(fun(JObj) ->
