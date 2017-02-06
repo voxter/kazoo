@@ -13,6 +13,7 @@
 -export([call_waiting/1, call_waiting_v/1
          ,call_missed/1, call_missed_v/1
          ,call_abandoned/1, call_abandoned_v/1
+         ,call_marked_callback/1, call_marked_callback_v/1
          ,call_handled/1, call_handled_v/1
          ,call_processed/1, call_processed_v/1
 
@@ -60,6 +61,7 @@
 -export([publish_call_waiting/1, publish_call_waiting/2
          ,publish_call_missed/1, publish_call_missed/2
          ,publish_call_abandoned/1, publish_call_abandoned/2
+         ,publish_call_marked_callback/1, publish_call_marked_callback/2
          ,publish_call_handled/1, publish_call_handled/2
          ,publish_call_processed/1, publish_call_processed/2
 
@@ -119,6 +121,10 @@
 -define(ABANDON_HEADERS, [<<"Abandon-Reason">>, <<"Abandon-Timestamp">>]).
 -define(ABANDON_VALUES, ?CALL_REQ_VALUES(<<"abandoned">>)).
 -define(ABANDON_TYPES, []).
+
+-define(MARKED_CALLBACK_HEADERS, [<<"Caller-ID-Name">>]).
+-define(MARKED_CALLBACK_VALUES, ?CALL_REQ_VALUES(<<"marked_callback">>)).
+-define(MARKED_CALLBACK_TYPES, []).
 
 -define(HANDLED_HEADERS, [<<"Agent-ID">>, <<"Handled-Timestamp">>]).
 -define(HANDLED_VALUES, ?CALL_REQ_VALUES(<<"handled">>)).
@@ -186,6 +192,23 @@ call_abandoned_v(Prop) when is_list(Prop) ->
     wh_api:validate(Prop, ?CALL_REQ_HEADERS, ?ABANDON_VALUES, ?ABANDON_TYPES);
 call_abandoned_v(JObj) ->
     call_abandoned_v(wh_json:to_proplist(JObj)).
+
+-spec call_marked_callback(api_terms()) ->
+                                  {'ok', iolist()} |
+                                  {'error', string()}.
+call_marked_callback(Props) when is_list(Props) ->
+    case call_marked_callback_v(Props) of
+        'true' -> wh_api:build_message(Props, ?CALL_REQ_HEADERS, ?MARKED_CALLBACK_HEADERS);
+        'false' -> {'error', "Proplist failed validation for call_marked_callback"}
+    end;
+call_marked_callback(JObj) ->
+    call_marked_callback(wh_json:to_proplist(JObj)).
+
+-spec call_marked_callback_v(api_terms()) -> boolean().
+call_marked_callback_v(Prop) when is_list(Prop) ->
+    wh_api:validate(Prop, ?CALL_REQ_HEADERS, ?MARKED_CALLBACK_VALUES, ?MARKED_CALLBACK_TYPES);
+call_marked_callback_v(JObj) ->
+    call_marked_callback_v(wh_json:to_proplist(JObj)).
 
 -spec call_handled(api_terms()) ->
                           {'ok', iolist()} |
@@ -893,6 +916,12 @@ publish_call_abandoned(JObj) ->
     publish_call_abandoned(JObj, ?DEFAULT_CONTENT_TYPE).
 publish_call_abandoned(API, ContentType) ->
     {'ok', Payload} = wh_api:prepare_api_payload(API, ?ABANDON_VALUES, fun call_abandoned/1),
+    amqp_util:whapps_publish(call_stat_routing_key(API), Payload, ContentType).
+
+publish_call_marked_callback(JObj) ->
+    publish_call_marked_callback(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_call_marked_callback(API, ContentType) ->
+    {'ok', Payload} = wh_api:prepare_api_payload(API, ?MARKED_CALLBACK_VALUES, fun call_marked_callback/1),
     amqp_util:whapps_publish(call_stat_routing_key(API), Payload, ContentType).
 
 publish_call_handled(JObj) ->
