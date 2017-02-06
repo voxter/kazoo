@@ -34,7 +34,7 @@
           ,exited_position :: api_integer()
 
           ,abandoned_reason :: api_binary() | '_'
-
+          ,is_callback = 'false' :: boolean() | '_'
           ,misses = [] :: agent_misses() | '_'
 
           ,status :: api_binary() | '$1' | '$2' | '$4' | '_'

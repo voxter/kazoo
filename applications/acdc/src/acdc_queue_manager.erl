@@ -690,7 +690,7 @@ handle_cast({'handle_member_callback_reg', JObj}, #state{account_id=AccountId
         Call ->
             lager:debug("call ~s marked as callback", [CallId]),
             Number = wh_json:get_value(<<"Number">>, JObj),
-            Call1 = callback_cid_update(AccountId, QueueId, Call),
+            Call1 = callback_flag(AccountId, QueueId, Call),
             CIDPrepend = whapps_call:kvs_fetch('prepend_cid_name', Call1),
             {'noreply', State#state{current_member_calls=lists:keyreplace(CallId, 2, CurrentCalls, Call1)
                                     ,pos_announce_pids=maybe_cancel_position_announcements(Call1, Pids)
@@ -1269,22 +1269,21 @@ maybe_remove_queue_member(CallId, #state{account_id=AccountId
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Prepend CB onto CID of callback calls and update waiting call stat
+%% Prepend CB: onto CID of callback calls and flag call ID as callback
+%% in acdc_stats
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec callback_cid_update(ne_binary(), ne_binary(), whapps_call:call()) ->
-                                 whapps_call:call().
-callback_cid_update(AccountId, QueueId, Call) ->
+-spec callback_flag(ne_binary(), ne_binary(), whapps_call:call()) ->
+                           whapps_call:call().
+callback_flag(AccountId, QueueId, Call) ->
     Call1 = prepend_cid_name(<<"CB:">>, Call),
-    {CIDNumber, CIDName} = acdc_util:caller_id(Call1),
-    acdc_stats:call_waiting(AccountId
-                            ,QueueId
-                            ,whapps_call:call_id(Call1)
-                            ,CIDName
-                            ,CIDNumber
-                            ,'undefined'
-                           ),
+    {_, CIDName} = acdc_util:caller_id(Call1),
+    acdc_stats:call_marked_callback(AccountId
+                                    ,QueueId
+                                    ,whapps_call:call_id(Call)
+                                    ,CIDName
+                                   ),
     Call1.
 
 -spec prepend_cid_name(ne_binary(), whapps_call:call()) -> whapps_call:call().
