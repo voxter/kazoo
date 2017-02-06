@@ -16,6 +16,7 @@
 -export([call_waiting/6
          ,call_waiting/7
          ,call_abandoned/4
+         ,call_marked_callback/4
          ,call_handled/4
          ,call_missed/5
          ,call_processed/5
@@ -119,6 +120,24 @@ call_abandoned(AccountId, QueueId, CallId, Reason) ->
               | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     whapps_util:amqp_pool_send(Prop, fun wapi_acdc_stats:publish_call_abandoned/1).
+
+-spec call_marked_callback(ne_binary()
+                           ,ne_binary()
+                           ,ne_binary()
+                           ,ne_binary()
+                          ) -> 'ok' | {'error', any()}.
+call_marked_callback(AccountId, QueueId, CallId, CallerIdName) ->
+    Prop = props:filter_undefined(
+             [{<<"Account-ID">>, AccountId}
+              ,{<<"Queue-ID">>, QueueId}
+              ,{<<"Call-ID">>, CallId}
+              ,{<<"Caller-ID-Name">>, CallerIdName}
+              | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+             ]),
+    whapps_util:amqp_pool_send(
+      Prop
+      ,fun wapi_acdc_stats:publish_call_marked_callback/1
+    ).
 
 call_handled(AccountId, QueueId, CallId, AgentId) ->
     Prop = props:filter_undefined(
@@ -328,6 +347,7 @@ agent_call_table_opts() ->
                       ,[{<<"acdc_call_stat">>, <<"waiting">>}
                         ,{<<"acdc_call_stat">>, <<"missed">>}
                         ,{<<"acdc_call_stat">>, <<"abandoned">>}
+                        ,{<<"acdc_call_stat">>, <<"marked_callback">>}
                         ,{<<"acdc_call_stat">>, <<"handled">>}
                         ,{<<"acdc_call_stat">>, <<"processed">>}
                         ,{<<"acdc_call_stat">>, <<"exited-position">>}
@@ -378,6 +398,7 @@ handle_call_stat(JObj, Props) ->
         <<"waiting">> -> handle_waiting_stat(JObj, Props);
         <<"missed">> -> handle_missed_stat(JObj, Props);
         <<"abandoned">> -> handle_abandoned_stat(JObj, Props);
+        <<"marked_callback">> -> handle_marked_callback_stat(JObj, Props);
         <<"handled">> -> handle_handled_stat(JObj, Props);
         <<"processed">> -> handle_processed_stat(JObj, Props);
         <<"exited-position">> -> handle_exited_stat(JObj, Props);
@@ -995,6 +1016,7 @@ call_stat_to_doc(#call_stat{id=Id
                             ,entered_position=EnteredPos
                             ,exited_position=ExitedPos
                             ,abandoned_reason=AbandonedR
+                            ,is_callback=IsCallback
                             ,misses=Misses
                             ,status=Status
                             ,caller_id_name=CallerIdName
@@ -1016,6 +1038,7 @@ call_stat_to_doc(#call_stat{id=Id
            ,{<<"entered_position">>, EnteredPos}
            ,{<<"exited_position">>, ExitedPos}
            ,{<<"abandoned_reason">>, AbandonedR}
+           ,{<<"is_callback">>, IsCallback}
            ,{<<"misses">>, misses_to_docs(Misses)}
            ,{<<"status">>, Status}
            ,{<<"caller_id_name">>, CallerIdName}
@@ -1043,6 +1066,7 @@ call_stat_to_json(#call_stat{id=Id
                              ,entered_position=EnteredPos
                              ,exited_position=ExitedPos
                              ,abandoned_reason=AbandonedR
+                             ,is_callback=IsCallback
                              ,misses=Misses
                              ,status=Status
                              ,caller_id_name=CallerIdName
@@ -1063,6 +1087,7 @@ call_stat_to_json(#call_stat{id=Id
          ,{<<"Entered-Position">>, EnteredPos}
          ,{<<"Exited-Position">>, ExitedPos}
          ,{<<"Abandoned-Reason">>, AbandonedR}
+         ,{<<"Is-Callback">>, IsCallback}
          ,{<<"Misses">>, misses_to_docs(Misses)}
          ,{<<"Status">>, Status}
          ,{<<"Caller-ID-Name">>, CallerIdName}
@@ -1194,6 +1219,17 @@ handle_abandoned_stat(JObj, Props) ->
                         ]),
             update_call_stat(Id, Updates, Props)
     end.
+
+-spec handle_marked_callback_stat(wh_json:object(), wh_proplist()) -> 'ok'.
+handle_marked_callback_stat(JObj, Props) ->
+    'true' = wapi_acdc_stats:call_marked_callback_v(JObj),
+
+    Id = call_stat_id(JObj),
+    Updates = props:filter_undefined(
+                [{#call_stat.is_callback, 'true'}
+                 ,{#call_stat.caller_id_name, wh_json:get_value(<<"Caller-ID-Name">>, JObj)}
+                ]),
+    update_call_stat(Id, Updates, Props).
 
 -spec handle_handled_stat(wh_json:object(), wh_proplist()) -> 'ok'.
 handle_handled_stat(JObj, Props) ->
