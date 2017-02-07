@@ -275,10 +275,14 @@ validate_account_path(Context, AccountId, ?TREE, ?HTTP_GET) ->
 -spec post(cb_context:context(), path_token()) -> cb_context:context().
 -spec post(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 post(Context, AccountId) ->
+    {'ok', Existing} = kz_account:fetch(AccountId),
     Context1 = crossbar_doc:save(Context),
+
     case cb_context:resp_status(Context1) of
         'success' ->
+            _ = kz_util:spawn(fun notification_util:maybe_notify_account_change/2, [Existing, cb_context:doc(Context1)]),
             _ = kz_util:spawn(fun provisioner_util:maybe_update_account/1, [Context1]),
+
             JObj = cb_context:doc(Context1),
             _ = replicate_account_definition(JObj),
             support_depreciated_billing_id(kz_json:get_value(<<"billing_id">>, JObj)
@@ -513,7 +517,7 @@ get_timezone_from_parent(Context) ->
 random_realm() ->
     RealmSuffix = kapps_config:get_binary(?ACCOUNTS_CONFIG_CAT, <<"account_realm_suffix">>, <<"sip.2600hz.com">>),
     Strength = kapps_config:get_integer(?ACCOUNTS_CONFIG_CAT, <<"random_realm_strength">>, 3),
-    list_to_binary([kz_util:rand_hex_binary(Strength), ".", RealmSuffix]).
+    list_to_binary([kz_binary:rand_hex(Strength), ".", RealmSuffix]).
 
 -spec remove_spaces(api_binary(), cb_context:context()) -> cb_context:context().
 remove_spaces(_AccountId, Context) ->
@@ -615,7 +619,7 @@ maybe_import_enabled(Context, 'success') ->
 maybe_import_enabled(Context, _JObj, 'undefined') -> Context;
 maybe_import_enabled(Context, JObj, IsEnabled) ->
     JObj1 =
-        case kz_util:is_true(IsEnabled) of
+        case kz_term:is_true(IsEnabled) of
             'true' -> kz_account:enable(JObj);
             'false' -> kz_account:disable(JObj)
         end,
@@ -768,7 +772,7 @@ leak_pvt_superduper_admin(Context) ->
 
 -spec leak_pvt_api_key(cb_context:context()) -> cb_context:context().
 leak_pvt_api_key(Context) ->
-    case kz_util:is_true(cb_context:req_value(Context, <<"include_api_key">>, 'false'))
+    case kz_term:is_true(cb_context:req_value(Context, <<"include_api_key">>, 'false'))
         orelse kapps_config:get_is_true(?ACCOUNTS_CONFIG_CAT, <<"expose_api_key">>, 'false')
     of
         'false' -> Context;
@@ -863,7 +867,10 @@ leak_trial_time_left(Context) ->
     leak_trial_time_left(Context, JObj, kz_account:trial_expiration(JObj)).
 
 leak_trial_time_left(Context, _JObj, 'undefined') ->
-    Context;
+    RespData = kz_json:delete_key(<<"trial_time_left">>
+                                 ,cb_context:resp_data(Context)
+                                 ),
+    cb_context:set_resp_data(Context, RespData);
 leak_trial_time_left(Context, JObj, _Expiration) ->
     RespData = kz_json:set_value(<<"trial_time_left">>
                                 ,kz_account:trial_time_left(JObj)
@@ -1192,7 +1199,7 @@ add_pvt_enabled(Context) ->
     case lists:reverse(kz_account:tree(JObj)) of
         [ParentId | _] ->
             ParentDb = kz_util:format_account_id(ParentId, 'encoded'),
-            case (not kz_util:is_empty(ParentId))
+            case (not kz_term:is_empty(ParentId))
                 andalso kz_datamgr:open_doc(ParentDb, ParentId)
             of
                 {'ok', Parent} ->
@@ -1211,7 +1218,7 @@ maybe_add_pvt_api_key(Context) ->
     JObj = cb_context:doc(Context),
     case kz_account:api_key(JObj) of
         'undefined' ->
-            APIKey = kz_util:to_hex_binary(crypto:strong_rand_bytes(32)),
+            APIKey = kz_term:to_hex_binary(crypto:strong_rand_bytes(32)),
             cb_context:set_doc(Context, kz_account:set_api_key(JObj, APIKey));
         _Else -> Context
     end.
@@ -1390,7 +1397,7 @@ create_account_definition(Context) ->
     AccountId = cb_context:account_id(Context),
     AccountDb = cb_context:account_db(Context),
 
-    TStamp = kz_util:current_tstamp(),
+    TStamp = kz_time:current_tstamp(),
     Props = [{<<"_id">>, AccountId}
             ,{<<"pvt_account_id">>, AccountId}
             ,{<<"pvt_account_db">>, AccountDb}
@@ -1424,7 +1431,7 @@ maybe_set_trial_expires(JObj) ->
 -spec set_trial_expires(kz_json:object()) -> kz_json:object().
 set_trial_expires(JObj) ->
     TrialTime = kapps_config:get_integer(?ACCOUNTS_CONFIG_CAT, <<"trial_time">>, ?SECONDS_IN_DAY * 14),
-    Expires = kz_util:current_tstamp() + TrialTime,
+    Expires = kz_time:current_tstamp() + TrialTime,
     kz_account:set_trial_expiration(JObj, Expires).
 
 
@@ -1483,7 +1490,7 @@ replicate_account_definition(JObj) ->
 %%--------------------------------------------------------------------
 -spec is_unique_realm(api_binary(), ne_binary()) -> boolean().
 is_unique_realm(AccountId, Realm) ->
-    ViewOptions = [{'key', kz_util:to_lower_binary(Realm)}],
+    ViewOptions = [{'key', kz_term:to_lower_binary(Realm)}],
     case kz_datamgr:get_results(?KZ_ACCOUNTS_DB, ?AGG_VIEW_REALM, ViewOptions) of
         {'ok', []} -> 'true';
         {'ok', [JObj]} -> kz_doc:id(JObj) =:= AccountId;
@@ -1564,7 +1571,7 @@ support_depreciated_billing_id(BillingId, AccountId, Context) ->
             cb_context:add_validation_error(<<"billing_id">>
                                            ,<<"not_found">>
                                            ,kz_json:from_list(
-                                              [{<<"message">>, kz_util:to_binary(Error)}
+                                              [{<<"message">>, kz_term:to_binary(Error)}
                                               ,{<<"cause">>, AccountId}
                                               ])
                                            ,Reason

@@ -61,7 +61,7 @@
 -spec from_jobj(kz_json:object(), atom()) -> global().
 from_jobj(JObj, Zone) ->
     Node = kz_api:node(JObj),
-    #kz_global{node=kz_util:to_atom(Node, 'true')
+    #kz_global{node=kz_term:to_atom(Node, 'true')
               ,zone=Zone
               ,server = kz_api:server_id(JObj)
               ,name = kapi_globals:name(JObj)
@@ -161,7 +161,7 @@ timestamp(#kz_global{timestamp=Timestamp}) -> Timestamp.
 
 -spec new_timestamp() -> integer().
 new_timestamp() ->
-    kz_util:now_us().
+    kz_time:now_us().
 
 -spec is_local_node(global()) -> boolean().
 is_local_node(#kz_global{node=Node}) ->

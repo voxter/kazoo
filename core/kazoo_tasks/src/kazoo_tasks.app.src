@@ -4,9 +4,10 @@
   {vsn, "4.0.0"},
   {modules, []},
   {registered, []},
-  {applications, [ kernel
-                 , stdlib
+  {applications, [kernel
+                 ,stdlib
 
-                 , kazoo
+                 ,kazoo
+                 ,kazoo_csv
                  ]}
  ]}.

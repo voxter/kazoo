@@ -80,7 +80,7 @@
 -define(SUBSCRIBE_VALUES, [{<<"Event-Category">>, <<"presence">>}
                           ,{<<"Event-Name">>, <<"subscription">>}
                           ]).
--define(SUBSCRIBE_TYPES, [{<<"Expires">>, fun(V) -> is_integer(kz_util:to_integer(V)) end}]).
+-define(SUBSCRIBE_TYPES, [{<<"Expires">>, fun(V) -> is_integer(kz_term:to_integer(V)) end}]).
 
 %% Presence state updates
 -define(UPDATE_HEADERS, [<<"Presence-ID">>, <<"State">>]).
@@ -311,15 +311,18 @@ update_routing_key(Req) ->
                       ).
 
 update_routing_key(State, PresenceID) when is_binary(State) ->
-    R = case binary:split(PresenceID, <<"@">>) of
-            [_To, Realm] -> amqp_util:encode(Realm);
-            [Realm] -> amqp_util:encode(Realm)
-        end,
     list_to_binary([<<"update.">>
                    ,amqp_util:encode(State)
                    ,"."
-                   ,amqp_util:encode(R)
+                   ,amqp_util:encode(realm_from_presence_id(PresenceID))
                    ]).
+
+-spec realm_from_presence_id(ne_binary()) -> ne_binary().
+realm_from_presence_id(PresenceID) ->
+    case binary:split(PresenceID, <<"@">>) of
+        [_To, Realm] -> Realm;
+        [Realm] -> Realm
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

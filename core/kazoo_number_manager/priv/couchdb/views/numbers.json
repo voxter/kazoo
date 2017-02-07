@@ -8,6 +8,10 @@
         "listing_undefined_module": {
             "map": "function(doc) { if (doc.pvt_module_name != 'undefined' ) return; emit([doc._id], [doc.pvt_module_name]); }"
         },
+        "module_name": {
+            "map": "function(doc) { emit(doc.pvt_module_name, 1); }",
+            "reduce": "_sum"
+        },
         "status": {
             "map": "function(doc) { emit([doc.pvt_state, doc.pvt_module_name, doc._id], null); }"
         },

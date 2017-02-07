@@ -153,7 +153,7 @@ node(Srv) ->
 -spec hostname(pid()) -> binary().
 hostname(Srv) ->
     Node = ?MODULE:node(Srv),
-    [_, Hostname] = binary:split(kz_util:to_binary(Node), <<"@">>),
+    [_, Hostname] = binary:split(kz_term:to_binary(Node), <<"@">>),
     Hostname.
 
 -spec queue_name(pid() | 'undefined') -> api_binary().
@@ -488,7 +488,7 @@ call_control_ready(#state{call_id=CallId
     Usurp = [{<<"Call-ID">>, CallId}
             ,{<<"Fetch-ID">>, FetchId}
             ,{<<"Reason">>, <<"Route-Win">>}
-            ,{<<"Media-Node">>, kz_util:to_binary(Node)}
+            ,{<<"Media-Node">>, kz_term:to_binary(Node)}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ],
     lager:debug("sending control usurp for ~s", [FetchId]),
@@ -836,7 +836,7 @@ handle_dialplan(JObj, #state{call_id=CallId
                             ,current_app=CurrApp
                             }=State) ->
     NewCmdQ = try
-                  insert_command(State, kz_util:to_atom(kz_json:get_value(<<"Insert-At">>, JObj, 'tail')), JObj)
+                  insert_command(State, kz_term:to_atom(kz_json:get_value(<<"Insert-At">>, JObj, 'tail')), JObj)
               catch _T:_R ->
                       lager:debug("failed to insert command into control queue: ~p:~p", [_T, _R]),
                       CmdQ
@@ -1035,10 +1035,10 @@ is_post_hangup_command(AppName) ->
 -spec get_module(ne_binary(), ne_binary()) -> atom().
 get_module(Category, Name) ->
     ModuleName = <<"ecallmgr_", Category/binary, "_", Name/binary>>,
-    try kz_util:to_atom(ModuleName)
+    try kz_term:to_atom(ModuleName)
     catch
         'error':'badarg' ->
-            kz_util:to_atom(ModuleName, 'true')
+            kz_term:to_atom(ModuleName, 'true')
     end.
 
 %%--------------------------------------------------------------------

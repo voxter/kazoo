@@ -309,7 +309,7 @@ get_default_limit_units(Key, Default) ->
 get_limit_boolean(Key, JObj, Default) ->
     case kz_json:get_value(<<"pvt_", Key/binary>>, JObj) of
         'undefined' -> get_public_limit_boolean(Key, JObj, Default);
-        Value -> kz_util:is_true(Value)
+        Value -> kz_term:is_true(Value)
     end.
 
 -spec get_public_limit_boolean(ne_binary(), kz_json:object(), boolean()) -> boolean().
@@ -318,7 +318,7 @@ get_limit_boolean(Key, JObj, Default) ->
 get_public_limit_boolean(<<"allow_prepay">> = Key, JObj, Default) ->
     case kz_json:get_value(Key, JObj) of
         'undefined' -> get_default_limit_boolean(Key, Default);
-        Value -> kz_util:is_true(Value)
+        Value -> kz_term:is_true(Value)
     end;
 get_public_limit_boolean(Key, _, Default) ->
     get_default_limit_boolean(Key, Default).
@@ -400,7 +400,7 @@ get_limit_jobj(AccountDb) ->
 
 -spec create_default_limit_jobj(ne_binary()) -> kz_json:object().
 create_default_limit_jobj(AccountDb) ->
-    TStamp = kz_util:current_tstamp(),
+    TStamp = kz_time:current_tstamp(),
     JObj = kz_json:from_list(
              [{<<"_id">>, <<"limits">>}
              ,{<<"pvt_account_db">>, AccountDb}

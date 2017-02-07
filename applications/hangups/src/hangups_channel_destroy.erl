@@ -37,7 +37,7 @@ alert_about_hangup(HangupCause, JObj) ->
     lager:debug("abnormal call termination: ~s", [HangupCause]),
     AccountId = kz_call_event:account_id(JObj, <<"unknown">>),
     kz_notify:detailed_alert("~s ~s to ~s (~s) on ~s(~s)"
-                            ,[kz_util:to_lower_binary(HangupCause)
+                            ,[kz_term:to_lower_binary(HangupCause)
                              ,find_source(JObj)
                              ,find_destination(JObj)
                              ,find_direction(JObj)
@@ -137,9 +137,10 @@ find_destination(JObj) ->
 
 -spec use_to_as_destination(kz_call_event:doc()) -> ne_binary().
 use_to_as_destination(JObj) ->
+    AccountId = kz_call_event:account_id(JObj),
     case catch binary:split(kz_json:get_value(<<"To-Uri">>, JObj), <<"@">>) of
         [Num|_] -> Num;
-        _ -> kz_json:get_value(<<"Callee-ID-Number">>, JObj,  kz_util:anonymous_caller_id_number())
+        _ -> kz_json:get_value(<<"Callee-ID-Number">>, JObj,  kz_privacy:anonymous_caller_id_number(AccountId))
     end.
 
 %%--------------------------------------------------------------------
@@ -150,9 +151,10 @@ use_to_as_destination(JObj) ->
 %%--------------------------------------------------------------------
 -spec find_source(kz_call_event:doc()) -> ne_binary().
 find_source(JObj) ->
+    AccountId = kz_call_event:account_id(JObj),
     case catch binary:split(kz_json:get_value(<<"From-Uri">>, JObj), <<"@">>) of
         [Num|_] -> Num;
-        _ -> kz_json:get_value(<<"Caller-ID-Number">>, JObj,  kz_util:anonymous_caller_id_number())
+        _ -> kz_json:get_value(<<"Caller-ID-Number">>, JObj,  kz_privacy:anonymous_caller_id_number(AccountId))
     end.
 
 %%--------------------------------------------------------------------

@@ -141,7 +141,7 @@ billing(Context, _ReqVerb, [{<<"devices">>, _}|_Nouns]) ->
         'throw':{Error, Reason} ->
             lager:debug("account ~s is not allowed to make billing updates: ~s: ~p"
                        ,[props:get_value(<<"accounts">>, _Nouns), Error, Reason]),
-            crossbar_util:response('error', kz_util:to_binary(Error), 500, Reason, Context)
+            crossbar_util:response('error', kz_term:to_binary(Error), 500, Reason, Context)
     end;
 billing(Context, _ReqVerb, _Nouns) ->
     Context.
@@ -410,11 +410,16 @@ error_mdn_changed(Context) ->
 -spec check_mdn_taken(api_binary(), cb_context:context()) -> cb_context:context().
 check_mdn_taken(DeviceId, Context) ->
     MDN = get_mdn(Context),
-    case knm_number:get(MDN) of
-        {'ok', _Number} -> error_mdn_taken(MDN, Context);
-        _Otherwise ->
-            lager:debug("endpoint mdn ~s is not taken: ~p", [MDN, _Otherwise]),
-            check_mdn_registered(DeviceId, Context)
+    case knm_number:get(MDN, knm_number_options:mdn_options()) of
+        {error, not_found} ->
+            lager:debug("endpoint mdn ~s is not taken", [MDN]),
+            check_mdn_registered(DeviceId, Context);
+        {ok, _Number} ->
+            lager:debug("mdn ~s taken", [MDN]),
+            error_mdn_taken(MDN, Context);
+        {error, _R} ->
+            lager:debug("number ~s taken: ~p", [MDN, _R]),
+            error_mdn_taken(MDN, Context)
     end.
 
 -spec error_mdn_taken(ne_binary(), cb_context:context()) -> cb_context:context().
@@ -438,13 +443,13 @@ check_mdn_registered(DeviceId, Context) ->
 
 -spec get_mac_address(cb_context:context()) -> api_binary().
 get_mac_address(Context) ->
-    kz_util:to_lower_binary(cb_context:req_value(Context, ?KEY_MAC_ADDRESS)).
+    kz_term:to_lower_binary(cb_context:req_value(Context, ?KEY_MAC_ADDRESS)).
 
 -spec changed_mac_address(cb_context:context()) -> boolean().
 changed_mac_address(Context) ->
     NewAddress = get_mac_address(Context),
     OldAddress = kz_json:get_ne_value(?KEY_MAC_ADDRESS, cb_context:fetch(Context, 'db_doc')),
-    NewAddress =:= kz_util:to_lower_binary(OldAddress)
+    NewAddress =:= kz_term:to_lower_binary(OldAddress)
         orelse unique_mac_address(NewAddress, Context).
 
 -spec check_mac_address(api_binary(), cb_context:context()) -> cb_context:context().
@@ -478,7 +483,7 @@ get_mac_addresses(DbName) ->
                {'ok', AdJObj} -> kz_datamgr:get_result_keys(AdJObj);
                _ -> []
            end,
-    lists:map(fun kz_util:to_lower_binary/1, MACs).
+    lists:map(fun kz_term:to_lower_binary/1, MACs).
 
 -spec prepare_outbound_flags(api_binary(), cb_context:context()) -> cb_context:context().
 prepare_outbound_flags(DeviceId, Context) ->
@@ -486,7 +491,7 @@ prepare_outbound_flags(DeviceId, Context) ->
                'undefined' -> cb_context:req_data(Context);
                [] -> cb_context:req_data(Context);
                Flags when is_list(Flags) ->
-                   OutboundFlags = [kz_util:strip_binary(Flag) || Flag <- Flags],
+                   OutboundFlags = [kz_binary:strip(Flag) || Flag <- Flags],
                    kz_json:set_value(<<"outbound_flags">>, OutboundFlags, cb_context:req_data(Context));
                _Else ->
                    kz_json:set_value(<<"outbound_flags">>, [], cb_context:req_data(Context))
@@ -719,7 +724,7 @@ is_sip_creds_unique(AccountDb, Realm, Username, DeviceId) ->
         andalso is_creds_global_unique(Realm, Username, DeviceId).
 
 is_creds_locally_unique(AccountDb, Username, DeviceId) ->
-    ViewOptions = [{'key', kz_util:to_lower_binary(Username)}],
+    ViewOptions = [{'key', kz_term:to_lower_binary(Username)}],
     case kz_datamgr:get_results(AccountDb, <<"devices/sip_credentials">>, ViewOptions) of
         {'ok', []} -> 'true';
         {'ok', [JObj]} -> kz_doc:id(JObj) =:= DeviceId;
@@ -728,8 +733,8 @@ is_creds_locally_unique(AccountDb, Username, DeviceId) ->
     end.
 
 is_creds_global_unique(Realm, Username, DeviceId) ->
-    ViewOptions = [{'key', [kz_util:to_lower_binary(Realm)
-                           ,kz_util:to_lower_binary(Username)
+    ViewOptions = [{'key', [kz_term:to_lower_binary(Realm)
+                           ,kz_term:to_lower_binary(Username)
                            ]
                    }],
     case kz_datamgr:get_results(?KZ_SIP_DB, <<"credentials/lookup">>, ViewOptions) of
@@ -750,7 +755,7 @@ is_creds_global_unique(Realm, Username, DeviceId) ->
 maybe_aggregate_device(DeviceId, Context) ->
     maybe_aggregate_device(DeviceId, Context, cb_context:resp_status(Context)).
 maybe_aggregate_device(DeviceId, Context, 'success') ->
-    case kz_util:is_true(cb_context:fetch(Context, 'aggregate_device'))
+    case kz_term:is_true(cb_context:fetch(Context, 'aggregate_device'))
         andalso ?DEVICES_ALLOW_AGGREGATES
     of
         'false' -> maybe_remove_aggregate(DeviceId, Context);
@@ -806,7 +811,7 @@ get_device_type(Context) ->
 %%--------------------------------------------------------------------
 -spec maybe_add_mobile_mdn(cb_context:context()) -> cb_context:context().
 maybe_add_mobile_mdn(Context) ->
-    case kz_util:is_true(cb_context:fetch(Context, 'add_mobile_mdn')) of
+    case kz_term:is_true(cb_context:fetch(Context, 'add_mobile_mdn')) of
         'true' -> add_mobile_mdn(Context);
         'false' -> Context
     end.
@@ -822,16 +827,16 @@ add_mobile_mdn(Context) ->
           ,{<<"device-id">>, kz_doc:id(cb_context:doc(Context))}
           ]),
     PublicFields = kz_json:from_list([{<<"mobile">>, MobileField}]),
-    Options = [{'auth_by', ?KNM_DEFAULT_AUTH_BY}
-              ,{'dry_run', not cb_context:accepting_charges(Context)}
+    Options = [{assign_to, cb_context:account_id(Context)}
               ,{'public_fields', PublicFields}
               ,{'module_name', ?CARRIER_MDN}
+               |knm_number_options:mdn_options()
               ],
-    case knm_number:move(Normalized, cb_context:account_id(Context), Options) of
-        {'error', _}=Error ->
+    case knm_number:create(Normalized, Options) of
+        {error, _}=Error ->
             _ = crossbar_doc:delete(Context),
             cb_phone_numbers_v2:set_response(Error, Context);
-        _Else ->
+        {ok, _} ->
             lager:debug("created new mdn ~s with public fields set to ~s"
                        ,[Normalized, kz_json:encode(PublicFields)]),
             maybe_remove_mobile_mdn(Context)
@@ -839,7 +844,7 @@ add_mobile_mdn(Context) ->
 
 -spec maybe_remove_mobile_mdn(cb_context:context()) -> cb_context:context().
 maybe_remove_mobile_mdn(Context) ->
-    case kz_util:is_true(cb_context:fetch(Context, 'remove_mobile_mdn')) of
+    case kz_term:is_true(cb_context:fetch(Context, 'remove_mobile_mdn')) of
         'true' -> remove_mobile_mdn(Context);
         'false' -> Context
     end.
@@ -854,18 +859,18 @@ remove_mobile_mdn(Context) ->
 -spec remove_if_mobile(ne_binary(), cb_context:context()) -> cb_context:context().
 remove_if_mobile(MDN, Context) ->
     Normalized = knm_converters:normalize(MDN),
-    case knm_number:get(Normalized) of
+    case knm_number:get(Normalized, knm_number_options:mdn_options()) of
         {'ok', Number} ->
             PN = knm_number:phone_number(Number),
             IsMdnCarrier = ?CARRIER_MDN =:= knm_phone_number:module_name(PN),
             case kz_json:get_ne_value(<<"mobile">>, knm_number:to_public_json(Number)) of
-                'undefined' when not IsMdnCarrier -> Context;
+                'undefined' when not IsMdnCarrier ->
+                    lager:error("not removing number ~s: somehow not an mdn", [Normalized]),
+                    Context;
                 Mobile ->
-                    %% mobile property found in the public fields or carrier is CARRIER_MDN,
-                    %% hard removing number
                     lager:debug("hard removing old mdn ~s with mobile properties ~s"
                                ,[Normalized, kz_json:encode(Mobile)]),
-                    _ = knm_number:delete(Normalized, knm_number_options:default()),
+                    _ = knm_number:release(Normalized, knm_number_options:mdn_options()),
                     Context
             end;
         {'error', _R} ->
@@ -881,18 +886,17 @@ remove_if_mobile(MDN, Context) ->
 -spec get_mdn(cb_context:context()) -> api_binary().
 get_mdn(Context) ->
     ReqMDN = cb_context:req_value(Context, ?KEY_MOBILE_MDN),
-    case kz_util:is_empty(ReqMDN) of
-        'true' ->
-            case kz_json:get_ne_value(?KEY_MOBILE_MDN, cb_context:fetch(Context, 'db_doc')) of
-                'undefined' -> 'undefined';
-                MDN -> knm_converters:normalize(MDN)
-            end;
-        'false' -> knm_converters:normalize(ReqMDN)
+    case kz_term:is_empty(ReqMDN)
+        andalso kz_json:get_ne_value(?KEY_MOBILE_MDN, cb_context:fetch(Context, 'db_doc'))
+    of
+        false -> knm_converters:normalize(ReqMDN);
+        undefined -> undefined;
+        MDN -> knm_converters:normalize(MDN)
     end.
 
 -spec has_mdn_changed(cb_context:context()) -> boolean().
 has_mdn_changed(Context) ->
-    %% This shouldn't be empty or undefined because the caller is already check that with get_mdn/1
+    %% This shouldn't be empty or undefined because caller already checked that with get_mdn/1
     NewMDN = cb_context:req_value(Context, ?KEY_MOBILE_MDN),
     case kz_json:get_ne_value(?KEY_MOBILE_MDN, cb_context:fetch(Context, 'db_doc')) of
         'undefined' -> 'true';

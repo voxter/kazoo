@@ -40,8 +40,8 @@
         ,post/3
         ]).
 
--include("crossbar.hrl").
--include_lib("acdc/include/acdc_config.hrl").
+-include_lib("crossbar/src/crossbar.hrl").
+-include("acdc_config.hrl").
 
 -define(MOD_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".queues">>).
 
@@ -67,6 +67,9 @@
 %%--------------------------------------------------------------------
 -spec init() -> 'ok'.
 init() ->
+    _ = kapi_acdc_agent:declare_exchanges(),
+    _ = kapi_acdc_stats:declare_exchanges(),
+
     _ = crossbar_bindings:bind(<<"*.allowed_methods.agents">>, ?MODULE, 'allowed_methods'),
     _ = crossbar_bindings:bind(<<"*.resource_exists.agents">>, ?MODULE, 'resource_exists'),
     _ = crossbar_bindings:bind(<<"*.content_types_provided.agents">>, ?MODULE, 'content_types_provided'),
@@ -320,7 +323,7 @@ fetch_all_agent_statuses(Context) ->
 
 -spec fetch_agent_status(api_binary(), cb_context:context()) -> cb_context:context().
 fetch_agent_status(AgentId, Context) ->
-    case kz_util:is_true(cb_context:req_value(Context, <<"recent">>)) of
+    case kz_term:is_true(cb_context:req_value(Context, <<"recent">>)) of
         'false' ->
             fetch_current_status(Context, AgentId);
         'true' ->
@@ -365,7 +368,7 @@ fetch_all_current_agent_stats(Context) ->
 
 -spec fetch_all_current_stats(cb_context:context(), api_binary()) -> cb_context:context().
 fetch_all_current_stats(Context, AgentId) ->
-    Now = kz_util:current_tstamp(),
+    Now = kz_time:current_tstamp(),
     Yday = Now - ?SECONDS_IN_DAY,
 
     Req = props:filter_undefined(
@@ -407,7 +410,7 @@ fetch_current_status(Context, AgentId) ->
 -spec fetch_all_current_statuses(cb_context:context(), api_binary(), api_binary()) ->
                                         cb_context:context().
 fetch_all_current_statuses(Context, AgentId, Status) ->
-    Now = kz_util:current_tstamp(),
+    Now = kz_time:current_tstamp(),
     Yday = Now - ?SECONDS_IN_DAY,
 
     Recent = cb_context:req_value(Context, <<"recent">>, 'false'),
@@ -417,7 +420,7 @@ fetch_all_current_statuses(Context, AgentId, Status) ->
              ,{<<"Agent-ID">>, AgentId}
              ,{<<"Start-Range">>, Yday}
              ,{<<"End-Range">>, Now}
-             ,{<<"Most-Recent">>, kz_util:is_false(Recent)}
+             ,{<<"Most-Recent">>, kz_term:is_false(Recent)}
              ]),
 
     {'ok', Resp} = acdc_agent_util:most_recent_statuses(cb_context:account_id(Context), Opts),
@@ -427,13 +430,13 @@ fetch_all_current_statuses(Context, AgentId, Status) ->
 fetch_ranged_agent_stats(Context, StartRange) ->
     MaxRange = ?ACDC_ARCHIVE_WINDOW,
 
-    Now = kz_util:current_tstamp(),
+    Now = kz_time:current_tstamp(),
     Past = Now - MaxRange,
 
-    To = kz_util:to_integer(cb_context:req_value(Context, <<"end_range">>, Now)),
+    To = kz_term:to_integer(cb_context:req_value(Context, <<"end_range">>, Now)),
     MaxFrom = To - MaxRange,
 
-    case kz_util:to_integer(StartRange) of
+    case kz_term:to_integer(StartRange) of
         F when F > To ->
             %% start_range is larger than end_range
             Msg = kz_json:from_list([{<<"message">>, <<"value is greater than start_range">>}
@@ -453,7 +456,7 @@ fetch_ranged_agent_stats(Context, StartRange) ->
 -spec fetch_ranged_agent_stats(cb_context:context(), pos_integer(), pos_integer(), boolean()) ->
                                       cb_context:context().
 fetch_ranged_agent_stats(Context, From, To, 'true') ->
-    lager:debug("ranged query from ~b to ~b(~b) of current stats (now ~b)", [From, To, To-From, kz_util:current_tstamp()]),
+    lager:debug("ranged query from ~b to ~b(~b) of current stats (now ~b)", [From, To, To-From, kz_time:current_tstamp()]),
     Req = props:filter_undefined(
             [{<<"Account-ID">>, cb_context:account_id(Context)}
             ,{<<"Status">>, cb_context:req_value(Context, <<"status">>)}
@@ -671,7 +674,7 @@ check_for_status_error(Context, S) ->
                                            cb_context:context().
 validate_status_change_params(Context, <<"pause">>) ->
     Value = cb_context:req_value(Context, <<"timeout">>),
-    try kz_util:to_integer(Value) of
+    try kz_term:to_integer(Value) of
         N when N >= 0 -> cb_context:set_resp_status(Context, 'success');
         N ->
             lager:debug("bad int for pause: ~p", [N]),

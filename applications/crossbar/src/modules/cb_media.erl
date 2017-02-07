@@ -168,7 +168,7 @@ acceptable_content_types() ->
 -spec content_types_provided_for_media(cb_context:context(), path_token(), path_token(), http_method()) ->
                                               cb_context:context().
 content_types_provided(Context, MediaId, ?BIN_DATA) ->
-    content_types_provided_for_media(Context, kz_http_util:urlencode(MediaId), ?BIN_DATA, cb_context:req_verb(Context)).
+    content_types_provided_for_media(Context, MediaId, ?BIN_DATA, cb_context:req_verb(Context)).
 
 content_types_provided_for_media(Context, MediaId, ?BIN_DATA, ?HTTP_GET) ->
     Context1 = load_media_meta(Context, MediaId),
@@ -238,15 +238,15 @@ validate(Context, ?LANGUAGES) ->
 validate(Context, ?PROMPTS) ->
     load_available_prompts(Context);
 validate(Context, MediaId) ->
-    validate_media_doc(Context, kz_http_util:urlencode(MediaId), cb_context:req_verb(Context)).
+    validate_media_doc(Context, MediaId, cb_context:req_verb(Context)).
 
 validate(Context, ?LANGUAGES, Language) ->
-    load_media_docs_by_language(Context, kz_util:to_lower_binary(Language));
+    load_media_docs_by_language(Context, kz_term:to_lower_binary(Language));
 validate(Context, ?PROMPTS, PromptId) ->
     load_media_docs_by_prompt(Context, PromptId);
 validate(Context, MediaId, ?BIN_DATA) ->
     lager:debug("uploading binary data to '~s'", [MediaId]),
-    validate_media_binary(Context, kz_http_util:urlencode(MediaId), cb_context:req_verb(Context), cb_context:req_files(Context)).
+    validate_media_binary(Context, MediaId, cb_context:req_verb(Context), cb_context:req_files(Context)).
 
 -spec validate_media_docs(cb_context:context(), http_method()) -> cb_context:context().
 validate_media_docs(Context, ?HTTP_GET) ->
@@ -452,7 +452,7 @@ do_put_prompt(Context) ->
 -spec post(cb_context:context(), path_token()) -> cb_context:context().
 -spec post(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 post(Context, MediaId) ->
-    post_media_doc(Context, kz_http_util:urlencode(MediaId), cb_context:account_id(Context)).
+    post_media_doc(Context, MediaId, cb_context:account_id(Context)).
 
 -spec post_media_doc(cb_context:context(), ne_binary(), api_binary()) -> cb_context:context().
 post_media_doc(Context, MediaId, 'undefined') ->
@@ -479,7 +479,7 @@ post_media_doc(Context, MediaId, _AccountId) ->
     lists:foldl(fun(F, C) -> F(C) end, Context, Routines).
 
 post(Context, MediaId, ?BIN_DATA) ->
-    post_media_binary(Context, kz_http_util:urlencode(MediaId), cb_context:account_id(Context)).
+    post_media_binary(Context, MediaId, cb_context:account_id(Context)).
 
 -spec remove_tts_keys(cb_context:context()) -> cb_context:context().
 remove_tts_keys(C) ->
@@ -514,10 +514,10 @@ maybe_update_tts(Context, Text, Voice, 'success') ->
     try kapps_speech:create(Text, Voice) of
         {'error', Reason} ->
             crossbar_doc:delete(Context),
-            crossbar_util:response('error', kz_util:to_binary(Reason), Context);
+            crossbar_util:response('error', kz_term:to_binary(Reason), Context);
         {'error', 'tts_provider_failure', Reason} ->
             crossbar_doc:delete(Context),
-            crossbar_util:response('error', kz_util:to_binary(Reason), Context);
+            crossbar_util:response('error', kz_term:to_binary(Reason), Context);
         {'ok', ContentType, Content} ->
             MediaId = kz_doc:id(JObj),
             Headers = kz_json:from_list([{<<"content_type">>, ContentType}
@@ -527,7 +527,7 @@ maybe_update_tts(Context, Text, Voice, 'success') ->
                                          ,{<<"contents">>, Content}
                                          ]),
             FileName = <<"text_to_speech_"
-                         ,(kz_util:to_binary(kz_util:current_tstamp()))/binary
+                         ,(kz_term:to_binary(kz_time:current_tstamp()))/binary
                          ,".wav"
                        >>,
             _ = update_media_binary(cb_context:set_resp_status(cb_context:set_req_files(Context, [{FileName, FileJObj}])
@@ -551,9 +551,9 @@ maybe_merge_tts(Context, MediaId, Text, Voice, 'success') ->
 
     case kapps_speech:create(Text, Voice) of
         {'error', R} ->
-            crossbar_util:response('error', kz_util:to_binary(R), Context);
+            crossbar_util:response('error', kz_term:to_binary(R), Context);
         {'error', 'tts_provider_failure', R} ->
-            crossbar_util:response('error', kz_util:to_binary(R), Context);
+            crossbar_util:response('error', kz_term:to_binary(R), Context);
         {'ok', ContentType, Content} ->
             Headers = kz_json:from_list([{<<"content_type">>, ContentType}
                                         ,{<<"content_length">>, iolist_size(Content)}
@@ -562,7 +562,7 @@ maybe_merge_tts(Context, MediaId, Text, Voice, 'success') ->
                                          ,{<<"contents">>, Content}
                                          ]),
             FileName = <<"text_to_speech_"
-                         ,(kz_util:to_binary(kz_util:current_tstamp()))/binary
+                         ,(kz_term:to_binary(kz_time:current_tstamp()))/binary
                          ,".wav"
                        >>,
 
@@ -595,7 +595,7 @@ delete(Context, _MediaId) ->
     crossbar_doc:delete(Context, delete_type(Context)).
 
 delete(Context, MediaId, ?BIN_DATA) ->
-    delete_media_binary(kz_http_util:urlencode(MediaId), Context, cb_context:account_id(Context)).
+    delete_media_binary(MediaId, Context, cb_context:account_id(Context)).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -630,7 +630,7 @@ load_media_summary(Context, _AccountId) ->
 start_key(Context) ->
     case crossbar_doc:start_key(Context) of
         'undefined' -> 'undefined';
-        StartKey -> kz_http_util:urlencode(StartKey)
+        StartKey -> StartKey
     end.
 
 -spec fix_start_keys(cb_context:context()) -> cb_context:context().
@@ -910,7 +910,7 @@ maybe_validate_prompt(_MediaId, Context, _Status) ->
 -spec validate_prompt(ne_binary(), cb_context:context(), ne_binary()) ->
                              cb_context:context().
 validate_prompt(MediaId, Context, PromptId) ->
-    Language = kz_util:to_lower_binary(kzd_media:language(cb_context:doc(Context))),
+    Language = kz_term:to_lower_binary(kzd_media:language(cb_context:doc(Context))),
     case kz_media_util:prompt_id(PromptId, Language) of
         MediaId -> Context;
         _OtherId ->
@@ -933,7 +933,7 @@ maybe_add_prompt_fields(Context) ->
     case kzd_media:prompt_id(JObj) of
         'undefined' -> [];
         PromptId ->
-            Language = kz_util:to_lower_binary(kzd_media:language(JObj, kz_media_util:default_prompt_language())),
+            Language = kz_term:to_lower_binary(kzd_media:language(JObj, kz_media_util:default_prompt_language())),
             ID = kz_media_util:prompt_id(PromptId, Language),
 
             lager:debug("creating properties for prompt ~s (~s)", [PromptId, Language]),

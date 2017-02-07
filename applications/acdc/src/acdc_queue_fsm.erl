@@ -220,7 +220,7 @@ register_callback(FSM, JObj) ->
 -spec init(list()) -> {'ok', atom(), state()}.
 init([MgrPid, ListenerPid, QueueJObj]) ->
     QueueId = kz_doc:id(QueueJObj),
-    kz_util:put_callid(<<"fsm_", QueueId/binary, "_", (kz_util:to_binary(self()))/binary>>),
+    kz_util:put_callid(<<"fsm_", QueueId/binary, "_", (kz_term:to_binary(self()))/binary>>),
 
     webseq:start(?WSD_ID),
     webseq:reg_who(?WSD_ID, self(), iolist_to_binary([<<"qFSM">>, pid_to_list(self())])),
@@ -858,7 +858,7 @@ elapsed(Ref) when is_reference(Ref) ->
         'false' -> 'undefined';
         Ms -> Ms div 1000
     end;
-elapsed(Time) -> kz_util:elapsed_s(Time).
+elapsed(Time) -> kz_time:elapsed_s(Time).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -890,7 +890,7 @@ maybe_delay_connect_req(Call, CallJObj, Delivery, #state{queue_proc=QueueSrv
 
             {'next_state', 'connect_req', State#state{collect_ref=start_collect_timer()
                                                      ,member_call=Call
-                                                     ,member_call_start=kz_util:current_tstamp()
+                                                     ,member_call_start=kz_time:current_tstamp()
                                                      ,connection_timer_ref=start_connection_timer(ConnTimeout)
                                                      }};
         'false' ->

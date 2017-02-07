@@ -62,8 +62,8 @@
 -define(PVT_LEGACY_TYPE, <<"private_media">>).
 
 -define(MSG_ID(Year, Month, Id),
-        <<(kz_util:to_binary(Year))/binary
-          ,(kz_util:pad_month(Month))/binary
+        <<(kz_term:to_binary(Year))/binary
+          ,(kz_time:pad_month(Month))/binary
           ,"-"
           ,(Id)/binary
         >>).
@@ -96,11 +96,11 @@
 %%--------------------------------------------------------------------
 -spec new(ne_binary(), kz_proplist()) -> doc().
 new(AccountId, Props) ->
-    UtcSeconds = props:get_value(<<"Message-Timestamp">>, Props, kz_util:current_tstamp()),
+    UtcSeconds = props:get_value(<<"Message-Timestamp">>, Props, kz_time:current_tstamp()),
     Timestamp  = props:get_value(<<"Document-Timestamp">>, Props, UtcSeconds),
     {{Year, Month, _}, _} = calendar:gregorian_seconds_to_datetime(Timestamp),
 
-    MediaId = props:get_value(<<"Media-ID">>, Props, kz_util:rand_hex_binary(16)),
+    MediaId = props:get_value(<<"Media-ID">>, Props, kz_binary:rand_hex(16)),
 
     Db = kazoo_modb:get_modb(AccountId, Year, Month),
     MsgId = ?MSG_ID(Year, Month, MediaId),
@@ -150,12 +150,12 @@ create_message_name(BoxNum, Timezone, UtcSeconds) ->
 -spec message_name(ne_binary(), kz_datetime(), string()) -> ne_binary().
 message_name(BoxNum, {{Y,M,D},{H,I,S}}, TZ) ->
     list_to_binary(["mailbox ", BoxNum, " message "
-                   ,kz_util:to_binary(M), "-"
-                   ,kz_util:to_binary(D), "-"
-                   ,kz_util:to_binary(Y), " "
-                   ,kz_util:to_binary(H), ":"
-                   ,kz_util:to_binary(I), ":"
-                   ,kz_util:to_binary(S), TZ
+                   ,kz_term:to_binary(M), "-"
+                   ,kz_term:to_binary(D), "-"
+                   ,kz_term:to_binary(Y), " "
+                   ,kz_term:to_binary(H), ":"
+                   ,kz_term:to_binary(I), ":"
+                   ,kz_term:to_binary(S), TZ
                    ]).
 
 %%--------------------------------------------------------------------

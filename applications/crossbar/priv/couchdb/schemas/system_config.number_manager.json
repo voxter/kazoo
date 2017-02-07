@@ -44,7 +44,7 @@
                 "tollfree_us": {
                     "friendly_name": "US TollFree",
                     "pretty_print": "SS(###) ### - ####",
-                    "regex": "^\\+1((?:800|888|877|866|855)\\d{7})$"
+                    "regex": "^\\+1((?:800|88\\d|877|866|855|844|833|822)\\d{7})$"
                 },
                 "unknown": {
                     "friendly_name": "Unknown",
@@ -153,6 +153,11 @@
             "default": 1000,
             "description": "number_manager time between numbers in milliseconds",
             "type": "integer"
+        },
+        "unauthorized_numbers_lookup": {
+            "default": false,
+            "description": "number_manager unauthorized numbers lookup",
+            "type": "boolean"
         }
     },
     "required": [

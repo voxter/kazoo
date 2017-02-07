@@ -22,7 +22,9 @@
 %%------------------------------------------------------------------------------
 -spec db_classification(text()) -> db_classifications().
 db_classification(Db) when not is_binary(Db) ->
-    db_classification(kz_util:to_binary(Db));
+    db_classification(kz_term:to_binary(Db));
+db_classification(<<"_users">>) -> 'external';
+db_classification(<<"_replicator">>) -> 'external';
 db_classification(<<"ts">>) -> 'deprecated';
 db_classification(<<"crossbar_schemas">>) -> 'deprecated';
 db_classification(<<"registrations">>) -> 'deprecated';
@@ -70,7 +72,8 @@ db_classification(?MATCH_ACCOUNT_encoded(_AccountId)) -> 'account';
 db_classification(?MATCH_ACCOUNT_ENCODED(_AccountId)) -> 'account';
 db_classification(_Database) ->
     lager:warning("unknown type for database ~s", [_Database]),
-    lager:debug("unknown database classification: ~p", [erlang:process_info(self(),current_stacktrace)]),
+    {current_stacktrace, ST} = erlang:process_info(self(),current_stacktrace),
+    kz_util:log_stacktrace(ST),
     'undefined'.
 
 %%------------------------------------------------------------------------------
@@ -80,7 +83,7 @@ db_classification(_Database) ->
 %%------------------------------------------------------------------------------
 -spec db_priority(text()) -> non_neg_integer().
 db_priority(Db) when not is_binary(Db) ->
-    db_priority(kz_util:to_binary(Db));
+    db_priority(kz_term:to_binary(Db));
 db_priority(?KZ_CONFIG_DB) -> 0;
 db_priority(?KZ_DATA_DB) -> 1;
 db_priority(?KZ_OFFNET_DB) -> 2;
@@ -129,6 +132,6 @@ map_keys_to_atoms(Map) ->
     maps:fold(fun map_keys_to_atoms_fold/3, #{}, Map).
 
 map_keys_to_atoms_fold(K, V, Acc) when is_map(V) ->
-    Acc#{kz_util:to_atom(K, 'true') => map_keys_to_atoms(V)};
+    Acc#{kz_term:to_atom(K, 'true') => map_keys_to_atoms(V)};
 map_keys_to_atoms_fold(K, V, Acc) ->
-    Acc#{kz_util:to_atom(K, 'true') => V}.
+    Acc#{kz_term:to_atom(K, 'true') => V}.

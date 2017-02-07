@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz INC
+%%% @copyright (C) 2013-2017, 2600Hz INC
 %%% @doc
 %%%
 %%% @end
@@ -72,7 +72,7 @@ check(Account)
             lager:warning("unable to open account definition for ~s: ~p", [AccountId, _R])
     end;
 check(Account) ->
-    check(kz_util:to_binary(Account)).
+    check(kz_term:to_binary(Account)).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -131,7 +131,7 @@ handle_info({timeout, Ref, _Msg}, #state{cleanup_ref = Ref
                       ],
                 lager:debug("beginning crawling accounts"),
                 State#state{cleanup_ref = cleanup_timer()
-                           ,account_ids = kz_util:shuffle_list(IDs)
+                           ,account_ids = kz_term:shuffle_list(IDs)
                            };
             {error, _R} ->
                 lager:warning("unable to list all docs in ~s: ~p", [?KZ_ACCOUNTS_DB, _R]),
@@ -395,7 +395,7 @@ maybe_low_balance_notify(AccountJObj, CurrentBalance, 'true') ->
     case kz_account:low_balance_tstamp(AccountJObj) of
         LowBalanceSent when is_number(LowBalanceSent) ->
             Cycle = ?LOW_BALANCE_REPEAT,
-            Diff = kz_util:current_tstamp() - LowBalanceSent,
+            Diff = kz_time:current_tstamp() - LowBalanceSent,
             case Diff >= Cycle of
                 'true' -> notify_of_low_balance(AccountJObj, CurrentBalance);
                 'false' ->

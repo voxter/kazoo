@@ -63,15 +63,15 @@
        ).
 
 -define(WSD_EVT(Fr, T, E), ?WSD_ENABLED
-        andalso webseq:evt(?WSD_ID, Fr, T, <<(kz_util:to_binary(?LINE))/binary, "-", E/binary>>)
+        andalso webseq:evt(?WSD_ID, Fr, T, <<(kz_term:to_binary(?LINE))/binary, "-", E/binary>>)
        ).
 
 -define(WSD_NOTE(W, D, N), ?WSD_ENABLED
-        andalso webseq:note(?WSD_ID, W, D, <<(kz_util:to_binary(?LINE))/binary, "-", N/binary>>)
+        andalso webseq:note(?WSD_ID, W, D, <<(kz_term:to_binary(?LINE))/binary, "-", N/binary>>)
        ).
 
 -define(WSD_TITLE(T), ?WSD_ENABLED
-        andalso webseq:title(?WSD_ID, [T, " in ", kz_util:to_binary(self())])
+        andalso webseq:title(?WSD_ID, [T, " in ", kz_term:to_binary(self())])
        ).
 -define(WSD_START(), ?WSD_ENABLED
         andalso webseq:start(?WSD_ID)
@@ -127,7 +127,7 @@ init({Call, JObj, Pid}) ->
     lager:debug("a endpoint: ~s b endpoint: ~s", [kapps_call:authorizing_id(Call), BEndpointId]),
 
     ?WSD_START(),
-    ?WSD_TITLE(["FSM: ", kapps_call:call_id(Call), " listen on: ", kz_util:to_list(ListenOn)]),
+    ?WSD_TITLE(["FSM: ", kapps_call:call_id(Call), " listen on: ", kz_term:to_list(ListenOn)]),
 
     {'ok', 'unarmed', #state{konami_call_pid=Pid
                             ,binding_digit=binding_digit(Call, JObj)

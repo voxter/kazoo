@@ -37,6 +37,8 @@
         ,created/1, created/2, set_created/2
         ,modified/1, modified/2, set_modified/2
         ,vsn/1, vsn/2, set_vsn/2
+        ,document_hash/1, set_document_hash/2
+        ,calculate_document_hash/1
         ,set_soft_deleted/2, is_soft_deleted/1
         ,set_deleted/1, set_deleted/2, is_deleted/1
 
@@ -54,6 +56,7 @@
                   ,fun add_pvt_type/3
                   ,fun add_pvt_node/3
                   ,fun add_id/3
+                  ,fun add_pvt_document_hash/3
                   ]).
 
 %% CouchDB Keys
@@ -72,6 +75,7 @@
 -define(KEY_SOFT_DELETED, <<"pvt_deleted">>).
 -define(KEY_VSN, <<"pvt_vsn">>).
 -define(KEY_EXTERNAL_ATTACHMENTS, <<"pvt_attachments">>).
+-define(KEY_DOCUMENT_HASH, <<"pvt_document_hash">>).
 
 -define(ATTACHMENT_PROPERTY_REVISION, <<"revpos">>).
 
@@ -93,7 +97,7 @@
 update_pvt_parameters(JObj0, DBName) ->
     update_pvt_parameters(JObj0, DBName, []).
 update_pvt_parameters(JObj0, DBName, Options) ->
-    Opts = props:insert_value('now', kz_util:current_tstamp(), Options),
+    Opts = props:insert_value('now', kz_time:current_tstamp(), Options),
     lists:foldl(fun(Fun, JObj) -> Fun(JObj, DBName, Opts) end, JObj0, ?PVT_FUNS).
 
 -spec add_pvt_vsn(kz_json:object(), api_binary(), kz_proplist()) -> kz_json:object().
@@ -137,8 +141,8 @@ add_pvt_type(JObj, _, Options) ->
 -spec add_pvt_node(kz_json:object(), api_binary(), kz_proplist()) -> kz_json:object().
 add_pvt_node(JObj, _, Options) ->
     case props:get_value('node', Options) of
-        'undefined' -> kz_json:set_value(?KEY_NODE, kz_util:to_binary(node()), JObj);
-        Node -> kz_json:set_value(?KEY_NODE, kz_util:to_binary(Node), JObj)
+        'undefined' -> kz_json:set_value(?KEY_NODE, kz_term:to_binary(node()), JObj);
+        Node -> kz_json:set_value(?KEY_NODE, kz_term:to_binary(Node), JObj)
     end.
 
 -spec add_pvt_created(kz_json:object(), api_binary(), kz_proplist()) -> kz_json:object().
@@ -146,7 +150,7 @@ add_pvt_created(JObj, _, Opts) ->
     case kz_json:get_value(?KEY_REV, JObj) of
         'undefined' ->
             kz_json:set_value(?KEY_CREATED
-                             ,props:get_value('now', Opts, kz_util:current_tstamp())
+                             ,props:get_value('now', Opts, kz_time:current_tstamp())
                              ,JObj
                              );
         _ -> JObj
@@ -154,7 +158,7 @@ add_pvt_created(JObj, _, Opts) ->
 
 -spec update_pvt_modified(kz_json:object()) -> kz_json:object().
 update_pvt_modified(JObj) ->
-    add_pvt_modified(JObj, 'undefined', [{'now', kz_util:current_tstamp()}]).
+    add_pvt_modified(JObj, 'undefined', [{'now', kz_time:current_tstamp()}]).
 
 -spec set_modified(kz_json:object(), gregorian_seconds()) -> kz_json:object().
 set_modified(JObj, Now) ->
@@ -177,6 +181,11 @@ add_id(JObj, _, Opts) ->
         'undefined' -> JObj;
         Id -> set_id(JObj, Id)
     end.
+
+-spec add_pvt_document_hash(kz_json:object(), any(), kz_proplist()) -> kz_json:object().
+add_pvt_document_hash(JObj, _, _) ->
+    Hash = calculate_document_hash(JObj),
+    set_document_hash(JObj, Hash).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -364,7 +373,7 @@ id(JObj, Default) ->
                                   ,JObj
                                   ,Default
                                   ),
-    case kz_util:is_empty(Id) of
+    case kz_term:is_empty(Id) of
         'true' -> Default;
         'false' -> Id
     end.
@@ -386,7 +395,7 @@ set_type(JObj, Type) ->
 
 -spec set_soft_deleted(kz_json:object(), boolean()) -> kz_json:object().
 set_soft_deleted(JObj, IsSoftDeleted) ->
-    kz_json:set_value(?KEY_SOFT_DELETED, kz_util:is_true(IsSoftDeleted), JObj).
+    kz_json:set_value(?KEY_SOFT_DELETED, kz_term:is_true(IsSoftDeleted), JObj).
 
 -spec is_soft_deleted(kz_json:object()) -> boolean().
 is_soft_deleted(JObj) ->
@@ -446,3 +455,21 @@ vsn(JObj, Default) ->
 -spec set_vsn(kz_json:object(), ne_binary()) -> kz_json:object().
 set_vsn(JObj, VSN) ->
     kz_json:set_value(?KEY_VSN, VSN, JObj).
+
+-spec document_hash(kz_json:object()) -> ne_binary().
+document_hash(JObj) ->
+    case kz_json:get_value(?KEY_DOCUMENT_HASH, JObj) of
+        'undefined' -> calculate_document_hash(JObj);
+        Hash -> Hash
+    end.
+
+-spec set_document_hash(kz_json:object(), ne_binary()) -> kz_json:object().
+set_document_hash(JObj, Hash) ->
+    kz_json:set_value(?KEY_DOCUMENT_HASH, Hash, JObj).
+
+-spec calculate_document_hash(kz_json:object()) -> ne_binary().
+calculate_document_hash(JObj) ->
+    PublicJObj = kz_json:public_fields(JObj),
+    Attachments = kz_json:get_value(<<"_attachments">>, JObj),
+    Props = [{<<"public">>, PublicJObj}, {<<"attachments">>, Attachments}],
+    kz_binary:md5(kz_json:encode(kz_json:from_list(Props))).

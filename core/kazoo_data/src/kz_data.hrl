@@ -11,7 +11,7 @@
 -define(APP_NAME, <<"datamgr">>).
 -define(APP_VERSION, <<"4.0.0">>).
 
--record(data_connection, {id = {kz_util:current_tstamp(), kz_util:rand_hex_binary(4)}
+-record(data_connection, {id = {kz_time:current_tstamp(), kz_binary:rand_hex(4)}
                          ,app :: atom() | '$1'
                          ,props = #{} :: #{} | '_'
                          ,server :: any() | '$2'
@@ -97,9 +97,11 @@
 
 -type db_classifications() :: 'account' | 'modb' |
                               'numbers' | 'aggregate' | 'system' |
-                              'resource_selectors' | 'deprecated' | 'undefined'.
+                              'resource_selectors' | 'deprecated' |
+                              'undefined' | 'external'.
 
--type db_create_options() :: [{'q',integer()} | {'n',integer()}].
+-type db_create_options() :: [{'q',integer()} | {'n',integer()} | 'ensure_other_dbs'].
+-type db_delete_options() :: ['ensure_other_dbs'].
 
 -type ddoc() :: ne_binary() | 'all_docs' | 'design_docs'.
 

@@ -111,15 +111,15 @@ save_sms(JObj, Call) ->
 -spec save_sms(kz_json:object(), api_binary(), kapps_call:call()) -> kapps_call:call().
 save_sms(JObj, 'undefined', Call) ->
     {Year, Month, _} = erlang:date(),
-    SmsDocId = kz_util:to_binary(
+    SmsDocId = kz_term:to_binary(
                  io_lib:format("~B~s-~s",
                                [Year
-                               ,kz_util:pad_month(Month)
+                               ,kz_time:pad_month(Month)
                                ,kapps_call:call_id(Call)
                                ])
                 ),
     UpdatedCall = kapps_call:kvs_store('sms_docid', SmsDocId, Call),
-    Doc = kz_doc:set_created(kz_json:new(), kz_util:current_tstamp()),
+    Doc = kz_doc:set_created(kz_json:new(), kz_time:current_tstamp()),
     save_sms(JObj, SmsDocId, Doc, UpdatedCall);
 save_sms(JObj, DocId, Call) ->
     AccountId = kapps_call:account_id(Call),
@@ -146,8 +146,8 @@ save_sms(JObj, ?MATCH_MODB_PREFIX(Year,Month,_) = DocId, Doc, Call) ->
     MessageId = kz_json:get_value(<<"Message-ID">>, JObj),
     Rev = get_sms_revision(Call),
     Opts = props:filter_undefined([{'rev', Rev}]),
-    Created = kz_doc:created(JObj, kz_util:current_tstamp()),
-    Modified = kz_util:current_tstamp(),
+    Created = kz_doc:created(JObj, kz_time:current_tstamp()),
+    Modified = kz_time:current_tstamp(),
     Status = kapps_call:kvs_fetch(<<"flow_status">>, <<"queued">>, Call),
     Schedule = kapps_call:kvs_fetch(<<"flow_schedule">>, Call),
     Props = props:filter_empty(
@@ -218,8 +218,8 @@ endpoint_id_from_sipdb(Realm, Username) ->
                                         {'ok', ne_binary(), ne_binary()} |
                                         {'error', any()}.
 get_endpoint_id_from_sipdb(Realm, Username) ->
-    ViewOptions = [{'key', [kz_util:to_lower_binary(Realm)
-                           ,kz_util:to_lower_binary(Username)
+    ViewOptions = [{'key', [kz_term:to_lower_binary(Realm)
+                           ,kz_term:to_lower_binary(Username)
                            ]
                    }],
     case kz_datamgr:get_single_result(?KZ_SIP_DB, <<"credentials/lookup">>, ViewOptions) of
@@ -248,8 +248,8 @@ endpoint_from_sipdb(Realm, Username) ->
                                      {'ok', kz_json:object()} |
                                      {'error', any()}.
 get_endpoint_from_sipdb(Realm, Username) ->
-    ViewOptions = [{'key', [kz_util:to_lower_binary(Realm)
-                           ,kz_util:to_lower_binary(Username)
+    ViewOptions = [{'key', [kz_term:to_lower_binary(Realm)
+                           ,kz_term:to_lower_binary(Username)
                            ]
                    }
                   ,'include_docs'
@@ -523,7 +523,7 @@ apply_reschedule_rules({[Rule | Rules], [Key | Keys]}, JObj, Step) ->
     case apply_reschedule_step(kz_json:get_values(Rule), JObj) of
         'no_match' ->
             NewObj = kz_json:set_values(
-                       [{<<"rule_start_time">>, kz_util:current_tstamp()}
+                       [{<<"rule_start_time">>, kz_time:current_tstamp()}
                        ,{<<"attempts">>, 0}
                        ], JObj),
             apply_reschedule_rules({Rules, Keys}, NewObj, Step+1);
@@ -576,14 +576,14 @@ apply_reschedule_rule(<<"time">>, IntervalJObj, JObj) ->
     {[Value], [Key]} = kz_json:get_values(IntervalJObj),
     Start = kz_json:get_value(<<"rule_start_time">>, JObj),
     Until = time_rule(Key, Value, Start),
-    Now = kz_util:current_tstamp(),
+    Now = kz_time:current_tstamp(),
     case Until > Now of
         'true' -> JObj;
         'false' -> 'no_match'
     end;
 apply_reschedule_rule(<<"interval">>, IntervalJObj, JObj) ->
     {[Value], [Key]} = kz_json:get_values(IntervalJObj),
-    Next = time_rule(Key, Value, kz_util:current_tstamp()),
+    Next = time_rule(Key, Value, kz_time:current_tstamp()),
     kz_json:set_value(<<"start_time">>, Next, JObj);
 apply_reschedule_rule(<<"report">>, V, JObj) ->
     Call = get('call'),
@@ -593,7 +593,7 @@ apply_reschedule_rule(<<"report">>, V, JObj) ->
     Props = props:filter_undefined(
               [{<<"To">>, kapps_call:to_user(Call)}
               ,{<<"From">>, kapps_call:from_user(Call)}
-              ,{<<"Error">>, kz_util:strip_binary(Error)}
+              ,{<<"Error">>, kz_binary:strip(Error)}
               ,{<<"Attempts">>, kz_json:get_value(<<"attempts">>, JObj)}
                | safe_to_proplist(V)
               ]),

@@ -16,15 +16,6 @@
 
 -define(SERVER, ?MODULE).
 
--define(CALLER_PRIVACY(CCVs)
-       ,(kz_json:is_true(<<"Caller-Privacy-Number">>, CCVs, 'false')
-         orelse kz_json:is_true(<<"Caller-Privacy-Name">>, CCVs, 'false')
-        )
-       ).
-
--define(ANONYMIZER_OPTIONS, [<<"caller_id_options">>, <<"anonymizer">>]).
--define(DEFAULT_ANONYMIZER_OPTION, <<"kazoo">>).
-
 -spec start_link(kz_json:object()) -> startlink_ret().
 start_link(RouteReqJObj) ->
     proc_lib:start_link(?SERVER, 'init', [self(), RouteReqJObj]).
@@ -63,7 +54,7 @@ proceed_with_endpoint(State, Endpoint, JObj) ->
     'true' = kapi_dialplan:bridge_endpoint_v(Endpoint),
 
     MediaHandling = case kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Inception-Account-ID">>], JObj) =/= 'undefined'
-                        orelse kz_util:is_false(kz_json:get_value(<<"Bypass-Media">>, Endpoint))
+                        orelse kz_term:is_false(kz_json:get_value(<<"Bypass-Media">>, Endpoint))
                     of
                         'true' -> <<"process">>; %% bypass media is false, process media
                         'false' -> <<"bypass">>
@@ -125,7 +116,7 @@ send_bridge(State, Command) ->
 
 -spec maybe_send_privacy(ts_callflow:state()) -> 'ok'.
 maybe_send_privacy(State) ->
-    case ?CALLER_PRIVACY(ts_callflow:get_custom_channel_vars(State)) of
+    case kz_privacy:has_flags(ts_callflow:get_custom_channel_vars(State)) of
         'false' -> 'ok';
         'true' -> send_privacy(State)
     end.
@@ -282,14 +273,14 @@ get_endpoint_data(State, JObj, ToDID, AccountId, NumberProps) ->
     CidFormat   = kz_json:get_ne_value(<<"format">>, CidOptions),
     OldCNum = kz_json:get_value(<<"Caller-ID-Number">>, JObj),
     OldCNam = kz_json:get_value(<<"Caller-ID-Name">>, JObj, OldCNum),
-    NewCallerId = maybe_anonymize_caller_id(State, OldCNum, OldCNam, CidFormat),
+    NewCallerId = maybe_anonymize_caller_id(State, {OldCNam, OldCNum}, CidFormat),
     RoutingData = RoutingData1 ++ NewCallerId,
 
     AuthUser = props:get_value(<<"To-User">>, RoutingData),
     AuthRealm = props:get_value(<<"To-Realm">>, RoutingData),
     AuthzId = props:get_value(<<"Authorizing-ID">>, RoutingData),
     InFormat = props:get_value(<<"Invite-Format">>, RoutingData, <<"username">>),
-    Invite = ts_util:invite_format(kz_util:to_lower_binary(InFormat), ToDID) ++ RoutingData,
+    Invite = ts_util:invite_format(kz_term:to_lower_binary(InFormat), ToDID) ++ RoutingData,
     Routines = [fun(E) -> get_endpoint_ccvs(E, AuthUser, AuthRealm, AccountId, AuthzId) end
                ,fun(E) -> get_endpoint_sip_headers(E, AuthUser, AuthRealm) end
                ],
@@ -431,9 +422,9 @@ routing_data(ToDID, AccountId, Settings) ->
 -spec build_ip(api_binary(), api_binary() | integer()) -> api_binary().
 build_ip('undefined', _) -> 'undefined';
 build_ip(IP, 'undefined') -> IP;
-build_ip(IP, <<_/binary>> = PortBin) -> build_ip(IP, kz_util:to_integer(PortBin));
+build_ip(IP, <<_/binary>> = PortBin) -> build_ip(IP, kz_term:to_integer(PortBin));
 build_ip(IP, 5060) -> IP;
-build_ip(IP, Port) -> list_to_binary([IP, ":", kz_util:to_binary(Port)]).
+build_ip(IP, Port) -> list_to_binary([IP, ":", kz_term:to_binary(Port)]).
 
 callee_id([]) -> {'undefined', 'undefined'};
 callee_id(['undefined' | T]) -> callee_id(T);
@@ -453,29 +444,11 @@ callee_id([JObj | T]) ->
             end
     end.
 
--spec maybe_anonymize_caller_id(ts_callflow:state(), ne_binary(), ne_binary(), ne_binary()) -> kz_proplist().
-maybe_anonymize_caller_id(State, OldCNum, OldCNam, CidFormat) ->
+-spec maybe_anonymize_caller_id(ts_callflow:state(), {ne_binary(), ne_binary()}, ne_binary()) -> kz_proplist().
+maybe_anonymize_caller_id(State, DefaultCID, CidFormat) ->
+    AccountId = ts_callflow:get_account_id(State),
     CCVs = ts_callflow:get_custom_channel_vars(State),
-    case should_anonymize_caller_id(State, ?CALLER_PRIVACY(CCVs)) of
-        'true' ->
-            [{<<"Outbound-Caller-ID-Name">>, kz_util:anonymous_caller_id_name()}
-            ,{<<"Outbound-Caller-ID-Number">>, kz_util:anonymous_caller_id_number()}
-            ];
-        'false' ->
-            [{<<"Outbound-Caller-ID-Number">>, kapps_call:maybe_format_caller_id_str(OldCNum, CidFormat)}
-            ,{<<"Outbound-Caller-ID-Name">>, OldCNam}
-            ]
-    end.
-
--spec should_anonymize_caller_id(ts_callflow:state(), boolean()) -> boolean().
-should_anonymize_caller_id(State, 'true') ->
-    AccountDb = ts_callflow:get_account_id(State),
-    fetch_anonymizer_option(AccountDb, kz_account:fetch(AccountDb)) =:= ?DEFAULT_ANONYMIZER_OPTION;
-should_anonymize_caller_id(_, _) -> 'false'.
-
--spec fetch_anonymizer_option(ne_binary(), {'ok', kz_json:object()} | {'error', any()}) -> ne_binary().
-fetch_anonymizer_option(_, {'ok', JObj}) ->
-    kz_json:get_value(?ANONYMIZER_OPTIONS, JObj, ?DEFAULT_ANONYMIZER_OPTION);
-fetch_anonymizer_option(AccountDb, {'error', _}) ->
-    lager:error("error opening account doc ~p", [AccountDb]),
-    ?DEFAULT_ANONYMIZER_OPTION.
+    {Name, Number} = kz_privacy:maybe_cid_privacy(kz_json:set_value(<<"Account-ID">>, AccountId, CCVs), DefaultCID),
+    [{<<"Outbound-Caller-ID-Number">>, kapps_call:maybe_format_caller_id_str(Number, CidFormat)}
+    ,{<<"Outbound-Caller-ID-Name">>, Name}
+    ].

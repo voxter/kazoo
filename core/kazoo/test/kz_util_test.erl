@@ -11,24 +11,27 @@
 -module(kz_util_test).
 
 -include_lib("kazoo/include/kz_types.hrl").
+-include("kz_databases.hrl").
 
 -ifdef(PROPER).
-- include_lib("proper/include/proper.hrl").
+-include_lib("proper/include/proper.hrl").
 -endif.
 -include_lib("eunit/include/eunit.hrl").
 
 -include_lib("kazoo/include/kz_types.hrl").
 
 %% For format_account_* tests
--export([ format_account_id_raw/1
-        , format_account_id_encoded/1
-        , format_account_id_unencoded/1
-        , format_account_mod_id_from_year_month/1
-        , format_account_mod_id_from_now/1
-        , format_account_modb_raw/1
-        , format_account_modb_encoded/1
-        , format_account_modb_unencoded/1
+-export([format_account_id_raw/1
+        ,format_account_id_encoded/1
+        ,format_account_id_unencoded/1
+        ,format_account_mod_id_from_year_month/1
+        ,format_account_mod_id_from_now/1
+        ,format_account_modb_raw/1
+        ,format_account_modb_encoded/1
+        ,format_account_modb_unencoded/1
         ]).
+
+-define(AN_ACCOUNT_ID, <<"4fe69c5b61015084f1fe5684abc6e502">>).
 
 %% PROPER TESTING
 -ifdef(PROPER).
@@ -38,14 +41,14 @@ prop_to_integer() ->
            ,{float(), integer()}
            ,begin
                 Is = [[Fun(N), N]
-                      || Fun <- [fun kz_util:to_list/1
-                                ,fun kz_util:to_binary/1
+                      || Fun <- [fun kz_term:to_list/1
+                                ,fun kz_term:to_binary/1
                                 ],
                          N <- [F, I]
                      ],
                 lists:all(fun([FN, N]) ->
-                                  erlang:is_integer(kz_util:to_integer(N))
-                                      andalso erlang:is_integer(kz_util:to_integer(FN))
+                                  erlang:is_integer(kz_term:to_integer(N))
+                                      andalso erlang:is_integer(kz_term:to_integer(FN))
                           end
                          ,Is
                          )
@@ -56,14 +59,14 @@ prop_to_number() ->
            ,{float(), integer()}
            ,begin
                 Is = [[Fun(N), N]
-                      || Fun <- [fun kz_util:to_list/1
-                                ,fun kz_util:to_binary/1
+                      || Fun <- [fun kz_term:to_list/1
+                                ,fun kz_term:to_binary/1
                                 ],
                          N <- [F, I]
                      ],
                 lists:all(fun([FN, N]) ->
-                                  erlang:is_number(kz_util:to_number(N))
-                                      andalso erlang:is_number(kz_util:to_number(FN))
+                                  erlang:is_number(kz_term:to_number(N))
+                                      andalso erlang:is_number(kz_term:to_number(FN))
                           end
                          ,Is
                          )
@@ -74,14 +77,14 @@ prop_to_float() ->
            ,{float(), integer()}
            ,begin
                 Fs = [[Fun(N), N]
-                      || Fun <- [fun kz_util:to_list/1
-                                ,fun kz_util:to_binary/1
+                      || Fun <- [fun kz_term:to_list/1
+                                ,fun kz_term:to_binary/1
                                 ],
                          N <- [F, I]
                      ],
                 lists:all(fun([FN, N]) ->
-                                  erlang:is_float(kz_util:to_float(N))
-                                      andalso erlang:is_float(kz_util:to_float(FN))
+                                  erlang:is_float(kz_term:to_float(N))
+                                      andalso erlang:is_float(kz_term:to_float(FN))
                           end
                          ,Fs
                          )
@@ -90,23 +93,23 @@ prop_to_float() ->
 prop_to_list() ->
     ?FORALL({A, L, B, I, F}
            ,{atom(), list(), binary(), integer(), float()}
-           ,lists:all(fun(X) -> is_list(kz_util:to_list(X)) end, [A, L, B, I, F])
+           ,lists:all(fun(X) -> is_list(kz_term:to_list(X)) end, [A, L, B, I, F])
            ).
 
 %%-type iolist() :: maybe_improper_list(char() | binary() | iolist(), binary() | []).
 prop_to_binary() ->
     ?FORALL({A, L, B, I, F, IO}
            ,{atom(), list(range(0,255)), binary(), integer(), float(), iolist()}
-           ,lists:all(fun(X) -> is_binary(kz_util:to_binary(X)) end, [A, L, B, I, F, IO])
+           ,lists:all(fun(X) -> is_binary(kz_term:to_binary(X)) end, [A, L, B, I, F, IO])
            ).
 
 prop_iolist_t() ->
-    ?FORALL(IO, iolist(), is_binary(kz_util:to_binary(IO))).
+    ?FORALL(IO, iolist(), is_binary(kz_term:to_binary(IO))).
 
 prop_to_from_hex() ->
     ?FORALL({F}, {binary()},
             begin
-                F =:= kz_util:from_hex_binary(kz_util:to_hex_binary(F))
+                F =:= kz_binary:from_hex(kz_term:to_hex_binary(F))
             end).
 
 prop_pretty_print_elapsed_s() ->
@@ -117,7 +120,7 @@ prop_pretty_print_elapsed_s() ->
                 Expected = lists:foldl(fun({0, "s"}, "") ->
                                                ["s", <<"0">>];
                                           ({0, _}, Acc) -> Acc;
-                                          ({N, Unit}, Acc) -> [Unit, kz_util:to_binary(N) | Acc]
+                                          ({N, Unit}, Acc) -> [Unit, kz_term:to_binary(N) | Acc]
                                        end
                                       ,[]
                                       ,[{D, "d"}
@@ -125,7 +128,7 @@ prop_pretty_print_elapsed_s() ->
                                        ,{M, "m"}
                                        ,{S, "s"}
                                        ]),
-                Result = kz_util:pretty_print_elapsed_s(Seconds),
+                Result = kz_time:pretty_print_elapsed_s(Seconds),
                 Result =:= iolist_to_binary(lists:reverse(Expected))
             end).
 
@@ -140,7 +143,7 @@ prop_pretty_print_bytes() ->
                                lists:foldl(fun({0, "B"}, "") ->
                                                    ["B", <<"0">>];
                                               ({0, _}, Acc) -> Acc;
-                                              ({N, Unit}, Acc) -> [Unit, kz_util:to_binary(N) | Acc]
+                                              ({N, Unit}, Acc) -> [Unit, kz_term:to_binary(N) | Acc]
                                            end
                                           ,[]
                                           ,[{T, "T"}
@@ -166,122 +169,251 @@ proper_test_() ->
 
 -endif.
 
+to_x_test_() ->
+    TS = kz_time:current_tstamp(),
+    [?_assertError(badarg, kz_term:to_integer(1.0, strict))
+    ,?_assertEqual(1, kz_term:to_integer(1.0, notstrict))
+    ,?_assertError(badarg, kz_term:to_float(1, strict))
+    ,?_assertEqual(1.0, kz_term:to_float(1, notstrict))
+    ,?_assertEqual(list_to_binary(pid_to_list(self())), kz_term:to_binary(self()))
+    ,?_assertEqual(to_atom, kz_term:to_atom(to_atom))
+    ,?_assertEqual(to_atom, kz_term:to_atom("to_atom"))
+    ,?_assertEqual(to_atom, kz_term:to_atom(<<"to_atom">>))
+    ,?_assertEqual(to_atom, kz_term:to_atom(<<"to_atom">>, false))
+    ,?_assertEqual(to_atom, kz_term:to_atom(<<"to_atom">>, ["to_atom"]))
+    ,?_assertEqual(element(1,calendar:gregorian_seconds_to_datetime(TS)), kz_term:to_date(TS))
+    ,?_assertEqual(element(1,calendar:gregorian_seconds_to_datetime(TS)), kz_term:to_date(kz_term:to_list(TS)))
+    ,?_assertEqual(element(1,calendar:gregorian_seconds_to_datetime(TS)), kz_term:to_date(kz_term:to_binary(TS)))
+    ,?_assertEqual(true, kz_time:current_unix_tstamp() < kz_time:current_tstamp())
+    ].
+
+
+%% Just to please coverage :)
+log_test_() ->
+    [?_assertEqual(ok, kz_util:log_stacktrace())
+    ,?_assertEqual(ok, kz_util:log_stacktrace(erlang:get_stacktrace()))
+    ].
+
+calling_app_test_() ->
+    [?_assertEqual(eunit_test, maps:get(app, kz_util:calling_process()))
+    ,?_assertMatch(undefined, kz_util:get_app("kazoo"))
+    ].
+
 pad_binary_test() ->
-    ?assertEqual(<<"1234500000">>, kz_util:pad_binary(<<"12345">>, 10, <<"0">>)).
+    ?assertEqual(<<"1234500000">>, kz_binary:pad(<<"12345">>, 10, <<"0">>)).
+
+pretty_print_datetime_test_() ->
+    TS = 63652662294,
+    [?_assertEqual(<<"2017-01-26_15-04-54">>, kz_time:pretty_print_datetime(TS))
+    ].
+
+weekday_test_() ->
+    Days = [<<"Mon">>, <<"Tue">>, <<"Wed">>, <<"Thu">>, <<"Fri">>, <<"Sat">>, <<"Sun">>],
+    [?_assertEqual(lists:nth(I,Days), kz_time:weekday(I))
+     || I <- lists:seq(1, 7)
+    ].
+
+month_test_() ->
+    Months = [<<"Jan">>, <<"Feb">>, <<"Mar">>, <<"Apr">>, <<"May">>, <<"Jun">>
+             ,<<"Jul">>, <<"Aug">>, <<"Sep">>, <<"Oct">>, <<"Nov">>, <<"Dec">>],
+    [?_assertEqual(lists:nth(I,Months), kz_time:month(I))
+     || I <- lists:seq(1, 12)
+    ].
 
 greg_secs_to_unix_secs_test() ->
-    GregSecs = kz_util:current_tstamp(),
-    ?assertEqual(GregSecs - ?UNIX_EPOCH_IN_GREGORIAN, kz_util:gregorian_seconds_to_unix_seconds(GregSecs)).
+    GregSecs = kz_time:current_tstamp(),
+    ?assertEqual(GregSecs - ?UNIX_EPOCH_IN_GREGORIAN, kz_time:gregorian_seconds_to_unix_seconds(GregSecs)).
 
 unix_secs_to_greg_secs_test() ->
     UnixSecs = 1000000000,
-    ?assertEqual(UnixSecs + ?UNIX_EPOCH_IN_GREGORIAN, kz_util:unix_seconds_to_gregorian_seconds(UnixSecs)).
+    ?assertEqual(UnixSecs + ?UNIX_EPOCH_IN_GREGORIAN, kz_time:unix_seconds_to_gregorian_seconds(UnixSecs)).
 
 microsecs_to_secs_test() ->
     Microsecs = 1310157838405890,
     Secs = 1310157838,
-    ?assertEqual(Secs, kz_util:microseconds_to_seconds(Microsecs)).
+    ?assertEqual(Secs, kz_time:microseconds_to_seconds(Microsecs)).
 
 elapsed_test_() ->
     Start = {1401,998570,817606},
     Now = {1401,998594,798064},
-
-    [?_assertEqual(kz_util:elapsed_us(Start, Now), 23980458)
-    ,?_assertEqual(kz_util:elapsed_ms(Start, Now), 23980)
-    ,?_assertEqual(kz_util:elapsed_s(Start, Now), 23)
+    [?_assertEqual(23980458, kz_time:elapsed_us(Start, Now))
+    ,?_assertEqual(23980, kz_time:elapsed_ms(Start, Now))
+    ,?_assertEqual(23, kz_time:elapsed_s(Start, Now))
+    ,?_assertEqual(<<"0s">>, kz_time:pretty_print_elapsed_s(0))
     ].
 
 more_elapsed_test_() ->
     StartDateTime = {{2014,6,5},{20,7,7}},
     StartTimestamp = calendar:datetime_to_gregorian_seconds(StartDateTime),
-
     NowDateTime = {{2014,6,5},{20,7,9}},
     NowTimestamp = calendar:datetime_to_gregorian_seconds(NowDateTime),
+    TS = 63652663232,
+    [?_assertEqual(2, kz_time:elapsed_s(StartTimestamp, NowTimestamp))
+    ,?_assertEqual(2000, kz_time:elapsed_ms(StartTimestamp, NowTimestamp))
+    ,?_assertEqual(2000000, kz_time:elapsed_us(StartTimestamp, NowTimestamp))
+    ,?_assertEqual(<<"2017-1-26">>, kz_time:format_date(TS))
+    ,?_assertEqual(<<"15:20:32">>, kz_time:format_time(TS))
+    ,?_assertEqual(<<"2017-1-26 15:20:32">>, kz_time:format_datetime(TS))
+    ].
 
-    [?_assertEqual(kz_util:elapsed_s(StartTimestamp, NowTimestamp), 2)
-    ,?_assertEqual(kz_util:elapsed_ms(StartTimestamp, NowTimestamp), 2000)
-    ,?_assertEqual(kz_util:elapsed_us(StartTimestamp, NowTimestamp), 2000000)
+unitfy_and_timeout_test_() ->
+    [?_assertEqual("", kz_time:unitfy_seconds(0))
+    ,?_assertEqual(infinity, kz_time:decr_timeout(infinity, 0))
+    ,?_assertEqual(0, kz_time:decr_timeout(30, 42))
+    ,?_assertEqual(12, kz_time:decr_timeout(42, 30))
+    ,?_assertEqual(10, kz_time:milliseconds_to_seconds(10*1000))
+    ].
+
+usages_test_() ->
+    [?_assertEqual(true, is_integer(kz_util:bin_usage()))
+    ,?_assertEqual(true, is_integer(kz_util:mem_usage()))
+    ,?_assertEqual(true, kz_term:is_ne_binary(kz_util:node_name()))
+    ,?_assertEqual(true, kz_term:is_ne_binary(kz_util:node_hostname()))
+    ].
+
+iolist_join_test_() ->
+    [?_assertEqual([], kz_util:iolist_join($,, []))
+    ,?_assertEqual([$a,<<" || ">>,$b,<<" || ">>,$c], kz_util:iolist_join(<<" || ">>, [$a,$b,$c]))
+    ].
+
+shuffle_list_test_() ->
+    [?_assertEqual([], kz_term:shuffle_list([]))
+    ,?_assertEqual([42], kz_term:shuffle_list([42]))
+    ].
+
+get_event_type_test_() ->
+    EventCategory = {<<"Event-Category">>, <<"call">>},
+    EventName = {<<"Event-Name">>, <<"CHANNEL_CONNECTED">>},
+    [?_assertEqual({undefined,undefined}, kz_util:get_event_type([]))
+    ,?_assertEqual({undefined,undefined}, kz_util:get_event_type(kz_json:from_list([])))
+    ,?_assertEqual({<<"call">>,undefined}, kz_util:get_event_type([EventCategory]))
+    ,?_assertEqual({<<"call">>,undefined}, kz_util:get_event_type(kz_json:from_list([EventCategory])))
+    ,?_assertEqual({undefined,<<"CHANNEL_CONNECTED">>}, kz_util:get_event_type([EventName]))
+    ,?_assertEqual({undefined,<<"CHANNEL_CONNECTED">>}, kz_util:get_event_type(kz_json:from_list([EventName])))
+    ,?_assertEqual({<<"call">>,<<"CHANNEL_CONNECTED">>}, kz_util:get_event_type([EventCategory,EventName]))
+    ,?_assertEqual({<<"call">>,<<"CHANNEL_CONNECTED">>}, kz_util:get_event_type(kz_json:from_list([EventCategory,EventName])))
+    ].
+
+to_hex_test_() ->
+    [?_assertEqual("626c61", kz_term:to_hex(bla))
+    ,?_assertEqual("626c61", kz_term:to_hex("bla"))
+    ,?_assertEqual("626c61", kz_term:to_hex(<<"bla">>))
+    ,?_assertEqual(<<"626c61">>, kz_binary:hexencode(bla))
+    ,?_assertEqual(<<"626c61">>, kz_binary:hexencode("bla"))
+    ,?_assertEqual(<<"626c61">>, kz_binary:hexencode(<<"bla">>))
+    ,?_assertEqual(30, byte_size(kz_binary:rand_hex("15")))
+    ,?_assertEqual(32, byte_size(kz_binary:rand_hex(<<"16">>)))
+    ].
+
+put_callid_test_() ->
+    ApiCallId = [{<<"Call-ID">>, <<"bla">>}],
+    [?_assertEqual(<<"bla">>, begin kz_util:put_callid(<<"bla">>), kz_util:get_callid() end)
+    ,?_assertEqual(bla, begin kz_util:put_callid(bla), kz_util:get_callid() end)
+    ,?_assertEqual(<<"bla">>, begin kz_util:put_callid(ApiCallId), kz_util:get_callid() end)
+    ,?_assertEqual(<<"bla">>, begin kz_util:put_callid(kz_json:from_list(ApiCallId)), kz_util:get_callid() end)
+    ,?_assert(is_integer(begin kz_util:set_startup(), kz_util:startup() end))
     ].
 
 join_binary_test_() ->
-    [?_assertEqual(<<"foo">>, kz_util:join_binary([<<"foo">>], <<", ">>))
-    ,?_assertEqual(<<"foo, bar">>, kz_util:join_binary([<<"foo">>, <<"bar">>], <<", ">>))
-    ,?_assertEqual(<<"foo, bar, baz">>, kz_util:join_binary([<<"foo">>, <<"bar">>, <<"baz">>], <<", ">>))
+    [?_assertEqual(<<>>, kz_binary:join([]))
+    ,?_assertEqual(<<"f, o, o">>, kz_binary:join([<<"f">>, <<"o">>, <<"o">>]))
+    ,?_assertEqual(<<"foo">>, kz_binary:join([<<"foo">>], <<", ">>))
+    ,?_assertEqual(<<"foo, bar">>, kz_binary:join([<<"foo">>, <<"bar">>], <<", ">>))
+    ,?_assertEqual(<<"foo, bar, baz">>, kz_binary:join([<<"foo">>, <<"bar">>, <<"baz">>], <<", ">>))
     ].
 
 ucfirst_binary_test_() ->
-    [?_assertEqual(<<"Foo">>, kz_util:ucfirst_binary(<<"foo">>))
-    ,?_assertEqual(<<"Foo">>, kz_util:ucfirst_binary(<<"Foo">>))
-    ,?_assertEqual(<<"FOO">>, kz_util:ucfirst_binary(<<"FOO">>))
-    ,?_assertEqual(<<"1oo">>, kz_util:ucfirst_binary(<<"1oo">>))
-    ,?_assertEqual(<<"100">>, kz_util:ucfirst_binary(<<"100">>))
-    ,?_assertEqual(<<"1FF">>, kz_util:ucfirst_binary(<<"1FF">>))
+    [?_assertEqual(<<"Foo">>, kz_binary:ucfirst(<<"foo">>))
+    ,?_assertEqual(<<"Foo">>, kz_binary:ucfirst(<<"Foo">>))
+    ,?_assertEqual(<<"FOO">>, kz_binary:ucfirst(<<"FOO">>))
+    ,?_assertEqual(<<"1oo">>, kz_binary:ucfirst(<<"1oo">>))
+    ,?_assertEqual(<<"100">>, kz_binary:ucfirst(<<"100">>))
+    ,?_assertEqual(<<"1FF">>, kz_binary:ucfirst(<<"1FF">>))
     ].
 
 lcfirst_binary_test_() ->
-    [?_assertEqual(<<"foo">>, kz_util:lcfirst_binary(<<"foo">>))
-    ,?_assertEqual(<<"foo">>, kz_util:lcfirst_binary(<<"Foo">>))
-    ,?_assertEqual(<<"fOO">>, kz_util:lcfirst_binary(<<"FOO">>))
-    ,?_assertEqual(<<"1oo">>, kz_util:lcfirst_binary(<<"1oo">>))
-    ,?_assertEqual(<<"100">>, kz_util:lcfirst_binary(<<"100">>))
-    ,?_assertEqual(<<"1FF">>, kz_util:lcfirst_binary(<<"1FF">>))
+    [?_assertEqual(<<"foo">>, kz_binary:lcfirst(<<"foo">>))
+    ,?_assertEqual(<<"foo">>, kz_binary:lcfirst(<<"Foo">>))
+    ,?_assertEqual(<<"fOO">>, kz_binary:lcfirst(<<"FOO">>))
+    ,?_assertEqual(<<"1oo">>, kz_binary:lcfirst(<<"1oo">>))
+    ,?_assertEqual(<<"100">>, kz_binary:lcfirst(<<"100">>))
+    ,?_assertEqual(<<"1FF">>, kz_binary:lcfirst(<<"1FF">>))
     ].
 
 to_lower_binary_test_() ->
-    [?_assertEqual(<<"foo">>, kz_util:to_lower_binary(<<"foo">>))
-    ,?_assertEqual(<<"foo">>, kz_util:to_lower_binary(<<"Foo">>))
-    ,?_assertEqual(<<"foo">>, kz_util:to_lower_binary(<<"FoO">>))
-    ,?_assertEqual(<<"f00">>, kz_util:to_lower_binary(<<"f00">>))
-    ,?_assertEqual(<<"f00">>, kz_util:to_lower_binary(<<"F00">>))
+    [?_assertEqual(undefined, kz_term:to_lower_binary(undefined))
+    ,?_assertEqual(<<"foo">>, kz_term:to_lower_binary(<<"foo">>))
+    ,?_assertEqual(<<"foo">>, kz_term:to_lower_binary(<<"Foo">>))
+    ,?_assertEqual(<<"foo">>, kz_term:to_lower_binary(<<"FoO">>))
+    ,?_assertEqual(<<"f00">>, kz_term:to_lower_binary(<<"f00">>))
+    ,?_assertEqual(<<"f00">>, kz_term:to_lower_binary(<<"F00">>))
+    ,?_assertEqual(<<"f00">>, kz_term:to_lower_binary("F00"))
     ].
 
 to_upper_binary_test_() ->
-    [?_assertEqual(<<"FOO">>, kz_util:to_upper_binary(<<"foo">>))
-    ,?_assertEqual(<<"FOO">>, kz_util:to_upper_binary(<<"Foo">>))
-    ,?_assertEqual(<<"FOO">>, kz_util:to_upper_binary(<<"FoO">>))
-    ,?_assertEqual(<<"F00">>, kz_util:to_upper_binary(<<"f00">>))
-    ,?_assertEqual(<<"F00">>, kz_util:to_upper_binary(<<"F00">>))
+    [?_assertEqual(undefined, kz_term:to_upper_binary(undefined))
+    ,?_assertEqual(<<"FOO">>, kz_term:to_upper_binary(<<"foo">>))
+    ,?_assertEqual(<<"FOO">>, kz_term:to_upper_binary(<<"Foo">>))
+    ,?_assertEqual(<<"FOO">>, kz_term:to_upper_binary(<<"FoO">>))
+    ,?_assertEqual(<<"F00">>, kz_term:to_upper_binary(<<"f00">>))
+    ,?_assertEqual(<<"F00">>, kz_term:to_upper_binary(<<"F00">>))
+    ,?_assertEqual(<<"F00">>, kz_term:to_upper_binary("F00"))
     ].
 
 to_lower_string_test_() ->
-    [?_assertEqual("foo", kz_util:to_lower_string("foo"))
-    ,?_assertEqual("foo", kz_util:to_lower_string("Foo"))
-    ,?_assertEqual("foo", kz_util:to_lower_string("FoO"))
-    ,?_assertEqual("f00", kz_util:to_lower_string("f00"))
-    ,?_assertEqual("f00", kz_util:to_lower_string("F00"))
+    [?_assertEqual(undefined, kz_term:to_lower_string(undefined))
+    ,?_assertEqual("foo", kz_term:to_lower_string("foo"))
+    ,?_assertEqual("foo", kz_term:to_lower_string("Foo"))
+    ,?_assertEqual("foo", kz_term:to_lower_string("FoO"))
+    ,?_assertEqual("f00", kz_term:to_lower_string("f00"))
+    ,?_assertEqual("f00", kz_term:to_lower_string("F00"))
+    ,?_assertEqual("f00", kz_term:to_lower_string(<<"F00">>))
     ].
 
 to_upper_string_test_() ->
-    [?_assertEqual("FOO", kz_util:to_upper_string("foo"))
-    ,?_assertEqual("FOO", kz_util:to_upper_string("Foo"))
-    ,?_assertEqual("FOO", kz_util:to_upper_string("FoO"))
-    ,?_assertEqual("F00", kz_util:to_upper_string("f00"))
-    ,?_assertEqual("F00", kz_util:to_upper_string("F00"))
+    [?_assertEqual(undefined, kz_term:to_upper_string(undefined))
+    ,?_assertEqual("FOO", kz_term:to_upper_string("foo"))
+    ,?_assertEqual("FOO", kz_term:to_upper_string("Foo"))
+    ,?_assertEqual("FOO", kz_term:to_upper_string("FoO"))
+    ,?_assertEqual("F00", kz_term:to_upper_string("f00"))
+    ,?_assertEqual("F00", kz_term:to_upper_string("F00"))
+    ,?_assertEqual("F00", kz_term:to_upper_string(<<"F00">>))
+    ].
+
+to_case_char_test_() ->
+    [?_assertEqual(16#F8, kz_term:to_lower_char(16#D8))
+    ,?_assertEqual(16#E0, kz_term:to_lower_char(16#C0))
+    ,?_assertEqual(16#D8, kz_term:to_upper_char(16#F8))
+    ,?_assertEqual(16#C0, kz_term:to_upper_char(16#E0))
     ].
 
 strip_binary_test_() ->
-    [?_assertEqual(<<"foo">>, kz_util:strip_binary(<<"foo">>))
-    ,?_assertEqual(<<"foo">>, kz_util:strip_binary(<<"foo ">>))
-    ,?_assertEqual(<<"foo">>, kz_util:strip_binary(<<" foo ">>))
-    ,?_assertEqual(<<"foo">>, kz_util:strip_binary(<<"  foo  ">>))
-    ,?_assertEqual(<<"foo">>, kz_util:strip_binary(<<"     foo">>))
+    [?_assertEqual(<<"foo">>, kz_binary:strip(<<"foo">>))
+    ,?_assertEqual(<<"foo">>, kz_binary:strip(<<"foo ">>))
+    ,?_assertEqual(<<"foo">>, kz_binary:strip(<<" foo ">>))
+    ,?_assertEqual(<<"foo">>, kz_binary:strip(<<"  foo  ">>))
+    ,?_assertEqual(<<"foo">>, kz_binary:strip(<<"     foo">>))
+    ,?_assertEqual(<<"foo">>, kz_binary:strip(<<"     foo   ">>, both))
+    ,?_assertEqual(<<"foo">>, kz_binary:strip(<<"     foo   ">>, [left,right]))
 
-    ,?_assertEqual(<<"foo">>, kz_util:strip_left_binary(<<"foo">>, $\s))
-    ,?_assertEqual(<<"foo">>, kz_util:strip_left_binary(<<" foo">>, $\s))
-    ,?_assertEqual(<<"foo ">>, kz_util:strip_left_binary(<<" foo ">>, $\s))
-    ,?_assertEqual(<<"foo ">>, kz_util:strip_left_binary(<<"foo ">>, $\s))
+    ,?_assertEqual(<<"foo">>, kz_binary:strip_left(<<"foo">>, $\s))
+    ,?_assertEqual(<<"foo">>, kz_binary:strip_left(<<" foo">>, $\s))
+    ,?_assertEqual(<<"foo">>, kz_binary:strip(<<" foo">>, left))
+    ,?_assertEqual(<<"foo ">>, kz_binary:strip_left(<<" foo ">>, $\s))
+    ,?_assertEqual(<<"foo ">>, kz_binary:strip_left(<<"foo ">>, $\s))
 
-    ,?_assertEqual(<<"foo">>, kz_util:strip_right_binary(<<"foo">>, $\s))
-    ,?_assertEqual(<<" foo">>, kz_util:strip_right_binary(<<" foo">>, $\s))
-    ,?_assertEqual(<<" foo">>, kz_util:strip_right_binary(<<" foo ">>, $\s))
-    ,?_assertEqual(<<"foo">>, kz_util:strip_right_binary(<<"foo ">>, $\s))
+    ,?_assertEqual(<<"foo">>, kz_binary:strip_right(<<"foo">>, $\s))
+    ,?_assertEqual(<<" foo">>, kz_binary:strip_right(<<" foo">>, $\s))
+    ,?_assertEqual(<<" foo">>, kz_binary:strip_right(<<" foo ">>, $\s))
+    ,?_assertEqual(<<"foo">>, kz_binary:strip_right(<<"foo ">>, $\s))
+    ,?_assertEqual(<<"foo">>, kz_binary:strip(<<"foo ">>, right))
     ].
 
 to_boolean_test_() ->
     All = [<<"true">>, "true", 'true', <<"false">>, "false", 'false'],
     NotAll = [0, 123, 1.23, "123", "abc", 'abc', <<"abc">>, <<"123">>, {'what', 'is', 'this', 'doing', 'here'}],
     [?_assertEqual('true', lists:all(fun(X) ->
-                                             try kz_util:to_boolean(X) of
+                                             try kz_term:to_boolean(X) of
                                                  _ -> 'true'
                                              catch _:_ -> 'false'
                                              end
@@ -290,7 +422,7 @@ to_boolean_test_() ->
                                     )
                   )
     ,?_assertEqual('true', lists:all(fun(X) ->
-                                             try kz_util:to_boolean(X) of
+                                             try kz_term:to_boolean(X) of
                                                  _ -> 'false'
                                              catch _:_ -> 'true'
                                              end
@@ -301,7 +433,7 @@ to_boolean_test_() ->
     ].
 
 strip_test() ->
-    ?assertEqual(kz_util:strip_binary(<<"...Hello.....">>, $.), <<"Hello">>).
+    ?assertEqual(kz_binary:strip(<<"...Hello.....">>, $.), <<"Hello">>).
 
 uri_test_() ->
     [?_assertEqual(<<"http://test.com/path1/path2">>, kz_util:uri(<<"http://test.com">>, [<<"path1">>, <<"path2">>]))
@@ -310,44 +442,267 @@ uri_test_() ->
     ].
 
 suffix_binary_test_() ->
-    [?_assertEqual('true', kz_util:suffix_binary(<<"34">>, <<"1234">>))
-    ,?_assertEqual('false', kz_util:suffix_binary(<<"34">>, <<"12345">>))
-    ,?_assertEqual('false', kz_util:suffix_binary(<<"1234">>, <<"1">>))
+    [?_assertEqual(false, kz_binary:suffix(<<>>, <<"1">>))
+    ,?_assertEqual(false, kz_binary:suffix(<<"1">>, <<>>))
+    ,?_assertEqual('true', kz_binary:suffix(<<"34">>, <<"1234">>))
+    ,?_assertEqual('false', kz_binary:suffix(<<"34">>, <<"12345">>))
+    ,?_assertEqual('false', kz_binary:suffix(<<"1234">>, <<"1">>))
+    ].
+
+clean_binary_test_() ->
+    [?_assertEqual(<<>>, kz_binary:clean(<<>>))
+    ,?_assertEqual(<<"bla">>, kz_binary:clean(<<"bla">>))
+    ,?_assertEqual(<<"bla">>, kz_binary:clean(<<"bla  ">>))
+    ,?_assertEqual(<<"bla">>, kz_binary:clean(<<"  bla">>))
+    ,?_assertEqual(<<"bla">>, kz_binary:clean(<<"  bla  ">>))
+    ,?_assertEqual(<<"bla">>, kz_binary:clean(<<" b l a ">>))
+    ,?_assertEqual(<<"bla\n">>, kz_binary:clean(<<" b l a \n">>))
+    ].
+
+binary_hashes_test_() ->
+    [?_assertEqual(<<"d41d8cd98f00b204e9800998ecf8427e">>, kz_binary:md5(<<>>))
+    ,?_assertEqual("44add22b6f3179b751eafd68ee370f7d", kz_term:a1hash(<<"u">>, <<"r">>, <<"p">>))
+    ].
+
+float_bounds_test_() ->
+    [?_assertEqual(1, kz_term:floor(1.0))
+    ,?_assertEqual(1, kz_term:floor(1.2))
+    ,?_assertEqual(1, kz_term:floor(1.5))
+    ,?_assertEqual(1, kz_term:floor(1.7))
+    ,?_assertEqual(1, kz_term:ceiling(1.0))
+    ,?_assertEqual(2, kz_term:ceiling(1.2))
+    ,?_assertEqual(2, kz_term:ceiling(1.5))
+    ,?_assertEqual(2, kz_term:ceiling(1.7))
+    ].
+
+binary_reverse_test_() ->
+    [?_assertEqual(<<>>, kz_binary:reverse(<<>>))
+    ,?_assertEqual(<<"B a">>, kz_binary:reverse(<<"a B">>))
+    ].
+
+pad_month_test_() ->
+    [?_assertEqual(<<"10">>, kz_time:pad_month(10))
+    ,?_assertEqual(<<"10">>, kz_time:pad_month(<<"10">>))
+    ,?_assertEqual(<<"03">>, kz_time:pad_month(3))
+    ,?_assertEqual(<<"03">>, kz_time:pad_month(<<"3">>))
+    ,?_assertEqual(<<"03">>, kz_time:pad_month(<<"03">>))
+    ].
+
+normalize_account_name_test_() ->
+    [?_assertEqual(undefined, kz_util:normalize_account_name(undefined))
+    ,?_assertEqual(<<"blip2blop">>, kz_util:normalize_account_name(<<"Blip#2!Blop">>))
+    ].
+
+is_in_account_hierarchy_test_() ->
+    [?_assertEqual(false, kz_util:is_in_account_hierarchy(undefined, ?AN_ACCOUNT_ID))
+    ,?_assertEqual(false, kz_util:is_in_account_hierarchy(undefined, ?AN_ACCOUNT_ID))
+    ,?_assertEqual(false, kz_util:is_in_account_hierarchy(undefined, ?AN_ACCOUNT_ID, true))
+    ,?_assertEqual(false, kz_util:is_in_account_hierarchy(undefined, ?AN_ACCOUNT_ID, false))
+    ,?_assertEqual(false, kz_util:is_in_account_hierarchy(?AN_ACCOUNT_ID, undefined, false))
+    ,?_assertEqual(false, kz_util:is_in_account_hierarchy(?AN_ACCOUNT_ID, undefined, true))
+    ,?_assertEqual(true, kz_util:is_in_account_hierarchy(?AN_ACCOUNT_ID, ?AN_ACCOUNT_ID, true))
+    ].
+
+is_system_admin_test_() ->
+    [?_assertEqual(false, kz_util:is_system_admin(undefined))
+    ].
+
+is_account_enabled_test_() ->
+    [?_assertEqual(false, kz_util:is_account_enabled(undefined))
+    ].
+
+is_account_expired_test_() ->
+    [?_assertEqual(false, kz_util:is_account_expired(undefined))
+    ].
+
+get_account_realm_test_() ->
+    [?_assertEqual(undefined, kz_util:get_account_realm(undefined, ?AN_ACCOUNT_ID))
+    ].
+
+try_load_module_test_() ->
+    [?_assertEqual(false, kz_util:try_load_module(undefined))
+    ,?_assertEqual(false, kz_util:try_load_module("undefined"))
+    ,?_assertEqual(false, kz_util:try_load_module(<<"undefined">>))
+    ,?_assertEqual(kz_util, kz_util:try_load_module("kz_util"))
+    ,?_assertEqual(kz_util, kz_util:try_load_module(<<"kz_util">>))
+    ,?_assertEqual(kz_util, kz_util:try_load_module(kz_util))
+    ,?_assertEqual(false, kz_util:try_load_module(kz_term:to_list(?AN_ACCOUNT_ID)))
+    ,?_assertEqual(false, kz_util:try_load_module(?AN_ACCOUNT_ID))
+    ,?_assertEqual(false, kz_util:try_load_module(kz_term:to_atom(?AN_ACCOUNT_ID,true)))
+    ].
+
+error_to_binary_test_() ->
+    [?_assertEqual(<<"oops">>, kz_term:error_to_binary({error, oops}))
+    ,?_assertEqual(<<"oops">>, kz_term:error_to_binary(oops))
+    ,?_assertEqual(<<"Unknown Error">>, kz_term:error_to_binary(fun io:format/1))
+    ].
+
+is_true_false_test_() ->
+    [?_assertEqual(true, kz_term:is_true(<<"true">>))
+    ,?_assertEqual(true, kz_term:is_true("true"))
+    ,?_assertEqual(true, kz_term:is_true(true))
+    ,?_assertEqual(false, kz_term:is_true("tru"))
+    ,?_assertEqual(false, kz_term:is_true(<<"undefined">>))
+    ,?_assertEqual(false, kz_term:is_true(undefined))
+    ,?_assertEqual(false, kz_term:is_true(<<"null">>))
+    ,?_assertEqual(false, kz_term:is_true(null))
+    ,?_assertEqual(false, kz_term:is_true(<<"false">>))
+    ,?_assertEqual(true, kz_term:always_true(bla))
+    ,?_assertEqual(true, kz_term:is_false(<<"false">>))
+    ,?_assertEqual(true, kz_term:is_false("false"))
+    ,?_assertEqual(true, kz_term:is_false(false))
+    ,?_assertEqual(false, kz_term:is_false("flse"))
+    ,?_assertEqual(false, kz_term:is_false(<<"undefined">>))
+    ,?_assertEqual(false, kz_term:is_false(undefined))
+    ,?_assertEqual(false, kz_term:is_false(<<"null">>))
+    ,?_assertEqual(false, kz_term:is_false(null))
+    ,?_assertEqual(false, kz_term:is_false(<<"true">>))
+    ,?_assertEqual(false, kz_term:always_false(bla))
+    ,?_assertEqual(false, kz_term:is_ne_binary(bla))
+    ,?_assertEqual(true, kz_term:is_ne_binary(<<"bla">>))
+    ,?_assertEqual(true, kz_term:is_boolean(<<"true">>))
+    ,?_assertEqual(true, kz_term:is_boolean(<<"false">>))
+    ,?_assertEqual(true, kz_term:is_boolean("true"))
+    ,?_assertEqual(true, kz_term:is_boolean("false"))
+    ,?_assertEqual(true, kz_term:is_boolean(true))
+    ,?_assertEqual(true, kz_term:is_boolean(false))
+    ,?_assertEqual(false, kz_term:is_boolean(bla))
+    ,?_assertEqual(false, kz_term:is_boolean(<<"undefined">>))
+    ].
+
+is_empty_test_() ->
+    [?_assertEqual(true, kz_term:is_empty(0))
+    ,?_assertEqual(true, kz_term:is_empty(0.0))
+    ,?_assertEqual(true, kz_term:is_empty("0"))
+    ,?_assertEqual(true, kz_term:is_empty(<<"0">>))
+    ,?_assertEqual(true, kz_term:is_empty([]))
+    ,?_assertEqual(true, kz_term:is_empty(""))
+    ,?_assertEqual(true, kz_term:is_empty(<<>>))
+    ,?_assertEqual(true, kz_term:is_empty(undefined))
+    ,?_assertEqual(true, kz_term:is_empty("undefined"))
+    ,?_assertEqual(true, kz_term:is_empty(<<"undefined">>))
+    ,?_assertEqual(true, kz_term:is_empty(kz_json:new()))
+    ,?_assertEqual(true, kz_term:is_empty(null))
+    ,?_assertEqual(true, kz_term:is_empty("NULL"))
+    ,?_assertEqual(true, kz_term:is_empty(<<"NULL">>))
+    ,?_assertEqual(true, kz_term:is_empty(false))
+    ,?_assertEqual(true, kz_term:is_empty("false"))
+    ,?_assertEqual(true, kz_term:is_empty(<<"false">>))
+    ,?_assertEqual(false, kz_term:is_empty(1))
+    ,?_assertEqual(false, kz_term:is_empty(1.0))
+    ,?_assertEqual(false, kz_term:is_empty(true))
+    ,?_assertEqual(false, kz_term:is_empty(bla))
+    ,?_assertEqual(false, kz_term:is_empty([42]))
+    ,?_assertEqual(false, kz_term:is_empty(kz_json:from_list([{<<"a">>, 42}])))
+    ].
+
+is_not_empty_test_() ->
+    [?_assertEqual(false, kz_term:is_not_empty(0))
+    ,?_assertEqual(false, kz_term:is_not_empty(0.0))
+    ,?_assertEqual(false, kz_term:is_not_empty("0"))
+    ,?_assertEqual(false, kz_term:is_not_empty(<<"0">>))
+    ,?_assertEqual(false, kz_term:is_not_empty([]))
+    ,?_assertEqual(false, kz_term:is_not_empty(""))
+    ,?_assertEqual(false, kz_term:is_not_empty(<<>>))
+    ,?_assertEqual(false, kz_term:is_not_empty(undefined))
+    ,?_assertEqual(false, kz_term:is_not_empty("undefined"))
+    ,?_assertEqual(false, kz_term:is_not_empty(<<"undefined">>))
+    ,?_assertEqual(false, kz_term:is_not_empty(kz_json:new()))
+    ,?_assertEqual(false, kz_term:is_not_empty(null))
+    ,?_assertEqual(false, kz_term:is_not_empty("NULL"))
+    ,?_assertEqual(false, kz_term:is_not_empty(<<"NULL">>))
+    ,?_assertEqual(false, kz_term:is_not_empty(false))
+    ,?_assertEqual(false, kz_term:is_not_empty("false"))
+    ,?_assertEqual(false, kz_term:is_not_empty(<<"false">>))
+    ,?_assertEqual(true, kz_term:is_not_empty(1))
+    ,?_assertEqual(true, kz_term:is_not_empty(1.0))
+    ,?_assertEqual(true, kz_term:is_not_empty(true))
+    ,?_assertEqual(true, kz_term:is_not_empty(bla))
+    ,?_assertEqual(true, kz_term:is_not_empty([42]))
+    ,?_assertEqual(true, kz_term:is_not_empty(kz_json:from_list([{<<"a">>, 42}])))
+    ].
+
+is_proplist_test_() ->
+    [?_assertEqual(true, kz_term:is_proplist([]))
+    ,?_assertEqual(true, kz_term:is_proplist([{a,2}]))
+    ,?_assertEqual(true, kz_term:is_proplist([{a,2}, b]))
+    ,?_assertEqual(false, kz_term:is_proplist([{a,2}, b, <<"c">>]))
+    ,?_assertEqual(false, kz_term:is_proplist(<<>>))
+    ,?_assertEqual(false, kz_term:is_proplist(#{}))
+    ,?_assertEqual(true, kz_term:is_proplist([{<<"a">>,2}]))
+    ,?_assertEqual(false, kz_term:is_proplist(kz_json:from_list([{<<"a">>,2}])))
+    ].
+
+id_test() ->
+    ?assertEqual(bla, kz_term:identity(bla)).
+
+spawns_test_() ->
+    [?_assert(is_pid(kz_util:spawn(fun () -> io:format("x") end)))
+    ,?_assert(is_pid(kz_util:spawn(fun (X) -> io:format("~p",[X]) end, [x])))
+    ,?_assert(is_pid(kz_util:spawn_link(fun () -> io:format("x") end)))
+    ,?_assert(is_pid(kz_util:spawn_link(fun (X) -> io:format("~p",[X]) end, [x])))
+    ,?_assertMatch({_,_}, kz_util:spawn_monitor(fun (X) -> io:format("~p",[X]) end, [x]))
     ].
 
 rfc1036_test_() ->
-    Tests = [{ {{2015,4,7},{1,3,2}}, <<"Tue, 07 Apr 2015 01:03:02 GMT">>}
-            ,{ {{2015,12,12},{12,13,12}}, <<"Sat, 12 Dec 2015 12:13:12 GMT">>}
-            ,{ 63595733389, <<"Wed, 08 Apr 2015 17:29:49 GMT">>}
+    Tests = [{{{2015,4,7},{1,3,2}}, <<"Tue, 07 Apr 2015 01:03:02 GMT">>}
+            ,{{{2015,12,12},{12,13,12}}, <<"Sat, 12 Dec 2015 12:13:12 GMT">>}
+            ,{63595733389, <<"Wed, 08 Apr 2015 17:29:49 GMT">>}
             ],
-    [?_assertEqual(Expected, kz_util:rfc1036(Date))
+    [?_assertEqual(Expected, kz_time:rfc1036(Date))
      || {Date, Expected} <- Tests].
 
 iso8601_test_() ->
-    Tests = [{ {{2015,4,7},{1,3,2}}, <<"2015-04-07">>}
-            ,{ {{2015,12,12},{12,13,12}}, <<"2015-12-12">>}
-            ,{ 63595733389, <<"2015-04-08">>}
+    Tests = [{{{2015,4,7},{1,3,2}}, <<"2015-04-07">>}
+            ,{{{2015,12,12},{12,13,12}}, <<"2015-12-12">>}
+            ,{63595733389, <<"2015-04-08">>}
             ],
-    [?_assertEqual(Expected, kz_util:iso8601(Date))
+    [?_assertEqual(Expected, kz_time:iso8601(Date))
      || {Date, Expected} <- Tests].
 
 resolve_uri_test_() ->
     RawPath = <<"http://pivot/script.php">>,
     Relative = <<"script2.php">>,
-
     [?_assertEqual(<<"http://pivot/script2.php">>, kz_util:resolve_uri(RawPath, Relative))
     ,?_assertEqual(<<"http://pivot/script2.php">>, kz_util:resolve_uri(RawPath, <<"/", Relative/binary>>))
+    ,?_assertEqual(Relative, kz_util:resolve_uri(Relative, undefined))
+    ,?_assertEqual(RawPath, kz_util:resolve_uri(Relative, RawPath))
+    ,?_assertEqual(Relative, kz_util:resolve_uri(kz_term:to_list(Relative), undefined))
+    ,?_assertEqual(RawPath, kz_util:resolve_uri(kz_term:to_list(Relative), RawPath))
+    ,?_assertEqual(RawPath, kz_util:resolve_uri(Relative, kz_term:to_list(RawPath)))
+    ,?_assertEqual(<<"http://host/d1/d2/a">>, kz_util:resolve_uri(<<"http://host/d1/d2/d3/file.ext">>, <<"../.././a">>))
+    ].
+
+resolve_uri_path_test_() ->
+    RawPath = <<"http://pivot/script.php">>,
+    Relative = <<"script2.php">>,
+    RawPathList = [<<"http:">>, <<>>, <<"pivot">>, <<"script2.php">>],
+    [?_assertEqual(RawPathList, kz_util:resolve_uri_path(RawPath, Relative))
+    ,?_assertEqual(RawPathList, kz_util:resolve_uri_path(RawPath, <<"/", Relative/binary>>))
+    ].
+
+truncate_binary_test_() ->
+    [?_assertEqual(<<>>, kz_binary:truncate(<<>>, 0))
+    ,?_assertEqual(<<>>, kz_binary:truncate(<<>>, 42))
+    ,?_assertEqual(<<"b">>, kz_binary:truncate(<<"bla">>, 1))
+    ,?_assertEqual(<<"bl">>, kz_binary:truncate_right(<<"bla">>, 2))
+    ,?_assertEqual(<<"la">>, kz_binary:truncate_left(<<"bla">>, 2))
+    ,?_assertEqual(<<"a">>, kz_binary:truncate_left(<<"bla">>, 1))
+    ,?_assertEqual(<<"bla">>, kz_binary:truncate(<<"bla">>, 4))
+    ,?_assertEqual(<<"bla">>, kz_binary:truncate_left(<<"bla">>, 4))
+    ,?_assertEqual(<<"bla">>, kz_binary:truncate_right(<<"bla">>, 4))
     ].
 
 account_formats_test_() ->
-    AccountId = <<A:2/binary, B:2/binary, Rest:28/binary>> = kz_util:rand_hex_binary(16),
+    AccountId = <<A:2/binary, B:2/binary, Rest:28/binary>> = kz_binary:rand_hex(16),
     AccountDbUn = list_to_binary(["account/", A, "/", B, "/", Rest]),
     AccountDbEn = list_to_binary(["account%2F", A, "%2F", B, "%2F", Rest]),
 
     {Y, M, _} = erlang:date(),
+    TS = kz_time:current_tstamp(),
     Now = os:timestamp(),
-    Year = kz_util:to_binary(Y),
-    Month = kz_util:pad_month(M),
+    Year = kz_term:to_binary(Y),
+    Month = kz_time:pad_month(M),
 
     MODbId = list_to_binary([AccountId, "-", Year, Month]),
     MODbEn = list_to_binary([AccountDbEn, "-", Year, Month]),
@@ -375,7 +730,17 @@ account_formats_test_() ->
      }
      || {Fun, Expected} <- Funs,
         Format <- Formats
-    ].
+    ] ++
+        [?_assertEqual(undefined, kz_util:format_account_id(undefined, raw))
+        ,?_assertEqual(<<"accounts">>, kz_util:format_account_id(<<"accounts">>, raw))
+        ,?_assertEqual(MODbEn, kz_util:format_account_id(AccountDbEn, TS))
+        ,?_assertEqual(MODbEn, kz_util:format_account_mod_id(AccountDbEn, TS))
+        ,?_assertEqual(undefined, kz_util:format_account_id(undefined, Year, Month))
+        ,?_assertEqual(MODbEn, kz_util:format_account_id(AccountDbEn, Year, Month))
+        ,?_assertEqual(MODbEn, kz_util:format_account_id(AccountDbEn, Year, M))
+        ,?_assertEqual(?KZ_TASKS_DB, kz_util:format_account_id(?KZ_TASKS_DB, raw))
+        ,?_assertEqual(<<"bla">>, kz_util:format_account_id(<<"bla">>, raw))
+        ].
 
 format_assert(Fun, Format, Expected) ->
     Matchable = format_title(Fun, Format, Expected),
@@ -445,4 +810,17 @@ pretty_print_bytes_test_() ->
 runs_in_test_() ->
     [?_assertEqual(timeout, kz_util:runs_in(1, fun timer:sleep/1, [10]))
     ,?_assertEqual({ok,ok}, kz_util:runs_in(10, fun timer:sleep/1, [1]))
+    ,?_assertEqual(timeout, kz_util:runs_in(1.0, fun timer:sleep/1, [10]))
+    ,?_assertEqual({ok,ok}, kz_util:runs_in(10.0, fun timer:sleep/1, [1]))
+    ].
+
+
+uniq_test_() ->
+    [?_assertEqual([], kz_util:uniq([]))
+    ,?_assertEqual([{module_name, <<"my_module">>}]
+                  ,kz_util:uniq([{module_name, <<"my_module">>}
+                                ,{module_name, <<"blaaa">>}
+                                ,{module_name, false}
+                                ])
+                  )
     ].

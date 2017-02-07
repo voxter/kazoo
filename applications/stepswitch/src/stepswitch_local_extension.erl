@@ -197,7 +197,7 @@ handle_event(JObj, #state{request_handler=RequestHandler
         {<<"error">>, _, _} ->
             <<"bridge">> = kz_json:get_value([<<"Request">>, <<"Application-Name">>], JObj),
             lager:debug("channel execution error while waiting for execute extension: ~s"
-                       ,[kz_util:to_binary(kz_json:encode(JObj))]),
+                       ,[kz_term:to_binary(kz_json:encode(JObj))]),
             gen_listener:cast(RequestHandler, {'local_extension_result', local_extension_error(JObj, Request)});
         {<<"call_event">>, <<"CHANNEL_TRANSFEROR">>, _CallId} ->
             Transferor = kz_call_event:other_leg_call_id(JObj),
@@ -341,11 +341,11 @@ get_account_realm(AccountId) ->
 
 -spec local_extension_caller_id(kz_json:object()) -> {api_binary(), api_binary()}.
 local_extension_caller_id(JObj) ->
-    {kz_json:get_first_defined([<<"Outbound-Caller-ID-Number">>
-                               ,<<"Emergency-Caller-ID-Number">>
-                               ], JObj)
-    ,kz_json:get_first_defined([<<"Outbound-Caller-ID-Name">>
+    {kz_json:get_first_defined([<<"Outbound-Caller-ID-Name">>
                                ,<<"Emergency-Caller-ID-Name">>
+                               ], JObj)
+    ,kz_json:get_first_defined([<<"Outbound-Caller-ID-Number">>
+                               ,<<"Emergency-Caller-ID-Number">>
                                ], JObj)
     }.
 
@@ -369,7 +369,7 @@ local_extension_timeout(Request) ->
 
 -spec local_extension_error(kz_json:object(), kz_json:object()) -> kz_proplist().
 local_extension_error(JObj, Request) ->
-    lager:debug("error during outbound request: ~s", [kz_util:to_binary(kz_json:encode(JObj))]),
+    lager:debug("error during outbound request: ~s", [kz_term:to_binary(kz_json:encode(JObj))]),
     [{<<"Call-ID">>, kz_json:get_value(<<"Call-ID">>, Request)}
     ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, Request, <<>>)}
     ,{<<"Response-Message">>, <<"NORMAL_TEMPORARY_FAILURE">>}

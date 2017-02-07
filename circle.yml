@@ -20,7 +20,7 @@ dependencies:
       - bash ./scripts/circleci-build-erlang.sh:
           timeout: 1800
       - pip install --upgrade pip
-      - pip install PyYAML
+      - pip install PyYAML mkdocs
 
 test:
   pre:
@@ -43,6 +43,7 @@ test:
         echo Unstaged changes!
         git status --porcelain
         git --no-pager diff
+        echo 'Maybe try `make apis` and see if that fixes anything ;)'
         exit 1
       fi
     - . ~/.kerl/$OTP_VERSION/activate && make xref

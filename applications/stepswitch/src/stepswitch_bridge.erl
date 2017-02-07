@@ -207,7 +207,7 @@ handle_event(JObj, #state{request_handler=RequestHandler
         {<<"error">>, _, _} ->
             <<"bridge">> = kz_json:get_value([<<"Request">>, <<"Application-Name">>], JObj),
             lager:debug("channel execution error while waiting for bridge: ~s"
-                       ,[kz_util:to_binary(kz_json:encode(JObj))]
+                       ,[kz_term:to_binary(kz_json:encode(JObj))]
                        ),
             gen_listener:cast(RequestHandler, {'bridge_result', bridge_error(JObj, OffnetReq)});
         {<<"call_event">>, <<"CHANNEL_TRANSFEROR">>, _} ->
@@ -313,7 +313,8 @@ maybe_bridge_emergency(#state{resource_req=OffnetReq
     end.
 
 -spec maybe_deny_emergency_bridge(state(), api_binary(), api_binary()) -> 'ok'.
-maybe_deny_emergency_bridge(State, 'undefined', Name) ->
+maybe_deny_emergency_bridge(#state{resource_req=OffnetReq}=State, 'undefined', Name) ->
+    AccountId = kapi_offnet_resource:account_id(OffnetReq),
     case kapps_config:get_is_true(?SS_CONFIG_CAT
                                  ,<<"deny_invalid_emergency_cid">>
                                  ,'false'
@@ -322,7 +323,9 @@ maybe_deny_emergency_bridge(State, 'undefined', Name) ->
         'true' -> deny_emergency_bridge(State);
         'false' ->
             maybe_deny_emergency_bridge(State
-                                       ,default_emergency_number(kz_util:anonymous_caller_id_number())
+                                       ,default_emergency_number(
+                                          kz_privacy:anonymous_caller_id_number(AccountId)
+                                         )
                                        ,Name
                                        )
     end;
@@ -516,7 +519,7 @@ bridge_timeout(OffnetReq) ->
 
 -spec bridge_error(kz_json:object(), kapi_offnet_resource:req()) -> kz_proplist().
 bridge_error(JObj, OffnetReq) ->
-    lager:debug("error during outbound request: ~s", [kz_util:to_binary(kz_json:encode(JObj))]),
+    lager:debug("error during outbound request: ~s", [kz_term:to_binary(kz_json:encode(JObj))]),
     [{<<"Call-ID">>, kapi_offnet_resource:call_id(OffnetReq)}
     ,{<<"Msg-ID">>, kapi_offnet_resource:msg_id(OffnetReq)}
     ,{<<"Response-Message">>, <<"NORMAL_TEMPORARY_FAILURE">>}

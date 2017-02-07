@@ -226,6 +226,7 @@ matches([<<"#">>], []) -> 'true';
 matches([<<"#">>, <<"*">>], []) -> 'false';
 matches([<<"#">>, <<"*">>], [<<>>]) -> 'false';
 matches([<<"#">>, <<"*">>], [_]) -> 'true'; % match one item:  #.* matches foo
+matches([<<"#">>], [_]) -> 'true';
 
 matches([<<"#">>, <<"#">> | Bs], Rs) ->
     matches([<<"#">> | Bs], Rs);
@@ -255,7 +256,8 @@ matches([<<"#">>, B | Bs], [B | Rs]) ->
     case lists:member(B, Rs) of
         'true' ->
             matches(Bs, Rs)
-                orelse matches([<<"#">> | Bs], Rs);
+                orelse matches([<<"#">> | Bs], Rs)
+                orelse matches([<<"#">>, B | Bs], Rs);
         'false' ->
             matches(Bs, Rs)
     end;
@@ -716,7 +718,7 @@ log_function_clause(M, F, Length, [{M, F, _Args, _}|_]) ->
 log_function_clause(M, F, Length, [{RealM, RealF, RealArgs, Where}|_ST]) ->
     lager:error("unable to find function clause for ~s:~s(~s) in ~s:~p"
                ,[RealM, RealF
-                ,kz_util:join_binary([kz_util:to_binary(io_lib:format("~p",[A])) || A <- RealArgs], <<", ">>)
+                ,kz_binary:join([kz_term:to_binary(io_lib:format("~p",[A])) || A <- RealArgs], <<", ">>)
                 ,props:get_value('file', Where), props:get_value('line', Where)
                 ]
                ),

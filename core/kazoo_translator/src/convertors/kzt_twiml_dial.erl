@@ -338,7 +338,7 @@ dial_strategy(Props) ->
 
 -spec caller_id(kz_proplist(), kapps_call:call()) -> ne_binary().
 caller_id(Props, Call) ->
-    kz_util:to_binary(
+    kz_term:to_binary(
       props:get_value('callerId', Props, kapps_call:caller_id_number(Call))
      ).
 
@@ -354,7 +354,7 @@ hangup_dtmf(DTMF) ->
         'false' -> 'undefined'
     end.
 
-should_record_call(Props) -> kz_util:is_true(props:get_value('record', Props, 'false')).
+should_record_call(Props) -> kz_term:is_true(props:get_value('record', Props, 'false')).
 timelimit_s(Props) -> props:get_integer_value('timeLimit', Props, 14400).
 
 
@@ -395,12 +395,14 @@ moderator_flags(_, _) -> kz_json:new().
 
 conference_id(Txts) ->
     Id = kz_xml:texts_to_binary(Txts),
-    MD5 = kz_util:to_hex_binary(erlang:md5(Id)),
+    MD5 = kz_term:to_hex_binary(erlang:md5(Id)),
     lager:debug("conf name: ~s (~s)", [Id, MD5]),
     MD5.
 
 
+-spec add_conference_profile(kapps_call:call(), kz_proplist()) -> kz_json:object().
 add_conference_profile(Call, ConfProps) ->
+    AccountId = kapps_call:account_id(Call),
     Profile = kz_json:from_list(
                 props:filter_undefined(
                   [{<<"rate">>, props:get_integer_value('rate', ConfProps, 8000)}
@@ -416,8 +418,8 @@ add_conference_profile(Call, ConfProps) ->
                   ,{<<"annouce-count">>, props:get_integer_value('announceCount', ConfProps)}
                   ,{<<"caller-controls">>, props:get_value('callerControls', ConfProps, <<"default">>)}
                   ,{<<"moderator-controls">>, props:get_value('callerControls', ConfProps, <<"default">>)}
-                  ,{<<"caller-id-name">>, props:get_value('callerIdName', ConfProps, kz_util:anonymous_caller_id_name())}
-                  ,{<<"caller-id-number">>, props:get_value('callerIdNumber', ConfProps, kz_util:anonymous_caller_id_number())}
+                  ,{<<"caller-id-name">>, props:get_value('callerIdName', ConfProps, kz_privacy:anonymous_caller_id_name(AccountId))}
+                  ,{<<"caller-id-number">>, props:get_value('callerIdNumber', ConfProps, kz_privacy:anonymous_caller_id_number(AccountId))}
                                                 %,{<<"suppress-events">>, <<>>} %% add events to make FS less chatty
                   ,{<<"moh-sound">>, props:get_value('waitUrl', ConfProps, <<"http://com.twilio.music.classical.s3.amazonaws.com/Mellotroniac_-_Flight_Of_Young_Hearts_Flute.mp3">>)}
                   ])),
@@ -438,5 +440,5 @@ conference_member_flags(ConfProps) ->
 -spec get_endpoints(binary(), kz_json:object(), kapps_call:call()) ->
                            kz_json:objects().
 get_endpoints(UserId, Data, Call) ->
-    Params = kz_json:set_value(<<"source">>, kz_util:to_binary(?MODULE), Data),
+    Params = kz_json:set_value(<<"source">>, kz_term:to_binary(?MODULE), Data),
     kz_endpoints:by_owner_id(UserId, Params, Call).

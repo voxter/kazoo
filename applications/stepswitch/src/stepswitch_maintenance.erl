@@ -33,7 +33,7 @@
 %%--------------------------------------------------------------------
 -spec reverse_lookup(text()) -> 'ok'.
 reverse_lookup(Thing) when not is_binary(Thing) ->
-    reverse_lookup(kz_util:to_binary(Thing));
+    reverse_lookup(kz_term:to_binary(Thing));
 reverse_lookup(Thing) ->
     JObj = kz_json:from_list([{<<"From-Network-Addr">>, Thing}
                              ,{<<"Auth-Realm">>, Thing}
@@ -46,7 +46,7 @@ reverse_lookup(Thing) ->
 -spec pretty_print_lookup(kz_proplist()) -> 'ok'.
 pretty_print_lookup([]) -> 'ok';
 pretty_print_lookup([{Key, Value}|Props]) ->
-    io:format("~-19s: ~s~n", [Key, kz_util:to_binary(Value)]),
+    io:format("~-19s: ~s~n", [Key, kz_term:to_binary(Value)]),
     pretty_print_lookup(Props).
 
 %%--------------------------------------------------------------------
@@ -106,7 +106,7 @@ pretty_print_resource([{Key, Values}|Props]) when is_list(Values) ->
     io:format("~s~n", [Key]),
     print_condensed_list(Values);
 pretty_print_resource([{Key, Value}|Props]) ->
-    io:format("~-19s: ~s~n", [Key, kz_util:to_binary(Value)]),
+    io:format("~-19s: ~s~n", [Key, kz_term:to_binary(Value)]),
     pretty_print_resource(Props).
 
 %%--------------------------------------------------------------------
@@ -174,7 +174,7 @@ lookup_number(Number) ->
 -spec pretty_print_number_props(kz_proplist()) -> 'ok'.
 pretty_print_number_props([]) -> 'ok';
 pretty_print_number_props([{Key, Value}|Props]) ->
-    io:format("~-19s: ~s~n", [kz_util:to_binary(Key), kz_util:to_binary(Value)]),
+    io:format("~-19s: ~s~n", [kz_term:to_binary(Key), kz_term:to_binary(Value)]),
     pretty_print_number_props(Props).
 
 %%--------------------------------------------------------------------
@@ -225,18 +225,18 @@ do_process_number(Number, 'undefined', Flags) ->
              props:filter_undefined([{<<"Flags">>, Flags}])
             ),
     Endpoints = stepswitch_resources:endpoints(
-                  kz_util:to_binary(Number)
+                  kz_term:to_binary(Number)
                                               ,kapi_offnet_resource:jobj_to_req(JObj)
                  ),
     pretty_print_endpoints(Endpoints);
 do_process_number(Number, AccountId, Flags) ->
     JObj = kz_json:from_list(
-             props:filter_undefined([{<<"Account-ID">>, kz_util:to_binary(AccountId)}
-                                    ,{<<"Hunt-Account-ID">>, kz_util:to_binary(AccountId)}
+             props:filter_undefined([{<<"Account-ID">>, kz_term:to_binary(AccountId)}
+                                    ,{<<"Hunt-Account-ID">>, kz_term:to_binary(AccountId)}
                                     ,{<<"Flags">>, Flags}
                                     ])
             ),
-    Endpoints = stepswitch_resources:endpoints(kz_util:to_binary(Number)
+    Endpoints = stepswitch_resources:endpoints(kz_term:to_binary(Number)
                                               ,kapi_offnet_resource:jobj_to_req(JObj)
                                               ),
     pretty_print_endpoints(Endpoints).
@@ -268,12 +268,12 @@ pretty_print_endpoint([{<<"Custom-Channel-Vars">>, JObj}|Props]) ->
     _ = pretty_print_endpoint(Props),
     io:format("Custom-Channel-Vars~n"),
     [io:format("    ~-15s: ~s~n", [Key
-                                  ,kz_util:to_binary(Value)
+                                  ,kz_term:to_binary(Value)
                                   ])
      || {Key, Value} <- kz_json:to_proplist(JObj)
     ];
 pretty_print_endpoint([{Key, Value}|Props]) ->
-    io:format("~-19s: ~s~n", [Key, kz_util:to_binary(Value)]),
+    io:format("~-19s: ~s~n", [Key, kz_term:to_binary(Value)]),
     pretty_print_endpoint(Props).
 
 %%--------------------------------------------------------------------
@@ -285,26 +285,26 @@ pretty_print_endpoint([{Key, Value}|Props]) ->
 -spec print_condensed_list(list()) -> 'ok'.
 print_condensed_list([E1, E2, E3]) ->
     io:format("    | ~-20s | ~-20s | ~-20s|~n"
-             ,[kz_util:to_binary(E1)
-              ,kz_util:to_binary(E2)
-              ,kz_util:to_binary(E3)
+             ,[kz_term:to_binary(E1)
+              ,kz_term:to_binary(E2)
+              ,kz_term:to_binary(E3)
               ]);
 print_condensed_list([E1, E2]) ->
     io:format("    | ~-20s | ~-20s | ~-20s|~n"
-             ,[kz_util:to_binary(E1)
-              ,kz_util:to_binary(E2)
+             ,[kz_term:to_binary(E1)
+              ,kz_term:to_binary(E2)
               ,<<>>
               ]);
 print_condensed_list([E1]) ->
     io:format("    | ~-20s | ~-20s | ~-20s|~n"
-             ,[kz_util:to_binary(E1)
+             ,[kz_term:to_binary(E1)
               ,<<>>
               ,<<>>
               ]);
 print_condensed_list([E1, E2, E3 | Rest]) ->
     io:format("    | ~-20s | ~-20s | ~-20s|~n"
-             ,[kz_util:to_binary(E1)
-              ,kz_util:to_binary(E2)
-              ,kz_util:to_binary(E3)
+             ,[kz_term:to_binary(E1)
+              ,kz_term:to_binary(E2)
+              ,kz_term:to_binary(E3)
               ]),
     print_condensed_list(Rest).

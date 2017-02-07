@@ -24,7 +24,7 @@
 
 sort_wdays_test() ->
     Sorted = [<<"monday">>, <<"tuesday">>, <<"wednesday">>, <<"thursday">>, <<"friday">>, <<"saturday">>, <<"sunday">>],
-    Shuffled = kz_util:shuffle_list(Sorted),
+    Shuffled = kz_term:shuffle_list(Sorted),
     ?assertEqual(Sorted, cf_temporal_route:sort_wdays(Shuffled)).
 
 date_range_test() ->

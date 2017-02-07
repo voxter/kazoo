@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @Copyright (C) 2013-2016, 2600Hz
+%%% @Copyright (C) 2016-2017, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -95,11 +95,11 @@ task(TaskId) ->
 
 -spec task_input(text()) -> 'no_return'.
 task_input(TaskId) ->
-    attachment(TaskId, ?KZ_TASKS_ATTACHMENT_NAME_IN).
+    attachment(TaskId, ?KZ_TASKS_ANAME_IN).
 
 -spec task_output(text()) -> 'no_return'.
 task_output(TaskId) ->
-    attachment(TaskId, ?KZ_TASKS_ATTACHMENT_NAME_OUT).
+    attachment(TaskId, ?KZ_TASKS_ANAME_OUT).
 
 -spec start(text()) -> 'no_return'.
 start(TaskId) ->
@@ -141,7 +141,7 @@ print_error(Reason) ->
     io:format("ERROR: ~p\n", [Reason]),
     'no_return'.
 
--spec attachment(kz_tasks:task_id(), ne_binary()) -> 'no_return'.
+-spec attachment(kz_tasks:id(), ne_binary()) -> no_return.
 attachment(TaskId, AName) ->
     case kz_tasks:read(TaskId) of
         {'ok', _JObj} ->
@@ -162,7 +162,7 @@ new_task(AuthAccountId, AccountId, Category, Action, TotalRows, CSVBin, CSVName)
             TaskId = kz_json:get_value([<<"_read_only">>, <<"id">>], TaskJObj),
             case kz_datamgr:put_attachment(?KZ_TASKS_DB
                                           ,TaskId
-                                          ,?KZ_TASKS_ATTACHMENT_NAME_IN
+                                          ,?KZ_TASKS_ANAME_IN
                                           ,CSVBin
                                           ,[{'content_type', <<"text/csv">>}]
                                           )

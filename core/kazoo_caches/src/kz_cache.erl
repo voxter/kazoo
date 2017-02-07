@@ -208,7 +208,7 @@ fetch_local(Srv, K) ->
     case peek_local(Srv, K) of
         {'error', 'not_found'}=E -> E;
         {'ok', _Value}=Ok ->
-            ets:update_element(Srv, K, {#cache_obj.timestamp, kz_util:current_tstamp()}),
+            ets:update_element(Srv, K, {#cache_obj.timestamp, kz_time:current_tstamp()}),
             Ok
     end.
 
@@ -221,7 +221,7 @@ erase_local(Srv, K) ->
 
 -spec flush_local(text() | atom()) -> 'ok'.
 flush_local(Srv) when not is_atom(Srv) ->
-    flush_local(kz_util:to_atom(Srv));
+    flush_local(kz_term:to_atom(Srv));
 flush_local(Srv) ->
     gen_server:cast(Srv, {'flush'}).
 
@@ -267,9 +267,9 @@ dump_local(Srv) -> dump_local(Srv, 'false').
 
 -spec dump_local(text(), text() | boolean()) -> 'ok'.
 dump_local(Srv, ShowValue) when not is_atom(Srv) ->
-    dump_local(kz_util:to_atom(Srv), ShowValue);
+    dump_local(kz_term:to_atom(Srv), ShowValue);
 dump_local(Srv, ShowValue) when not is_boolean(ShowValue) ->
-    dump_local(Srv, kz_util:to_boolean(ShowValue));
+    dump_local(Srv, kz_term:to_boolean(ShowValue));
 dump_local(Srv, ShowValue) ->
     {PointerTab, MonitorTab} = gen_listener:call(Srv, {'tables'}),
 
@@ -280,7 +280,7 @@ dump_local(Srv, ShowValue) ->
 
 -spec dump_table(ets:tab(), boolean()) -> 'ok'.
 dump_table(Tab, ShowValue) ->
-    Now = kz_util:current_tstamp(),
+    Now = kz_time:current_tstamp(),
     io:format("Table ~p~n", [ets:info(Tab, 'name')]),
     _ = [display_cache_obj(CacheObj, ShowValue, Now)
          || CacheObj <- ets:match_object(Tab, #cache_obj{_ = '_'})
@@ -394,7 +394,7 @@ monitor_tab(Tab) ->
 
 -spec to_tab(atom(), string()) -> atom().
 to_tab(Tab, Suffix) ->
-    kz_util:to_atom(kz_util:to_list(Tab) ++ Suffix, 'true').
+    kz_term:to_atom(kz_term:to_list(Tab) ++ Suffix, 'true').
 
 %%--------------------------------------------------------------------
 %% @private
@@ -591,7 +591,7 @@ handle_info(_Info, State) ->
 -spec handle_event(kz_json:object(), state()) -> gen_listener:handle_event_return().
 handle_event(JObj, #state{tab=Tab}=State) ->
     case (V=kapi_conf:doc_update_v(JObj))
-        andalso (kz_api:node(JObj) =/= kz_util:to_binary(node())
+        andalso (kz_api:node(JObj) =/= kz_term:to_binary(node())
                  orelse kz_json:get_atom_value(<<"Origin-Cache">>, JObj) =/= ets:info(Tab, 'name')
                 )
     of
@@ -656,7 +656,7 @@ get_props_origin(Props) -> props:get_value('origin', Props).
 -spec expire_objects(ets:tab(), [ets:tab()]) -> non_neg_integer().
 -spec expire_objects(ets:tab(), [ets:tab()], list()) -> non_neg_integer().
 expire_objects(Tab, AuxTables) ->
-    Now = kz_util:current_tstamp(),
+    Now = kz_time:current_tstamp(),
     FindSpec = [{#cache_obj{key = '$1'
                            ,value = '$2'
                            ,expires = '$3'

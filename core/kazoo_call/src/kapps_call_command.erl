@@ -237,8 +237,8 @@
 -define(DEFAULT_MESSAGE_TIMEOUT, kapps_config:get_integer(?CONFIG_CAT, <<"message_timeout">>, 5 * ?MILLISECONDS_IN_SECOND)).
 -define(DEFAULT_APPLICATION_TIMEOUT, kapps_config:get_integer(?CONFIG_CAT, <<"application_timeout">>, 500 * ?MILLISECONDS_IN_SECOND)).
 
--define(STORAGE_TIMEOUT(App), kapps_config:get_integer(?CONFIG_CAT, [<<"store_file">>, kz_util:to_binary(App), <<"save_timeout_ms">>], 5 * ?MILLISECONDS_IN_MINUTE, <<"default">>)).
--define(STORAGE_RETRIES(App), kapps_config:get_integer(?CONFIG_CAT, [<<"store_file">>, kz_util:to_binary(App), <<"retries">>], 5, <<"default">>)).
+-define(STORAGE_TIMEOUT(App), kapps_config:get_integer(?CONFIG_CAT, [<<"store_file">>, kz_term:to_binary(App), <<"save_timeout_ms">>], 5 * ?MILLISECONDS_IN_MINUTE, <<"default">>)).
+-define(STORAGE_RETRIES(App), kapps_config:get_integer(?CONFIG_CAT, [<<"store_file">>, kz_term:to_binary(App), <<"retries">>], 5, <<"default">>)).
 
 -define(EXTRA_BRIDGE_TIMEOUT, kapps_config:get_integer(?CONFIG_CAT, <<"bridge_timeout_extended_ms">>, 20 * ?MILLISECONDS_IN_SECOND)).
 -define(BRIDGE_DEFAULT_TIMEOUT, ?BRIDGE_DEFAULT_SYSTEM_TIMEOUT_S * ?MILLISECONDS_IN_SECOND).
@@ -413,7 +413,7 @@ receive_event(Timeout, IgnoreOthers) ->
     receive
         {'amqp_msg', JObj} -> {'ok', JObj};
         _ when IgnoreOthers ->
-            receive_event(kz_util:decr_timeout(Timeout, Start), IgnoreOthers);
+            receive_event(kz_time:decr_timeout(Timeout, Start), IgnoreOthers);
         Other -> {'other', Other}
     after
         Timeout -> {'error', 'timeout'}
@@ -836,7 +836,7 @@ b_receive_fax(Call) ->
 get_default_t38_setting() ->
     case kapps_config:get_binary(<<"fax">>, <<"inbound_t38_default">>, 'true') of
         <<"auto">> -> <<"auto">>;
-        Otherwise -> kz_util:is_true(Otherwise)
+        Otherwise -> kz_term:is_true(Otherwise)
     end.
 
 %%--------------------------------------------------------------------
@@ -1093,7 +1093,7 @@ b_bridge(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHeaders, I
 b_bridge_wait(0, Call) ->
     wait_for_bridge(?BRIDGE_DEFAULT_TIMEOUT + ?EXTRA_BRIDGE_TIMEOUT , Call);
 b_bridge_wait(Timeout, Call) ->
-    wait_for_bridge((kz_util:to_integer(Timeout) * ?MILLISECONDS_IN_SECOND) + ?EXTRA_BRIDGE_TIMEOUT , Call).
+    wait_for_bridge((kz_term:to_integer(Timeout) * ?MILLISECONDS_IN_SECOND) + ?EXTRA_BRIDGE_TIMEOUT , Call).
 
 -spec unbridge(kapps_call:call()) -> 'ok'.
 -spec unbridge(kapps_call:call(), ne_binary()) -> 'ok'.
@@ -1331,7 +1331,7 @@ play_terminators(Ts) -> lists:usort(Ts).
 
 -spec play_leg(api_binary()) -> api_binary().
 play_leg('undefined') -> 'undefined';
-play_leg(Leg) -> kz_util:ucfirst_binary(Leg).
+play_leg(Leg) -> kz_binary:ucfirst(Leg).
 
 play(Media, Call) -> play(Media, ?ANY_DIGIT, Call).
 play(Media, Terminators, Call) ->
@@ -1533,7 +1533,7 @@ record_call(Media, Action, Call) ->
 record_call(Media, Action, TimeLimit, Call) ->
     record_call(Media, Action, TimeLimit, ?ANY_DIGIT, Call).
 record_call(Media, Action, TimeLimit, Terminators, Call) ->
-    Limit = props:get_value(<<"Time-Limit">>, Media, kz_util:to_binary(TimeLimit)),
+    Limit = props:get_value(<<"Time-Limit">>, Media, kz_term:to_binary(TimeLimit)),
     Command = props:filter_undefined(
                 [{<<"Application-Name">>, <<"record_call">>}
                 ,{<<"Record-Action">>, Action}
@@ -1975,7 +1975,7 @@ say_language(L, _Call) -> L.
 -spec say_gender(api_binary()) -> api_binary().
 say_gender('undefined') -> 'undefined';
 say_gender(Gender) ->
-    say_gender_validate(kz_util:to_lower_binary(Gender)).
+    say_gender_validate(kz_term:to_lower_binary(Gender)).
 
 -spec say_gender_validate(ne_binary()) -> ne_binary().
 say_gender_validate(<<"masculine">> = G) -> G;
@@ -2105,12 +2105,12 @@ b_flush(Call) -> wait_for_noop(Call, flush(Call)).
 %% @end
 %%--------------------------------------------------------------------
 -spec privacy(kapps_call:call()) -> 'ok'.
--spec privacy(ne_binary(), kapps_call:call()) -> 'ok'.
+-spec privacy(api_ne_binary(), kapps_call:call()) -> 'ok'.
 
 -spec b_privacy(kapps_call:call()) ->
                        kapps_api_error() |
                        {'ok', kz_json:object()}.
--spec b_privacy(ne_binary(), kapps_call:call()) ->
+-spec b_privacy(api_ne_binary(), kapps_call:call()) ->
                        kapps_api_error() |
                        {'ok', kz_json:object()}.
 
@@ -2171,30 +2171,30 @@ b_privacy(Mode, Call) ->
 -type wcc_collect_digits() :: #wcc_collect_digits{}.
 
 collect_digits(MaxDigits, Call) ->
-    do_collect_digits(#wcc_collect_digits{max_digits=kz_util:to_integer(MaxDigits)
+    do_collect_digits(#wcc_collect_digits{max_digits=kz_term:to_integer(MaxDigits)
                                          ,call=Call
                                          ,after_timeout=?DEFAULT_DIGIT_TIMEOUT
                                          }).
 
 collect_digits(MaxDigits, Timeout, Call) ->
-    do_collect_digits(#wcc_collect_digits{max_digits=kz_util:to_integer(MaxDigits)
-                                         ,timeout=kz_util:to_integer(Timeout)
+    do_collect_digits(#wcc_collect_digits{max_digits=kz_term:to_integer(MaxDigits)
+                                         ,timeout=kz_term:to_integer(Timeout)
                                          ,call=Call
-                                         ,after_timeout=kz_util:to_integer(Timeout)
+                                         ,after_timeout=kz_term:to_integer(Timeout)
                                          }).
 
 collect_digits(MaxDigits, Timeout, Interdigit, Call) ->
-    do_collect_digits(#wcc_collect_digits{max_digits=kz_util:to_integer(MaxDigits)
-                                         ,timeout=kz_util:to_integer(Timeout)
-                                         ,interdigit=kz_util:to_integer(Interdigit)
+    do_collect_digits(#wcc_collect_digits{max_digits=kz_term:to_integer(MaxDigits)
+                                         ,timeout=kz_term:to_integer(Timeout)
+                                         ,interdigit=kz_term:to_integer(Interdigit)
                                          ,call=Call
-                                         ,after_timeout=kz_util:to_integer(Timeout)
+                                         ,after_timeout=kz_term:to_integer(Timeout)
                                          }).
 
 collect_digits(MaxDigits, Timeout, Interdigit, NoopId, Call) ->
-    do_collect_digits(#wcc_collect_digits{max_digits=kz_util:to_integer(MaxDigits)
-                                         ,timeout=kz_util:to_integer(Timeout)
-                                         ,interdigit=kz_util:to_integer(Interdigit)
+    do_collect_digits(#wcc_collect_digits{max_digits=kz_term:to_integer(MaxDigits)
+                                         ,timeout=kz_term:to_integer(Timeout)
+                                         ,interdigit=kz_term:to_integer(Interdigit)
                                          ,noop_id=NoopId
                                          ,call=Call
                                          }).
@@ -2210,9 +2210,9 @@ collect_digits(MaxDigits, Timeout, Interdigit, 'undefined', Terminators, Call) -
                                          ,after_timeout=kz_util:to_integer(Timeout)
                                          });
 collect_digits(MaxDigits, Timeout, Interdigit, NoopId, Terminators, Call) ->
-    do_collect_digits(#wcc_collect_digits{max_digits=kz_util:to_integer(MaxDigits)
-                                         ,timeout=kz_util:to_integer(Timeout)
-                                         ,interdigit=kz_util:to_integer(Interdigit)
+    do_collect_digits(#wcc_collect_digits{max_digits=kz_term:to_integer(MaxDigits)
+                                         ,timeout=kz_term:to_integer(Timeout)
+                                         ,interdigit=kz_term:to_integer(Interdigit)
                                          ,noop_id=NoopId
                                          ,terminators=Terminators
                                          ,call=Call
@@ -2242,7 +2242,7 @@ do_collect_digits(#wcc_collect_digits{max_digits=MaxDigits
                     %% if we were given the NoopId of the noop and this is not it, then keep waiting
                     do_collect_digits(Collect);
                 {'decrement'} ->
-                    do_collect_digits(Collect#wcc_collect_digits{after_timeout=kz_util:decr_timeout(After, Start)});
+                    do_collect_digits(Collect#wcc_collect_digits{after_timeout=kz_time:decr_timeout(After, Start)});
                 {'ok', Digit} ->
                     %% DTMF received, collect and start interdigit timeout
                     Digits =:= <<>>
@@ -2354,7 +2354,7 @@ wait_for_message(Call, Application, Event, Type, Timeout) ->
                 {Type, Event, Application} ->
                     Ok;
                 _ ->
-                    wait_for_message(Call, Application, Event, Type, kz_util:decr_timeout(Timeout, Start))
+                    wait_for_message(Call, Application, Event, Type, kz_time:decr_timeout(Timeout, Start))
             end
     end.
 
@@ -2398,7 +2398,7 @@ wait_for_application(Call, Application, Event, Type, Timeout) ->
                 {Type, Event, Application} ->
                     Ok;
                 _ ->
-                    wait_for_application(Call, Application, Event, Type, kz_util:decr_timeout(Timeout, Start))
+                    wait_for_application(Call, Application, Event, Type, kz_time:decr_timeout(Timeout, Start))
             end
     end.
 
@@ -2458,15 +2458,15 @@ wait_for_headless_application(Application, {StartEv, StopEv}=Event, Type, Fun, T
                     {'error', 'channel_hungup'};
                 {Type, StartEv, Application} ->
                     lager:debug("start event ~s has been received for ~s", [StartEv, Application]),
-                    wait_for_headless_application(Application, StopEv, Type, Fun, kz_util:decr_timeout(Timeout, Start));
+                    wait_for_headless_application(Application, StopEv, Type, Fun, kz_time:decr_timeout(Timeout, Start));
                 {Type, StopEv, Application} ->
                     case Fun(JObj) of
                         'true' -> Ok;
-                        'false' -> wait_for_headless_application(Application, Event, Type, Fun, kz_util:decr_timeout(Timeout, Start))
+                        'false' -> wait_for_headless_application(Application, Event, Type, Fun, kz_time:decr_timeout(Timeout, Start))
                     end;
                 _T ->
                     lager:debug("headless application ~s ignoring ~p", [Application, _T]),
-                    wait_for_headless_application(Application, Event, Type, Fun, kz_util:decr_timeout(Timeout, Start))
+                    wait_for_headless_application(Application, Event, Type, Fun, kz_time:decr_timeout(Timeout, Start))
             end;
         {'error', _E}=E -> E
     end;
@@ -2484,11 +2484,11 @@ wait_for_headless_application(Application, Event, Type, Fun, Timeout) ->
                 {Type, Event, Application} ->
                     case Fun(JObj) of
                         'true' -> Ok;
-                        'false' -> wait_for_headless_application(Application, Event, Type, Fun, kz_util:decr_timeout(Timeout, Start))
+                        'false' -> wait_for_headless_application(Application, Event, Type, Fun, kz_time:decr_timeout(Timeout, Start))
                     end;
                 _T ->
                     lager:debug("ignore ~p", [_T]),
-                    wait_for_headless_application(Application, Event, Type, Fun, kz_util:decr_timeout(Timeout, Start))
+                    wait_for_headless_application(Application, Event, Type, Fun, kz_time:decr_timeout(Timeout, Start))
             end;
         {'error', _E}=E -> E
     end.
@@ -2516,7 +2516,7 @@ wait_for_dtmf(Timeout) ->
                 {<<"call_event">>, <<"DTMF">>} ->
                     {'ok', kz_json:get_value(<<"DTMF-Digit">>, JObj)};
                 _ ->
-                    wait_for_dtmf(kz_util:decr_timeout(Timeout, Start))
+                    wait_for_dtmf(kz_time:decr_timeout(Timeout, Start))
             end;
         {'error', 'timeout'}=E ->
             lager:debug("timed out after ~p ms waiting for DTMF", [Timeout]),
@@ -2583,7 +2583,7 @@ wait_for_bridge(Timeout, Fun, Call, Start, {'ok', JObj}) ->
             lager:info("bridge channel execute completed with result ~s(~s)", [Disposition, Result]),
             {Result, JObj};
         _E ->
-            NewTimeout = kz_util:decr_timeout(Timeout, Start),
+            NewTimeout = kz_time:decr_timeout(Timeout, Start),
             NewStart = os:timestamp(),
             wait_for_bridge(NewTimeout, Fun, Call, NewStart, receive_event(NewTimeout))
     end.
@@ -2665,9 +2665,9 @@ wait_for_hangup(Timeout) ->
                     {'ok', 'channel_hungup'};
                 _Evt ->
                     lager:debug("ignoring: ~p", [_Evt]),
-                    wait_for_hangup(kz_util:decr_timeout(Timeout, Start))
+                    wait_for_hangup(kz_time:decr_timeout(Timeout, Start))
             end;
-        _ -> wait_for_hangup(kz_util:decr_timeout(Timeout, Start))
+        _ -> wait_for_hangup(kz_time:decr_timeout(Timeout, Start))
     after
         Timeout ->
             {'error', 'timeout'}
@@ -2694,7 +2694,7 @@ wait_for_unbridge(Timeout) ->
         {'ok', JObj} ->
             case kapps_util:get_event_type(JObj) of
                 {<<"call_event">>, <<"LEG_DESTROYED">>} -> {'ok', 'leg_hungup'};
-                _ -> wait_for_unbridge(kz_util:decr_timeout(Timeout, Start))
+                _ -> wait_for_unbridge(kz_time:decr_timeout(Timeout, Start))
             end
     end.
 
@@ -2722,7 +2722,7 @@ wait_for_application_or_dtmf(Application, Timeout) ->
                 {<<"call_event">>, <<"CHANNEL_EXECUTE_COMPLETE">>, Application} -> Ok;
                 {<<"call_event">>, <<"DTMF">>, _} -> {'dtmf', kz_json:get_value(<<"DTMF-Digit">>, JObj)};
                 _ ->
-                    wait_for_application_or_dtmf(Application, kz_util:decr_timeout(Timeout, Start))
+                    wait_for_application_or_dtmf(Application, kz_time:decr_timeout(Timeout, Start))
             end
     end.
 
@@ -2789,7 +2789,7 @@ wait_for_fax(Timeout) ->
                     %% NOTE:
                     lager:debug("channel hungup but no end of fax, maybe its coming next..."),
                     wait_for_fax(5 * ?MILLISECONDS_IN_SECOND);
-                _ -> wait_for_fax(kz_util:decr_timeout(Timeout, Start))
+                _ -> wait_for_fax(kz_time:decr_timeout(Timeout, Start))
             end
     end.
 
@@ -2854,7 +2854,7 @@ get_outbound_t38_settings(CarrierFlag, <<"auto">>) ->
 get_outbound_t38_settings(CarrierFlag, 'undefined') ->
     get_outbound_t38_settings(CarrierFlag);
 get_outbound_t38_settings(CarrierFlag, CallerFlag) when not is_boolean(CallerFlag) ->
-    get_outbound_t38_settings(CarrierFlag, kz_util:is_true(CallerFlag));
+    get_outbound_t38_settings(CarrierFlag, kz_term:is_true(CallerFlag));
 get_outbound_t38_settings('true', 'true') ->
     [{<<"Enable-T38-Fax">>, 'undefined'}
     ,{<<"Enable-T38-Fax-Request">>, 'undefined'}
@@ -2907,7 +2907,7 @@ get_inbound_t38_settings(CarrierFlag, <<"auto">>) ->
 get_inbound_t38_settings(CarrierFlag, 'undefined') ->
     get_inbound_t38_settings(CarrierFlag);
 get_inbound_t38_settings(CarrierFlag, CallerFlag) when not is_boolean(CallerFlag) ->
-    get_inbound_t38_settings(CarrierFlag, kz_util:is_true(CallerFlag));
+    get_inbound_t38_settings(CarrierFlag, kz_term:is_true(CallerFlag));
 get_inbound_t38_settings('true', 'true') ->
     [{<<"Enable-T38-Fax">>, 'undefined'}
     ,{<<"Enable-T38-Fax-Request">>, 'undefined'}
@@ -3023,7 +3023,7 @@ wait_for_fax_detection(Timeout, Call) ->
             case get_event_type(JObj) of
                 {<<"call_event">>, <<"FAX_DETECTED">>, _ } ->
                     {'ok', kz_json:set_value(<<"Fax-Success">>, 'true', JObj)};
-                _ -> wait_for_fax_detection(kz_util:decr_timeout(Timeout, Start), Call)
+                _ -> wait_for_fax_detection(kz_time:decr_timeout(Timeout, Start), Call)
             end
     end.
 
@@ -3103,7 +3103,7 @@ wait_for_unparked_call(Call, Timeout) ->
                 {<<"call_event">>, <<"CHANNEL_EXECUTE_COMPLETE">>, <<"hold">>} ->
                     Ok;
                 _ ->
-                    wait_for_unparked_call(Call, kz_util:decr_timeout(Timeout, Start))
+                    wait_for_unparked_call(Call, kz_time:decr_timeout(Timeout, Start))
             end
     end.
 
@@ -3160,7 +3160,7 @@ do_store_file(Tries, Timeout, API, Msg, Call) ->
                     Error = kz_json:get_first_defined([[<<"Event-Data">>, <<"API-Error">>], <<"Error">>], JObj, <<"error not available">>),
                     retry_store_file(Tries - 1, Timeout, API, Msg, Error, maybe_add_debug_data(JObj, Call));
                 _Other ->
-                    Error = kz_util:to_binary(io_lib:format("unhandled return ('~s') from store file", [_Other])),
+                    Error = kz_term:to_binary(io_lib:format("unhandled return ('~s') from store file", [_Other])),
                     retry_store_file(Tries - 1, Timeout, API, Msg, Error, maybe_add_debug_data(JObj, Call))
             end;
         {'returned', _JObj, _Basic} ->
@@ -3168,17 +3168,17 @@ do_store_file(Tries, Timeout, API, Msg, Call) ->
                                  ,[kapps_call:switch_nodename(Call)]
                                  ),
             Funs = [{fun kapps_call:kvs_store/3, 'basic_return', kz_json:to_proplist(_Basic)}],
-            retry_store_file(Tries - 1, Timeout, API, Msg, kz_util:to_binary(Error), kapps_call:exec(Funs, Call));
+            retry_store_file(Tries - 1, Timeout, API, Msg, kz_term:to_binary(Error), kapps_call:exec(Funs, Call));
         {'timeout', _JObj} ->
             Error = io_lib:format("timeout publishing message to amqp. is ~s down ?"
                                  ,[kapps_call:switch_nodename(Call)]
                                  ),
-            retry_store_file(Tries - 1, Timeout, API, Msg, kz_util:to_binary(Error), Call);
+            retry_store_file(Tries - 1, Timeout, API, Msg, kz_term:to_binary(Error), Call);
         {'error', Err} ->
             Error = io_lib:format("error publishing message to amqp. is ~s down ? : ~p"
                                  ,[kapps_call:switch_nodename(Call), Err]
                                  ),
-            retry_store_file(Tries - 1, Timeout, API, Msg, kz_util:to_binary(Error), Call)
+            retry_store_file(Tries - 1, Timeout, API, Msg, kz_term:to_binary(Error), Call)
     end.
 
 -spec retry_store_file(integer(), kz_timeout(), kz_proplist() | function()

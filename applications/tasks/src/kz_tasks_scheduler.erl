@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz INC
+%%% @copyright (C) 2016-2017, 2600Hz INC
 %%% @doc
 %%% Schedule one-off tasks only once per cluster
 %%% @end
@@ -76,12 +76,12 @@ start_link() ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec start(kz_tasks:task_id()) -> {'ok', kz_json:object()} |
-                                   {'error'
-                                   ,'not_found' |
-                                    'already_started' |
-                                    any()
-                                   }.
+-spec start(kz_tasks:id()) -> {ok, kz_json:object()} |
+                              {error
+                              ,not_found |
+                               already_started |
+                               any()
+                              }.
 start(TaskId=?NE_BINARY) ->
     gen_server:call(?SERVER, {'start_task', TaskId}).
 
@@ -90,8 +90,8 @@ start(TaskId=?NE_BINARY) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec remove(kz_tasks:task_id()) -> {'ok', kz_json:object()} |
-                                    {'error', 'not_found' | 'task_running'}.
+-spec remove(kz_tasks:id()) -> {ok, kz_json:object()} |
+                               {error, not_found | task_running}.
 remove(TaskId=?NE_BINARY) ->
     gen_server:call(?SERVER, {'remove_task', TaskId}).
 
@@ -105,7 +105,7 @@ remove(TaskId=?NE_BINARY) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec worker_error(kz_tasks:task_id()) -> 'ok'.
+-spec worker_error(kz_tasks:id()) -> ok.
 worker_error(TaskId=?NE_BINARY) ->
     gen_server:cast(?SERVER, {'worker_error', TaskId}).
 
@@ -125,7 +125,7 @@ worker_pause() ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec worker_maybe_send_update(kz_tasks:task_id(), pos_integer(), pos_integer()) -> 'ok'.
+-spec worker_maybe_send_update(kz_tasks:id(), pos_integer(), pos_integer()) -> ok.
 worker_maybe_send_update(TaskId, TotalSucceeded, TotalFailed) ->
     case (TotalFailed + TotalSucceeded) rem ?PROGRESS_AFTER_PROCESSED == 0 of
         'false' -> 'ok';
@@ -138,25 +138,27 @@ worker_maybe_send_update(TaskId, TotalSucceeded, TotalFailed) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec worker_finished(kz_tasks:task_id(), non_neg_integer(), non_neg_integer(), ne_binary()) -> 'ok'.
+-spec worker_finished(kz_tasks:id(), non_neg_integer(), non_neg_integer(), ne_binary()) -> ok.
 worker_finished(TaskId=?NE_BINARY, TotalSucceeded, TotalFailed, Output=?NE_BINARY)
   when is_integer(TotalSucceeded), is_integer(TotalFailed) ->
     _ = gen_server:call(?SERVER, {'worker_finished', TaskId, TotalSucceeded, TotalFailed}),
     {'ok', CSVOut} = file:read_file(Output),
-    case kz_datamgr:put_attachment(?KZ_TASKS_DB
-                                  ,TaskId
-                                  ,?KZ_TASKS_ATTACHMENT_NAME_OUT
-                                  ,CSVOut
-                                  ,[{'content_type', <<"text/csv">>}]
-                                  )
-    of
-        {'ok', _TaskJObj} ->
-            lager:debug("saved ~s", [?KZ_TASKS_ATTACHMENT_NAME_OUT]),
-            kz_util:delete_file(Output),
-            'ok';
-        {'error', _R}=Error ->
-            lager:error("failed saving ~s/~s: ~p"
-                       ,[TaskId, ?KZ_TASKS_ATTACHMENT_NAME_OUT, _R]),
+    AName = ?KZ_TASKS_ANAME_OUT,
+    attempt_upload(TaskId, AName, CSVOut, Output, 3).
+
+attempt_upload(_TaskId, _AName, _, _, 0) ->
+    lager:error("failed saving ~s/~s: 3rd conflict", [_TaskId, _AName]),
+    {error, conflict};
+attempt_upload(TaskId, AName, CSVOut, Output, Retries) ->
+    lager:debug("attempt #~p to save ~s/~s", [3-Retries+1, TaskId, AName]),
+    Options = [{content_type, <<"text/csv">>}],
+    case kz_datamgr:put_attachment(?KZ_TASKS_DB, TaskId, AName, CSVOut, Options) of
+        {ok, _TaskJObj} ->
+            lager:debug("saved ~s", [AName]),
+            kz_util:delete_file(Output);
+        {error, conflict} -> attempt_upload(TaskId, AName, CSVOut, Output, Retries-1);
+        {error, _R}=Error ->
+            lager:error("failed saving ~s/~s: ~p", [TaskId, AName, _R]),
             Error
     end.
 
@@ -241,7 +243,7 @@ handle_call({'worker_finished', TaskId, TotalSucceeded, TotalFailed}, _From, Sta
     lager:debug("worker finished ~s: ~p/~p", [TaskId, TotalSucceeded, TotalFailed]),
     case task_by_id(TaskId, State) of
         [Task] ->
-            Task1 = Task#{finished => kz_util:current_tstamp()
+            Task1 = Task#{finished => kz_time:current_tstamp()
                          ,total_rows_failed => TotalFailed
                          ,total_rows_succeeded => TotalSucceeded
                          },
@@ -291,7 +293,7 @@ handle_call(_Request, _From, State) ->
 handle_cast({'worker_error', TaskId}, State) ->
     lager:debug("worker error ~s", [TaskId]),
     [Task=#{total_rows := TotalRows}] = task_by_id(TaskId, State),
-    Task1 = Task#{finished => kz_util:current_tstamp()
+    Task1 = Task#{finished => kz_time:current_tstamp()
                  ,total_rows_failed => TotalRows
                  ,total_rows_succeeded => 0
                  },
@@ -330,7 +332,7 @@ handle_info({'EXIT', Pid, _Reason}, State) ->
             %% Note: this means output attachment was MAYBE NOT saved to task doc.
             %% Note: setting total_rows_failed to undefined here will change
             %%  status to ?STATUS_BAD but will not update total_rows_failed value in doc.
-            Task1 = Task#{finished => kz_util:current_tstamp()
+            Task1 = Task#{finished => kz_time:current_tstamp()
                          ,total_rows_failed := 'undefined'
                          },
             {'ok', _JObj} = update_task(Task1),
@@ -369,7 +371,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
--spec task_by_id(kz_tasks:task_id(), state()) -> [kz_tasks:task()].
+-spec task_by_id(kz_tasks:id(), state()) -> [kz_tasks:task()].
 task_by_id(TaskId, State) ->
     [T || T=#{id := Id} <- State#state.tasks,
           TaskId == Id
@@ -385,7 +387,7 @@ task_by_pid(Pid, State) ->
 log_elapsed_time(#{started := Start
                   ,finished := End
                   }) ->
-    lager:debug("task ran for ~s", [kz_util:pretty_print_elapsed_s(End - Start)]).
+    lager:debug("task ran for ~s", [kz_time:pretty_print_elapsed_s(End - Start)]).
 
 -spec handle_call_start_task(kz_tasks:task(), state()) -> ?REPLY(state(), Response) when
       Response :: {'ok', kz_json:object()} |
@@ -407,16 +409,16 @@ handle_call_start_task(Task=#{id := TaskId
     lager:debug("API ~s", [kz_json:encode(API)]),
     Worker = worker_module(API),
     lager:debug("worker type: ~s", [Worker]),
-    ExtraArgs = [{'account_id', AccountId}
-                ,{'auth_account_id', AuthAccountId}
-                ],
+    ExtraArgs = #{account_id => AccountId
+                 ,auth_account_id => AuthAccountId
+                 },
     lager:debug("extra args: ~p", [ExtraArgs]),
     %% Task needs to run where App is started.
     try kz_util:spawn_link(fun Worker:start/3, [TaskId, API, ExtraArgs]) of
         Pid ->
-            Task1 = Task#{started => kz_util:current_tstamp()
+            Task1 = Task#{started => kz_time:current_tstamp()
                          ,worker_pid => Pid
-                         ,worker_node => kz_util:to_binary(node())
+                         ,worker_node => kz_term:to_binary(node())
                          },
             {'ok', JObj} = update_task(Task1),
             State1 = add_task(Task1, State),
@@ -427,7 +429,7 @@ handle_call_start_task(Task=#{id := TaskId
             ?REPLY(State, {'error', _R})
     end.
 
--spec remove_task(kz_tasks:task_id(), state()) -> state().
+-spec remove_task(kz_tasks:id(), state()) -> state().
 remove_task(TaskId, State) ->
     NewTasks =
         [T || T=#{id := Id} <- State#state.tasks,
@@ -463,8 +465,8 @@ task_api(Category, Action) ->
 -spec worker_module(kz_json:object()) -> module().
 worker_module(API) ->
     case kz_tasks:input_mime(API) of
-        <<"none">> -> 'kz_task_noinput_worker';
-        _TextCSV -> 'kz_task_worker'
+        <<"none">> -> kz_task_worker_noinput;
+        _TextCSV -> kz_task_worker
     end.
 
 %%% End of Module.

@@ -98,7 +98,7 @@ build_offnet_request(Data, Call) ->
       ,{?KEY_IGNORE_EARLY_MEDIA, get_ignore_early_media(Data)}
       ,{?KEY_INCEPTION, get_inception(Call)}
       ,{?KEY_MEDIA, kz_json:get_first_defined([<<"media">>, <<"Media">>], Data)}
-      ,{?KEY_MSG_ID, kz_util:rand_hex_binary(6)}
+      ,{?KEY_MSG_ID, kz_binary:rand_hex(6)}
       ,{?KEY_OUTBOUND_CALLER_ID_NAME, CIDName}
       ,{?KEY_OUTBOUND_CALLER_ID_NUMBER, CIDNumber}
       ,{?KEY_PRESENCE_ID, kz_attributes:presence_id(Call)}
@@ -112,27 +112,40 @@ build_offnet_request(Data, Call) ->
 
 -spec get_channel_vars(kapps_call:call()) -> kz_json:object().
 get_channel_vars(Call) ->
+    GetterFuns = [fun maybe_add_endpoint/2
+                 ,fun add_privacy_flags/2
+                 ,fun maybe_require_ignore_early_media/2
+                 ],
+    CCVs = lists:foldl(fun(F, Acc) -> F(Call, Acc) end
+                      ,[]
+                      ,GetterFuns
+                      ),
+    kz_json:from_list(props:filter_empty(CCVs)).
+
+-spec add_privacy_flags(kapps_call:call(), kz_proplist()) -> kz_proplist().
+add_privacy_flags(Call, Acc) ->
+    CCVs = kapps_call:custom_channel_vars(Call),
+    kz_privacy:flags(CCVs) ++ Acc.
+
+-spec maybe_add_endpoint(kapps_call:call(), kz_proplist()) -> kz_proplist().
+maybe_add_endpoint(Call, Acc) ->
     AuthId = kapps_call:authorizing_id(Call),
     EndpointId = kapps_call:kvs_fetch(?RESTRICTED_ENDPOINT_KEY, AuthId, Call),
-    kz_json:from_list(
-      props:filter_undefined(get_channel_vars(EndpointId, Call))
-     ).
-
--spec get_channel_vars(api_binary(), kapps_call:call()) -> kz_proplist().
-get_channel_vars('undefined', Call) -> [maybe_require_ignore_early_media(Call)];
-get_channel_vars(EndpointId, Call) ->
-    case kz_endpoint:get(EndpointId, kapps_call:account_db(Call)) of
+    case EndpointId =/= 'undefined'
+        andalso kz_endpoint:get(EndpointId, kapps_call:account_db(Call))
+    of
+        'false' -> Acc;
         {'ok', Endpoint} ->
             [{<<"Authorizing-ID">>, EndpointId}
             ,{<<"Owner-ID">>, kz_json:get_value(<<"owner_id">>, Endpoint)}
-            ,maybe_require_ignore_early_media(Call)
+             | Acc
             ];
-        {'error', _} -> [maybe_require_ignore_early_media(Call)]
+        {'error', _} -> Acc
     end.
 
--spec maybe_require_ignore_early_media(kapps_call:call()) -> {ne_binary(), api_binary()}.
-maybe_require_ignore_early_media(Call) ->
-    {<<"Require-Ignore-Early-Media">>, kapps_call:custom_channel_var(<<"Require-Ignore-Early-Media">>, Call)}.
+-spec maybe_require_ignore_early_media(kapps_call:call(), kz_proplist()) -> kz_proplist().
+maybe_require_ignore_early_media(Call, Acc) ->
+    [{<<"Require-Ignore-Early-Media">>, kapps_call:custom_channel_var(<<"Require-Ignore-Early-Media">>, Call)} | Acc].
 
 -spec get_bypass_e164(kz_json:object()) -> boolean().
 get_bypass_e164(Data) ->
@@ -259,7 +272,7 @@ get_sip_headers(Data, Call) ->
     Headers = kz_json:merge_jobjs(AuthEndCSH, CSH),
 
     JObj = lists:foldl(fun(F, J) -> F(J) end, Headers, Routines),
-    case kz_util:is_empty(JObj) of
+    case kz_term:is_empty(JObj) of
         'true' -> 'undefined';
         'false' -> JObj
     end.
@@ -285,7 +298,7 @@ maybe_emit_account_id(JObj, Data, Call) ->
 
 -spec get_ignore_early_media(kz_json:object()) -> api_binary().
 get_ignore_early_media(Data) ->
-    kz_util:to_binary(kz_json:is_true(<<"ignore_early_media">>, Data, 'false')).
+    kz_term:to_binary(kz_json:is_true(<<"ignore_early_media">>, Data, 'false')).
 
 -spec get_t38_enabled(kapps_call:call()) -> api_boolean().
 get_t38_enabled(Call) ->
@@ -385,14 +398,14 @@ get_account_dynamic_flags(_, Call, Flags) ->
                                    ne_binaries().
 process_dynamic_flags([], Flags, _) -> Flags;
 process_dynamic_flags([<<"zone">>|DynamicFlags], Flags, Call) ->
-    Zone = kz_util:to_binary(kz_nodes:local_zone()),
+    Zone = kz_term:to_binary(kz_nodes:local_zone()),
     lager:debug("adding dynamic flag ~s", [Zone]),
     process_dynamic_flags(DynamicFlags, [Zone|Flags], Call);
 process_dynamic_flags([DynamicFlag|DynamicFlags], Flags, Call) ->
     case is_flag_exported(DynamicFlag) of
         'false' -> process_dynamic_flags(DynamicFlags, Flags, Call);
         'true' ->
-            Fun = kz_util:to_atom(DynamicFlag),
+            Fun = kz_term:to_atom(DynamicFlag),
             process_dynamic_flags(DynamicFlags, [kapps_call:Fun(Call)|Flags], Call)
     end.
 
@@ -402,7 +415,7 @@ is_flag_exported(Flag) ->
 
 is_flag_exported(_, []) -> 'false';
 is_flag_exported(Flag, [{F, 1}|Funs]) ->
-    kz_util:to_binary(F) =:= Flag
+    kz_term:to_binary(F) =:= Flag
         orelse is_flag_exported(Flag, Funs);
 is_flag_exported(Flag, [_|Funs]) -> is_flag_exported(Flag, Funs).
 

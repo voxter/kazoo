@@ -103,7 +103,7 @@ lookup_priority(Data, Call) ->
     FromCall = kapps_call:custom_channel_var(<<"Call-Priority">>, Call),
     case {FromData, FromCall} of
         {FromData, _} when is_integer(FromData) -> FromData;
-        {_, FromCall} when is_binary(FromCall) -> kz_util:to_integer(FromCall);
+        {_, FromCall} when is_binary(FromCall) -> kz_term:to_integer(FromCall);
         _ -> 'undefined'
     end.
 
@@ -159,10 +159,10 @@ end_member_call(Call) ->
                      ,{ne_binary(), ne_binary()}
                      ) -> 'ok'.
 process_message(#member_call{call=Call}, _, _, Start, _Wait, _JObj, {<<"call_event">>,<<"CHANNEL_BRIDGE">>}) ->
-    lager:info("member was bridged to agent, yay! took ~b s", [kz_util:elapsed_s(Start)]),
+    lager:info("member was bridged to agent, yay! took ~b s", [kz_time:elapsed_s(Start)]),
     cf_exe:control_usurped(Call);
 process_message(#member_call{call=Call}, _, _, Start, _Wait, _JObj, {<<"call_event">>,<<"CHANNEL_DESTROY">>}) ->
-    lager:info("member hungup while waiting in the queue (was there ~b s)", [kz_util:elapsed_s(Start)]),
+    lager:info("member hungup while waiting in the queue (was there ~b s)", [kz_time:elapsed_s(Start)]),
     cancel_member_call(Call, ?MEMBER_HANGUP),
     cf_exe:stop(Call);
 process_message(#member_call{call=Call
@@ -184,14 +184,14 @@ process_message(#member_call{call=Call
         'true' ->
             Failure = kz_json:get_value(<<"Failure-Reason">>, JObj),
             lager:info("call failed to be processed: ~s (took ~b s)"
-                      ,[Failure, kz_util:elapsed_s(Start)]
+                      ,[Failure, kz_time:elapsed_s(Start)]
                       ),
             cancel_member_call(Call, Failure),
             stop_hold_music(Call),
             cf_exe:continue(Call);
         'false' ->
             lager:info("failure json was for a different queue, ignoring"),
-            wait_for_bridge(MC, BreakoutState, kz_util:decr_timeout(Timeout, Wait), Start)
+            wait_for_bridge(MC, BreakoutState, kz_time:decr_timeout(Timeout, Wait), Start)
     end;
 process_message(#member_call{call=Call}, _, _, Start, _Wait, _JObj, {<<"member">>, <<"call_success">>}) ->
     lager:info("call was processed by queue (took ~b s)", [kz_util:elapsed_s(Start)]),
@@ -222,15 +222,15 @@ process_dtmf(DTMF, #member_call{call=Call
             kapps_call_command:flush(Call),
             kapps_call_command:hold(<<"silence_stream://0">>, Call),
             kapps_call_command:prompt(breakout_prompt(BreakoutMedia), kapps_call:language(Call), Call),
-            wait_for_bridge(MC, BreakoutState#breakout_state{active='true'}, kz_util:decr_timeout(Timeout, Wait), Start);
+            wait_for_bridge(MC, BreakoutState#breakout_state{active='true'}, kz_time:decr_timeout(Timeout, Wait), Start);
         _ ->
             lager:info("caller pressed ~s, ignoring", [DTMF]),
-            wait_for_bridge(MC, BreakoutState, kz_util:decr_timeout(Timeout, Wait), Start)
+            wait_for_bridge(MC, BreakoutState, kz_time:decr_timeout(Timeout, Wait), Start)
     end;
 process_dtmf(DTMF, #member_call{call=Call}=MC, BreakoutState, Timeout, Start, Wait) ->
     case breakout_loop(DTMF, MC, BreakoutState) of
         #breakout_state{}=NextState ->
-            wait_for_bridge(MC, NextState, kz_util:decr_timeout(Timeout, Wait), Start);
+            wait_for_bridge(MC, NextState, kz_time:decr_timeout(Timeout, Wait), Start);
         'callback_registered' ->
             lager:debug("member callback registered, stopping callflow"),
             cf_exe:control_usurped(Call)

@@ -89,7 +89,7 @@ get_media_handling(L) ->
 
 -spec constrain_weight(ne_binary() | integer()) -> integer().
 constrain_weight(W) when not is_integer(W) ->
-    constrain_weight(kz_util:to_integer(W));
+    constrain_weight(kz_term:to_integer(W));
 constrain_weight(W) when W > 100 -> 100;
 constrain_weight(W) when W < 1 -> 1;
 constrain_weight(W) -> W.
@@ -184,8 +184,8 @@ lookup_user_flags(Name, Realm, AccountId, _) ->
             lager:info("cache hit for ~s@~s", [Name, Realm]),
             Result;
         {'error', 'not_found'} ->
-            Options = [{'key', [kz_util:to_lower_binary(Realm)
-                               ,kz_util:to_lower_binary(Name)
+            Options = [{'key', [kz_term:to_lower_binary(Realm)
+                               ,kz_term:to_lower_binary(Name)
                                ]
                        }],
             case kz_datamgr:get_results(AccountDb, <<"trunkstore/lookup_user_flags">>, Options) of
@@ -232,7 +232,7 @@ merge_account_attributes(Account, JObj) ->
 
 -spec get_call_duration(kz_json:object()) -> integer().
 get_call_duration(JObj) ->
-    kz_util:to_integer(kz_json:get_value(<<"Billing-Seconds">>, JObj)).
+    kz_term:to_integer(kz_json:get_value(<<"Billing-Seconds">>, JObj)).
 
 -spec invite_format(ne_binary(), ne_binary()) -> kz_proplist().
 invite_format(<<"e.164">>, To) ->
@@ -374,7 +374,7 @@ honor_diversion(CIDNum, FromUser, AccountId, CustomSIPHeaders) ->
             case knm_number:lookup_account(CallerIdNumber) of
                 {'ok', AccountId, _} -> CIDNum;
                 _ ->
-                    DefaultCID = kapps_config:get(<<"trunkstore">>, <<"default_caller_id_number">>, kz_util:anonymous_caller_id_number()),
+                    DefaultCID = kapps_config:get(<<"trunkstore">>, <<"default_caller_id_number">>, kz_privacy:anonymous_caller_id_number(AccountId)),
                     lager:info("wrong diversions cid detected! Will use default trunkstore caller id: ~s", [DefaultCID]),
                     DefaultCID
             end;
@@ -398,7 +398,7 @@ validate_from_user(FromUser, AccountId) ->
             lager:info("CID Number derived from CID Name, normalized and set to: ~s", [NormalizedFromUser]),
             NormalizedFromUser;
         _NothingLeft ->
-            DefaultCID = kapps_config:get(?CONFIG_CAT, <<"default_caller_id_number">>, kz_util:anonymous_caller_id_number()),
+            DefaultCID = kapps_config:get(?CONFIG_CAT, <<"default_caller_id_number">>, kz_privacy:anonymous_caller_id_number(AccountId)),
             lager:info("no valid caller id identified! Will use default trunkstore caller id: ~s", [DefaultCID]),
             DefaultCID
     end.

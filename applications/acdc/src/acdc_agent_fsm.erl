@@ -552,7 +552,7 @@ sync({'sync_req', JObj}, #state{agent_listener=AgentListener
 sync({'sync_resp', JObj}, #state{sync_ref=Ref
                                 ,agent_listener=AgentListener
                                 }=State) ->
-    case catch kz_util:to_atom(kz_json:get_value(<<"Status">>, JObj)) of
+    case catch kz_term:to_atom(kz_json:get_value(<<"Status">>, JObj)) of
         'sync' ->
             lager:debug("other agent is in sync too"),
             {'next_state', 'sync', State};
@@ -652,7 +652,7 @@ ready({'member_connect_win', JObj, 'same_node'}, #state{agent_listener=AgentList
             {'next_state', NextState, State#state{wrapup_timeout=WrapupTimer
                                                  ,member_call=Call
                                                  ,member_call_id=CallId
-                                                 ,member_call_start=kz_util:now()
+                                                 ,member_call_start=kz_time:now()
                                                  ,member_call_queue_id=QueueId
                                                  ,caller_exit_key=CallerExitKey
                                                  ,endpoints=UpdatedEPs
@@ -697,7 +697,7 @@ ready({'member_connect_win', JObj, 'different_node'}, #state{agent_listener=Agen
             {'next_state', NextState, State#state{wrapup_timeout=WrapupTimer
                                                  ,member_call=Call
                                                  ,member_call_id=CallId
-                                                 ,member_call_start=kz_util:now()
+                                                 ,member_call_start=kz_time:now()
                                                  ,member_call_queue_id=QueueId
                                                  ,caller_exit_key=CallerExitKey
                                                  ,endpoints=UpdatedEPs
@@ -2088,14 +2088,14 @@ current_call(Call, AgentState, QueueId, Start) ->
                       ,{<<"caller_id_number">>, kapps_call:caller_id_name(Call)}
                       ,{<<"to">>, kapps_call:to_user(Call)}
                       ,{<<"from">>, kapps_call:from_user(Call)}
-                      ,{<<"agent_state">>, kz_util:to_binary(AgentState)}
+                      ,{<<"agent_state">>, kz_term:to_binary(AgentState)}
                       ,{<<"duration">>, elapsed(Start)}
                       ,{<<"queue_id">>, QueueId}
                       ]).
 
 -spec elapsed('undefined' | kz_now()) -> api_integer().
 elapsed('undefined') -> 'undefined';
-elapsed(Start) -> kz_util:elapsed_s(Start).
+elapsed(Start) -> kz_time:elapsed_s(Start).
 
 -spec wrapup_timer(state()) -> reference().
 wrapup_timer(#state{agent_listener=AgentListener
@@ -2330,7 +2330,7 @@ maybe_notify(Ns, Key, State) ->
 get_method(Ns) ->
     case kz_json:get_value(<<"method">>, Ns) of
         'undefined' -> 'get';
-        M -> standardize_method(kz_util:to_lower_binary(M))
+        M -> standardize_method(kz_term:to_lower_binary(M))
     end.
 
 -spec standardize_method(ne_binary()) -> 'get' | 'post'.
@@ -2356,7 +2356,7 @@ notify(Url, Method, Key, #state{account_id=AccountId
                ,{<<"caller_id_name">>, CIDName}
                ,{<<"caller_id_number">>, CIDNumber}
                ,{<<"call_state">>, Key}
-               ,{<<"now">>, kz_util:current_tstamp()}
+               ,{<<"now">>, kz_time:current_tstamp()}
                ,{<<"Custom-KVs">>, kapps_call:custom_kvs(MemberCall)}
                ,{<<"agent_username">>, AgentName}
                ]),
@@ -2385,7 +2385,7 @@ notify(Uri, Headers, Method, Body, Opts) ->
               ,{'ssl_options', [{'versions', ['tlsv1.2','tlsv1.1','tlsv1','sslv3']}]}
                | Opts
               ],
-    URI = kz_util:to_list(Uri),
+    URI = kz_term:to_list(Uri),
     case kz_http:req(Method, URI, Headers, Body, Options) of
         {'ok', _Status, _ResponseHeaders, _ResponseBody} ->
             lager:debug("~s req to ~s: ~p", [Method, Uri, _Status]);
@@ -2413,7 +2413,7 @@ uri(URI, QueryString) ->
         {Scheme, Host, Path, <<>>, Fragment} ->
             kz_http_util:urlunsplit({Scheme, Host, Path, QueryString, Fragment});
         {Scheme, Host, Path, QS, Fragment} ->
-            kz_http_util:urlunsplit({Scheme, Host, Path, <<QS/binary, "&", (kz_util:to_binary(QueryString))/binary>>, Fragment})
+            kz_http_util:urlunsplit({Scheme, Host, Path, <<QS/binary, "&", (kz_term:to_binary(QueryString))/binary>>, Fragment})
     end.
 
 -spec apply_state_updates(state()) -> handle_fsm_ret(state()).

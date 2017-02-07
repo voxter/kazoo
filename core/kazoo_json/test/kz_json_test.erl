@@ -422,7 +422,7 @@ to_querystring_test_() ->
             ,{<<"{\"topkey\":{\"subkey1\":\"v1\",\"subkey2\":{\"k3\":\"v3\"}}}">>
              ,<<"topkey[subkey1]=v1&topkey[subkey2][k3]=v3">>}
             ],
-    [?_assertEqual(QS, kz_util:to_binary(
+    [?_assertEqual(QS, kz_term:to_binary(
                          kz_json:to_querystring(
                            kz_json:decode(JSON)
                           )
@@ -556,4 +556,27 @@ sum_test_() ->
     ,?_assertEqual(A42Bhi, kz_json:sum(A40, A2Bhi))
     ,?_assertEqual(A42Bhi, kz_json:sum(A2Bhi, A40))
     ,?_assertEqual(?CHARGES_DOUBLE, kz_json:sum(?CHARGES_SIMPLE, ?CHARGES_SIMPLE))
+    ].
+
+from_list_recursive_test() ->
+    Obj1 = kz_json:from_list([{<<"send_to">>, [<<"someone@somedomain.com">>]}]),
+    Obj2 = kz_json:from_list([{<<"email">>, Obj1}]),
+    L1 = [{<<"fax_hangup_code">>,200}
+         ,{<<"fax_hangup_cause">>,<<"NORMAL_CLEARING">>}
+         ],
+    L3 = [{<<"fax">>, [{<<"id">>,<<"201702-1b6cfec4e3ab0b7bb97ced78bf431f39">>}
+                      ,{<<"info">>, L1}
+                      ,{<<"notifications">>, Obj2}
+                      ]}],
+    Obj3 = kz_json:from_list([{<<"id">>,<<"201702-1b6cfec4e3ab0b7bb97ced78bf431f39">>}
+                             ,{<<"info">>, kz_json:from_list(L1)}
+                             ,{<<"notifications">>, Obj2}
+                             ]),
+    JObj1 = kz_json:from_list([{<<"fax">>, Obj3}]),
+    JObj2 = kz_json:from_list_recursive(L3),
+    Key1 = [<<"fax">>, <<"info">>, <<"fax_hangup_code">>],
+    Key2 = [<<"fax">>, <<"notifications">>, <<"email">>, <<"send_to">>],
+    [?_assertEqual(kz_json:get_integer_value(Key1, JObj1), kz_json:get_integer_value(Key1, JObj2))
+    ,?_assertEqual(kz_json:get_ne_binary_value(Key2, JObj1), kz_json:get_ne_binary_value(Key2, JObj2))
+    ,?_assertEqual(true, kz_json:are_equal(JObj1, JObj2))
     ].

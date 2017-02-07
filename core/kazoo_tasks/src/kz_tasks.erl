@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz INC
+%%% @copyright (C) 2016-2017, 2600Hz INC
 %%% @doc
 %%% Utilities for tasks validation & stuff.
 %%% @end
@@ -31,14 +31,14 @@
 -include("kazoo_tasks.hrl").
 
 -define(TASK_ID_SIZE, 15).
--define(A_TASK_ID, kz_util:rand_hex_binary(?TASK_ID_SIZE)).
--type task_id() :: <<_:(8*2*?TASK_ID_SIZE)>>.
+-define(A_TASK_ID, kz_binary:rand_hex(?TASK_ID_SIZE)).
+-type id() :: <<_:(8*2*?TASK_ID_SIZE)>>.
 
 -type task() :: #{worker_pid => api_pid()
                  ,worker_node => api_ne_binary()
                  ,account_id => ne_binary()
                  ,auth_account_id => ne_binary()
-                 ,id => task_id()
+                 ,id => id()
                  ,category => ne_binary()
                  ,action => ne_binary()
                  ,file_name => api_ne_binary()
@@ -52,11 +52,25 @@
 
 -type input() :: api_ne_binary() | kz_json:objects().
 
--type help_error() :: {'error', 'unknown_category_action'}.
+-type help_error() :: {error, unknown_category_action}.
 
--export_type([task_id/0
+-type return() :: ok | api_ne_binary() | kz_csv:row() | [kz_csv:row()].
+
+-type iterator() :: init | stop | any().
+
+-type extra_args() :: #{account_id => ne_binary()
+                       ,auth_account_id => ne_binary()
+                       }.
+
+-type args() :: map().
+
+-export_type([id/0
              ,input/0
              ,help_error/0
+             ,return/0
+             ,iterator/0
+             ,extra_args/0
+             ,args/0
              ]).
 
 -define(API_MANDATORY, <<"mandatory">>).
@@ -105,8 +119,8 @@ all(AccountId=?NE_BINARY) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec read(task_id()) -> {'ok', kz_json:object()} |
-                         {'error', 'not_found'}.
+-spec read(id()) -> {ok, kz_json:object()} |
+                    {error, not_found}.
 read(TaskId=?NE_BINARY) ->
     case task_by_id(TaskId) of
         [Task] -> {'ok', to_public_json(Task)};
@@ -139,9 +153,9 @@ new(?MATCH_ACCOUNT_RAW(AuthAccountId), ?MATCH_ACCOUNT_RAW(AccountId)
                     JObj = kz_json:from_list(props:filter_empty(maps:to_list(Errors))),
                     {'error', JObj};
                 _ ->
-                    InputName = case kz_util:is_empty(CSVName) of
+                    InputName = case kz_term:is_empty(CSVName) of
                                     'true' -> 'undefined';
-                                    'false' -> kz_util:to_binary(CSVName)
+                                    'false' -> kz_term:to_binary(CSVName)
                                 end,
                     lager:debug("creating ~s.~s task (~p)", [Category, Action, TotalRows]),
                     lager:debug("using auth ~s and account ~s", [AuthAccountId, AccountId]),
@@ -154,7 +168,7 @@ new(?MATCH_ACCOUNT_RAW(AuthAccountId), ?MATCH_ACCOUNT_RAW(AccountId)
                             ,category => Category
                             ,action => Action
                             ,file_name => InputName
-                            ,created => kz_util:current_tstamp()
+                            ,created => kz_time:current_tstamp()
                             ,started => 'undefined'
                             ,finished => 'undefined'
                             ,total_rows => TotalRows
@@ -188,7 +202,7 @@ help(Category, Action) ->
     of
         {'ok', JObj} ->
             Help = kz_json:get_value([<<"Help">>, Category, Action], JObj),
-            case kz_util:is_empty(Help) of
+            case kz_term:is_empty(Help) of
                 false -> Help;
                 true -> {error, unknown_category_action}
             end;
@@ -285,7 +299,7 @@ save_new_task(Task = #{id := _TaskId}) ->
             E
     end.
 
--spec task_by_id(task_id()) -> [task()].
+-spec task_by_id(id()) -> [task()].
 task_by_id(TaskId) ->
     case kz_datamgr:open_cache_doc(?KZ_TASKS_DB, TaskId) of
         {'ok', JObj} -> [from_json(JObj)];
@@ -339,7 +353,7 @@ to_json(#{id := TaskId
         ,{?PVT_ACTION, Action}
         ,{?PVT_FILENAME, InputName}
         ,{?PVT_CREATED, Created}
-        ,{?PVT_MODIFIED, kz_util:current_tstamp()}
+        ,{?PVT_MODIFIED, kz_time:current_tstamp()}
         ,{?PVT_STARTED_AT, Started}
         ,{?PVT_FINISHED_AT, Finished}
         ,{?PVT_TOTAL_ROWS, TotalRows}

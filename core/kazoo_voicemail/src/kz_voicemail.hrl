@@ -30,8 +30,8 @@
 -type next_account() :: {ne_binary(), gregorian_seconds(), gregorian_seconds()}.
 
 -define(MODB_MSG_ID(Year, Month, Id),
-        <<(kz_util:to_binary(Year))/binary
-          ,(kz_util:pad_month(Month))/binary
+        <<(kz_term:to_binary(Year))/binary
+          ,(kz_time:pad_month(Month))/binary
           ,"-"
           ,(Id)/binary
         >>).

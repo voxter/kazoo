@@ -216,7 +216,7 @@ maybe_allow_updates(Context, [{<<"phone_numbers">>, _}|_], _Verb) ->
         'true' -> Context
     catch
         'throw':{Error, Reason} ->
-            crossbar_util:response('error', kz_util:to_binary(Error), 500, Reason, Context)
+            crossbar_util:response('error', kz_term:to_binary(Error), 500, Reason, Context)
     end;
 maybe_allow_updates(Context, _Nouns, _Verb) -> Context.
 
@@ -435,15 +435,11 @@ delete(Context, Number) ->
 %%--------------------------------------------------------------------
 -spec summary(cb_context:context(), ne_binary()) -> cb_context:context().
 summary(Context, Number) ->
-    IncludePorts =
-        kz_util:is_true(cb_context:req_value(Context, <<"include_ports">>, 'false')),
-    Options = [{'auth_by', cb_context:auth_account_id(Context)}
-              ],
-    case knm_number:get(Number, Options) of
+    case knm_number:get(Number, [{auth_by, cb_context:auth_account_id(Context)}]) of
         {'ok', KNMNumber} ->
             crossbar_util:response(knm_number:to_public_json(KNMNumber), Context);
         {'error', _JObj} ->
-            maybe_find_port_number(Context, Number, IncludePorts)
+            maybe_find_port_number(Context, Number, should_include_ports(Context))
     end.
 
 
@@ -480,13 +476,10 @@ normalize_port_number(JObj, Number, Context) ->
     Setters = [{fun knm_phone_number:set_number/2, Number}
               ,{fun knm_phone_number:set_assigned_to/2, kz_json:get_value(<<"assigned_to">>, JObj)}
               ,{fun knm_phone_number:set_used_by/2, kz_json:get_value(<<"used_by">>, JObj)}
-              ,{fun knm_phone_number:set_state/2, kz_json:get_value(<<"state">>, JObj)}
               ,{fun knm_phone_number:set_auth_by/2, cb_context:auth_account_id(Context)}
+              ,{fun knm_phone_number:set_state/2, ?NUMBER_STATE_PORT_IN}
               ,{fun knm_phone_number:set_modified/2, kz_json:get_value(<<"updated">>, JObj)}
               ,{fun knm_phone_number:set_created/2, kz_json:get_value(<<"created">>, JObj)}
-               | [{fun knm_phone_number:set_feature/3, Feature, kz_json:new()}
-                  || Feature <- kz_json:get_value(<<"features">>, JObj)
-                 ]
               ],
     knm_phone_number:setters(knm_phone_number:new(), Setters).
 
@@ -533,12 +526,14 @@ fix_available(NumJObj) ->
     NewJObj = kz_json:set_value(<<"features_available">>, Allowed, JObj),
     kz_json:from_list([{Num, NewJObj}]).
 
+should_include_ports(Context) ->
+    kz_term:is_true(cb_context:req_value(Context, <<"include_ports">>)).
+
 %% @private
 -spec maybe_add_port_request_numbers(cb_context:context()) -> kz_json:object().
 -spec maybe_add_port_request_numbers(cb_context:context(), boolean()) -> kz_json:object().
 maybe_add_port_request_numbers(Context) ->
-    IncludePorts = cb_context:req_value(Context, <<"include_ports">>, 'false'),
-    maybe_add_port_request_numbers(Context, kz_util:is_true(IncludePorts)).
+    maybe_add_port_request_numbers(Context, should_include_ports(Context)).
 
 maybe_add_port_request_numbers(_Context, 'false') -> kz_json:new();
 maybe_add_port_request_numbers(Context, 'true') ->
@@ -619,7 +614,7 @@ maybe_find_numbers(Context) ->
 find_numbers(Context, AccountId, ResellerId) ->
     QS = cb_context:query_string(Context),
     Country = kz_json:get_ne_value(?COUNTRY, QS, ?KNM_DEFAULT_COUNTRY),
-    Prefix = kz_util:remove_white_spaces(kz_json:get_ne_value(?PREFIX, QS)),
+    Prefix = kz_binary:remove_white_spaces(kz_json:get_ne_value(?PREFIX, QS)),
     Offset = kz_json:get_integer_value(?OFFSET, QS, 0),
     Token = cb_context:auth_token(Context),
     HashKey = <<AccountId/binary, "-", Token/binary>>,
@@ -1014,7 +1009,7 @@ numbers_action(Context, ?HTTP_DELETE, Numbers) ->
 -spec pick_release_or_delete(cb_context:context(), knm_number_options:options()) -> 'release' | 'delete'.
 pick_release_or_delete(Context, Options) ->
     AuthBy = knm_number_options:auth_by(Options),
-    Pick = case kz_util:is_true(cb_context:req_param(Context, <<"hard">>, 'false'))
+    Pick = case kz_term:is_true(cb_context:req_param(Context, <<"hard">>, 'false'))
                andalso kz_util:is_system_admin(AuthBy)
            of
                'false' -> 'release';

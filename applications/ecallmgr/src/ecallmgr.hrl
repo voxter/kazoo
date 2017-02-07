@@ -54,7 +54,7 @@
                           ,from :: api_binary() | '$2' | '_'
                           ,node :: atom() | '$1' | '_'
                           ,expires = 300 :: pos_integer() | '$1' | '_'
-                          ,timestamp = kz_util:current_tstamp() :: pos_integer() | '$2' | '_'
+                          ,timestamp = kz_time:current_tstamp() :: pos_integer() | '$2' | '_'
                           }).
 
 -record(channel, {uuid :: api_binary() | '$1' | '$2' | '_'
@@ -115,7 +115,7 @@
                     ,dynamic = 'true' :: boolean() | '_'
                     ,exit_sound = 'true' :: boolean() | '_'
                     ,enter_sound = 'true' :: boolean() | '_'
-                    ,start_time = kz_util:current_tstamp() :: non_neg_integer() | '_'
+                    ,start_time = kz_time:current_tstamp() :: non_neg_integer() | '_'
                     ,switch_hostname :: api_binary() | '_'
                     ,switch_url :: api_binary() | '_'
                     ,switch_external_ip :: api_binary() | '_'
@@ -132,7 +132,7 @@
                      ,node :: atom() | '$2' | '_'
                      ,conference_uuid :: api_binary() | '$1'| '_'
                      ,conference_name :: api_binary() | '$1'| '_'
-                     ,join_time = kz_util:current_tstamp() :: non_neg_integer() | '_'
+                     ,join_time = kz_time:current_tstamp() :: non_neg_integer() | '_'
                      ,caller_id_name :: api_binary() | '_'
                      ,caller_id_number :: api_binary() | '_'
                      ,conference_channel_vars :: kz_proplist() | '_'
@@ -364,7 +364,7 @@
                                   ,'sofia::replaced'
                                   ,'sofia::intercepted'
                                   ]).
--define(IS_SOFIA_TRANSFER(N), lists:member(kz_util:to_atom(N, 'true'), ?FS_SOFIA_TRANSFER_EVENTS)).
+-define(IS_SOFIA_TRANSFER(N), lists:member(kz_term:to_atom(N, 'true'), ?FS_SOFIA_TRANSFER_EVENTS)).
 
 -define(FS_CUSTOM_EVENTS, [['kazoo::noop'
                            ,'kazoo::masquerade'
@@ -502,18 +502,18 @@
                          ,<<"Member-Ghost">>
                          ]).
 
--define(CONFERENCE_VAR_MAP, [{<<"variable_conference_moderator">>, {<<"Is-Moderator">>, fun kz_util:to_boolean/1}}
-                            ,{<<"Floor">>, fun kz_util:to_boolean/1}
-                            ,{<<"Video">>, fun kz_util:to_boolean/1}
-                            ,{<<"See">>, fun kz_util:to_boolean/1}
-                            ,{<<"Speak">>, fun kz_util:to_boolean/1}
-                            ,{<<"Hear">>, fun kz_util:to_boolean/1}
-                            ,{<<"Talking">>, fun kz_util:to_boolean/1}
-                            ,{<<"Mute-Detect">>, fun kz_util:to_boolean/1}
-                            ,{<<"Energy-Level">>, fun kz_util:to_integer/1}
-                            ,{<<"Current-Energy">>, fun kz_util:to_integer/1}
-                            ,{<<"Member-ID">>, fun kz_util:to_integer/1}
-                            ,{<<"Member-Ghost">>, fun kz_util:to_boolean/1}
+-define(CONFERENCE_VAR_MAP, [{<<"variable_conference_moderator">>, {<<"Is-Moderator">>, fun kz_term:to_boolean/1}}
+                            ,{<<"Floor">>, fun kz_term:to_boolean/1}
+                            ,{<<"Video">>, fun kz_term:to_boolean/1}
+                            ,{<<"See">>, fun kz_term:to_boolean/1}
+                            ,{<<"Speak">>, fun kz_term:to_boolean/1}
+                            ,{<<"Hear">>, fun kz_term:to_boolean/1}
+                            ,{<<"Talking">>, fun kz_term:to_boolean/1}
+                            ,{<<"Mute-Detect">>, fun kz_term:to_boolean/1}
+                            ,{<<"Energy-Level">>, fun kz_term:to_integer/1}
+                            ,{<<"Current-Energy">>, fun kz_term:to_integer/1}
+                            ,{<<"Member-ID">>, fun kz_term:to_integer/1}
+                            ,{<<"Member-Ghost">>, fun kz_term:to_boolean/1}
                             ]).
 
 -define(FS_EVENT_FILTERS,

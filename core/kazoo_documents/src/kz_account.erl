@@ -44,6 +44,7 @@
         ,topup_threshold/1, topup_threshold/2, set_topup_threshold/2
         ,sent_initial_registration/1, set_initial_registration_sent/2
         ,sent_initial_call/1, set_initial_call_sent/2
+        ,home_zone/1, home_zone/2, set_home_zone/2
         ]).
 
 -include("kz_documents.hrl").
@@ -54,6 +55,7 @@
 -define(LANGUAGE, <<"language">>).
 -define(TIMEZONE, <<"timezone">>).
 -define(THRESHOLD, <<"threshold">>).
+-define(HOME_ZONE, [<<"zones">>, <<"home">>]).
 -define(TREE, <<"pvt_tree">>).
 -define(IS_ENABLED, <<"pvt_enabled">>).
 -define(API_KEY, <<"pvt_api_key">>).
@@ -267,6 +269,30 @@ parent_timezone(_AccountId, ParentId) -> timezone(ParentId).
 set_timezone(JObj, Timezone) ->
     kz_json:set_value(?TIMEZONE, Timezone, JObj).
 
+-spec home_zone(ne_binary() | doc()) -> api_binary().
+home_zone(AccountId) when is_binary(AccountId) ->
+    case fetch(AccountId) of
+        {'error', _R} -> 'undefined';
+        {'ok', JObj}  -> home_zone(JObj, 'undefined')
+    end;
+
+home_zone(JObj) ->
+    home_zone(JObj, 'undefined').
+
+-spec home_zone(ne_binary() | doc(), api_binary()) -> api_binary().
+home_zone(AccountId, Default) when is_binary(AccountId) ->
+    case fetch(AccountId) of
+        {'error', _R} -> Default;
+        {'ok', JObj}  -> home_zone(JObj, Default)
+    end;
+
+home_zone(JObj, Default) ->
+    kz_json:get_value(?HOME_ZONE, JObj, Default).
+
+-spec set_home_zone(doc(), api_binary()) -> doc().
+set_home_zone(JObj, Zone) ->
+    kz_json:set_value(?HOME_ZONE, Zone, JObj).
+
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
@@ -343,7 +369,7 @@ low_balance_tstamp(JObj) ->
 
 -spec set_low_balance_tstamp(doc()) -> doc().
 set_low_balance_tstamp(JObj) ->
-    TStamp = kz_util:current_tstamp(),
+    TStamp = kz_time:current_tstamp(),
     set_low_balance_tstamp(JObj, TStamp).
 
 -spec set_low_balance_tstamp(doc(), number()) -> doc().
@@ -545,7 +571,7 @@ allow_number_additions(JObj) ->
 
 -spec set_allow_number_additions(doc(), boolean()) -> doc().
 set_allow_number_additions(JObj, IsAllowed) ->
-    kz_json:set_value(?ALLOW_NUMBER_ADDITIONS, kz_util:is_true(IsAllowed), JObj).
+    kz_json:set_value(?ALLOW_NUMBER_ADDITIONS, kz_term:is_true(IsAllowed), JObj).
 
 -spec trial_expiration(doc()) -> api_integer().
 -spec trial_expiration(doc(), Default) -> integer() | Default.
@@ -573,11 +599,11 @@ set_trial_expiration(JObj, Expiration) ->
 -spec trial_time_left(doc()) -> integer().
 -spec trial_time_left(doc(), gregorian_seconds()) -> integer().
 trial_time_left(JObj) ->
-    trial_time_left(JObj, kz_util:current_tstamp()).
+    trial_time_left(JObj, kz_time:current_tstamp()).
 trial_time_left(JObj, Now) ->
     case trial_expiration(JObj) of
         'undefined' -> 0;
-        Expiration -> kz_util:elapsed_s(Now, Expiration)
+        Expiration -> kz_time:elapsed_s(Now, Expiration)
     end.
 
 %%--------------------------------------------------------------------
@@ -588,7 +614,7 @@ trial_time_left(JObj, Now) ->
 -spec trial_has_expired(doc()) -> boolean().
 -spec trial_has_expired(doc(), gregorian_seconds()) -> boolean().
 trial_has_expired(JObj) ->
-    trial_has_expired(JObj, kz_util:current_tstamp()).
+    trial_has_expired(JObj, kz_time:current_tstamp()).
 trial_has_expired(JObj, Now) ->
     trial_expiration(JObj) =/= 'undefined'
         andalso trial_time_left(JObj, Now) =< 0.

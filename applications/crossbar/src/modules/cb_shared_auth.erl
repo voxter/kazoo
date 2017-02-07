@@ -208,9 +208,9 @@ create_local_token(Context) ->
     JObj = cb_context:doc(Context),
     Token = kz_json:from_list([{<<"account_id">>, kz_json:get_value([<<"account">>, <<"_id">>], JObj, <<>>)}
                               ,{<<"owner_id">>, kz_json:get_value([<<"user">>, <<"_id">>], JObj, <<>>)}
-                              ,{<<"created">>, kz_util:current_tstamp()}
-                              ,{<<"modified">>, kz_util:current_tstamp()}
-                              ,{<<"method">>, kz_util:to_binary(?MODULE)}
+                              ,{<<"created">>, kz_time:current_tstamp()}
+                              ,{<<"modified">>, kz_time:current_tstamp()}
+                              ,{<<"method">>, kz_term:to_binary(?MODULE)}
                               ,{<<"shared_token">>, cb_context:auth_token(Context)}
                               ]),
     case kz_datamgr:save_doc(?KZ_TOKEN_DB, Token) of
@@ -241,7 +241,7 @@ authenticate_shared_token('undefined', _) ->
 authenticate_shared_token(SharedToken, XBarUrl) ->
     Url = lists:flatten(XBarUrl, "/shared_auth"),
     Headers = [{"Accept", "application/json"}
-              ,{"X-Auth-Token", kz_util:to_list(SharedToken)}
+              ,{"X-Auth-Token", kz_term:to_list(SharedToken)}
               ],
     lager:debug("validating shared token ~s via ~s", [SharedToken, Url]),
     case kz_http:get(Url, Headers) of

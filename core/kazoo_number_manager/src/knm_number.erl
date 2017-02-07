@@ -144,10 +144,15 @@ create(Num, Options) ->
 -spec state_for_create(ne_binary(), knm_number_options:options()) -> ne_binary().
 -ifdef(TEST).
 state_for_create(AccountId, Options) ->
-    case {knm_number_options:state(Options), AccountId} of
-        {?NUMBER_STATE_PORT_IN=PortIn, _} -> PortIn;
-        {_, ?MASTER_ACCOUNT_ID} -> ?NUMBER_STATE_AVAILABLE;
-        {_, ?RESELLER_ACCOUNT_ID} -> ?NUMBER_STATE_RESERVED;
+    case {knm_number_options:state(Options)
+         ,knm_number_options:module_name(Options)
+         ,AccountId
+         }
+    of
+        {?NUMBER_STATE_PORT_IN=PortIn, _, _} -> PortIn;
+        {_, ?CARRIER_MDN, _} -> ?NUMBER_STATE_IN_SERVICE;
+        {_, _, ?MASTER_ACCOUNT_ID} -> ?NUMBER_STATE_AVAILABLE;
+        {_, _, ?RESELLER_ACCOUNT_ID} -> ?NUMBER_STATE_RESERVED;
         _ -> ?NUMBER_STATE_IN_SERVICE
     end.
 -else.
@@ -155,12 +160,16 @@ state_for_create(AccountId, Options) ->
     case knm_number_options:state(Options) of
         ?NUMBER_STATE_PORT_IN=PortIn -> PortIn;
         _ ->
-            case kz_services:is_reseller(AccountId)
-                andalso kapps_util:get_master_account_id()
-            of
-                'false' -> ?NUMBER_STATE_IN_SERVICE;
-                {'ok', AccountId} -> ?NUMBER_STATE_AVAILABLE;
-                {'ok', _} -> ?NUMBER_STATE_RESERVED
+            case ?CARRIER_MDN =:= knm_number_options:module_name(Options) of
+                true -> ?NUMBER_STATE_IN_SERVICE;
+                _ ->
+                    case kz_services:is_reseller(AccountId)
+                        andalso kapps_util:get_master_account_id()
+                    of
+                        'false' -> ?NUMBER_STATE_IN_SERVICE;
+                        {'ok', AccountId} -> ?NUMBER_STATE_AVAILABLE;
+                        {'ok', _} -> ?NUMBER_STATE_RESERVED
+                    end
             end
     end.
 -endif.
@@ -384,7 +393,7 @@ fetch_account_from_number(NormalizedNum) ->
 -spec check_number(knm_phone_number:knm_phone_number()) -> lookup_account_return().
 check_number(PhoneNumber) ->
     AssignedTo = knm_phone_number:assigned_to(PhoneNumber),
-    case kz_util:is_empty(AssignedTo) of
+    case kz_term:is_empty(AssignedTo) of
         'true' -> {'error', 'unassigned'};
         'false' ->
             States = [?NUMBER_STATE_PORT_IN
@@ -449,9 +458,9 @@ feature_inbound_cname(PhoneNumber) ->
         'undefined' -> 'false';
         _ ->
             Mod = knm_phone_number:module_name(PhoneNumber),
-            Module = kz_util:to_atom(Mod, 'true'),
+            Module = kz_term:to_atom(Mod, 'true'),
             try Module:should_lookup_cnam() of
-                Boolean -> kz_util:is_true(Boolean)
+                Boolean -> kz_term:is_true(Boolean)
             catch
                 _E:_R -> 'true'
             end
@@ -488,7 +497,7 @@ is_force_outbound(PhoneNumber) ->
     Module = knm_phone_number:module_name(PhoneNumber),
     State = knm_phone_number:state(PhoneNumber),
     ForceOutbound = force_outbound_feature(PhoneNumber),
-    is_force_outbound(State, Module, kz_util:is_true(ForceOutbound)).
+    is_force_outbound(State, Module, kz_term:is_true(ForceOutbound)).
 
 is_force_outbound(?NUMBER_STATE_PORT_IN, Module, _ForceOutbound) ->
     kapps_config:get_is_true(?KNM_CONFIG_CAT, <<"force_port_in_outbound">>, 'true')
@@ -505,7 +514,7 @@ is_force_outbound(_State, _Module, ForceOutbound) ->
 force_outbound_feature(PhoneNumber) ->
     case knm_phone_number:feature(PhoneNumber, ?FEATURE_FORCE_OUTBOUND) of
         'undefined' -> default_force_outbound();
-        FO -> kz_util:is_true(FO)
+        FO -> kz_term:is_true(FO)
     end.
 
 %%--------------------------------------------------------------------

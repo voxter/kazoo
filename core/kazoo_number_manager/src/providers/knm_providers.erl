@@ -144,9 +144,17 @@ list_available_features(Parameters) ->
         not lists:member(Feature, Denied)
     ].
 
+%% @private
+-spec is_local(knm_phone_number:knm_phone_number()) -> boolean().
+is_local(PN) ->
+    ModuleName = knm_phone_number:module_name(PN),
+    ?CARRIER_LOCAL =:= ModuleName
+        orelse ?CARRIER_MDN =:= ModuleName
+        orelse lists:member(?FEATURE_LOCAL, knm_phone_number:features_list(PN)).
+
 -spec feature_parameters(knm_phone_number:knm_phone_number()) -> feature_parameters().
 feature_parameters(PhoneNumber) ->
-    feature_parameters(?CARRIER_LOCAL =:= knm_phone_number:module_name(PhoneNumber)
+    feature_parameters(is_local(PhoneNumber)
                       ,knm_phone_number:assigned_to(PhoneNumber)
                       ,knm_phone_number:used_by(PhoneNumber)
                       ,knm_phone_number:features_allowed(PhoneNumber)
@@ -273,6 +281,10 @@ provider_modules(Features, MaybeAccountId) ->
 -spec provider_module(ne_binary(), api_ne_binary()) -> ne_binary().
 provider_module(?FEATURE_CNAM, ?MATCH_ACCOUNT_RAW(AccountId)) ->
     cnam_provider(AccountId);
+provider_module(?FEATURE_CNAM_INBOUND, AccountId) ->
+    provider_module(?FEATURE_CNAM, AccountId);
+provider_module(?FEATURE_CNAM_OUTBOUND, AccountId) ->
+    provider_module(?FEATURE_CNAM, AccountId);
 provider_module(?FEATURE_E911, ?MATCH_ACCOUNT_RAW(AccountId)) ->
     e911_provider(AccountId);
 provider_module(?FEATURE_PREPEND, _) ->
