@@ -47,6 +47,7 @@
                                                                   ,{<<"pretty_print">>, <<"SS(###) ### - ####">>}
                                                                  ])}
                               ,{<<"emergency">>, wh_json:from_list([{<<"regex">>, <<"^(911)$">>}
+                                                                    ,{<<"emergency">>, 'true'}
                                                                     ,{<<"friendly_name">>, <<"Emergency Dispatcher">>}
                                                                    ])}
                               ,{<<"caribbean">>, wh_json:from_list([{<<"regex">>, <<"^\\+?1((?:684|264|268|242|246|441|284|345|767|809|829|849|473|671|876|664|670|787|939|869|758|784|721|868|649|340)\\d{7})$">>}
@@ -422,7 +423,7 @@ to_account_e164(Number, <<_/binary>> = AccountId) ->
                                    ne_binary().
 maybe_convert_to_e164([], _, Number) -> Number;
 maybe_convert_to_e164([Regex|Regexs], Converters, Number) ->
-    case re:run(Number, Regex, [{'capture', 'all', 'binary'}]) of
+    try re:run(Number, Regex, [{'capture', 'all', 'binary'}]) of
         'nomatch' ->
             maybe_convert_to_e164(Regexs, Converters, Number);
         {'match', Captures} ->
@@ -430,6 +431,11 @@ maybe_convert_to_e164([Regex|Regexs], Converters, Number) ->
             Prefix = wh_json:get_binary_value([Regex, <<"prefix">>], Converters, <<>>),
             Suffix = wh_json:get_binary_value([Regex, <<"suffix">>], Converters, <<>>),
             <<Prefix/binary, Root/binary, Suffix/binary>>
+    catch
+        _E:_R ->
+            ST = erlang:get_stacktrace(),
+            lager:debug("failed to convert number ~p to e164: ~p:~p", [Number, _E, _R]),
+            wh_util:log_stacktrace(ST)
     end.
 
 %% end up with 8001234567 from 1NPAN and E.164
