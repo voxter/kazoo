@@ -330,7 +330,7 @@ handle_cast('stop_call', #state{is_recording='true'
     save_recording(Call, MediaName, Format, PreserveMetadata, ExtraMetadata, Store),
     case Store of
         'false' -> {'stop', 'normal', State};
-        _ -> 
+        _ ->
             lager:debug("sent store command"),
             {'noreply', State#state{store_attempted='true'
                                     ,is_recording='false'
@@ -592,7 +592,7 @@ ext_to_mime(<<"wav">>) -> <<"audio/x-wav">>;
 ext_to_mime(_) -> <<"audio/mp3">>.
 
 -spec get_recording_doc_id(ne_binary()) -> ne_binary().
-get_recording_doc_id(CallId) -> <<"call_recording_", (cow_qs:urlencode(CallId))/binary>>.
+get_recording_doc_id(CallId) -> <<"call_recording_", CallId/binary>>.
 
 -spec get_media_name(ne_binary(), api_binary()) -> ne_binary().
 get_media_name(CallId, Ext) ->

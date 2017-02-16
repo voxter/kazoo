@@ -22,6 +22,8 @@
          ,post/2, post/3
          ,delete/2, delete/3
          ,patch/2
+
+         ,replicate_account_definition/1
         ]).
 
 -export([notify_new_account/1]).
@@ -1604,6 +1606,7 @@ delete_remove_sip_aggregates(Context) ->
 delete_remove_db(Context) ->
     Removed = case couch_mgr:open_doc(cb_context:account_db(Context), cb_context:account_id(Context)) of
                   {'ok', _} ->
+                      _ = provisioner_util:maybe_delete_account(Context),
                       couch_mgr:db_delete(cb_context:account_db(Context)),
                       delete_mod_dbs(Context);
                   {'error', 'not_found'} -> 'true';
@@ -1643,7 +1646,6 @@ delete_mod_dbs(AccountId, Year, Month) ->
 delete_remove_from_accounts(Context) ->
     case couch_mgr:open_doc(?WH_ACCOUNTS_DB, cb_context:account_id(Context)) of
         {'ok', JObj} ->
-            _ = provisioner_util:maybe_delete_account(Context),
             crossbar_doc:delete(
               cb_context:setters(Context
                                  ,[{fun cb_context:set_account_db/2, ?WH_ACCOUNTS_DB}
