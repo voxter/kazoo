@@ -96,7 +96,7 @@
 
           ,notifications :: api_object()
 
-          ,callback_number :: api_binary()
+          ,callback_details :: {ne_binary(), ne_binary()}
          }).
 -type queue_fsm_state() :: #state{}.
 
@@ -801,7 +801,7 @@ clear_member_call(#state{connection_timer_ref=ConnRef
                 ,agent_ring_timer_ref='undefined'
                 ,member_call_start='undefined'
                 ,member_call_winner='undefined'
-                ,callback_number='undefined'
+                ,callback_details='undefined'
                }.
 
 update_properties(QueueJObj, State) ->
@@ -847,6 +847,9 @@ elapsed(Ref) when is_reference(Ref) ->
     end;
 elapsed(Time) -> wh_util:elapsed_s(Time).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% If some agents are busy, the manager will tell us to delay our
 %% connect reqs
 %%
@@ -899,7 +902,7 @@ maybe_delay_connect_req(Call, CallJObj, Delivery, #state{queue_proc=QueueSrv
 maybe_connect_re_req(MgrSrv, ListenerSrv, #state{account_id=AccountId
                                                  ,queue_id=QueueId
                                                  ,member_call=Call
-                                                 ,callback_number='undefined'
+                                                 ,callback_details='undefined'
                                                 }=State) ->
     case acdc_queue_manager:are_agents_available(MgrSrv) of
         'true' ->
@@ -956,8 +959,8 @@ handle_agent_responses(#state{collect_ref=Ref
             {'ready', clear_member_call(State)};
         'false' ->
             lager:debug("done waiting for agents to respond, picking a winner"),
-            CallbackNumber = acdc_queue_manager:callback_number(MgrSrv, whapps_call:call_id(Call)),
-            maybe_pick_winner(State#state{callback_number=CallbackNumber})
+            CallbackDetails = acdc_queue_manager:callback_details(MgrSrv, whapps_call:call_id(Call)),
+            maybe_pick_winner(State#state{callback_details=CallbackDetails})
     end.
 
 -spec maybe_pick_winner(queue_fsm_state()) -> {atom(), queue_fsm_state()}.
@@ -972,7 +975,6 @@ maybe_pick_winner(#state{connect_resps=CRs
                          ,recording_url=RecordUrl
                          ,preserve_metadata=PreserveMetadata
                          ,notifications=Notifications
-                         ,callback_number=CallbackNumber
                         }=State) ->
     case acdc_queue_manager:pick_winner(Mgr, CRs) of
         {[Winner|_], Rest} ->
@@ -984,7 +986,7 @@ maybe_pick_winner(#state{connect_resps=CRs
                          ,{<<"Recording-URL">>, RecordUrl}
                          ,{<<"Preserve-Metadata">>, PreserveMetadata}
                          ,{<<"Notifications">>, Notifications}
-                         ,{<<"Callback-Number">>, CallbackNumber}
+                         ,{<<"Callback-Details">>, callback_details(State)}
                         ],
 
             acdc_queue_listener:member_connect_win(Srv, update_agent(Winner, Winner), props:filter_undefined(QueueOpts)),
@@ -1011,3 +1013,10 @@ have_agents_responded(Resps, Agents) ->
 -spec filter_agents(wh_json:object(), ne_binaries()) -> ne_binaries().
 filter_agents(Resp, AgentsAcc) ->
     lists:delete(wh_json:get_value(<<"Agent-ID">>, Resp), AgentsAcc).
+
+-spec callback_details(queue_fsm_state()) -> api_object().
+callback_details(#state{callback_details='undefined'}) -> 'undefined';
+callback_details(#state{callback_details={Number, CIDPrepend}}) ->
+    wh_json:from_list([{<<"Callback-Number">>, Number}
+                       ,{<<"Prepend-CID">>, CIDPrepend}
+                      ]).
