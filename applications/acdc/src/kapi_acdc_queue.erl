@@ -288,7 +288,7 @@ member_connect_resp_v(JObj) ->
                                              ,<<"Wrapup-Timeout">>, <<"CDR-Url">>
                                              ,<<"Process-ID">>
                                              ,<<"Record-Caller">>, <<"Recording-URL">>, <<"Preserve-Metadata">>
-                                             ,<<"Notifications">>, <<"Callback-Number">>
+                                             ,<<"Notifications">>, <<"Callback-Details">>
                                              ]).
 -define(MEMBER_CONNECT_WIN_VALUES, [{<<"Event-Category">>, <<"member">>}
                                    ,{<<"Event-Name">>, <<"connect_win">>}

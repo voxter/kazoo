@@ -13,12 +13,11 @@
 -export([call_waiting/1, call_waiting_v/1
         ,call_missed/1, call_missed_v/1
         ,call_abandoned/1, call_abandoned_v/1
+        ,call_marked_callback/1, call_marked_callback_v/1
         ,call_handled/1, call_handled_v/1
         ,call_processed/1, call_processed_v/1
 
         ,call_exited_position/1, call_exited_position_v/1
-
-        ,call_id_change/1, call_id_change_v/1
 
         ,call_flush/1, call_flush_v/1
 
@@ -62,12 +61,11 @@
 -export([publish_call_waiting/1, publish_call_waiting/2
         ,publish_call_missed/1, publish_call_missed/2
         ,publish_call_abandoned/1, publish_call_abandoned/2
+        ,publish_call_marked_callback/1, publish_call_marked_callback/2
         ,publish_call_handled/1, publish_call_handled/2
         ,publish_call_processed/1, publish_call_processed/2
 
         ,publish_call_exited_position/1, publish_call_exited_position/2
-
-        ,publish_call_id_change/1, publish_call_id_change/2
 
         ,publish_call_flush/1, publish_call_flush/2
 
@@ -124,6 +122,10 @@
 -define(ABANDON_VALUES, ?CALL_REQ_VALUES(<<"abandoned">>)).
 -define(ABANDON_TYPES, []).
 
+-define(MARKED_CALLBACK_HEADERS, [<<"Caller-ID-Name">>]).
+-define(MARKED_CALLBACK_VALUES, ?CALL_REQ_VALUES(<<"marked_callback">>)).
+-define(MARKED_CALLBACK_TYPES, []).
+
 -define(HANDLED_HEADERS, [<<"Agent-ID">>, <<"Handled-Timestamp">>]).
 -define(HANDLED_VALUES, ?CALL_REQ_VALUES(<<"handled">>)).
 -define(HANDLED_TYPES, []).
@@ -135,10 +137,6 @@
 -define(EXITED_HEADERS, [<<"Exited-Position">>]).
 -define(EXITED_VALUES, ?CALL_REQ_VALUES(<<"exited-position">>)).
 -define(EXITED_TYPES, []).
-
--define(ID_CHANGE_HEADERS, [<<"Old-Call-ID">>]).
--define(ID_CHANGE_VALUES, ?CALL_REQ_VALUES(<<"id-change">>)).
--define(ID_CHANGE_TYPES, []).
 
 -define(FLUSH_HEADERS, [<<"Call-ID">>]).
 -define(FLUSH_VALUES, ?CALL_REQ_VALUES(<<"flush">>)).
@@ -195,6 +193,23 @@ call_abandoned_v(Prop) when is_list(Prop) ->
 call_abandoned_v(JObj) ->
     call_abandoned_v(kz_json:to_proplist(JObj)).
 
+-spec call_marked_callback(api_terms()) ->
+                                  {'ok', iolist()} |
+                                  {'error', string()}.
+call_marked_callback(Props) when is_list(Props) ->
+    case call_marked_callback_v(Props) of
+        'true' -> kz_api:build_message(Props, ?CALL_REQ_HEADERS, ?MARKED_CALLBACK_HEADERS);
+        'false' -> {'error', "Proplist failed validation for call_marked_callback"}
+    end;
+call_marked_callback(JObj) ->
+    call_marked_callback(kz_json:to_proplist(JObj)).
+
+-spec call_marked_callback_v(api_terms()) -> boolean().
+call_marked_callback_v(Prop) when is_list(Prop) ->
+    kz_api:validate(Prop, ?CALL_REQ_HEADERS, ?MARKED_CALLBACK_VALUES, ?MARKED_CALLBACK_TYPES);
+call_marked_callback_v(JObj) ->
+    call_marked_callback_v(kz_json:to_proplist(JObj)).
+
 -spec call_handled(api_terms()) ->
                           {'ok', iolist()} |
                           {'error', string()}.
@@ -245,23 +260,6 @@ call_exited_position_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?CALL_REQ_HEADERS, ?EXITED_VALUES, ?EXITED_TYPES);
 call_exited_position_v(JObj) ->
     call_exited_position_v(kz_json:to_proplist(JObj)).
-
--spec call_id_change(api_terms()) ->
-                            {'ok', iolist()} |
-                            {'error', string()}.
-call_id_change(Props) when is_list(Props) ->
-    case call_id_change_v(Props) of
-        'true' -> kz_api:build_message(Props, ?CALL_REQ_HEADERS, ?ID_CHANGE_HEADERS);
-        'false' -> {'error', "Proplist failed validation for call_id_change"}
-    end;
-call_id_change(JObj) ->
-    call_id_change(kz_json:to_proplist(JObj)).
-
--spec call_id_change_v(api_terms()) -> boolean().
-call_id_change_v(Prop) when is_list(Prop) ->
-    kz_api:validate(Prop, ?CALL_REQ_HEADERS, ?ID_CHANGE_VALUES, ?ID_CHANGE_TYPES);
-call_id_change_v(JObj) ->
-    call_id_change_v(kz_json:to_proplist(JObj)).
 
 -spec call_flush(api_terms()) ->
                         {'ok', iolist()} |
@@ -849,8 +847,7 @@ bind_q(Q, AcctId, QID, AID, 'undefined') ->
     amqp_util:bind_q_to_kapps(Q, call_stat_routing_key(AcctId, QID)),
     amqp_util:bind_q_to_kapps(Q, status_stat_routing_key(AcctId, AID)),
     amqp_util:bind_q_to_kapps(Q, query_call_stat_routing_key(AcctId, QID)),
-    amqp_util:bind_q_to_kapps(Q, query_status_stat_routing_key(AcctId, AID)),
-    amqp_util:bind_q_to_kapps(Q, call_id_change_routing_key(AcctId, QID));
+    amqp_util:bind_q_to_kapps(Q, query_status_stat_routing_key(AcctId, AID));
 bind_q(Q, AcctId, QID, AID, ['call_stat'|L]) ->
     amqp_util:bind_q_to_kapps(Q, call_stat_routing_key(AcctId, QID)),
     bind_q(Q, AcctId, QID, AID, L);
@@ -862,9 +859,6 @@ bind_q(Q, AcctId, QID, AID, ['query_call_stat'|L]) ->
     bind_q(Q, AcctId, QID, AID, L);
 bind_q(Q, AcctId, QID, AID, ['query_status_stat'|L]) ->
     amqp_util:bind_q_to_kapps(Q, query_status_stat_routing_key(AcctId, AID)),
-    bind_q(Q, AcctId, QID, AID, L);
-bind_q(Q, AcctId, QID, AID, ['id_change'|L]) ->
-    amqp_util:bind_q_to_kapps(Q, call_id_change_routing_key(AcctId, QID)),
     bind_q(Q, AcctId, QID, AID, L);
 bind_q(Q, AcctId, QID, AID, [_|L]) ->
     bind_q(Q, AcctId, QID, AID, L);
@@ -894,9 +888,6 @@ unbind_q(Q, AcctId, QID, AID, ['query_call_stat'|L]) ->
     unbind_q(Q, AcctId, QID, AID, L);
 unbind_q(Q, AcctId, QID, AID, ['query_status_stat'|L]) ->
     amqp_util:unbind_q_from_kapps(Q, query_status_stat_routing_key(AcctId, AID)),
-    unbind_q(Q, AcctId, QID, AID, L);
-unbind_q(Q, AcctId, QID, AID, ['id_change'|L]) ->
-    amqp_util:unbind_q_from_kapps(Q, call_id_change_routing_key(AcctId, QID)),
     unbind_q(Q, AcctId, QID, AID, L);
 unbind_q(Q, AcctId, QID, AID, [_|L]) ->
     unbind_q(Q, AcctId, QID, AID, L);
@@ -935,6 +926,14 @@ publish_call_abandoned(API, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(API, ?ABANDON_VALUES, fun call_abandoned/1),
     amqp_util:kapps_publish(call_stat_routing_key(API), Payload, ContentType).
 
+-spec publish_call_marked_callback(api_terms()) -> 'ok'.
+-spec publish_call_marked_callback(api_terms(), binary()) -> 'ok'.
+publish_call_marked_callback(JObj) ->
+    publish_call_marked_callback(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_call_marked_callback(API, ContentType) ->
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?MARKED_CALLBACK_VALUES, fun call_marked_callback/1),
+    amqp_util:kapps_publish(call_stat_routing_key(API), Payload, ContentType).
+
 -spec publish_call_handled(api_terms()) -> 'ok'.
 -spec publish_call_handled(api_terms(), binary()) -> 'ok'.
 publish_call_handled(JObj) ->
@@ -958,14 +957,6 @@ publish_call_exited_position(JObj) ->
 publish_call_exited_position(API, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(API, ?EXITED_VALUES, fun call_exited_position/1),
     amqp_util:kapps_publish(call_stat_routing_key(API), Payload, ContentType).
-
--spec publish_call_id_change(api_terms()) -> 'ok'.
--spec publish_call_id_change(api_terms(), binary()) -> 'ok'.
-publish_call_id_change(JObj) ->
-    publish_call_id_change(JObj, ?DEFAULT_CONTENT_TYPE).
-publish_call_id_change(API, ContentType) ->
-    {'ok', Payload} = kz_api:prepare_api_payload(API, ?ID_CHANGE_VALUES, fun call_id_change/1),
-    amqp_util:kapps_publish(call_id_change_routing_key(API), Payload, ContentType).
 
 -spec publish_call_flush(api_terms()) -> 'ok'.
 -spec publish_call_flush(api_terms(), binary()) -> 'ok'.
@@ -1226,18 +1217,6 @@ query_status_stat_routing_key(AcctId, 'undefined') ->
     <<"acdc_stats.query_status.", AcctId/binary, ".all">>;
 query_status_stat_routing_key(AcctId, QID) ->
     <<"acdc_stats.query_status.", AcctId/binary, ".", QID/binary>>.
-
-call_id_change_routing_key(Prop) when is_list(Prop) ->
-    call_id_change_routing_key(props:get_value(<<"Account-ID">>, Prop)
-                              ,props:get_value(<<"Queue-ID">>, Prop)
-                              );
-call_id_change_routing_key(JObj) ->
-    call_id_change_routing_key(kz_json:get_value(<<"Account-ID">>, JObj)
-                              ,kz_json:get_value(<<"Queue-ID">>, JObj)
-                              ).
-
-call_id_change_routing_key(AcctId, QID) ->
-    <<"acdc_stats.id_change.", AcctId/binary, ".", QID/binary>>.
 
 
 status_value(API) when is_list(API) -> props:get_value(<<"Status">>, API);

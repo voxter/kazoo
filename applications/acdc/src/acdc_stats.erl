@@ -15,11 +15,10 @@
 -export([call_waiting/6
         ,call_waiting/7
         ,call_abandoned/4
+        ,call_marked_callback/4
         ,call_handled/4
         ,call_missed/5
         ,call_processed/5
-
-        ,call_id_change/4
 
         ,find_call/1
         ,call_stat_to_json/1
@@ -132,6 +131,24 @@ call_abandoned(AccountId, QueueId, CallId, Reason) ->
              ]),
     kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_abandoned/1).
 
+-spec call_marked_callback(ne_binary()
+                          ,ne_binary()
+                          ,ne_binary()
+                          ,ne_binary()
+                          ) -> 'ok' | {'error', any()}.
+call_marked_callback(AccountId, QueueId, CallId, CallerIdName) ->
+    Prop = props:filter_undefined(
+             [{<<"Account-ID">>, AccountId}
+             ,{<<"Queue-ID">>, QueueId}
+             ,{<<"Call-ID">>, CallId}
+             ,{<<"Caller-ID-Name">>, CallerIdName}
+              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+             ]),
+    kapps_util:amqp_pool_send(
+      Prop
+                             ,fun kapi_acdc_stats:publish_call_marked_callback/1
+     ).
+
 -spec call_handled(ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> 'ok' | {'error', any()}.
 call_handled(AccountId, QueueId, CallId, AgentId) ->
     Prop = props:filter_undefined(
@@ -169,17 +186,6 @@ call_processed(AccountId, QueueId, AgentId, CallId, Initiator) ->
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_processed/1).
-
--spec call_id_change(ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> 'ok' | {'error', any()}.
-call_id_change(AccountId, QueueId, OldCallId, NewCallId) ->
-    Prop = props:filter_undefined(
-             [{<<"Account-ID">>, AccountId}
-             ,{<<"Queue-ID">>, QueueId}
-             ,{<<"Old-Call-ID">>, OldCallId}
-             ,{<<"Call-ID">>, NewCallId}
-              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-             ]),
-    kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_id_change/1).
 
 -spec agent_ready(ne_binary(), ne_binary()) -> 'ok' | {'error', any()}.
 agent_ready(AcctId, AgentId) ->
@@ -373,6 +379,7 @@ agent_call_table_opts() ->
                      ,[{<<"acdc_call_stat">>, <<"waiting">>}
                       ,{<<"acdc_call_stat">>, <<"missed">>}
                       ,{<<"acdc_call_stat">>, <<"abandoned">>}
+                      ,{<<"acdc_call_stat">>, <<"marked_callback">>}
                       ,{<<"acdc_call_stat">>, <<"handled">>}
                       ,{<<"acdc_call_stat">>, <<"processed">>}
                       ,{<<"acdc_call_stat">>, <<"exited-position">>}
@@ -416,8 +423,9 @@ start_link() ->
                            ,[{'bindings', ?BINDINGS}
                             ,{'responders', ?RESPONDERS}
                             ,{'queue_name', ?QUEUE_NAME}
-                            ],
-                            []).
+                            ]
+                           ,[]
+                           ).
 
 -spec handle_call_stat(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_call_stat(JObj, Props) ->
@@ -425,10 +433,10 @@ handle_call_stat(JObj, Props) ->
         <<"waiting">> -> handle_waiting_stat(JObj, Props);
         <<"missed">> -> handle_missed_stat(JObj, Props);
         <<"abandoned">> -> handle_abandoned_stat(JObj, Props);
+        <<"marked_callback">> -> handle_marked_callback_stat(JObj, Props);
         <<"handled">> -> handle_handled_stat(JObj, Props);
         <<"processed">> -> handle_processed_stat(JObj, Props);
         <<"exited-position">> -> handle_exited_stat(JObj, Props);
-        <<"id-change">> -> handle_id_change(JObj, Props);
         <<"flush">> -> flush_call_stat(JObj, Props);
         _Name ->
             lager:debug("recv unknown call stat type ~s: ~p", [_Name, JObj])
@@ -583,9 +591,6 @@ handle_cast({'add_miss', JObj}, State) ->
                             ,kz_json:get_value(<<"Agent-ID">>, JObj)
                             ,kz_json:get_value(<<"Miss-Timestamp">>, JObj)),
 
-    {'noreply', State};
-handle_cast({'replace_call_id', QueueId, OldCallId, NewCallId}, State) ->
-    replace_call_id(QueueId, OldCallId, NewCallId, find_call_stat(OldCallId)),
     {'noreply', State};
 handle_cast({'flush_call', Id}, State) ->
     lager:debug("flushing call stat ~s", [Id]),
@@ -1059,6 +1064,7 @@ call_stat_to_doc(#call_stat{id=Id
                            ,entered_position=EnteredPos
                            ,exited_position=ExitedPos
                            ,abandoned_reason=AbandonedR
+                           ,is_callback=IsCallback
                            ,misses=Misses
                            ,status=Status
                            ,caller_id_name=CallerIdName
@@ -1080,6 +1086,7 @@ call_stat_to_doc(#call_stat{id=Id
           ,{<<"entered_position">>, EnteredPos}
           ,{<<"exited_position">>, ExitedPos}
           ,{<<"abandoned_reason">>, AbandonedR}
+          ,{<<"is_callback">>, IsCallback}
           ,{<<"misses">>, misses_to_docs(Misses)}
           ,{<<"status">>, Status}
           ,{<<"caller_id_name">>, CallerIdName}
@@ -1107,6 +1114,7 @@ call_stat_to_json(#call_stat{id=Id
                             ,entered_position=EnteredPos
                             ,exited_position=ExitedPos
                             ,abandoned_reason=AbandonedR
+                            ,is_callback=IsCallback
                             ,misses=Misses
                             ,status=Status
                             ,caller_id_name=CallerIdName
@@ -1127,6 +1135,7 @@ call_stat_to_json(#call_stat{id=Id
         ,{<<"Entered-Position">>, EnteredPos}
         ,{<<"Exited-Position">>, ExitedPos}
         ,{<<"Abandoned-Reason">>, AbandonedR}
+        ,{<<"Is-Callback">>, IsCallback}
         ,{<<"Misses">>, misses_to_docs(Misses)}
         ,{<<"Status">>, Status}
         ,{<<"Caller-ID-Name">>, CallerIdName}
@@ -1259,6 +1268,17 @@ handle_abandoned_stat(JObj, Props) ->
             update_call_stat(Id, Updates, Props)
     end.
 
+-spec handle_marked_callback_stat(kz_json:object(), kz_proplist()) -> 'ok'.
+handle_marked_callback_stat(JObj, Props) ->
+    'true' = kapi_acdc_stats:call_marked_callback_v(JObj),
+
+    Id = call_stat_id(JObj),
+    Updates = props:filter_undefined(
+                [{#call_stat.is_callback, 'true'}
+                ,{#call_stat.caller_id_name, kz_json:get_value(<<"Caller-ID-Name">>, JObj)}
+                ]),
+    update_call_stat(Id, Updates, Props).
+
 -spec handle_handled_stat(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_handled_stat(JObj, Props) ->
     'true' = kapi_acdc_stats:call_handled_v(JObj),
@@ -1291,55 +1311,6 @@ handle_exited_stat(JObj, Props) ->
     Id = call_stat_id(JObj),
     Updates = props:filter_undefined([{#call_stat.exited_position, kz_json:get_value(<<"Exited-Position">>, JObj)}]),
     update_call_stat(Id, Updates, Props).
-
--spec handle_id_change(kz_json:object(), kz_proplist()) -> 'ok'.
-handle_id_change(JObj, Props) ->
-    'true' = kapi_acdc_stats:call_id_change_v(JObj),
-
-    lager:debug("Trying id change"),
-
-    gen_listener:cast(props:get_value('server', Props)
-                     ,{'replace_call_id'
-                      ,kz_json:get_value(<<"Queue-ID">>, JObj)
-                      ,kz_json:get_value(<<"Old-Call-ID">>, JObj)
-                      ,kz_json:get_value(<<"Call-ID">>, JObj)
-                      }
-                     ).
-
--spec replace_call_id(ne_binary(), ne_binary(), ne_binary(), call_stat() | 'undefined') -> 'ok'.
-replace_call_id(_QueueId, OldCallId, _NewCallId, 'undefined') ->
-    lager:debug("no ~s stat to replace", [OldCallId]);
-replace_call_id(QueueId, OldCallId, NewCallId, Stat) ->
-    CallTableId = call_table_id(),
-    CallSummaryTableId = call_summary_table_id(),
-    AgentCallTableId = agent_call_table_id(),
-
-    OldId = call_stat_id(OldCallId, QueueId),
-    NewId = call_stat_id(NewCallId, QueueId),
-
-    lager:debug("replacing old stat id ~p with ~p", [OldId, NewId]),
-
-    ets:delete(CallTableId, OldId),
-    ets:insert(CallTableId, Stat#call_stat{id=NewId
-                                          ,call_id=NewCallId
-                                          }),
-
-    case ets:lookup(CallSummaryTableId, OldId) of
-        [] -> 'ok';
-        [Stat1] ->
-            ets:delete(CallSummaryTableId, OldId),
-            ets:insert(CallSummaryTableId, Stat1#call_summary_stat{id=NewId
-                                                                  ,call_id=NewCallId
-                                                                  })
-    end,
-
-    AgentStats = ets:lookup(AgentCallTableId, OldId),
-    ets:delete(AgentCallTableId, OldId),
-    lists:foreach(fun(AgentStat) ->
-                          ets:insert(AgentCallTableId, AgentStat#agent_call_stat{id=NewId
-                                                                                ,call_id=NewCallId
-                                                                                })
-                  end, AgentStats).
 
 -spec flush_call_stat(kz_json:object(), kz_proplist()) -> 'ok'.
 flush_call_stat(JObj, Props) ->
@@ -1387,8 +1358,8 @@ add_agent_call_stat_miss(Stat, AgentId, Timestamp) ->
     ets:insert(agent_call_table_id(), AgentStat1).
 
 -spec maybe_insert_agent_cur_status(status_stat(), status_stat()) -> boolean().
-maybe_insert_agent_cur_status(#status_stat{status='logged_out', timestamp=Timestamp}
-                             ,#status_stat{status='pending_logged_out', timestamp=Timestamp1}=Stat
+maybe_insert_agent_cur_status(#status_stat{status= <<"logged_out">>, timestamp=Timestamp}
+                             ,#status_stat{status= <<"pending_logged_out">>, timestamp=Timestamp1}=Stat
                              ) ->
     %% Note the timestamp must be GREATER if new stat is pending (fix logout bug)
     case Timestamp1 > Timestamp of

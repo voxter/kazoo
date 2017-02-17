@@ -866,7 +866,18 @@ build_sip_channel(#bridge_endpoint{failover=Failover}=Endpoint) ->
 maybe_failover(Endpoint) ->
     case kz_term:is_empty(Endpoint) of
         'true' -> {'error', 'invalid'};
-        'false' -> build_sip_channel(endpoint_jobj_to_record(Endpoint))
+        'false' -> sip_failover_only(Endpoint)
+    end.
+
+-spec sip_failover_only(kz_json:object()) ->
+                               {'ok', bridge_channel()} |
+                               {'error', any()}.
+sip_failover_only(Endpoint) ->
+    case kz_json:get_keys(Endpoint) of
+        [<<"e164">>] ->
+            lager:info("skipping e164 failover, letting trunkstore do it"),
+            {'error', 'invalid'};
+        _ -> build_sip_channel(endpoint_jobj_to_record(Endpoint))
     end.
 
 -spec get_sip_contact(bridge_endpoint()) -> ne_binary().

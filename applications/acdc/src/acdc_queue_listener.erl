@@ -21,7 +21,6 @@
 
 %% API
 -export([start_link/4
-        ,accept_member_calls/1
         ,member_connect_req/4
         ,member_connect_re_req/1
         ,member_connect_win/3
@@ -124,10 +123,6 @@ start_link(WorkerSup, MgrPid, AccountId, QueueId) ->
                             ]
                            ,[WorkerSup, MgrPid, AccountId, QueueId]
                            ).
-
--spec accept_member_calls(pid()) -> 'ok'.
-accept_member_calls(Srv) ->
-    gen_listener:cast(Srv, {'accept_member_calls'}).
 
 -spec member_connect_req(pid(), kz_json:object(), any(), api_binary()) -> 'ok'.
 member_connect_req(Srv, MemberCallJObj, Delivery, Url) ->
@@ -316,7 +311,7 @@ handle_cast({'member_connect_req', MemberCallJObj, Delivery, _Url}
 
     %% If a callback is registered before queue_fsm gets the call,
     %% do not bind to events (as we don't care about hangups)
-    case acdc_queue_manager:callback_number(MgrPid, CallId) of
+    case acdc_queue_manager:callback_details(MgrPid, CallId) of
         'undefined' ->
             acdc_util:bind_to_call_events(Call),
             lager:debug("bound to call events for ~s", [CallId]);
@@ -352,8 +347,13 @@ handle_cast({'member_connect_win', RespJObj, QueueOpts}, #state{my_q=MyQ
                                                                }=State) ->
     lager:debug("agent process won the call, sending the win"),
 
-    send_member_connect_win(RespJObj, Call, QueueId, MyQ, MyId, QueueOpts),
-    {'noreply', State#state{agent_id=kz_json:get_value(<<"Agent-ID">>, RespJObj)}, 'hibernate'};
+    Call1 = apply_callback_details(Call, QueueOpts),
+
+    send_member_connect_win(RespJObj, Call1, QueueId, MyQ, MyId, QueueOpts),
+
+    {'noreply', State#state{call=Call1
+                           ,agent_id=kz_json:get_value(<<"Agent-ID">>, RespJObj)
+                           }, 'hibernate'};
 handle_cast({'timeout_agent', RespJObj}, #state{queue_id=QueueId
                                                ,call=Call
                                                }=State) ->
@@ -661,6 +661,16 @@ publish_sync_resp(Strategy, StrategyState, ReqJObj, Id) ->
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     publish(kz_json:get_value(<<"Server-ID">>, ReqJObj), Resp, fun kapi_acdc_queue:publish_sync_resp/2).
+
+-spec apply_callback_details(kapps_call:call(), kz_proplist()) ->
+                                    kapps_call:call().
+apply_callback_details(Call, Props) ->
+    case props:get_value(<<"Callback-Details">>, Props) of
+        'undefined' -> Call;
+        CallbackDetails ->
+            CIDPrepend = kz_json:get_value(<<"Prepend-CID">>, CallbackDetails),
+            kapps_call:kvs_store('prepend_cid_name', CIDPrepend, Call)
+    end.
 
 -spec maybe_nack(kapps_call:call(), gen_listener:basic_deliver(), pid()) -> boolean().
 maybe_nack(Call, Delivery, SharedPid) ->

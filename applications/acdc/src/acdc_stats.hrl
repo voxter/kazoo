@@ -30,11 +30,11 @@
 
                    ,hung_up_by :: api_binary() | '_'
 
-                   ,entered_position :: api_integer()
-                   ,exited_position :: api_integer()
+                   ,entered_position :: api_integer() | '_'
+                   ,exited_position :: api_integer() | '_'
 
                    ,abandoned_reason :: api_binary() | '_'
-
+                   ,is_callback = 'false' :: boolean() | '_'
                    ,misses = [] :: agent_misses() | '_'
 
                    ,status :: api_binary() | '$1' | '$2' | '$4' | '_'

@@ -32,7 +32,7 @@
         ,status/1
         ,current_agents/1
         ,refresh/2
-        ,callback_number/2
+        ,callback_details/2
         ]).
 
 %% FSM helpers
@@ -300,9 +300,9 @@ agents_available(Srv) -> gen_listener:call(Srv, 'agents_available').
                          {kz_json:objects(), kz_json:objects()}.
 pick_winner(Srv, Resps) -> pick_winner(Srv, Resps, strategy(Srv), next_winner(Srv)).
 
--spec callback_number(pid(), ne_binary()) -> api_binary().
-callback_number(Srv, CallId) ->
-    gen_listener:call(Srv, {'callback_number', CallId}).
+-spec callback_details(pid(), ne_binary()) -> api_binary().
+callback_details(Srv, CallId) ->
+    gen_listener:call(Srv, {'callback_details', CallId}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -441,7 +441,7 @@ handle_call({'queue_position', CallId}, _, #state{current_member_calls=CurrentCa
 
     {'reply', Index, State};
 
-handle_call({'callback_number', CallId}, _, #state{registered_callbacks=Callbacks}=State) ->
+handle_call({'callback_details', CallId}, _, #state{registered_callbacks=Callbacks}=State) ->
     {'reply', props:get_value(CallId, Callbacks), State};
 
 handle_call(_Request, _From, State) ->
@@ -670,7 +670,9 @@ handle_cast({'handle_queue_member_remove', CallId}, State) ->
     State2 = maybe_remove_callback_reg(CallId, State1),
     {'noreply', State2};
 
-handle_cast({'handle_member_callback_reg', JObj}, #state{current_member_calls=CurrentCalls
+handle_cast({'handle_member_callback_reg', JObj}, #state{account_id=AccountId
+                                                        ,queue_id=QueueId
+                                                        ,current_member_calls=CurrentCalls
                                                         ,pos_announce_pids=Pids
                                                         ,registered_callbacks=RegCallbacks}=State) ->
     CallId = kz_json:get_value(<<"Call-ID">>, JObj),
@@ -681,8 +683,11 @@ handle_cast({'handle_member_callback_reg', JObj}, #state{current_member_calls=Cu
         Call ->
             lager:debug("call ~s marked as callback", [CallId]),
             Number = kz_json:get_value(<<"Number">>, JObj),
-            {'noreply', State#state{pos_announce_pids=maybe_cancel_position_announcements(Call, Pids)
-                                   ,registered_callbacks=[{CallId, Number} | RegCallbacks]
+            Call1 = callback_flag(AccountId, QueueId, Call),
+            CIDPrepend = kapps_call:kvs_fetch('prepend_cid_name', Call1),
+            {'noreply', State#state{current_member_calls=lists:keyreplace(CallId, 2, CurrentCalls, Call1)
+                                   ,pos_announce_pids=maybe_cancel_position_announcements(Call1, Pids)
+                                   ,registered_callbacks=[{CallId, {Number, CIDPrepend}} | RegCallbacks]
                                    }}
     end;
 
@@ -1103,7 +1108,7 @@ maybe_average_wait_announcement(_, 'false', _, _, _) ->
 maybe_average_wait_announcement(JObj, 'true', Media, Language, OldAverageWait) ->
     average_wait_announcement(JObj, Media, Language, OldAverageWait).
 
--spec average_wait_announcement(kz_json:object(), proplist(), binary(), non_neg_integer() | 'undefined') -> {non_neg_integer() | 'undefined', list()}.
+-spec average_wait_announcement(kz_json:object(), proplist(), binary(), non_neg_integer() | 'undefined') -> {kz_time(), list()}.
 average_wait_announcement(JObj, Media, Language, OldAverageWait) ->
     Abandoned = length(kz_json:get_value(<<"Abandoned">>, JObj, [])),
     Total = length(kz_json:get_value(<<"Abandoned">>, JObj, [])) +
@@ -1182,8 +1187,8 @@ announce_position_loop(Srv, Call, QueueId, AnnouncesEnabled, AnnouncementsTimer,
 -spec maybe_schedule_position_announcements(kapps_call:call()
                                            ,ne_binary()
                                            ,{boolean(), boolean()}
-                                           ,proplist()
                                            ,non_neg_integer()
+                                           ,proplist()
                                            ,announce_pid_list()
                                            ) -> announce_pid_list().
 maybe_schedule_position_announcements(_Call, _, {'false', 'false'}, _, _, Pids) ->
@@ -1261,6 +1266,34 @@ maybe_remove_queue_member(CallId, #state{account_id=AccountId
     State#state{current_member_calls=UpdatedMemberCalls
                ,pos_announce_pids=UpdatedAnnouncePids
                }.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Prepend CB: onto CID of callback calls and flag call ID as callback
+%% in acdc_stats
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec callback_flag(ne_binary(), ne_binary(), kapps_call:call()) ->
+                           kapps_call:call().
+callback_flag(AccountId, QueueId, Call) ->
+    Call1 = prepend_cid_name(<<"CB:">>, Call),
+    {_, CIDName} = acdc_util:caller_id(Call1),
+    acdc_stats:call_marked_callback(AccountId
+                                   ,QueueId
+                                   ,kapps_call:call_id(Call)
+                                   ,CIDName
+                                   ),
+    Call1.
+
+-spec prepend_cid_name(ne_binary(), kapps_call:call()) -> kapps_call:call().
+prepend_cid_name(Prefix, Call) ->
+    Prefix1 = case kapps_call:kvs_fetch('prepend_cid_name', Call) of
+                  'undefined' -> Prefix;
+                  Prepend -> <<Prefix/binary, Prepend/binary>>
+              end,
+    kapps_call:kvs_store('prepend_cid_name', Prefix1, Call).
 
 -spec maybe_remove_callback_reg(ne_binary(), mgr_state()) -> mgr_state().
 maybe_remove_callback_reg(CallId, #state{registered_callbacks=RegCallbacks}=State) ->
