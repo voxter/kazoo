@@ -460,7 +460,7 @@ play_instructions(#mailbox{skip_instructions='false'}, Call) ->
 %% @doc
 %%
 %% @end
-%%--------------------------------------------------------------------  
+%%--------------------------------------------------------------------
 -spec maybe_hunt(mailbox(), whapps_call:call()) ->
                                'ok' | {'branch', _} |
                                {'error', 'channel_hungup'}.
@@ -1114,8 +1114,10 @@ maybe_replace_by_resampled_message(ResampledMessagePath, ForwardMessagePath) ->
 %% to understand that it should be replaced or not
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_should_convert(ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> {'ok', ne_binary()} |
-                                                                                  {'error', any()}.
+-spec maybe_should_convert(ne_binary(), ne_binary(), ne_binary()
+                           ,{'ok', ne_binary()} | {'error', any()}
+                          ) -> {'ok', ne_binary()} |
+                               {'error', any()}.
 maybe_should_convert(OrigMessagePath, OrigMsgSampleRate, ForwardMessagePath, ForwardedMsgSampleRateRes) ->
     case ForwardedMsgSampleRateRes of
         {'ok', OrigMsgSampleRate} ->
@@ -1317,7 +1319,7 @@ play_prev_message(Messages, [H|T], Count, Box, Call) ->
 %% user provides a valid option
 %% @end
 %%--------------------------------------------------------------------
--type message_menu_returns() :: {'ok', 'keep' | 'delete' | 'return' | 'replay' | 'prev' | 'envelope' | 'next'}.
+-type message_menu_returns() :: {'ok', 'keep' | 'delete' | 'return' | 'replay' | 'forward' | 'prev' | 'envelope' | 'next'}.
 
 -spec message_menu(mailbox(), whapps_call:call()) ->
                           {'error', 'channel_hungup' | 'channel_unbridge' | wh_json:object()} |
@@ -1700,18 +1702,18 @@ change_pin(#mailbox{mailbox_id=Id
                 PrivJObj = wh_json:private_fields(JObj),
 
                 JObj1 = wh_json:merge_jobjs(PrivJObj, PublicJObj),
-                
+
                 % Start of Daniel's code
 				{'ok', UserObj} = couch_mgr:open_doc(AccountDb, wh_json:get_value(<<"owner_id">>, JObj1)),
 				PrivLevel = wh_json:get_value(<<"priv_level">>, UserObj),
-		
+
 				UsernameIsInteger = try
 					_ = list_to_integer(binary_to_list(wh_json:get_value(<<"username">>, UserObj))),
 					true
 				catch error:badarg ->
 					false
 				end,
-		
+
 				case { PrivLevel, UsernameIsInteger } of
 					{<<"user">>, true} ->
 						Username = wh_json:get_value(<<"username">>, UserObj),
