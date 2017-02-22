@@ -15,7 +15,9 @@
 -behaviour(gen_listener).
 
 %% API
--export([start_link/0]).
+-export([start_link/0
+         ,start_agent/3
+        ]).
 
 %% gen_server callbacks
 -export([init/1
@@ -79,6 +81,15 @@ start_link() ->
                              ]
                             ,[]
                            ).
+%%--------------------------------------------------------------------
+%% @doc
+%% Start a new agent supervisor
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec start_agent(ne_binary(), ne_binary(), list()) -> sup_startchild_ret().
+start_agent(AccountId, AgentId, Args) ->
+    gen_listener:call(?SERVER, {'start_agent', AccountId, AgentId, Args}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -113,6 +124,14 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_call({'start_agent', AccountId, AgentId, Args}, _, State) ->
+    case acdc_agents_sup:find_agent_supervisor(AccountId, AgentId) of
+        'undefined' ->
+            {'reply', supervisor:start_child('acdc_agents_sup', Args), State};
+        Sup ->
+            lager:error("agent ~s(~s) already started here: ~p", [AgentId, AccountId, Sup]),
+            {'reply', {'already_started', Sup}, State}
+    end;
 handle_call(_Request, _From, State) ->
     Reply = 'ok',
     {'reply', Reply, State}.
