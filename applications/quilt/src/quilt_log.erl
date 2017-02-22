@@ -108,7 +108,7 @@ handle_specific_event({<<"call_event">>, <<"transfer">>}, JObj) ->
     WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, Call)),
     HandledTime = wh_json:get_integer_value(<<"Handled-Timestamp">>, Call),
     ProcessedTime = wh_json:get_integer_value(<<"Processed-Timestamp">>, Call),
-    TalkTime = [ProcessedTime - HandledTime], %integer_to_list(wh_json:get_value(<<"Talk-Time">>, Call)), %% Talk-Time is not always available
+    TalkTime = integer_to_list(ProcessedTime - HandledTime), %integer_to_list(wh_json:get_value(<<"Talk-Time">>, Call)), %% Talk-Time is not always available
     Position = integer_to_list(wh_json:get_value(<<"Exited-Position">>, Call)),
     EventParams = {Extension, <<"from-queue">>, WaitTime, TalkTime, Position},
     lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
@@ -125,7 +125,7 @@ handle_specific_event({<<"acdc_call_stat">>, <<"processed">>}, JObj) ->
     WaitTime = integer_to_list(wh_json:get_value(<<"Wait-Time">>, Call)),
     HandledTime = wh_json:get_integer_value(<<"Handled-Timestamp">>, Call),
     ProcessedTime = wh_json:get_integer_value(<<"Processed-Timestamp">>, Call),
-    TalkTime = [ProcessedTime - HandledTime], %integer_to_list(wh_json:get_value(<<"Talk-Time">>, Call)), %% Talk-Time is not always available
+    TalkTime = integer_to_list(ProcessedTime - HandledTime), %integer_to_list(wh_json:get_value(<<"Talk-Time">>, Call)), %% Talk-Time is not always available
     OriginalPos = integer_to_list(wh_json:get_value(<<"Entered-Position">>, Call)),
     EventParams = {WaitTime, TalkTime, OriginalPos},
     lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
