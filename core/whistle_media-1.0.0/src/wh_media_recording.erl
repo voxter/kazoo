@@ -29,6 +29,8 @@
          ,get_url/1
          ,get_media_name/2
          ,should_store_recording/1
+
+         ,update_control_queue/2 %% after transfer, recording can continue, but needs new ctrl Q to store
         ]).
 
 -export([init/1
@@ -187,6 +189,10 @@ init([Call, Data]) ->
                   ,record_min_sec = RecordMinSec
                   ,retries = ?STORAGE_RETRY_TIMES(whapps_call:account_id(Call))
                  }}.
+
+-spec update_control_queue(pid(), api_binary()) -> 'ok'.
+update_control_queue(Listener, CtrlQ) ->
+    gen_listener:cast(Listener, {'update_control_queue', CtrlQ}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -358,6 +364,11 @@ handle_cast('store_failed', #state{retries=Retries
     lager:debug("store failed, retrying ~p times", [Retries]),
     save_recording(Call, MediaName, Format, Store),
     {'noreply', State#state{retries=Retries - 1}};
+
+handle_cast({'update_control_queue', CtrlQ}, #state{call=Call}=State) when is_binary(CtrlQ) ->
+    Call1 = whapps_call:set_control_queue(CtrlQ, Call),
+    {'noreply', State#state{call=Call1}};
+
 
 handle_cast({'gen_listener',{'created_queue',Queue}}, #state{call=Call}=State) ->
     Call1 = whapps_call:kvs_store('consumer_pid', wh_amqp_channel:consumer_pid(), Call),
