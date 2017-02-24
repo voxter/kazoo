@@ -407,10 +407,14 @@ audio_macro([{'play', MediaName}|T], Call, Queue) ->
     audio_macro(T, Call, [play_command(MediaName, ?ANY_DIGIT, Call) | Queue]);
 audio_macro([{'play', MediaName, Terminators}|T], Call, Queue) ->
     audio_macro(T, Call, [play_command(MediaName, Terminators, Call) | Queue]);
+audio_macro([{'play', MediaName, Terminators, Leg}|T], Call, Queue) ->
+    audio_macro(T, Call, [play_command(MediaName, Terminators, Leg, Call) | Queue]);
 audio_macro([{'prompt', PromptName}|T], Call, Queue) ->
     audio_macro(T, Call, [play_command(wh_media_util:get_prompt(PromptName, Call), ?ANY_DIGIT, Call) | Queue]);
 audio_macro([{'prompt', PromptName, Lang}|T], Call, Queue) ->
     audio_macro(T, Call, [play_command(wh_media_util:get_prompt(PromptName, Lang, Call), ?ANY_DIGIT, Call) | Queue]);
+audio_macro([{'prompt', PromptName, Lang, Leg}|T], Call, Queue) ->
+    audio_macro(T, Call, [play_command(wh_media_util:get_prompt(PromptName, Lang, Call), ?ANY_DIGIT, Leg, Call) | Queue]);
 audio_macro([{'say', Say}|T], Call, Queue) ->
     audio_macro(T, Call, [say_command(Say, <<"name_spelled">>, <<"pronounced">>, whapps_call:language(Call), Call) | Queue]);
 audio_macro([{'say', Say, Type}|T], Call, Queue) ->

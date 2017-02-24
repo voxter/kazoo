@@ -403,10 +403,11 @@ fsm_shared_routing_key(AcctId, AgentId) ->
     <<?FSM_SHARED_KEY, AcctId/binary, ".", AgentId/binary>>.
 
 -define(SHARED_FAILURE_HEADERS, [<<"Account-ID">>, <<"Agent-ID">>]).
--define(OPTIONAL_SHARED_FAILURE_HEADERS, []).
+-define(OPTIONAL_SHARED_FAILURE_HEADERS, [<<"Blame">>]).
 -define(SHARED_FAILURE_VALUES, [{<<"Event-Category">>, <<"agent">>}
-                               ,{<<"Event-Name">>, <<"shared_failure">>}
-                              ]).
+                                ,{<<"Event-Name">>, <<"shared_failure">>}
+                                ,{<<"Blame">>, [<<"member">>]}
+                               ]).
 -define(SHARED_FAILURE_TYPES, []).
 
 -spec shared_originate_failure(api_terms()) ->
