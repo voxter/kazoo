@@ -16,6 +16,7 @@
 -export([get/2, get/3, get/4
         ,get_all_kvs/1
         ,get_current/2, get_current/3, get_current/4
+        ,get_category/1
         ]).
 
 -export([get_node_value/2, get_node_value/3, get_node_value/4]).
@@ -422,15 +423,15 @@ get_all_default_kvs(JObj) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec set_string(config_category(), config_key(), text() | binary() | string()) ->
-                        {ok, kz_json:object()}.
+                        {'ok', kz_json:object()}.
 -spec set_integer(config_category(), config_key(), text() | integer()) ->
-                         {ok, kz_json:object()}.
+                         {'ok', kz_json:object()}.
 -spec set_float(config_category(), config_key(), text() | float()) ->
-                       {ok, kz_json:object()}.
+                       {'ok', kz_json:object()}.
 -spec set_boolean(config_category(), config_key(), text() | boolean()) ->
-                         {ok, kz_json:object()}.
+                         {'ok', kz_json:object()}.
 -spec set_json(config_category(), config_key(), text() | kz_json:object()) ->
-                      {ok, kz_json:object()}.
+                      {'ok', kz_json:object()}.
 
 set_string(Category, Key, Value) ->
     set(Category, Key, kz_term:to_binary(Value)).
@@ -783,6 +784,9 @@ get_category(Category, 'false') ->
         ,{{<<"number_manager.port_request">>, <<"crawler_delay_time_ms">>}
          ,{<<"tasks">>, <<"crawler_delay_time_ms">>}
          }
+        ,{{<<"number_manager">>, <<"porting_module_name">>}
+         ,{<<"number_manager">>, <<"port_in_module_name">>}
+         }
 
         ,{{<<"notify.account_crawler">>, <<"interaccount_delay">>}
          ,{<<"tasks">>, <<"interaccount_delay_ms">>}
@@ -826,15 +830,12 @@ get_category(Category, 'false') ->
 
 -spec migrate() -> 'ok'.
 migrate() ->
-    _ = [migrate_config_setting(From, To)
-         || {From, To} <- ?CONFIG_MIGRATIONS
-        ],
-    'ok'.
+    lists:foreach(fun migrate_config_setting/1, ?CONFIG_MIGRATIONS).
 
--spec migrate_config_setting(migrate_setting(), migrate_setting()) ->
+-spec migrate_config_setting({migrate_setting(), migrate_setting()}) ->
                                     'ok' |
                                     {'error', any()}.
-migrate_config_setting(From, To) ->
+migrate_config_setting({From, To}) ->
     case remove_config_setting(From) of
         {'ok', _, []} -> 'ok';
         {'ok', JObj, Removed} ->
@@ -846,20 +847,24 @@ migrate_config_setting(From, To) ->
 -spec migrate_config_setting(kz_json:object(), migrate_values(), migrate_setting()) ->
                                     'ok' |
                                     {'error', any()}.
-migrate_config_setting(UpdatedFrom, Removed, To) ->
-    case add_config_setting(To, Removed) of
-        {'ok', UpdatedTo} ->
-            {'ok', _} = kz_datamgr:save_doc(?KZ_CONFIG_DB, UpdatedTo),
-            {'ok', _} = kz_datamgr:save_doc(?KZ_CONFIG_DB, UpdatedFrom),
-            'ok';
-        {'error', Reason} -> {'error', {'add', Reason}}
+migrate_config_setting(UpdatedFrom, Removed, {ToId, ToSetting}) ->
+    case ToId =:= kz_doc:id(UpdatedFrom) of
+        true ->
+            case add_config_setting(UpdatedFrom, ToSetting, Removed) of
+                {error, Reason} -> {error, {add, Reason}};
+                {ok, Updated} ->
+                    {ok, _} = kz_datamgr:save_doc(?KZ_CONFIG_DB, Updated),
+                    ok
+            end;
+        false ->
+            case add_config_setting(ToId, ToSetting, Removed) of
+                {'error', Reason} -> {'error', {'add', Reason}};
+                {'ok', UpdatedTo} ->
+                    {'ok', _} = kz_datamgr:save_doc(?KZ_CONFIG_DB, UpdatedTo),
+                    {'ok', _} = kz_datamgr:save_doc(?KZ_CONFIG_DB, UpdatedFrom),
+                    'ok'
+            end
     end.
-
--spec add_config_setting(migrate_setting(), migrate_values()) ->
-                                'ok' |
-                                {'error', any()}.
-add_config_setting({Id, Setting}, Values) ->
-    add_config_setting(Id, Setting, Values).
 
 -spec add_config_setting(ne_binary(), config_key(), migrate_values()) ->
                                 'ok' |
@@ -868,15 +873,11 @@ add_config_setting(Id, Setting, Values) when is_binary(Id) ->
     case kz_datamgr:open_doc(?KZ_CONFIG_DB, Id) of
         {'ok', JObj} -> add_config_setting(JObj, Setting, Values);
         {'error', 'not_found'} ->
-            add_config_setting(
-              kz_doc:update_pvt_parameters(
-                kz_doc:set_id(kz_json:new(), Id)
-                                          ,?KZ_CONFIG_DB
-                                          ,[{'type', <<"config">>}]
-               )
-                              ,Setting
-                              ,Values
-             );
+            New = kz_doc:update_pvt_parameters(kz_doc:set_id(kz_json:new(), Id)
+                                              ,?KZ_CONFIG_DB
+                                              ,[{'type', <<"config">>}]
+                                              ),
+            add_config_setting(New, Setting, Values);
         {'error', _}=Error -> Error
     end;
 add_config_setting(JObj, _, []) -> {'ok', JObj};
@@ -885,27 +886,24 @@ add_config_setting(JObj, ToSetting, [{FromId, Node, FromSetting, Value} | Values
     Key = config_setting_key(Node, ToSetting),
     case kz_json:get_value(Key, JObj) of
         'undefined' ->
-            io:format(
-              "migrating setting from ~s ~s.~s to ~s ~s.~s value ~p~n"
+            io:format("migrating setting from ~s ~s.~s to ~s ~s.~s value ~p~n"
                      ,[FromId, Node, FromSetting
                       ,ToId, Node, ToSetting
                       ,Value
-                      ]
-             ),
-            add_config_setting(
-              kz_json:set_value(Key, Value, JObj)
+                      ]),
+            add_config_setting(kz_json:set_value(Key, Value, JObj)
                               ,ToSetting
                               ,Values
-             );
+                              );
         Value -> add_config_setting(JObj, ToSetting, Values);
         _Else ->
-            io:format("the system tried to move the parameter listed below but found a different setting already there, you need to correct this disparity manually!~n", []),
+            io:format("the system tried to move the parameter listed below"
+                      " but found a different setting already there."
+                      " You need to correct this disparity manually!~n"),
             io:format("  Source~n    db: ~s~n    id: ~s~n    key: ~s ~s~n    value: ~p~n"
-                     ,[?KZ_CONFIG_DB, FromId, Node, FromSetting, Value]
-                     ),
+                     ,[?KZ_CONFIG_DB, FromId, Node, FromSetting, Value]),
             io:format("  Destination~n    db: ~s~n    id: ~s~n    key: ~s ~s~n    value: ~p~n"
-                     ,[?KZ_CONFIG_DB, ToId, Node, ToSetting, _Else]
-                     ),
+                     ,[?KZ_CONFIG_DB, ToId, Node, ToSetting, _Else]),
             {'error', 'disparity'}
     end.
 
@@ -925,10 +923,9 @@ remove_config_setting(Id, Setting) when is_binary(Id) ->
     end;
 remove_config_setting(JObj, Setting) ->
     Id = kz_doc:id(JObj),
-    Keys =
-        [{Id, Node, Setting}
-         || Node <- kz_json:get_public_keys(JObj)
-        ],
+    Keys = [{Id, Node, Setting}
+            || Node <- kz_json:get_public_keys(JObj)
+           ],
     remove_config_setting(Keys, JObj, []).
 
 -spec remove_config_setting([{ne_binary(), ne_binary(), config_key()}], kz_json:object(), migrate_values()) ->

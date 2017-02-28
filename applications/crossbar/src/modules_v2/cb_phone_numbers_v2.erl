@@ -442,25 +442,24 @@ summary(Context, Number) ->
             maybe_find_port_number(Context, Number, should_include_ports(Context))
     end.
 
-
 -spec maybe_find_port_number(cb_context:context(), ne_binary(), boolean()) ->
                                     cb_context:context().
 maybe_find_port_number(Context, _Number, 'false') ->
     reply_number_not_found(Context);
 maybe_find_port_number(Context, Number, 'true') ->
-    NormalizeNum = knm_converters:normalize(Number),
-    ViewOption = [{'key', [cb_context:account_id(Context), NormalizeNum]}
+    Num = knm_converters:normalize(Number),
+    ViewOption = [{'key', [cb_context:account_id(Context), Num]}
                  ],
     case kz_datamgr:get_single_result(?KZ_PORT_REQUESTS_DB, ?PORT_NUM_LISTING, ViewOption) of
         {'error', _} -> reply_number_not_found(Context);
         {'ok', Result} ->
             Port = kz_json:get_value(<<"value">>, Result),
-            {'ok', PhoneNumber} = normalize_port_number(Port, NormalizeNum, Context),
+            PN = normalize_port_number(Port, Num, cb_context:auth_account_id(Context)),
             Values = [{[<<"_read_only">>, <<"port_id">>], kz_json:get_value(<<"port_id">>, Port)}
                      ,{[<<"_read_only">>, <<"port_state">>], kz_json:get_value(<<"port_state">>, Port)}
                      ],
-            JObj = kz_json:set_values(Values, knm_phone_number:to_public_json(PhoneNumber)),
-            port_number_summary(JObj, Context, knm_phone_number:is_authorized(PhoneNumber))
+            JObj = kz_json:set_values(Values, knm_phone_number:to_public_json(PN)),
+            port_number_summary(JObj, Context, knm_phone_number:is_authorized(PN))
     end.
 
 %% @private
@@ -470,18 +469,16 @@ port_number_summary(PhoneNumber, Context, 'true') ->
 port_number_summary(_PhoneNumber, Context, 'false') ->
     reply_number_not_found(Context).
 
--spec normalize_port_number(kz_json:object(), ne_binary(), cb_context:context()) ->
-                                   knm_phone_number_return().
-normalize_port_number(JObj, Number, Context) ->
-    Setters = [{fun knm_phone_number:set_number/2, Number}
-              ,{fun knm_phone_number:set_assigned_to/2, kz_json:get_value(<<"assigned_to">>, JObj)}
-              ,{fun knm_phone_number:set_used_by/2, kz_json:get_value(<<"used_by">>, JObj)}
-              ,{fun knm_phone_number:set_auth_by/2, cb_context:auth_account_id(Context)}
-              ,{fun knm_phone_number:set_state/2, ?NUMBER_STATE_PORT_IN}
-              ,{fun knm_phone_number:set_modified/2, kz_json:get_value(<<"updated">>, JObj)}
-              ,{fun knm_phone_number:set_created/2, kz_json:get_value(<<"created">>, JObj)}
-              ],
-    knm_phone_number:setters(knm_phone_number:new(), Setters).
+-spec normalize_port_number(kz_json:object(), ne_binary(), ne_binary()) ->
+                                   knm_phone_number:knm_phone_number().
+normalize_port_number(JObj, Num, AuthBy) ->
+    knm_phone_number:setters(knm_phone_number:from_number_with_options(Num, [{auth_by, AuthBy}])
+                            ,[{fun knm_phone_number:set_assigned_to/2, kz_json:get_value(<<"assigned_to">>, JObj)}
+                             ,{fun knm_phone_number:set_used_by/2, kz_json:get_value(<<"used_by">>, JObj)}
+                             ,{fun knm_phone_number:set_state/2, ?NUMBER_STATE_PORT_IN}
+                             ,{fun knm_phone_number:set_modified/2, kz_json:get_value(<<"updated">>, JObj)}
+                             ,{fun knm_phone_number:set_created/2, kz_json:get_value(<<"created">>, JObj)}
+                             ]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -498,12 +495,9 @@ summary(Context) ->
 %% @private
 -spec view_account_phone_numbers(cb_context:context()) -> cb_context:context().
 view_account_phone_numbers(Context) ->
-    Context1 = crossbar_doc:load_view(?CB_LIST
-                                     ,[]
-                                     ,rename_qs_filters(Context)
-                                     ,fun normalize_view_results/2
-                                     ),
-    ListOfNumProps = lists:map(fun fix_available/1, cb_context:resp_data(Context1)),
+    Ctx = rename_qs_filters(Context),
+    Context1 = crossbar_doc:load_view(?CB_LIST, [], Ctx, fun normalize_view_results/2),
+    ListOfNumProps = [fix_available(NumJObj) || NumJObj <- cb_context:resp_data(Context1)],
     PortNumberJObj = maybe_add_port_request_numbers(Context),
     NumbersJObj = lists:foldl(fun kz_json:merge_jobjs/2, PortNumberJObj, ListOfNumProps),
     Service = kz_services:fetch(cb_context:account_id(Context)),
@@ -526,8 +520,9 @@ fix_available(NumJObj) ->
     NewJObj = kz_json:set_value(<<"features_available">>, Allowed, JObj),
     kz_json:from_list([{Num, NewJObj}]).
 
+-spec should_include_ports(cb_context:context()) -> boolean().
 should_include_ports(Context) ->
-    kz_term:is_true(cb_context:req_value(Context, <<"include_ports">>)).
+    kz_term:is_true(cb_context:req_value(Context, <<"include_ports">>, 'true')).
 
 %% @private
 -spec maybe_add_port_request_numbers(cb_context:context()) -> kz_json:object().
@@ -555,7 +550,7 @@ maybe_add_port_request_numbers(Context, 'true') ->
 %% @private
 -spec maybe_filter_port_number(kz_json:object(), cb_context:context(), boolean()) ->
                                       boolean().
-maybe_filter_port_number(_Port, _Context, 'false') -> 'false';
+maybe_filter_port_number(_Port, _Context, 'false') -> 'true';
 maybe_filter_port_number(Port, Context, 'true') ->
     crossbar_doc:filtered_doc_by_qs(kz_json:get_value(<<"value">>, Port), Context).
 

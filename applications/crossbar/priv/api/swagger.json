@@ -35,6 +35,193 @@
             ],
             "type": "object"
         },
+        "account_config.cdr": {
+            "description": "Schema for cdr account_config",
+            "properties": {
+                "ignore_loopback_bowout": {
+                    "default": true,
+                    "description": "cdr ignore loopback bowout",
+                    "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
+        "account_config.conferences": {
+            "description": "Schema for conferences account_config",
+            "properties": {
+                "entry_tone": {
+                    "default": "tone_stream://v=-7;>=2;+=.1;%(300,0,523,659);v=-7;>=3;+=.1;%(800,0,659,783)",
+                    "description": "conferences entry tone",
+                    "type": "string"
+                },
+                "exit_tone": {
+                    "default": "tone_stream://v=-7;>=2;+=.1;%(300,0,523,440);v=-7;>=3;+=.1;%(800,0,349,440)",
+                    "description": "conferences exit tone",
+                    "type": "string"
+                },
+                "moderator_entry_tone": {
+                    "default": "tone_stream://v=-7;>=2;+=.1;%(300,0,523,659);v=-7;>=3;+=.1;%(800,0,659,783)",
+                    "description": "conferences moderator entry tone",
+                    "type": "string"
+                },
+                "moderator_exit_tone": {
+                    "default": "tone_stream://v=-7;>=2;+=.1;%(300,0,523,440);v=-7;>=3;+=.1;%(800,0,349,440)",
+                    "description": "conferences moderator exit tone",
+                    "type": "string"
+                },
+                "number_timeout": {
+                    "default": 5000,
+                    "description": "conferences number timeout",
+                    "type": "integer"
+                },
+                "pin_timeout": {
+                    "default": 5000,
+                    "description": "conferences pin timeout",
+                    "type": "integer"
+                },
+                "support_name_announcement": {
+                    "default": true,
+                    "description": "conferences support name announcement",
+                    "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
+        "account_config.crossbar.sms": {
+            "description": "Schema for crossbar.sms account_config",
+            "properties": {
+                "api_e164_convert_from": {
+                    "default": false,
+                    "description": "crossbar.sms api e164 convert from",
+                    "type": "boolean"
+                },
+                "api_e164_convert_to": {
+                    "default": false,
+                    "description": "crossbar.sms api e164 convert to",
+                    "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
+        "account_config.doodle": {
+            "description": "Schema for doodle account_config",
+            "properties": {
+                "api_preserve_caller_id": {
+                    "default": true,
+                    "description": "doodle.api preserve caller id",
+                    "type": "boolean"
+                },
+                "reschedule": {
+                    "default": {},
+                    "description": "doodle reschedule",
+                    "type": "object"
+                }
+            },
+            "type": "object"
+        },
+        "account_config.fax": {
+            "description": "Schema for fax account_config",
+            "properties": {
+                "default_smtp_domain": {
+                    "default": "fax.kazoo.io",
+                    "description": "fax defaultsmtp domain",
+                    "type": "string"
+                },
+                "log_faxbox_errors": {
+                    "default": true,
+                    "description": "fax log faxbox errors",
+                    "type": "boolean"
+                },
+                "max_outbound": {
+                    "default": 10,
+                    "description": "fax max outbound",
+                    "type": "integer"
+                }
+            },
+            "type": "object"
+        },
+        "account_config.kazoo_endpoint": {
+            "description": "Schema for kazoo_endpoint account_config",
+            "properties": {
+                "default_can_text_self": {
+                    "default": true,
+                    "description": "kazoo_endpoint default can text self",
+                    "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
+        "account_config.media": {
+            "description": "Schema for media account_config",
+            "properties": {
+                "call_recording": {
+                    "properties": {
+                        "storage_retry_times": {
+                            "properties": {
+                                "default": 5,
+                                "description": "media storage retry times",
+                                "type": "integer"
+                            }
+                        }
+                    }
+                }
+            },
+            "type": "object"
+        },
+        "account_config.number_manager": {
+            "description": "Schema for number_manager account_config",
+            "properties": {
+                "unauthorized_numbers_lookup": {
+                    "default": false,
+                    "description": "number_manager unauthorized numbers lookup",
+                    "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
+        "account_config.privacy": {
+            "description": "Schema for privacy account_config",
+            "properties": {
+                "block_anonymous_caller_id": {
+                    "default": false,
+                    "description": "Controls blocking of anonymous calls",
+                    "type": "boolean"
+                },
+                "privacy_mode": {
+                    "default": "kazoo",
+                    "description": "Default privacy mode for anonymous calls",
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
+        "account_config.speech": {
+            "description": "Schema for speech account_config",
+            "properties": {
+                "tts_provider": {
+                    "default": "flite",
+                    "description": "speech tts provider",
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
+        "account_config.webhooks": {
+            "description": "Schema for webhooks account_config",
+            "properties": {
+                "attempt_failure_count": {
+                    "default": 6,
+                    "description": "webhooks attempt failure count",
+                    "type": "integer"
+                },
+                "attempt_failure_expiry_ms": {
+                    "default": 60000,
+                    "description": "webhooks attempt failure expiry in milliseconds",
+                    "type": "integer"
+                }
+            },
+            "type": "object"
+        },
         "account_rate_limits": {
             "additionalProperties": true,
             "description": "describe limits for SIP requests",
@@ -233,7 +420,7 @@
             "type": "object"
         },
         "allotments": {
-            "description": "",
+            "description": "Create buckets of minutes per time-period",
             "patternProperties": {
                 "^\\w+$": {
                     "properties": {
@@ -657,7 +844,8 @@
                         "type": "string"
                     },
                     "required": false,
-                    "type": "array"
+                    "type": "array",
+                    "uniqueItems": true
                 },
                 "patterns": {
                     "default": [],
@@ -678,25 +866,33 @@
             "description": "Validator for the acdc_agent callflow's data object",
             "properties": {
                 "action": {
-                    "description": ""
+                    "description": "Set which action to perform",
+                    "enum": [
+                        "login",
+                        "logout",
+                        "paused",
+                        "resume"
+                    ],
+                    "type": "string"
                 },
                 "presence_id": {
-                    "description": "",
+                    "description": "Static presence ID to send BLF updates to",
                     "type": "string"
                 },
                 "presence_state": {
-                    "description": ""
-                },
-                "sip": {
-                    "properties": {
-                        "username": {
-                            "description": ""
-                        }
-                    },
-                    "type": "object"
+                    "description": "Custom presence state to send",
+                    "enum": [
+                        "early",
+                        "confirmed",
+                        "terminated",
+                        "red_flash",
+                        "red_solid",
+                        "green"
+                    ],
+                    "type": "string"
                 },
                 "timeout": {
-                    "description": "",
+                    "description": "Time, in seconds, for 'paused' state",
                     "type": "integer"
                 }
             },
@@ -706,8 +902,12 @@
         "callflows.acdc_member": {
             "description": "Validator for the acdc_member callflow's data object",
             "properties": {
+                "id": {
+                    "description": "ID of the ACDc Queue",
+                    "type": "string"
+                },
                 "priority": {
-                    "description": "",
+                    "description": "assign a priority to the caller",
                     "type": "integer"
                 }
             },
@@ -718,7 +918,16 @@
             "description": "Validator for the acdc_queue callflow's data object",
             "properties": {
                 "action": {
-                    "description": ""
+                    "description": "What action to perform on the agent for this queue",
+                    "enum": [
+                        "login",
+                        "logout"
+                    ],
+                    "type": "string"
+                },
+                "id": {
+                    "description": "Queue ID",
+                    "type": "string"
                 }
             },
             "required": true,
@@ -737,11 +946,14 @@
                     "type": "object"
                 },
                 "data": {
+                    "default": {},
                     "description": "The data/arguments of the callflow module",
+                    "kazoo-validation": true,
                     "type": "object"
                 },
                 "module": {
                     "description": "The name of the callflow module to excute at this node",
+                    "kazoo-validation": true,
                     "maxLength": 64,
                     "minLength": 1,
                     "type": "string"
@@ -757,10 +969,20 @@
             "description": "Validator for the after_bridge callflow's data object",
             "properties": {
                 "action": {
-                    "description": ""
+                    "description": "What action to perform after a call is bridged",
+                    "enum": [
+                        "park",
+                        "transfer",
+                        "hangup"
+                    ],
+                    "type": "string"
                 },
                 "data": {
-                    "description": ""
+                    "description": "The number to transfer to, or a boolean, depending on the 'action'",
+                    "type": [
+                        "string",
+                        "boolean"
+                    ]
                 }
             },
             "required": true,
@@ -801,7 +1023,15 @@
             "description": "Validator for the call_forward callflow's data object",
             "properties": {
                 "action": {
-                    "description": ""
+                    "description": "What action to perform on the caller's call forwarding",
+                    "enum": [
+                        "activate",
+                        "deactivate",
+                        "update",
+                        "toggle",
+                        "menu"
+                    ],
+                    "type": "string"
                 }
             },
             "required": true,
@@ -812,12 +1042,21 @@
             "properties": {
                 "action": {
                     "default": "toggle",
-                    "description": "",
+                    "description": "What action to perform",
+                    "enum": [
+                        "activate",
+                        "deactivate",
+                        "toggle"
+                    ],
                     "type": "string"
                 },
                 "scope": {
                     "default": "device",
-                    "description": "",
+                    "description": "Apply the action to the calling device or user",
+                    "enum": [
+                        "device",
+                        "user"
+                    ],
                     "type": "string"
                 }
             },
@@ -826,7 +1065,12 @@
         },
         "callflows.callflow": {
             "description": "Validator for the callflow callflow's data object",
-            "properties": {},
+            "properties": {
+                "id": {
+                    "description": "The Callflow ID to branch to",
+                    "type": "string"
+                }
+            },
             "required": true,
             "type": "object"
         },
@@ -844,10 +1088,12 @@
                         "external": {
                             "properties": {
                                 "name": {
-                                    "description": ""
+                                    "description": "Update external Caller ID Name",
+                                    "type": "string"
                                 },
                                 "number": {
-                                    "description": ""
+                                    "description": "Update external Caller ID Number",
+                                    "type": "string"
                                 }
                             },
                             "type": "object"
@@ -857,16 +1103,17 @@
                 },
                 "regex": {
                     "default": ".*",
-                    "description": "",
+                    "description": "Determine match/nomatch when use_absolute_mode is false",
                     "type": "string"
                 },
                 "use_absolute_mode": {
                     "default": false,
-                    "description": "",
+                    "description": "If true, direct call down a branch that matches the caller ID",
                     "type": "boolean"
                 },
                 "user_id": {
-                    "description": ""
+                    "description": "kazoo User ID to use as owner_id instead of detected owner_id",
+                    "type": "string"
                 }
             },
             "required": true,
@@ -874,7 +1121,12 @@
         },
         "callflows.cidlistmatch": {
             "description": "Validator for the cidlistmatch callflow's data object",
-            "properties": {},
+            "properties": {
+                "id": {
+                    "description": "CallerID List ID",
+                    "type": "string"
+                }
+            },
             "required": true,
             "type": "object"
         },
@@ -1022,69 +1274,52 @@
             "type": "object"
         },
         "callflows.device": {
-            "description": "Validator for the device callflow's data object",
             "properties": {
                 "can_call_self": {
-                    "default": false,
-                    "description": "Permits a user to call from one self-owned device to another",
-                    "required": false,
+                    "description": "Toggle whether devices of the same owner can call each other",
                     "type": "boolean"
                 },
                 "can_text_self": {
-                    "default": false,
-                    "description": "Permits a user to send a text from one self-owned device to another",
-                    "required": false,
+                    "description": "Toggle whether devices of the same owner can text each other",
                     "type": "boolean"
                 },
                 "delay": {
                     "default": 0,
-                    "description": "",
+                    "description": "How long to delay ringing the device, in seconds",
                     "type": "integer"
                 },
-                "fail_on_single_reject": {
-                    "descripption": "Should the call be ended on first REJECT (when multiple endpoints are being tried",
-                    "required": false,
-                    "type": "boolean"
-                },
                 "id": {
-                    "description": "The device ID",
-                    "maxLength": 32,
-                    "minLength": 32,
-                    "required": true,
+                    "description": "Device ID",
                     "type": "string"
                 },
-                "skype": {
-                    "description": "Skype configuration options",
-                    "properties": {},
-                    "required": false,
-                    "type": "object"
-                },
                 "source": {
-                    "description": ""
+                    "description": "Source of generating the endpoint (read-only)",
+                    "type": "string"
                 },
                 "static_invite": {
-                    "description": "Override SIP To header with this value",
-                    "required": false,
+                    "description": "Override the SIP Username",
                     "type": "string"
                 },
                 "suppress_clid": {
-                    "description": "If true, does not set Caller ID attributes on the endpoint",
-                    "required": false,
+                    "description": "Suppress sending caller ID",
                     "type": "boolean"
                 },
                 "timeout": {
-                    "default": 20,
-                    "description": "How long, in seconds, to bridge the endpoint(s)",
-                    "required": false,
+                    "default": 0,
+                    "description": "Time, in seconds, to wait for device to bridge",
                     "type": "integer"
                 }
             },
-            "required": true,
             "type": "object"
         },
         "callflows.directory": {
             "description": "Validator for the directory callflow's data object",
-            "properties": {},
+            "properties": {
+                "id": {
+                    "description": "Directory ID",
+                    "type": "string"
+                }
+            },
             "required": true,
             "type": "object"
         },
@@ -1098,7 +1333,17 @@
             "description": "Validator for the do_not_disturb callflow's data object",
             "properties": {
                 "action": {
-                    "description": ""
+                    "description": "What action to perform",
+                    "enum": [
+                        "activate",
+                        "deactivate",
+                        "toggle"
+                    ],
+                    "type": "string"
+                },
+                "id": {
+                    "description": "Document ID on which to update DND settings",
+                    "type": "string"
                 }
             },
             "required": true,
@@ -1108,37 +1353,59 @@
             "description": "Validator for the dynamic_cid callflow's data object",
             "properties": {
                 "action": {
-                    "description": ""
+                    "description": "What action to perform",
+                    "enum": [
+                        "manual",
+                        "list"
+                    ],
+                    "type": "string"
                 },
                 "caller_id": {
-                    "description": ""
+                    "description": "Static Caller ID settings",
+                    "properties": {
+                        "name": {
+                            "description": "Caller ID Name",
+                            "type": "string"
+                        },
+                        "number": {
+                            "description": "Caller ID Number",
+                            "type": "string"
+                        }
+                    },
+                    "type": "object"
                 },
                 "enforce_call_restriction": {
                     "default": true,
-                    "description": "",
+                    "description": "Check classification restrictions against endpoint",
                     "type": "boolean"
                 },
                 "id": {
-                    "description": ""
+                    "description": "List ID for caller IDs when 'action' is 'list'",
+                    "type": "string"
                 },
                 "idx_name": {
-                    "description": ""
+                    "description": "Named capture group to use",
+                    "type": "string"
                 },
                 "interdigit_timeout": {
-                    "description": "",
+                    "description": "How long, in seconds, to wait for keypresses",
                     "type": "integer"
                 },
                 "max_digits": {
-                    "description": ""
+                    "description": "Max number of digits allowed when collecting Caller ID Number",
+                    "type": "integer"
                 },
                 "media_id": {
-                    "description": ""
+                    "description": "Prompt to play to caller to enter Caller ID Number",
+                    "type": "string"
                 },
                 "min_digits": {
-                    "description": ""
+                    "description": "Minimum number of digits that must match the regex to collected DTMF",
+                    "type": "integer"
                 },
                 "whitelist_regex": {
-                    "description": ""
+                    "description": "Regex to match collected Caller ID Number",
+                    "type": "string"
                 }
             },
             "required": true,
@@ -1147,11 +1414,25 @@
         "callflows.eavesdrop": {
             "description": "Validator for the eavesdrop callflow's data object",
             "properties": {
+                "approved_device_id": {
+                    "description": "Restricts the calling device to this Device",
+                    "type": "string"
+                },
+                "approved_group_id": {
+                    "description": "Requires the calling device to be part of the Group",
+                    "type": "string"
+                },
+                "approved_user_id": {
+                    "description": "Requires the calling device to be part of the User",
+                    "type": "string"
+                },
                 "device_id": {
-                    "description": ""
+                    "description": "Device ID to eavesdrop",
+                    "type": "string"
                 },
                 "user_id": {
-                    "description": ""
+                    "description": "User ID to eavesdrop",
+                    "type": "string"
                 }
             },
             "required": true,
@@ -1160,8 +1441,21 @@
         "callflows.eavesdrop_feature": {
             "description": "Validator for the eavesdrop_feature callflow's data object",
             "properties": {
+                "approved_device_id": {
+                    "description": "Restricts the calling device to this Device",
+                    "type": "string"
+                },
+                "approved_group_id": {
+                    "description": "Requires the calling device to be part of the Group",
+                    "type": "string"
+                },
+                "approved_user_id": {
+                    "description": "Requires the calling device to be part of the User",
+                    "type": "string"
+                },
                 "group_id": {
-                    "description": ""
+                    "description": "ID of the group/user/device to eavesdrop",
+                    "type": "string"
                 }
             },
             "required": true,
@@ -1171,7 +1465,7 @@
             "description": "Validator for the fax_detect callflow's data object",
             "properties": {
                 "duration": {
-                    "description": "",
+                    "description": "How long, in seconds, to try detecting fax tones",
                     "type": "integer"
                 }
             },
@@ -1181,10 +1475,27 @@
         "callflows.faxbox": {
             "description": "Validator for the faxbox callflow's data object",
             "properties": {
+                "faxbox_id": {
+                    "description": "ID of the faxbox",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "ID of the faxbox",
+                    "type": "string"
+                },
                 "media": {
                     "properties": {
                         "fax_option": {
-                            "description": ""
+                            "description": "Caller flag for T38 settings",
+                            "enum": [
+                                "auto",
+                                true,
+                                false
+                            ],
+                            "type": [
+                                "string",
+                                "boolean"
+                            ]
                         }
                     },
                     "type": "object"
@@ -1198,33 +1509,48 @@
             "properties": {
                 "endpoints": {
                     "default": [],
-                    "description": "",
+                    "description": "List of endpoint (device/user/group) IDs",
+                    "items": {
+                        "description": "ID of the endpoint",
+                        "type": "string"
+                    },
                     "type": "array"
                 },
                 "fail_on_single_reject": {
-                    "description": ""
+                    "description": "If any leg rejects the call, cancel all other legs",
+                    "type": "boolean"
+                },
+                "id": {
+                    "description": "Group ID",
+                    "type": "string"
                 },
                 "ignore_forward": {
                     "default": true,
-                    "description": "",
+                    "description": "Whether to ignore forwarded phones",
                     "type": "boolean"
                 },
                 "repeats": {
                     "default": 1,
-                    "description": "",
+                    "description": "How many times to repeat dialing the group",
                     "type": "integer"
                 },
                 "ringback": {
-                    "description": ""
+                    "description": "Ringback to use",
+                    "required": false,
+                    "type": "string"
                 },
                 "strategy": {
                     "default": "simultaneous",
-                    "description": "",
+                    "description": "How to ring the endpoints",
+                    "enum": [
+                        "single",
+                        "simultaneous"
+                    ],
                     "type": "string"
                 },
                 "timeout": {
                     "default": 20,
-                    "description": "",
+                    "description": "How long to attempt the group",
                     "type": "integer"
                 }
             },
@@ -1235,22 +1561,28 @@
             "description": "Validator for the group_pickup callflow's data object",
             "properties": {
                 "approved_device_id": {
-                    "description": ""
+                    "description": "Restrict calling device to Device",
+                    "type": "string"
                 },
                 "approved_group_id": {
-                    "description": ""
+                    "description": "Restrict calling device to Group",
+                    "type": "string"
                 },
                 "approved_user_id": {
-                    "description": ""
+                    "description": "Restrict calling device to User",
+                    "type": "string"
                 },
                 "device_id": {
-                    "description": ""
+                    "description": "Device to pickup",
+                    "type": "string"
                 },
                 "group_id": {
-                    "description": ""
+                    "description": "Group in which to find a call to pickup",
+                    "type": "string"
                 },
                 "user_id": {
-                    "description": ""
+                    "description": "User in which to find a call to pickup",
+                    "type": "string"
                 }
             },
             "required": true,
@@ -1260,7 +1592,14 @@
             "description": "Validator for the group_pickup_feature callflow's data object",
             "properties": {
                 "type": {
-                    "description": ""
+                    "description": "The type of collection to pickup",
+                    "enum": [
+                        "group",
+                        "user",
+                        "device",
+                        "extension"
+                    ],
+                    "type": "string"
                 }
             },
             "required": true,
@@ -1276,10 +1615,21 @@
             "description": "Validator for the hotdesk callflow's data object",
             "properties": {
                 "action": {
-                    "description": ""
+                    "description": "The action to take for hotdesking",
+                    "enum": [
+                        "logout",
+                        "login",
+                        "toggle",
+                        "bridge"
+                    ],
+                    "type": "string"
+                },
+                "id": {
+                    "description": "Hotdesk ID",
+                    "type": "string"
                 },
                 "interdigit_timeout": {
-                    "description": "",
+                    "description": "How long, in seconds, to wait between keypresses",
                     "type": "integer"
                 }
             },
@@ -1290,22 +1640,28 @@
             "description": "Validator for the intercept callflow's data object",
             "properties": {
                 "approved_device_id": {
-                    "description": ""
+                    "description": "Restrict calling device to Device",
+                    "type": "string"
                 },
                 "approved_group_id": {
-                    "description": ""
+                    "description": "Restrict calling device to Group",
+                    "type": "string"
                 },
                 "approved_user_id": {
-                    "description": ""
+                    "description": "Restrict calling device to User",
+                    "type": "string"
                 },
                 "device_id": {
-                    "description": ""
+                    "description": "Device to intercept",
+                    "type": "string"
                 },
                 "group_id": {
-                    "description": ""
+                    "description": "Group in which to find a call to intercept",
+                    "type": "string"
                 },
                 "user_id": {
-                    "description": ""
+                    "description": "User in which to find a call to intercept",
+                    "type": "string"
                 }
             },
             "required": true,
@@ -1315,16 +1671,25 @@
             "description": "Validator for the intercept_feature callflow's data object",
             "properties": {
                 "approved_device_id": {
-                    "description": ""
+                    "description": "Restricts the calling device to this Device",
+                    "type": "string"
                 },
                 "approved_group_id": {
-                    "description": ""
+                    "description": "Requires the calling device to be part of the Group",
+                    "type": "string"
                 },
                 "approved_user_id": {
-                    "description": ""
+                    "description": "Requires the calling device to be part of the User",
+                    "type": "string"
                 },
                 "type": {
-                    "description": ""
+                    "description": "The scope of devices to intercept",
+                    "enum": [
+                        "user",
+                        "device",
+                        "extension"
+                    ],
+                    "type": "string"
                 }
             },
             "required": true,
@@ -1334,7 +1699,7 @@
             "description": "Validator for the intercom callflow's data object",
             "properties": {
                 "barge_calls": {
-                    "description": "",
+                    "description": "Whether to barge in on the callee",
                     "type": "boolean"
                 }
             },
@@ -1396,8 +1761,13 @@
         "callflows.menu": {
             "description": "Validator for the menu callflow's data object",
             "properties": {
+                "id": {
+                    "description": "Menu ID to use",
+                    "type": "string"
+                },
                 "interdigit_timeout": {
-                    "description": ""
+                    "description": "Amount of time, in milliseconds, to wait between keypresses",
+                    "type": "integer"
                 }
             },
             "required": true,
@@ -1434,60 +1804,67 @@
             "description": "Validator for the offnet callflow's data object",
             "properties": {
                 "bypass_e164": {
-                    "description": "",
+                    "description": "Use the original requested number instead of normalizing to E164",
                     "type": "boolean"
                 },
                 "caller_id_type": {
                     "default": "external",
-                    "description": "",
+                    "description": "Which configured caller-id to use (key in the 'caller_id' object)",
                     "type": "string"
                 },
                 "custom_sip_headers": {
-                    "default": {},
-                    "description": "",
+                    "description": "Custom SIP Headers to include on the outgoing INVITE",
                     "type": "object"
                 },
                 "do_not_normalize": {
-                    "description": "",
+                    "description": "Use the original requested number instead of normalizing; otherwise try to apply the endpoint's dialplan to the requested number",
                     "type": "boolean"
                 },
                 "dynamic_flags": {
-                    "description": ""
+                    "description": "List of function names (or 'zone') that are called on the Call record to populate the 'flags' array sent to the resource(s) for matching",
+                    "type": "array"
                 },
                 "emit_account_id": {
-                    "description": "",
+                    "description": "Toggles whether to put the account id in the SIP packets",
                     "type": "boolean"
                 },
                 "format_from_uri": {
-                    "description": "",
+                    "description": "If true, puts the account realm in the From header",
                     "type": "boolean"
                 },
                 "from_uri_realm": {
-                    "description": ""
+                    "description": "Override the From realm in the SIP packets",
+                    "type": "string"
                 },
                 "hunt_account_id": {
-                    "description": ""
+                    "description": "When using local resources, use this account instead of the account making the call (useful for resellers)",
+                    "type": "string"
                 },
                 "ignore_early_media": {
                     "default": false,
-                    "description": "",
+                    "description": "Toggle whether to ignore early media",
                     "type": "boolean"
                 },
                 "outbound_flags": {
-                    "description": ""
+                    "default": [],
+                    "description": "List of flags to use when matching resources to route the call",
+                    "type": "array"
                 },
                 "ringback": {
-                    "description": ""
+                    "description": "Tone or file to play while waiting for the leg to be answered",
+                    "type": "string"
                 },
                 "timeout": {
-                    "description": ""
+                    "description": "How long, in seconds, to wait for the call to be answered",
+                    "type": "integer"
                 },
                 "to_did": {
-                    "description": ""
+                    "description": "Statically set the DID to dial",
+                    "type": "string"
                 },
                 "use_local_resources": {
                     "default": true,
-                    "description": "",
+                    "description": "Toggle whether to use the account's (or hunt_account_id's) resources vs the system resources",
                     "type": "boolean"
                 }
             },
@@ -1498,18 +1875,62 @@
             "description": "Validator for the page_group callflow's data object",
             "properties": {
                 "barge_calls": {
-                    "description": "",
+                    "description": "Should the Endpoint be interrupted by this call",
                     "type": "boolean"
                 },
                 "endpoints": {
                     "default": [],
-                    "description": "",
+                    "description": "Endpoint IDs (devices, users, etc) included in the ring group",
+                    "items": {
+                        "description": "ID of the endpoint (device, user, etc)",
+                        "properties": {
+                            "delay": {
+                                "default": 0,
+                                "description": "How long to delay ringing the endpoint, in seconds",
+                                "required": false,
+                                "type": "integer"
+                            },
+                            "endpoint_type": {
+                                "description": "The type (device, user, etc) of endpoint",
+                                "enum": [
+                                    "device",
+                                    "user",
+                                    "group"
+                                ],
+                                "required": true,
+                                "type": "string"
+                            },
+                            "id": {
+                                "description": "The ID of the endpoint",
+                                "maxLength": 128,
+                                "minLength": 1,
+                                "required": true,
+                                "type": "string"
+                            },
+                            "timeout": {
+                                "default": 20,
+                                "description": "How long to ring the endpoint, in seconds",
+                                "required": false,
+                                "type": "integer"
+                            },
+                            "weight": {
+                                "description": "Weight of endpoint, different usage in various strategies",
+                                "maximum": 100,
+                                "minimum": 1,
+                                "required": false,
+                                "type": "integer"
+                            }
+                        },
+                        "type": "object"
+                    },
+                    "minItems": 1,
+                    "required": true,
                     "type": "array"
                 },
                 "timeout": {
                     "default": 5,
-                    "description": "",
-                    "type": "string"
+                    "description": "How long to ring the ring group before continuing, in seconds",
+                    "type": "integer"
                 }
             },
             "required": true,
@@ -1520,27 +1941,33 @@
             "properties": {
                 "action": {
                     "default": "park",
-                    "description": "",
+                    "description": "Action to take for the caller",
+                    "enum": [
+                        "park",
+                        "retrieve",
+                        "auto"
+                    ],
                     "type": "string"
                 },
                 "default_callback_timeout": {
-                    "description": "",
+                    "description": "How long, in seconds, to wait before calling back the parker",
                     "type": "integer"
                 },
                 "default_presence_type": {
-                    "description": "",
+                    "description": "Type of presence to update",
                     "type": "string"
                 },
                 "default_ringback_timeout": {
-                    "description": "",
+                    "description": "How long, in milliseconds, before ringing back",
                     "type": "integer"
                 },
                 "slot": {
-                    "description": ""
+                    "description": "Static slot number to use",
+                    "type": "string"
                 },
                 "slots": {
-                    "default": {},
-                    "description": "",
+                    "default": null,
+                    "description": "Statically define slots and their configuration",
                     "type": "object"
                 }
             },
@@ -1598,8 +2025,12 @@
             "description": "Validator for the play callflow's data object",
             "properties": {
                 "answer": {
-                    "description": "",
+                    "description": "Whether to answer an unanswered call",
                     "type": "boolean"
+                },
+                "id": {
+                    "description": "Media ID or URL of the media to play",
+                    "type": "string"
                 }
             },
             "required": true,
@@ -1610,22 +2041,30 @@
             "properties": {
                 "action": {
                     "default": "prepend",
-                    "description": "",
+                    "description": "Action to perform",
+                    "enum": [
+                        "reset",
+                        "prepend"
+                    ],
                     "type": "string"
                 },
                 "apply_to": {
                     "default": "original",
-                    "description": "",
+                    "description": "Apply the prepend to which caller ID",
+                    "enum": [
+                        "original",
+                        "current"
+                    ],
                     "type": "string"
                 },
                 "caller_id_name_prefix": {
                     "default": "",
-                    "description": "",
+                    "description": "Prefix caller ID name",
                     "type": "string"
                 },
                 "caller_id_number_prefix": {
                     "default": "",
-                    "description": "",
+                    "description": "Prefix caller ID number",
                     "type": "string"
                 }
             },
@@ -1656,13 +2095,23 @@
                 "media": {
                     "properties": {
                         "fax_option": {
-                            "description": ""
+                            "description": "Caller flag for T38 settings",
+                            "enum": [
+                                "auto",
+                                true,
+                                false
+                            ],
+                            "type": [
+                                "string",
+                                "boolean"
+                            ]
                         }
                     },
                     "type": "object"
                 },
                 "owner_id": {
-                    "description": ""
+                    "description": "User ID to send fax to",
+                    "type": "string"
                 }
             },
             "required": true,
@@ -1678,7 +2127,7 @@
                         "start",
                         "stop"
                     ],
-                    "required": false,
+                    "required": true,
                     "type": "string"
                 },
                 "format": {
@@ -1775,60 +2224,67 @@
             "description": "Validator for the resources callflow's data object",
             "properties": {
                 "bypass_e164": {
-                    "description": "",
+                    "description": "Use the original requested number instead of normalizing to E164",
                     "type": "boolean"
                 },
                 "caller_id_type": {
                     "default": "external",
-                    "description": "",
+                    "description": "Which configured caller-id to use (key in the 'caller_id' object)",
                     "type": "string"
                 },
                 "custom_sip_headers": {
-                    "default": {},
-                    "description": "",
+                    "description": "Custom SIP Headers to include on the outgoing INVITE",
                     "type": "object"
                 },
                 "do_not_normalize": {
-                    "description": "",
+                    "description": "Use the original requested number instead of normalizing; otherwise try to apply the endpoint's dialplan to the requested number",
                     "type": "boolean"
                 },
                 "dynamic_flags": {
-                    "description": ""
+                    "description": "List of function names (or 'zone') that are called on the Call record to populate the 'flags' array sent to the resource(s) for matching",
+                    "type": "array"
                 },
                 "emit_account_id": {
-                    "description": "",
+                    "description": "Toggles whether to put the account id in the SIP packets",
                     "type": "boolean"
                 },
                 "format_from_uri": {
-                    "description": "",
+                    "description": "If true, puts the account realm in the From header",
                     "type": "boolean"
                 },
                 "from_uri_realm": {
-                    "description": ""
+                    "description": "Override the From realm in the SIP packets",
+                    "type": "string"
                 },
                 "hunt_account_id": {
-                    "description": ""
+                    "description": "When using local resources, use this account instead of the account making the call (useful for resellers)",
+                    "type": "string"
                 },
                 "ignore_early_media": {
                     "default": false,
-                    "description": "",
+                    "description": "Toggle whether to ignore early media",
                     "type": "boolean"
                 },
                 "outbound_flags": {
-                    "description": ""
+                    "default": [],
+                    "description": "List of flags to use when matching resources to route the call",
+                    "type": "array"
                 },
                 "ringback": {
-                    "description": ""
+                    "description": "Tone or file to play while waiting for the leg to be answered",
+                    "type": "string"
                 },
                 "timeout": {
-                    "description": ""
+                    "description": "How long, in seconds, to wait for the call to be answered",
+                    "type": "integer"
                 },
                 "to_did": {
-                    "description": ""
+                    "description": "Statically set the DID to dial",
+                    "type": "string"
                 },
                 "use_local_resources": {
                     "default": true,
-                    "description": "",
+                    "description": "Toggle whether to use the account's (or hunt_account_id's) resources vs the system resources",
                     "type": "boolean"
                 }
             },
@@ -1911,7 +2367,8 @@
                     "type": "array"
                 },
                 "fail_on_single_reject": {
-                    "description": ""
+                    "description": "If any leg rejects the call, cancel all other legs",
+                    "type": "boolean"
                 },
                 "ignore_forward": {
                     "default": true,
@@ -1983,12 +2440,12 @@
             "properties": {
                 "caller_id_name": {
                     "default": "",
-                    "description": "",
+                    "description": "Set caller ID Name",
                     "type": "string"
                 },
                 "caller_id_number": {
                     "default": "",
-                    "description": "",
+                    "description": "Set caller ID number",
                     "type": "string"
                 }
             },
@@ -2000,15 +2457,20 @@
             "properties": {
                 "channel": {
                     "default": "a",
-                    "description": "",
+                    "description": "Which channel to set the variable on",
+                    "enum": [
+                        "a",
+                        "both"
+                    ],
                     "type": "string"
                 },
                 "value": {
-                    "description": "",
+                    "description": "The value to set 'variable'",
                     "type": "string"
                 },
                 "variable": {
-                    "description": ""
+                    "description": "The variable name to set on the leg(s)",
+                    "type": "string"
                 }
             },
             "required": true,
@@ -2025,12 +2487,20 @@
             "properties": {
                 "duration": {
                     "default": 0,
-                    "description": "",
+                    "description": "How long to pause before continuing the callflow",
+                    "maximum": 86400000,
+                    "minimum": 0,
                     "type": "integer"
                 },
                 "unit": {
                     "default": "s",
-                    "description": "",
+                    "description": "What time unit is 'duration' in",
+                    "enum": [
+                        "ms",
+                        "s",
+                        "m",
+                        "h"
+                    ],
                     "type": "string"
                 }
             },
@@ -2041,22 +2511,35 @@
             "description": "Validator for the temporal_route callflow's data object",
             "properties": {
                 "action": {
-                    "description": ""
+                    "description": "What action to perform",
+                    "enum": [
+                        "menu",
+                        "enable",
+                        "disable",
+                        "reset"
+                    ],
+                    "type": "string"
                 },
                 "interdigit_timeout": {
-                    "description": "",
+                    "description": "How long, in milliseconds, to wait for the next keypress",
                     "type": "integer"
                 },
                 "rule_set": {
-                    "description": ""
+                    "description": "ID of the rule set",
+                    "type": "string"
                 },
                 "rules": {
                     "default": [],
-                    "description": "",
+                    "description": "List of rule IDs to use",
+                    "items": {
+                        "description": "ID of the temporal rule set to use",
+                        "type": "string"
+                    },
                     "type": "array"
                 },
                 "timezone": {
-                    "description": ""
+                    "description": "Timezone to use when processing temporal rules",
+                    "type": "string"
                 }
             },
             "required": true,
@@ -2101,39 +2584,50 @@
             "description": "Validator for the user callflow's data object",
             "properties": {
                 "can_call_self": {
-                    "description": "",
+                    "description": "Toggle whether devices of this use can call each other",
                     "type": "boolean"
                 },
                 "can_text_self": {
-                    "description": "",
+                    "description": "Toggle whether devices of this use can text each other",
                     "type": "boolean"
                 },
                 "delay": {
                     "default": 0,
-                    "description": "",
+                    "description": "How long to delay the endpoint(s) before bridging",
                     "type": "integer"
                 },
                 "fail_on_single_reject": {
-                    "description": ""
+                    "description": "If any leg rejects the call, cancel all other legs",
+                    "type": "boolean"
+                },
+                "id": {
+                    "description": "User ID",
+                    "type": "string"
                 },
                 "source": {
-                    "description": ""
+                    "description": "Source of the endpoint(s)",
+                    "type": "string"
                 },
                 "static_invite": {
-                    "description": ""
+                    "description": "Override the SIP Username",
+                    "type": "string"
                 },
                 "strategy": {
                     "default": "simultaneous",
-                    "description": "",
+                    "description": "Ringing strategy for the endpoint(s)",
+                    "enum": [
+                        "simultaneous",
+                        "single"
+                    ],
                     "type": "string"
                 },
                 "suppress_clid": {
-                    "description": "",
+                    "description": "Toggle whether to suppress caller ID",
                     "type": "boolean"
                 },
                 "timeout": {
                     "default": 20,
-                    "description": "",
+                    "description": "Timeout, in seconds, to wait for answer",
                     "type": "integer"
                 }
             },
@@ -2155,7 +2649,7 @@
                 },
                 "callerid_match_login": {
                     "default": false,
-                    "description": "",
+                    "description": "Whether to match the caller ID to a voicemail box",
                     "type": "boolean"
                 },
                 "id": {
@@ -2179,7 +2673,7 @@
                 },
                 "single_mailbox_login": {
                     "default": false,
-                    "description": "",
+                    "description": "Allow login if caller has a single mailbox",
                     "type": "boolean"
                 }
             },
@@ -2190,19 +2684,23 @@
             "description": "Validator for the webhook callflow's data object",
             "properties": {
                 "custom_data": {
-                    "description": "",
+                    "description": "JSON object of custom data included on the HTTP request",
                     "type": "object"
                 },
                 "http_verb": {
-                    "description": "",
+                    "description": "What HTTP verb to use when sending the request",
+                    "enum": [
+                        "post",
+                        "get"
+                    ],
                     "type": "string"
                 },
                 "retries": {
-                    "description": "",
+                    "description": "How many times to retry the request if the host isn't available",
                     "type": "integer"
                 },
                 "uri": {
-                    "description": "",
+                    "description": "The HTTP URI to send the request",
                     "type": "string"
                 }
             },
@@ -3497,7 +3995,7 @@
                 "required": false,
                 "type": "object"
             },
-            "description": "",
+            "description": "Permit local dialing by converting the dialed number to a routable form",
             "properties": {
                 "system": {
                     "description": "List of system dial plans",
@@ -4701,580 +5199,306 @@
         },
         "metaflow": {
             "description": "A metaflow node defines a module to execute, data to provide to that module, and one or more children to branch to",
-            "oneOf": [
-                {
-                    "$ref": "metaflow.audio_level"
+            "properties": {
+                "children": {
+                    "description": "Children metaflows",
+                    "patternProperties": {
+                        ".+": {
+                            "$ref": "metaflow"
+                        }
+                    },
+                    "type": "object"
                 },
-                {
-                    "$ref": "metaflow.break"
+                "data": {
+                    "description": "The data/arguments of the metaflow module",
+                    "kazoo-validation": true,
+                    "type": "object"
                 },
-                {
-                    "$ref": "metaflow.callflow"
-                },
-                {
-                    "$ref": "metaflow.hangup"
-                },
-                {
-                    "$ref": "metaflow.hold"
-                },
-                {
-                    "$ref": "metaflow.hold_control"
-                },
-                {
-                    "$ref": "metaflow.intercept"
-                },
-                {
-                    "$ref": "metaflow.move"
-                },
-                {
-                    "$ref": "metaflow.play"
-                },
-                {
-                    "$ref": "metaflow.record_call"
-                },
-                {
-                    "$ref": "metaflow.resume"
-                },
-                {
-                    "$ref": "metaflow.say"
-                },
-                {
-                    "$ref": "metaflow.sound_touch"
-                },
-                {
-                    "$ref": "metaflow.transfer"
-                },
-                {
-                    "$ref": "metaflow.tts"
+                "module": {
+                    "description": "The name of the metaflow module to execute at this node",
+                    "kazoo-validation": true,
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "type": "string"
                 }
+            },
+            "required": [
+                "module"
             ],
             "type": "object"
         },
         "metaflow.audio_level": {
             "description": "audio_level metaflow schema",
             "properties": {
-                "children": {
-                    "$ref": "metaflow_children"
+                "action": {
+                    "type": "string"
                 },
-                "data": {
-                    "properties": {
-                        "action": {
-                            "type": "string"
-                        },
-                        "level": {
-                            "type": "string"
-                        },
-                        "mode": {
-                            "type": "string"
-                        }
-                    },
-                    "required": [
-                        "action"
-                    ],
-                    "type": "object"
+                "level": {
+                    "type": "string"
                 },
-                "module": {
-                    "enum": [
-                        "audio_level"
-                    ],
+                "mode": {
                     "type": "string"
                 }
             },
             "required": [
-                "module",
-                "data"
+                "action"
             ],
             "type": "object"
         },
         "metaflow.break": {
             "additionalProperties": false,
             "description": "break metaflow schema",
-            "properties": {
-                "children": {
-                    "$ref": "metaflow_children"
-                },
-                "data": {
-                    "type": "object"
-                },
-                "module": {
-                    "enum": [
-                        "break"
-                    ]
-                }
-            },
-            "required": [
-                "module"
-            ],
+            "properties": {},
             "type": "object"
         },
         "metaflow.callflow": {
             "description": "callflow metaflow schema",
             "properties": {
-                "children": {
-                    "$ref": "metaflow_children"
-                },
-                "data": {
-                    "properties": {
-                        "id": {
-                            "type": "string"
-                        }
-                    },
-                    "required": [
-                        "id"
-                    ],
-                    "type": "object"
-                },
-                "module": {
-                    "enum": [
-                        "callflow"
-                    ]
+                "id": {
+                    "type": "string"
                 }
             },
             "required": [
-                "module",
-                "data"
+                "id"
             ],
             "type": "object"
         },
         "metaflow.hangup": {
             "description": "hangup metaflow schema",
-            "properties": {
-                "children": {
-                    "$ref": "metaflow_children"
-                },
-                "data": {
-                    "type": "object"
-                },
-                "module": {
-                    "enum": [
-                        "hangup"
-                    ]
-                }
-            },
-            "required": [
-                "module"
-            ],
+            "properties": {},
             "type": "object"
         },
         "metaflow.hold": {
             "description": "hold metaflow schema",
             "properties": {
-                "children": {
-                    "$ref": "metaflow_children"
+                "moh_aleg": {
+                    "type": "string"
                 },
-                "data": {
-                    "properties": {
-                        "moh_aleg": {
-                            "type": "string"
-                        },
-                        "moh_bleg": {
-                            "type": "string"
-                        },
-                        "unhold_key": {
-                            "default": "1",
-                            "type": "string"
-                        }
-                    },
-                    "type": "object"
+                "moh_bleg": {
+                    "type": "string"
                 },
-                "module": {
-                    "enum": [
-                        "hold"
-                    ]
+                "unhold_key": {
+                    "default": "1",
+                    "type": "string"
                 }
             },
-            "required": [
-                "module",
-                "data"
-            ],
             "type": "object"
         },
         "metaflow.hold_control": {
             "description": "hold_control metaflow schema",
             "properties": {
-                "children": {
-                    "$ref": "metaflow_children"
-                },
-                "data": {
-                    "properties": {
-                        "action": {
-                            "default": "toggle",
-                            "enum": [
-                                "hold",
-                                "unhold",
-                                "toggle"
-                            ]
-                        }
-                    },
-                    "type": "object"
-                },
-                "module": {
+                "action": {
+                    "default": "toggle",
                     "enum": [
-                        "hold_control"
+                        "hold",
+                        "unhold",
+                        "toggle"
                     ]
                 }
             },
-            "required": [
-                "module"
-            ],
             "type": "object"
         },
         "metaflow.intercept": {
             "description": "intercept metaflow schema",
             "properties": {
-                "children": {
-                    "$ref": "metaflow_children"
+                "auto_answer": {
+                    "default": false,
+                    "type": "boolean"
                 },
-                "data": {
-                    "properties": {
-                        "auto_answer": {
-                            "default": false,
-                            "type": "boolean"
-                        },
-                        "target_id": {
-                            "type": "string"
-                        },
-                        "target_type": {
-                            "enum": [
-                                "device",
-                                "user",
-                                "number"
-                            ]
-                        },
-                        "unbridged_only": {
-                            "default": true,
-                            "type": "boolean"
-                        }
-                    },
-                    "required": [
-                        "target_type",
-                        "target_id"
-                    ],
-                    "type": "object"
+                "target_id": {
+                    "type": "string"
                 },
-                "module": {
+                "target_type": {
                     "enum": [
-                        "intercept"
+                        "device",
+                        "user",
+                        "number"
                     ]
+                },
+                "unbridged_only": {
+                    "default": true,
+                    "type": "boolean"
                 }
             },
             "required": [
-                "module",
-                "data"
+                "target_type",
+                "target_id"
             ],
             "type": "object"
         },
         "metaflow.move": {
             "description": "move metaflow schema",
             "properties": {
-                "children": {
-                    "$ref": "metaflow_children"
+                "auto_answer": {
+                    "default": false,
+                    "type": "boolean"
                 },
-                "data": {
-                    "properties": {
-                        "auto_answer": {
-                            "default": false,
-                            "type": "boolean"
-                        },
-                        "device_id": {
-                            "type": "string"
-                        },
-                        "owner_id": {
-                            "type": "string"
-                        }
-                    },
-                    "type": "object"
+                "device_id": {
+                    "type": "string"
                 },
-                "module": {
-                    "enum": [
-                        "move"
-                    ]
+                "owner_id": {
+                    "type": "string"
                 }
             },
-            "required": [
-                "module",
-                "data"
-            ],
             "type": "object"
         },
         "metaflow.play": {
             "description": "play metaflow schema",
             "properties": {
-                "children": {
-                    "$ref": "metaflow_children"
+                "id": {
+                    "type": "string"
                 },
-                "data": {
-                    "properties": {
-                        "id": {
-                            "type": "string"
-                        },
-                        "leg": {
-                            "default": "both",
-                            "enum": [
-                                "both",
-                                "self",
-                                "peer"
-                            ]
-                        }
-                    },
-                    "required": [
-                        "id"
-                    ],
-                    "type": "object"
-                },
-                "module": {
+                "leg": {
+                    "default": "both",
                     "enum": [
-                        "play"
+                        "both",
+                        "self",
+                        "peer"
                     ]
                 }
             },
             "required": [
-                "module",
-                "data"
+                "id"
             ],
             "type": "object"
         },
         "metaflow.record_call": {
             "description": "record_call metaflow schema",
             "properties": {
-                "children": {
-                    "$ref": "metaflow_children"
-                },
-                "data": {
-                    "properties": {
-                        "action": {
-                            "default": "toggle",
-                            "enum": [
-                                "start",
-                                "stop",
-                                "toggle"
-                            ]
-                        },
-                        "format": {
-                            "type": "string"
-                        },
-                        "media_name": {
-                            "type": "string"
-                        }
-                    },
-                    "required": [
-                        "action"
-                    ],
-                    "type": "object"
-                },
-                "module": {
+                "action": {
+                    "default": "toggle",
                     "enum": [
-                        "record_call"
+                        "start",
+                        "stop",
+                        "toggle"
                     ]
+                },
+                "format": {
+                    "type": "string"
+                },
+                "media_name": {
+                    "type": "string"
                 }
             },
             "required": [
-                "module",
-                "data"
+                "action"
             ],
             "type": "object"
         },
         "metaflow.resume": {
             "description": "resume metaflow schema",
-            "properties": {
-                "children": {
-                    "$ref": "metaflow_children"
-                },
-                "data": {
-                    "type": "object"
-                },
-                "module": {
-                    "enum": [
-                        "resume"
-                    ]
-                }
-            },
-            "required": [
-                "module"
-            ],
+            "properties": {},
             "type": "object"
         },
         "metaflow.say": {
             "description": "say metaflow schema",
             "properties": {
-                "children": {
-                    "$ref": "metaflow_children"
+                "language": {
+                    "type": "string"
                 },
-                "data": {
-                    "properties": {
-                        "language": {
-                            "type": "string"
-                        },
-                        "method": {
-                            "type": "string"
-                        },
-                        "text": {
-                            "type": "string"
-                        },
-                        "type": {
-                            "type": "string"
-                        }
-                    },
-                    "required": [
-                        "text"
-                    ],
-                    "type": "object"
+                "method": {
+                    "type": "string"
                 },
-                "module": {
-                    "enum": [
-                        "say"
-                    ]
+                "text": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
                 }
             },
             "required": [
-                "module",
-                "data"
-            ]
+                "text"
+            ],
+            "type": "object"
         },
         "metaflow.sound_touch": {
             "description": "sound_touch metaflow schema",
             "properties": {
-                "children": {
-                    "$ref": "metaflow_children"
-                },
-                "data": {
-                    "properties": {
-                        "action": {
-                            "enum": [
-                                "start",
-                                "stop"
-                            ]
-                        },
-                        "adjust_in_octaves": {
-                            "type": "integer"
-                        },
-                        "adjust_in_semitones": {
-                            "type": "integer"
-                        },
-                        "hook_dtmf": {
-                            "default": false,
-                            "type": "boolean"
-                        },
-                        "pitch": {
-                            "type": "integer"
-                        },
-                        "rate": {
-                            "type": "integer"
-                        },
-                        "sending_leg": {
-                            "default": false,
-                            "type": "boolean"
-                        },
-                        "tempo": {
-                            "type": "integer"
-                        }
-                    },
-                    "required": [
-                        "action"
-                    ],
-                    "type": "object"
-                },
-                "module": {
+                "action": {
                     "enum": [
-                        "sound_touch"
+                        "start",
+                        "stop"
                     ]
+                },
+                "adjust_in_octaves": {
+                    "type": "integer"
+                },
+                "adjust_in_semitones": {
+                    "type": "integer"
+                },
+                "hook_dtmf": {
+                    "default": false,
+                    "type": "boolean"
+                },
+                "pitch": {
+                    "type": "integer"
+                },
+                "rate": {
+                    "type": "integer"
+                },
+                "sending_leg": {
+                    "default": false,
+                    "type": "boolean"
+                },
+                "tempo": {
+                    "type": "integer"
                 }
             },
             "required": [
-                "module",
-                "data"
+                "action"
             ],
             "type": "object"
         },
         "metaflow.transfer": {
             "description": "transfer metaflow schema",
             "properties": {
-                "children": {
-                    "$ref": "metaflow_children"
-                },
-                "data": {
-                    "properties": {
-                        "Transfer-Type": {
-                            "default": "attended",
-                            "type": "string"
-                        },
-                        "captures": {
-                            "type": "string"
-                        },
-                        "target": {
-                            "type": "string"
-                        }
-                    },
-                    "type": "object"
-                },
-                "module": {
+                "Transfer-Type": {
+                    "default": "attended",
                     "enum": [
-                        "transfer"
+                        "attended",
+                        "blind"
                     ]
+                },
+                "captures": {
+                    "type": "string"
+                },
+                "target": {
+                    "type": "string"
                 }
             },
-            "required": [
-                "module",
-                "data"
-            ],
             "type": "object"
         },
         "metaflow.tts": {
             "description": "tts metaflow schema",
             "properties": {
-                "children": {
-                    "$ref": "metaflow_children"
+                "engine": {
+                    "default": "flite",
+                    "type": "string"
                 },
-                "data": {
-                    "properties": {
-                        "engine": {
-                            "default": "flite",
-                            "type": "string"
-                        },
-                        "language": {
-                            "type": "string"
-                        },
-                        "leg": {
-                            "default": "self",
-                            "type": "string"
-                        },
-                        "terminators": {
-                            "type": "string"
-                        },
-                        "text": {
-                            "type": "string"
-                        },
-                        "voice": {
-                            "default": "female",
-                            "type": "string"
-                        }
-                    },
-                    "required": [
-                        "text"
-                    ],
-                    "type": "object"
+                "language": {
+                    "type": "string"
                 },
-                "module": {
+                "leg": {
+                    "default": "self",
                     "enum": [
-                        "tts"
+                        "self",
+                        "peer"
                     ]
+                },
+                "terminators": {
+                    "type": "string"
+                },
+                "text": {
+                    "type": "string"
+                },
+                "voice": {
+                    "default": "female",
+                    "type": "string"
                 }
             },
             "required": [
-                "module",
-                "data"
+                "text"
             ],
-            "type": "object"
-        },
-        "metaflow_children": {
-            "additionalProperties": false,
-            "default": {},
-            "description": "A metaflow child nodes",
-            "patternProperties": {
-                ".+": {
-                    "$ref": "metaflow"
-                }
-            },
             "type": "object"
         },
         "metaflows": {
@@ -5519,6 +5743,11 @@
         "phone_numbers": {
             "description": "Schema for a number",
             "properties": {
+                "carrier_name": {
+                    "maxLength": 30,
+                    "minLength": 1,
+                    "type": "string"
+                },
                 "cnam": {
                     "properties": {
                         "display_name": {
@@ -6180,6 +6409,11 @@
         "rates": {
             "description": "Defines a rate for a given prefix",
             "properties": {
+                "account_id": {
+                    "description": "Reseller's account ID",
+                    "required": false,
+                    "type": "string"
+                },
                 "carrier": {
                     "description": "Friendly name for the carrier providing this rate",
                     "required": false,
@@ -6191,10 +6425,6 @@
                     "type": "string"
                 },
                 "direction": {
-                    "default": [
-                        "inbound",
-                        "outbound"
-                    ],
                     "description": "Apply this rate based on the direction of the call (relative to FreeSWITCH)",
                     "items": {
                         "enum": [
@@ -6238,16 +6468,14 @@
                     "type": "number"
                 },
                 "rate_increment": {
-                    "default": 60,
                     "description": "The time slice, in seconds, to bill in.",
-                    "minimum": 10,
+                    "minimum": 1,
                     "required": false,
                     "type": "integer"
                 },
                 "rate_minimum": {
-                    "default": 60,
                     "description": "The minimum time slice, in seconds to bill a call",
-                    "minimum": 10,
+                    "minimum": 1,
                     "required": false,
                     "type": "integer"
                 },
@@ -6257,21 +6485,28 @@
                     "type": "string"
                 },
                 "rate_nocharge_time": {
-                    "default": 0,
                     "description": "If the call duration is shorter than this threshold (seconds), the call is not billed",
                     "minimum": 0,
                     "required": false,
                     "type": "integer"
                 },
                 "rate_surcharge": {
-                    "default": 0,
                     "description": "The upfront cost of connecting the call",
                     "minimum": 0,
                     "required": false,
                     "type": "number"
                 },
+                "rate_version": {
+                    "description": "Rate version",
+                    "required": false,
+                    "type": "string"
+                },
+                "ratedeck_id": {
+                    "description": "ID of the ratedeck this rate belongs to",
+                    "required": false,
+                    "type": "string"
+                },
                 "routes": {
-                    "default": [],
                     "description": "List of regexs that match valid DIDs for this rate",
                     "items": {
                         "required": false,
@@ -6558,7 +6793,7 @@
                             },
                             "server": {
                                 "description": "This resource gateway server",
-                                "maxLength": 64,
+                                "maxLength": 128,
                                 "minLength": 1,
                                 "required": true,
                                 "type": "string"
@@ -6723,12 +6958,130 @@
             "required": true,
             "type": "object"
         },
+        "service_plan": {
+            "description": "Describes a service plan",
+            "patternProperties": {
+                ".+": {
+                    "$ref": "service_plan.category",
+                    "description": "Category name",
+                    "type": "object"
+                }
+            }
+        },
+        "service_plan.category": {
+            "description": "Describes a service plan category",
+            "patternProperties": {
+                ".+": {
+                    "$ref": "service_plan.item",
+                    "description": "Item name",
+                    "type": "object"
+                }
+            },
+            "properties": {
+                "_all": {
+                    "$ref": "service_plan.item",
+                    "description": "Applies item rules to any item in this category",
+                    "properties": {
+                        "exceptions": {
+                            "description": "Items that are not included in this item plan",
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": "array"
+                        }
+                    },
+                    "type": "object"
+                }
+            }
+        },
+        "service_plan.item": {
+            "description": "Describes a service plan item",
+            "properties": {
+                "activation_charge": {
+                    "description": "What to charge when activating an Item",
+                    "type": "float"
+                },
+                "as": {
+                    "description": "Count Item as if it was another Item",
+                    "type": "string"
+                },
+                "cascade": {
+                    "description": "Whether to count quantities among all sub-accounts or just the account",
+                    "type": "boolean"
+                },
+                "cumulative_discount": {
+                    "description": "Whether to give a discount based on quatities of the account and all sub-accounts",
+                    "type": "boolean"
+                },
+                "cumulative_discount_rate": {
+                    "description": "How much of a discount to apply",
+                    "type": "float"
+                },
+                "discounts": {
+                    "properties": {
+                        "cumulative": {
+                            "properties": {
+                                "maximum": {
+                                    "description": "The most number of Items to apply discount to",
+                                    "type": "integer"
+                                },
+                                "rate": {
+                                    "description": "The discount to apply, up to maximum Items (if applicable)",
+                                    "type": "float"
+                                }
+                            },
+                            "type": "object"
+                        }
+                    },
+                    "type": "object"
+                },
+                "minimum": {
+                    "description": "The minimum quantity to charge for, if 'quantity' is less than 'minimum'",
+                    "type": "integer"
+                },
+                "name": {
+                    "description": "Friendly name for this Item",
+                    "type": "string"
+                },
+                "quantity": {
+                    "description": "How many of the item are allowed",
+                    "type": "integer"
+                },
+                "rate": {
+                    "description": "How much is the item billed, per-item",
+                    "type": "float"
+                },
+                "rates": {
+                    "description": "Tiers of rates based on quantities",
+                    "patternProperties": {
+                        "^[0-9]+$": {
+                            "description": "The rate to charge when under the quantity indicated in the key",
+                            "type": "float"
+                        }
+                    },
+                    "type": "object"
+                },
+                "single_discount": {
+                    "description": "Whether to give a discount to the account",
+                    "type": "boolean"
+                },
+                "single_discount_rate": {
+                    "description": "How much of a discount to apply, per-item",
+                    "type": "float"
+                }
+            },
+            "type": "object"
+        },
         "service_plans": {
             "description": "Describes services offered to sub-accounts",
             "properties": {
                 "bookkeepers": {
                     "$ref": "bookkeepers",
                     "type": "object"
+                },
+                "category": {
+                    "description": "Optional category used for grouping service plans",
+                    "type": "string"
                 },
                 "description": {
                     "description": "Describes the service plan offering",
@@ -6744,6 +7097,12 @@
                 },
                 "plan": {
                     "description": "Outlines the service plan for various services",
+                    "patternProperties": {
+                        "^[0-9a-zA-Z_]+$": {
+                            "$ref": "service_plan",
+                            "type": "object"
+                        }
+                    },
                     "required": true,
                     "type": "object"
                 }
@@ -7157,9 +7516,6 @@
                     "description": "accounts master account id"
                 }
             },
-            "required": [
-                "master_account_id"
-            ],
             "type": "object"
         },
         "system_config.acdc": {
@@ -7276,9 +7632,6 @@
                     }
                 }
             },
-            "required": [
-                "voicemail"
-            ],
             "type": "object"
         },
         "system_config.auth": {
@@ -7582,14 +7935,17 @@
                                 "description": "callflow save after notify",
                                 "type": "boolean"
                             }
+                        },
+                        "vm_message_foraward_type": {
+                            "properties": {
+                                "default": "only_forward",
+                                "description": "Enable or disable the ability to prepend a message when forwarding a voicemail message",
+                                "type": "string"
+                            }
                         }
                     }
                 }
             },
-            "required": [
-                "call_recording",
-                "voicemail"
-            ],
             "type": "object"
         },
         "system_config.callflow.call_forward": {
@@ -7629,9 +7985,6 @@
                     "type": "integer"
                 }
             },
-            "required": [
-                "keys"
-            ],
             "type": "object"
         },
         "system_config.callflow.dynamic_cid": {
@@ -7807,10 +8160,6 @@
                     "type": "integer"
                 }
             },
-            "required": [
-                "cccp_cb_number",
-                "cccp_cc_number"
-            ],
             "type": "object"
         },
         "system_config.cdr": {
@@ -7827,6 +8176,16 @@
                     "default": true,
                     "description": "cdr ignore loopback bowout",
                     "type": "boolean"
+                },
+                "refresh_timeout": {
+                    "default": 900,
+                    "description": "time in seconds to to trigger cdrs view refresh",
+                    "type": "integer"
+                },
+                "refresh_view_threshold": {
+                    "default": 0,
+                    "description": "number of cdrs to trigger view refresh",
+                    "type": "integer"
                 },
                 "store_anonymous": {
                     "default": false,
@@ -7932,9 +8291,6 @@
                     "type": "boolean"
                 }
             },
-            "required": [
-                "profiles"
-            ],
             "type": "object"
         },
         "system_config.crossbar": {
@@ -8099,10 +8455,6 @@
                     "type": "integer"
                 }
             },
-            "required": [
-                "autoload_modules",
-                "ssl_ca_cert"
-            ],
             "type": "object"
         },
         "system_config.crossbar.accounts": {
@@ -8163,6 +8515,11 @@
                     "default": "md5",
                     "description": "crossbar.auth basic auth type",
                     "type": "string"
+                },
+                "kazoo_auth_configs": {
+                    "default": {},
+                    "description": "Kazoo Auth modules' configurations",
+                    "type": "object"
                 }
             },
             "type": "object"
@@ -8192,6 +8549,11 @@
         "system_config.crossbar.cdrs": {
             "description": "Schema for crossbar.cdrs system_config",
             "properties": {
+                "cdr_stale_view": {
+                    "default": false,
+                    "description": "force cdr to return stale records only",
+                    "type": "boolean"
+                },
                 "maximum_bulk": {
                     "default": 50,
                     "description": "crossbar.cdrs maximum bulk",
@@ -8259,14 +8621,6 @@
                     "type": "string"
                 }
             },
-            "required": [
-                "provisioner_host",
-                "provisioner_referer",
-                "provisioning_host",
-                "provisioning_referer",
-                "provisioning_type",
-                "provisioning_url"
-            ],
             "type": "object"
         },
         "system_config.crossbar.freeswitch": {
@@ -8388,9 +8742,6 @@
                     "type": "string"
                 }
             },
-            "required": [
-                "phonebook_url"
-            ],
             "type": "object"
         },
         "system_config.crossbar.port_requests": {
@@ -8414,7 +8765,7 @@
                     "type": "boolean"
                 },
                 "query_presence_timeout": {
-                    "default": 1000,
+                    "default": 5000,
                     "description": "crossbar.presence query presence timeout",
                     "type": "integer"
                 }
@@ -8475,9 +8826,6 @@
                     "type": "string"
                 }
             },
-            "required": [
-                "authoritative_crossbar"
-            ],
             "type": "object"
         },
         "system_config.crossbar.sms": {
@@ -8509,9 +8857,6 @@
                     "type": "string"
                 }
             },
-            "required": [
-                "_"
-            ],
             "type": "object"
         },
         "system_config.crossbar.ubiquiti": {
@@ -8542,16 +8887,13 @@
                     "type": "integer"
                 },
                 "sso_environment": {
-                    "properties": {
-                        "sso_url": {
-                            "properties": {
-                                "description": "crossbar.ubiquiti sso url"
-                            }
-                        }
-                    }
+                    "default": "staging",
+                    "description": "crossbar.ubiquiti sso environment",
+                    "type": "string"
                 },
                 "sso_provider_id": {
-                    "description": "crossbar.ubiquiti sso provider id"
+                    "description": "crossbar.ubiquiti sso provider id",
+                    "type": "string"
                 },
                 "staging": {
                     "properties": {
@@ -8570,13 +8912,6 @@
                     "type": "integer"
                 }
             },
-            "required": [
-                "api_secret",
-                "production",
-                "sso_environment",
-                "sso_provider_id",
-                "staging"
-            ],
             "type": "object"
         },
         "system_config.datamgr": {
@@ -8616,9 +8951,6 @@
                     "description": "datamgr performance"
                 }
             },
-            "required": [
-                "performance"
-            ],
             "type": "object"
         },
         "system_config.doodle": {
@@ -8690,10 +9022,6 @@
                     "type": "object"
                 }
             },
-            "required": [
-                "connections",
-                "inbound_queue_name"
-            ],
             "type": "object"
         },
         "system_config.ecallmgr": {
@@ -9063,13 +9391,6 @@
                     "type": "integer"
                 }
             },
-            "required": [
-                "default_ringback",
-                "fs_reconnect_cmds",
-                "node_commands",
-                "should_detect_inband_dtmf",
-                "sofia_conf"
-            ],
             "type": "object"
         },
         "system_config.fax": {
@@ -9104,6 +9425,11 @@
                     "default": 5000,
                     "description": "fax cloud registration pool interval",
                     "type": "integer"
+                },
+                "conversion_command": {
+                    "default": "/usr/bin/gs -q -r204x98 -g1728x1078 -dNOPAUSE -dBATCH -dSAFER -sDEVICE=tiffg3 -sOutputFile=~s -- ~s > /dev/null && echo -n \"success\"",
+                    "description": "fax conversion command",
+                    "type": "string"
                 },
                 "conversion_image_command": {
                     "default": "convert -density 204x98 -units PixelsPerInch -size 1728x1078 ~s ~s > /dev/null && echo -n success",
@@ -9357,9 +9683,67 @@
         "system_config.hotornot": {
             "description": "Schema for hotornot system_config",
             "properties": {
+                "default_rate_cost": {
+                    "default": 0.0,
+                    "description": "default cost per minute for rate",
+                    "type": "number"
+                },
+                "default_rate_increment": {
+                    "default": 60,
+                    "description": "default increment time for rate",
+                    "type": "integer"
+                },
+                "default_rate_internal_cost": {
+                    "default": 0.0,
+                    "description": "default internal cost per minute for rate",
+                    "type": "number"
+                },
+                "default_rate_minimum": {
+                    "default": 60,
+                    "description": "default minimal duration for rate",
+                    "type": "integer"
+                },
+                "default_rate_nocharge_time": {
+                    "default": 0,
+                    "description": "default nocharge time for rate",
+                    "type": "integer"
+                },
+                "default_rate_surcharge": {
+                    "default": 0.0,
+                    "description": "default surcharge amount for rate",
+                    "type": "number"
+                },
+                "default_ratedeck": {
+                    "default": "ratedeck",
+                    "description": "default ratedeck database to use",
+                    "type": "string"
+                },
+                "filter_list": {
+                    "default": [
+                        "direction",
+                        "route_options",
+                        "routes"
+                    ],
+                    "description": "List of filters for rates",
+                    "type": "array"
+                },
+                "rate_version": {
+                    "description": "If defined, use rates with this version",
+                    "type": "string"
+                },
+                "sort_by_weight": {
+                    "default": true,
+                    "description": "sort rates by weight (true) or cost (false)",
+                    "type": "boolean"
+                },
+                "trie_build_timeout_ms": {
+                    "default": 60000,
+                    "description": "build timeout (ms) for trie",
+                    "type": "integer"
+                },
                 "use_trie": {
                     "default": false,
-                    "description": "Whether to use the trie to store rates in the VM",
+                    "description": "whether to use the trie to store rates in the VM",
                     "type": "boolean"
                 }
             },
@@ -9385,10 +9769,6 @@
                     "type": "string"
                 }
             },
-            "required": [
-                "default_inbound_trunks",
-                "default_twoway_trunks"
-            ],
             "type": "object"
         },
         "system_config.kapps_controller": {
@@ -9557,12 +9937,6 @@
                     "description": "kazoo_endpoint sip transport"
                 }
             },
-            "required": [
-                "custom_sip_interface",
-                "default_caller_id_name",
-                "default_caller_id_number",
-                "sip_transport"
-            ],
             "type": "object"
         },
         "system_config.kazoo_endpoint.mobile": {
@@ -9635,10 +10009,6 @@
                     "type": "string"
                 }
             },
-            "required": [
-                "custom_sip_interface",
-                "sms"
-            ],
             "type": "object"
         },
         "system_config.konami": {
@@ -9678,9 +10048,6 @@
                     "type": "boolean"
                 }
             },
-            "required": [
-                "transfer"
-            ],
             "type": "object"
         },
         "system_config.kzt_twiml_util": {
@@ -9841,10 +10208,6 @@
                     "type": "boolean"
                 }
             },
-            "required": [
-                "call_recording",
-                "default_language"
-            ],
             "type": "object"
         },
         "system_config.metaflows": {
@@ -9936,9 +10299,6 @@
                     "type": "string"
                 }
             },
-            "required": [
-                "url"
-            ],
             "type": "object"
         },
         "system_config.modb": {
@@ -10078,9 +10438,6 @@
                     "type": "array"
                 }
             },
-            "required": [
-                "default_to"
-            ],
             "type": "object"
         },
         "system_config.notify.fax_inbound_to_email": {
@@ -10090,9 +10447,6 @@
                     "description": "notify.fax_inbound_to_email default to"
                 }
             },
-            "required": [
-                "default_to"
-            ],
             "type": "object"
         },
         "system_config.notify.fax_outbound_error_to_email": {
@@ -10107,9 +10461,6 @@
                     "description": "notify.fax_outbound_error_to_email default to"
                 }
             },
-            "required": [
-                "default_to"
-            ],
             "type": "object"
         },
         "system_config.notify.fax_outbound_to_email": {
@@ -10119,9 +10470,6 @@
                     "description": "notify.fax_outbound_to_email default to"
                 }
             },
-            "required": [
-                "default_to"
-            ],
             "type": "object"
         },
         "system_config.notify.first_occurrence": {
@@ -10211,9 +10559,6 @@
                     "type": "string"
                 }
             },
-            "required": [
-                "default_from"
-            ],
             "type": "object"
         },
         "system_config.notify.port_request": {
@@ -10229,9 +10574,6 @@
                     "type": "string"
                 }
             },
-            "required": [
-                "default_from"
-            ],
             "type": "object"
         },
         "system_config.notify.port_request_admin": {
@@ -10241,9 +10583,6 @@
                     "description": "notify.port_request_admin default to"
                 }
             },
-            "required": [
-                "default_to"
-            ],
             "type": "object"
         },
         "system_config.notify.ported": {
@@ -10290,9 +10629,6 @@
                     "type": "string"
                 }
             },
-            "required": [
-                "subscriber_url"
-            ],
             "type": "object"
         },
         "system_config.notify.topup": {
@@ -10349,9 +10685,6 @@
                     "description": "notify.voicemail_full default to"
                 }
             },
-            "required": [
-                "default_to"
-            ],
             "type": "object"
         },
         "system_config.notify.voicemail_to_email": {
@@ -10373,6 +10706,11 @@
         "system_config.number_manager": {
             "description": "Schema for number_manager system_config",
             "properties": {
+                "allow_port_transition_from_submitted_to_scheduled": {
+                    "default": false,
+                    "description": "Should number ports be allowed to transition from submitted to scheduled?",
+                    "type": "boolean"
+                },
                 "available_module_name": {
                     "default": "knm_local",
                     "description": "number_manager available module name",
@@ -10483,11 +10821,6 @@
                     "description": "the kazoo number manager module name that completed port request numbers should be created with",
                     "type": "string"
                 },
-                "porting_module_name": {
-                    "default": "knm_local",
-                    "description": "number manager porting module name",
-                    "type": "string"
-                },
                 "providers": {
                     "description": "Number features sub accounts are allowed to enable or disable"
                 },
@@ -10530,13 +10863,6 @@
                     "type": "boolean"
                 }
             },
-            "required": [
-                "e164_converters",
-                "features",
-                "providers",
-                "released_state",
-                "should_permanently_delete"
-            ],
             "type": "object"
         },
         "system_config.number_manager.bandwidth": {
@@ -10576,9 +10902,6 @@
                     "type": "boolean"
                 }
             },
-            "required": [
-                "endpoints"
-            ],
             "type": "object"
         },
         "system_config.number_manager.bandwidth2": {
@@ -10670,9 +10993,6 @@
                     "description": "number_manager.locality url"
                 }
             },
-            "required": [
-                "url"
-            ],
             "type": "object"
         },
         "system_config.number_manager.other": {
@@ -10690,10 +11010,6 @@
                     "description": "number_manager.other phonebook url"
                 }
             },
-            "required": [
-                "endpoints",
-                "phonebook_url"
-            ],
             "type": "object"
         },
         "system_config.number_manager.port_request": {
@@ -10781,10 +11097,6 @@
                     "type": "string"
                 }
             },
-            "required": [
-                "token",
-                "user"
-            ],
             "type": "object"
         },
         "system_config.number_manager.vitelity": {
@@ -10799,9 +11111,6 @@
                     "description": "number_manager.vitelity routesip"
                 }
             },
-            "required": [
-                "routesip"
-            ],
             "type": "object"
         },
         "system_config.number_manager.voip_innovations": {
@@ -10957,11 +11266,6 @@
                     "type": "string"
                 }
             },
-            "required": [
-                "cluster_id",
-                "provisioning_type",
-                "provisioning_url"
-            ],
             "type": "object"
         },
         "system_config.pusher": {
@@ -10986,10 +11290,6 @@
                     "type": "array"
                 }
             },
-            "required": [
-                "apple",
-                "google"
-            ],
             "type": "object"
         },
         "system_config.registrar": {
@@ -11046,9 +11346,6 @@
                     "type": "string"
                 }
             },
-            "required": [
-                "assume_inbound_e164"
-            ],
             "type": "object"
         },
         "system_config.servers": {
@@ -11104,9 +11401,6 @@
                     "type": "boolean"
                 }
             },
-            "required": [
-                "modules"
-            ],
             "type": "object"
         },
         "system_config.services.http_sync": {
@@ -11148,9 +11442,6 @@
                     }
                 }
             },
-            "required": [
-                "outbound"
-            ],
             "type": "object"
         },
         "system_config.sms_command": {
@@ -11221,9 +11512,6 @@
                     "type": "string"
                 }
             },
-            "required": [
-                "tls"
-            ],
             "type": "object"
         },
         "system_config.speech": {
@@ -11439,11 +11727,6 @@
                     "type": "string"
                 }
             },
-            "required": [
-                "default_emergency_cid_number",
-                "default_formatters",
-                "default_route"
-            ],
             "type": "object"
         },
         "system_config.stepswitch.cnam": {
@@ -11623,10 +11906,31 @@
         "system_config.token_buckets": {
             "description": "Schema for token_buckets system_config",
             "properties": {
+                "default": {
+                    "properties": {
+                        "max_bucket_tokens": {
+                            "properties": {
+                                "default": 100,
+                                "description": "token_buckets maximum bucket tokens",
+                                "type": "integer"
+                            }
+                        }
+                    }
+                },
                 "inactivity_timeout_s": {
                     "default": 600,
                     "description": "token_buckets inactivity timeout in seconds",
                     "type": "integer"
+                },
+                "tokens_fill_rate": {
+                    "default": 10,
+                    "description": "token_buckets tokens fill rate",
+                    "type": "integer"
+                },
+                "tokens_fill_time": {
+                    "default": "second",
+                    "description": "token_buckets tokens fill time",
+                    "type": "string"
                 }
             },
             "type": "object"
@@ -11670,9 +11974,6 @@
                     "type": "boolean"
                 }
             },
-            "required": [
-                "default_caller_id_number"
-            ],
             "type": "object"
         },
         "system_config.webhooks": {
@@ -11708,9 +12009,6 @@
                     "type": "array"
                 }
             },
-            "required": [
-                "object_types"
-            ],
             "type": "object"
         },
         "system_config.whitelabel": {
@@ -11720,9 +12018,6 @@
                     "description": "whitelabel domains"
                 }
             },
-            "required": [
-                "domains"
-            ],
             "type": "object"
         },
         "tasks": {
@@ -18353,6 +18648,20 @@
             }
         },
         "/accounts/{ACCOUNT_ID}/presence/{EXTENSION}": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/extension"
+                    },
+                    {
+                        "$ref": "#/parameters/auth_token_header",
+                        "required": true
+                    },
+                    {
+                        "$ref": "#/parameters/account_id"
+                    }
+                ]
+            },
             "post": {
                 "parameters": [
                     {

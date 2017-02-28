@@ -25,7 +25,7 @@
 -define(MEMBER_TIMEOUT, <<"member_timeout">>).
 -define(MEMBER_HANGUP, <<"member_hangup">>).
 
--record(member_call, {call              :: kapps_call:call()
+-record(member_call, {call             :: kapps_call:call()
                      ,queue_id         :: api_binary()
                      ,config_data = [] :: kz_proplist()
                      ,breakout_media   :: api_object()
@@ -88,7 +88,7 @@ handle(Data, Call) ->
 maybe_use_variable(Data, Call) ->
     case kz_json:get_value(<<"var">>, Data) of
         'undefined' ->
-            kz_doc:id(Data);
+            kz_json:get_ne_binary_value(<<"id">>, Data);
         Variable ->
             Value = kz_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
             case kz_datamgr:open_cache_doc(kapps_call:account_db(Call), Value) of

@@ -82,6 +82,30 @@ prop_to_proplist() ->
                       end)
            ).
 
+prop_flatten_expand() ->
+    ?FORALL(Prop
+           ,json_proplist()
+           ,begin
+                L = props:unique(Prop),
+                JObj = kz_json:from_list(L),
+                ?WHENFAIL(io:format("Failed to flatten/expand: ~p~n", [JObj])
+                         ,JObj =:= kz_json:expand(kz_json:flatten(JObj))
+                         )
+            end
+           ).
+
+prop_expand_flatten() ->
+    ?FORALL(Prop
+           ,flat_proplist()
+           ,begin
+                L = props:unique(Prop),
+                JObj = kz_json:from_list(L),
+                ?WHENFAIL(io:format("Failed to expand/flatten: ~p~n", [JObj])
+                         ,JObj =:= kz_json:flatten(kz_json:expand(JObj))
+                         )
+            end
+           ).
+
 -endif.
 
 -define(D1, ?JSON_WRAPPER([{<<"d1k1">>, <<"d1v1">>}
@@ -561,10 +585,10 @@ sum_test_() ->
 from_list_recursive_test() ->
     Obj1 = kz_json:from_list([{<<"send_to">>, [<<"someone@somedomain.com">>]}]),
     Obj2 = kz_json:from_list([{<<"email">>, Obj1}]),
-    L1 = [{<<"fax_hangup_code">>,200}
-         ,{<<"fax_hangup_cause">>,<<"NORMAL_CLEARING">>}
+    L1 = [{<<"fax_hangup_codes">>, [200, 201, 202]}
+         ,{<<"fax_hangup_cause">>, <<"NORMAL_CLEARING">>}
          ],
-    L3 = [{<<"fax">>, [{<<"id">>,<<"201702-1b6cfec4e3ab0b7bb97ced78bf431f39">>}
+    L3 = [{<<"fax">>, [{<<"id">>, "201702-1b6cfec4e3ab0b7bb97ced78bf431f39"}
                       ,{<<"info">>, L1}
                       ,{<<"notifications">>, Obj2}
                       ]}],
@@ -578,5 +602,14 @@ from_list_recursive_test() ->
     Key2 = [<<"fax">>, <<"notifications">>, <<"email">>, <<"send_to">>],
     [?_assertEqual(kz_json:get_integer_value(Key1, JObj1), kz_json:get_integer_value(Key1, JObj2))
     ,?_assertEqual(kz_json:get_ne_binary_value(Key2, JObj1), kz_json:get_ne_binary_value(Key2, JObj2))
-    ,?_assertEqual(true, kz_json:are_equal(JObj1, JObj2))
+    ,?_assertEqual('true', kz_json:are_equal(JObj1, JObj2))
+    ].
+
+flatten_expand_diff_test() ->
+    X = kz_json:set_value([k10, k11, k12], v10, kz_json:new()),
+    X2 = kz_json:set_value(k20, v20, X),
+    Delta = kz_json:set_value(k20, v20, X),
+    [
+     ?_assertEqual(kz_json:expand(kz_json:flatten(X2)), X2)
+    ,?_assertEqual(kz_json:diff(X, X2), Delta)
     ].

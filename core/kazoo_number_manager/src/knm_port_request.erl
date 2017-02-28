@@ -187,7 +187,15 @@ transition_to_pending(JObj) ->
     transition(JObj, [?PORT_SUBMITTED], ?PORT_PENDING).
 
 transition_to_scheduled(JObj) ->
-    transition(JObj, [?PORT_PENDING], ?PORT_SCHEDULED).
+    FromSubmitted = kapps_config:get_is_true(?KNM_CONFIG_CAT
+                                            ,<<"allow_port_transition_from_submitted_to_scheduled">>
+                                            ,'false'),
+    transition(JObj, states_to_scheduled(FromSubmitted), ?PORT_SCHEDULED).
+
+states_to_scheduled(_AllowFromSubmitted='false') ->
+    [?PORT_PENDING];
+states_to_scheduled(_AllowFromSubmitted='true') ->
+    [?PORT_SUBMITTED | states_to_scheduled('false')].
 
 transition_to_complete(JObj) ->
     case transition(JObj, [?PORT_PENDING, ?PORT_SCHEDULED, ?PORT_REJECTED], ?PORT_COMPLETED) of
@@ -337,55 +345,64 @@ completed_port(PortReq) ->
 %%--------------------------------------------------------------------
 -spec transition_numbers(kz_json:object()) -> transition_response().
 transition_numbers(PortReq) ->
-    ModuleName = kapps_config:get_ne_binary(?KNM_CONFIG_CAT, <<"port_in_module_name">>, ?CARRIER_LOCAL),
     PortReqId = kz_doc:id(PortReq),
-    Options = [{'assign_to', kz_json:get_value(?PVT_ACCOUNT_ID, PortReq)}
+    AccountId = kz_json:get_value(?PVT_ACCOUNT_ID, PortReq),
+    Options = [{'assign_to', AccountId}
               ,{'auth_by', ?KNM_DEFAULT_AUTH_BY}
-              ,{'module_name', ModuleName}
               ,{'ported_in', 'true'}
               ,{'public_fields', kz_json:from_list([{<<"port_id">>, PortReqId}])}
               ,{'state', ?NUMBER_STATE_IN_SERVICE}
               ],
     lager:debug("creating local numbers for port ~s", [PortReqId]),
     Numbers = kz_json:get_keys(?NUMBERS_KEY, PortReq),
-    Results = knm_numbers:create(Numbers, Options),
-    case lists:partition(fun was_number_operation_successul/1, Results) of
-        {_, []} ->
+    case knm_numbers:create(Numbers, Options) of
+        #{ko := KOs} when map_size(KOs) =:= 0 ->
             lager:debug("all numbers ported, removing from port request"),
-            ClearedPortRequest = clear_numbers_from_port(PortReq),
-            {'ok', ClearedPortRequest};
-        {_OK, _Errored} ->
-            lager:debug("failed to transition ~p/~p numbers", [length(_Errored), length(_OK)]),
-            {'error', PortReq}
+            clear_numbers_from_port(PortReq);
+        #{ko := KOs, ok := _OKs} ->
+            NumsKO = maps:keys(KOs),
+            case numbers_not_in_account_nor_in_service(AccountId, NumsKO) of
+                [] ->
+                    lager:debug("these were already assigned and in service: ~p", [NumsKO]),
+                    clear_numbers_from_port(PortReq);
+                _NumsNotTransitioned ->
+                    lager:debug("failed to transition ~p/~p numbers"
+                               ,[length(_NumsNotTransitioned), length(_OKs)]),
+                    {'error', PortReq}
+            end
     end.
 
-%% @private
--spec was_number_operation_successul(knm_numbers:number_return()) -> boolean().
-was_number_operation_successul({_Num, {'ok', _}}) ->
-    lager:debug("~s success", [_Num]),
-    'true';
-was_number_operation_successul({_Num, _Error}) ->
-    lager:debug("~s error: ~p", [_Num, _Error]),
-    'false'.
+numbers_not_in_account_nor_in_service(AccountId, Nums) ->
+    #{ko := KOs, ok := Ns} = knm_numbers:get(Nums),
+    [knm_phone_number:number(PN)
+     || N <- Ns,
+        PN <- [knm_number:phone_number(N)],
+        not is_in_account_and_in_service(AccountId, PN)
+    ]
+        ++ maps:keys(KOs).
+
+is_in_account_and_in_service(AccountId, PN) ->
+    AccountId =:= knm_phone_number:assigned_to(PN)
+        andalso ?NUMBER_STATE_IN_SERVICE =:= knm_phone_number:state(PN).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec clear_numbers_from_port(kz_json:object()) -> kz_json:object().
+-spec clear_numbers_from_port(kz_json:object()) -> {ok, kz_json:object()}.
 clear_numbers_from_port(PortReq) ->
     Cleared = kz_json:set_value(?NUMBERS_KEY, kz_json:new(), PortReq),
     case save_doc(Cleared) of
-        {'ok', PortReq1} ->
+        {'ok', _PortReq1}=Ok ->
             lager:debug("port numbers cleared"),
-            PortReq1;
+            Ok;
         {'error', 'conflict'} ->
-            lager:debug("port request doc was updated before we could re-save"),
-            PortReq;
+            lager:error("port request doc was updated before we could re-save"),
+            {ok, PortReq};
         {'error', _E} ->
             lager:debug("failed to clear numbers: ~p", [_E]),
-            PortReq
+            {ok, PortReq}
     end.
 
 %%--------------------------------------------------------------------

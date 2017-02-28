@@ -34,6 +34,8 @@
 
 -type pid_ref() :: {pid(), reference()}.
 -type pid_refs() :: [pid_ref()].
+-type api_pid_ref() :: pid_ref() | 'undefined'.
+-type api_pid_refs() :: pid_refs() | 'undefined'.
 
 -type api_terms() :: kz_json:object() | kz_proplist().
 -type api_binary() :: binary() | 'undefined'.
@@ -361,7 +363,9 @@
        ).
 
 %% KZ_NODES types
--record(whapp_info, {startup :: gregorian_seconds()}).
+-record(whapp_info, {startup :: gregorian_seconds()
+                    ,roles = [] :: ne_binaries()
+                    }).
 
 -type whapp_info() :: #whapp_info{}.
 -type kapps_info() :: [{binary(), whapp_info()}].
@@ -370,6 +374,7 @@
 -type media_servers() :: [media_server()].
 
 -record(kz_node, {node = node() :: atom() | '$1' | '$2' | '_'
+                 ,md5 :: api_binary() | '_'
                  ,expires = 0 :: non_neg_integer() | 'undefined' | '$2' | '_'
                  ,kapps = [] :: kapps_info() | '$1' | '_'
                  ,media_servers = [] :: media_servers() | '_'
@@ -388,6 +393,8 @@
 
 -type kz_node() :: #kz_node{}.
 -type kz_nodes() :: [kz_node()].
+
+-define(FAKE_CALLID(C), kz_term:to_hex_binary(crypto:hash(md5, C))).
 
 -define(KAZOO_TYPES_INCLUDED, 'true').
 -endif.

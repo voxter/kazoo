@@ -584,7 +584,7 @@ get_menu_profile(Data, Call) ->
 maybe_use_variable(Data, Call) ->
     case kz_json:get_value(<<"var">>, Data) of
         'undefined' ->
-            kz_doc:id(Data);
+            kz_json:get_ne_binary_value(<<"id">>, Data);
         Variable ->
             Value = kz_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
             case kz_datamgr:open_cache_doc(kapps_call:account_db(Call), Value) of

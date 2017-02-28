@@ -361,7 +361,7 @@ add_pattern_conflict(Context, JObj) ->
 -spec validate_callflow_schema(api_binary(), cb_context:context()) -> cb_context:context().
 validate_callflow_schema(CallflowId, Context) ->
     OnSuccess = fun(C) ->
-                        C1 = validate_callflow_elements(on_successful_validation(CallflowId, C)),
+                        C1 = on_successful_validation(CallflowId, C),
                         C2 = validate_uniqueness(CallflowId, C1),
                         validate_number_ownership(C2)
                 end,
@@ -374,13 +374,6 @@ on_successful_validation('undefined', Context) ->
                       );
 on_successful_validation(CallflowId, Context) ->
     crossbar_doc:load_merge(CallflowId, Context, ?TYPE_CHECK_OPTION(kzd_callflow:type())).
-
--spec validate_callflow_elements(cb_context:context()) -> cb_context:context().
-validate_callflow_elements(Context) ->
-    case kzd_callflow:validate_flow(cb_context:doc(Context)) of
-        {'ok', CallflowJObj} -> cb_context:set_doc(Context, CallflowJObj);
-        {'error', Errors} -> cb_context:failed(Context, Errors)
-    end.
 
 %%--------------------------------------------------------------------
 %% @private

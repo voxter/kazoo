@@ -587,6 +587,8 @@ parse_path_tokens(_, [<<"braintree">>=Mod|T], Events) ->
     [{Mod, T} | Events];
 parse_path_tokens(_, [<<"system_configs">>=Mod|T], Events) ->
     [{Mod, T} | Events];
+parse_path_tokens(_, [<<"configs">>=Mod|T], Events) ->
+    [{Mod, T} | Events];
 parse_path_tokens(_, [<<"sup">>=Mod|T], Events) ->
     [{Mod, cb_sup:format_path_tokens(T)} | Events];
 parse_path_tokens(Context, [Mod|T], Events) ->
@@ -1266,13 +1268,19 @@ do_create_resp_envelope(Context) ->
                    [{<<"auth_token">>, cb_context:auth_token(Context)}
                    ,{<<"status">>, <<"success">>}
                    ,{<<"request_id">>, cb_context:req_id(Context)}
-                   ,{<<"revision">>, kz_term:to_binary(cb_context:resp_etag(Context))}
+                   ,{<<"node">>, kz_nodes:node_encoded()}
+                   ,{<<"version">>, kz_util:kazoo_version()}
+                   ,{<<"timestamp">>, kz_time:iso8601(kz_time:current_tstamp())}
+                   ,{<<"revision">>, kz_term:to_api_binary(cb_context:resp_etag(Context))}
                    ,{<<"data">>, RespData}
                    ];
                {'error', {ErrorCode, ErrorMsg, RespData}} ->
                    lager:debug("generating error ~b ~s response", [ErrorCode, ErrorMsg]),
                    [{<<"auth_token">>, kz_term:to_binary(cb_context:auth_token(Context))}
                    ,{<<"request_id">>, cb_context:req_id(Context)}
+                   ,{<<"node">>, kz_nodes:node_encoded()}
+                   ,{<<"version">>, kz_util:kazoo_version()}
+                   ,{<<"timestamp">>, kz_time:iso8601(kz_time:current_tstamp())}
                    ,{<<"status">>, <<"error">>}
                    ,{<<"message">>, ErrorMsg}
                    ,{<<"error">>, kz_term:to_binary(ErrorCode)}

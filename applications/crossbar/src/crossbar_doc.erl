@@ -10,13 +10,12 @@
 -module(crossbar_doc).
 
 -export([load/2, load/3
-        ,load_from_file/2
         ,load_merge/2, load_merge/3, load_merge/4
         ,merge/3
         ,patch_and_validate/3
         ,load_view/3, load_view/4, load_view/5, load_view/6
         ,load_attachment/4, load_docs/2
-        ,save/1, save/2
+        ,save/1, save/2, save/3
         ,delete/1, delete/2
         ,save_attachment/4, save_attachment/5
         ,delete_attachment/3
@@ -57,11 +56,7 @@
                   ]).
 
 -define(PAGINATION_PAGE_SIZE
-       ,kapps_config:get_integer(?CONFIG_CAT
-                                ,<<"pagination_page_size">>
-                                ,50
-                                )
-       ).
+       ,kapps_config:get_integer(?CONFIG_CAT, <<"pagination_page_size">>, 50)).
 
 -type direction() :: 'ascending' | 'descending'.
 
@@ -272,22 +267,6 @@ handle_successful_load(Context, JObj, 'false') ->
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
-%% "Load" is a poor word choice given the other function names...
-%% This function creates a crossbar document from the contents of
-%% a file.
-%%
-%% Failure here returns 410, 500, or 503
-%% @end
-%%--------------------------------------------------------------------
--spec load_from_file(ne_binary(), ne_binary()) ->
-                            {'ok', kz_json:object()} |
-                            {'error', atom()}.
-load_from_file(Db, File) ->
-    kz_datamgr:load_doc_from_file(Db, 'crossbar', File).
-
-%%--------------------------------------------------------------------
-%% @public
-%% @doc
 %% This function attempts to merge the submitted data with the private
 %% fields of an existing account document, if successful it will
 %% load the context with the account details
@@ -363,7 +342,7 @@ patch_and_validate_doc(Id, Context, ValidateFun, _RespStatus) ->
                        cb_context:context().
 -spec load_view(ne_binary() | 'all_docs', kz_proplist(), cb_context:context(), kz_json:json_term(), pos_integer()) ->
                        cb_context:context().
--spec load_view(ne_binary() | 'all_docs', kz_proplist(), cb_context:context(), kz_json:json_term(), pos_integer(), filter_fun() | 'undefined') ->
+-spec load_view(ne_binary() | 'all_docs', kz_proplist(), cb_context:context(), kz_json:json_term(), pos_integer(), filter_fun()) ->
                        cb_context:context().
 load_view(View, Options, Context) ->
     load_view(View, Options, Context
@@ -999,11 +978,12 @@ handle_datamgr_pagination_success([_|_]=JObjs
     end.
 
 -type filter_fun() :: fun((kz_json:object(), kz_json:objects()) -> kz_json:objects()) |
-                      fun((cb_context:context(), kz_json:object(), kz_json:objects()) -> kz_json:objects()).
+                      fun((cb_context:context(), kz_json:object(), kz_json:objects()) -> kz_json:objects()) |
+                      'undefined'.
 
--spec apply_filter('undefined' | filter_fun(), kz_json:objects(), cb_context:context(), direction()) ->
+-spec apply_filter(filter_fun(), kz_json:objects(), cb_context:context(), direction()) ->
                           kz_json:objects().
--spec apply_filter('undefined' | filter_fun(), kz_json:objects(), cb_context:context(), direction(), boolean()) ->
+-spec apply_filter(filter_fun(), kz_json:objects(), cb_context:context(), direction(), boolean()) ->
                           kz_json:objects().
 apply_filter(FilterFun, JObjs, Context, Direction) ->
     apply_filter(FilterFun, JObjs, Context, Direction, has_qs_filter(Context)).
@@ -1025,7 +1005,7 @@ apply_filter(FilterFun, JObjs, Context, Direction, HasQSFilter) ->
         'descending' -> lists:reverse(Filtered)
     end.
 
--spec maybe_apply_custom_filter(cb_context:context(), 'undefined' | filter_fun(), kz_json:objects()) -> kz_json:objects().
+-spec maybe_apply_custom_filter(cb_context:context(), filter_fun(), kz_json:objects()) -> kz_json:objects().
 maybe_apply_custom_filter(_Context, 'undefined', JObjs) -> JObjs;
 maybe_apply_custom_filter(Context, FilterFun, JObjs) ->
     Fun = case is_function(FilterFun, 2) of
@@ -1235,27 +1215,20 @@ add_pvt_account_id(JObj, Context) ->
 -spec add_pvt_created(kz_json:object(), cb_context:context()) -> kz_json:object().
 add_pvt_created(JObj, _) ->
     case kz_doc:revision(JObj) of
-        'undefined' ->
-            Timestamp = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
-            kz_doc:set_created(JObj, Timestamp);
-        _ ->
-            JObj
+        'undefined' -> kz_doc:set_created(JObj, kz_time:current_tstamp());
+        _ -> JObj
     end.
 
--spec add_pvt_modified(kz_json:object(), cb_context:context()) ->
-                              kz_json:object().
+-spec add_pvt_modified(kz_json:object(), cb_context:context()) -> kz_json:object().
 add_pvt_modified(JObj, _) ->
-    Timestamp = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
-    kz_doc:set_modified(JObj, Timestamp).
+    kz_doc:set_modified(JObj, kz_time:current_tstamp()).
 
--spec add_pvt_request_id(kz_json:object(), cb_context:context()) ->
-                                kz_json:object().
+-spec add_pvt_request_id(kz_json:object(), cb_context:context()) -> kz_json:object().
 add_pvt_request_id(JObj, Context) ->
     RequestId = cb_context:req_id(Context),
     kz_json:set_value(<<"pvt_request_id">>, RequestId, JObj).
 
--spec add_pvt_auth(kz_json:object(), cb_context:context()) ->
-                          kz_json:object().
+-spec add_pvt_auth(kz_json:object(), cb_context:context()) -> kz_json:object().
 add_pvt_auth(JObj, Context) ->
     case cb_context:is_authenticated(Context) of
         'false' -> kz_json:set_value(<<"pvt_is_authenticated">>, 'false', JObj);
@@ -1281,10 +1254,10 @@ extract_included_docs(Context, JObjs) ->
 
 extract_included_docs_fold(JObj, {Docs, Context}) ->
     case kz_json:get_ne_value(<<"doc">>, JObj) of
-        undefined ->
+        'undefined' ->
             Reason = kz_json:get_ne_value(<<"error">>, JObj),
             ID = kz_json:get_ne_value(<<"key">>, JObj),
-            {Docs, handle_datamgr_errors(kz_term:to_atom(Reason,true), ID, Context)};
+            {Docs, handle_datamgr_errors(kz_term:to_atom(Reason, 'true'), ID, Context)};
         Doc ->
             {[Doc|Docs], Context}
     end.

@@ -87,8 +87,7 @@
 -type directory_user() :: #directory_user{}.
 -type directory_users() :: [directory_user()].
 
--record(directory, {
-          sort_by = 'last' :: 'first' | 'last'
+-record(directory, {sort_by = 'last' :: 'first' | 'last'
                    ,search_fields = 'both' :: 'first' | 'last' | 'both'
                    ,min_dtmf :: pos_integer()
                    ,max_dtmf :: non_neg_integer()
@@ -96,7 +95,7 @@
                    ,digits_collected = <<>> :: binary()
                    ,users = [] :: directory_users()
                    ,curr_users = [] :: directory_users()
-         }).
+                   }).
 -type directory() :: #directory{}.
 
 -type dtmf_action() :: 'route' | 'next' | 'start_over' | 'invalid' | 'continue'.
@@ -112,7 +111,7 @@
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     {'ok', DirJObj} = kz_datamgr:open_cache_doc(kapps_call:account_db(Call)
-                                               ,kz_doc:id(Data)
+                                               ,kz_json:get_ne_binary_value(<<"id">>, Data)
                                                ),
     kapps_call_command:answer(Call),
 

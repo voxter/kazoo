@@ -196,7 +196,13 @@ apis:
 	@ERL_LIBS=deps/:core/:applications/ $(ROOT)/scripts/generate-fs-headers-hrl.escript
 
 DOCS_ROOT=$(ROOT)/doc/mkdocs
-docs: docs-setup docs-build
+docs: docs-validate docs-setup docs-build
+
+docs-validate:
+	@$(ROOT)/scripts/check-scripts-readme.bash
+	@$(ROOT)/scripts/empty_schema_descriptions.bash
+
+docs-validate:
 
 docs-setup:
 	@$(ROOT)/scripts/validate_mkdocs.py
@@ -212,7 +218,7 @@ docs-clean:
 	@rm -rf $(DOCS_ROOT)/site $(DOCS_ROOT)/docs $(DOCS_ROOT)/mkdocs.local.yml
 
 docs-serve: docs-build
-	@mkdocs serve -f $(DOCS_ROOT)/mkdocs.local.yml
+	@mkdocs serve --dev-addr=0.0.0.0:9876 -f $(DOCS_ROOT)/mkdocs.local.yml
 
 fs-headers:
 	@ERL_LIBS=deps/:core/:applications/ $(ROOT)/scripts/generate-fs-headers-hrl.escript

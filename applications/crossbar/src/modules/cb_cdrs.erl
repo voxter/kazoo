@@ -33,6 +33,7 @@
 
 -define(MOD_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".cdrs">>).
 -define(MAX_BULK, kapps_config:get_integer(?MOD_CONFIG_CAT, <<"maximum_bulk">>, 50)).
+-define(STALE_CDR, kapps_config:get_is_true(?MOD_CONFIG_CAT, <<"cdr_stale_view">>, false)).
 -define(CB_LIST_BY_USER, <<"cdrs/listing_by_owner">>).
 -define(CB_LIST, <<"cdrs/crossbar_listing">>).
 -define(CB_INTERACTION_LIST, <<"cdrs/interaction_listing">>).
@@ -440,6 +441,7 @@ create_interaction_view_options('undefined', Context, CreatedFrom, CreatedTo) ->
            ,{'group_level', 2}
            ,{'reduce', 'true'}
            ,'descending'
+            | maybe_add_stale_to_options(?STALE_CDR)
            ]};
 create_interaction_view_options(OwnerId, Context, CreatedFrom, CreatedTo) ->
     {'ok', [{'startkey', [OwnerId, CreatedTo]}
@@ -449,7 +451,12 @@ create_interaction_view_options(OwnerId, Context, CreatedFrom, CreatedTo) ->
            ,{'group_level', 3}
            ,{'reduce', 'true'}
            ,'descending'
+            | maybe_add_stale_to_options(?STALE_CDR)
            ]}.
+
+-spec maybe_add_stale_to_options(crossbar_doc:view_options()) -> crossbar_doc:view_options().
+maybe_add_stale_to_options(true) ->[ {stale, ok} ];
+maybe_add_stale_to_options(_) ->[].
 
 -spec create_summary_view_options(api_binary(), cb_context:context(), pos_integer(), pos_integer()) ->
                                          {'ok', crossbar_doc:view_options()}.
@@ -740,7 +747,7 @@ col_calling_from(JObj, _Timestamp) -> calling_from(JObj).
 col_pretty_print(_JObj, Timestamp) -> pretty_print_datetime(Timestamp).
 col_unix_timestamp(_JObj, Timestamp) -> kz_term:to_binary(kz_time:gregorian_seconds_to_unix_seconds(Timestamp)).
 col_rfc1036(_JObj, Timestamp) -> list_to_binary([$", kz_time:rfc1036(Timestamp), $"]).
-col_iso8601(_JObj, Timestamp) -> list_to_binary([$", kz_time:iso8601(Timestamp), $"]).
+col_iso8601(_JObj, Timestamp) -> list_to_binary([$", kz_time:iso8601_date(Timestamp), $"]).
 col_account_call_type(JObj, _Timestamp) -> kz_json:get_value([?KEY_CCV, <<"account_billing">>], JObj, <<>>).
 col_rate(JObj, _Timestamp) -> kz_term:to_binary(wht_util:units_to_dollars(kz_json:get_value([?KEY_CCV, <<"rate">>], JObj, 0))).
 col_rate_name(JObj, _Timestamp) -> kz_json:get_value([?KEY_CCV, <<"rate_name">>], JObj, <<>>).

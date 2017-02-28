@@ -290,9 +290,8 @@ move(Nums, ?MATCH_ACCOUNT_RAW(MoveTo), Options0) ->
     {TFound, NotFounds} = take_not_founds(do_get(Nums, Options)),
     Updates = knm_number_options:to_phone_number_setters(Options0),
     TUpdated = do_in_wrap(fun (T) -> knm_phone_number:setters(T, Updates) end, TFound),
-    {TDiscovered, NotExisting} = take_not_founds(do(fun discover/1, new(Options, NotFounds))),
-    TNew = do_move_not_founds(NotExisting, Options),
-    T = merge_okkos([TUpdated, TDiscovered, TNew]),
+    TDiscovered = do(fun discover/1, new(Options, NotFounds)),
+    T = merge_okkos(TUpdated, TDiscovered),
     ret(do(fun move_to/1, T)).
 
 %%--------------------------------------------------------------------
@@ -312,9 +311,18 @@ update([?NE_BINARY|_]=Nums, Routines, Options) ->
     Reason = not_reconcilable,  %% FIXME: unify to atom OR knm_error.
     do_update(do_get_pn(Nums, Options, Reason), Routines);
 update(Ns, Routines, Options) ->
-    T0 = new(Options, Ns),
+    T0 = new(Options, fix_options_inside(Options, Ns)),
     T1 = do_in_wrap(fun (T) -> knm_phone_number:setters(T, Routines) end, T0),
     ret(do(fun save_numbers/1, T1)).
+
+fix_options_inside(Options, Ns) ->
+    Fix = knm_number_options:to_phone_number_setters(Options),
+    [begin
+         {ok, NewPN} = knm_phone_number:setters(knm_number:phone_number(N), Fix),
+         knm_number:set_phone_number(N, NewPN)
+     end
+     || N <- Ns
+    ].
 -else.
 update(Nums, Routines, Options) ->
     Reason = not_reconcilable,  %% FIXME: unify to atom OR knm_error.
@@ -356,10 +364,7 @@ release(Nums, Options) ->
 %%--------------------------------------------------------------------
 -spec delete(ne_binaries(), knm_number_options:options()) -> ret().
 delete(Nums, Options) ->
-    AuthBy = knm_number_options:auth_by(Options),
-    case ?KNM_DEFAULT_AUTH_BY =:= AuthBy
-        orelse kz_util:is_system_admin(AuthBy)
-    of
+    case knm_phone_number:is_admin(knm_number_options:auth_by(Options)) of
         false ->
             Error = knm_errors:to_json(unauthorized),
             ret(new(Options, [], Nums, Error));

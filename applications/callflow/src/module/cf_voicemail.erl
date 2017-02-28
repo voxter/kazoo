@@ -97,6 +97,13 @@
                         )
        ).
 
+-define(DEFAULT_FORWARD_TYPE
+       ,kapps_config:get(?CF_CONFIG_CAT
+                        ,[?KEY_VOICEMAIL, <<"vm_message_foraward_type">>]
+                        ,<<"only_forward">>
+                        )
+       ).
+
 -define(DEFAULT_FIND_BOX_PROMPT, <<"vm-enter_id">>).
 
 -record(keys, {
@@ -131,33 +138,36 @@
               ,envelope = <<"5">>
               ,next = <<"6">>
               ,delete = <<"7">>
+
+              %% Greeting or instructions
+              ,continue = 'undefined'
          }).
 -type vm_keys() :: #keys{}.
 
 -define(KEY_LENGTH, 1).
 
--record(mailbox, {mailbox_id :: api_binary()
+-record(mailbox, {mailbox_id :: api_ne_binary()
                  ,mailbox_number = <<>> :: binary()
                  ,exists = 'false' :: boolean()
                  ,skip_instructions = 'false' :: boolean()
                  ,skip_greeting = 'false' :: boolean()
-                 ,unavailable_media_id :: api_binary()
-                 ,temporary_unavailable_media_id :: api_binary()
-                 ,name_media_id :: api_binary()
+                 ,unavailable_media_id :: api_ne_binary()
+                 ,temporary_unavailable_media_id :: api_ne_binary()
+                 ,name_media_id :: api_ne_binary()
                  ,pin = <<>> :: binary()
-                 ,timezone :: ne_binary()
+                 ,timezone :: api_ne_binary()
                  ,max_login_attempts = ?MAX_LOGIN_ATTEMPTS :: non_neg_integer()
                  ,require_pin = 'false' :: boolean()
                  ,check_if_owner = 'true' :: boolean()
-                 ,owner_id :: api_binary()
+                 ,owner_id :: api_ne_binary()
                  ,is_setup = 'false' :: boolean()
                  ,message_count = 0 :: non_neg_integer()
                  ,max_message_count = 0 :: non_neg_integer()
-                 ,max_message_length :: pos_integer()
+                 ,max_message_length = ?MAILBOX_DEFAULT_MSG_MAX_LENGTH :: pos_integer()
                  ,min_message_length = ?MAILBOX_DEFAULT_MSG_MIN_LENGTH :: pos_integer()
                  ,keys = #keys{} :: vm_keys()
                  ,transcribe_voicemail = 'false' :: boolean()
-                 ,notifications :: kz_json:object()
+                 ,notifications :: api_object()
                  ,after_notify_action = 'nothing' :: 'nothing' | 'delete' | 'save'
                  ,interdigit_timeout = kapps_call_command:default_interdigit_timeout() :: pos_integer()
                  ,play_greeting_intro = 'false' :: boolean()
@@ -166,8 +176,9 @@
                  ,hunt_deny = <<>> :: binary()
                  ,hunt_allow = <<>> :: binary()
                  ,not_configurable = 'false' :: boolean()
-                 ,account_db :: api_binary()
-                 ,media_extension :: api_binary()
+                 ,account_db :: api_ne_binary()
+                 ,media_extension :: api_ne_binary()
+                 ,forward_type :: api_ne_binary()
                  }).
 -type mailbox() :: #mailbox{}.
 
@@ -180,7 +191,7 @@
 %%--------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
-    case kz_json:get_value(<<"action">>, Data, <<"compose">>) of
+    case kz_json:get_ne_binary_value(<<"action">>, Data, <<"compose">>) of
         <<"compose">> ->
             kapps_call_command:answer(Call),
             lager:debug("answered the call and composing the voicemail"),
@@ -525,6 +536,7 @@ maybe_hunt(Mailbox, Call) ->
                                   {'error', 'channel_hungup'}.
 do_compose_voicemail(#mailbox{keys=#keys{login=Login
                                         ,operator=Operator
+                                        ,continue=Continue
                                         }
                              ,media_extension=Ext
                              }=Box, Call) ->
@@ -547,6 +559,8 @@ do_compose_voicemail(#mailbox{keys=#keys{login=Login
                         {'ok', Flow} -> {'branch', Flow};
                         {'error', _R} -> record_voicemail(tmp_file(Ext), Box, Call)
                     end;
+                Continue ->
+                    lager:info("caller chose to continue to the next element in the callflow");
                 _Else ->
                     lager:info("caller pressed unbound '~s', skip to recording new message", [_Else]),
                     record_voicemail(tmp_file(Ext), Box, Call)
@@ -704,8 +718,7 @@ record_voicemail(AttachmentName, #mailbox{max_message_length=MaxMessageLength
     case kapps_call_command:b_record(AttachmentName, ?ANY_DIGIT, kz_term:to_binary(MaxMessageLength), Call) of
         {'ok', Msg} ->
             Length = kz_json:get_integer_value(<<"Length">>, Msg, 0),
-            IsCallUp = kz_json:get_value(<<"Hangup-Cause">>, Msg) =:= 'undefined',
-            case IsCallUp
+            case kz_call_event:hangup_cause(Msg) =:= 'undefined'
                 andalso review_recording(AttachmentName, 'true', Box, Call)
             of
                 'false' ->
@@ -971,7 +984,7 @@ play_messages([H|T]=Messages, PrevMessages, Count, #mailbox{timezone=Timezone
              ,{'say', kz_term:to_binary(Count - length(Messages) + 1), <<"number">>}
              ,{'play', Message}
              ,{'prompt', <<"vm-received">>}
-             ,{'say',  get_unix_epoch(kz_json:get_value(<<"timestamp">>, H), Timezone), <<"current_date_time">>}
+             ,{'say',  get_unix_epoch(kz_json:get_integer_value(<<"timestamp">>, H), Timezone), <<"current_date_time">>}
              ,{'tts', <<"from">>}
              ,{'say', kz_json:get_value(<<"caller_id_number">>, H)}
              ,{'prompt', <<"vm-message_menu">>}
@@ -1047,17 +1060,23 @@ play_prev_message(Messages, [H|T], Count, Box, Call) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec forward_message(kz_json:object(), mailbox(), kapps_call:call()) -> 'ok'.
-forward_message(Message, #mailbox{mailbox_id=SrcBoxId}, Call) ->
+forward_message(Message, #mailbox{mailbox_id=SrcBoxId} = SrcBox, Call) ->
     lager:info("enter destination mailbox number"),
     _ = kapps_call_command:b_flush(Call),
     PossibleBox = find_destination_mailbox(#mailbox{}, Call, SrcBoxId, 1),
-    forward_message(Message, SrcBoxId, PossibleBox, Call).
+    forward_message(Message, SrcBox, PossibleBox, Call).
 
--spec forward_message(kz_json:object(), ne_binary(), mailbox(), kapps_call:call()) -> 'ok'.
-forward_message(_Message, _SrcBoxId, #mailbox{exists='false'}, _Call) ->
+-spec forward_message(kz_json:object(), mailbox(), mailbox(), kapps_call:call()) -> 'ok'.
+forward_message(_Message, _SrcBox, #mailbox{exists='false'}, _Call) ->
     lager:info("unable to find destination mailbox, returning to message menu...");
-forward_message(Message, SrcBoxId, DestBox, Call) ->
-    case forward_message_menu(DestBox, Call) of
+forward_message(Message, #mailbox{mailbox_id = SrcBoxId
+                                 ,forward_type = ForwardType
+                                 }, DestBox, Call) ->
+    case ForwardType =:= <<"prepend_forward">>
+        andalso forward_message_menu(DestBox, Call)
+    of
+        'false' ->
+            forward_message('undefined', 0, Message, SrcBoxId, DestBox, Call);
         {'ok', 'return'} -> 'ok';
         {'ok', 'append'} ->
             compose_forward_message(Message, SrcBoxId, DestBox, Call);
@@ -1122,8 +1141,7 @@ record_forward(AttachmentName, Message, SrcBoxId, #mailbox{media_extension=Ext
     case kapps_call_command:b_record(AttachmentName, ?ANY_DIGIT, kz_term:to_binary(MaxMessageLength), Call) of
         {'ok', Msg} ->
             Length = kz_json:get_integer_value(<<"Length">>, Msg, 0),
-            IsCallUp = kz_json:get_value(<<"Hangup-Cause">>, Msg) =:= 'undefined',
-            case IsCallUp
+            case kz_call_event:hangup_cause(Msg) =:= 'undefined'
                 andalso review_recording(AttachmentName, 'false', DestBox, Call)
             of
                 'false' ->
@@ -1444,7 +1462,7 @@ record_unavailable_greeting(AttachmentName, #mailbox{unavailable_media_id=MediaI
 -spec check_media_source(ne_binary(), mailbox(), kapps_call:call(), kz_json:object()) ->
                                 'ok' | mailbox().
 check_media_source(AttachmentName, Box, Call, JObj) ->
-    case kz_json:get_value(<<"media_source">>, JObj) of
+    case kz_json:get_ne_binary_value(<<"media_source">>, JObj) of
         <<"upload">> ->
             lager:debug("The voicemail greeting media is a web upload, let's not touch it,"
                         ++ " it may be in use in some other maibox. We create new media document."
@@ -1783,7 +1801,7 @@ get_mailbox_profile(Data, Call) ->
                     ,transcribe_voicemail =
                          kz_json:is_true(<<"transcribe">>, MailboxJObj, 'false')
                     ,notifications =
-                         kz_json:get_value(<<"notifications">>, MailboxJObj)
+                         kz_json:get_json_value(<<"notifications">>, MailboxJObj)
                     ,after_notify_action = AfterNotifyAction
                     ,interdigit_timeout =
                          kz_json:find(<<"interdigit_timeout">>, [MailboxJObj, Data], kapps_call_command:default_interdigit_timeout())
@@ -1800,7 +1818,8 @@ get_mailbox_profile(Data, Call) ->
                     ,not_configurable=
                          kz_json:is_true(<<"not_configurable">>, MailboxJObj, 'false')
                     ,account_db = AccountDb
-                    ,media_extension = kz_json:get_value(<<"media_extension">>, MailboxJObj, ?ACCOUNT_VM_EXTENSION(AccountId))
+                    ,media_extension = kz_json:get_ne_binary_value(<<"media_extension">>, MailboxJObj, ?ACCOUNT_VM_EXTENSION(AccountId))
+                    ,forward_type = ?DEFAULT_FORWARD_TYPE
                     };
         {'error', R} ->
             lager:info("failed to load voicemail box ~s, ~p", [Id, R]),
@@ -1811,7 +1830,7 @@ get_mailbox_profile(Data, Call) ->
 maybe_use_variable(Data, Call) ->
     case kz_json:get_value(<<"var">>, Data) of
         'undefined' ->
-            kz_doc:id(Data);
+            kz_json:get_ne_binary_value(<<"id">>, Data);
         Variable ->
             Value = kz_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
             case kz_datamgr:open_cache_doc(kapps_call:account_db(Call), Value) of
@@ -1892,6 +1911,7 @@ populate_keys(Call) ->
          ,prev = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"prev">>], JObj, Default#keys.prev)
          ,next = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"next">>], JObj, Default#keys.next)
          ,delete = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"delete">>], JObj, Default#keys.delete)
+         ,continue = kz_json:get_binary_value([?KEY_VOICEMAIL, <<"continue">>], JObj, Default#keys.continue)
          }.
 
 %%--------------------------------------------------------------------
@@ -1918,7 +1938,7 @@ get_mailbox_doc(Db, Id, Data, Call) ->
                    ],
             case kz_datamgr:get_single_result(Db, <<"attributes/mailbox_number">>, Opts) of
                 {'ok', JObj} ->
-                    {'ok', kz_json:get_value(<<"doc">>, JObj, kz_json:new())};
+                    {'ok', kz_json:get_json_value(<<"doc">>, JObj, kz_json:new())};
                 E -> E
             end;
         'true' ->
@@ -1938,7 +1958,7 @@ get_user_mailbox_doc(Data, Call, 'undefined') ->
     DeviceId = kapps_call:authorizing_id(Call),
     case kz_datamgr:open_cache_doc(kapps_call:account_db(Call), DeviceId) of
         {'ok', DeviceJObj} ->
-            case kz_json:get_value(<<"owner_id">>, DeviceJObj) of
+            case kz_device:owner_id(DeviceJObj) of
                 'undefined' ->
                     lager:debug("device used to check voicemail has no owner assigned", []),
                     {'error', "request voicemail box number"};
@@ -1972,7 +1992,7 @@ get_user_mailbox_doc(Data, Call, OwnerId) ->
 maybe_match_callerid(Boxes, Data, Call) ->
     case kz_json:is_true(<<"callerid_match_login">>, Data, 'false') of
         'false' ->
-            lager:debug("found voicemail boxes but caller-id match disabled", []),
+            lager:debug("found voicemail boxes but caller-id match disabled"),
             {'error', "request voicemail box number"};
         'true' ->
             CallerId = kapps_call:caller_id_number(Call),
@@ -1986,7 +2006,7 @@ try_match_callerid([], _CallerId) ->
     lager:debug("no voicemail box found for owner with matching caller id ~s", [_CallerId]),
     {'error', "request voicemail box number"};
 try_match_callerid([Box|Boxes], CallerId) ->
-    case kz_json:get_value(<<"mailbox">>, Box) of
+    case kz_json:get_ne_binary_value(<<"mailbox">>, Box) of
         CallerId ->
             lager:debug("found mailbox from caller id ~s", [CallerId]),
             {'ok', Box};
@@ -2190,9 +2210,9 @@ tmp_file(Ext) ->
 %% encoded Unix epoch in the provided timezone
 %% @end
 %%--------------------------------------------------------------------
--spec get_unix_epoch(ne_binary(), ne_binary()) -> ne_binary().
+-spec get_unix_epoch(integer(), ne_binary()) -> ne_binary().
 get_unix_epoch(Epoch, Timezone) ->
-    UtcDateTime = calendar:gregorian_seconds_to_datetime(kz_term:to_integer(Epoch)),
+    UtcDateTime = calendar:gregorian_seconds_to_datetime(Epoch),
     LocalDateTime = localtime:utc_to_local(UtcDateTime, Timezone),
     kz_term:to_binary(calendar:datetime_to_gregorian_seconds(LocalDateTime) - ?UNIX_EPOCH_IN_GREGORIAN).
 

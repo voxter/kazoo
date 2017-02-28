@@ -11,6 +11,7 @@
 -define(APP_NAME, <<"crossbar">>).
 -define(APP_VERSION, <<"4.0.0">>).
 -define(CONFIG_CAT, ?APP_NAME).
+-define(AUTH_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".auth">>).
 
 -define(CACHE_NAME, 'crossbar_cache').
 
@@ -139,7 +140,7 @@
                     ,req_nouns = [{<<"404">>, []}] :: req_nouns() % {module, [id]} most typical
                     ,req_json = kz_json:new() :: req_json()
                     ,req_files = [] :: req_files()
-                    ,req_data :: kz_json:json_term()  % the "data" from the request JSON envelope
+                    ,req_data = kz_json:new() :: kz_json:json_term()  % the "data" from the request JSON envelope
                     ,req_headers = [] :: cowboy:http_headers()
                     ,query_json = kz_json:new() :: kz_json:object()
                     ,account_id :: api_ne_binary()

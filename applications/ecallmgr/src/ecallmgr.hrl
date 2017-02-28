@@ -33,6 +33,10 @@
 -define(DEFAULT_SAMPLE_RATE, ecallmgr_config:get_integer(<<"record_sample_rate">>, 8000)).
 -define(DEFAULT_STEREO_SAMPLE_RATE, ecallmgr_config:get_integer(<<"record_stereo_sample_rate">>, 16000)).
 
+-type fs_app() :: {ne_binary(), ne_binary() | 'noop'} |
+                  {ne_binary(), ne_binary(), atom()}.
+-type fs_apps() :: [fs_app(),...].
+
 -type fs_api_ret()       :: {'ok', binary()} |
                             {'error', 'badarg'} |
                             'timeout'.
@@ -357,6 +361,7 @@
                    ,['CHANNEL_DATA','CALL_UPDATE', 'CALL_SECURE']
                    ,['PLAYBACK_START', 'PLAYBACK_STOP']
                    ,['CHANNEL_HOLD', 'CHANNEL_UNHOLD']
+                   ,['PRESENCE_IN']
                    ]).
 
 -define(FS_SOFIA_TRANSFER_EVENTS, ['sofia::transferor'
@@ -539,6 +544,7 @@
         ,<<"resource">>
         ,<<"route_sup">>
         ,<<"channel_hold">>
+        ,<<"presence">>
         ]).
 
 -define(ECALLMGR_HRL, 'true').

@@ -25,7 +25,6 @@
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     AccountId = kapps_call:account_id(Call),
-
     Path = maybe_use_variable(Data, Call),
     case kz_media_util:media_path(Path, AccountId) of
         'undefined' ->
@@ -40,7 +39,7 @@ handle(Data, Call) ->
 maybe_use_variable(Data, Call) ->
     case kz_json:get_value(<<"var">>, Data) of
         'undefined' ->
-            kz_doc:id(Data);
+            kz_json:get_ne_binary_value(<<"id">>, Data);
         Variable ->
             Value = kz_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
             case kz_datamgr:open_cache_doc(kapps_call:account_db(Call), Value) of

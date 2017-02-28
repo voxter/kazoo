@@ -29,9 +29,9 @@ handle(Data, Call) ->
             lager:info("could not branch to callflow ~s, ~p", [Id, R]),
             cf_exe:continue(Call);
         {'ok', JObj} ->
-            lager:info("branching to new callflow ~s", [kz_doc:id(JObj)]),
-            Flow = kz_json:get_value(<<"flow">>, JObj, kz_json:new()),
-            cf_exe:set_call(kapps_call:kvs_store('cf_flow_id', kz_doc:id(JObj), Call)),
+            lager:info("branching to new callflow ~s", [Id]),
+            Flow = kzd_callflow:flow(JObj, kz_json:new()),
+            cf_exe:set_call(kapps_call:kvs_store('cf_flow_id', Id, Call)),
             cf_exe:branch(Flow, Call)
     end.
 
@@ -39,7 +39,7 @@ handle(Data, Call) ->
 maybe_use_variable(Data, Call) ->
     case kz_json:get_value(<<"var">>, Data) of
         'undefined' ->
-            kz_doc:id(Data);
+            kz_json:get_ne_binary_value(<<"id">>, Data);
         Variable ->
             Value = kz_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
             case kz_datamgr:open_cache_doc(kapps_call:account_db(Call), Value) of

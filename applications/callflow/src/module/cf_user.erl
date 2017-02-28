@@ -26,9 +26,9 @@
 handle(Data, Call) ->
     UserId = maybe_use_variable(Data, Call),
     Endpoints = get_endpoints(UserId, Data, Call),
-    FailOnSingleReject = kz_json:get_value(<<"fail_on_single_reject">>, Data, 'undefined'),
+    FailOnSingleReject = kz_json:is_true(<<"fail_on_single_reject">>, Data, 'undefined'),
     Timeout = kz_json:get_integer_value(<<"timeout">>, Data, ?DEFAULT_TIMEOUT_S),
-    Strategy = kz_json:get_binary_value(<<"strategy">>, Data, <<"simultaneous">>),
+    Strategy = kz_json:get_ne_binary_value(<<"strategy">>, Data, <<"simultaneous">>),
     IgnoreEarlyMedia = kz_endpoints:ignore_early_media(Endpoints),
 
     Command = [{<<"Application-Name">>, <<"bridge">>}
@@ -60,7 +60,7 @@ handle(Data, Call) ->
 maybe_use_variable(Data, Call) ->
     case kz_json:get_value(<<"var">>, Data) of
         'undefined' ->
-            kz_doc:id(Data);
+            kz_json:get_ne_binary_value(<<"id">>, Data);
         Variable ->
             Value = kz_json:get_value(<<"value">>, cf_kvs_set:get_kv(Variable, Call)),
             case kz_datamgr:open_cache_doc(kapps_call:account_db(Call), Value) of
@@ -69,7 +69,7 @@ maybe_use_variable(Data, Call) ->
             end
     end.
 
--spec maybe_handle_bridge_failure(_, kapps_call:call()) -> 'ok'.
+-spec maybe_handle_bridge_failure(any(), kapps_call:call()) -> 'ok'.
 maybe_handle_bridge_failure(Reason, Call) ->
     case cf_util:handle_bridge_failure(Reason, Call) of
         'not_found' -> cf_exe:continue(Call);
