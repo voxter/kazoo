@@ -26,7 +26,7 @@ start_listeners(ListenSocket, Count) ->
     lager:debug("Starting ~p socket listener processes", [Count]),
     [start_listener(ListenSocket, Num) || Num <- lists:seq(1, Count)],
     'ok'.
-    
+
 %% Launch a client handler process listening on the given socket
 start_listener(ListenSocket, Num) ->
     supervisor:start_child(?MODULE, {"amimulator_socket_listener-" ++ wh_util:to_list(Num)
@@ -88,7 +88,7 @@ stop_event_listener(_, {_, WorkerName}, _) ->
 %%
 %% supervisor callbacks
 %%
-        
+
 init([]) ->
     RestartStrategy = 'one_for_one',
     MaxRestarts = 3,
@@ -99,7 +99,7 @@ init([]) ->
     StateMaster = {'ami_sm', {'ami_sm', 'start_link', []}, 'permanent', 'infinity', 'worker', ['ami_sm']},
     Originator = {'amimulator_originator', {'amimulator_originator', 'start_link', []}, 'permanent', 2000, 'worker', ['amimulator_originator']},
     CallSup = {'amimulator_call_sup', {'amimulator_call_sup', 'start_link', []}, 'permanent', 5000, 'supervisor', ['amimulator_call_sup']},
-    
+
     {'ok', {SupFlags, [StateMaster, Originator, CallSup]}}.
 
 %%
@@ -107,7 +107,7 @@ init([]) ->
 %%
 
 -spec event_listeners() -> [{pid(), term()},...] | [].
-event_listeners() -> 
+event_listeners() ->
     [{Pid, WorkerName} || {WorkerName, Pid, 'worker', ['amimulator_event_listener']} <- supervisor:which_children(?MODULE)].
 
 -spec find_event_listener(ne_binary()) -> {pid(), term()} | 'undefined'.

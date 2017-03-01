@@ -4,9 +4,9 @@
 -export([start_link/1]).
 -export([login/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
-         
+
 -include("amimulator.hrl").
-         
+
 -record(state, {listen_socket
                 ,accept_socket
                 %% A collection of data packets that represent a single command
@@ -53,11 +53,11 @@ handle_cast('accept', #state{listen_socket=Socket}=State) ->
             %% Send announcement to clients of who we are
             %% Required for queuestats application
             gen_tcp:send(AcceptSocket, <<"Asterisk Call Manager/1.1\r\n">>),
-            
+
             %% Need to wait for login now
             {'noreply', State#state{accept_socket=AcceptSocket}};
         {'error', 'closed'} ->
-        	% lager:debug("Listen socket closed"),
+            % lager:debug("Listen socket closed"),
             {'noreply', State};
         {_, _} ->
             lager:debug("Exception occurred when waiting for socket accept"),
@@ -92,7 +92,7 @@ handle_cast({'publish', Events}, #state{accept_socket=AcceptSocket}=State) ->
 handle_cast(Event, State) ->
     lager:debug("unhandled cast ~p", [Event]),
     {'noreply', State}.
-    
+
 %% Route socket data to command processor
 handle_info({'tcp', _Socket, Data}, #state{bundle=Bundle
                                            ,account_id=AccountId
@@ -132,7 +132,7 @@ handle_info(_Info, State) ->
 terminate('shutdown', #state{accept_socket=AcceptSocket
                              ,account_id=_AccountId
                             }) ->
-	% TODO: actually close these accept sockets on restart
+    % TODO: actually close these accept sockets on restart
     case AcceptSocket of
         'undefined' ->
             'ok';
@@ -161,7 +161,7 @@ maybe_send_response('on', HandleResp) ->
 maybe_send_response(_EventMask, HandleResp) ->
     %% TODO implement
     send_response(HandleResp).
-    
+
 -spec send_response(tuple()) -> 'ok'.
 send_response(HandleResp) ->
     case HandleResp of
@@ -173,8 +173,8 @@ publish_events({[Event|_]=Events, Mode}, Socket) when is_list(Event) ->
     [publish_event(Event2, Mode, Socket) || Event2 <- Events];
 publish_events({Event, Mode}, Socket) ->
     publish_event(Event, Mode, Socket).
-  
-%% It looks like sometimes, Asterisk sends the messages broken up by newlines...  
+
+%% It looks like sometimes, Asterisk sends the messages broken up by newlines...
 publish_event(Props, 'broken', Socket) ->
     lists:foreach(fun(Part) ->
         gen_tcp:send(Socket, amimulator_util:format_prop(Part))
