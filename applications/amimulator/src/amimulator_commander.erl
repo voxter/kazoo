@@ -74,14 +74,14 @@ handle_event("status", Props) ->
     {ok, {Payload, n}};
 
 handle_event("queuestatus", Props) ->
-	Header = [[
-		{<<"Response">>, <<"Success">>},
+    Header = [[
+        {<<"Response">>, <<"Success">>},
         {<<"Message">>, <<"Queue status will follow">>}
-	]],
-	Footer = [[
-		{<<"Event">>, <<"QueueStatusComplete">>}
-	]],
-	{'ok', {Header ++ queues_status(Props) ++ Footer, 'n'}};
+    ]],
+    Footer = [[
+        {<<"Event">>, <<"QueueStatusComplete">>}
+    ]],
+    {'ok', {Header ++ queues_status(Props) ++ Footer, 'n'}};
 
 handle_event("sippeers", Props) ->
     ActionId = props:get_value(<<"ActionID">>, Props),
@@ -101,65 +101,65 @@ handle_event("sippeers", Props) ->
     {ok, {Payload, n}};
 handle_event("sipshowpeer", Props) ->
     Payload = props:filter_undefined([
-		{<<"Response">>, <<"Success">>},
-		{<<"ActionID">>, props:get_value(<<"ActionID">>, Props)},
-		{<<"Channeltype">>, <<"SIP">>},
-		{<<"ObjectName">>, <<"1011">>},
-		{<<"ChanObjectType">>, <<"peer">>},
-		{<<"SecretExist">>, <<"Y">>},
-		{<<"RemoteSecretExist">>, <<"N">>},
-		{<<"MD5SecretExist">>, <<"N">>},
-		{<<"Context">>, <<"from-internal">>},
-		{<<"Language">>, <<>>},
-		{<<"AMAflags">>, <<"Unknown">>},
-		{<<"CID-CallingPres">>, <<"Presentation Allowed, Not Screened">>},
-		{<<"Callgroup">>, <<>>},
-		{<<"Pickupgroup">>, <<>>},
-		{<<"MOHSuggest">>, <<>>},
-		{<<"VoiceMailbox">>, <<"1011@default">>},
-		{<<"TransferMode">>, <<"open">>},
-		{<<"Maxforwards">>, <<"0">>},
-		{<<"LastMsgsSent">>, <<"-1">>},
-		{<<"Maxforwards">>, <<"0">>},
-		{<<"Call-limit">>, <<"2147483647">>},
-		{<<"Busy-level">>, <<"0">>},
-		{<<"MaxCallBR">>, <<"384 kbps">>},
-		{<<"Dynamic">>, <<"Y">>},
-		{<<"Callerid">>, <<"\"device\" <1011>">>},
-		{<<"RegExpire">>, <<"71 seconds">>},
-		{<<"SIP-AuthInsecure">>, <<"no">>},
-		{<<"SIP-Forcerport">>, <<"Y">>},
-		{<<"ACL">>, <<"Y">>},
-		{<<"SIP-CanReinvite">>, <<"N">>},
-		{<<"SIP-DirectMedia">>, <<"N">>},
-		{<<"SIP-PromiscRedir">>, <<"N">>},
-		{<<"SIP-UserPhone">>, <<"N">>},
-		{<<"SIP-VideoSupport">>, <<"N">>},
-		{<<"SIP-TextSupport">>, <<"N">>},
-		{<<"SIP-T.38Support">>, <<"N">>},
-		{<<"SIP-T.38EC">>, <<"Unknown">>},
-		{<<"SIP-T.38MaxDtgrm">>, <<"-1">>},
-		{<<"SIP-Sess-Timers">>, <<"Accept">>},
-		{<<"SIP-Sess-Refresh">>, <<"uas">>},
-		{<<"SIP-Sess-Expires">>, <<"1800">>},
-		{<<"SIP-Sess-Min">>, <<"90">>},
-		{<<"SIP-RTP-Engine">>, <<"asterisk">>},
-		{<<"SIP-Encryption">>, <<"N">>},
-		{<<"SIP-DTMFmode">>, <<"rfc2833">>},
-		{<<"ToHost">>, <<>>},
-		{<<"Address-IP">>, <<"206.191.105.50">>},
-		{<<"Address-Port">>, <<"52511">>},
-		{<<"Default-addr-IP">>, <<"(null)">>},
-		{<<"Default-addr-port">>, <<"0">>},
-		{<<"Default-Username">>, <<"448">>},
-		{<<"Codecs">>, <<"0x104 (ulaw|g729)">>},
-		{<<"CodecOrder">>, <<"ulaw,g729">>},
-		{<<"Status">>, <<"OK (66 ms)">>},
-		{<<"SIP-Useragent">>, <<"Aastra 57i/3.3.1.4305">>},
-		{<<"Reg-Contact">>, <<"sip:1011@10.2.0.63:5060;transport=udp">>},
-		{<<"QualifyFreq">>, <<"60000 ms">>},
-		{<<"Parkinglot">>, <<>>},
-		{<<"SIP-Use-Reason-Header ">>, <<"N">>}
+        {<<"Response">>, <<"Success">>},
+        {<<"ActionID">>, props:get_value(<<"ActionID">>, Props)},
+        {<<"Channeltype">>, <<"SIP">>},
+        {<<"ObjectName">>, <<"1011">>},
+        {<<"ChanObjectType">>, <<"peer">>},
+        {<<"SecretExist">>, <<"Y">>},
+        {<<"RemoteSecretExist">>, <<"N">>},
+        {<<"MD5SecretExist">>, <<"N">>},
+        {<<"Context">>, <<"from-internal">>},
+        {<<"Language">>, <<>>},
+        {<<"AMAflags">>, <<"Unknown">>},
+        {<<"CID-CallingPres">>, <<"Presentation Allowed, Not Screened">>},
+        {<<"Callgroup">>, <<>>},
+        {<<"Pickupgroup">>, <<>>},
+        {<<"MOHSuggest">>, <<>>},
+        {<<"VoiceMailbox">>, <<"1011@default">>},
+        {<<"TransferMode">>, <<"open">>},
+        {<<"Maxforwards">>, <<"0">>},
+        {<<"LastMsgsSent">>, <<"-1">>},
+        {<<"Maxforwards">>, <<"0">>},
+        {<<"Call-limit">>, <<"2147483647">>},
+        {<<"Busy-level">>, <<"0">>},
+        {<<"MaxCallBR">>, <<"384 kbps">>},
+        {<<"Dynamic">>, <<"Y">>},
+        {<<"Callerid">>, <<"\"device\" <1011>">>},
+        {<<"RegExpire">>, <<"71 seconds">>},
+        {<<"SIP-AuthInsecure">>, <<"no">>},
+        {<<"SIP-Forcerport">>, <<"Y">>},
+        {<<"ACL">>, <<"Y">>},
+        {<<"SIP-CanReinvite">>, <<"N">>},
+        {<<"SIP-DirectMedia">>, <<"N">>},
+        {<<"SIP-PromiscRedir">>, <<"N">>},
+        {<<"SIP-UserPhone">>, <<"N">>},
+        {<<"SIP-VideoSupport">>, <<"N">>},
+        {<<"SIP-TextSupport">>, <<"N">>},
+        {<<"SIP-T.38Support">>, <<"N">>},
+        {<<"SIP-T.38EC">>, <<"Unknown">>},
+        {<<"SIP-T.38MaxDtgrm">>, <<"-1">>},
+        {<<"SIP-Sess-Timers">>, <<"Accept">>},
+        {<<"SIP-Sess-Refresh">>, <<"uas">>},
+        {<<"SIP-Sess-Expires">>, <<"1800">>},
+        {<<"SIP-Sess-Min">>, <<"90">>},
+        {<<"SIP-RTP-Engine">>, <<"asterisk">>},
+        {<<"SIP-Encryption">>, <<"N">>},
+        {<<"SIP-DTMFmode">>, <<"rfc2833">>},
+        {<<"ToHost">>, <<>>},
+        {<<"Address-IP">>, <<"206.191.105.50">>},
+        {<<"Address-Port">>, <<"52511">>},
+        {<<"Default-addr-IP">>, <<"(null)">>},
+        {<<"Default-addr-port">>, <<"0">>},
+        {<<"Default-Username">>, <<"448">>},
+        {<<"Codecs">>, <<"0x104 (ulaw|g729)">>},
+        {<<"CodecOrder">>, <<"ulaw,g729">>},
+        {<<"Status">>, <<"OK (66 ms)">>},
+        {<<"SIP-Useragent">>, <<"Aastra 57i/3.3.1.4305">>},
+        {<<"Reg-Contact">>, <<"sip:1011@10.2.0.63:5060;transport=udp">>},
+        {<<"QualifyFreq">>, <<"60000 ms">>},
+        {<<"Parkinglot">>, <<>>},
+        {<<"SIP-Use-Reason-Header ">>, <<"N">>}
     ]),
     {'ok', {Payload, 'n'}};
 handle_event("mailboxcount", Props) ->
@@ -198,11 +198,11 @@ handle_event("originate", Props) ->
             case proplists:get_value(<<"Application">>, Props) of
                 <<"ChanSpy">> ->
                     gen_listener:cast(amimulator_originator, {"eavesdrop", Props});
-               	<<"PickupChan">> ->
-               		% Props2 = props:set_value(<<"Channel">>, props:get_value(<<"Data">>, 
-               		% 	props:set_value(<<"SourceExten">>, hd(binary:split(props:get_value(<<"Channel">>, Props), <<"/">>)),
-               		% 	Props)), Props),
-               		gen_listener:cast(amimulator_originator, {"pickupchan", Props});
+                   <<"PickupChan">> ->
+                       % Props2 = props:set_value(<<"Channel">>, props:get_value(<<"Data">>,
+                       %     props:set_value(<<"SourceExten">>, hd(binary:split(props:get_value(<<"Channel">>, Props), <<"/">>)),
+                       %     Props)), Props),
+                       gen_listener:cast(amimulator_originator, {"pickupchan", Props});
                 _ ->
                     gen_listener:cast(amimulator_originator, {"originate", Props})
             end
@@ -305,10 +305,10 @@ login_md5(Username, Md5, Challenge, ActionId) ->
 
 login_success(AccountId, ActionId) ->
     lager:debug("successful login, starting event listener"),
-    
+
     %% Record account id that is being used for logged in account
     amimulator_socket_listener:login(AccountId),
-    
+
     Payload = props:filter_undefined([{<<"Response">>, <<"Success">>}
                                       ,{<<"ActionID">>, ActionId}
                                       ,{<<"Message">>, <<"Authentication accepted">>}
@@ -403,7 +403,7 @@ dest_exten(_, _, _, _, _, Call) ->
 
 channel_state(Call) ->
     channel_state(amimulator_call:answered(Call), amimulator_call:direction(Call)).
-    
+
 channel_state('true', _) ->
     {6, <<"Up">>};
 channel_state(_, <<"inbound">>) ->
@@ -414,7 +414,7 @@ channel_state(_, <<"outbound">>) ->
 application_and_context(Call) ->
     application_and_context(amimulator_call:answered(Call), amimulator_call:direction(Call), amimulator_call:acdc_queue_id(Call)
                             ,amimulator_call:account_id(Call), amimulator_call:other_channel(Call), Call).
-    
+
 application_and_context(_, _, 'undefined', _, _, _) ->
     {<<"Dial">>, <<"from-internal">>};
 application_and_context('true', <<"inbound">>, _, _, <<"Local", _/binary>>, _) ->
@@ -576,7 +576,7 @@ append_space(RevList, Count, Count) ->
     RevList;
 append_space(RevList, Count, Index) ->
     append_space(" " ++ RevList, Count, Index+1).
-    
+
 queues_status(Props) ->
     AccountId = proplists:get_value(<<"AccountId">>, Props),
     AccountDb = proplists:get_value(<<"AccountDb">>, Props),
@@ -585,61 +585,61 @@ queues_status(Props) ->
     lists:foldl(fun(Result, Acc) ->
         QueueId = wh_json:get_value(<<"id">>, Result),
         case couch_mgr:open_doc(AccountDb, QueueId) of
-        	{'error', E} ->
-        		lager:debug("Error opening queue doc: ~p", [E]),
-        		[] ++ Acc;
-        	{'ok', QueueDoc} ->
-        		case couch_mgr:get_results(AccountDb, <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
-        			{'error', E} ->
-        				lager:debug("Could not find queue number for queue ~p (~p)", [QueueId, E]),
-        				[] ++ Acc;
-        			{'ok', Results2} when length(Results2) =:= 1 ->
-        				Value = wh_json:get_value(<<"value">>, hd(Results2)),
-        				Number = hd(Value),
+            {'error', E} ->
+                lager:debug("Error opening queue doc: ~p", [E]),
+                [] ++ Acc;
+            {'ok', QueueDoc} ->
+                case couch_mgr:get_results(AccountDb, <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
+                    {'error', E} ->
+                        lager:debug("Could not find queue number for queue ~p (~p)", [QueueId, E]),
+                        [] ++ Acc;
+                    {'ok', Results2} when length(Results2) =:= 1 ->
+                        Value = wh_json:get_value(<<"value">>, hd(Results2)),
+                        Number = hd(Value),
 
-        				RawStats = queue_stats(QueueId, AccountId),
-        				{Calls, Holdtime, TalkTime, Completed, Abandoned, AgentStats} = case RawStats of
-        					{error, E} ->
-        						lager:error("error ~p when getting queue stats for queue ~p", [E, QueueId]),
-        						{0, 0, 0, 0, 0, []};
-        					{ok, Resp} ->
-        						count_stats(Resp)
-        				end,
+                        RawStats = queue_stats(QueueId, AccountId),
+                        {Calls, Holdtime, TalkTime, Completed, Abandoned, AgentStats} = case RawStats of
+                            {error, E} ->
+                                lager:error("error ~p when getting queue stats for queue ~p", [E, QueueId]),
+                                {0, 0, 0, 0, 0, []};
+                            {ok, Resp} ->
+                                count_stats(Resp)
+                        end,
 
-        				CompletedCalls = Completed - Abandoned,
-        				AverageHold = case CompletedCalls of
-        					0 ->
-        						0.0;
-        					_ ->
-        						Holdtime / CompletedCalls
-        				end,
-        				WaitingCalls = Calls - Completed,
+                        CompletedCalls = Completed - Abandoned,
+                        AverageHold = case CompletedCalls of
+                            0 ->
+                                0.0;
+                            _ ->
+                                Holdtime / CompletedCalls
+                        end,
+                        WaitingCalls = Calls - Completed,
 
-        				[[
-        					{<<"Event">>, <<"QueueParams">>},
-					        {<<"Queue">>, Number},
-					        {<<"Max">>, wh_json:get_value(<<"max_queue_size">>, QueueDoc)},
-					        {<<"Strategy">>, wh_json:get_value(<<"strategy">>, QueueDoc)},
-					        %% Calls actually represents number of waiting calls
-					        {<<"Calls">>, WaitingCalls},
-					        {<<"Holdtime">>, round(AverageHold)},
-					        {<<"TalkTime">>, TalkTime},
-					        {<<"Completed">>, CompletedCalls},
-					        {<<"Abandoned">>, Abandoned},
-					        % TODO: add servicelevel
-					        {<<"ServiceLevel">>, 60},
-					        {<<"ServicelevelPerf">>, 69.0}
-        				]]
+                        [[
+                            {<<"Event">>, <<"QueueParams">>},
+                            {<<"Queue">>, Number},
+                            {<<"Max">>, wh_json:get_value(<<"max_queue_size">>, QueueDoc)},
+                            {<<"Strategy">>, wh_json:get_value(<<"strategy">>, QueueDoc)},
+                            %% Calls actually represents number of waiting calls
+                            {<<"Calls">>, WaitingCalls},
+                            {<<"Holdtime">>, round(AverageHold)},
+                            {<<"TalkTime">>, TalkTime},
+                            {<<"Completed">>, CompletedCalls},
+                            {<<"Abandoned">>, Abandoned},
+                            % TODO: add servicelevel
+                            {<<"ServiceLevel">>, 60},
+                            {<<"ServicelevelPerf">>, 69.0}
+                        ]]
                         ++ queue_entries(QueueId, Number, wh_json:get_value(<<"Waiting">>, element(2, RawStats), []))
-        				++ agent_statuses(QueueId, AccountId, Number, AgentStats)
-        				++ Acc;
-        			{'ok', Results2} ->
-        				lager:debug("Too many results when trying to find queue number for queue ~p: ~p", [QueueId, Results2]),
-        				[] ++ Acc
-        		end
+                        ++ agent_statuses(QueueId, AccountId, Number, AgentStats)
+                        ++ Acc;
+                    {'ok', Results2} ->
+                        lager:debug("Too many results when trying to find queue number for queue ~p: ~p", [QueueId, Results2]),
+                        [] ++ Acc
+                end
         end
     end, [], Results).
-    
+
 % TODO: maybe we need acdc stats to be persisted in couch
 queue_stats(QueueId, AcctId) ->
     Req = props:filter_undefined(
@@ -660,13 +660,13 @@ count_stats(Stats) ->
         wh_json:get_value(<<"Waiting">>, Stats, []) ++
         wh_json:get_value(<<"Processed">>, Stats, []),
     count_stats(AllStats, {0, 0, 0, 0, 0, []}).
-    
+
 count_stats([], {Calls, Holdtime, TalkTime, Completed, Abandoned, AgentStats}) ->
     {Calls, Holdtime, TalkTime, Completed, Abandoned, AgentStats};
 count_stats([Stat|Stats], {Calls, Holdtime, TalkTime, Completed, Abandoned, AgentStats}) ->
-	Status = wh_json:get_value(<<"status">>, Stat),
-	AgentStats2 = if (Status =:= <<"handled">>) or (Status =:= <<"processed">>) ->
-		AgentId = wh_json:get_value(<<"agent_id">>, Stat),
+    Status = wh_json:get_value(<<"status">>, Stat),
+    AgentStats2 = if (Status =:= <<"handled">>) or (Status =:= <<"processed">>) ->
+        AgentId = wh_json:get_value(<<"agent_id">>, Stat),
         LastCall = props:get_value(<<"LastCall">>, props:get_value(AgentId, AgentStats, []), 0),
         StatLastCall = wh_json:get_first_defined([<<"processed_timestamp">>, <<"handled_timestamp">>], Stat, 0) - 62167219200,
         NewLastCall = if StatLastCall > LastCall ->
@@ -674,13 +674,13 @@ count_stats([Stat|Stats], {Calls, Holdtime, TalkTime, Completed, Abandoned, Agen
         true ->
             LastCall
         end,
-		props:set_value(AgentId, [
-				{<<"CallsTaken">>, props:get_value(<<"CallsTaken">>, props:get_value(AgentId, AgentStats, []), 0) + 1},
-				{<<"LastCall">>, NewLastCall}
-			], AgentStats);
-	true ->
-		AgentStats
-	end,
+        props:set_value(AgentId, [
+                {<<"CallsTaken">>, props:get_value(<<"CallsTaken">>, props:get_value(AgentId, AgentStats, []), 0) + 1},
+                {<<"LastCall">>, NewLastCall}
+            ], AgentStats);
+    true ->
+        AgentStats
+    end,
 
     case Status of
         <<"abandoned">> ->
@@ -752,9 +752,9 @@ agent_statuses(QueueId, AccountId, Number, AgentStats) ->
             AgentStatus -> [AgentStatus | Acc]
         end
     end, [], Results).
-        
+
 agent_status(AgentId, AccountId, Number, AgentStats) ->
-    AccountDb = wh_util:format_account_id(AccountId, encoded), 
+    AccountDb = wh_util:format_account_id(AccountId, encoded),
     {ok, UserDoc} = couch_mgr:open_doc(AccountDb, AgentId),
     FirstName = wh_json:get_value(<<"first_name">>, UserDoc),
     LastName = wh_json:get_value(<<"last_name">>, UserDoc),
@@ -787,7 +787,7 @@ agent_status(AgentId, AccountId, Number, AgentStats) ->
                 {<<"Paused">>, Paused}
             ]
     end.
-    
+
 translate_status(Status) ->
     % TODO: properly translate statuses
     case Status of
@@ -1058,19 +1058,19 @@ command(<<"meetme kick ", MeetMeSpec/binary>>, Props) ->
 command(<<"core show channels ", Verbosity/binary>>, Props) ->
     initial_channel_status(ami_sm:calls(proplists:get_value(<<"AccountId">>, Props)), Props, Verbosity);
 command(<<"database put ", Variable/binary>>, Props) ->
-	[Family, Key, Value] = parse_command(wh_util:to_list(Variable)),
-	ami_sm:db_put(props:get_value(<<"AccountId">>, Props), Family, Key, Value),
+    [Family, Key, Value] = parse_command(wh_util:to_list(Variable)),
+    ami_sm:db_put(props:get_value(<<"AccountId">>, Props), Family, Key, Value),
 
-	{[
+    {[
         <<"Response: Follows\r\nPrivilege: Command\r\n">>,
         <<"Updated database successfully\n">>,
         <<"--END COMMAND--\r\n\r\n">>
     ], raw};
 command(<<"database del ", Variable/binary>>, Props) ->
-	[Family, Key] = parse_command(wh_util:to_list(Variable)),
-	ami_sm:db_del(props:get_value(<<"AccountId">>, Props), Family, Key),
+    [Family, Key] = parse_command(wh_util:to_list(Variable)),
+    ami_sm:db_del(props:get_value(<<"AccountId">>, Props), Family, Key),
 
-	{[
+    {[
         <<"Response: Follows\r\nPrivilege: Command\r\n">>,
         <<"Database entry removed.\n">>,
         <<"--END COMMAND--\r\n\r\n">>
@@ -1085,27 +1085,27 @@ command(CommandName, Props) ->
     ], raw}.
 
 parse_command(Command) ->
-	parse_command(Command, [], []).
+    parse_command(Command, [], []).
 
 parse_command([], Parts, _Acc) ->
-	lists:reverse(Parts);
+    lists:reverse(Parts);
 parse_command([Char|Chars], Parts, Acc) ->
-	if Char =:= 34 ->
-		parse_command(quoted, Chars, Parts, Acc);
-	Char =:= 32 ->
-		parse_command(Chars, [lists:reverse(Acc)] ++ Parts, []);
-	true ->
-		parse_command(Chars, Parts, [Char | Acc])
-	end.
+    if Char =:= 34 ->
+        parse_command(quoted, Chars, Parts, Acc);
+    Char =:= 32 ->
+        parse_command(Chars, [lists:reverse(Acc)] ++ Parts, []);
+    true ->
+        parse_command(Chars, Parts, [Char | Acc])
+    end.
 
 parse_command(quoted, [], Parts, _Acc) ->
-	lists:reverse(Parts);
+    lists:reverse(Parts);
 parse_command(quoted, [Char|Chars], Parts, Acc) ->
-	if Char =:= 34 ->
-		parse_command(Chars, [lists:reverse(Acc)] ++ Parts, []);
-	true ->
-		parse_command(quoted, Chars, Parts, [Char | Acc])
-	end.
+    if Char =:= 34 ->
+        parse_command(Chars, [lists:reverse(Acc)] ++ Parts, []);
+    true ->
+        parse_command(quoted, Chars, Parts, [Char | Acc])
+    end.
 
 user_event(<<"MEETME-REFRESH">>, Props) ->
     [[
@@ -1119,7 +1119,7 @@ user_event(<<"MEETME-REFRESH">>, Props) ->
         {<<"Meetme">>, props:get_value(<<"Meetme">>, Props)}
     ]];
 user_event(<<"FOP2ASTDB">>, Props) ->
-	[[
+    [[
         {<<"Response">>, <<"Success">>},
         {<<"Message">>, <<"Event Sent">>}
     ] ++ [
@@ -1133,34 +1133,34 @@ user_event(<<"FOP2ASTDB">>, Props) ->
         {<<"Value">>, props:get_value(<<"Value">>, Props)}
     ]];
 user_event(<<"FOP2CHAT">>, Props) ->
-	[[
-		{<<"Response">>, <<"Success">>},
+    [[
+        {<<"Response">>, <<"Success">>},
         {<<"Message">>, <<"Event Sent">>}
-	] ++ [
-		{<<"Event">>, <<"UserEvent">>},
+    ] ++ [
+        {<<"Event">>, <<"UserEvent">>},
         {<<"Privilege">>, <<"user,all">>},
         {<<"UserEvent">>, <<"FOP2CHAT">>},
         {<<"Action">>, <<"UserEvent">>},
         {<<"From">>, props:get_value(<<"From">>, Props)},
         {<<"Channel">>, props:get_value(<<"Channel">>, Props)},
         {<<"Msg">>, props:get_value(<<"Msg">>, Props)}
-	]];
+    ]];
 user_event(<<"FOP2NOTIFY">>, Props) ->
-	[[
-		{<<"Response">>, <<"Success">>},
+    [[
+        {<<"Response">>, <<"Success">>},
         {<<"Message">>, <<"Event Sent">>}
-	] ++ [
-		{<<"Event">>, <<"UserEvent">>},
+    ] ++ [
+        {<<"Event">>, <<"UserEvent">>},
         {<<"Privilege">>, <<"user,all">>},
         {<<"UserEvent">>, <<"FOP2NOTIFY">>},
         {<<"Action">>, <<"UserEvent">>},
         {<<"From">>, props:get_value(<<"From">>, Props)},
         {<<"Channel">>, props:get_value(<<"Channel">>, Props)},
         {<<"Msg">>, props:get_value(<<"Msg">>, Props)}
-	]];
+    ]];
 user_event(EventName, Props) ->
-	lager:debug("Unhandled event ~p with props ~p", [EventName, Props]),
-	undefined.
+    lager:debug("Unhandled event ~p with props ~p", [EventName, Props]),
+    undefined.
 
 maybe_list_conf(Number, Props) ->
     case conf_id_for_number(Number, props:get_value(<<"AccountId">>, Props)) of
