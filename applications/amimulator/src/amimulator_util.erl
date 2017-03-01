@@ -20,7 +20,7 @@
          ,queue_number/2
          ,maybe_leave_conference/1
 ,
-   
+
     find_id_number/2, queue_for_number/2]).
 
 %% AMI commands broken up by newlines
@@ -33,7 +33,7 @@ parse_payload(Payload) ->
         Prop = {K, binary:replace(V, <<" ">>, <<>>)},
         [Prop] ++ Acc
         end, [], Lines).
-    
+
 %% Eliminates trailing lines from client payload
 -spec filter_empty(list()) -> list().
 filter_empty(Parameters) ->
@@ -634,7 +634,7 @@ maybe_leave_conference(CallId) ->
 %     Call = props:get_value(CallId, BasicCalls),
 
 %     Routines = [
-%         % fun(Call2, JObj2, _BC) -> 
+%         % fun(Call2, JObj2, _BC) ->
 %         %     CallDirection = wh_json:get_first_defined([<<"direction">>, <<"Call-Direction">>], JObj2,
 %         %         <<"inbound">>),
 %         %     props:set_value(<<"direction">>, CallDirection, Call2) end,
@@ -644,11 +644,11 @@ maybe_leave_conference(CallId) ->
 %         fun bleg_cid/3,
 %         fun bleg_exten/3,
 %         fun bleg_ami_channel/3,
-%         % fun(Call2, JObj2, _BC) -> props:set_value(<<"username">>, 
+%         % fun(Call2, JObj2, _BC) -> props:set_value(<<"username">>,
 %         %     wh_json:get_first_defined([<<"username">>, <<"Username">>], JObj2), Call2) end,
-%         % fun(Call2, JObj2, _BC) -> props:set_value(<<"answered">>, 
+%         % fun(Call2, JObj2, _BC) -> props:set_value(<<"answered">>,
 %         %     wh_json:get_first_defined([<<"answered">>], JObj2), Call2) end,
-%         % fun(Call2, JObj2, _BC) -> props:set_value(<<"elapsed_s">>, 
+%         % fun(Call2, JObj2, _BC) -> props:set_value(<<"elapsed_s">>,
 %         %     wh_json:get_first_defined([<<"elapsed_s">>], JObj2), Call2) end
 %     ],
 %     lists:foldl(
@@ -895,7 +895,7 @@ maybe_id_in_callflow(Id, CFId, AccountDb) ->
         true ->
             hd(wh_json:get_value(<<"numbers">>, CFDoc))
     end.
-    
+
 maybe_id_in_callflow(Id, Flow) ->
     Data = wh_json:get_value(<<"data">>, Flow),
     %% Skipping queue login and queue logout possibilities
@@ -918,7 +918,7 @@ recurse_to_child_callflow(Id, Flow) ->
     end.
 
 
-   
+
 
 
 
@@ -935,7 +935,7 @@ queue_for_number(Number, AccountDb) ->
                     couch_mgr:open_doc(AccountDb, QueueId)
             end
     end.
-    
+
 maybe_queue_in_flow(Flow) ->
     case wh_json:get_value(<<"module">>, Flow) of
         <<"acdc_member">> ->
