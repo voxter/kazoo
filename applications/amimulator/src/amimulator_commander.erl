@@ -289,19 +289,31 @@ handle_event(Event, Props) ->
     {error, no_action}.
 
 login_secret(Username, Secret, ActionId) ->
-    {'ok', AMIDoc} = couch_mgr:open_doc(?AMI_DB, Username),
-    case wh_json:get_value(<<"secret">>, AMIDoc) of
-        Secret -> login_success(wh_json:get_value(<<"account_id">>, AMIDoc), ActionId);
-        _ -> login_fail(ActionId)
+    case get_ami_doc(Username) of
+        'not_found' -> login_fail(ActionId);
+        AMIDoc ->
+            AMIDocSecret = wh_json:get_value(<<"secret">>, AMIDoc),
+            AccountId = wh_json:get_value(<<"account_id">>, AMIDoc),
+            check_login(Secret, AMIDocSecret, AccountId, ActionId)
     end.
 
 login_md5(Username, Md5, Challenge, ActionId) ->
-    {'ok', AMIDoc} = couch_mgr:open_doc(?AMI_DB, Username),
-    Digest = crypto:hash('md5', <<(wh_util:to_binary(Challenge))/binary, (wh_json:get_value(<<"secret">>, AMIDoc))/binary>>),
-    case wh_util:to_binary(lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest])) of
-        Md5 -> login_success(wh_json:get_value(<<"account_id">>, AMIDoc), ActionId);
-        _ -> login_fail(ActionId)
+    case get_ami_doc(Username) of
+        'not_found' -> login_fail(ActionId);
+        AMIDoc ->
+            AMIDocSecret = wh_json:get_value(<<"secret">>, AMIDoc),
+            AccountId = wh_json:get_value(<<"account_id">>, AMIDoc),
+            Digest = crypto:hash('md5', <<(wh_util:to_binary(Challenge))/binary, AMIDocSecret/binary>>),
+            SuccessMd5 = wh_util:to_binary(lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest])),
+            check_login(Md5, SuccessMd5, AccountId, ActionId)
     end.
+
+-spec check_login(ne_binary(), ne_binary(), ne_binary(), ne_binary()) ->
+                         {'ok', {wh_proplist(), 'broken' | 'n'}}.
+check_login(SuccessCredentials, SuccessCredentials, AccountId, ActionId) ->
+    login_success(AccountId, ActionId);
+check_login(_, _, _, ActionId) ->
+    login_fail(ActionId).
 
 login_success(AccountId, ActionId) ->
     lager:debug("successful login, starting event listener"),
@@ -321,6 +333,13 @@ login_fail(ActionId) ->
                                       ,{<<"Message">>, <<"Authentication failed">>}
                                      ]),
     {'ok', {Payload, 'n'}}.
+
+-spec get_ami_doc(ne_binary()) -> wh_json:object() | 'not_found'.
+get_ami_doc(Username) ->
+    case couch_mgr:open_doc(?AMI_DB, Username) of
+        {'ok', Doc} -> Doc;
+        {'error', _} -> 'not_found'
+    end.
 
 initial_channel_status(Calls, _Props, Format) ->
     FormattedCalls = lists:foldl(fun(Call, List) ->
