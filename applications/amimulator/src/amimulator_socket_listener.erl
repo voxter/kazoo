@@ -130,7 +130,7 @@ handle_info(_Info, State) ->
     {'noreply', State}.
 
 terminate('shutdown', #state{accept_socket=AcceptSocket
-                             ,account_id=AccountId
+                             ,account_id=_AccountId
                             }) ->
 	% TODO: actually close these accept sockets on restart
     case AcceptSocket of
