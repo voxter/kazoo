@@ -600,8 +600,8 @@ queues_status(Props) ->
         				RawStats = queue_stats(QueueId, AccountId),
         				{Calls, Holdtime, TalkTime, Completed, Abandoned, AgentStats} = case RawStats of
         					{error, E} ->
-        						lager:debug("Error ~p when getting queue stats for queue ~p", [E, QueueId]),
-        						{0, 0, 0, 0, 0};
+        						lager:error("error ~p when getting queue stats for queue ~p", [E, QueueId]),
+        						{0, 0, 0, 0, 0, []};
         					{ok, Resp} ->
         						count_stats(Resp)
         				end,
