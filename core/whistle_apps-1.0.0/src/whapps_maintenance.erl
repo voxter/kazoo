@@ -16,6 +16,7 @@
         ]).
 -export([migrate/0
          ,migrate/1
+         ,pre_migration_4_0/0
         ]).
 -export([find_invalid_acccount_dbs/0]).
 -export([refresh/0, refresh/1
@@ -125,6 +126,22 @@ migrate(Pause) ->
     _ = whistle_media_maintenance:migrate(),
 
     'no_return'.
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Perform some early migration steps for moving to Kazoo 4. Helps to
+%% ensure that services will work better immediately after cutover
+%% prior to migration finishing. This is modeled after the master
+%% branch's kapps_maintenance:migrate_to_4_0/0.
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec pre_migration_4_0() -> 'no_return'.
+pre_migration_4_0() ->
+    %% Number migration
+    whistle_number_manager_maintenance:pre_migration_4_0(),
+    no_return.
 
 %%--------------------------------------------------------------------
 %% @private
