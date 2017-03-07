@@ -8,6 +8,7 @@
 %%%-------------------------------------------------------------------
 -module(whistle_number_manager_maintenance).
 
+-export([pre_migration_4_0/0, pre_migrate_4_0/1]).
 -export([refresh/0]).
 -export([reconcile/0, reconcile/1]).
 -export([reconcile_numbers/0, reconcile_numbers/1]).
@@ -33,6 +34,111 @@
 %% run anyway (no callflow whapp connected to the db to execute). But it is
 %% still nasty...
 -define(CALLFLOW_VIEW, <<"callflows/listing_by_number">>).
+
+-define(LOG(Format, Args)
+        ,begin
+             lager:debug(Format, Args),
+             io:format(Format ++ "\n", Args)
+         end
+       ).
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Perform Kazoo 4 pre-migration on numbers.
+%%
+%% @see whapps_maintenance:pre_migration_4_0/0
+%% @end
+%%--------------------------------------------------------------------
+-spec pre_migration_4_0() -> 'ok'.
+pre_migration_4_0() ->
+    AccountDbs = whapps_util:get_all_accounts(),
+    lists:foreach(fun pre_migrate_4_0/1, AccountDbs).
+
+-spec pre_migrate_4_0(ne_binary()) -> 'ok'.
+pre_migrate_4_0(AccountDb) ->
+    ?LOG("########## migrating ~s ##########", [AccountDb]),
+    NumberDbs = wnm_util:get_all_number_dbs(),
+    pre_migrate_4_0_number_dbs(AccountDb, NumberDbs).
+
+-spec pre_migrate_4_0_number_dbs(ne_binary(), ne_binaries()) -> 'ok'.
+pre_migrate_4_0_number_dbs(_, []) -> 'ok';
+pre_migrate_4_0_number_dbs(AccountDb = ?MATCH_ACCOUNT_ENCODED(A, B, Rest)
+                           ,[NumberDb|NumberDbs]) ->
+    ?LOG("updating from number db ~s", [NumberDb]),
+    AccountId = ?MATCH_ACCOUNT_RAW(A, B, Rest),
+    NumbersAssignedToAccount = get_DIDs_assigned_to(NumberDb, AccountId),
+    pre_migrate_4_0_numbers(AccountDb, NumberDb, gb_sets:to_list(NumbersAssignedToAccount)),
+    pre_migrate_4_0_number_dbs(AccountDb, NumberDbs).
+
+-spec pre_migrate_4_0_numbers(ne_binary(), ne_binary(), ne_binaries()) -> 'no_return'.
+pre_migrate_4_0_numbers(_, _, []) -> 'no_return';
+pre_migrate_4_0_numbers(AccountDb, NumberDb, [Number|Numbers]) ->
+    Res = couch_mgr:open_cache_doc(AccountDb, Number),
+    pre_migrate_4_0_number(AccountDb, NumberDb, Number, Res),
+    pre_migrate_4_0_numbers(AccountDb, NumberDb, Numbers).
+
+-spec pre_migrate_4_0_number(ne_binary()
+                             ,ne_binary()
+                             ,ne_binary()
+                             ,{'ok', wh_json:object()} |
+                              {'error', any()}) -> 'no_return'.
+pre_migrate_4_0_number(_, _, Number, {'ok', _}) ->
+    ?LOG("skipping ~s (already done)", [Number]),
+    'no_return';
+pre_migrate_4_0_number(AccountDb, NumberDb, Number, {'error', 'not_found'}) ->
+    ?LOG("creating ~s in account db", [Number]),
+    {'ok', NumberDoc} = couch_mgr:open_cache_doc(NumberDb, Number),
+    Updaters = [fun unset_rev/1
+                ,fun number_state_to_state/1
+                ,fun used_by_to_pvt_used_by/1
+                ,fun module_name_wnm_to_knm/1
+               ],
+    AccountNumberDoc = lists:foldl(fun(Updater, Doc) ->
+                                           Updater(Doc)
+                                   end, NumberDoc, Updaters),
+    _ = couch_mgr:save_doc(AccountDb, AccountNumberDoc),
+    'no_return'.
+
+unset_rev(Doc) ->
+    wh_json:delete_key(<<"_rev">>, Doc).
+
+number_state_to_state(Doc) ->
+    State = wh_json:get_value(<<"pvt_number_state">>, Doc),
+    Doc1 = case State of
+        'undefined' -> Doc;
+        _ -> wh_json:set_value(<<"pvt_state">>, State, Doc)
+    end,
+    wh_json:delete_key(<<"pvt_number_state">>, Doc1).
+
+used_by_to_pvt_used_by(Doc) ->
+    UsedBy = wh_json:get_value(<<"used_by">>, Doc),
+    Doc1 = case UsedBy of
+        'undefined' -> Doc;
+        <<>> -> Doc;
+        _ -> wh_json:set_value(<<"pvt_used_by">>, Doc)
+    end,
+    wh_json:delete_key(<<"used_by">>, Doc1).
+
+module_name_wnm_to_knm(Doc) ->
+    case wh_json:get_value(<<"pvt_module_name">>, Doc) of
+        <<"wnm", Rest/binary>> ->
+            wh_json:set_value(<<"pvt_module_name">>, <<"knm", Rest/binary>>, Doc);
+        _ -> Doc
+    end.
+
+-type dids() :: gb_sets:set(ne_binary()).
+-spec get_DIDs_assigned_to(ne_binary(), ne_binary()) -> dids().
+get_DIDs_assigned_to(NumberDb, AssignedTo) ->
+    ViewOptions = [{startkey, [AssignedTo]}
+                   ,{endkey, [AssignedTo, wh_json:new()]}
+                  ],
+    case couch_mgr:get_results(NumberDb, <<"numbers/assigned_to">>, ViewOptions) of
+        {ok, JObjs} -> gb_sets:from_list(lists:map(fun wh_doc:id/1, JObjs));
+        {error, _R} ->
+            lager:debug("failed to get ~s DIDs from ~s: ~p", [AssignedTo, NumberDb, _R]),
+            gb_sets:new()
+    end.
 
 %%--------------------------------------------------------------------
 %% @public
