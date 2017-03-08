@@ -15,13 +15,13 @@
          ,handle_stats_req/2
          ,handle_call_event/2
          ,handle_new_channel/2
+         ,handle_destroyed_channel/2
          ,handle_originate_resp/2
          ,handle_member_connect_win/2
          ,handle_member_message/2
          ,handle_agent_message/2
          ,handle_config_change/2
          ,handle_presence_probe/2
-         ,handle_destroy/2
         ]).
 
 -include("acdc.hrl").
@@ -269,12 +269,43 @@ handle_new_channel_acct(JObj, AccountId) ->
 
     lager:debug("new channel in acct ~s: from ~s to ~s(~s)", [AccountId, FromUser, ToUser, ReqUser]),
 
-    case wh_json:get_value(<<"Call-Direction">>, JObj) of
+    case kz_call_event:call_direction(JObj) of
         <<"inbound">> -> gproc:send(?NEW_CHANNEL_REG(AccountId, FromUser), ?NEW_CHANNEL_FROM(CallId));
         <<"outbound">> ->
             gproc:send(?NEW_CHANNEL_REG(AccountId, ToUser), ?NEW_CHANNEL_TO(CallId, MemberCallId)),
             gproc:send(?NEW_CHANNEL_REG(AccountId, ReqUser), ?NEW_CHANNEL_TO(CallId, MemberCallId));
         _ -> lager:debug("invalid call direction for call ~s", [CallId])
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Send event to agent FSM when channels are destroyed. This occurs in
+%% addition to the above handle_call_event/2. Though this is redundant
+%% in most cases, it will keep the agent from becoming stuck in the
+%% outbound state if a channel is created and destroyed before the
+%% acdc_agent_listener gen_listener can bind to it.
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_destroyed_channel(wh_json:object(), api_binary()) -> 'ok'.
+handle_destroyed_channel(JObj, AccountId) ->
+    FromUser = hd(binary:split(wh_json:get_value(<<"From">>, JObj), <<"@">>)),
+    ToUser = hd(binary:split(wh_json:get_value(<<"To">>, JObj), <<"@">>)),
+
+    CallId = wh_json:get_value(<<"Call-ID">>, JObj),
+    HangupCause = acdc_util:hangup_cause(JObj),
+
+    lager:debug("destroyed channel in acct ~s: from ~s to ~s", [AccountId, FromUser, ToUser]),
+
+    case kz_call_event:call_direction(JObj) of
+        <<"inbound">> -> gproc:send(?DESTROYED_CHANNEL_REG(AccountId, FromUser)
+                                    ,?DESTROYED_CHANNEL(CallId, HangupCause));
+        <<"outbound">> ->
+            gproc:send(?DESTROYED_CHANNEL_REG(AccountId, FromUser)
+                       ,?DESTROYED_CHANNEL(CallId, HangupCause)),
+            gproc:send(?DESTROYED_CHANNEL_REG(AccountId, ToUser)
+                       ,?DESTROYED_CHANNEL(CallId, HangupCause));
+        _ -> 'ok'
     end.
 
 handle_originate_resp(JObj, Props) ->
@@ -456,11 +487,6 @@ send_probe(JObj, State) ->
          | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
         ],
     wapi_presence:publish_update(PresenceUpdate).
-
-handle_destroy(JObj, Props) ->
-    'true' = wapi_call:event_v(JObj),
-    FSM = props:get_value('fsm_pid', Props),
-    acdc_agent_fsm:call_event(FSM, <<"call_event">>, <<"CHANNEL_DESTROY">>, JObj).
 
 presence_id(JObj) ->
     presence_id(JObj, 'undefined').

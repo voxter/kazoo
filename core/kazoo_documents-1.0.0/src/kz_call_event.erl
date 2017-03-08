@@ -25,6 +25,7 @@
          ,timestamp/1
          ,ringing_seconds/1, billing_seconds/1, duration_seconds/1
          ,is_call_forwarded/1, is_call_forwarded/2
+         ,call_direction/1
         ]).
 
 -include("kz_documents.hrl").
@@ -146,3 +147,7 @@ is_call_forwarded(JObj, Default) ->
         Default -> Default;
         IsForwarded -> wh_util:is_true(IsForwarded)
     end.
+
+-spec call_direction(wh_json:object()) -> api_binary().
+call_direction(JObj) ->
+    wh_json:get_binary_value(<<"Call-Direction">>, JObj).
