@@ -38,7 +38,7 @@ init(Socket) ->
     process_flag('trap_exit', 'true'),
     %% Random seed used to change md5 challenge
     <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
-    random:seed({A,B,C}),
+    _ = random:seed({A,B,C}),
 
     gen_server:cast(self(), 'accept'),
     {'ok', #state{listen_socket=Socket}}.
@@ -57,7 +57,7 @@ handle_cast('accept', #state{listen_socket=Socket}=State) ->
 
             %% Send announcement to clients of who we are
             %% Required for queuestats application
-            gen_tcp:send(AcceptSocket, <<"Asterisk Call Manager/1.1\r\n">>),
+            _ = gen_tcp:send(AcceptSocket, <<"Asterisk Call Manager/1.1\r\n">>),
 
             %% Need to wait for login now
             {'noreply', State#state{accept_socket=AcceptSocket}};
@@ -74,18 +74,12 @@ handle_cast({'login', AccountId}, State) ->
 handle_cast({'logout'}, #state{accept_socket=AcceptSocket
                               ,account_id=AccountId
                               }=State) ->
-    inet:setopts(AcceptSocket, [{'nodelay', 'true'}]),
-    gen_tcp:send(AcceptSocket, <<"Response: Goodbye\r\nMessage: Thanks for all the fish.\r\n\r\n">>),
-    inet:setopts(AcceptSocket, [{'nodelay', 'false'}]),
+    _ = inet:setopts(AcceptSocket, [{'nodelay', 'true'}]),
+    _ = gen_tcp:send(AcceptSocket, <<"Response: Goodbye\r\nMessage: Thanks for all the fish.\r\n\r\n">>),
+    _ = inet:setopts(AcceptSocket, [{'nodelay', 'false'}]),
 
-    case AcceptSocket of
-        'undefined' ->
-            'ok';
-        _ ->
-            lager:debug("Closing an accept socket"),
-            gen_tcp:close(AcceptSocket),
-            'ok'
-    end,
+    lager:debug("Closing an accept socket"),
+    gen_tcp:close(AcceptSocket),
 
     amimulator_sup:unregister_event_listener(AccountId, self()),
     gen_server:cast(self(), 'accept'),
@@ -176,7 +170,8 @@ send_response(HandleResp) ->
     end.
 
 publish_events({[Event|_]=Events, Mode}, Socket) when is_list(Event) ->
-    [publish_event(Event2, Mode, Socket) || Event2 <- Events];
+    _ = [publish_event(Event2, Mode, Socket) || Event2 <- Events],
+    'ok';
 publish_events({Event, Mode}, Socket) ->
     publish_event(Event, Mode, Socket).
 
@@ -185,16 +180,19 @@ publish_event(Props, 'broken', Socket) ->
     lists:foreach(fun(Part) ->
                           gen_tcp:send(Socket, amimulator_util:format_prop(Part))
                   end, Props),
-    gen_tcp:send(Socket, <<"\r\n">>);
+    _ = gen_tcp:send(Socket, <<"\r\n">>),
+    'ok';
 publish_event(Props, 'raw', Socket) ->
-    inet:setopts(Socket, [{'nodelay', 'true'}]),
+    _ = inet:setopts(Socket, [{'nodelay', 'true'}]),
     lists:foreach(fun(Part) ->
                           gen_tcp:send(Socket, Part)
                   end, Props),
-    inet:setopts(Socket, [{'nodelay', 'false'}]);
+    _ = inet:setopts(Socket, [{'nodelay', 'false'}]),
+    'ok';
 publish_event(Props, _, Socket) ->
                                                 %lager:debug("AMI: publish ~p", [Props]),
-    gen_tcp:send(Socket, amimulator_util:format_binary(Props)).
+    _ = gen_tcp:send(Socket, amimulator_util:format_binary(Props)),
+    'ok'.
 
 
 

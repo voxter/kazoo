@@ -140,7 +140,10 @@ pre_create({'answer', CallId}, State) ->
     ami_sm:flag_early_answer(CallId),
     {'next_state', 'pre_create', State#state{answered=CallId}}.
 
--spec created({'new_call' | 'add_initial' | 'answer' | 'bridge' | 'destroy'}
+-spec created({'new_call' | 'add_initial', amimulator_call:call()} |
+              {'answer', ne_binary()} |
+              {'bridge', kz_json:object()} |
+              {'destroy', api_binary(), ne_binary()}
              ,state()) -> handle_fsm_ret(state()).
 created({'new_call', Call}, #state{call_ids=CallIds}=State) ->
     CallId = amimulator_call:call_id(Call),
@@ -194,7 +197,10 @@ created({'destroy', Reason, CallId}, #state{monitored_channel=Channel
             {'next_state', 'created', State#state{call_ids=CallIds2}}
     end.
 
--spec answered({'new_call' | 'add_initial' | 'answer' | 'bridge' | 'destroy'}
+-spec answered({'new_call' | 'add_initial', amimulator_call:call()} |
+               {'answer', ne_binary()} |
+               {'bridge', kz_json:object()} |
+               {'destroy', api_binary(), ne_binary()}
               ,state()) -> handle_fsm_ret(state()).
 answered({'new_call', Call}, #state{call_ids=CallIds}=State) ->
     CallId = amimulator_call:call_id(Call),

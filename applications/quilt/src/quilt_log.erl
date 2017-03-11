@@ -41,7 +41,7 @@ handle_specific_event({<<"acdc_call_stat">>, <<"exited-position">>}, JObj) ->
     lager:debug("exited queue call lookup: ~p", [Call]),
     Ev = {kz_json:get_value(<<"Status">>, Call), kz_json:get_value(<<"Abandoned-Reason">>, Call)},
     case Ev of
-        {<<"abandoned">>, <<"member_hangup">>} -> 
+        {<<"abandoned">>, <<"member_hangup">>} ->
             quilt_sup:stop_member_fsm(CallId),
             case maybe_queue_empty(AccountId, QueueId) of
                 'true' -> EventName = "EXITEMPTY"; % EXITEMPTY(position|origposition|waittime)
@@ -53,7 +53,7 @@ handle_specific_event({<<"acdc_call_stat">>, <<"exited-position">>}, JObj) ->
             EventParams = {Position, OriginalPos, WaitTime},
             lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
             write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
-        {<<"abandoned">>, <<"member_timeout">>} -> 
+        {<<"abandoned">>, <<"member_timeout">>} ->
             quilt_sup:stop_member_fsm(CallId),
             EventName = "EXITWITHTIMEOUT", % EXITWITHTIMEOUT(position)
             EventParams = {integer_to_list(kz_json:get_value(<<"Exited-Position">>, JObj))},
@@ -135,7 +135,7 @@ handle_specific_event({<<"acdc_call_stat">>, <<"processed">>}, JObj) ->
 handle_specific_event({<<"agent">>, <<"login_queue">>}, JObj) ->
     EventName = "ADDMEMBER", % ADDMEMBER
     {AccountId, CallId, _, QueueName, BridgedChannel} = get_common_props(JObj),
-    EventParams = {<<"">>},         
+    EventParams = {<<"">>},
     lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
     write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams);
 
@@ -173,7 +173,7 @@ handle_specific_event({<<"acdc_status_stat">>, <<"logged_in">>}, JObj) ->
     ChannelName = lookup_agent_name(AccountId, AgentId),
     lists:foreach(fun(Q) -> % Agent will log in to all queues that they are a member of
                           QueueName = lookup_queue_name(AccountId, Q),
-                          EventParams = {ChannelName}, 
+                          EventParams = {ChannelName},
                           lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
                           write_log(AccountId, CallId, QueueName, BridgedChannel, EventName, EventParams)
                   end, get_queue_list_by_agent_id(AccountId, AgentId));
@@ -216,7 +216,7 @@ get_common_props(JObj) ->
     {AccountId, CallId, QueueId, QueueName, BridgedChannel}.
 
 maybe_queue_empty(AccountId, QueueId) ->
-    LoggedIn = lists:filter(fun(Agent) -> 
+    LoggedIn = lists:filter(fun(Agent) ->
                                     case acdc_agent_util:most_recent_status(AccountId, Agent) of
                                         {'ok', <<"logged_out">>} -> 'false';
                                         _ -> 'true'
@@ -277,7 +277,7 @@ lookup_queue_name(AccountId, QueueId) ->
 write_log(AccountId, CallId, QueueName, BridgedChannel, Event) ->
     LogFile = "/tmp/queue_log." ++ binary_to_list(AccountId),
     {MegaSec, Sec, _} = os:timestamp(),
-    Timestamp = MegaSec * 1000000 + Sec,    
+    Timestamp = MegaSec * 1000000 + Sec,
     lager:debug("queue_log event: ~p|~s|~s|~s|~s|", [Timestamp, CallId, QueueName, BridgedChannel, Event]),
     file:write_file(LogFile, io_lib:fwrite("~p|~s|~s|~s|~s|\n", [Timestamp, CallId, QueueName, BridgedChannel, Event]), ['append']).
 
@@ -286,21 +286,16 @@ write_log(AccountId, CallId, QueueName, BridgedChannel, Event, EventParams) ->
     {MegaSec, Sec, _} = os:timestamp(),
     Timestamp = MegaSec * 1000000 + Sec,
     case EventParams of
-        {Param1, Param2, Param3, Param4, Param5} -> 
+        {Param1, Param2, Param3, Param4, Param5} ->
             lager:debug("fwrite params ~p|~s|~s|~s|~s|~s|~s|~s|~s|~s", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1, Param2, Param3, Param4, Param5]),
             file:write_file(LogFile, io_lib:fwrite("~p|~s|~s|~s|~s|~s|~s|~s|~s|~s\n", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1, Param2, Param3, Param4, Param5]), ['append']);
-        {Param1, Param2, Param3, Param4} -> 
-            lager:debug("fwrite params ~p|~s|~s|~s|~s|~s|~s|~s|~s", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1, Param2, Param3, Param4]),
-            file:write_file(LogFile, io_lib:fwrite("~p|~s|~s|~s|~s|~s|~s|~s|~s\n", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1, Param2, Param3, Param4]), ['append']);
-        {Param1, Param2, Param3} -> 
+        {Param1, Param2, Param3} ->
             lager:debug("fwrite params ~p|~s|~s|~s|~s|~s|~s|~s", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1, Param2, Param3]),
             file:write_file(LogFile, io_lib:fwrite("~p|~s|~s|~s|~s|~s|~s|~s\n", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1, Param2, Param3]), ['append']);
-        {Param1, Param2} -> 
+        {Param1, Param2} ->
             lager:debug("fwrite params ~p|~s|~s|~s|~s|~s|~s", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1, Param2]),
             file:write_file(LogFile, io_lib:fwrite("~p|~s|~s|~s|~s|~s|~s\n", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1, Param2]), ['append']);
-        {Param1} -> 
+        {Param1} ->
             lager:debug("fwrite params ~p|~s|~s|~s|~s|~s", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1]),
-            file:write_file(LogFile, io_lib:fwrite("~p|~s|~s|~s|~s|~s\n", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1]), ['append']);
-        _ -> 
-            lager:debug("unexpected event parameters: ~p", [EventParams])
+            file:write_file(LogFile, io_lib:fwrite("~p|~s|~s|~s|~s|~s\n", [Timestamp, CallId, QueueName, BridgedChannel, Event, Param1]), ['append'])
     end.

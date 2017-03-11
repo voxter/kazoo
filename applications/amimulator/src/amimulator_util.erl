@@ -313,8 +313,8 @@ fork_agent_call_leg2(_, SipAgentCall, Call) ->
     lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters).
 
 -spec channel_string(amimulator_call:call()) -> binary().
-                                                % -spec
--spec channel_string('sip' | 'local', api_binary(), api_binary(), api_binary()) -> binary().
+-spec channel_string('sip' | 'local', amimulator_call:call(), pos_integer()) -> binary().
+-spec channel_string('sip' | 'local', api_binary(), api_binary(), pos_integer()) -> binary().
 channel_string(Call) ->
     channel_string('sip', amimulator_call:id_number(Call), amimulator_call:call_id(Call), amimulator_call:direction(Call)).
 
