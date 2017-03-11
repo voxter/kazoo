@@ -13,7 +13,6 @@
 -export([handle_status_update/2
         ,handle_sync_req/2
         ,handle_sync_resp/2
-        ,handle_stats_req/2
         ,handle_call_event/2
         ,handle_new_channel/2
         ,handle_destroyed_channel/2
