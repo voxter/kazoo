@@ -206,7 +206,7 @@ handle_event("originate", Props) ->
                 <<"ChanSpy">> ->
                     gen_listener:cast(amimulator_originator, {"eavesdrop", Props});
                 <<"PickupChan">> ->
-                                                % Props2 = props:set_value(<<"Channel">>, props:get_value(<<"Data">>, 
+                                                % Props2 = props:set_value(<<"Channel">>, props:get_value(<<"Data">>,
                                                 %       props:set_value(<<"SourceExten">>, hd(binary:split(props:get_value(<<"Channel">>, Props), <<"/">>)),
                                                 %       Props)), Props),
                     gen_listener:cast(amimulator_originator, {"pickupchan", Props});
@@ -343,7 +343,7 @@ login_fail(ActionId) ->
 
 -spec get_ami_doc(ne_binary()) -> kz_json:object() | 'not_found'.
 get_ami_doc(Username) ->
-    case couch_mgr:open_doc(?AMI_DB, Username) of
+    case kz_datamgr:open_doc(?AMI_DB, Username) of
         {'ok', Doc} -> Doc;
         {'error', _} -> 'not_found'
     end.
@@ -609,18 +609,18 @@ queues_status(Props) ->
     {'ok', Results} = kz_datamgr:get_results(AccountDb, <<"queues/crossbar_listing">>),
 
     lists:foldl(fun(Result, Acc) ->
-                        QueueId = wh_json:get_value(<<"id">>, Result),
-                        case couch_mgr:open_doc(AccountDb, QueueId) of
+                        QueueId = kz_json:get_value(<<"id">>, Result),
+                        case kz_datamgr:open_doc(AccountDb, QueueId) of
                             {'error', E} ->
                                 lager:debug("Error opening queue doc: ~p", [E]),
                                 [] ++ Acc;
                             {'ok', QueueDoc} ->
-                                case couch_mgr:get_results(AccountDb, <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
+                                case kz_datamgr:get_results(AccountDb, <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
                                     {'error', E} ->
                                         lager:debug("Could not find queue number for queue ~p (~p)", [QueueId, E]),
                                         [] ++ Acc;
                                     {'ok', Results2} when length(Results2) =:= 1 ->
-                                        Value = wh_json:get_value(<<"value">>, hd(Results2)),
+                                        Value = kz_json:get_value(<<"value">>, hd(Results2)),
                                         Number = hd(Value),
 
                                         RawStats = queue_stats(QueueId, AccountId),
@@ -644,8 +644,8 @@ queues_status(Props) ->
                                         [[
                                           {<<"Event">>, <<"QueueParams">>},
                                           {<<"Queue">>, Number},
-                                          {<<"Max">>, wh_json:get_value(<<"max_queue_size">>, QueueDoc)},
-                                          {<<"Strategy">>, wh_json:get_value(<<"strategy">>, QueueDoc)},
+                                          {<<"Max">>, kz_json:get_value(<<"max_queue_size">>, QueueDoc)},
+                                          {<<"Strategy">>, kz_json:get_value(<<"strategy">>, QueueDoc)},
                                           %% Calls actually represents number of waiting calls
                                           {<<"Calls">>, WaitingCalls},
                                           {<<"Holdtime">>, round(AverageHold)},
@@ -656,7 +656,7 @@ queues_status(Props) ->
                                           {<<"ServiceLevel">>, 60},
                                           {<<"ServicelevelPerf">>, 69.0}
                                          ]]
-                                            ++ queue_entries(QueueId, Number, wh_json:get_value(<<"Waiting">>, element(2, RawStats), []))
+                                            ++ queue_entries(QueueId, Number, kz_json:get_value(<<"Waiting">>, element(2, RawStats), []))
                                             ++ agent_statuses(QueueId, AccountId, Number, AgentStats)
                                             ++ Acc;
                                     {'ok', Results2} ->
@@ -780,7 +780,7 @@ agent_statuses(QueueId, AccountId, Number, AgentStats) ->
                 end, [], Results).
 
 agent_status(AgentId, AccountId, Number, AgentStats) ->
-    AccountDb = kz_util:format_account_id(AccountId, encoded), 
+    AccountDb = kz_util:format_account_id(AccountId, encoded),
     {ok, UserDoc} = kz_datamgr:open_doc(AccountDb, AgentId),
     FirstName = kz_json:get_value(<<"first_name">>, UserDoc),
     LastName = kz_json:get_value(<<"last_name">>, UserDoc),

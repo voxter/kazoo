@@ -848,9 +848,9 @@ ringing({'agent_timeout', _JObj}, #state{agent_listener=AgentListener
                                         }=State) ->
     ErrReason = <<"timeout">>,
     lager:debug("agent timeout, publishing originate failed"),
-    wapi_acdc_agent:publish_shared_originate_failure([{<<"Account-ID">>, AccountId}
+    kapi_acdc_agent:publish_shared_originate_failure([{<<"Account-ID">>, AccountId}
                                                      ,{<<"Agent-ID">>, AgentId}
-                                                      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                                      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                                      ]),
 
     acdc_agent_listener:agent_timeout(AgentListener),
