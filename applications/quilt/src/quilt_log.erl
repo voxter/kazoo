@@ -120,9 +120,9 @@ handle_specific_event({<<"acdc_call_stat">>, <<"processed">>}, JObj) ->
     Call = acdc_stats:find_call(CallId),
     HungUpBy = kz_json:get_value(<<"Hung-Up-By">>, Call),
     EventName = case HungUpBy of
-        <<"member">> -> "COMPLETECALLER"; % COMPLETECALLER(holdtime|calltime|origposition)
-        _ -> "COMPLETEAGENT" % COMPLETECALLER(holdtime|calltime|origposition)
-    end,
+                    <<"member">> -> "COMPLETECALLER"; % COMPLETECALLER(holdtime|calltime|origposition)
+                    _ -> "COMPLETEAGENT" % COMPLETECALLER(holdtime|calltime|origposition)
+                end,
     WaitTime = integer_to_list(kz_json:get_value(<<"Wait-Time">>, Call)),
     HandledTime = kz_json:get_integer_value(<<"Handled-Timestamp">>, Call),
     ProcessedTime = kz_json:get_integer_value(<<"Processed-Timestamp">>, Call),

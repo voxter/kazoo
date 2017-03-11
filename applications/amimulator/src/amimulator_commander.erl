@@ -609,19 +609,19 @@ queues_status(Props) ->
     {'ok', Results} = kz_datamgr:get_results(AccountDb, <<"queues/crossbar_listing">>),
 
     lists:foldl(fun(Result, Acc) ->
-        QueueId = wh_json:get_value(<<"id">>, Result),
-        case couch_mgr:open_doc(AccountDb, QueueId) of
-        	{'error', E} ->
-        		lager:debug("Error opening queue doc: ~p", [E]),
-        		[] ++ Acc;
-        	{'ok', QueueDoc} ->
-        		case couch_mgr:get_results(AccountDb, <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
-        			{'error', E} ->
-        				lager:debug("Could not find queue number for queue ~p (~p)", [QueueId, E]),
-        				[] ++ Acc;
-        			{'ok', Results2} when length(Results2) =:= 1 ->
-        				Value = wh_json:get_value(<<"value">>, hd(Results2)),
-        				Number = hd(Value),
+                        QueueId = wh_json:get_value(<<"id">>, Result),
+                        case couch_mgr:open_doc(AccountDb, QueueId) of
+                            {'error', E} ->
+                                lager:debug("Error opening queue doc: ~p", [E]),
+                                [] ++ Acc;
+                            {'ok', QueueDoc} ->
+                                case couch_mgr:get_results(AccountDb, <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
+                                    {'error', E} ->
+                                        lager:debug("Could not find queue number for queue ~p (~p)", [QueueId, E]),
+                                        [] ++ Acc;
+                                    {'ok', Results2} when length(Results2) =:= 1 ->
+                                        Value = wh_json:get_value(<<"value">>, hd(Results2)),
+                                        Number = hd(Value),
 
                                         RawStats = queue_stats(QueueId, AccountId),
                                         {Calls, Holdtime, TalkTime, Completed, Abandoned, AgentStats} = case RawStats of
@@ -632,41 +632,41 @@ queues_status(Props) ->
                                                                                                                 count_stats(Resp)
                                                                                                         end,
 
-        				CompletedCalls = Completed - Abandoned,
-        				AverageHold = case CompletedCalls of
-        					0 ->
-        						0.0;
-        					_ ->
-        						Holdtime / CompletedCalls
-        				end,
-        				WaitingCalls = Calls - Completed,
+                                        CompletedCalls = Completed - Abandoned,
+                                        AverageHold = case CompletedCalls of
+                                                          0 ->
+                                                              0.0;
+                                                          _ ->
+                                                              Holdtime / CompletedCalls
+                                                      end,
+                                        WaitingCalls = Calls - Completed,
 
-        				[[
-        					{<<"Event">>, <<"QueueParams">>},
-					        {<<"Queue">>, Number},
-					        {<<"Max">>, wh_json:get_value(<<"max_queue_size">>, QueueDoc)},
-					        {<<"Strategy">>, wh_json:get_value(<<"strategy">>, QueueDoc)},
-					        %% Calls actually represents number of waiting calls
-					        {<<"Calls">>, WaitingCalls},
-					        {<<"Holdtime">>, round(AverageHold)},
-					        {<<"TalkTime">>, TalkTime},
-					        {<<"Completed">>, CompletedCalls},
-					        {<<"Abandoned">>, Abandoned},
-					        % TODO: add servicelevel
-					        {<<"ServiceLevel">>, 60},
-					        {<<"ServicelevelPerf">>, 69.0}
-        				]]
-                        ++ queue_entries(QueueId, Number, wh_json:get_value(<<"Waiting">>, element(2, RawStats), []))
-        				++ agent_statuses(QueueId, AccountId, Number, AgentStats)
-        				++ Acc;
-        			{'ok', Results2} ->
-        				lager:debug("Too many results when trying to find queue number for queue ~p: ~p", [QueueId, Results2]),
-        				[] ++ Acc
-        		end
-        end
-    end, [], Results).
-    
-% TODO: maybe we need acdc stats to be persisted in couch
+                                        [[
+                                          {<<"Event">>, <<"QueueParams">>},
+                                          {<<"Queue">>, Number},
+                                          {<<"Max">>, wh_json:get_value(<<"max_queue_size">>, QueueDoc)},
+                                          {<<"Strategy">>, wh_json:get_value(<<"strategy">>, QueueDoc)},
+                                          %% Calls actually represents number of waiting calls
+                                          {<<"Calls">>, WaitingCalls},
+                                          {<<"Holdtime">>, round(AverageHold)},
+                                          {<<"TalkTime">>, TalkTime},
+                                          {<<"Completed">>, CompletedCalls},
+                                          {<<"Abandoned">>, Abandoned},
+                                                % TODO: add servicelevel
+                                          {<<"ServiceLevel">>, 60},
+                                          {<<"ServicelevelPerf">>, 69.0}
+                                         ]]
+                                            ++ queue_entries(QueueId, Number, wh_json:get_value(<<"Waiting">>, element(2, RawStats), []))
+                                            ++ agent_statuses(QueueId, AccountId, Number, AgentStats)
+                                            ++ Acc;
+                                    {'ok', Results2} ->
+                                        lager:debug("Too many results when trying to find queue number for queue ~p: ~p", [QueueId, Results2]),
+                                        [] ++ Acc
+                                end
+                        end
+                end, [], Results).
+
+                                                % TODO: maybe we need acdc stats to be persisted in couch
 queue_stats(QueueId, AcctId) ->
     Req = props:filter_undefined(
             [{<<"Account-ID">>, AcctId}

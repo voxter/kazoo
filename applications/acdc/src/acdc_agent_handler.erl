@@ -281,12 +281,12 @@ handle_destroyed_channel(JObj, AccountId) ->
 
     case kz_call_event:call_direction(JObj) of
         <<"inbound">> -> gproc:send(?DESTROYED_CHANNEL_REG(AccountId, FromUser)
-                                    ,?DESTROYED_CHANNEL(CallId, HangupCause));
+                                   ,?DESTROYED_CHANNEL(CallId, HangupCause));
         <<"outbound">> ->
             gproc:send(?DESTROYED_CHANNEL_REG(AccountId, FromUser)
-                       ,?DESTROYED_CHANNEL(CallId, HangupCause)),
+                      ,?DESTROYED_CHANNEL(CallId, HangupCause)),
             gproc:send(?DESTROYED_CHANNEL_REG(AccountId, ToUser)
-                       ,?DESTROYED_CHANNEL(CallId, HangupCause));
+                      ,?DESTROYED_CHANNEL(CallId, HangupCause));
         _ -> 'ok'
     end.
 
