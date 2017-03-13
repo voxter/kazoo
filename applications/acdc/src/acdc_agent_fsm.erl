@@ -826,20 +826,21 @@ ringing({'agent_timeout', _JObj}, #state{agent_listener=AgentListener
                                          ,agent_id=AgentId
                                          ,member_call_queue_id=QueueId
                                          ,member_call_id=CallId
-                                        ,connect_failures=Fails
-                                        ,max_connect_failures=MaxFails
                                         }=State) ->
+    ErrReason = <<"timeout">>,
+    lager:debug("agent timeout, publishing originate failed"),
+    wapi_acdc_agent:publish_shared_originate_failure([{<<"Account-ID">>, AccountId}
+                                                      ,{<<"Agent-ID">>, AgentId}
+                                                      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                                     ]),
+
     acdc_agent_listener:agent_timeout(AgentListener),
-    lager:debug("recv timeout from queue process"),
-    acdc_stats:call_missed(AccountId, QueueId, AgentId, CallId, <<"timeout">>),
+
+    acdc_stats:call_missed(AccountId, QueueId, AgentId, CallId, ErrReason),
 
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
-    NewFSMState = clear_call(State, 'failed'),
-    NextState = return_to_state(Fails+1, MaxFails, AccountId, AgentId),
-    case NextState of
-        'paused' -> {'next_state', 'paused', NewFSMState};
-        'ready' -> apply_state_updates(NewFSMState)
-    end;
+
+    {'next_state', 'ringing', State};
 ringing({'playback_stop', _JObj}, State) ->
     {'next_state', 'ringing', State};
 ringing({'channel_bridged', MemberCallId}, #state{member_call_id=MemberCallId
