@@ -180,7 +180,7 @@ publish_events({[Event|_]=Events, Mode}, Socket) when is_list(Event) ->
 publish_events({Event, Mode}, Socket) ->
     publish_event(Event, Mode, Socket).
 
-%% It looks like sometimes, Asterisk sends the messages broken up by newlines...  
+%% It looks like sometimes, Asterisk sends the messages broken up by newlines...
 publish_event(Props, 'broken', Socket) ->
     lists:foreach(fun(Part) ->
                           gen_tcp:send(Socket, amimulator_util:format_prop(Part))

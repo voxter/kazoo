@@ -296,19 +296,31 @@ handle_event(Event, Props) ->
     {error, no_action}.
 
 login_secret(Username, Secret, ActionId) ->
-    {'ok', AMIDoc} = kz_datamgr:open_doc(?AMI_DB, Username),
-    case kz_json:get_value(<<"secret">>, AMIDoc) of
-        Secret -> login_success(kz_json:get_value(<<"account_id">>, AMIDoc), ActionId);
-        _ -> login_fail(ActionId)
+    case get_ami_doc(Username) of
+        'not_found' -> login_fail(ActionId);
+        AMIDoc ->
+            AMIDocSecret = kz_json:get_value(<<"secret">>, AMIDoc),
+            AccountId = kz_json:get_value(<<"account_id">>, AMIDoc),
+            check_login(Secret, AMIDocSecret, AccountId, ActionId)
     end.
 
 login_md5(Username, Md5, Challenge, ActionId) ->
-    {'ok', AMIDoc} = kz_datamgr:open_doc(?AMI_DB, Username),
-    Digest = crypto:hash('md5', <<(kz_term:to_binary(Challenge))/binary, (kz_json:get_value(<<"secret">>, AMIDoc))/binary>>),
-    case kz_term:to_binary(lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest])) of
-        Md5 -> login_success(kz_json:get_value(<<"account_id">>, AMIDoc), ActionId);
-        _ -> login_fail(ActionId)
+    case get_ami_doc(Username) of
+        'not_found' -> login_fail(ActionId);
+        AMIDoc ->
+            AMIDocSecret = kz_json:get_value(<<"secret">>, AMIDoc),
+            AccountId = kz_json:get_value(<<"account_id">>, AMIDoc),
+            Digest = crypto:hash('md5', <<(kz_term:to_binary(Challenge))/binary, AMIDocSecret/binary>>),
+            SuccessMd5 = kz_term:to_binary(lists:flatten([io_lib:format("~2.16.0b", [Part]) || <<Part>> <= Digest])),
+            check_login(Md5, SuccessMd5, AccountId, ActionId)
     end.
+
+-spec check_login(ne_binary(), ne_binary(), ne_binary(), ne_binary()) ->
+                         {'ok', {kz_proplist(), 'broken' | 'n'}}.
+check_login(SuccessCredentials, SuccessCredentials, AccountId, ActionId) ->
+    login_success(AccountId, ActionId);
+check_login(_, _, _, ActionId) ->
+    login_fail(ActionId).
 
 login_success(AccountId, ActionId) ->
     lager:debug("successful login, starting event listener"),
@@ -328,6 +340,13 @@ login_fail(ActionId) ->
                                      ,{<<"Message">>, <<"Authentication failed">>}
                                      ]),
     {'ok', {Payload, 'n'}}.
+
+-spec get_ami_doc(ne_binary()) -> kz_json:object() | 'not_found'.
+get_ami_doc(Username) ->
+    case couch_mgr:open_doc(?AMI_DB, Username) of
+        {'ok', Doc} -> Doc;
+        {'error', _} -> 'not_found'
+    end.
 
 initial_channel_status(Calls, _Props, Format) ->
     FormattedCalls = lists:foldl(fun(Call, List) ->
@@ -590,64 +609,64 @@ queues_status(Props) ->
     {'ok', Results} = kz_datamgr:get_results(AccountDb, <<"queues/crossbar_listing">>),
 
     lists:foldl(fun(Result, Acc) ->
-                        QueueId = kz_json:get_value(<<"id">>, Result),
-                        case kz_datamgr:open_doc(AccountDb, QueueId) of
-                            {'error', E} ->
-                                lager:debug("Error opening queue doc: ~p", [E]),
-                                [] ++ Acc;
-                            {'ok', QueueDoc} ->
-                                case kz_datamgr:get_results(AccountDb, <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
-                                    {'error', E} ->
-                                        lager:debug("Could not find queue number for queue ~p (~p)", [QueueId, E]),
-                                        [] ++ Acc;
-                                    {'ok', Results2} when length(Results2) =:= 1 ->
-                                        Value = kz_json:get_value(<<"value">>, hd(Results2)),
-                                        Number = hd(Value),
+        QueueId = wh_json:get_value(<<"id">>, Result),
+        case couch_mgr:open_doc(AccountDb, QueueId) of
+        	{'error', E} ->
+        		lager:debug("Error opening queue doc: ~p", [E]),
+        		[] ++ Acc;
+        	{'ok', QueueDoc} ->
+        		case couch_mgr:get_results(AccountDb, <<"callflows/queue_callflows">>, [{'key', QueueId}]) of
+        			{'error', E} ->
+        				lager:debug("Could not find queue number for queue ~p (~p)", [QueueId, E]),
+        				[] ++ Acc;
+        			{'ok', Results2} when length(Results2) =:= 1 ->
+        				Value = wh_json:get_value(<<"value">>, hd(Results2)),
+        				Number = hd(Value),
 
                                         RawStats = queue_stats(QueueId, AccountId),
                                         {Calls, Holdtime, TalkTime, Completed, Abandoned, AgentStats} = case RawStats of
                                                                                                             {error, E} ->
-                                                                                                                lager:debug("Error ~p when getting queue stats for queue ~p", [E, QueueId]),
-                                                                                                                {0, 0, 0, 0, 0};
+                                                                                                                lager:error("error ~p when getting queue stats for queue ~p", [E, QueueId]),
+                                                                                                                {0, 0, 0, 0, 0, []};
                                                                                                             {ok, Resp} ->
                                                                                                                 count_stats(Resp)
                                                                                                         end,
 
-                                        CompletedCalls = Completed - Abandoned,
-                                        AverageHold = case CompletedCalls of
-                                                          0 ->
-                                                              0.0;
-                                                          _ ->
-                                                              Holdtime / CompletedCalls
-                                                      end,
-                                        WaitingCalls = Calls - Completed,
+        				CompletedCalls = Completed - Abandoned,
+        				AverageHold = case CompletedCalls of
+        					0 ->
+        						0.0;
+        					_ ->
+        						Holdtime / CompletedCalls
+        				end,
+        				WaitingCalls = Calls - Completed,
 
-                                        [[
-                                          {<<"Event">>, <<"QueueParams">>},
-                                          {<<"Queue">>, Number},
-                                          {<<"Max">>, kz_json:get_value(<<"max_queue_size">>, QueueDoc)},
-                                          {<<"Strategy">>, kz_json:get_value(<<"strategy">>, QueueDoc)},
-                                          %% Calls actually represents number of waiting calls
-                                          {<<"Calls">>, WaitingCalls},
-                                          {<<"Holdtime">>, round(AverageHold)},
-                                          {<<"TalkTime">>, TalkTime},
-                                          {<<"Completed">>, CompletedCalls},
-                                          {<<"Abandoned">>, Abandoned},
-                                                % TODO: add servicelevel
-                                          {<<"ServiceLevel">>, 60},
-                                          {<<"ServicelevelPerf">>, 69.0}
-                                         ]]
-                                            ++ queue_entries(QueueId, Number, kz_json:get_value(<<"Waiting">>, element(2, RawStats), []))
-                                            ++ agent_statuses(QueueId, AccountId, Number, AgentStats)
-                                            ++ Acc;
-                                    {'ok', Results2} ->
-                                        lager:debug("Too many results when trying to find queue number for queue ~p: ~p", [QueueId, Results2]),
-                                        [] ++ Acc
-                                end
-                        end
-                end, [], Results).
-
-                                                % TODO: maybe we need acdc stats to be persisted in couch
+        				[[
+        					{<<"Event">>, <<"QueueParams">>},
+					        {<<"Queue">>, Number},
+					        {<<"Max">>, wh_json:get_value(<<"max_queue_size">>, QueueDoc)},
+					        {<<"Strategy">>, wh_json:get_value(<<"strategy">>, QueueDoc)},
+					        %% Calls actually represents number of waiting calls
+					        {<<"Calls">>, WaitingCalls},
+					        {<<"Holdtime">>, round(AverageHold)},
+					        {<<"TalkTime">>, TalkTime},
+					        {<<"Completed">>, CompletedCalls},
+					        {<<"Abandoned">>, Abandoned},
+					        % TODO: add servicelevel
+					        {<<"ServiceLevel">>, 60},
+					        {<<"ServicelevelPerf">>, 69.0}
+        				]]
+                        ++ queue_entries(QueueId, Number, wh_json:get_value(<<"Waiting">>, element(2, RawStats), []))
+        				++ agent_statuses(QueueId, AccountId, Number, AgentStats)
+        				++ Acc;
+        			{'ok', Results2} ->
+        				lager:debug("Too many results when trying to find queue number for queue ~p: ~p", [QueueId, Results2]),
+        				[] ++ Acc
+        		end
+        end
+    end, [], Results).
+    
+% TODO: maybe we need acdc stats to be persisted in couch
 queue_stats(QueueId, AcctId) ->
     Req = props:filter_undefined(
             [{<<"Account-ID">>, AcctId}

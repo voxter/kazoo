@@ -167,9 +167,6 @@
                     ,{{'acdc_agent_handler', 'handle_agent_message'}
                      ,[{<<"agent">>, <<"*">>}]
                      }
-                    ,{{'acdc_agent_handler', 'handle_destroy'}
-                     ,[{<<"channel">>, <<"destroy">>}]
-                     }
                     ,{{'acdc_agent_handler', 'handle_config_change'}
                      ,[{<<"configuration">>, <<"*">>}]
                      }
@@ -766,6 +763,7 @@ handle_cast({'originate_callback_to_agent', Call, WinJObj, EPs, CDRUrl, Recordin
                                                ,CDRUrl
                                                ,dict:store(AgentCallIds, CDRUrl, Urls)
                                                )
+                           ,preserve_metadata=kz_json:is_true(<<"Preserve-Metadata">>, WinJObj, 'false')
                            ,recording_url=RecordingUrl
                            }
     ,'hibernate'};
@@ -1405,6 +1403,7 @@ do_originate_callback_return(MyQ, Call) ->
              ,{<<"Authorizing-Type">>, kapps_call:authorizing_type(Call)}
              ,{<<"Channel-Authorized">>, 'true'}
              ,{<<"From-URI">>, <<FromUser/binary, "@", (kapps_call:account_realm(Call))/binary>>}
+             ,{<<"Retain-CID">>, 'true'}
              ]),
 
     TargetCallId = create_call_id(),
@@ -1435,9 +1434,9 @@ do_originate_callback_return(MyQ, Call) ->
                 ,{<<"Application-Name">>, <<"bridge">>}
                 ,{<<"Timeout">>, 60}
 
-                ,{<<"Outbound-Caller-ID-Name">>, kapps_call:callee_id_name(Call)}
+                ,{<<"Outbound-Caller-ID-Name">>, kapps_call:callee_id_number(Call)}
                 ,{<<"Outbound-Caller-ID-Number">>, kapps_call:callee_id_number(Call)}
-                ,{<<"Caller-ID-Name">>, kapps_call:callee_id_name(Call)}
+                ,{<<"Caller-ID-Name">>, kapps_call:callee_id_number(Call)}
                 ,{<<"Caller-ID-Number">>, kapps_call:callee_id_number(Call)}
 
                 ,{<<"Existing-Call-ID">>, TransferorLeg}

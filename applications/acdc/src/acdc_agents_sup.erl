@@ -55,25 +55,24 @@ status() ->
 -spec new(kz_json:object()) -> sup_startchild_ret().
 -spec new(ne_binary(), ne_binary()) -> sup_startchild_ret().
 new(JObj) ->
-    case find_agent_supervisor(kz_doc:account_id(JObj), kz_doc:id(JObj)) of
-        'undefined' -> supervisor:start_child(?SERVER, [JObj]);
-        P when is_pid(P) -> lager:debug("agent already started here: ~p", [P])
-    end.
+    acdc_agent_manager:start_agent(kz_doc:account_id(JObj)
+                                  ,kz_doc:id(JObj)
+                                  ,[JObj]
+                                  ).
 
 new(AcctId, AgentId) ->
-    case find_agent_supervisor(AcctId, AgentId) of
-        'undefined' ->
-            {'ok', Agent} = kz_datamgr:open_doc(kz_util:format_account_id(AcctId, 'encoded'), AgentId),
-            supervisor:start_child(?SERVER, [Agent]);
-        P when is_pid(P) -> lager:debug("agent already started here: ~p", [P])
-    end.
+    {'ok', Agent} = kz_datamgr:open_doc(kz_util:format_account_id(AcctId, 'encoded'), AgentId),
+    acdc_agent_manager:start_agent(AcctId
+                                  ,AgentId
+                                  ,[Agent]
+                                  ).
 
 -spec new(ne_binary(), ne_binary(), kz_json:object(), ne_binaries()) -> sup_startchild_ret() | 'ok'.
 new(AcctId, AgentId, AgentJObj, Queues) ->
-    case find_agent_supervisor(AcctId, AgentId) of
-        'undefined' -> supervisor:start_child(?SERVER, [AgentJObj, AcctId, AgentId, Queues]);
-        P when is_pid(P) -> lager:debug("agent already started here: ~p", [P])
-    end.
+    acdc_agent_manager:start_agent(AcctId
+                                  ,AgentId
+                                  ,[AgentJObj, AcctId, AgentId, Queues]
+                                  ).
 
 -spec new_thief(kapps_call:call(), ne_binary()) -> sup_startchild_ret().
 new_thief(Call, QueueId) -> supervisor:start_child(?SERVER, [Call, QueueId]).

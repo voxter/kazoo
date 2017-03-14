@@ -107,7 +107,9 @@ handle_specific_event({<<"call_event">>, <<"transfer">>}, JObj) ->
     Call = acdc_stats:find_call(CallId),
     {AccountId, CallId, _, QueueName, BridgedChannel} = get_common_props(Call),
     WaitTime = integer_to_list(kz_json:get_value(<<"Wait-Time">>, Call)),
-    TalkTime = integer_to_list(kz_json:get_value(<<"Talk-Time">>, Call)),
+    HandledTime = kz_json:get_integer_value(<<"Handled-Timestamp">>, Call),
+    ProcessedTime = kz_json:get_integer_value(<<"Processed-Timestamp">>, Call),
+    TalkTime = integer_to_list(ProcessedTime - HandledTime), %integer_to_list(kz_json:get_value(<<"Talk-Time">>, Call)), %% Talk-Time is not always available
     Position = integer_to_list(kz_json:get_value(<<"Exited-Position">>, Call)),
     EventParams = {Extension, <<"from-queue">>, WaitTime, TalkTime, Position},
     lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),
@@ -118,11 +120,13 @@ handle_specific_event({<<"acdc_call_stat">>, <<"processed">>}, JObj) ->
     Call = acdc_stats:find_call(CallId),
     HungUpBy = kz_json:get_value(<<"Hung-Up-By">>, Call),
     EventName = case HungUpBy of
-                    <<"member">> -> "COMPLETECALLER"; % COMPLETECALLER(holdtime|calltime|origposition)
-                    _ -> "COMPLETEAGENT" % COMPLETECALLER(holdtime|calltime|origposition)
-                end,
+        <<"member">> -> "COMPLETECALLER"; % COMPLETECALLER(holdtime|calltime|origposition)
+        _ -> "COMPLETEAGENT" % COMPLETECALLER(holdtime|calltime|origposition)
+    end,
     WaitTime = integer_to_list(kz_json:get_value(<<"Wait-Time">>, Call)),
-    TalkTime = integer_to_list(kz_json:get_value(<<"Talk-Time">>, Call)),
+    HandledTime = kz_json:get_integer_value(<<"Handled-Timestamp">>, Call),
+    ProcessedTime = kz_json:get_integer_value(<<"Processed-Timestamp">>, Call),
+    TalkTime = integer_to_list(ProcessedTime - HandledTime), %integer_to_list(kz_json:get_value(<<"Talk-Time">>, Call)), %% Talk-Time is not always available
     OriginalPos = integer_to_list(kz_json:get_value(<<"Entered-Position">>, Call)),
     EventParams = {WaitTime, TalkTime, OriginalPos},
     lager:debug("writing event to queue_log: ~s, ~p", [EventName, EventParams]),

@@ -194,9 +194,9 @@ call_event(FSM, <<"call_event">>, <<"CHANNEL_UNBRIDGE">>, JObj) ->
 call_event(FSM, <<"call_event">>, <<"usurp_control">>, JObj) ->
     gen_fsm:send_event(FSM, {'usurp_control', call_id(JObj)});
 call_event(FSM, <<"call_event">>, <<"CHANNEL_DESTROY">>, JObj) ->
-    gen_fsm:send_event(FSM, {'channel_hungup', call_id(JObj), hangup_cause(JObj)});
+    gen_fsm:send_event(FSM, ?DESTROYED_CHANNEL(call_id(JObj), acdc_util:hangup_cause(JObj)));
 call_event(FSM, <<"call_event">>, <<"CHANNEL_DISCONNECTED">>, JObj) ->
-    gen_fsm:send_event(FSM, {'channel_hungup', call_id(JObj), <<"MEDIA_SERVER_UNREACHABLE">>});
+    gen_fsm:send_event(FSM, ?DESTROYED_CHANNEL(call_id(JObj), <<"MEDIA_SERVER_UNREACHABLE">>));
 call_event(FSM, <<"call_event">>, <<"LEG_CREATED">>, JObj) ->
     gen_fsm:send_event(FSM, {'leg_created', call_id(JObj), kz_call_event:other_leg_call_id(JObj)});
 call_event(FSM, <<"call_event">>, <<"LEG_DESTROYED">>, JObj) ->
@@ -730,7 +730,7 @@ ready({'channel_answered', JObj}, #state{outbound_call_ids=OutboundCallIds}=Stat
             lager:debug("unexpected answer of ~s while in ready", [CallId]),
             {'next_state', 'ready', State}
     end;
-ready({'channel_hungup', CallId, _Cause}, #state{agent_listener=AgentListener
+ready(?DESTROYED_CHANNEL(CallId, _Cause), #state{agent_listener=AgentListener
                                                 ,outbound_call_ids=OutboundCallIds
                                                 }=State) ->
     case lists:member(CallId, OutboundCallIds) of
@@ -845,20 +845,21 @@ ringing({'agent_timeout', _JObj}, #state{agent_listener=AgentListener
                                         ,agent_id=AgentId
                                         ,member_call_queue_id=QueueId
                                         ,member_call_id=CallId
-                                        ,connect_failures=Fails
-                                        ,max_connect_failures=MaxFails
                                         }=State) ->
+    ErrReason = <<"timeout">>,
+    lager:debug("agent timeout, publishing originate failed"),
+    wapi_acdc_agent:publish_shared_originate_failure([{<<"Account-ID">>, AccountId}
+                                                      ,{<<"Agent-ID">>, AgentId}
+                                                      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                                     ]),
+
     acdc_agent_listener:agent_timeout(AgentListener),
-    lager:debug("recv timeout from queue process"),
-    acdc_stats:call_missed(AccountId, QueueId, AgentId, CallId, <<"timeout">>),
+
+    acdc_stats:call_missed(AccountId, QueueId, AgentId, CallId, ErrReason),
 
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
-    NewFSMState = clear_call(State, 'failed'),
-    NextState = return_to_state(Fails+1, MaxFails),
-    case NextState of
-        'paused' -> {'next_state', 'paused', NewFSMState};
-        'ready' -> apply_state_updates(NewFSMState)
-    end;
+
+    {'next_state', 'ringing', State};
 ringing({'playback_stop', _JObj}, State) ->
     {'next_state', 'ringing', State};
 ringing({'channel_bridged', MemberCallId}, #state{member_call_id=MemberCallId
@@ -880,7 +881,7 @@ ringing({'channel_bridged', MemberCallId}, #state{member_call_id=MemberCallId
     {'next_state', 'answered', State#state{connect_failures=0}};
 ringing({'channel_bridged', _CallId}, State) ->
     {'next_state', 'ringing', State};
-ringing({'channel_hungup', AgentCallId, _Cause}, #state{agent_listener=AgentListener
+ringing(?DESTROYED_CHANNEL(AgentCallId, _Cause), #state{agent_listener=AgentListener
                                                        ,agent_call_id=AgentCallId
                                                        ,connect_failures=Fails
                                                        ,max_connect_failures=MaxFails
@@ -897,7 +898,7 @@ ringing({'channel_hungup', AgentCallId, _Cause}, #state{agent_listener=AgentList
         'paused' -> {'next_state', 'paused', NewFSMState};
         'ready' -> apply_state_updates(NewFSMState)
     end;
-ringing({'channel_hungup', MemberCallId, _Cause}, #state{agent_listener=AgentListener
+ringing(?DESTROYED_CHANNEL(MemberCallId, _Cause), #state{agent_listener=AgentListener
                                                         ,account_id=AccountId
                                                         ,member_call_id=MemberCallId
                                                         ,member_call_queue_id=QueueId
@@ -909,7 +910,7 @@ ringing({'channel_hungup', MemberCallId, _Cause}, #state{agent_listener=AgentLis
 
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
     apply_state_updates(clear_call(State, 'ready'));
-ringing({'channel_hungup', CallId, _Cause}, #state{agent_listener=AgentListener
+ringing(?DESTROYED_CHANNEL(CallId, _Cause), #state{agent_listener=AgentListener
                                                   ,outbound_call_ids=OutboundCallIds
                                                   }=State) ->
     case lists:member(CallId, OutboundCallIds) of
@@ -1264,7 +1265,7 @@ awaiting_callback({'channel_answered', JObj}=Evt, #state{account_id=AccountId
                                                            ,connect_failures=0
                                                            }}
     end;
-awaiting_callback({'channel_hungup', ACallId, _Cause}, #state{agent_listener=AgentListener
+awaiting_callback(?DESTROYED_CHANNEL(ACallId, _Cause), #state{agent_listener=AgentListener
                                                              ,member_callback_flag='true'
                                                              ,agent_call_id=ACallId
                                                              }=State) ->
@@ -1273,7 +1274,7 @@ awaiting_callback({'channel_hungup', ACallId, _Cause}, #state{agent_listener=Age
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
 
     {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'agent')}};
-awaiting_callback({'channel_hungup', _ACallId, _Cause}, #state{connect_failures=Fails
+awaiting_callback(?DESTROYED_CHANNEL(_ACallId, _Cause), #state{connect_failures=Fails
                                                               ,max_connect_failures=MaxFails
                                                               ,monitoring='true'
                                                               }=State) ->
@@ -1283,7 +1284,7 @@ awaiting_callback({'channel_hungup', _ACallId, _Cause}, #state{connect_failures=
         'paused' -> {'next_state', 'paused', NewFSMState};
         'ready' -> apply_state_updates(NewFSMState)
     end;
-awaiting_callback({'channel_hungup', ACallId, Cause}, #state{account_id=AccountId
+awaiting_callback(?DESTROYED_CHANNEL(ACallId, Cause), #state{account_id=AccountId
                                                             ,agent_id=AgentId
                                                             ,agent_listener=AgentListener
                                                             ,member_original_call_id=OriginalMemberCallId
@@ -1306,7 +1307,7 @@ awaiting_callback({'channel_hungup', ACallId, Cause}, #state{account_id=AccountI
         'paused' -> {'next_state', 'paused', NewFSMState};
         'ready' -> apply_state_updates(NewFSMState)
     end;
-awaiting_callback({'channel_hungup', CallId, Cause}, State) ->
+awaiting_callback(?DESTROYED_CHANNEL(CallId, Cause), State) ->
     maybe_member_no_answer(CallId, Cause, State);
 awaiting_callback({'leg_created', CallId, OtherLegCallId}=Evt, #state{agent_listener=AgentListener
                                                                      ,member_callback_candidates=Candidates
@@ -1408,12 +1409,12 @@ answered({'dialplan_error', _App}, #state{agent_listener=AgentListener
     apply_state_updates(clear_call(State, 'ready'));
 answered({'playback_stop', _JObj}, State) ->
     {'next_state', 'answered', State};
-answered({'channel_hungup', CallId, Cause}, #state{member_call_id=CallId
+answered(?DESTROYED_CHANNEL(CallId, Cause), #state{member_call_id=CallId
                                                   ,outbound_call_ids=[]
                                                   }=State) ->
     lager:debug("caller's channel hung up: ~s", [Cause]),
     {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'member')}};
-answered({'channel_hungup', CallId, _Cause}, #state{account_id=AccountId
+answered(?DESTROYED_CHANNEL(CallId, _Cause), #state{account_id=AccountId
                                                    ,agent_id=AgentId
                                                    ,agent_listener=AgentListener
                                                    ,member_call_id=CallId
@@ -1426,12 +1427,12 @@ answered({'channel_hungup', CallId, _Cause}, #state{account_id=AccountId
     acdc_agent_listener:channel_hungup(AgentListener, CallId),
     maybe_notify(Ns, ?NOTIFY_HANGUP, State),
     {'next_state', 'outbound', start_outbound_call_handling(OutboundCallId, clear_call(State, 'ready')), 'hibernate'};
-answered({'channel_hungup', CallId, Cause}, #state{agent_call_id=CallId
+answered(?DESTROYED_CHANNEL(CallId, Cause), #state{agent_call_id=CallId
                                                   ,outbound_call_ids=[]
                                                   }=State) ->
     lager:debug("agent's channel has hung up: ~s", [Cause]),
     {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'agent')}};
-answered({'channel_hungup', CallId, _Cause}, #state{account_id=AccountId
+answered(?DESTROYED_CHANNEL(CallId, _Cause), #state{account_id=AccountId
                                                    ,agent_id=AgentId
                                                    ,agent_listener=AgentListener
                                                    ,member_call_id=MemberCallId
@@ -1445,7 +1446,7 @@ answered({'channel_hungup', CallId, _Cause}, #state{account_id=AccountId
     acdc_agent_listener:channel_hungup(AgentListener, MemberCallId),
     maybe_notify(Ns, ?NOTIFY_HANGUP, State),
     {'next_state', 'outbound', start_outbound_call_handling(OutboundCallId, clear_call(State, 'ready')), 'hibernate'};
-answered({'channel_hungup', CallId, _Cause}, #state{agent_listener=AgentListener
+answered(?DESTROYED_CHANNEL(CallId, _Cause), #state{agent_listener=AgentListener
                                                    ,outbound_call_ids=OutboundCallIds
                                                    }=State) ->
     case lists:member(CallId, OutboundCallIds) of
@@ -1584,7 +1585,7 @@ wrapup({'channel_unbridged', _}, State) ->
     {'next_state', 'wrapup', State};
 wrapup({'channel_transferee', _, _}, State) ->
     {'next_state', 'wrapup', State};
-wrapup({'channel_hungup', _, _}, State) ->
+wrapup(?DESTROYED_CHANNEL(_, _), State) ->
     {'next_state', 'wrapup', State};
 wrapup({'leg_destroyed', CallId}, #state{agent_listener=AgentListener}=State) ->
     lager:debug("leg ~s destroyed", [CallId]),
@@ -1677,7 +1678,7 @@ paused('current_call', _, State) ->
 -spec outbound(any(), atom(), state()) -> handle_sync_event_ret(state()).
 outbound({'playback_stop', _JObj}, State) ->
     {'next_state', 'outbound', State};
-outbound({'channel_hungup', CallId, Cause}, #state{agent_listener=AgentListener
+outbound(?DESTROYED_CHANNEL(CallId, Cause), #state{agent_listener=AgentListener
                                                   ,outbound_call_ids=OutboundCallIds
                                                   }=State) ->
     acdc_agent_listener:channel_hungup(AgentListener, CallId),
@@ -1941,6 +1942,9 @@ handle_info(?NEW_CHANNEL_FROM(_CallId)=Evt, StateName, State) ->
 handle_info(?NEW_CHANNEL_TO(_CallId, _)=Evt, StateName, State) ->
     gen_fsm:send_event(self(), Evt),
     {'next_state', StateName, State};
+handle_info(?DESTROYED_CHANNEL(_, _)=Evt, StateName, State) ->
+    gen_fsm:send_event(self(), Evt),
+    {'next_state', StateName, State};
 handle_info(_Info, StateName, State) ->
     lager:debug("unhandled message in state ~s: ~p", [StateName, _Info]),
     {'next_state', StateName, State}.
@@ -2016,13 +2020,6 @@ call_id(JObj) ->
     case kz_json:get_value(<<"Call-ID">>, JObj) of
         'undefined' -> kz_json:get_value([<<"Call">>, <<"Call-ID">>], JObj);
         CallId -> CallId
-    end.
-
--spec hangup_cause(kz_json:object()) -> ne_binary().
-hangup_cause(JObj) ->
-    case kz_json:get_value(<<"Hangup-Cause">>, JObj) of
-        'undefined' -> <<"unknown">>;
-        Cause -> Cause
     end.
 
 %% returns time left in seconds
@@ -2201,25 +2198,31 @@ find_endpoint_id(_EP, EPId) -> EPId.
 -spec monitor_endpoint(api_object(), ne_binary(), server_ref()) -> _.
 monitor_endpoint('undefined', _, _) -> 'ok';
 monitor_endpoint(EP, AccountId, AgentListener) ->
+    Username = find_username(EP),
+
     %% Bind for outbound call requests
     acdc_agent_listener:add_endpoint_bindings(AgentListener
                                              ,kz_endpoint:get_sip_realm(EP, AccountId)
-                                             ,find_username(EP)
+                                             ,Username
                                              ),
     %% Inform us of device changes
     catch gproc:reg(?ENDPOINT_UPDATE_REG(AccountId, find_endpoint_id(EP))),
-    catch gproc:reg(?NEW_CHANNEL_REG(AccountId, find_username(EP))).
+    catch gproc:reg(?NEW_CHANNEL_REG(AccountId, Username)),
+    catch gproc:reg(?DESTROYED_CHANNEL_REG(AccountId, Username)).
 
 -spec unmonitor_endpoint(kz_json:object(), ne_binary(), server_ref()) -> any().
 unmonitor_endpoint(EP, AccountId, AgentListener) ->
+    Username = find_username(EP),
+
     %% Bind for outbound call requests
     acdc_agent_listener:remove_endpoint_bindings(AgentListener
                                                 ,kz_endpoint:get_sip_realm(EP, AccountId)
-                                                ,find_username(EP)
+                                                ,Username
                                                 ),
     %% Inform us of device changes
     catch gproc:unreg(?ENDPOINT_UPDATE_REG(AccountId, find_endpoint_id(EP))),
-    catch gproc:unreg(?NEW_CHANNEL_REG(AccountId, find_username(EP))).
+    catch gproc:unreg(?NEW_CHANNEL_REG(AccountId, Username)),
+    catch gproc:unreg(?DESTROYED_CHANNEL_REG(AccountId, Username)).
 
 -spec maybe_add_endpoint(ne_binary(), kz_json:object(), kz_json:objects(), ne_binary(), server_ref()) -> any().
 maybe_add_endpoint(EPId, EP, EPs, AccountId, AgentListener) ->

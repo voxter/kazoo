@@ -21,6 +21,7 @@
         ,presence_update/3, presence_update/4
         ,send_cdr/2
         ,caller_id/1
+        ,hangup_cause/1
         ]).
 
 -include("acdc.hrl").
@@ -154,3 +155,10 @@ caller_id(Call) ->
                        _Else -> <<"external">>
                    end,
     kz_attributes:caller_id(CallerIdType, Call).
+
+-spec hangup_cause(kz_json:object()) -> ne_binary().
+hangup_cause(JObj) ->
+    case kz_json:get_value(<<"Hangup-Cause">>, JObj) of
+        'undefined' -> <<"unknown">>;
+        Cause -> Cause
+    end.

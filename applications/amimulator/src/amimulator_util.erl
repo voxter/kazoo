@@ -148,7 +148,8 @@ initial_calls(AccountId) ->
 
             process_basic_calls(PrioritySortedBasicCalls, PrioritySortedBasicCalls, []);
         E ->
-            lager:debug("Could not get channel statuses: ~p", [E])
+            lager:error("could not get active channels: ~p", [E]),
+            []
     end.
 
                                                 % -spec

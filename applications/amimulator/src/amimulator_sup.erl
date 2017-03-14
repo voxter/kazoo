@@ -112,7 +112,7 @@ init([]) ->
 %%
 
 -spec event_listeners() -> [{pid(), term()},...] | [].
-event_listeners() -> 
+event_listeners() ->
     [{Pid, WorkerName} || {WorkerName, Pid, 'worker', ['amimulator_event_listener']} <- supervisor:which_children(?MODULE)].
 
 -spec find_event_listener(ne_binary()) -> {pid(), term()} | 'undefined'.
