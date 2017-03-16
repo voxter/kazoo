@@ -165,9 +165,6 @@
                      ,{{'acdc_agent_handler', 'handle_agent_message'}
                        ,[{<<"agent">>, <<"*">>}]
                       }
-                     ,{{'acdc_agent_handler', 'handle_destroy'}
-                       ,[{<<"channel">>, <<"destroy">>}]
-                      }
                      ,{{'acdc_agent_handler', 'handle_config_change'}
                        ,[{<<"configuration">>, <<"*">>}]
                       }
@@ -732,6 +729,7 @@ handle_cast({'originate_callback_to_agent', Call, WinJObj, EPs, CDRUrl, Recordin
                             ,cdr_urls=dict:store(whapps_call:call_id(Call), CDRUrl,
                                                  dict:store(AgentCallIds, CDRUrl, Urls)
                                                 )
+                            ,preserve_metadata=wh_json:is_true(<<"Preserve-Metadata">>, WinJObj, 'false')
                             ,recording_url=RecordingUrl
                            }
      ,'hibernate'};
@@ -1362,6 +1360,7 @@ do_originate_callback_return(MyQ, Call) ->
               ,{<<"Authorizing-Type">>, whapps_call:authorizing_type(Call)}
               ,{<<"Channel-Authorized">>, 'true'}
               ,{<<"From-URI">>, <<FromUser/binary, "@", (whapps_call:account_realm(Call))/binary>>}
+              ,{<<"Retain-CID">>, 'true'}
              ]),
 
     TargetCallId = create_call_id(),
@@ -1392,9 +1391,9 @@ do_originate_callback_return(MyQ, Call) ->
                  ,{<<"Application-Name">>, <<"bridge">>}
                  ,{<<"Timeout">>, 60}
 
-                 ,{<<"Outbound-Caller-ID-Name">>, whapps_call:callee_id_name(Call)}
+                 ,{<<"Outbound-Caller-ID-Name">>, whapps_call:callee_id_number(Call)}
                  ,{<<"Outbound-Caller-ID-Number">>, whapps_call:callee_id_number(Call)}
-                 ,{<<"Caller-ID-Name">>, whapps_call:callee_id_name(Call)}
+                 ,{<<"Caller-ID-Name">>, whapps_call:callee_id_number(Call)}
                  ,{<<"Caller-ID-Number">>, whapps_call:callee_id_number(Call)}
 
                  ,{<<"Existing-Call-ID">>, TransferorLeg}
