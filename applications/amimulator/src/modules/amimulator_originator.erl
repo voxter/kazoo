@@ -3,13 +3,13 @@
 
 -export([start_link/0]).
 -export([init/1
-		 ,handle_call/3
-		 ,handle_cast/2
-		 ,handle_info/2
-		 ,handle_event/2
-		 ,terminate/2
-		 ,code_change/3
-		]).
+         ,handle_call/3
+         ,handle_cast/2
+         ,handle_info/2
+         ,handle_event/2
+         ,terminate/2
+         ,code_change/3
+        ]).
 
 -include("../amimulator.hrl").
 
@@ -17,10 +17,10 @@
 
 start_link() ->
     gen_listener:start_link({'local', ?MODULE}
-    	                    ,?MODULE
+                            ,?MODULE
                             ,[{'bindings', []}, {'responders', []}]
                             ,[]
-	                       ).
+                           ).
 
 init([]) ->
     lager:debug("AMI: Started originator for handling AMI dials ~p", [self()]),
@@ -31,8 +31,8 @@ handle_call(_Request, _From, State) ->
     {'reply', {'error', 'not_implemented'}, State}.
 
 handle_cast({"originate", Props}, State) ->
-	dial(update_props(Props)),
-	{'noreply', State};
+    dial(update_props(Props)),
+    {'noreply', State};
 handle_cast({"blindxfer", Props}, State) ->
     control_queue_exec(update_props(Props), fun blind_transfer/2),
     {'noreply', State};
@@ -43,8 +43,8 @@ handle_cast({"vmxfer", Props}, State) ->
     control_queue_exec(update_props(Props), fun vm_transfer/2),
     {'noreply', State};
 handle_cast({"pickupchan", Props}, State) ->
-	pickup_channel(update_props(Props)),
-	{'noreply', State};
+    pickup_channel(update_props(Props)),
+    {'noreply', State};
 handle_cast({"eavesdrop", Props}, State) ->
     eavesdrop_req(update_props(Props)),
     {'noreply', State};
@@ -62,7 +62,7 @@ dial(Props) ->
     DestExten = proplists:get_value(<<"Exten">>, Props),
 
     CCVs = [
-    	{<<"Account-ID">>, proplists:get_value(<<"AccountId">>, Props)},
+        {<<"Account-ID">>, proplists:get_value(<<"AccountId">>, Props)},
         {<<"Retain-CID">>, <<"true">>},
         {<<"Inherit-Codec">>, <<"false">>},
         {<<"Authorizing-Type">>, whapps_call:authorizing_type(Call)},
@@ -88,12 +88,12 @@ dial(Props) ->
                ,{<<"Continue-On-Fail">>, 'false'}
                ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
                ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>
-               										,<<"Retain-CID">>
-               										,<<"Authorizing-ID">>
-               										,<<"Authorizing-Type">>
-               										,<<"Web-Dial">>
-               										,<<"Flip-Direction-On-Bridge">>
-               									   ]}
+                                                       ,<<"Retain-CID">>
+                                                       ,<<"Authorizing-ID">>
+                                                       ,<<"Authorizing-Type">>
+                                                       ,<<"Web-Dial">>
+                                                       ,<<"Flip-Direction-On-Bridge">>
+                                                      ]}
                | wh_api:default_headers(<<"resource">>, <<"originate_req">>, ?APP_NAME, ?APP_VERSION)
               ],
 
@@ -142,20 +142,20 @@ assign_aleg_props(AuthorizingId, Props, Call) ->
 update_props(Props) ->
     Routines = [
         fun(Props2) -> [{<<"AccountDb">>
-        				,wh_util:format_account_id(proplists:get_value(<<"AccountId">>, Props), 'encoded')}
-        			   ] ++ Props2 end,
+                        ,wh_util:format_account_id(proplists:get_value(<<"AccountId">>, Props), 'encoded')}
+                       ] ++ Props2 end,
         fun(Props2) -> [{<<"SourceExten">>
-        				,channel_to_exten(props:get_value(<<"Channel">>, Props))}
-        			   ]
+                        ,channel_to_exten(props:get_value(<<"Channel">>, Props))}
+                       ]
             ++ Props2 end
     ],
     lists:foldl(fun(F, Props2) -> F(Props2) end, Props, Routines).
 
 channel_to_exten(Channel) ->
-	binary:replace(hd(binary:split(Channel, <<"@">>)), <<"SIP/">>, <<"">>).
+    binary:replace(hd(binary:split(Channel, <<"@">>)), <<"SIP/">>, <<"">>).
 
 %% Find the endpoints associated with the user placing the originate request
-get_endpoints(Props, Call) ->
+get_endpoints(_, Call) ->
     UserId = whapps_call:authorizing_id(Call),
     % Number = proplists:get_value(<<"SourceExten">>, Props),
     Properties = wh_json:from_list([
@@ -177,34 +177,34 @@ aleg_cid(CID, Call) ->
     lists:foldl(fun(F, C) -> F(C) end, Call, Routines).
 
 control_queue_exec(Props, Function) ->
-	Call = props:get_value(<<"Call">>, Props),
+    Call = props:get_value(<<"Call">>, Props),
 
-	case amimulator_call:control_queue(Call) of
-		'undefined' -> 'error';
-		CtrlQ ->
-    		lager:debug("Got control queue ~p", [CtrlQ]),
+    case amimulator_call:control_queue(Call) of
+        'undefined' -> 'error';
+        CtrlQ ->
+            lager:debug("Got control queue ~p", [CtrlQ]),
             Function(Props, amimulator_call:set_control_queue(CtrlQ, Call))
-	end.
+    end.
 
 blind_transfer(Props, Call) ->
     WhappsCall = amimulator_call:to_whapps_call(Call),
-	% whapps_call_command:unbridge(WhappsCall2),
-	whapps_call_command:hangup('true', WhappsCall),
+    % whapps_call_command:unbridge(WhappsCall2),
+    whapps_call_command:hangup('true', WhappsCall),
 
-	SourceExten = amimulator_call:id_number(Call),
-	SourceCID = amimulator_call:id_name(Call),
-	DestExten = props:get_value(<<"Exten">>, Props),
-	CallId = amimulator_call:call_id(Call),
-	TargetCallId = <<"blind-transfer-", (wh_util:rand_hex_binary(4))/binary>>,
+    SourceExten = amimulator_call:id_number(Call),
+    SourceCID = amimulator_call:id_name(Call),
+    DestExten = props:get_value(<<"Exten">>, Props),
+    CallId = amimulator_call:call_id(Call),
+    TargetCallId = <<"blind-transfer-", (wh_util:rand_hex_binary(4))/binary>>,
 
     CCVs = props:filter_undefined([{<<"Account-ID">>, amimulator_call:account_id(Call)}
-					               ,{<<"Authorizing-ID">>, amimulator_call:authorizing_id(Call)}
-					               ,{<<"Channel-Authorized">>, 'true'}
+                                   ,{<<"Authorizing-ID">>, amimulator_call:authorizing_id(Call)}
+                                   ,{<<"Channel-Authorized">>, 'true'}
                                    %% TODO add account realm to amimulator_call
-					               ,{<<"From-URI">>, <<SourceExten/binary, "@", (whapps_call:account_realm(WhappsCall))/binary>>}
-					               ,{<<"Ignore-Early-Media">>, 'true'}
-					               % ,{<<"Amimulator-Blind-Transfer">>, <<"true">>}
-					              ]),
+                                   ,{<<"From-URI">>, <<SourceExten/binary, "@", (whapps_call:account_realm(WhappsCall))/binary>>}
+                                   ,{<<"Ignore-Early-Media">>, 'true'}
+                                   % ,{<<"Amimulator-Blind-Transfer">>, <<"true">>}
+                                  ]),
 
     Endpoint = wh_json:from_list(
                  props:filter_undefined(
@@ -267,14 +267,14 @@ attended_transfer(Props) ->
 
 vm_transfer(Props, Call) ->
     WhappsCall = amimulator_call:to_whapps_call(Call),
-	%whapps_call_command:unbridge(WhappsCall2),
-	whapps_call_command:hangup('true', WhappsCall),
+    %whapps_call_command:unbridge(WhappsCall2),
+    whapps_call_command:hangup('true', WhappsCall),
 
-	SourceExten = amimulator_call:id_number(Call),
+    SourceExten = amimulator_call:id_number(Call),
     SourceCID = amimulator_call:id_name(Call),
     DestExten = props:get_value(<<"Exten">>, Props),
-	CallId = amimulator_call:call_id(Call),
-	TargetCallId = <<"vm-transfer-", (wh_util:rand_hex_binary(4))/binary>>,
+    CallId = amimulator_call:call_id(Call),
+    TargetCallId = <<"vm-transfer-", (wh_util:rand_hex_binary(4))/binary>>,
 
     CCVs = props:filter_undefined(
              [{<<"Account-ID">>, amimulator_call:account_id(Call)}
@@ -367,12 +367,12 @@ eavesdrop_req(Props) ->
     DestExten = lists:nth(2, binary:split(Channel, <<"/">>)),
     EavesdropCallId = amimulator_call:call_id(ami_sm:call_by_channel(Channel)),
     EavesdropMode = case lists:nth(2, binary:split(props:get_value(<<"Data">>, Props), <<",">>)) of
-    	<<"w">> ->
-    		<<"whisper">>;
-    	<<"bq">> ->
-    		<<"listen">>;
-    	Other ->
-    		lager:debug("Unsupported eavesdrop mode ~p, defaulting to listen", [Other])
+        <<"w">> ->
+            <<"whisper">>;
+        <<"bq">> ->
+            <<"listen">>;
+        Other ->
+            lager:debug("Unsupported eavesdrop mode ~p, defaulting to listen", [Other])
     end,
 
     CCVs = props:filter_undefined([{<<"Account-ID">>, AccountId}]),
@@ -380,28 +380,28 @@ eavesdrop_req(Props) ->
     SourceEndpoints = get_endpoints(props:delete(<<"SourceExten">>, Props), Call),
 
     Prop = wh_json:set_values(props:filter_undefined([
-	         {<<"Msg-ID">>, wh_util:rand_hex_binary(16)}
-	         ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
-	         ,{<<"Timeout">>, <<"30">>}
-	         ,{<<"Endpoints">>, SourceEndpoints}
-	         ,{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
-	         ,{<<"Ignore-Early-Media">>, <<"true">>}
-	         ,{<<"Outbound-Caller-ID-Name">>, <<"Eavesdrop ", DestExten/binary>>}
-	         ,{<<"Outbound-Caller-ID-Number">>, DestExten}
-	         ,{<<"Export-Custom-Channel-Vars">>, [
-	            <<"Account-ID">>
-	            ,<<"Retain-CID">>
-	            ,<<"Authorizing-ID">>
-	            ,<<"Authorizing-Type">>
-	          ]}
-	         ,{<<"Account-ID">>, AccountId}
-	         ,{<<"Resource-Type">>, <<"originate">>}
-	         ,{<<"Application-Name">>, <<"eavesdrop">>}
-	         ,{<<"Eavesdrop-Call-ID">>, EavesdropCallId}
-	         ,{<<"Eavesdrop-Group-ID">>, 'undefined'}
-	         ,{<<"Eavesdrop-Mode">>, EavesdropMode}
-	         | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
-	    	]), wh_json:new()),
+             {<<"Msg-ID">>, wh_util:rand_hex_binary(16)}
+             ,{<<"Custom-Channel-Vars">>, wh_json:from_list(CCVs)}
+             ,{<<"Timeout">>, <<"30">>}
+             ,{<<"Endpoints">>, SourceEndpoints}
+             ,{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
+             ,{<<"Ignore-Early-Media">>, <<"true">>}
+             ,{<<"Outbound-Caller-ID-Name">>, <<"Eavesdrop ", DestExten/binary>>}
+             ,{<<"Outbound-Caller-ID-Number">>, DestExten}
+             ,{<<"Export-Custom-Channel-Vars">>, [
+                <<"Account-ID">>
+                ,<<"Retain-CID">>
+                ,<<"Authorizing-ID">>
+                ,<<"Authorizing-Type">>
+              ]}
+             ,{<<"Account-ID">>, AccountId}
+             ,{<<"Resource-Type">>, <<"originate">>}
+             ,{<<"Application-Name">>, <<"eavesdrop">>}
+             ,{<<"Eavesdrop-Call-ID">>, EavesdropCallId}
+             ,{<<"Eavesdrop-Group-ID">>, 'undefined'}
+             ,{<<"Eavesdrop-Mode">>, EavesdropMode}
+             | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
+            ]), wh_json:new()),
 
     lager:debug("Eavesdropping on call id ~p", [EavesdropCallId]),
     case whapps_util:amqp_pool_collect(Prop

@@ -136,7 +136,7 @@ running_apps_list() ->
         Resp -> Resp
     end.
 
-app_running(AppName) ->
+app_running(AppName) when is_atom(AppName) ->
     case [App
           || App <- running_apps_list(),
              AppName =:= App
@@ -144,6 +144,12 @@ app_running(AppName) ->
     of
         [] -> false;
         _ -> true
+    end;
+app_running(AppName) ->
+    try
+        app_running(wh_util:to_atom(AppName))
+    catch
+        'error':'badarg' -> 'false'
     end.
 
 -spec initialize_whapps() -> 'ok'.
