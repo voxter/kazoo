@@ -505,59 +505,44 @@ validate_unique_vmbox(VMBoxId, Context, _AccountDb) ->
 check_vmbox_schema(VMBoxId, Context) ->
     Context1 = maybe_migrate_notification_emails(Context),
     OnSuccess = fun(C) -> on_successful_validation(VMBoxId, C) end,
-    update_user_creds(VMBoxId, Context),
+    update_user_creds(Context),
     cb_context:validate_request_data(<<"vmboxes">>, Context1, OnSuccess).
 
 %% Update voicemail PIN at the same time as a password update
-update_user_creds(VMBoxId, #cb_context{db_name=AccountDb, req_data=ReqData}) ->
-    lager:info("Updating password after PIN change"),
-    if VMBoxId == 'undefined' ->
-            lager:info("New voicemail box"),
-            'ok';
-       true ->
-            {'ok', VMJObj} = kz_datamgr:open_doc(AccountDb, VMBoxId),
-            OwnerId = kz_json:get_value(<<"owner_id">>, VMJObj),
-
-            if OwnerId == 'undefined' ->
-                    lager:info("Voicemail does not have an owner"),
-                    'ok';
-               true ->
-                    case AccountDb of
-                        'undefined' ->
-                            lager:error("The AccountDb supplied wasn't correct when additionally updating voicemail creds");
-                        _ ->
-                            lager:info("Detected user doc with id: ~p", [OwnerId]),
-                            {'ok', UserFullDoc} = kz_datamgr:open_doc(AccountDb, OwnerId),
-
-                            case should_update_user_creds(UserFullDoc) of
-                                false ->
-                                    'ok';
-                                true ->
-                                    Username = kz_json:get_value(<<"username">>, UserFullDoc),
-                                    Pin = kz_json:get_value(<<"pin">>, ReqData),
-                                    {MD5, SHA1} = cb_modules_util:pass_hashes(Username, Pin),
-                                    kz_datamgr:save_doc(AccountDb
-                                                       ,kz_json:set_values([{<<"pvt_md5_auth">>, MD5}, {<<"pvt_sha1_auth">>, SHA1}]
-                                                                          ,UserFullDoc
-                                                                          ))
-                            end
-                    end
-            end
+-spec update_user_creds(cb_context:context()) -> 'ok'.
+update_user_creds(Context) ->
+    case cb_context:req_value(Context, <<"owner_id">>) of
+        'undefined' -> lager:debug("no owner, no creds to update");
+        OwnerId ->
+            PIN = cb_context:req_value(Context, <<"pin">>),
+            update_user_creds(OwnerId, PIN, Context)
     end.
 
-should_update_user_creds(UserFullDoc) ->
-    try
-        _ = list_to_integer(binary_to_list(kz_json:get_value(<<"username">>, UserFullDoc))),
+-spec update_user_creds(ne_binary(), ne_binary(), cb_context:context()) -> 'ok'.
+update_user_creds(UserId, PIN, Context) ->
+    AccountDb = cb_context:account_db(Context),
+    case kz_datamgr:open_doc(AccountDb, UserId) of
+        {'ok', Doc} ->
+            Username = kz_json:get_value(<<"username">>, Doc),
+            case should_update_user_creds(Username) of
+                'true' ->
+                    {MD5, SHA1} = cb_modules_util:pass_hashes(Username, PIN),
+                    Doc1 = kz_json:set_values([{<<"pvt_md5_auth">>, MD5}
+                                              ,{<<"pvt_sha1_auth">>, SHA1}]
+                                             ,Doc),
+                    _ = kz_datamgr:save_doc(AccountDb, Doc1),
+                    'ok';
+                'false' ->
+                    lager:debug("username is not numeric, not updating creds")
+            end;
+        {'error', E} -> lager:error("could not find owner doc (~p)", [E])
+    end.
 
-        case UserFullDoc of
-            'undefined' ->
-                lager:info("Could not find user"),
-                false;
-            _ -> true
-        end
-    catch error:badarg ->
-            lager:info("Did not save user PIN as pass because they do not have an extension username"),
-            false
+-spec should_update_user_creds(ne_binary()) -> boolean().
+should_update_user_creds(Username) ->
+    case catch kz_term:to_integer(Username) of
+        {'EXIT', _} -> 'false';
+        _ -> 'true'
     end.
 
 %%--------------------------------------------------------------------

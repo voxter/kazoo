@@ -661,7 +661,7 @@ rehash_creds(_UserId, 'undefined', _Password, Context) ->
                                      )
                                    ,Context
      );
-rehash_creds(_UserId, Username, Password, Context) ->
+rehash_creds(UserId, Username, Password, Context) ->
     lager:debug("password set on doc, updating hashes for ~s", [Username]),
     {MD5, SHA1} = cb_modules_util:pass_hashes(Username, Password),
     JObj1 = kz_json:set_values([{<<"pvt_md5_auth">>, MD5}
@@ -669,6 +669,9 @@ rehash_creds(_UserId, Username, Password, Context) ->
                                ]
                               ,cb_context:doc(Context)
                               ),
+
+    cb_modules_util:update_voicemail_creds(UserId, Username, Password, Context),
+
     cb_context:set_doc(Context, kz_json:delete_key(<<"password">>, JObj1)).
 
 %%--------------------------------------------------------------------
