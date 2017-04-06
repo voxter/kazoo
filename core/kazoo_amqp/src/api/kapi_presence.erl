@@ -385,12 +385,11 @@ publish_mwi_update(Req, ContentType) ->
 mwi_update_routing_key(Prop) when is_list(Prop) ->
     mwi_update_routing_key(props:get_value(<<"To">>, Prop));
 mwi_update_routing_key(To) when is_binary(To) ->
-    [To, Realm] = binary:split(To, <<"@">>),
-    list_to_binary([<<"mwi_updates.">>
-                   ,amqp_util:encode(Realm)
-                   ,"."
-                   ,amqp_util:encode(To)
-                   ]);
+    R = case binary:split(To, <<"@">>) of
+            [_To, Realm] -> amqp_util:encode(Realm);
+            [Realm] -> amqp_util:encode(Realm)
+        end,
+    <<"mwi_updates.", R/binary>>;
 mwi_update_routing_key(JObj) ->
     mwi_update_routing_key(kz_json:get_value(<<"To">>, JObj)).
 
