@@ -361,7 +361,6 @@
                    ,['CHANNEL_DATA','CALL_UPDATE', 'CALL_SECURE']
                    ,['PLAYBACK_START', 'PLAYBACK_STOP']
                    ,['CHANNEL_HOLD', 'CHANNEL_UNHOLD']
-                   ,['PRESENCE_IN']
                    ]).
 
 -define(FS_SOFIA_TRANSFER_EVENTS, ['sofia::transferor'
@@ -544,7 +543,6 @@
         ,<<"resource">>
         ,<<"route_sup">>
         ,<<"channel_hold">>
-        ,<<"presence">>
         ]).
 
 -define(ECALLMGR_HRL, 'true').

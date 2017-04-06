@@ -157,8 +157,15 @@ retrieve(SlotNumber, ParkedCalls, Call) ->
 -spec maybe_retrieve_slot(ne_binary(), kz_json:object(), ne_binary(), kapps_call:call()) ->
                                  'ok' |
                                  {'error', 'timeout' | 'failed'}.
-maybe_retrieve_slot(_SlotNumber, _Slot, ParkedCall, Call) ->
+maybe_retrieve_slot(SlotNumber, Slot, ParkedCall, Call) ->
     lager:info("retrieved parked call from slot, maybe bridging to caller ~s", [ParkedCall]),
+    %% publish_usurp_control(ParkedCall, Call),
+    Name = kz_json:get_value(<<"CID-Name">>, Slot, <<"Parking Slot ", SlotNumber/binary>>),
+    Number = kz_json:get_value(<<"CID-Number">>, Slot, SlotNumber),
+    Update = [{<<"Callee-ID-Name">>, Name}
+             ,{<<"Callee-ID-Number">>, Number}
+             ],
+    _ = kapps_call_command:set(kz_json:from_list(Update), 'undefined', Call),
     _ = send_pickup(ParkedCall, Call),
     wait_for_pickup(Call).
 
@@ -230,7 +237,8 @@ park_call(SlotNumber, Slot, ParkedCalls, ReferredTo, Data, Call) ->
         %% blind transfer and but the provided slot number is occupied
         {_, {'error', 'occupied'}} ->
             lager:info("blind transfer to a occupied slot, call the parker back.."),
-            case ringback_parker(kz_json:get_ne_binary_value(<<"Ringback-ID">>, Slot), SlotNumber, Data, Call) of
+            TmpCID = <<"Parking slot ", SlotNumber/binary, " occupied">>,
+            case ringback_parker(kz_json:get_value(<<"Ringback-ID">>, Slot), SlotNumber, TmpCID, Data, Call) of
                 'answered' -> cf_exe:transfer(Call);
                 'channel_hungup' -> cf_exe:stop(Call);
                 'failed' ->
@@ -256,10 +264,10 @@ park_call(SlotNumber, Slot, ParkedCalls, ReferredTo, Data, Call) ->
 -spec create_slot(api_binary(), ne_binary(), kapps_call:call()) -> kz_json:object().
 create_slot(ParkerCallId, PresenceType, Call) ->
     CallId = cf_exe:callid(Call),
+    AccountDb = kapps_call:account_db(Call),
+    AccountId = kapps_call:account_id(Call),
     RingbackId = maybe_get_ringback_id(Call),
     SlotCallId = kz_binary:rand_hex(16),
-    User = kapps_call:request_user(Call),
-    Realm = kapps_call:account_realm(Call),
     kz_json:from_list(
       props:filter_undefined(
         [{<<"Call-ID">>, CallId}
@@ -269,9 +277,10 @@ create_slot(ParkerCallId, PresenceType, Call) ->
         ,{<<"To-Tag">>, kapps_call:to_tag(Call)}
         ,{<<"Parker-Call-ID">>, ParkerCallId}
         ,{<<"Ringback-ID">>, RingbackId}
-        ,{<<"Presence-User">>, User}
-        ,{<<"Presence-Realm">>, Realm}
-        ,{<<"Presence-ID">>, <<User/binary, "@", Realm/binary>>}
+        ,{<<"Presence-ID">>, <<(kapps_call:request_user(Call))/binary
+                               ,"@", (kz_util:get_account_realm(AccountDb, AccountId))/binary
+                             >>
+         }
         ,{<<"Node">>, kapps_call:switch_nodename(Call)}
         ,{<<"CID-Number">>, kapps_call:caller_id_number(Call)}
         ,{<<"CID-Name">>, kapps_call:caller_id_name(Call)}
@@ -625,12 +634,13 @@ wait_for_pickup(SlotNumber, Slot, Data, Call) ->
     kapps_call_command:hold(HoldMedia, Call),
     case kapps_call_command:wait_for_unparked_call(Call, Timeout) of
         {'error', 'timeout'} ->
+            TmpCID = <<"Parking slot ", SlotNumber/binary>>,
             ChannelUp = case kapps_call_command:b_channel_status(Call) of
                             {'ok', _} -> 'true';
                             {'error', _} -> 'false'
                         end,
             case ChannelUp
-                andalso ringback_parker(RingbackId, SlotNumber, Data, Call)
+                andalso ringback_parker(RingbackId, SlotNumber, TmpCID, Data, Call)
             of
                 'answered' ->
                     lager:info("parked caller ringback was answered"),
@@ -727,22 +737,23 @@ get_endpoint_id(Username, Call) ->
 %% Ringback the device that parked the call
 %% @end
 %%--------------------------------------------------------------------
--spec ringback_parker(api_binary(), ne_binary(), kz_json:object(), kapps_call:call()) ->
+-spec ringback_parker(api_binary(), ne_binary(), ne_binary(), kz_json:object(), kapps_call:call()) ->
                              'answered' | 'failed' | 'channel_hungup'.
-ringback_parker('undefined', _, _, _) -> 'failed';
-ringback_parker(EndpointId, SlotNumber, Data, Call0) ->
-    TmpCID = <<"Parking slot ", SlotNumber/binary>>,
-    Call = kapps_call:kvs_store('dynamic_cid', {'undefined', TmpCID}, Call0),
+ringback_parker('undefined', _, _, _, _) -> 'failed';
+ringback_parker(EndpointId, SlotNumber, TmpCID, Data, Call) ->
     Timeout = callback_timeout(Data, SlotNumber),
     case kz_endpoint:build(EndpointId, kz_json:from_list([{<<"can_call_self">>, 'true'}]), Call) of
         {'ok', Endpoints} ->
-            lager:info("attempting to ringback endpoint ~s : ~p", [EndpointId, Endpoints]),
+            lager:info("attempting to ringback endpoint ~s", [EndpointId]),
+            OriginalCID = kapps_call:caller_id_name(Call),
             CleanUpFun = fun(_) ->
                                  lager:info("parking ringback was answered", []),
-                                 _ = cleanup_slot(SlotNumber, cf_exe:callid(Call), kapps_call:account_db(Call))
+                                 _ = cleanup_slot(SlotNumber, cf_exe:callid(Call), kapps_call:account_db(Call)),
+                                 kapps_call:set_caller_id_name(OriginalCID, Call)
                          end,
-            kapps_call_command:bridge(Endpoints, ?DEFAULT_TIMEOUT_S, Call),
-            wait_for_ringback(CleanUpFun, Timeout, Call);
+            Call1 = kapps_call:set_caller_id_name(TmpCID, Call),
+            kapps_call_command:bridge(Endpoints, ?DEFAULT_TIMEOUT_S, Call1),
+            wait_for_ringback(CleanUpFun, Timeout, Call1);
         _ -> 'failed'
     end.
 
@@ -767,10 +778,6 @@ wait_for_ringback(Fun, Timeout, Call) ->
             'failed'
     end.
 
-expires(<<"early">>) -> 3600;
-expires(<<"confirmed">>) -> 3600;
-expires(<<"terminated">>) -> 10.
-
 -spec update_presence(api_object()) -> 'ok'.
 update_presence('undefined') -> 'ok';
 update_presence(Slot) ->
@@ -779,43 +786,26 @@ update_presence(Slot) ->
 -spec update_presence(ne_binary(), api_object()) -> 'ok'.
 update_presence(_State, 'undefined') -> 'ok';
 update_presence(State, Slot) ->
-    PresenceUser = kz_json:get_ne_binary_value(<<"Presence-User">>, Slot),
-    PresenceRealm = kz_json:get_ne_binary_value(<<"Presence-Realm">>, Slot),
-    PresenceId = <<PresenceUser/binary, "@", PresenceRealm/binary>>,
-    PresenceURI = <<"sip:", PresenceId/binary>>,
-
-    SwitchURI = kz_json:get_ne_binary_value(<<"Switch-URI">>, Slot),
-    CallId = kz_json:get_ne_binary_value(<<"Call-ID">>, Slot),
-    _SlotCallId = kz_json:get_ne_binary_value(<<"Slot-Call-ID">>, Slot),
-    ToUser = kz_json:get_ne_binary_value(<<"CID-Name">>, Slot),
-    To = kz_json:get_ne_binary_value(<<"CID-URI">>, Slot),
-    Expires = expires(State),
-
+    PresenceId = kz_json:get_value(<<"Presence-ID">>, Slot),
+    TargetURI = kz_json:get_value(<<"CID-URI">>, Slot),
+    ToTag = kz_json:get_value(<<"To-Tag">>, Slot),
+    FromTag = kz_json:get_value(<<"From-Tag">>, Slot),
+    SwitchURI = kz_json:get_value(<<"Switch-URI">>, Slot),
+    CallId = kz_json:get_value(<<"Call-ID">>, Slot),
+    SlotCallId = kz_json:get_value(<<"Slot-Call-ID">>, Slot),
     Command = props:filter_undefined(
                 [{<<"Presence-ID">>, PresenceId}
-                ,{<<"From">>, PresenceURI}
-                ,{<<"From-User">>, PresenceUser}
-                ,{<<"From-Realm">>, PresenceRealm}
-                ,{<<"From-Tag">>, <<"A">>}
-
-                ,{<<"To">>, To}
-                ,{<<"To-User">>, ToUser}
-                ,{<<"To-Realm">>, PresenceRealm}
-                ,{<<"To-Tag">>, <<"B">>}
-                ,{<<"To-URI">>, PresenceURI}
-
+                ,{<<"From">>, TargetURI}
+                ,{<<"From-Tag">>, FromTag}
+                ,{<<"To-Tag">>, ToTag}
                 ,{<<"State">>, State}
-                ,{<<"Call-ID">>, CallId}
+                ,{<<"Call-ID">>, SlotCallId}
+                ,{<<"Target-Call-ID">>, CallId}
                 ,{<<"Switch-URI">>, SwitchURI}
-                ,{<<"Direction">>, <<"recipient">>}
-
-                ,{<<"Expires">>, Expires}
-                ,{<<"Event-Package">>, <<"dialog">>}
-
-                 | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+                 | kz_api:default_headers(<<"park">>, ?APP_VERSION)
                 ]),
     lager:info("update presence-id '~s' with state: ~s", [PresenceId, State]),
-    kz_amqp_worker:cast(Command, fun kapi_presence:publish_dialog/1).
+    kz_amqp_worker:cast(Command, fun kapi_presence:publish_update/1).
 
 %%--------------------------------------------------------------------
 %% @private

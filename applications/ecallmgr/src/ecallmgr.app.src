@@ -25,7 +25,6 @@
                          ,['CHANNEL_DATA','CALL_UPDATE', 'CALL_SECURE']
                          ,['PLAYBACK_START', 'PLAYBACK_STOP']
                          ,['CHANNEL_HOLD', 'CHANNEL_UNHOLD']
-                         ,['PRESENCE_IN']
                          ]}
          ,{event_stream_custom, [['kazoo::noop', 'kazoo::masquerade']
                                 ,['sofia::transferor', 'sofia::transferee'
@@ -58,7 +57,6 @@
                          ,"resource"
                          ,"route_sup"
                          ,"channel_hold"
-                         ,"presence"
                          ]}
          ]}
  ]}.
