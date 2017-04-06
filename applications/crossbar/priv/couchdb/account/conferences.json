@@ -6,7 +6,7 @@
     "language": "javascript",
     "views": {
         "conference_map": {
-            "map": "function(doc) { if (doc.flow.module != 'conference' || doc.pvt_deleted) return; var featurecode = (!doc.featurecode) ? false : doc.featurecode; emit(doc.flow.data.id, {'numbers': doc.numbers}); }"
+            "map": "function(doc) { if (doc.flow.module != 'conference' || doc.flow.data.id === undefined || doc.pvt_deleted) return; emit(doc.flow.data.id, {'numbers': doc.numbers}); }"
         },
         "crossbar_listing": {
             "map": "function(doc) { if (doc.pvt_type != 'conference' || doc.pvt_deleted) return; emit(doc._id, {'id': doc._id, 'name': doc.name, 'owner_id': doc.owner_id, 'member': doc.member, 'moderator': doc.moderator, 'ui_flags': doc.ui_flags, 'conference_numbers': doc.conference_numbers}); }"
