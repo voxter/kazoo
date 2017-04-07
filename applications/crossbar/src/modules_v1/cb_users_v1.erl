@@ -726,86 +726,16 @@ rehash_creds(_UserId, 'undefined', _Password, Context) ->
                                                       ])
                                    ,Context
      );
-rehash_creds(_UserId, Username, Password, Context) ->
+rehash_creds(UserId, Username, Password, Context) ->
     lager:debug("password set on doc, updating hashes for ~s", [Username]),
     {MD5, SHA1} = cb_modules_util:pass_hashes(Username, Password),
     JObj1 = kz_json:set_values([{<<"pvt_md5_auth">>, MD5}
                                ,{<<"pvt_sha1_auth">>, SHA1}
                                ], cb_context:doc(Context)),
 
-    update_voicemail_creds(Username, Password, Context),
+    cb_modules_util:update_voicemail_creds(UserId, Username, Password, Context),
 
     cb_context:set_doc(Context, kz_json:delete_key(<<"password">>, JObj1)).
-
-%% Update voicemail PIN at the same time as a password update
-update_voicemail_creds(_, _, #cb_context{db_name='undefined'}) ->
-    lager:error("the account db was undefined when updating voicemail creds");
-update_voicemail_creds(Username, Password, #cb_context{db_name=AccountDb}) ->
-    lager:info("Updating PIN after password change"),
-    {'ok', UserJObjs} = kz_datamgr:get_results(AccountDb,
-                                               <<"users/list_by_username">>,
-                                               [{key, Username}]
-                                              ),
-    UserJObj =
-        if UserJObjs == [] -> 'undefined';
-           true -> hd(UserJObjs)
-        end,
-
-    if UserJObj == 'undefined' ->
-            lager:info("New user"),
-            'ok';
-       true ->
-            lager:info("Detected user doc with id: ~p", [kz_json:get_value(<<"id">>, UserJObj)]),
-
-            {'ok', UserFullDoc} = kz_datamgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, UserJObj)),
-
-            VMJObj = try
-                         {'ok', VMJObjs} = kz_datamgr:get_results(AccountDb,
-                                                                  <<"vmboxes/listing_by_mailbox">>,
-                                                                  [{key, list_to_integer(binary_to_list(Username))}]
-                                                                 ),
-                         VMJObj1 =
-                             if VMJObjs == [] -> 'undefined';
-                                true -> hd(VMJObjs)
-                             end,
-                         lager:info("Detected vmbox doc with id: ~p", [kz_json:get_value(<<"id">>, VMJObj1)]),
-                         VMJObj1
-                     catch error:badarg ->
-                             'undefined'
-                     end,
-
-            if VMJObj == 'undefined' ->
-                    lager:info("No voicemail box to update for the user"),
-                    'ok';
-               true ->
-                    {'ok', VMFullDoc} = kz_datamgr:open_doc(AccountDb, kz_json:get_value(<<"id">>, VMJObj)),
-
-                    case should_update_voicemail_creds(Username, VMFullDoc, UserFullDoc) of
-                        false ->
-                            'ok';
-                        true ->
-                            lager:info("Updating user password"),
-                            kz_datamgr:save_doc(AccountDb,
-                                                kz_json:set_value(<<"pin">>, Password, VMFullDoc))
-                    end
-            end
-    end.
-
-should_update_voicemail_creds(Username, VMJObj, UserFullDoc) ->
-    try
-        _ = list_to_integer(binary_to_list(Username)),
-
-        case {VMJObj, UserFullDoc} of
-            {'undefined', _} -> lager:info("No voicemail box to update for the user"),
-                                false;
-            {_, 'undefined'} -> lager:info("Could not find user"),
-                                false;
-            _ -> true
-        end
-    catch error:badarg ->
-            lager:info("Did not save user pass as PIN because they do not have an extension username"),
-            false
-    end.
 
 %%--------------------------------------------------------------------
 %% @private

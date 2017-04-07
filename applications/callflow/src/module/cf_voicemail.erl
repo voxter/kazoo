@@ -1606,26 +1606,9 @@ change_pin(#mailbox{mailbox_id=Id
 
                 JObj1 = kz_json:merge_jobjs(PrivJObj, PublicJObj),
 
-                {'ok', UserObj} = kz_datamgr:open_doc(AccountDb, kz_json:get_value(<<"owner_id">>, JObj1)),
-                PrivLevel = kz_json:get_value(<<"priv_level">>, UserObj),
-
-                UsernameIsInteger = try
-                                        _ = list_to_integer(binary_to_list(kz_json:get_value(<<"username">>, UserObj))),
-                                        true
-                                    catch error:badarg ->
-                                            false
-                                    end,
-
-                case { PrivLevel, UsernameIsInteger } of
-                    {<<"user">>, true} ->
-                        Username = kz_json:get_value(<<"username">>, UserObj),
-                        {MD5, SHA1} = cb_modules_util:pass_hashes(Username, Pin),
-                        kz_datamgr:save_doc(AccountDb
-                                           ,kz_json:set_values([{<<"pvt_md5_auth">>, MD5}, {<<"pvt_sha1_auth">>, SHA1}]
-                                                              ,UserObj));
-                    {_, false} -> lager:info("Did not save user PIN as pass because they do not have an extension username");
-                    {_, _} -> lager:info("Did not save user PIN as pass because they are not priv_level user")
-                end,
+                update_user_creds(AccountDb
+                                 ,kz_json:get_value(<<"owner_id">>, JObj1)
+                                 ,Pin),
 
                 {'ok', _} = kz_datamgr:save_doc(AccountDb, JObj1),
                 {'ok', _} = kapps_call_command:b_prompt(<<"vm-pin_set">>, Call),
@@ -1646,6 +1629,38 @@ change_pin(#mailbox{mailbox_id=Id
             lager:debug("failed to get new pin: ~s: ~p", [_E, _R]),
             invalid_pin(Box, Call)
     end.
+
+-spec update_user_creds(ne_binary(), api_binary(), ne_binary()) -> 'ok'.
+update_user_creds(_, 'undefined', _) ->
+    lager:debug("no owner, no creds to update");
+update_user_creds(AccountDb, OwnerId, PIN) ->
+    case kz_datamgr:open_doc(AccountDb, OwnerId) of
+        {'ok', Doc} ->
+            Username = kz_json:get_value(<<"username">>, Doc),
+            PrivLevel = kz_json:get_value(<<"priv_level">>, Doc),
+            case should_update_user_creds(Username, PrivLevel) of
+                'true' ->
+                    {MD5, SHA1} = cb_modules_util:pass_hashes(Username, PIN),
+                    Doc1 = kz_json:set_values([{<<"pvt_md5_auth">>, MD5}
+                                              ,{<<"pvt_sha1_auth">>, SHA1}]
+                                             ,Doc),
+                    _ = kz_datamgr:save_doc(AccountDb, Doc1);
+                'false' -> 'ok'
+            end;
+        {'error', E} -> lager:error("could not find owner doc (~p)", [E])
+    end.
+
+-spec should_update_user_creds(ne_binary(), ne_binary()) -> boolean().
+should_update_user_creds(Username, <<"user">>) ->
+    case catch kz_term:to_integer(Username) of
+        {'EXIT', _} ->
+            lager:debug("username is not numeric, not updating creds"),
+            'false';
+        _ -> 'true'
+    end;
+should_update_user_creds(_, _) ->
+    lager:debug("user is not priv_level user, not updating creds"),
+    'false'.
 
 -spec invalid_pin(mailbox(), kapps_call:call()) ->
                          mailbox() |

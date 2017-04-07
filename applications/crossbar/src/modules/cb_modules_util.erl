@@ -33,6 +33,8 @@
 
         ,apply_assignment_updates/1
         ,log_assignment_updates/1
+
+        ,update_voicemail_creds/4
         ]).
 
 -include("crossbar.hrl").
@@ -650,3 +652,52 @@ log_assignment_update({DID, {'ok', _Number}}) ->
     lager:debug("successfully updated ~s", [DID]);
 log_assignment_update({DID, {'error', E}}) ->
     lager:debug("failed to update ~s: ~p", [DID, E]).
+
+%% Update voicemail PIN at the same time as a password update
+-spec update_voicemail_creds(ne_binary(), ne_binary(), ne_binary(), cb_context:context()) ->
+                                    'ok'.
+update_voicemail_creds(UserId, Username, Password, Context) ->
+    AccountDb = cb_context:account_db(Context),
+    case should_update_voicemail_creds(Username) of
+        'true' ->
+            case maybe_matching_vmbox(AccountDb, UserId, Username) of
+                'undefined' -> 'ok';
+                Doc ->
+                    Doc1 = kz_json:set_value(<<"pin">>, Password, Doc),
+                    kz_datamgr:save_doc(AccountDb, Doc1),
+                    'ok'
+            end;
+        'false' ->
+            lager:debug("username is not numeric, not updating creds"),
+            'ok'
+    end.
+
+-spec should_update_voicemail_creds(ne_binary()) -> boolean().
+should_update_voicemail_creds(Username) ->
+    case catch kz_term:to_integer(Username) of
+        {'EXIT', _} -> 'false';
+        _ -> 'true'
+    end.
+
+-spec maybe_matching_vmbox(ne_binary(), ne_binary(), ne_binary()) -> api_object().
+maybe_matching_vmbox(AccountDb, UserId, Username) ->
+    case kz_datamgr:get_results(AccountDb
+                               ,<<"vmboxes/listing_by_mailbox">>
+                               ,[{'key', kz_term:to_integer(Username)}]
+                               ) of
+        {'ok', [JObj]} ->
+            {'ok', Doc} = kz_datamgr:open_doc(AccountDb
+                                             ,kz_json:get_value(<<"id">>, JObj)),
+            case kz_json:get_value(<<"owner_id">>, Doc) of
+                UserId -> Doc;
+                _ ->
+                    lager:debug("user ~s doesn't own the matching voicemail box", [UserId]),
+                    'undefined'
+            end;
+        {'ok', []} ->
+            lager:debug("no vmbox with username matching ~s", [Username]),
+            'undefined';
+        {'error', E} ->
+            lager:debug("error (~p) when getting listing_by_mailbox", [E]),
+            'undefined'
+    end.
