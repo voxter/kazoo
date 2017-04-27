@@ -9,7 +9,6 @@
 -module(kz_service_seats).
 
 -export([reconcile/1]).
-% -export([reconcile/2]).
 
 -include("kazoo_services.hrl").
 
@@ -132,8 +131,8 @@ reconcile_vmbox_seats(#state{standard_seats=StandardSeats
     %% Only consider a user to be standard due to VM if they exist, and have
     %% not already been included in the counts
     case OwnerId =:= 'undefined'
-            orelse exists(OwnerId, UsersDone)
-            orelse not exists(OwnerId, UsersNext)
+        orelse exists(OwnerId, UsersDone)
+        orelse not exists(OwnerId, UsersNext)
     of
         'true' ->
             reconcile_vmbox_seats(State#state{vmboxes_todo=Vmboxes}, Services);
@@ -273,19 +272,19 @@ check_standard_seat_in_callflow(#state{account_db=AccountDb
     {'ok', CallflowJObj} = kz_datamgr:open_cache_doc(AccountDb, CallflowId),
 
     State1 = case basic_seat_in_callflow(CallflowJObj, UsersNext, UsersDone, DevicesDone) of
-                  'false' -> State;
-                  {'device', Device} -> device_detected_standard(Device, State);
-                  {'user', User} ->
-                      UserId = kz_json:get_ne_binary_value(<<"id">>, User),
-                      lager:debug("user ~s is standard due to did", [UserId]),
-                      UsersNext1 = filter_out_user_id(UserId, UsersNext),
-                      {UserDevices, RemainingDevices} = partition_owned_devices(UserId, OwnedDevices),
-                      State#state{standard_seats=StandardSeats + 1
-                                 ,users_next=UsersNext1
-                                 ,users_done=[User|UsersDone]
-                                 ,devices_done=UserDevices ++ DevicesDone
-                                 ,owned_devices=RemainingDevices
-                                 }
+                 'false' -> State;
+                 {'device', Device} -> device_detected_standard(Device, State);
+                 {'user', User} ->
+                     UserId = kz_json:get_ne_binary_value(<<"id">>, User),
+                     lager:debug("user ~s is standard due to did", [UserId]),
+                     UsersNext1 = filter_out_user_id(UserId, UsersNext),
+                     {UserDevices, RemainingDevices} = partition_owned_devices(UserId, OwnedDevices),
+                     State#state{standard_seats=StandardSeats + 1
+                                ,users_next=UsersNext1
+                                ,users_done=[User|UsersDone]
+                                ,devices_done=UserDevices ++ DevicesDone
+                                ,owned_devices=RemainingDevices
+                                }
              end,
     reconcile_standard_seats_due_to_dids(State1#state{callflows_todo=Callflows}, Services).
 
@@ -462,10 +461,10 @@ fetch_callflows(AccountDb) ->
 -spec filter_out_user_id(ne_binary(), kz_json:objects()) -> kz_json:objects().
 filter_out_user_id(UserId, Users) ->
     lists:filter(fun(User) ->
-                     case kz_json:get_ne_binary_value(<<"id">>, User) of
-                         UserId -> 'false';
-                         _ -> 'true'
-                     end
+                         case kz_json:get_ne_binary_value(<<"id">>, User) of
+                             UserId -> 'false';
+                             _ -> 'true'
+                         end
                  end, Users).
 
 %%--------------------------------------------------------------------
@@ -479,10 +478,10 @@ filter_out_user_id(UserId, Users) ->
                                      {kz_json:objects(), kz_json:objects()}.
 partition_owned_devices(UserId, Devices) ->
     lists:partition(fun(Device) ->
-                        case kz_json:get_ne_binary_value(<<"key">>, Device) of
-                            UserId -> 'true';
-                            _ -> 'false'
-                        end
+                            case kz_json:get_ne_binary_value(<<"key">>, Device) of
+                                UserId -> 'true';
+                                _ -> 'false'
+                            end
                     end, Devices).
 
 %%--------------------------------------------------------------------
