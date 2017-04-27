@@ -631,7 +631,7 @@ remove_plaintext_password(Context) ->
 %%--------------------------------------------------------------------
 -spec validate_number_ownership(ne_binaries(), cb_context:context()) ->
                                        cb_context:context().
--spec validate_number_ownership(knm_numbers:kos(), ne_binaries(), cb_context:context()) ->
+-spec validate_number_ownership([{knm_numbers:num(), knm_numbers:ko()}], ne_binaries(), cb_context:context()) ->
                                        cb_context:context().
 validate_number_ownership(Numbers, Context) ->
     Options = [{'auth_by', cb_context:auth_account_id(Context)}],
