@@ -47,6 +47,7 @@ reconcile(Services) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Start the process of reconciling seats.
 %%
 %% @end
 %%--------------------------------------------------------------------
@@ -63,6 +64,14 @@ reconcile_seats(Services) ->
                                }
                         ,Services).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handle users that should be considered premium seats (user owns
+%% more than one device).
+%%
+%% @end
+%%--------------------------------------------------------------------
 -spec reconcile_user_seats(state(), kz_services:services()) ->
                                   {state(), kz_services:services()}.
 reconcile_user_seats(#state{account_db=AccountDb
@@ -81,6 +90,7 @@ reconcile_user_seats(#state{premium_seats=PremiumSeats
     {UserDevices, RemainingDevices} = partition_owned_devices(UserId, OwnedDevices),
     lager:debug("check for premium in user ~s", [UserId]),
 
+    %% Premium users have more than one owned device
     State1 = case length(UserDevices) > 1 of
                  'true' ->
                      lager:debug("user ~s is premium", [UserId]),
@@ -94,6 +104,14 @@ reconcile_user_seats(#state{premium_seats=PremiumSeats
              end,
     reconcile_user_seats(State1#state{users_todo=Users}, Services).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handle users that have a voicemail box and should therefore be
+%% considered standard seats.
+%%
+%% @end
+%%--------------------------------------------------------------------
 -spec reconcile_vmbox_seats(state(), kz_services:services()) ->
                                    {state(), kz_services:services()}.
 reconcile_vmbox_seats(#state{account_db=AccountDb
@@ -111,8 +129,12 @@ reconcile_vmbox_seats(#state{standard_seats=StandardSeats
                             }=State, Services) ->
     lager:debug("check for standard due to vm ~s", [kz_json:get_ne_binary_value(<<"id">>, Vmbox)]),
     OwnerId = kz_json:get_ne_binary_value([<<"value">>, <<"owner_id">>], Vmbox),
-    case OwnerId =:= 'undefined' orelse
-         visited(OwnerId, UsersDone) of
+    %% Only consider a user to be standard due to VM if they exist, and have
+    %% not already been included in the counts
+    case OwnerId =:= 'undefined'
+            orelse exists(OwnerId, UsersDone)
+            orelse not exists(OwnerId, UsersNext)
+    of
         'true' ->
             reconcile_vmbox_seats(State#state{vmboxes_todo=Vmboxes}, Services);
         'false' ->
@@ -131,6 +153,14 @@ reconcile_vmbox_seats(#state{standard_seats=StandardSeats
                                              }, Services)
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handle users or devices that appear in callflows. If they are in a
+%% callflow that has a DID, they are considered standard seats.
+%%
+%% @end
+%%--------------------------------------------------------------------
 -spec reconcile_standard_seats_due_to_dids(state(), kz_services:services()) ->
                                                   {state(), kz_services:services()}.
 reconcile_standard_seats_due_to_dids(#state{account_db=AccountDb
@@ -141,6 +171,7 @@ reconcile_standard_seats_due_to_dids(#state{account_db=AccountDb
     reconcile_basic_seats(State#state{devices_todo=Devices}, Services);
 reconcile_standard_seats_due_to_dids(#state{callflows_todo=[Callflow|Callflows]}=State
                                     ,Services) ->
+    %% Having a DID will make a user or device a standard seat
     case callflow_has_did(Callflow) of
         'true' ->
             CallflowId = kz_json:get_ne_binary_value(<<"id">>, Callflow),
@@ -151,6 +182,15 @@ reconcile_standard_seats_due_to_dids(#state{callflows_todo=[Callflow|Callflows]}
                                                 ,Services)
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handle all remaining seats as basic. Remaining users are done first
+%% in order to filter out their device. Then remaining devices are
+%% counted.
+%%
+%% @end
+%%--------------------------------------------------------------------
 -spec reconcile_basic_seats(state(), kz_services:services()) ->
                                    {state(), kz_services:services()}.
 reconcile_basic_seats(#state{users_next=[]
@@ -166,7 +206,8 @@ reconcile_basic_seats(#state{basic_seats=BasicSeats
     lager:debug("fall back to basic for device ~s", [DeviceId]),
 
     State1 = State#state{devices_todo=Devices},
-    case visited(DeviceId, DevicesDone) of
+    %% Only devices that have not been counted up to this point are basic
+    case exists(DeviceId, DevicesDone) of
         'true' -> reconcile_basic_seats(State1, Services);
         'false' ->
             lager:debug("device ~s is basic", [DeviceId]),
@@ -189,9 +230,16 @@ reconcile_basic_seats(#state{basic_seats=BasicSeats
                                      ,owned_devices=RemainingDevices
                                      }, Services).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Return true if a given callflow JSON object has a DID assigned.
+%%
+%% @end
+%%--------------------------------------------------------------------
 -spec callflow_has_did(kz_json:object()) -> boolean().
 callflow_has_did(Callflow) ->
-    callflow_has_did2(kz_json:get_list_value(<<"numbers">>, Callflow)).
+    callflow_has_did2(kz_json:get_list_value([<<"value">>, <<"numbers">>], Callflow)).
 
 -spec callflow_has_did2(api_binaries()) -> boolean().
 callflow_has_did2('undefined') -> 'false';
@@ -202,6 +250,14 @@ callflow_has_did2([Number|Numbers]) ->
         'false' -> callflow_has_did2(Numbers)
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% For callflows that have a DID, determine if there is a user or
+%% device in the flow that should be considered as standard.
+%%
+%% @end
+%%--------------------------------------------------------------------
 -spec check_standard_seat_in_callflow(state(), kz_services:services()) ->
                                              {state(), kz_services:services()}.
 check_standard_seat_in_callflow(#state{account_db=AccountDb
@@ -216,11 +272,12 @@ check_standard_seat_in_callflow(#state{account_db=AccountDb
     CallflowId = kz_json:get_ne_binary_value(<<"id">>, Callflow),
     {'ok', CallflowJObj} = kz_datamgr:open_cache_doc(AccountDb, CallflowId),
 
-    State1 = case basic_seat_in_callflow(CallflowJObj, UsersDone, DevicesDone) of
+    State1 = case basic_seat_in_callflow(CallflowJObj, UsersNext, UsersDone, DevicesDone) of
                   'false' -> State;
                   {'device', Device} -> device_detected_standard(Device, State);
                   {'user', User} ->
                       UserId = kz_json:get_ne_binary_value(<<"id">>, User),
+                      lager:debug("user ~s is standard due to did", [UserId]),
                       UsersNext1 = filter_out_user_id(UserId, UsersNext),
                       {UserDevices, RemainingDevices} = partition_owned_devices(UserId, OwnedDevices),
                       State#state{standard_seats=StandardSeats + 1
@@ -232,20 +289,34 @@ check_standard_seat_in_callflow(#state{account_db=AccountDb
              end,
     reconcile_standard_seats_due_to_dids(State1#state{callflows_todo=Callflows}, Services).
 
--spec basic_seat_in_callflow(kz_json:object(), kz_json:objects(), kz_json:objects()) ->
+-spec basic_seat_in_callflow(kz_json:object(), kz_json:objects(), kz_json:objects(), kz_json:objects()) ->
                                     {'device', kz_json:object()} |
                                     {'user', kz_json:object()} |
                                     'false'.
-basic_seat_in_callflow(CallflowJObj, UsersDone, DevicesDone) ->
+basic_seat_in_callflow(CallflowJObj, UsersNext, UsersDone, DevicesDone) ->
     Flow = kz_json:get_json_value(<<"flow">>, CallflowJObj, kz_json:new()),
-    basic_seat_in_callflow2([Flow], UsersDone, DevicesDone).
+    basic_seat_in_callflow2([Flow], UsersNext, UsersDone, DevicesDone).
 
-basic_seat_in_callflow2([], _, _) -> 'false';
-basic_seat_in_callflow2([Node|Nodes], UsersDone, DevicesDone) ->
+-spec basic_seat_in_callflow2(kz_json:objects(), kz_json:objects(), kz_json:objects(), kz_json:objects()) ->
+                                     {'device', kz_json:object()} |
+                                     {'user', kz_json:object()} |
+                                     'false'.
+basic_seat_in_callflow2([], _, _, _) -> 'false';
+basic_seat_in_callflow2([Node|Nodes], UsersNext, UsersDone, DevicesDone) ->
     case unmatched_basic_seat(Node, UsersDone, DevicesDone) of
         'false' ->
             Children = kz_json:values(<<"children">>, Node),
-            basic_seat_in_callflow2(Nodes ++ Children, UsersDone, DevicesDone);
+            basic_seat_in_callflow2(Nodes ++ Children, UsersNext, UsersDone, DevicesDone);
+        %% Special case - callflows can reference deleted users
+        %% Only consider this a match if the user exists and has not been matched
+        {'user', User}=Match ->
+            UserId = kz_json:get_ne_binary_value(<<"id">>, User),
+            case exists(UserId, UsersNext) of
+                'true' -> Match;
+                'false' ->
+                    Children = kz_json:values(<<"children">>, Node),
+                    basic_seat_in_callflow2(Nodes ++ Children, UsersNext, UsersDone, DevicesDone)
+            end;
         Match -> Match
     end.
 
@@ -262,7 +333,7 @@ unmatched_basic_seat(Node, UsersDone, DevicesDone) ->
         <<"user">> ->
             UserId = kz_json:get_ne_binary_value([<<"data">>, <<"id">>], Node),
             unmatched_basic_seat_user(UserId, UsersDone);
-        'false' -> 'false'
+        _ -> 'false'
     end.
 
 -spec unmatched_basic_seat_device(ne_binary(), kz_json:objects()) ->
@@ -287,6 +358,14 @@ unmatched_basic_seat_user(UserId, [User|Users]) ->
         _ -> unmatched_basic_seat_user(UserId, Users)
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% When a device is detected as a standard seat (due to DID), check if
+%% it is an owned device, and then associate the user with the seat.
+%%
+%% @end
+%%--------------------------------------------------------------------
 -spec device_detected_standard(kz_json:object(), state()) -> state().
 -spec device_detected_standard(kz_json:object(), kz_json:objects(), state()) ->
                                       state().
@@ -309,20 +388,28 @@ device_detected_standard(Device, [OwnedDevice|Devices], #state{standard_seats=St
                                                               }=State) ->
     DeviceId = kz_json:get_ne_binary_value(<<"id">>, Device),
     case kz_json:get_ne_binary_value(<<"id">>, OwnedDevice) of
+        %% The device is an owned device
         DeviceId ->
             OwnerId = kz_json:get_ne_binary_value(<<"key">>, OwnedDevice),
-            lager:debug("user ~s is standard due to did with a device they own", [OwnerId]),
-            UsersNext1 = filter_out_user_id(OwnerId, UsersNext),
-            UsersDone1 = [kz_json:set_value(<<"id">>, OwnerId, kz_json:new())
-                          | UsersDone
-                         ],
-            {UserDevices, RemainingDevices} = partition_owned_devices(OwnerId, OwnedDevices),
-            State#state{standard_seats=StandardSeats + 1
-                       ,users_next=UsersNext1
-                       ,users_done=UsersDone1
-                       ,devices_done=UserDevices ++ DevicesDone
-                       ,owned_devices=RemainingDevices
-                       };
+            %% Special case - device owner_id can reference deleted users
+            %% Only bundle this device with the owner if the owner is not deleted
+            case exists(OwnerId, UsersNext) of
+                'true' ->
+                    lager:debug("user ~s is standard due to did with a device they own", [OwnerId]),
+                    UsersNext1 = filter_out_user_id(OwnerId, UsersNext),
+                    UsersDone1 = [kz_json:set_value(<<"id">>, OwnerId, kz_json:new())
+                                  | UsersDone
+                                 ],
+                    {UserDevices, RemainingDevices} = partition_owned_devices(OwnerId, OwnedDevices),
+                    State#state{standard_seats=StandardSeats + 1
+                               ,users_next=UsersNext1
+                               ,users_done=UsersDone1
+                               ,devices_done=UserDevices ++ DevicesDone
+                               ,owned_devices=RemainingDevices
+                               };
+                'false' ->
+                    device_detected_standard(Device, Devices, State)
+            end;
         _ ->
             device_detected_standard(Device, Devices, State)
     end.
@@ -381,6 +468,13 @@ filter_out_user_id(UserId, Users) ->
                      end
                  end, Users).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Partition a list of devices by an owning user Id.
+%%
+%% @end
+%%--------------------------------------------------------------------
 -spec partition_owned_devices(ne_binary(), kz_json:objects()) ->
                                      {kz_json:objects(), kz_json:objects()}.
 partition_owned_devices(UserId, Devices) ->
@@ -391,10 +485,18 @@ partition_owned_devices(UserId, Devices) ->
                         end
                     end, Devices).
 
--spec visited(ne_binary(), kz_json:objects()) -> boolean().
-visited(_, []) -> 'false';
-visited(Id, [JObj|JObjs]) ->
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Return true if the given Id is the Id of at least one of the list
+%% of JSON objects.
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec exists(ne_binary(), kz_json:objects()) -> boolean().
+exists(_, []) -> 'false';
+exists(Id, [JObj|JObjs]) ->
     case kz_json:get_ne_binary_value(<<"id">>, JObj) of
         Id -> 'true';
-        _ -> visited(Id, JObjs)
+        _ -> exists(Id, JObjs)
     end.
