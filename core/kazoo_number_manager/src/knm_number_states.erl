@@ -245,28 +245,11 @@ in_service_from_in_service_authorize(T0=#{todo := Ns, options := Options}) ->
     lists:foldl(F, T0, Ns).
 
 -spec in_service_from_in_service_authorize(kn(), knm_numbers:options()) -> kn().
-in_service_from_in_service_authorize(Number, Options) ->
+in_service_from_in_service_authorize(Number, _Options) ->
     PhoneNumber = knm_number:phone_number(Number),
-    AssignedTo = knm_phone_number:assigned_to(PhoneNumber),
-    AssignTo = knm_number_options:assign_to(Options),
-    AuthBy = knm_number_options:auth_by(Options),
-    Sudo = ?KNM_DEFAULT_AUTH_BY =:= AuthBy,
-    case Sudo
-        %% Allowed when number is not assigned
-        orelse 'undefined' =:= AssignedTo
-        %% Assign to self or parent
-        %% Allowed when account is parent of owner or owner
-        orelse (?ACCT_HIERARCHY(AssignTo, AuthBy, 'true')
-                andalso ?ACCT_HIERARCHY(AuthBy, AssignedTo, 'true'))
-        %% Assign to another child
-        %% Allowed when account is parent of owner
-        orelse ?ACCT_HIERARCHY(AuthBy, AssignedTo, 'false')
-    of
-        false -> knm_errors:unauthorized();
-        true ->
-            Sudo
-                andalso lager:info("bypassing auth"),
-            Number
+    case knm_phone_number:is_authorized(PhoneNumber) of
+        'true' -> Number;
+        'false' -> knm_errors:unauthorized()
     end.
 
 -spec not_assigning_to_self(kn()) -> kn();
