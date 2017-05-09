@@ -363,7 +363,10 @@ validate_callflow_schema(CallflowId, Context) ->
     OnSuccess = fun(C) ->
                         C1 = on_successful_validation(CallflowId, C),
                         C2 = validate_uniqueness(CallflowId, C1),
-                        validate_number_ownership(C2)
+
+                        Doc = cb_context:doc(C2),
+                        Nums = kz_json:get_list_value(<<"numbers">>, Doc, []),
+                        cb_modules_util:validate_number_ownership(Nums, C2)
                 end,
     cb_context:validate_request_data(<<"callflows">>, Context, OnSuccess).
 
@@ -374,48 +377,6 @@ on_successful_validation('undefined', Context) ->
                       );
 on_successful_validation(CallflowId, Context) ->
     crossbar_doc:load_merge(CallflowId, Context, ?TYPE_CHECK_OPTION(kzd_callflow:type())).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec validate_number_ownership(cb_context:context()) -> cb_context:context().
--spec validate_number_ownership(ne_binaries(), cb_context:context()) ->
-                                       cb_context:context().
--spec validate_number_ownership(knm_number:knm_number()
-                               ,ne_binaries()
-                               ,cb_context:context()) -> cb_context:context().
-validate_number_ownership(Context) ->
-    NewNums = kz_json:get_value(<<"numbers">>, cb_context:doc(Context), []),
-
-    Assigned =  [Num
-                 || Num <- NewNums,
-                    Num =/= <<"undefined">>
-                ],
-
-    validate_number_ownership(Assigned, Context).
-
-validate_number_ownership([], Context) -> Context;
-validate_number_ownership([Number|Numbers], Context) ->
-    case knm_number:get(Number) of
-        {'ok', NumberObj} ->
-            validate_number_ownership(NumberObj, Numbers, Context);
-        _ -> validate_number_ownership(Numbers, Context)
-    end.
-
-validate_number_ownership(NumberObj, Numbers, Context) ->
-    AuthBy = cb_context:auth_account_id(Context),
-    PhoneNumber = knm_number:phone_number(NumberObj),
-    AssignedTo = knm_phone_number:assigned_to(PhoneNumber),
-    case kz_util:is_in_account_hierarchy(AuthBy, AssignedTo, 'true') of
-        'true' -> validate_number_ownership(Numbers, Context);
-        'false' ->
-            Number = knm_phone_number:number(PhoneNumber),
-            Message = <<"unauthorized to add/modify ", Number/binary>>,
-            cb_context:add_system_error(403, 'forbidden', Message, Context)
-    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -471,7 +432,7 @@ track_assignment('post', Context) ->
                     Num =/= <<"undefined">>
                 ],
 
-    Updates = cb_modules_util:apply_assignment_updates(Unassigned ++ Assigned),
+    Updates = cb_modules_util:apply_assignment_updates(Unassigned ++ Assigned, Context),
     cb_modules_util:log_assignment_updates(Updates);
 track_assignment('put', Context) ->
     NewNums = kz_json:get_value(<<"numbers">>, cb_context:doc(Context), []),
@@ -480,7 +441,7 @@ track_assignment('put', Context) ->
                     Num =/= <<"undefined">>
                 ],
 
-    Updates = cb_modules_util:apply_assignment_updates(Assigned),
+    Updates = cb_modules_util:apply_assignment_updates(Assigned, Context),
     cb_modules_util:log_assignment_updates(Updates);
 track_assignment('delete', Context) ->
     Nums = kz_json:get_value(<<"numbers">>, cb_context:doc(Context), []),
@@ -488,7 +449,7 @@ track_assignment('delete', Context) ->
                    || Num <- Nums,
                       Num =/= <<"undefined">>
                   ],
-    Updates = cb_modules_util:apply_assignment_updates(Unassigned),
+    Updates = cb_modules_util:apply_assignment_updates(Unassigned, Context),
     cb_modules_util:log_assignment_updates(Updates).
 
 -spec filter_callflow_list(api_binary(), kz_json:objects()) -> kz_json:objects().
