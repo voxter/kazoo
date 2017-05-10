@@ -18,6 +18,9 @@
                 "knm_local"
             ],
             "description": "number_manager carrier modules",
+            "items": {
+                "type": "string"
+            },
             "type": "array"
         },
         "classifiers": {
@@ -64,6 +67,9 @@
                 "regex"
             ],
             "description": "number_manager converters",
+            "items": {
+                "type": "string"
+            },
             "type": "array"
         },
         "default_force_outbound": {
@@ -72,14 +78,13 @@
             "type": "boolean"
         },
         "e164_converters": {
-            "description": "number_manager e164 converters"
+            "description": "number_manager e164 converters",
+            "type": "object"
         },
         "features": {
             "properties": {
                 "allow": {
-                    "properties": {
-                        "description": "Number features a number is allowed to enable or disable"
-                    }
+                    "description": "Number features a number is allowed to enable or disable"
                 }
             }
         },

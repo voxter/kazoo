@@ -31,10 +31,14 @@
                 "mailbox_message"
             ],
             "description": "datamgr no caching doc types",
+            "items": {
+                "type": "string"
+            },
             "type": "array"
         },
         "performance": {
-            "description": "datamgr performance"
+            "description": "datamgr performance",
+            "type": "object"
         }
     },
     "type": "object"

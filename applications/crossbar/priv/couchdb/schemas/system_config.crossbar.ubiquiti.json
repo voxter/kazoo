@@ -4,7 +4,8 @@
     "description": "Schema for crossbar.ubiquiti system_config",
     "properties": {
         "api_secret": {
-            "description": "crossbar.ubiquiti api secret"
+            "description": "crossbar.ubiquiti api secret",
+            "type": "string"
         },
         "api_token_expires_s": {
             "default": 1800,
@@ -14,11 +15,9 @@
         "production": {
             "properties": {
                 "sso_url": {
-                    "properties": {
-                        "default": "https://sso.ubnt.com/api/sso/v1/",
-                        "description": "crossbar.ubiquiti sso url",
-                        "type": "string"
-                    }
+                    "default": "https://sso.ubnt.com/api/sso/v1/",
+                    "description": "crossbar.ubiquiti sso url",
+                    "type": "string"
                 }
             }
         },
@@ -39,11 +38,9 @@
         "staging": {
             "properties": {
                 "sso_url": {
-                    "properties": {
-                        "default": "https://sso-stage.ubnt.com/api/sso/v1/",
-                        "description": "crossbar.ubiquiti sso url",
-                        "type": "string"
-                    }
+                    "default": "https://sso-stage.ubnt.com/api/sso/v1/",
+                    "description": "crossbar.ubiquiti sso url",
+                    "type": "string"
                 }
             }
         },

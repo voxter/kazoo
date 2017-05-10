@@ -16,23 +16,20 @@
         "call_recording": {
             "properties": {
                 "extension": {
-                    "properties": {
-                        "default": "mp3",
-                        "description": "media extension",
-                        "type": "string"
-                    }
+                    "default": "mp3",
+                    "description": "Default media file format",
+                    "type": "string"
                 },
                 "storage_retry_times": {
-                    "properties": {
-                        "default": 5,
-                        "description": "media storage retry times",
-                        "type": "integer"
-                    }
+                    "default": 5,
+                    "description": "media storage retry times",
+                    "type": "integer"
                 }
             }
         },
         "default_language": {
-            "description": "media default language"
+            "description": "media default language",
+            "type": "string"
         },
         "fix_media_names": {
             "default": true,
@@ -86,6 +83,9 @@
                 "127.0.0.0/24"
             ],
             "description": "media proxy store acls",
+            "items": {
+                "type": "string"
+            },
             "type": "array"
         },
         "proxy_store_authenticate": {
