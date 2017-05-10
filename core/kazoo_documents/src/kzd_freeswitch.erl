@@ -15,7 +15,7 @@
         ,dialed_number/1
         ,call_id/1
         ,other_leg_call_id/1
-        ,call_direction/1
+        ,call_direction/1, original_call_direction/1
         ,resource_type/1, resource_type/2
         ,channel_authorized/1
         ,hunt_destination_number/1
@@ -66,7 +66,8 @@
 caller_id_name(Props) ->
     caller_id_name(Props, 'undefined').
 caller_id_name(Props, Default) ->
-    props:get_first_defined([<<"variable_effective_caller_id_name">>
+    props:get_first_defined([<<"variable_origination_caller_id_name">>
+                            ,<<"variable_effective_caller_id_name">>
                             ,<<"Caller-Caller-ID-Name">>
                             ]
                            ,Props
@@ -78,7 +79,8 @@ caller_id_name(Props, Default) ->
 caller_id_number(Props) ->
     caller_id_number(Props, 'undefined').
 caller_id_number(Props, Default) ->
-    props:get_first_defined([<<"variable_effective_caller_id_number">>
+    props:get_first_defined([<<"variable_origination_caller_id_number">>
+                            ,<<"variable_effective_caller_id_number">>
                             ,<<"Caller-Caller-ID-Number">>
                             ]
                            ,Props
@@ -90,7 +92,8 @@ caller_id_number(Props, Default) ->
 callee_id_name(Props) ->
     callee_id_name(Props, 'undefined').
 callee_id_name(Props, Default) ->
-    props:get_first_defined([<<"variable_effective_callee_id_name">>
+    props:get_first_defined([<<"variable_origination_callee_id_name">>
+                            ,<<"variable_effective_callee_id_name">>
                             ,<<"Caller-Callee-ID-Name">>
                             ]
                            ,Props
@@ -102,7 +105,8 @@ callee_id_name(Props, Default) ->
 callee_id_number(Props) ->
     callee_id_number(Props, 'undefined').
 callee_id_number(Props, Default) ->
-    props:get_first_defined([<<"variable_effective_callee_id_number">>
+    props:get_first_defined([<<"variable_origination_callee_id_number">>
+                            ,<<"variable_effective_callee_id_number">>
                             ,<<"Caller-Callee-ID-Number">>
                             ]
                            ,Props
@@ -131,6 +135,10 @@ call_id(Props) ->
 -spec other_leg_call_id(data()) -> api_binary().
 other_leg_call_id(Props) ->
     props:get_value(<<"Other-Leg-Unique-ID">>, Props).
+
+-spec original_call_direction(data()) -> api_binary().
+original_call_direction(Props) ->
+    props:get_value(<<"Call-Direction">>, Props).
 
 -spec call_direction(data()) -> api_binary().
 call_direction(Props) ->
