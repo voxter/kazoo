@@ -34,5 +34,3 @@ Account Information
 
 
 Sent from {{system.hostname}}
-
-Transcription: {{voicemail.transcription|default:"Not Enabled"}}
