@@ -40,7 +40,6 @@
 get_db(#server{}=Conn, DbName) ->
     kz_couch_util:get_db(Conn, DbName).
 
-
 %% Document related functions --------------------------------------------------
 
 -spec open_doc(server(), ne_binary(), ne_binary()) ->
@@ -75,7 +74,7 @@ save_docs(#server{}=Conn, DbName, Docs, Options) ->
                             couchbeam_error().
 lookup_doc_rev(#server{}=Conn, DbName, DocId) ->
     case do_fetch_rev(get_db(Conn, DbName), DocId) of
-        ?NE_BINARY = Rev -> {'ok', Rev};
+        ?NE_BINARY=Rev -> {'ok', Rev};
         {'error', _}=E -> E
     end.
 

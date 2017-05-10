@@ -9,7 +9,7 @@
 -module(teletype_low_balance).
 
 -export([init/0
-        ,handle_low_balance/2
+        ,handle_low_balance/1
         ]).
 
 -include("teletype.hrl").
@@ -18,10 +18,14 @@
 -define(MOD_CONFIG_CAT, <<(?NOTIFY_CONFIG_CAT)/binary, ".", (?TEMPLATE_ID)/binary>>).
 
 -define(TEMPLATE_MACROS
-       ,kz_json:from_list(?ACCOUNT_MACROS)
+       ,kz_json:from_list(
+          [?MACRO_VALUE(<<"current_balance">>, <<"current_balance">>, <<"Current Balance">>, <<"Account's Current Credit Balance">>)
+          ,?MACRO_VALUE(<<"threshold">>, <<"threshold">>, <<"Threshold">>, <<"Account's Low Credit Balance Threshold">>)
+           | ?ACCOUNT_MACROS
+          ])
        ).
 
--define(TEMPLATE_SUBJECT, <<"Account {{account.name}} is running out of credit">>).
+-define(TEMPLATE_SUBJECT, <<"Account '{{account.name}}' is running out of credit">>).
 -define(TEMPLATE_CATEGORY, <<"account">>).
 -define(TEMPLATE_NAME, <<"Low Balance">>).
 
@@ -43,10 +47,11 @@ init() ->
                                           ,{'cc', ?TEMPLATE_CC}
                                           ,{'bcc', ?TEMPLATE_BCC}
                                           ,{'reply_to', ?TEMPLATE_REPLY_TO}
-                                          ]).
+                                          ]),
+    teletype_bindings:bind(<<"low_balance">>, ?MODULE, 'handle_low_balance').
 
--spec handle_low_balance(kz_json:object(), kz_proplist()) -> 'ok'.
-handle_low_balance(JObj, _Props) ->
+-spec handle_low_balance(kz_json:object()) -> 'ok'.
+handle_low_balance(JObj) ->
     'true' = kapi_notifications:low_balance_v(JObj),
     kz_util:put_callid(JObj),
 
@@ -62,8 +67,10 @@ handle_low_balance(JObj, _Props) ->
 -spec get_current_balance(kz_json:object()) -> ne_binary().
 get_current_balance(DataJObj) ->
     AccountId = kz_json:get_value(<<"account_id">>, DataJObj),
-    Dollars = wht_util:current_account_dollars(AccountId),
-    wht_util:pretty_print_dollars(Dollars).
+    case wht_util:current_account_dollars(AccountId) of
+        {'ok', Dollars} -> wht_util:pretty_print_dollars(Dollars);
+        {'error', _R} -> <<"not known at the moment">>
+    end.
 
 -spec get_balance_threshold(kz_json:object()) -> ne_binary().
 get_balance_threshold(DataJObj) ->

@@ -13,7 +13,7 @@
 
 -record(data_connection, {id = {kz_time:current_tstamp(), kz_binary:rand_hex(4)}
                          ,app :: atom() | '$1'
-                         ,props = #{} :: #{} | '_'
+                         ,props = #{} :: map() | '_'
                          ,server :: any() | '$2'
                          ,connected = 'false' :: boolean() | '_'
                          ,ready = 'false' :: boolean()
@@ -98,7 +98,7 @@
 -type db_classifications() :: 'account' | 'modb' |
                               'numbers' | 'aggregate' | 'system' |
                               'resource_selectors' | 'deprecated' |
-                              'undefined' | 'external'.
+                              'undefined' | 'external' | 'provisioner'.
 
 -type db_create_options() :: [{'q',integer()} | {'n',integer()} | 'ensure_other_dbs'].
 -type db_delete_options() :: ['ensure_other_dbs'].

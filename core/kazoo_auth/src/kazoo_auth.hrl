@@ -5,6 +5,7 @@
 -include_lib("kazoo/include/kz_log.hrl").
 -include_lib("kazoo/include/kz_databases.hrl").
 -include_lib("public_key/include/public_key.hrl").
+-include_lib("kazoo_stdlib/include/kazoo_json.hrl").
 
 -define(CONFIG_CAT, <<"auth">>).
 
@@ -46,7 +47,24 @@
                     ,{<<"email">>, <<"email">>}
                     ,{<<"pvt_accounts">>, <<"as">>}
                     ,{<<"scope">>, <<"scope">>}
+                    ,{<<"display_name">>, <<"displayName">>}
+                    ,{<<"photo_url">>, <<"photoUrl">>}
                     ]).
+
+-define(JWT_MAP_CLAIMS, [{access_token, <<"auth_app_token">>}
+                        ,{token_type, <<"auth_app_token_type">>}
+                         %%                         ,{id_token, <<"auth_app_id_token">>}
+                        ]).
+
+-type mfa_errors() :: 'no_provider' |
+                      'unauthorized' |
+                      ne_binary().
+
+-type mfa_result() :: 'authenticated' |
+                      {'error', mfa_errors()} |
+                      {'error', non_neg_integer(), kz_json:object()}.
+
+-define(TEST_DUO_SIGN_EXPIRE, 1234).
 
 -define(KAZOO_AUTH_HRL, 'true').
 -endif.

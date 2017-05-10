@@ -44,7 +44,7 @@
 -define(PVT_ID, <<"_id">>).
 -define(PVT_REV, <<"_rev">>).
 -ifndef(PVT_TREE).
-- define(PVT_TREE, <<"pvt_tree">>).
+-define(PVT_TREE, <<"pvt_tree">>).
 -endif.
 -define(PVT_VSN, <<"pvt_vsn">>).
 
@@ -95,15 +95,20 @@ public_fields(JObj) ->
 %%--------------------------------------------------------------------
 -spec get(ne_binary()) -> {'ok', kz_json:object()} |
                           {'error', 'not_found'}.
+-ifdef(TEST).
+get(?TEST_NEW_PORT_NUM) -> {ok, ?TEST_NEW_PORT_REQ};
+get(?NE_BINARY) -> {error, not_found}.
+-else.
 get(DID=?NE_BINARY) ->
     View = ?ACTIVE_PORT_IN_NUMBERS,
-    ViewOptions = [{'key', DID}, 'include_docs'],
+    ViewOptions = [{key, DID}, include_docs],
     case kz_datamgr:get_single_result(?KZ_PORT_REQUESTS_DB, View, ViewOptions) of
-        {'ok', Port} -> {'ok', kz_json:get_value(<<"doc">>, Port)};
-        {'error', _E} ->
+        {ok, Port} -> {ok, kz_json:get_value(<<"doc">>, Port)};
+        {error, _E} ->
             lager:debug("failed to query for port number '~s': ~p", [DID, _E]),
-            {'error', 'not_found'}
+            {error, not_found}
     end.
+-endif.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -347,11 +352,11 @@ completed_port(PortReq) ->
 transition_numbers(PortReq) ->
     PortReqId = kz_doc:id(PortReq),
     AccountId = kz_json:get_value(?PVT_ACCOUNT_ID, PortReq),
-    Options = [{'assign_to', AccountId}
-              ,{'auth_by', ?KNM_DEFAULT_AUTH_BY}
-              ,{'ported_in', 'true'}
-              ,{'public_fields', kz_json:from_list([{<<"port_id">>, PortReqId}])}
-              ,{'state', ?NUMBER_STATE_IN_SERVICE}
+    Options = [{auth_by, ?KNM_DEFAULT_AUTH_BY}
+              ,{assign_to, AccountId}
+              ,{dry_run, false}
+              ,{ported_in, true}
+              ,{public_fields, kz_json:from_list([{<<"port_id">>, PortReqId}])}
               ],
     lager:debug("creating local numbers for port ~s", [PortReqId]),
     Numbers = kz_json:get_keys(?NUMBERS_KEY, PortReq),
@@ -368,7 +373,7 @@ transition_numbers(PortReq) ->
                 _NumsNotTransitioned ->
                     lager:debug("failed to transition ~p/~p numbers"
                                ,[length(_NumsNotTransitioned), length(_OKs)]),
-                    {'error', PortReq}
+                    {error, PortReq}
             end
     end.
 

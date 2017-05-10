@@ -1,6 +1,6 @@
 ### Phone Numbers
 
-#### About Phone_numbers
+#### About Phone Numbers
 
 The 2600hz mobile API set: manage numbers.
 
@@ -14,6 +14,7 @@ Key | Description | Type | Default | Required
 `cnam` |   | `object` |   | `false`
 `cnam.display_name` |   | `string(1..15)` |   | `false`
 `cnam.inbound_lookup` |   | `boolean` |   | `false`
+`create_with_state` | The state to create numbers in | `string('aging', 'available', 'deleted', 'discovery', 'in_service', 'port_in', 'port_out', 'released', 'reserved')` |   | `false`
 `e911` |   | `object` |   | `false`
 `e911.activated_time` | The time stamp e911 was provisioned | `string` |   | `false`
 `e911.caller_name` | The name that will show to emergency services | `string(3..)` |   | `false`
@@ -29,7 +30,7 @@ Key | Description | Type | Default | Required
 `e911.longitude` | The e911 provisioning system calculated service address longitude | `string` |   | `false`
 `e911.plus_four` | The extended zip/postal code where the number is in service | `string` |   | `false`
 `e911.postal_code` | The zip/postal code where the number is in service | `string` |   | `true`
-`e911.region` | The region (state) where the number is in service | `string` |   | `true`
+`e911.region` | The region (state) where the number is in service | `string(2)` |   | `true`
 `e911.status` | The e911 provisioning system status for this service address | `string('INVALID', 'GEOCODED', 'PROVISIONED', 'REMOVED', 'ERROR')` |   | `false`
 `e911.street_address` | The street address where the number is in service | `string` |   | `true`
 `porting` | Porting (in) information for the phone number | `object` |   | `false`
@@ -140,6 +141,51 @@ curl -v -X GET \
     "request_id": "{REQUEST_ID}",
     "revision": "{REVISION}",
     "status": "success"
+}
+```
+
+
+#### See how many digits a `{PREFIX}` can take
+
+> GET /v2/accounts/{ACCOUNT_ID}/phone_numbers/carriers_info
+
+Depending on your carriers configuration you may be allowed to query numbers
+by NPA-NXX instead of just NPA.
+
+```shell
+curl -v -X GET \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/carriers_info
+```
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": {
+        "maximal_prefix_length": 3,
+        "usable_carriers": [
+            "bandwidth2",
+            "bandwidth",
+            "inum",
+            "local",
+            "inventory",
+            "managed",
+            "mdn",
+            "other",
+            "simwood",
+            "telnyx",
+            "vitelity",
+            "voip_innovations"
+        ],
+        "usable_creation_states": [
+            "reserved",
+            "in_service"
+        ]
+    },
+    "node": "{NODE}",
+    "request_id": "{REQUEST_ID}",
+    "status": "success",
+    "timestamp": "2017-05-01T20:31:35",
+    "version": "4.0.0"
 }
 ```
 
@@ -404,6 +450,8 @@ curl -v -X POST \
 #### Add a number to the database
 
 Adds a number to the database, returning its properties.
+
+Note: set field `"create_with_state"` in payload to your desired number state (defaults to `"reserved"`).
 
 Note: payload is facultative.
 
@@ -829,6 +877,8 @@ curl -v -X POST \
 
 #### Add a list of numbers to the database
 
+Note: set field `"create_with_state"` in payload to your desired number state (defaults to `"reserved"`).
+
 > PUT /v2/accounts/{ACCOUNT_ID}/phone_numbers/collection
 
 ```shell
@@ -1008,6 +1058,60 @@ curl -v -X POST \
 ```
 
 
+#### Fix `used_by` field (and others) of a specific number
+
+> POST /v2/accounts/{ACCOUNT_ID}/phone_numbers/fix/{PHONE_NUMBER}
+
+```shell
+curl -v -X POST \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/fix/%2B15554445563
+```
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": {
+        "_read_only": {
+            "created": 63635220353,
+            "features": [
+                "inbound_cnam",
+                "outbound_cnam"
+            ],
+            "features_available": [
+                "cnam",
+                "e911",
+                "port",
+                "prepend"
+            ],
+            "modified": 63635220353,
+            "state": "in_service",
+            "used_by": "callflow"
+        },
+        "cnam": {
+            "display_name": "My Main Num2",
+            "inbound_lookup": true
+        },
+        "features": [
+            "inbound_cnam",
+            "outbound_cnam"
+        ],
+        "id": "+15554445563",
+        "state": "in_service",
+        "ui_metadata": {
+            "origin": "common",
+            "ui": "monster-ui",
+            "version": "3.23"
+        },
+        "used_by": "callflow"
+    },
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
+    "status": "success"
+}
+```
+
+
 #### Return which account a number belongs to
 
 > GET /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}/identify
@@ -1032,6 +1136,22 @@ curl -v -X GET \
     "request_id": "{REQUEST_ID}",
     "revision": "{REVISION}",
     "status": "success"
+}
+```
+
+###### Number not in service or account disabled
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": {
+        "account_id": "009deaaadc97b2ae693c6cc4920988e8",
+        "cause": "not_in_service"
+    },
+    "error": "400",
+    "message": "client error",
+    "request_id": "{REQUEST_ID}",
+    "status": "error"
 }
 ```
 
@@ -1339,14 +1459,14 @@ curl -v -X PUT \
 {
     "data": {
         "used_by": "callflow",
-        "id": "{{NUMBER}}",
+        "id": "{NUMBER}",
         "e911": {
-            "caller_name": "{{NAME}}",
-            "postal_code": "{{ZIP_CODE}}",
-            "street_address": "{{ADDRESS}}",
-            "extended_address": "{{EXTENDED}}",
-            "locality": "{{CITY}}",
-            "region": "{{STATE}}"
+            "caller_name": "{NAME}",
+            "postal_code": "{ZIP_CODE}",
+            "street_address": "{ADDRESS}",
+            "extended_address": "{EXTENDED}",
+            "locality": "{CITY}",
+            "region": "{STATE}"
         }
     }
 }
@@ -1362,12 +1482,12 @@ curl -v -X PUT \
         "address": {
             "invalid": {
                 "cause": {
-                    "caller_name": "{{NAME}}",
-                    "postal_code": "{{ZIP_CODE}}",
-                    "street_address": "{{ADDRESS}}",
-                    "extended_address": "{{EXTENDED}}",
-                    "locality": "{{CITY}}",
-                    "region": "{{STATE}}"
+                    "caller_name": "{NAME}",
+                    "postal_code": "{ZIP_CODE}",
+                    "street_address": "{ADDRESS}",
+                    "extended_address": "{EXTENDED}",
+                    "locality": "{CITY}",
+                    "region": "{STATE}"
                 },
                 "message": "Location is not geocoded"
             }
@@ -1386,24 +1506,24 @@ curl -v -X PUT \
         "multiple_choice": {
             "e911": {
                 "cause": {
-                    "postal_code": "{{ZIP_CODE}}",
-                    "street_address": "{{ADDRESS}}",
-                    "extended_address": "{{EXTENDED}}",
-                    "locality": "{{CITY}}",
-                    "region": "{{STATE}}"
+                    "postal_code": "{ZIP_CODE}",
+                    "street_address": "{ADDRESS}",
+                    "extended_address": "{EXTENDED}",
+                    "locality": "{CITY}",
+                    "region": "{STATE}"
                 },
                 "details": [{
-                    "postal_code": "{{ZIP_CODE}}",
-                    "street_address": "{{ADDRESS}}",
-                    "extended_address": "{{EXTENDED}}",
-                    "locality": "{{CITY}}",
-                    "region": "{{STATE}}"
+                    "postal_code": "{ZIP_CODE}",
+                    "street_address": "{ADDRESS}",
+                    "extended_address": "{EXTENDED}",
+                    "locality": "{CITY}",
+                    "region": "{STATE}"
                 }, {
-                    "postal_code": "{{ZIP_CODE}}",
-                    "street_address": "{{ADDRESS}}",
-                    "extended_address": "{{EXTENDED}}",
-                    "locality": "{{CITY}}",
-                    "region": "{{STATE}}"
+                    "postal_code": "{ZIP_CODE}",
+                    "street_address": "{ADDRESS}",
+                    "extended_address": "{EXTENDED}",
+                    "locality": "{CITY}",
+                    "region": "{STATE}"
                 }],
                 "message": "more than one address found"
             }
@@ -1421,7 +1541,7 @@ curl -v -X PUT \
 {
     "data": {
         "used_by": "callflow",
-        "id": "{{NUMBER}}",
+        "id": "{NUMBER}",
         "e911": {
             "street_address": "116 NATOMA ST",
             "extended_address": "APT 116",

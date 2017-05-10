@@ -606,8 +606,10 @@ select_bookkeeper(BillingId) ->
 check_bookkeeper(BillingId, Amount) ->
     case select_bookkeeper(BillingId) of
         'kz_bookkeeper_local' ->
-            Balance = wht_util:current_balance(BillingId),
-            Balance - Amount >= 0;
+            case wht_util:current_balance(BillingId) of
+                {'ok', Balance} -> Balance - Amount >= 0;
+                {'error', _} -> false
+            end;
         Bookkeeper ->
             CurrentStatus = current_service_status(BillingId),
             Bookkeeper:is_good_standing(BillingId, CurrentStatus)
@@ -930,6 +932,9 @@ maybe_update_diff(_Key, _ItemQuantity, 'undefined', Updates) ->
 maybe_update_diff(_Key, 0, 0, Updates) ->
     lager:debug("not updating ~p", [_Key]),
     Updates;
+maybe_update_diff(_Key, ItemQuantity, ItemQuantity, Updates) ->
+    lager:debug("same quantity for ~p, ignoring", [_Key]),
+    Updates;
 maybe_update_diff(Key, ItemQuantity, UpdateQuantity, Updates) ->
     lager:debug("updating ~p from ~p to ~p", [Key, ItemQuantity, UpdateQuantity]),
     kz_json:set_value(Key, UpdateQuantity - ItemQuantity, Updates).
@@ -973,7 +978,7 @@ category_quantity(CategoryId, ItemExceptions, #kz_services{updates=UpdatedQuanti
     CatUpdates = kz_json:get_value(CategoryId, UpdatedQuantities, kz_json:new()),
 
     %% replaces CatQs values with CatUpdate
-    Quantities = kz_json:merge_recursive(CatQuantities, CatUpdates),
+    Quantities = kz_json:merge(CatQuantities, CatUpdates),
 
     %% Removes ItemExceptions, if any
     QsMinusEx = kz_json:delete_keys(ItemExceptions, Quantities),
@@ -1099,7 +1104,7 @@ calculate_services_charges(#kz_services{jobj=ServiceJObj
                           ,ServicePlans
                           ) ->
     CurrentQuantities = kzd_services:quantities(ServiceJObj),
-    UpdatedQuantities = kz_json:merge_jobjs(UpdatesJObj, CurrentQuantities),
+    UpdatedQuantities = kz_json:merge(CurrentQuantities, UpdatesJObj),
 
     UpdatedServiceJObj = kzd_services:set_quantities(ServiceJObj, UpdatedQuantities),
 

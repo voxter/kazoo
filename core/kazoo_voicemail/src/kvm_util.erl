@@ -251,13 +251,13 @@ publish_saved_notify(MediaId, BoxId, Call, Length, Props) ->
                  ,{<<"Account-DB">>, kapps_call:account_db(Call)}
                  ,{<<"Account-ID">>, kapps_call:account_id(Call)}
                  ,{<<"Voicemail-Box">>, BoxId}
-                 ,{<<"Voicemail-Name">>, MediaId}
+                 ,{<<"Voicemail-ID">>, MediaId}
                  ,{<<"Caller-ID-Number">>, get_caller_id_number(Call)}
                  ,{<<"Caller-ID-Name">>, get_caller_id_name(Call)}
                  ,{<<"Voicemail-Timestamp">>, kz_time:current_tstamp()}
                  ,{<<"Voicemail-Length">>, Length}
                  ,{<<"Voicemail-Transcription">>, Transcription}
-                 ,{<<"Call-ID">>, kapps_call:call_id(Call)}
+                 ,{<<"Call-ID">>, kapps_call:call_id_direct(Call)}
                   | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                  ],
 
@@ -282,12 +282,12 @@ publish_voicemail_saved(Length, BoxId, Call, MediaId, Timestamp) ->
            ,{<<"Account-DB">>, kapps_call:account_db(Call)}
            ,{<<"Account-ID">>, kapps_call:account_id(Call)}
            ,{<<"Voicemail-Box">>, BoxId}
-           ,{<<"Voicemail-Name">>, MediaId}
+           ,{<<"Voicemail-ID">>, MediaId}
            ,{<<"Caller-ID-Number">>, get_caller_id_number(Call)}
            ,{<<"Caller-ID-Name">>, get_caller_id_name(Call)}
            ,{<<"Voicemail-Timestamp">>, Timestamp}
            ,{<<"Voicemail-Length">>, Length}
-           ,{<<"Call-ID">>, kapps_call:call_id(Call)}
+           ,{<<"Call-ID">>, kapps_call:call_id_direct(Call)}
             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
     kapi_notifications:publish_voicemail_saved(Prop),
@@ -359,7 +359,7 @@ maybe_transcribe(_, _, 'false') -> 'undefined'.
 maybe_transcribe(_, _, _, 'undefined') -> 'undefined';
 maybe_transcribe(_, _, <<>>, _) -> 'undefined';
 maybe_transcribe(Db, MediaDoc, Bin, ContentType) ->
-    case kapps_speech:asr_freeform(Bin, ContentType) of
+    case kazoo_asr:freeform(Bin, ContentType) of
         {'ok', Resp} ->
             lager:info("transcription resp: ~p", [Resp]),
             MediaDoc1 = kz_json:set_value(<<"transcription">>, Resp, MediaDoc),

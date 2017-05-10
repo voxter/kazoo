@@ -21,6 +21,7 @@
         ,find_account_admin/1
         ,find_account_id/1
         ,find_account_db/2
+        ,find_account_params/1
         ,is_notice_enabled/3, is_notice_enabled_default/1
         ,should_handle_notification/1
 
@@ -31,6 +32,9 @@
 
         ,open_doc/3
         ,is_preview/1
+        ,read_preview_doc/1
+        ,fix_timestamp/1, fix_timestamp/2, fix_timestamp/3
+        ,build_call_data/2
 
         ,public_proplist/2
 
@@ -45,6 +49,10 @@
 -define(TEMPLATE_RENDERING_ORDER, [{?TEXT_PLAIN, 3}
                                   ,{?TEXT_HTML, 2}
                                   ]).
+
+-define(NOTICE_ENABLED_BY_DEFAULT,
+        kapps_config:get_is_true(?APP_NAME, <<"notice_enabled_by_default">>, 'true')
+       ).
 
 -spec send_email(email_map(), ne_binary(), rendered_templates()) ->
                         'ok' | {'error', any()}.
@@ -348,29 +356,31 @@ account_params(DataJObj) ->
             [];
         AccountId ->
             put('account_id', AccountId),
-            find_account_params(DataJObj, AccountId)
+            find_account_params(AccountId)
     end.
 
--spec find_account_params(kz_json:object(), ne_binary()) -> kz_proplist().
-find_account_params(DataJObj, AccountId) ->
-    case open_doc(<<"account">>, AccountId, DataJObj) of
+-spec find_account_params(api_binary()) -> kz_proplist().
+find_account_params('undefined') -> [];
+find_account_params(AccountId) ->
+    case kz_datamgr:open_cache_doc(kz_util:format_account_db(AccountId), AccountId) of
         {'ok', AccountJObj} ->
             props:filter_undefined([{<<"name">>, kz_account:name(AccountJObj)}
                                    ,{<<"realm">>, kz_account:realm(AccountJObj)}
                                    ,{<<"id">>, kz_account:id(AccountJObj)}
                                    ,{<<"language">>, kz_account:language(AccountJObj)}
                                    ,{<<"timezone">>, kz_account:timezone(AccountJObj)}
-                                    | maybe_add_parent_params(AccountJObj)
+                                    | maybe_add_parent_params(AccountId, AccountJObj)
                                    ]);
         {'error', _E} ->
             lager:debug("failed to find account doc for ~s: ~p", [AccountId, _E]),
             []
     end.
 
--spec maybe_add_parent_params(kz_json:object()) -> kz_proplist().
-maybe_add_parent_params(AccountJObj) ->
+-spec maybe_add_parent_params(ne_binary(), kz_json:object()) -> kz_proplist().
+maybe_add_parent_params(AccountId, AccountJObj) ->
     case kz_account:parent_account_id(AccountJObj) of
         'undefined' -> [];
+        AccountId -> [];
         ParentAccountId ->
             {'ok', ParentAccountJObj} = kz_account:fetch(ParentAccountId),
             [{<<"parent_name">>, kz_account:name(ParentAccountJObj)}
@@ -629,7 +639,7 @@ is_account_notice_enabled(AccountId, TemplateKey, ResellerAccountId) ->
     case kz_datamgr:open_cache_doc(AccountDb, TemplateId) of
         {'ok', TemplateJObj} ->
             lager:debug("account ~s has ~s, checking if enabled", [AccountId, TemplateId]),
-            kz_notification:is_enabled(TemplateJObj);
+            kz_notification:is_enabled(TemplateJObj, ?NOTICE_ENABLED_BY_DEFAULT);
         _Otherwise when AccountId =/= ResellerAccountId ->
             lager:debug("account ~s is mute, checking parent", [AccountId]),
             is_account_notice_enabled(
@@ -647,7 +657,7 @@ is_notice_enabled_default(TemplateKey) ->
     case kz_datamgr:open_cache_doc(?KZ_CONFIG_DB, TemplateId) of
         {'ok', TemplateJObj} ->
             lager:debug("system has ~s, checking if enabled", [TemplateId]),
-            kz_notification:is_enabled(TemplateJObj);
+            kz_notification:is_enabled(TemplateJObj, ?NOTICE_ENABLED_BY_DEFAULT);
         _Otherwise ->
             lager:debug("system is mute, ~s not enabled", [TemplateId]),
             'false'
@@ -672,51 +682,41 @@ find_addresses(DataJObj, TemplateMetaJObj, ConfigCat) ->
 
 find_addresses(_DataJObj, _TemplateMetaJObj, _ConfigCat, [], Acc) -> Acc;
 find_addresses(DataJObj, TemplateMetaJObj, ConfigCat, [Key|Keys], Acc) ->
-    find_addresses(
-      DataJObj
+    find_addresses(DataJObj
                   ,TemplateMetaJObj
                   ,ConfigCat
                   ,Keys
                   ,[find_address(DataJObj, TemplateMetaJObj, ConfigCat, Key)|Acc]
-     ).
+                  ).
 
 -spec find_address(kz_json:object(), kz_json:object(), ne_binary(), kz_json:path()) ->
                           {kz_json:path(), api_binaries()}.
 -spec find_address(kz_json:object(), kz_json:object(), ne_binary(), kz_json:path(), api_binary()) ->
                           {kz_json:path(), api_binaries()}.
 find_address(DataJObj, TemplateMetaJObj, ConfigCat, Key) ->
-    find_address(
-      DataJObj
+    find_address(DataJObj
                 ,TemplateMetaJObj
                 ,ConfigCat
                 ,Key
                 ,kz_json:find([Key, <<"type">>]
                              ,[DataJObj, TemplateMetaJObj]
                              )
-     ).
+                ).
 
 find_address(DataJObj, TemplateMetaJObj, _ConfigCat, Key, 'undefined') ->
     lager:debug("email type for '~s' not defined in template, checking just the key", [Key]),
     {Key, check_address_value(kz_json:find(Key, [DataJObj, TemplateMetaJObj]))};
 find_address(DataJObj, TemplateMetaJObj, _ConfigCat, Key, ?EMAIL_SPECIFIED) ->
     lager:debug("checking template for '~s' email addresses", [Key]),
-    Emails = kz_json:find([Key, <<"email_addresses">>], [DataJObj, TemplateMetaJObj]),
+    Emails = kz_json:find_first_defined([[Key, <<"email_addresses">>], Key], [DataJObj, TemplateMetaJObj]),
     {Key, check_address_value(Emails)};
 find_address(DataJObj, TemplateMetaJObj, _ConfigCat, Key, ?EMAIL_ORIGINAL) ->
     lager:debug("checking data for '~s' email address(es)", [Key]),
-    {Key, find_address(Key, DataJObj, TemplateMetaJObj)};
+    Emails = kz_json:find_first_defined([Key, [Key, <<"email_addresses">>]], [DataJObj, TemplateMetaJObj]),
+    {Key, check_address_value(Emails)};
 find_address(DataJObj, _TemplateMetaJObj, ConfigCat, Key, ?EMAIL_ADMINS) ->
     lager:debug("looking for admin emails for '~s'", [Key]),
     {Key, find_admin_emails(DataJObj, ConfigCat, Key)}.
-
--spec find_address(kz_json:path(), kz_json:object(), kz_json:object()) ->
-                          api_binaries().
-find_address(Key, DataJObj, TemplateMetaJObj) ->
-    case check_address_value(kz_json:get_value(Key, DataJObj)) of
-        'undefined' ->
-            check_address_value(kz_json:get_value(Key, TemplateMetaJObj));
-        Emails -> Emails
-    end.
 
 -spec check_address_value(binary() | binaries() | kz_json:object() | 'undefined') -> api_binaries().
 check_address_value('undefined') -> 'undefined';
@@ -774,12 +774,12 @@ open_doc(Type, DocId, DataJObj) ->
 maybe_load_preview(_Type, Error, 'false') ->
     Error;
 maybe_load_preview(Type, _Error, 'true') ->
-    read_doc(Type).
+    read_preview_doc(Type).
 
--spec read_doc(ne_binary()) ->
-                      {'ok', kz_json:object()} |
-                      {'error', read_file_error()}.
-read_doc(File) ->
+-spec read_preview_doc(ne_binary()) ->
+                              {'ok', kz_json:object()} |
+                              {'error', read_file_error()}.
+read_preview_doc(File) ->
     AppDir = code:lib_dir('teletype'),
     PreviewFile = filename:join([AppDir, "priv", "preview_data", <<File/binary, ".json">>]),
     case file:read_file(PreviewFile) of
@@ -797,10 +797,104 @@ is_preview(DataJObj) ->
       kz_json:get_first_defined([<<"Preview">>, <<"preview">>], DataJObj, 'false')
      ).
 
+%% make timestamp ready to proccess by "date" filter in ErlyDTL
+%% returns a prop list with local, utc time and timezone
+-spec fix_timestamp(gregorian_seconds() | api_ne_binary()) -> kz_proplist().
+fix_timestamp(Timestamp) ->
+    fix_timestamp(Timestamp, <<"GMT">>).
+
+-spec fix_timestamp(gregorian_seconds() | api_ne_binary(), api_binary() | kz_json:object()) -> kz_proplist().
+fix_timestamp('undefined', Thing) ->
+    fix_timestamp(kz_time:current_tstamp(), Thing);
+fix_timestamp(?NE_BINARY=Timestamp, TZ) ->
+    fix_timestamp(kz_term:to_integer(Timestamp), TZ);
+fix_timestamp(Timestamp, ?NE_BINARY=TZ) when is_integer(Timestamp) ->
+    DateTime = calendar:gregorian_seconds_to_datetime(Timestamp),
+    ClockTimezone = kapps_config:get_string(<<"servers">>, <<"clock_timezone">>, <<"UTC">>),
+
+    lager:debug("using tz ~s (system ~s) for ~p", [TZ, ClockTimezone, DateTime]),
+
+    props:filter_undefined(
+      [{<<"utc">>, localtime:local_to_utc(DateTime, ClockTimezone)}
+      ,{<<"local">>, localtime:local_to_local(DateTime, ClockTimezone, TZ)}
+      ,{<<"timezone">>, TZ}
+      ]);
+fix_timestamp(Timestamp, 'undefined') ->
+    fix_timestamp(Timestamp, <<"GMT">>);
+fix_timestamp(Timestamp, DataJObj) ->
+    Params = account_params(DataJObj),
+    TZ = props:get_value(<<"timezone">>, Params),
+    fix_timestamp(Timestamp, TZ).
+
+-spec fix_timestamp(gregorian_seconds() | api_ne_binary(), api_binary() | kz_json:object(), api_binary() | kz_json:object()) -> kz_proplist().
+fix_timestamp(Timestamp, 'undefined', Thing) ->
+    fix_timestamp(Timestamp, Thing);
+fix_timestamp(Timestamp, TZ, _Thing) ->
+    fix_timestamp(Timestamp, TZ).
+
+-spec build_call_data(kz_json:object(), api_ne_binary()) -> kz_proplist().
+build_call_data(DataJObj, Timezone) ->
+    props:filter_empty(
+      [{<<"caller_id">>, build_caller_id_data(DataJObj)}
+      ,{<<"callee_id">>, build_callee_id_data(DataJObj)}
+      ,{<<"date_called">>, build_date_called_data(DataJObj, Timezone)}
+      ,{<<"from">>, build_from_data(DataJObj)}
+      ,{<<"to">>, build_to_data(DataJObj)}
+      ,{<<"call_id">>, kz_json:get_value(<<"call_id">>, DataJObj)}
+      ]).
+
+-spec build_caller_id_data(kz_json:object()) -> kz_proplist().
+build_caller_id_data(DataJObj) ->
+    props:filter_undefined(
+      [{<<"name">>, kz_json:get_value(<<"caller_id_name">>, DataJObj)}
+      ,{<<"number">>, kz_json:get_value(<<"caller_id_number">>, DataJObj)}
+      ]).
+
+-spec build_callee_id_data(kz_json:object()) -> kz_proplist().
+build_callee_id_data(DataJObj) ->
+    props:filter_undefined(
+      [{<<"name">>, kz_json:get_value(<<"callee_id_name">>, DataJObj)}
+      ,{<<"number">>, kz_json:get_value(<<"callee_id_number">>, DataJObj)}
+      ]).
+
+-spec build_date_called_data(kz_json:object(), api_ne_binary()) -> kz_proplist().
+build_date_called_data(DataJObj, Timezone) ->
+    DateCalled = find_date_called(DataJObj),
+    Timezone = kz_json:get_ne_binary_value(<<"timezone">>, DataJObj, Timezone),
+    fix_timestamp(DateCalled, DataJObj, Timezone).
+
+-spec find_date_called(kz_json:object()) -> gregorian_seconds().
+find_date_called(DataJObj) ->
+    kz_term:to_integer(
+      kz_json:get_first_defined([<<"voicemail_timestamp">>
+                                ,<<"fax_timestamp">>
+                                ,<<"timestamp">>
+                                ]
+                               ,DataJObj
+                               ,kz_time:current_tstamp()
+                               )
+     ).
+
+-spec build_from_data(kz_json:object()) -> kz_proplist().
+build_from_data(DataJObj) ->
+    FromE164 = kz_json:get_first_defined([<<"from_user">>, <<"caller_id_number">>], DataJObj),
+    props:filter_undefined(
+      [{<<"user">>, knm_util:pretty_print(FromE164)}
+      ,{<<"realm">>, kz_json:get_value(<<"from_realm">>, DataJObj)}
+      ]).
+
+-spec build_to_data(kz_json:object()) -> kz_proplist().
+build_to_data(DataJObj) ->
+    ToE164 = kz_json:get_first_defined([<<"to_user">>, <<"callee_id_number">>], DataJObj),
+    props:filter_undefined(
+      [{<<"user">>, knm_util:pretty_print(ToE164)}
+      ,{<<"realm">>, kz_json:get_value(<<"to_realm">>, DataJObj)}
+      ]).
+
 -spec public_proplist(kz_json:path(), kz_json:object()) -> kz_proplist().
 public_proplist(Key, JObj) ->
-    kz_json:to_proplist(
-      kz_json:public_fields(
+    kz_json:recursive_to_proplist(
+      kz_doc:public_fields(
         kz_json:get_value(Key, JObj, kz_json:new())
        )
      ).

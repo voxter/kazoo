@@ -18,7 +18,7 @@
 -behaviour(gen_cf_action).
 
 -include("callflow.hrl").
--include_lib("kazoo_json/include/kazoo_json.hrl").
+-include_lib("kazoo_stdlib/include/kazoo_json.hrl").
 
 -export([handle/2]).
 -export([new_message/4]).
@@ -54,26 +54,12 @@
                                 ,[?KEY_VOICEMAIL, ?KEY_MAX_BOX_NUMBER_LENGTH]
                                 ,15
                                 )).
--define(DEFAULT_VM_EXTENSION
-       ,kapps_config:get(?CF_CONFIG_CAT
-                        ,[?KEY_VOICEMAIL, ?KEY_EXTENSION]
-                        ,<<"mp3">>
-                        )
-       ).
 
 -define(MAX_LOGIN_ATTEMPTS
        ,kapps_config:get(?CF_CONFIG_CAT
                         ,[?KEY_VOICEMAIL, ?KEY_MAX_LOGIN_ATTEMPTS]
                         ,3
                         )
-       ).
-
--define(ACCOUNT_VM_EXTENSION(AccountId)
-       ,kapps_account_config:get_global(AccountId
-                                       ,?CF_CONFIG_CAT
-                                       ,[?KEY_VOICEMAIL, ?KEY_EXTENSION]
-                                       ,<<"mp3">>
-                                       )
        ).
 
 -define(DEFAULT_MAX_PIN_LENGTH
@@ -418,10 +404,8 @@ compose_voicemail(#mailbox{max_message_count=MaxCount
                           }=Box, _, Call) when Count >= MaxCount
                                                andalso MaxCount > 0 ->
     lager:debug("voicemail box is full, cannot hold more messages, sending notification"),
-    Props = [{<<"Account-DB">>, kapps_call:account_db(Call)}
-            ,{<<"Account-ID">>, kapps_call:account_id(Call)}
+    Props = [{<<"Account-ID">>, kapps_call:account_id(Call)}
             ,{<<"Voicemail-Box">>, VMBId}
-            ,{<<"Voicemail-Number">>, VMBN}
             ,{<<"Max-Message-Count">>, MaxCount}
             ,{<<"Message-Count">>, Count}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
@@ -715,6 +699,8 @@ record_voicemail(AttachmentName, #mailbox{max_message_length=MaxMessageLength
                              ]),
     kapps_call_command:tones([Tone], Call),
     lager:info("composing new voicemail to ~s", [AttachmentName]),
+    Routins = [{fun kapps_call:set_message_left/2, 'true'}
+              ],
     case kapps_call_command:b_record(AttachmentName, ?ANY_DIGIT, kz_term:to_binary(MaxMessageLength), Call) of
         {'ok', Msg} ->
             Length = kz_json:get_integer_value(<<"Length">>, Msg, 0),
@@ -722,15 +708,18 @@ record_voicemail(AttachmentName, #mailbox{max_message_length=MaxMessageLength
                 andalso review_recording(AttachmentName, 'true', Box, Call)
             of
                 'false' ->
+                    cf_exe:update_call(Call, Routins),
                     new_message(AttachmentName, Length, Box, Call);
                 {'ok', 'record'} ->
                     record_voicemail(tmp_file(Ext), Box, Call);
                 {'ok', _Selection} ->
+                    cf_exe:update_call(Call, Routins),
                     cf_util:start_task(fun new_message/4, [AttachmentName, Length, Box], Call),
                     _ = kapps_call_command:prompt(<<"vm-saved">>, Call),
                     _ = kapps_call_command:prompt(<<"vm-thank_you">>, Call),
                     'ok';
                 {'branch', Flow} ->
+                    cf_exe:update_call(Call, Routins),
                     _ = new_message(AttachmentName, Length, Box, Call),
                     _ = kapps_call_command:prompt(<<"vm-saved">>, Call),
                     {'branch', Flow}
@@ -1181,7 +1170,7 @@ forward_message(AttachmentName, Length, Message, SrcBoxId, #mailbox{mailbox_numb
                     ]
                    ),
     case kvm_message:forward_message(Call, Message, SrcBoxId, NewMsgProps) of
-        'ok' -> send_mwi_update(DestBox, Call);
+        {'ok', NewCall} -> send_mwi_update(DestBox, NewCall);
         {'error', _, _Msg} ->
             lager:warning("failed to save forwarded voice mail message recorded media : ~p", [_Msg])
     end.
@@ -1602,7 +1591,7 @@ change_pin(#mailbox{mailbox_id=Id
 
         case validate_box_schema(kz_json:set_value(<<"pin">>, Pin, JObj)) of
             {'ok', PublicJObj} ->
-                PrivJObj = kz_json:private_fields(JObj),
+                PrivJObj = kz_doc:private_fields(JObj),
 
                 JObj1 = kz_json:merge_jobjs(PrivJObj, PublicJObj),
 
@@ -1681,7 +1670,7 @@ invalid_pin(Box, Call) ->
                                  {'error', any()}.
 validate_box_schema(JObj) ->
     {'ok', Schema} = kz_json_schema:load(<<"vmboxes">>),
-    case jesse:validate_with_schema(Schema, kz_json:public_fields(JObj)) of
+    case jesse:validate_with_schema(Schema, kz_doc:public_fields(JObj)) of
         {'ok', _}=OK -> OK;
         {'error', _Errors} ->
             lager:debug("failed to validate vmbox schema: ~p", [_Errors]),
@@ -1739,7 +1728,7 @@ new_message(AttachmentName, Length, #mailbox{mailbox_number=BoxNum
                   ,{<<"Timezone">>, Timezone}
                   ],
     case kvm_message:new(Call, NewMsgProps) of
-        'ok' -> send_mwi_update(Box, Call);
+        {'ok', NewCall} -> send_mwi_update(Box, NewCall);
         {'error', _, _Msg} -> lager:warning("failed to save voice mail message recorded media : ~p", [_Msg])
     end.
 
@@ -1754,7 +1743,6 @@ new_message(AttachmentName, Length, #mailbox{mailbox_number=BoxNum
 get_mailbox_profile(Data, Call) ->
     Id = maybe_use_variable(Data, Call),
     AccountDb = kapps_call:account_db(Call),
-    AccountId = kapps_call:account_id(Call),
 
     case get_mailbox_doc(AccountDb, Id, Data, Call) of
         {'ok', MailboxJObj} ->
@@ -1833,7 +1821,7 @@ get_mailbox_profile(Data, Call) ->
                     ,not_configurable=
                          kz_json:is_true(<<"not_configurable">>, MailboxJObj, 'false')
                     ,account_db = AccountDb
-                    ,media_extension = kz_json:get_ne_binary_value(<<"media_extension">>, MailboxJObj, ?ACCOUNT_VM_EXTENSION(AccountId))
+                    ,media_extension = kzd_voicemail_box:media_extension(MailboxJObj)
                     ,forward_type = ?DEFAULT_FORWARD_TYPE
                     };
         {'error', R} ->

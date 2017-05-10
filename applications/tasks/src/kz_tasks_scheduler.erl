@@ -12,9 +12,11 @@
 %%% Public API
 -export([start_link/0]).
 -export([start/1
-        ,restart/1
         ,remove/1
         ]).
+
+%%% For playfull debugging
+-export([restart/1]).
 
 %%% API used by workers
 -export([worker_finished/4
@@ -36,7 +38,7 @@
 
 -include("tasks.hrl").
 -include_lib("kazoo_tasks/include/task_fields.hrl").
--include_lib("kazoo_json/include/kazoo_json.hrl").
+-include_lib("kazoo_stdlib/include/kazoo_json.hrl").
 
 -define(SERVER, {'via', 'kz_globals', ?MODULE}).
 
@@ -44,6 +46,10 @@
         kapps_config:get_integer(?CONFIG_CAT, <<"wait_after_row_ms">>, 500)).
 -define(PROGRESS_AFTER_PROCESSED,
         kapps_config:get_integer(?CONFIG_CAT, <<"send_progress_after_processed">>, 1000)).
+-define(PAUSE_BETWEEN_UPLOAD_ATTEMPTS,
+        kapps_config:get_integer(?CONFIG_CAT, <<"pause_between_upload_output_attempts_s">>, 10)).
+-define(UPLOAD_ATTEMPTS,
+        kapps_config:get_integer(?CONFIG_CAT, <<"attempt_upload_output_times">>, 5)).
 
 -record(state, {tasks = [] :: [kz_tasks:task()]
                }).
@@ -153,23 +159,25 @@ worker_finished(TaskId=?NE_BINARY, TotalSucceeded, TotalFailed, Output=?NE_BINAR
   when is_integer(TotalSucceeded), is_integer(TotalFailed) ->
     _ = gen_server:call(?SERVER, {'worker_finished', TaskId, TotalSucceeded, TotalFailed}),
     {'ok', CSVOut} = file:read_file(Output),
-    AName = ?KZ_TASKS_ANAME_OUT,
-    attempt_upload(TaskId, AName, CSVOut, Output, 3).
+    Max = ?UPLOAD_ATTEMPTS,
+    attempt_upload(TaskId, ?KZ_TASKS_ANAME_OUT, CSVOut, Output, Max, Max).
 
-attempt_upload(_TaskId, _AName, _, _, 0) ->
-    lager:error("failed saving ~s/~s: 3rd conflict", [_TaskId, _AName]),
+attempt_upload(_TaskId, _AName, _, _, 0, _) ->
+    lager:error("failed saving ~s/~s: last failing attempt", [_TaskId, _AName]),
     {error, conflict};
-attempt_upload(TaskId, AName, CSVOut, Output, Retries) ->
-    lager:debug("attempt #~p to save ~s/~s", [3-Retries+1, TaskId, AName]),
+attempt_upload(TaskId, AName, CSVOut, Output, Retries, Max) ->
+    lager:debug("attempt #~p to save ~s/~s", [Max-Retries+1, TaskId, AName]),
     Options = [{content_type, <<"text/csv">>}],
     case kz_datamgr:put_attachment(?KZ_TASKS_DB, TaskId, AName, CSVOut, Options) of
         {ok, _TaskJObj} ->
-            lager:debug("saved ~s", [AName]),
+            lager:debug("saved ~s after ~p attempts", [AName, Max-Retries+1]),
             kz_util:delete_file(Output);
-        {error, conflict} -> attempt_upload(TaskId, AName, CSVOut, Output, Retries-1);
-        {error, _R}=Error ->
-            lager:error("failed saving ~s/~s: ~p", [TaskId, AName, _R]),
-            Error
+        {error, _R} ->
+            lager:debug("upload of ~s failed (~s), may retry soon", [TaskId, _R]),
+            Pause = ?MILLISECONDS_IN_SECOND * ?PAUSE_BETWEEN_UPLOAD_ATTEMPTS,
+            lager:debug("waiting ~pms before next upload attempt of ~s", [Pause, TaskId]),
+            timer:sleep(Pause),
+            attempt_upload(TaskId, AName, CSVOut, Output, Retries-1, Max)
     end.
 
 %%--------------------------------------------------------------------
@@ -177,17 +185,18 @@ attempt_upload(TaskId, AName, CSVOut, Output, Retries) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec get_output_header(kz_json:object()) -> kz_csv:row().
+-spec get_output_header(kz_json:object()) -> kz_tasks:output_header().
 get_output_header(API) ->
     Action = kz_json:get_value(<<"action">>, API),
     case tasks_bindings:apply(API, <<"output_header">>, [Action]) of
         [[_|_]=Header] -> Header;
+        [{replace, [_|_]}=Header] -> Header;
         [{'EXIT', {_E, _R}}] ->
             lager:debug("output_header not found for ~s (~p), using default", [Action, _E]),
-            ?OUTPUT_CSV_HEADER_ROW;
+            [?OUTPUT_CSV_HEADER_ERROR];
         _NotARow ->
             lager:debug("bad CSV output header ~p, using default", [_NotARow]),
-            ?OUTPUT_CSV_HEADER_ROW
+            [?OUTPUT_CSV_HEADER_ERROR]
     end.
 
 %%--------------------------------------------------------------------
@@ -248,6 +257,7 @@ handle_call({'start_task', TaskId}, _From, State) ->
             lager:info("task ~s exists already", [TaskId]),
             ?REPLY(State, {'error', 'already_started'})
     end;
+
 handle_call({'restart_task', TaskId}, _From, State) ->
     lager:debug("attempting to restart ~s", [TaskId]),
     case task_by_id(TaskId, State) of
@@ -261,6 +271,7 @@ handle_call({'restart_task', TaskId}, _From, State) ->
             lager:info("task ~s exists already", [TaskId]),
             ?REPLY(State, {'error', 'already_started'})
     end;
+
 %% This used to be cast but would race with worker process' EXIT signal.
 handle_call({'worker_finished', TaskId, TotalSucceeded, TotalFailed}, _From, State) ->
     lager:debug("worker finished ~s: ~p/~p", [TaskId, TotalSucceeded, TotalFailed]),

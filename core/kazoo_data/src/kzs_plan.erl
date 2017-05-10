@@ -193,7 +193,7 @@ dataplan_match(Classification, Plan, AccountId) ->
              ,others => Others
              ,att_proxy => 'true'
              ,att_post_handler => att_post_handler(CAtt)
-             ,att_handler => {AttHandler, kzs_util:map_keys_to_atoms(Params)}
+             ,att_handler => {AttHandler, kz_maps:keys_to_atoms(Params)}
              ,classification => Classification
              ,account_id => AccountId
              }
@@ -239,7 +239,7 @@ dataplan_type_match(Classification, DocType, Plan, AccountId) ->
              ,server => Server
              ,att_proxy => 'true'
              ,att_post_handler => att_post_handler(TypeAttMap)
-             ,att_handler => {AttHandler, kzs_util:map_keys_to_atoms(Params)}
+             ,att_handler => {AttHandler, kz_maps:keys_to_atoms(Params)}
              ,classification => Classification
              ,doc_type => DocType
              ,account_id => AccountId
@@ -263,11 +263,11 @@ fetch_account_dataplan(AccountId) ->
     case kz_json:get_value(<<"pvt_plan_id">>, JObj) of
         'undefined' ->
             Keys = [AccountId, ?SYSTEM_DATAPLAN],
-            MergedJObj = kz_json:merge_recursive(SystemJObj, JObj),
+            MergedJObj = kz_json:merge(SystemJObj, JObj),
             {Keys, MergedJObj};
         PlanId ->
-            PlanJObj = kz_json:merge_recursive(SystemJObj, fetch_dataplan(PlanId)),
-            MergedJObj = kz_json:merge_recursive(PlanJObj, JObj),
+            PlanJObj = kz_json:merge(SystemJObj, fetch_dataplan(PlanId)),
+            MergedJObj = kz_json:merge(PlanJObj, JObj),
             Keys = [AccountId, PlanId, ?SYSTEM_DATAPLAN],
             {Keys, MergedJObj}
     end.
@@ -275,7 +275,7 @@ fetch_account_dataplan(AccountId) ->
 -spec fetch_storage_dataplan({ne_binary(), ne_binary()}) -> fetch_dataplan_ret().
 fetch_storage_dataplan({AccountId, StorageId}) ->
     {Keys, AccountPlan} = fetch_account_dataplan(AccountId),
-    MergedJObj = kz_json:merge_recursive(AccountPlan, fetch_dataplan(StorageId)),
+    MergedJObj = kz_json:merge(AccountPlan, fetch_dataplan(StorageId)),
     {[StorageId | Keys], MergedJObj}.
 
 
@@ -331,7 +331,7 @@ maybe_start_connection(Tag, Params) ->
 
 -spec start_connection(atom(), map()) -> {atom(), server()}.
 start_connection(Tag, Params) ->
-    Connection = kz_dataconfig:connection(kzs_util:map_keys_to_atoms(Params#{tag => Tag})),
+    Connection = kz_dataconfig:connection(kz_maps:keys_to_atoms(Params#{tag => Tag})),
     kz_dataconnections:add(Connection),
     case kz_dataconnections:wait_for_connection(Tag, ?NEW_CONNECTION_TIMEOUT) of
         'no_connection' ->

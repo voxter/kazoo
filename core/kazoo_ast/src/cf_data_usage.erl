@@ -7,7 +7,7 @@
         ]).
 
 -include_lib("kazoo_ast/include/kz_ast.hrl").
--include_lib("kazoo_json/include/kazoo_json.hrl").
+-include_lib("kazoo_stdlib/include/kazoo_json.hrl").
 
 -define(DEBUG(_Fmt, _Args), 'ok').
 %%-define(DEBUG(Fmt, Args), io:format([$~, $p, $  | Fmt], [?LINE | Args])).
@@ -52,15 +52,12 @@ update_doc(Base, Schema) ->
     'ok' = file:write_file(RefPath, Contents).
 
 build_ref_doc(Base, Schema) ->
-    DocName = format_name(Base),
+    DocName = kz_ast_util:smash_snake(Base),
     ["## ", DocName, "\n\n"
     ,"### About ", DocName, "\n\n"
     ,"### Schema\n\n"
     ,kz_ast_util:schema_to_table(Schema)
     ].
-
-format_name(Base) ->
-    kz_binary:join([kz_binary:ucfirst(Piece) || Piece <- binary:split(Base, <<"_">>)], <<" ">>).
 
 update_schema(Base, Path, Usage) ->
     {'ok', Bin} = file:read_file(Path),
@@ -94,6 +91,9 @@ maybe_insert_schema('get_first_defined', _Ks, _Default, Schema) ->
     Schema;
 maybe_insert_schema('get_first_defined_keys', _Ks, _Default, Schema) ->
     Schema;
+maybe_insert_schema(_F, ['undefined' | _Keys], _Default, Schema) ->
+    ?DEBUG("skipping function ~p with key undefined (~p left)", [_F, _Keys]),
+    Schema;
 maybe_insert_schema(F, [K|Ks], Default, Schema) ->
     Section = kz_json:get_value([<<"properties">>, K], Schema, kz_json:new()),
     Updated = maybe_insert_schema(F, Ks, Default, Section),
@@ -111,8 +111,10 @@ maybe_insert_schema(F, [], Default, Schema) ->
     kz_json:insert_values(Updates, Schema).
 
 check_default({_M, _F, _A}) -> 'undefined';
+check_default([<<_/binary>>|_]=L) ->
+    L;
 check_default([_|_]=_L) ->
-    ?DEBUG("unchanged default list ~p~n", [_L]),
+    ?DEBUG("default list ~p~n", [L]),
     'undefined';
 check_default([]) -> [];
 check_default(?EMPTY_JSON_OBJECT=J) -> J;
@@ -166,7 +168,9 @@ guess_type('get_float_value', _) ->
     <<"float">>;
 guess_type('get_json_value', _) ->
     <<"object">>;
-guess_type('get_list_value', _) ->
+guess_type('get_list_value', [<<_/binary>>|_]) ->
+    <<"array(string)">>;
+guess_type('get_list_value', _L) ->
     <<"array">>;
 guess_type('find', _) ->
     'undefined';
@@ -377,7 +381,6 @@ process_mfa(#usage{data_var_name=DataName
                           maybe_add_usage(Usages, {M, F, arg_to_key(Key), Alias, arg_to_key(Default)})
                      }
     end;
-
 process_mfa(#usage{data_var_name=DataName
                   ,data_var_aliases=Aliases
                   }=Acc
@@ -471,8 +474,7 @@ arg_to_key(?MOD_FUN_ARGS('kz_json', 'new', [])) ->
     kz_json:new();
 arg_to_key(?MOD_FUN_ARGS(M, F, As)) ->
     {M, F, length(As)};
-arg_to_key(?VAR(Arg)) ->
-    Arg;
+arg_to_key(?VAR(_Arg)) -> 'undefined';
 arg_to_key(?INTEGER(I)) ->
     I;
 arg_to_key(?EMPTY_LIST) ->
@@ -488,6 +490,9 @@ list_of_keys_to_binary(Arg, ?EMPTY_LIST, Path) ->
 list_of_keys_to_binary(Arg, ?LIST(Head, Tail), Path) ->
     list_of_keys_to_binary(Head, Tail, [arg_to_key(Arg) | Path]).
 
+
+maybe_add_usage(Usages, {'kz_json',_Function,<<"source">>,_DataVar, _Default}) ->
+    Usages;
 maybe_add_usage(Usages, Call) ->
     case lists:member(Call, Usages) of
         'true' -> Usages;
@@ -529,9 +534,7 @@ process_mfa_call(Acc, M, F, As) ->
 have_visited(#usage{visited=Vs}, M, F, As) ->
     lists:member({M, F, As}, Vs).
 
-process_mfa_call(#usage{data_var_name=DataName
-                       ,usages=Usages
-                       ,functions=Fs
+process_mfa_call(#usage{functions=Fs
                        ,current_module=_CM
                        ,visited=Vs
                        }=Acc
@@ -553,25 +556,98 @@ process_mfa_call(#usage{data_var_name=DataName
         [] ->
             ?DEBUG("  no clauses for ~p:~p~n", [M, F]),
             Acc#usage{visited=lists:usort([{M, F, As} | Vs])};
+        [Clauses] when F =:= 'evaluate_rules_for_creation';
+                       F =:= 'create_endpoints' ->
+            process_mfa_clauses_kz_endpoint(Acc, M, F, As, Clauses);
         [Clauses] ->
-            #usage{usages=ModuleUsages
-                  ,functions=NewFs
-                  ,visited=ModuleVisited
-                  } =
-                process_mfa_clauses(Acc#usage{current_module=M
-                                             ,usages=[]
-                                             ,data_var_aliases=[]
-                                             ,visited=lists:usort([{M, F, As} | Vs])
-                                             }
-                                   ,Clauses
-                                   ,data_index(DataName, As)
-                                   ),
-            ?DEBUG("  visited ~p:~p(~p)~n", [M, F, As]),
-            Acc#usage{usages=lists:usort(ModuleUsages ++ Usages)
-                     ,functions=NewFs
-                     ,visited=ModuleVisited
-                     }
+            process_mfa_clauses(Acc, M, F, As, Clauses)
     end.
+
+process_mfa_clauses(#usage{visited=Vs
+                          ,data_var_name=DataName
+                          ,usages=Usages
+                          }=Acc
+                   ,M, F, As, Clauses
+                   ) ->
+    #usage{usages=ModuleUsages
+          ,functions=NewFs
+          ,visited=ModuleVisited
+          } =
+        process_mfa_clauses(Acc#usage{current_module=M
+                                     ,usages=[]
+                                     ,data_var_aliases=[]
+                                     ,visited=lists:usort([{M, F, As} | Vs])
+                                     }
+                           ,Clauses
+                           ,data_index(DataName, As)
+                           ),
+    ?DEBUG("  visited ~p:~p(~p)~n", [M, F, As]),
+    Acc#usage{usages=lists:usort(ModuleUsages ++ Usages)
+             ,functions=NewFs
+             ,visited=ModuleVisited
+             }.
+
+process_mfa_clauses_kz_endpoint(#usage{visited=Vs}=Acc
+                               ,M, 'evaluate_rules_for_creation'=F, As
+                               ,[?CLAUSE(_Args, _Guards, Expressions)]
+                               ) ->
+    [?MATCH(?VAR('Routines')
+           ,?LIST(_, _)=FunExpressions
+           )
+    ,?MOD_FUN_ARGS('lists'
+                  ,'foldl'
+                  ,[?FA(_FoldFun, 2), ?TUPLE(FunArgs), ?VAR('Routines')]
+                  )
+    ] = Expressions,
+
+    ?DEBUG("  visiting funs in ~p:~p(~p)~n", [M, F, As]),
+    process_mfa_clauses_kz_endpoint_folds(Acc#usage{visited=lists:usort([{M, F, As} | Vs])}
+                                         ,M, list_of_fun_expressions_to_f(FunExpressions), FunArgs
+                                         );
+process_mfa_clauses_kz_endpoint(#usage{visited=Vs}=Acc
+                               ,M, 'create_endpoints'=F, As
+                               ,[?CLAUSE(_Args, _Guards, Expressions)]
+                               ) ->
+    ?MATCH(?VAR('Routines')
+          ,?LIST(_, _)=FunExpressions
+          ) = hd(Expressions),
+
+    ?DEBUG("  visiting funs in ~p:~p(~p)~n", [M, F, As]),
+    process_mfa_clauses_kz_endpoint_folds(Acc#usage{visited=lists:usort([{M, F, As} | Vs])}
+                                         ,M, list_of_fun_expressions_to_f(FunExpressions), As
+                                         ).
+
+process_mfa_clauses_kz_endpoint_folds(#usage{usages=Usages}=Acc, M, Funs, FunArgs) ->
+    ForFsAcc = Acc#usage{current_module=M
+                        ,usages=[]
+                        ,data_var_aliases=[]
+                        },
+
+    #usage{usages=ModuleUsages
+          ,functions=NewFs
+          ,visited=ModuleVisited
+          } =
+        lists:foldl(fun(LocalFun, MyAcc) ->
+                            ?DEBUG("  checking for usage in ~p:~p(~p)~n", [M, LocalFun, FunArgs]),
+                            process_mfa_call(MyAcc, M, LocalFun, FunArgs)
+                    end
+                   ,ForFsAcc
+                   ,Funs
+                   ),
+
+    ?DEBUG("  new usages: ~p~n", [ModuleUsages]),
+    Acc#usage{usages=lists:usort(ModuleUsages ++ Usages)
+             ,functions=NewFs
+             ,visited=ModuleVisited
+             }.
+
+
+list_of_fun_expressions_to_f(ListExpression) ->
+    list_of_fun_expressions_to_f(ListExpression, []).
+list_of_fun_expressions_to_f(?EMPTY_LIST, Acc) ->
+    lists:reverse(Acc);
+list_of_fun_expressions_to_f(?LIST(?FA(Function, _Arity), Tail), Acc) ->
+    list_of_fun_expressions_to_f(Tail, [Function | Acc]).
 
 process_mfa_clauses(Acc, Clauses, DataIndex) ->
     lists:foldl(fun(Clause, UsagesAcc) ->

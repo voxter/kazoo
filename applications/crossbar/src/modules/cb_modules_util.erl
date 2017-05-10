@@ -35,11 +35,13 @@
         ,apply_assignment_updates/2
         ,log_assignment_updates/1
 
+        ,normalize_media_upload/5
+
         ,update_voicemail_creds/4
         ]).
 
 -include("crossbar.hrl").
--include_lib("kazoo_json/include/kazoo_json.hrl").
+-include_lib("kazoo_stdlib/include/kazoo_json.hrl").
 
 -define(QCALL_NUMBER_FILTER, [<<" ">>, <<",">>, <<".">>, <<"-">>, <<"(">>, <<")">>]).
 
@@ -130,20 +132,26 @@ range_modb_view_options(Context, PrefixKeys, SuffixKeys, CreatedFrom, CreatedTo)
 -spec range_modb_view_options1(cb_context:context(), api_binaries(), api_binaries(), gregorian_seconds(), gregorian_seconds()) ->
                                       {'ok', crossbar_doc:view_options()} |
                                       cb_context:context().
+range_modb_view_options1(Context, [], [], CreatedFrom, CreatedTo) ->
+    lager:debug("from ~p to ~p (range: ~p)"
+               ,[CreatedFrom, CreatedTo, (CreatedTo - CreatedFrom)]
+               ),
+    {'ok'
+    ,[{'startkey', CreatedFrom}
+     ,{'endkey', CreatedTo}
+     ,{'databases', kazoo_modb:get_range(cb_context:account_id(Context), CreatedFrom, CreatedTo)}
+     ]
+    };
 range_modb_view_options1(Context, PrefixKeys, SuffixKeys, CreatedFrom, CreatedTo) ->
-    AccountId = cb_context:account_id(Context),
-    case PrefixKeys =:= []
-        andalso SuffixKeys =:= []
-    of
-        'true' -> {'ok', [{'startkey', CreatedFrom}
-                         ,{'endkey', CreatedTo}
-                         ,{'databases', kazoo_modb:get_range(AccountId, CreatedFrom, CreatedTo)}
-                         ]};
-        'false' -> {'ok', [{'startkey', [Key || Key <- PrefixKeys ++ [CreatedFrom] ++ SuffixKeys] }
-                          ,{'endkey', [Key || Key <- PrefixKeys  ++ [CreatedTo]   ++ SuffixKeys] }
-                          ,{'databases', kazoo_modb:get_range(AccountId, CreatedFrom, CreatedTo)}
-                          ]}
-    end.
+    lager:debug("prefix/suffix'd from ~p to ~p (range: ~p)"
+               ,[CreatedFrom, CreatedTo, (CreatedTo - CreatedFrom)]
+               ),
+    {'ok'
+    ,[{'startkey', PrefixKeys ++ [CreatedFrom] ++ SuffixKeys}
+     ,{'endkey',   PrefixKeys ++ [CreatedTo]   ++ SuffixKeys}
+     ,{'databases', kazoo_modb:get_range(cb_context:account_id(Context), CreatedFrom, CreatedTo)}
+     ]
+    }.
 
 -spec range_to(cb_context:context(), pos_integer(), ne_binary()) -> pos_integer().
 range_to(Context, TStamp, Key) ->
@@ -158,8 +166,9 @@ range_to(Context, TStamp, Key) ->
 
 -spec range_from(cb_context:context(), pos_integer(), pos_integer(), ne_binary()) -> pos_integer().
 range_from(Context, CreatedTo, MaxRange, Key) ->
-    lager:debug("building ~s_from from req value", [Key]),
-    kz_term:to_integer(cb_context:req_value(Context, <<Key/binary, "_from">>, CreatedTo - MaxRange)).
+    MaxFrom = CreatedTo - MaxRange,
+    lager:debug("building from req value '~s_from' or default ~p", [Key, MaxFrom]),
+    kz_term:to_integer(cb_context:req_value(Context, <<Key/binary, "_from">>, MaxFrom)).
 
 -type binding() :: {ne_binary(), atom()}.
 -type bindings() :: [binding(),...].
@@ -503,7 +512,7 @@ is_parent_account(Context, Account2) ->
 %% it has an extension (for the associated content type)
 %% @end
 %%--------------------------------------------------------------------
--spec attachment_name(ne_binary(), text()) -> ne_binary().
+-spec attachment_name(binary(), text()) -> ne_binary().
 attachment_name(Filename, CT) ->
     Generators = [fun(A) ->
                           case kz_term:is_empty(A) of
@@ -528,11 +537,9 @@ parse_media_type(MediaType) ->
     cowboy_http:nonempty_list(MediaType, fun cowboy_http:media_range/2).
 
 -spec bucket_name(cb_context:context()) -> ne_binary().
--spec bucket_name(api_binary(), api_binary()) -> ne_binary().
+-spec bucket_name(api_ne_binary(), api_ne_binary()) -> ne_binary().
 bucket_name(Context) ->
-    bucket_name(cb_context:client_ip(Context)
-               ,cb_context:account_id(Context)
-               ).
+    bucket_name(cb_context:client_ip(Context), cb_context:account_id(Context)).
 
 bucket_name('undefined', 'undefined') ->
     <<"no_ip/no_account">>;
@@ -544,7 +551,7 @@ bucket_name(IP, AccountId) ->
     <<IP/binary, "/", AccountId/binary>>.
 
 -spec token_cost(cb_context:context()) -> non_neg_integer().
--spec token_cost(cb_context:context(), non_neg_integer() | kz_json:path() | kz_json:path()) -> non_neg_integer().
+-spec token_cost(cb_context:context(), non_neg_integer() | kz_json:path()) -> non_neg_integer().
 -spec token_cost(cb_context:context(), non_neg_integer(), kz_json:path()) -> non_neg_integer().
 
 token_cost(Context) ->
@@ -557,8 +564,7 @@ token_cost(Context, [_|_]=Suffix) ->
 token_cost(Context, Default) ->
     token_cost(Context, Default, []).
 
-token_cost(Context, Default, Suffix) when is_integer(Default)
-                                          andalso Default >= 0 ->
+token_cost(Context, Default, Suffix) when is_integer(Default), Default >= 0 ->
     Costs = kapps_config:get(?CONFIG_CAT, <<"token_costs">>, 1),
     find_token_cost(Costs
                    ,Default
@@ -573,7 +579,7 @@ token_cost(Context, Default, Suffix) when is_integer(Default)
                      ,kz_json:path()
                      ,req_nouns()
                      ,http_method()
-                     ,api_binary()
+                     ,api_ne_binary()
                      ) ->
                              integer() | Default.
 find_token_cost(N, _Default, _Suffix, _Nouns, _ReqVerb, _AccountId) when is_integer(N) ->
@@ -751,6 +757,45 @@ log_assignment_update({DID, {'ok', _Number}}) ->
     lager:debug("successfully updated ~s", [DID]);
 log_assignment_update({DID, {'error', E}}) ->
     lager:debug("failed to update ~s: ~p", [DID, E]).
+
+-spec normalize_media_upload(cb_context:context(), ne_binary(), ne_binary(), kz_json:object(), kz_media_util:normalization_options()) ->
+                                    {cb_context:context(), kz_json:object()}.
+normalize_media_upload(Context, FromExt, ToExt, FileJObj, NormalizeOptions) ->
+    NormalizedResult = kz_media_util:normalize_media(FromExt
+                                                    ,ToExt
+                                                    ,kz_json:get_binary_value(<<"contents">>, FileJObj)
+                                                    ,NormalizeOptions
+                                                    ),
+    handle_normalized_upload(Context, FileJObj, ToExt, NormalizedResult).
+
+-spec handle_normalized_upload(cb_context:context(), kz_json:object(), ne_binary(), kz_media_util:normalized_media()) ->
+                                      {cb_context:context(), kz_json:object()}.
+handle_normalized_upload(Context, FileJObj, ToExt, {'ok', Contents}) ->
+    lager:debug("successfully normalized to ~s", [ToExt]),
+    {Major, Minor, _} = cow_mimetypes:all(<<"foo.", (ToExt)/binary>>),
+
+    NewFileJObj = kz_json:set_values([{[<<"headers">>, <<"content_type">>], <<Major/binary, "/", Minor/binary>>}
+                                     ,{[<<"headers">>, <<"content_length">>], iolist_size(Contents)}
+                                     ,{<<"contents">>, Contents}
+                                     ]
+                                    ,FileJObj
+                                    ),
+
+    UpdatedContext = cb_context:setters(Context
+                                       ,[{fun cb_context:set_req_files/2, [{<<"original_media">>, FileJObj}
+                                                                          ,{<<"normalized_media">>, NewFileJObj}
+                                                                          ]
+                                         }
+                                        ,{fun cb_context:set_doc/2, kz_json:delete_key(<<"normalization_error">>, cb_context:doc(Context))}
+                                        ]
+                                       ),
+    {UpdatedContext, NewFileJObj};
+handle_normalized_upload(Context, FileJObj, ToExt, {'error', _R}) ->
+    lager:warning("failed to convert to ~s: ~p", [ToExt, _R]),
+    Reason = <<"failed to communicate with conversion utility">>,
+    UpdatedDoc = kz_json:set_value(<<"normalization_error">>, Reason, cb_context:doc(Context)),
+    UpdatedContext = cb_context:set_doc(Context, UpdatedDoc),
+    {UpdatedContext, FileJObj}.
 
 %% Update voicemail PIN at the same time as a password update
 -spec update_voicemail_creds(ne_binary(), ne_binary(), ne_binary(), cb_context:context()) ->

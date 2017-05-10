@@ -2377,7 +2377,7 @@ notify_method(Url, 'post', Headers, Data) ->
           ,[{'content_type', "application/json"}]
           );
 notify_method(Url, 'get', Headers, Data) ->
-    notify(uri(Url, kz_json:to_querystring(Data))
+    notify(uri(Url, kz_http_util:json_to_querystring(Data))
           ,Headers, 'get', <<>>, []
           ).
 

@@ -29,6 +29,8 @@
 -export([notify_new_account/1]).
 -export([is_unique_realm/2]).
 
+-compile({no_auto_import,[put/2]}).
+
 -include("crossbar.hrl").
 
 -define(SERVER, ?MODULE).
@@ -287,7 +289,7 @@ post(Context, AccountId) ->
             _ = replicate_account_definition(JObj),
             support_depreciated_billing_id(kz_json:get_value(<<"billing_id">>, JObj)
                                           ,AccountId
-                                          ,leak_pvt_fields(Context1)
+                                          ,leak_pvt_fields(AccountId, Context1)
                                           );
         _Status -> Context1
     end.
@@ -309,38 +311,38 @@ patch(Context, AccountId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec put(cb_context:context()) -> cb_context:context().
--spec put(cb_context:context(), path_token()) -> cb_context:context().
+-spec put(cb_context:context(), api_binary()) -> cb_context:context().
 -spec put(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 
 put(Context) ->
+    put(Context, 'undefined').
+
+put(Context, PathAccountId) ->
     JObj = cb_context:doc(Context),
-    AccountId = kz_doc:id(JObj, kz_datamgr:get_uuid()),
-    try create_new_account_db(prepare_context(AccountId, Context)) of
+    NewAccountId = kz_doc:id(JObj, kz_datamgr:get_uuid()),
+    try create_new_account_db(prepare_context(NewAccountId, Context)) of
         C ->
             Tree = kz_account:tree(JObj),
             _ = maybe_update_descendants_count(Tree),
-            _ = create_apps_store_doc(AccountId),
-            leak_pvt_fields(C)
+            _ = create_apps_store_doc(NewAccountId),
+            leak_pvt_fields(PathAccountId, C)
     catch
         'throw':C ->
             lager:debug("failed to create account, unrolling changes"),
 
             case cb_context:is_context(C) of
-                'true' -> delete(C, AccountId);
+                'true' -> delete(C, NewAccountId);
                 'false' ->
-                    C = cb_context:add_system_error('unspecified_fault', Context),
-                    delete(C, AccountId)
+                    _ = delete(Context, NewAccountId),
+                    cb_context:add_system_error('unspecified_fault', <<"internal error, unable to create the account">>, Context)
             end;
         _E:_R ->
             ST = erlang:get_stacktrace(),
             lager:debug("unexpected failure when creating account: ~s: ~p", [_E, _R]),
             kz_util:log_stacktrace(ST),
-            C = cb_context:add_system_error('unspecified_fault', Context),
-            delete(C, AccountId)
+            _ = delete(Context, NewAccountId),
+            cb_context:add_system_error('unspecified_fault', <<"internal error, unable to create the account">>, Context)
     end.
-
-put(Context, _AccountId) ->
-    put(Context).
 
 put(Context, AccountId, ?RESELLER) ->
     case whs_account_conversion:promote(AccountId) of
@@ -406,7 +408,7 @@ create_apps_store_doc(AccountId) ->
 -spec validate_move(ne_binary(), cb_context:context(), ne_binary(), ne_binary()) -> boolean().
 validate_move(<<"superduper_admin">>, Context, _, _) ->
     lager:debug("using superduper_admin flag to allow move account"),
-    AuthId = kz_doc:account_id(cb_context:auth_doc(Context)),
+    AuthId = kz_json:get_value(<<"account_id">>, cb_context:auth_doc(Context)),
     kz_util:is_system_admin(AuthId);
 validate_move(<<"tree">>, Context, MoveAccount, ToAccount) ->
     lager:debug("using tree to allow move account"),
@@ -724,7 +726,7 @@ validate_patch_request(AccountId, Context) ->
 %%--------------------------------------------------------------------
 -spec load_account(ne_binary(), cb_context:context()) -> cb_context:context().
 load_account(AccountId, Context) ->
-    leak_pvt_fields(crossbar_doc:load(AccountId, Context, ?TYPE_CHECK_OPTION(?PVT_TYPE))).
+    leak_pvt_fields(AccountId, crossbar_doc:load(AccountId, Context, ?TYPE_CHECK_OPTION(?PVT_TYPE))).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -732,25 +734,25 @@ load_account(AccountId, Context) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec leak_pvt_fields(cb_context:context()) -> cb_context:context().
--spec leak_pvt_fields(cb_context:context(), crossbar_status()) -> cb_context:context().
-leak_pvt_fields(Context) ->
-    leak_pvt_fields(Context, cb_context:resp_status(Context)).
+-spec leak_pvt_fields(api_binary(), cb_context:context()) -> cb_context:context().
+-spec leak_pvt_fields(api_binary(), cb_context:context(), crossbar_status()) -> cb_context:context().
+leak_pvt_fields(AccountId, Context) ->
+    leak_pvt_fields(AccountId, Context, cb_context:resp_status(Context)).
 
-leak_pvt_fields(Context, 'success') ->
+leak_pvt_fields(AccountId, Context, 'success') ->
     Routines = [fun leak_pvt_allow_additions/1
                ,fun leak_pvt_superduper_admin/1
                ,fun leak_pvt_api_key/1
                ,fun leak_pvt_created/1
                ,fun leak_pvt_enabled/1
-               ,fun leak_reseller_id/1
+               ,{fun leak_reseller_id/2, AccountId}
                ,fun leak_is_reseller/1
-               ,fun leak_billing_mode/1
+               ,{fun leak_billing_mode/2, AccountId}
                ,fun leak_notification_preference/1
                ,fun leak_trial_time_left/1
                ],
     cb_context:setters(Context, Routines);
-leak_pvt_fields(Context, _Status) -> Context.
+leak_pvt_fields(_AccountId, Context, _Status) -> Context.
 
 -spec leak_pvt_allow_additions(cb_context:context()) -> cb_context:context().
 leak_pvt_allow_additions(Context) ->
@@ -808,11 +810,11 @@ leak_pvt_enabled(Context) ->
                                     )
     end.
 
--spec leak_reseller_id(cb_context:context()) -> cb_context:context().
-leak_reseller_id(Context) ->
+-spec leak_reseller_id(cb_context:context(), api_binary()) -> cb_context:context().
+leak_reseller_id(Context, PathAccountId) ->
     cb_context:set_resp_data(Context
                             ,kz_json:set_value(<<"reseller_id">>
-                                              ,cb_context:reseller_id(Context)
+                                              ,find_reseller_id(Context, PathAccountId)
                                               ,cb_context:resp_data(Context)
                                               )
                             ).
@@ -827,12 +829,12 @@ leak_is_reseller(Context) ->
                                               )
                             ).
 
--spec leak_billing_mode(cb_context:context()) -> cb_context:context().
-leak_billing_mode(Context) ->
+-spec leak_billing_mode(cb_context:context(), api_binary()) -> cb_context:context().
+leak_billing_mode(Context, PathAccountId) ->
     {'ok', MasterAccountId} = kapps_util:get_master_account_id(),
     AuthAccountId = cb_context:auth_account_id(Context),
     RespJObj = cb_context:resp_data(Context),
-    case cb_context:reseller_id(Context) of
+    case find_reseller_id(Context, PathAccountId) of
         AuthAccountId ->
             cb_context:set_resp_data(Context
                                     ,kz_json:set_value(<<"billing_mode">>, <<"limits_only">>, RespJObj)
@@ -845,6 +847,18 @@ leak_billing_mode(Context) ->
             cb_context:set_resp_data(Context
                                     ,kz_json:set_value(<<"billing_mode">>, <<"manual">>, RespJObj)
                                     )
+    end.
+
+-spec find_reseller_id(cb_context:context(), api_binary()) -> api_binary().
+find_reseller_id(Context, 'undefined') ->
+    %% only when put/1
+    cb_context:reseller_id(Context);
+find_reseller_id(Context, PathAccountId) ->
+    IsNotSelf = PathAccountId =/= cb_context:account_id(Context),
+    case kz_services:is_reseller(PathAccountId) of
+        'true' when IsNotSelf -> PathAccountId;
+        'true' -> cb_context:reseller_id(Context);
+        'false' -> cb_context:reseller_id(Context)
     end.
 
 -spec leak_notification_preference(cb_context:context()) -> cb_context:context().
@@ -1099,17 +1113,15 @@ load_parent_tree(AccountId, Context) ->
     Tree = extract_tree(AccountId, RespData),
     Parents = find_accounts_from_tree(Tree, RespData, Context),
     RespEnv =
-        kz_json:set_value(
-          <<"page_size">>
-                         ,erlang:length(Parents)
+        kz_json:set_value(<<"page_size">>
+                         ,length(Parents)
                          ,cb_context:resp_envelope(Context)
-         ),
-    cb_context:setters(
-      Context
+                         ),
+    cb_context:setters(Context
                       ,[{fun cb_context:set_resp_data/2, Parents}
                        ,{fun cb_context:set_resp_envelope/2, RespEnv}
                        ]
-     ).
+                      ).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1413,7 +1425,7 @@ create_account_definition(Context) ->
             _ = replicate_account_definition(AccountDef),
             cb_context:setters(Context
                               ,[{fun cb_context:set_doc/2, AccountDef}
-                               ,{fun cb_context:set_resp_data/2, kz_json:public_fields(AccountDef)}
+                               ,{fun cb_context:set_resp_data/2, kz_doc:public_fields(AccountDef)}
                                ,{fun cb_context:set_resp_status/2, 'success'}
                                ]);
         {'error', _R} ->
@@ -1548,7 +1560,7 @@ notify_new_account(Context, _AuthDoc) ->
              ,{<<"Account-DB">>, cb_context:account_db(Context)}
               | kz_api:default_headers(?APP_VERSION, ?APP_NAME)
              ],
-    kapi_notifications:publish_new_account(Notify).
+    kz_amqp_worker:cast(Notify, fun kapi_notifications:publish_new_account/1).
 
 %%--------------------------------------------------------------------
 %% @private

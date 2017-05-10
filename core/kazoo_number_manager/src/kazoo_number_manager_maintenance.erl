@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz INC
+%%% @copyright (C) 2016-2017, 2600Hz INC
 %%% @doc
 %%%
 %%%
@@ -11,6 +11,7 @@
 
 -include("knm.hrl").
 
+-export([app_using/2]).
 -export([carrier_module_usage/0
         ,carrier_module_usage/1
         ]).
@@ -21,7 +22,8 @@
 -export([refresh_numbers_dbs/0
         ,refresh_numbers_db/1
         ]).
--export([fix_account_numbers/1
+-export([fix_number/3
+        ,fix_account_numbers/1
         ,fix_accounts_numbers/1
         ]).
 -export([migrate/0, migrate/1
@@ -33,11 +35,31 @@
 -export([purge_deleted/0, purge_deleted/1]).
 -export([update_number_services_view/1]).
 
+-export([feature_permissions_on_number/1]).
+-export([add_allowed_feature_on_number/2
+        ,remove_allowed_feature_on_number/2
+        ,add_denied_feature_on_number/2
+        ,remove_denied_feature_on_number/2
+        ]).
+-export([feature_permissions_on_reseller_of/1]).
+-export([add_allowed_feature_on_reseller_of/2
+        ,remove_allowed_feature_on_reseller_of/2
+        ,add_denied_feature_on_reseller_of/2
+        ,remove_denied_feature_on_reseller_of/2
+        ]).
+-export([feature_permissions_on_system_config/0]).
+-export([add_allowed_feature_on_system_config/1
+        ,remove_allowed_feature_on_system_config/1
+        ]).
+
 -define(TIME_BETWEEN_ACCOUNTS_MS
        ,kapps_config:get_integer(?KNM_CONFIG_CAT, <<"time_between_accounts_ms">>, ?MILLISECONDS_IN_SECOND)).
 
 -define(TIME_BETWEEN_NUMBERS_MS
        ,kapps_config:get_integer(?KNM_CONFIG_CAT, <<"time_between_numbers_ms">>, ?MILLISECONDS_IN_SECOND)).
+
+-define(PARALLEL_JOBS_COUNT,
+        kapps_config:get_integer(?KNM_CONFIG_CAT, <<"parallel_jobs_count">>, 1)).
 
 -define(LOG(Format, Args)
        ,begin
@@ -54,8 +76,7 @@
 %%--------------------------------------------------------------------
 -spec carrier_module_usage() -> 'ok'.
 carrier_module_usage() ->
-    Databases = knm_util:get_all_number_dbs(),
-    carrier_module_usage(Databases, dict:new()).
+    carrier_module_usage(knm_util:get_all_number_dbs(), dict:new()).
 
 -spec carrier_module_usage(text()) -> 'ok'.
 carrier_module_usage(Prefix) ->
@@ -96,8 +117,7 @@ log_carrier_module_usage([JObj|JObjs], Database, Totals0) ->
 %%--------------------------------------------------------------------
 -spec convert_carrier_module(ne_binary(), ne_binary()) -> 'ok'.
 convert_carrier_module(Source, Target) ->
-    Databases = knm_util:get_all_number_dbs(),
-    convert_carrier_module_database(Source, Target, Databases).
+    convert_carrier_module_database(Source, Target, knm_util:get_all_number_dbs()).
 
 -spec convert_carrier_module(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
 convert_carrier_module(Source, Target, Prefix) ->
@@ -116,15 +136,19 @@ convert_carrier_module_database(Source, Target, [Database|Databases]) ->
 
 -spec convert_carrier_module_numbers(ne_binaries(), ne_binary()) -> ok.
 convert_carrier_module_numbers(Nums, Target) ->
-    Routines = [{fun knm_phone_number:set_module_name/2, Target}],
-    #{ok := Ns, ko := KOs} = knm_numbers:update(Nums, Routines),
-    io:format("updated carrier module to ~s for ~p:\n", [Target, length(Ns)]),
-    F = fun (N) -> io:format("\t~s\n", [knm_phone_number:number(knm_number:phone_number(N))]) end,
-    lists:foreach(F, Ns),
-    io:format("updating carrier module failed for ~p:\n", [maps:size(KOs)]),
-    G = fun (Num, R) -> io:format("\t~s: ~p\n", [Num, R]) end,
-    _ = maps:map(G, KOs),
-    ok.
+    case lists:member(Target, knm_carriers:all_modules()) of
+        false -> io:format("Bad carrier module: ~s\n", [Target]);
+        true ->
+            Routines = [{fun knm_phone_number:set_module_name/2, Target}],
+            #{ok := Ns, ko := KOs} = knm_numbers:update(Nums, Routines),
+            io:format("updated carrier module to ~s for ~p:\n", [Target, length(Ns)]),
+            F = fun (N) -> io:format("\t~s\n", [knm_phone_number:number(knm_number:phone_number(N))]) end,
+            lists:foreach(F, Ns),
+            io:format("updating carrier module failed for ~p:\n", [maps:size(KOs)]),
+            G = fun (Num, R) -> io:format("\t~s: ~p\n", [Num, R]) end,
+            _ = maps:map(G, KOs),
+            ok
+    end.
 
 -spec convert_carrier_module_number(ne_binary(), ne_binary()) -> ok.
 convert_carrier_module_number(Num, Target) ->
@@ -165,9 +189,8 @@ refresh_numbers_db(<<?KNM_DB_PREFIX, Suffix/binary>>) ->
     refresh_numbers_db(NumberDb);
 refresh_numbers_db(<<"+", _/binary>> = Num) ->
     refresh_numbers_db(knm_converters:to_db(Num));
-refresh_numbers_db(Suffix) ->
-    NumberDb = <<?KNM_DB_PREFIX_ENCODED, Suffix/binary>>,
-    refresh_numbers_db(NumberDb).
+refresh_numbers_db(_Thing) ->
+    ?LOG("skipping badly formed ~s", [_Thing]).
 
 %% @public
 -spec update_number_services_view(ne_binary()) -> ok.
@@ -209,10 +232,8 @@ fix_account_numbers(AccountDb = ?MATCH_ACCOUNT_ENCODED(A,B,Rest)) ->
     ?LOG("########## fixing [~s] ##########", [AccountDb]),
     ?LOG("[~s] getting numbers from account db", [AccountDb]),
     DisplayPNs = get_DIDs(AccountDb, <<"phone_numbers/crossbar_listing">>),
-    ?LOG("[~s] getting numbers from callflow", [AccountDb]),
-    put(callflow_DIDs, get_DIDs(AccountDb, <<"callflows/listing_by_number">>)),
-    ?LOG("[~s] getting numbers from trunkstore", [AccountDb]),
-    put(trunkstore_DIDs, get_DIDs(AccountDb, <<"trunkstore/lookup_did">>)),
+    put(callflow_DIDs, get_DIDs_callflow(AccountDb)),
+    put(trunkstore_DIDs, get_DIDs_trunkstore(AccountDb)),
     AccountId = ?MATCH_ACCOUNT_RAW(A, B, Rest),
     Leftovers =
         lists:foldl(fun (NumberDb, Leftovers) ->
@@ -231,13 +252,8 @@ fix_account_numbers(AccountDb = ?MATCH_ACCOUNT_ENCODED(A,B,Rest)) ->
                    ,DisplayPNs
                    ,knm_util:get_all_number_dbs()
                    ),
-    _ = knm_phone_number:push_stored(), %% Bulk doc writes
     ToRm0 = gb_sets:to_list(Leftovers),
-    lists:foreach(fun (DID) ->
-                          ?LOG("########## found alien [~s] doc: ~s ##########", [AccountDb, DID])
-                  end
-                 ,ToRm0
-                 ),
+    lists:foreach(fun (_DID) -> log_alien(AccountDb, _DID) end, ToRm0),
     ToRm = [DID
             || DID <- ToRm0,
                false =:= is_assigned_to(AccountDb, DID, AccountId),
@@ -246,17 +262,31 @@ fix_account_numbers(AccountDb = ?MATCH_ACCOUNT_ENCODED(A,B,Rest)) ->
     _ = kz_datamgr:del_docs(AccountDb, ToRm),
     ?LOG("########## updating view [~s] ##########", [AccountDb]),
     update_number_services_view(AccountDb),
+    erase(callflow_DIDs),
+    erase(trunkstore_DIDs),
     ?LOG("########## done fixing [~s] ##########", [AccountDb]);
 fix_account_numbers(Account = ?NE_BINARY) ->
     fix_account_numbers(kz_util:format_account_db(Account)).
 
+log_alien(_AccountDb, _DID) ->
+    ?LOG("########## found alien [~s] doc: ~s ##########", [_AccountDb, _DID]).
+
+-spec fix_number(ne_binary(), ne_binary(), ne_binary()) -> knm_number_return().
+fix_number(Num, AuthBy, AccountDb) ->
+    UsedBy = app_using(knm_converters:normalize(Num), AccountDb),
+    Routines = [{fun knm_phone_number:set_used_by/2, UsedBy}
+               ,fun knm_phone_number:remove_denied_features/1
+               ],
+    Options = [{auth_by, AuthBy}
+              ,{dry_run, false}
+              ,{batch_run, false}
+              ],
+    knm_number:update(Num, Routines, Options).
+
 -spec migrate() -> 'ok'.
 migrate() ->
     _ = refresh_numbers_dbs(),
-    AccountDbs = kapps_util:get_all_accounts(),
-    foreach_pause_in_between(?TIME_BETWEEN_ACCOUNTS_MS, fun migrate/1, AccountDbs),
-    erase(callflow_DIDs),
-    erase(trunkstore_DIDs),
+    pforeach(fun migrate/1, kapps_util:get_all_accounts()),
     migrate_unassigned_numbers().
 
 -spec migrate(ne_binary()) -> 'ok'.
@@ -270,18 +300,13 @@ migrate(Account) ->
 -spec migrate_unassigned_numbers(ne_binary(), integer()) -> 'ok'.
 migrate_unassigned_numbers() ->
     ?LOG("********** fixing unassigned numbers **********", []),
-    NumberDbs = knm_util:get_all_number_dbs(),
-    foreach_pause_in_between(?TIME_BETWEEN_ACCOUNTS_MS
-                            ,fun migrate_unassigned_numbers/1
-                            ,NumberDbs
-                            ),
+    pforeach(fun migrate_unassigned_numbers/1, knm_util:get_all_number_dbs()),
     ?LOG("********** finished fixing unassigned numbers **********", []).
 
 -spec migrate_unassigned_numbers(ne_binary()) -> ok.
 migrate_unassigned_numbers(<<?KNM_DB_PREFIX_ENCODED, _/binary>> = NumberDb) ->
     ?LOG("########## start fixing ~s ##########", [NumberDb]),
     migrate_unassigned_numbers(NumberDb, 0),
-    _ = knm_phone_number:push_stored(), %% Bulk doc writes
     ?LOG("########## done fixing ~s ##########", [NumberDb]);
 migrate_unassigned_numbers(<<?KNM_DB_PREFIX_encoded, Suffix/binary>>) ->
     migrate_unassigned_numbers(<<?KNM_DB_PREFIX_ENCODED, Suffix/binary>>);
@@ -302,7 +327,7 @@ migrate_unassigned_numbers(NumberDb, Offset) ->
             ?LOG("[~s] fixing ~b docs", [NumberDb, Length]),
             foreach_pause_in_between(?TIME_BETWEEN_NUMBERS_MS
                                     ,fun fix_unassign_doc/1
-                                    ,lists:map(fun kz_doc:id/1, JObjs)
+                                    ,[kz_doc:id(JObj) || JObj <- JObjs]
                                     ),
             timer:sleep(?TIME_BETWEEN_ACCOUNTS_MS),
             migrate_unassigned_numbers(NumberDb, Offset + Length);
@@ -384,6 +409,18 @@ foreach_pause_in_between(Time, Fun, [Element|Elements]) ->
     timer:sleep(Time),
     foreach_pause_in_between(Time, Fun, Elements).
 
+-spec pforeach(fun((A) -> any()), [A]) -> ok.
+pforeach(Fun, Arg1s)
+  when is_function(Fun, 1),
+       is_list(Arg1s) ->
+    Malt = [%% Each worker process gets to do only 1 item before dying
+            1
+            %% A processes count of 1 is equivalent to lists:foreach-ordering
+            %% with each Fun being applied on its own (different) process
+           ,{processes, ?PARALLEL_JOBS_COUNT}
+           ],
+    plists:foreach(Fun, Arg1s, Malt).
+
 -spec fix_docs(ne_binary(), ne_binary(), ne_binary()) -> ok.
 fix_docs(AccountDb, NumberDb, DID) ->
     Res = kz_datamgr:open_doc(AccountDb, DID),
@@ -391,10 +428,13 @@ fix_docs(AccountDb, NumberDb, DID) ->
 
 fix_docs({error, timeout}, _AccountDb, _, _DID) ->
     ?LOG("getting ~s from ~s timed out, skipping", [_DID, _AccountDb]);
-fix_docs({error, _R}, _AccountDb, _, DID) ->
-    ?LOG("failed to get ~s from ~s (~p), creating it", [DID, _AccountDb, _R]),
+fix_docs({error, _R}, AccountDb, _, DID) ->
+    ?LOG("failed to get ~s from ~s (~p), creating it", [DID, AccountDb, _R]),
+    Updates = [{fun knm_phone_number:set_used_by/2, app_using(DID, AccountDb)}
+              ,fun knm_phone_number:remove_denied_features/1
+              ],
     %% knm_number:update/2,3 ensures creation of doc in AccountDb
-    case knm_number:update(DID, [{fun knm_phone_number:set_used_by/2, app_using(DID)}]) of
+    case knm_number:update(DID, Updates, options()) of
         {ok, _} -> ok;
         {error, _E} -> ?LOG("creating ~s failed: ~p", [DID, _E])
     end;
@@ -406,18 +446,25 @@ fix_docs({error, timeout}, _, _, _NumberDb, _DID) ->
     ?LOG("getting ~s from ~s timed out, skipping", [_DID, _NumberDb]);
 fix_docs({error, _R}, _, _, _NumberDb, _DID) ->
     ?LOG("~s disappeared from ~s (~p), skipping", [_DID, _NumberDb]);
-fix_docs({ok, NumDoc}, Doc, AccountDb, NumberDb, DID) ->
-    case app_using(DID) =:= kz_json:get_ne_binary_value(?PVT_USED_BY, NumDoc)
+fix_docs({ok, NumDoc}, Doc, _AccountDb, NumberDb, DID) ->
+    AccountDb = account_db_from_number_doc(NumDoc),
+    ShouldEnsureDocIsInRightAccountDb = _AccountDb =/= AccountDb,
+    ShouldEnsureDocIsInRightAccountDb
+        andalso ?LOG("[~s] ~s should be in ~s instead", [_AccountDb, DID, AccountDb]),
+    UsedBy = app_using(DID, AccountDb),
+    case not ShouldEnsureDocIsInRightAccountDb
+        andalso UsedBy =:= kz_json:get_ne_binary_value(?PVT_USED_BY, NumDoc)
         andalso have_same_pvt_values(NumDoc, Doc)
     of
         true -> ?LOG("~s already synced", [DID]);
         false ->
-            JObj = kz_json:merge_jobjs(kz_json:public_fields(NumDoc)
-                                      ,kz_json:public_fields(Doc)
+            JObj = kz_json:merge_jobjs(kz_doc:public_fields(NumDoc)
+                                      ,kz_doc:public_fields(Doc)
                                       ),
             ?LOG("syncing ~s", [DID]),
-            Routines = [{fun knm_phone_number:set_used_by/2, app_using(DID)}
-                       ,{fun knm_phone_number:update_doc/2, JObj}
+            Routines = [{fun knm_phone_number:set_used_by/2, UsedBy}
+                       ,{fun knm_phone_number:reset_doc/2, JObj}
+                       ,fun knm_phone_number:remove_denied_features/1
                        ],
             try knm_number:update(DID, Routines, options()) of
                 {ok, _} -> ok;
@@ -434,9 +481,17 @@ options() ->
     ,{batch_run, true}
     ].
 
+account_db_from_number_doc(NumDoc) ->
+    case kz_json:get_ne_binary_value(?PVT_ASSIGNED_TO, NumDoc) of
+        undefined -> undefined;
+        AccountId -> kz_util:format_account_db(AccountId)
+    end.
+
 -spec fix_unassign_doc(ne_binary()) -> 'ok'.
 fix_unassign_doc(DID) ->
-    Setters = [{fun knm_phone_number:set_used_by/2, undefined}],
+    Setters = [{fun knm_phone_number:set_used_by/2, undefined}
+              ,fun knm_phone_number:remove_denied_features/1
+              ],
     case knm_number:update(DID, Setters, options()) of
         {ok, _} -> ok;
         {error, _R} -> ?LOG("failed fixing unassigned ~s: ~p", [DID, _R])
@@ -445,12 +500,25 @@ fix_unassign_doc(DID) ->
 -type dids() :: gb_sets:set(ne_binary()).
 -spec get_DIDs(ne_binary(), ne_binary()) -> dids().
 get_DIDs(AccountDb, View) ->
-    case kz_datamgr:get_result_keys(AccountDb, View, []) of
+    get_DIDs(AccountDb, View, []).
+-spec get_DIDs(ne_binary(), ne_binary(), kz_proplist()) -> dids().
+get_DIDs(AccountDb, View, ViewOptions) ->
+    ?LOG("[~s] getting numbers from ~s", [AccountDb, View]),
+    case kz_datamgr:get_result_keys(AccountDb, View, ViewOptions) of
         {'ok', DIDs} -> gb_sets:from_list(DIDs);
         {'error', _R} ->
             ?LOG("failed to get ~s DIDs from ~s: ~p", [View, AccountDb, _R]),
             gb_sets:new()
     end.
+
+get_DIDs_callflow(AccountDb) ->
+    get_DIDs_callflow(AccountDb, []).
+get_DIDs_trunkstore(AccountDb) ->
+    get_DIDs_trunkstore(AccountDb, []).
+get_DIDs_callflow(AccountDb, ViewOptions) ->
+    get_DIDs(AccountDb, <<"callflows/listing_by_number">>, ViewOptions).
+get_DIDs_trunkstore(AccountDb, ViewOptions) ->
+    get_DIDs(AccountDb, <<"trunkstore/lookup_did">>, ViewOptions).
 
 -spec get_DIDs_assigned_to(ne_binary(), ne_binary()) -> dids().
 get_DIDs_assigned_to(NumberDb, AssignedTo) ->
@@ -458,7 +526,7 @@ get_DIDs_assigned_to(NumberDb, AssignedTo) ->
                   ,{endkey, [AssignedTo, kz_json:new()]}
                   ],
     case kz_datamgr:get_results(NumberDb, <<"numbers/assigned_to">>, ViewOptions) of
-        {ok, JObjs} -> gb_sets:from_list(lists:map(fun kz_doc:id/1, JObjs));
+        {ok, JObjs} -> gb_sets:from_list([kz_doc:id(JObj) || JObj <- JObjs]);
         {error, _R} ->
             lager:debug("failed to get ~s DIDs from ~s: ~p", [AssignedTo, NumberDb, _R]),
             gb_sets:new()
@@ -466,9 +534,9 @@ get_DIDs_assigned_to(NumberDb, AssignedTo) ->
 
 -spec have_same_pvt_values(kz_json:object(), kz_json:object()) -> boolean().
 have_same_pvt_values(NumDoc0, Doc0) ->
-    NumDoc = cleanse(kz_json:private_fields(NumDoc0)),
-    Doc = cleanse(kz_json:private_fields(Doc0)),
-    NumDoc == Doc.
+    NumDoc = cleanse(kz_doc:private_fields(NumDoc0)),
+    Doc = cleanse(kz_doc:private_fields(Doc0)),
+    kz_json:are_equal(NumDoc, Doc).
 
 -spec cleanse(kz_json:object()) -> kz_json:object().
 cleanse(JObj) ->
@@ -482,16 +550,33 @@ cleanse(JObj) ->
                        ,JObj
                        ).
 
--spec app_using(ne_binary()) -> api_ne_binary().
-app_using(DID) ->
-    case gb_sets:is_element(DID, get(callflow_DIDs)) of
+
+-spec app_using(ne_binary(), ne_binary()) -> api_ne_binary().
+-ifdef(TEST).
+app_using(?TEST_OLD7_NUM, ?CHILD_ACCOUNT_DB) -> <<"trunkstore">>;
+app_using(?NE_BINARY, ?MATCH_ACCOUNT_ENCODED(_)) -> undefined.
+-else.
+app_using(Num, AccountDb) ->
+    app_using(Num, AccountDb, get(callflow_DIDs), get(trunkstore_DIDs)).
+
+-type api_dids() :: undefined | dids().
+-spec app_using(ne_binary(), ne_binary(), api_dids(), api_dids()) -> api_ne_binary().
+app_using(Num, AccountDb, undefined, TrunkstoreNums) ->
+    CallflowNums = get_DIDs_callflow(AccountDb, [{key, Num}]),
+    app_using(Num, AccountDb, CallflowNums, TrunkstoreNums);
+app_using(Num, AccountDb, CallflowNums, undefined) ->
+    TrunkstoreNums = get_DIDs_trunkstore(AccountDb, [{key, Num}]),
+    app_using(Num, AccountDb, CallflowNums, TrunkstoreNums);
+app_using(Num, _, CallflowNums, TrunkstoreNums) ->
+    case gb_sets:is_element(Num, CallflowNums) of
         true -> <<"callflow">>;
         false ->
-            case gb_sets:is_element(DID, get(trunkstore_DIDs)) of
+            case gb_sets:is_element(Num, TrunkstoreNums) of
                 true -> <<"trunkstore">>;
                 false -> undefined
             end
     end.
+-endif.
 
 -spec is_assigned_to(ne_binary(), ne_binary(), ne_binary()) -> boolean().
 is_assigned_to(AccountDb, DID, AccountId) ->
@@ -524,7 +609,7 @@ delete(Num) ->
 -spec purge_discovery() -> 'no_return'.
 purge_discovery() ->
     Purge = fun (NumberDb) -> purge_number_db(NumberDb, ?NUMBER_STATE_DISCOVERY) end,
-    lists:foreach(Purge, knm_util:get_all_number_dbs()),
+    pforeach(Purge, knm_util:get_all_number_dbs()),
     'no_return'.
 
 %% @public
@@ -537,7 +622,7 @@ purge_deleted(Prefix) ->
 -spec purge_deleted() -> 'no_return'.
 purge_deleted() ->
     Purge = fun (NumberDb) -> purge_number_db(NumberDb, ?NUMBER_STATE_DELETED) end,
-    lists:foreach(Purge, knm_util:get_all_number_dbs()),
+    pforeach(Purge, knm_util:get_all_number_dbs()),
     'no_return'.
 
 %% @public
@@ -564,3 +649,185 @@ purge_number_db(NumberDb, State) ->
             kz_datamgr:del_docs(NumberDb, JObjs),
             purge_number_db(NumberDb, State)
     end.
+
+
+%% @private
+-spec is_feature_valid(any()) -> boolean().
+is_feature_valid(Thing) ->
+    lists:member(Thing, ?ALL_KNM_FEATURES).
+
+%% @private
+-spec invalid_feature(ne_binary()) -> no_return.
+invalid_feature(Feature) ->
+    io:format("Feature '~s' is not a known feature. Known features:\n"
+              "\t~s\n"
+             ,[Feature, list_features(?ALL_KNM_FEATURES)]
+             ),
+    no_return.
+
+%% @private
+-spec list_features(ne_binaries()) -> iodata().
+list_features(Features) ->
+    kz_util:iolist_join($\s, Features).
+
+%% @private
+-spec error_with_number(ne_binary(), any()) -> no_return.
+error_with_number(Num, Error) ->
+    Reason = case kz_json:is_json_object(Error) of
+                 false -> Error;
+                 true -> knm_errors:error(Error)
+             end,
+    io:format("Error with number ~s: ~s\n", [Num, Reason]),
+    no_return.
+
+%% @private
+-spec print_feature_permissions(ne_binaries(), ne_binaries()) -> no_return.
+print_feature_permissions(Allowed, Denied) ->
+    io:format("\tFeatures allowed: ~s\n"
+              "\tFeatures denied: ~s\n"
+             ,[list_features(Allowed), list_features(Denied)]
+             ),
+    no_return.
+
+%% @private
+-spec list_number_feature_permissions(knm_number:knm_number()) -> no_return.
+list_number_feature_permissions(N) ->
+    PN = knm_number:phone_number(N),
+    Num = knm_phone_number:number(PN),
+    Allowed = knm_phone_number:features_allowed(PN),
+    Denied = knm_phone_number:features_denied(PN),
+    io:format("Feature permissions on ~s:\n", [Num]),
+    print_feature_permissions(Allowed, Denied).
+
+%% @private
+-spec edit_feature_permissions_on_number(ne_binary(), fun(), ne_binary()) -> no_return.
+edit_feature_permissions_on_number(Num, Fun, Feature) ->
+    case is_feature_valid(Feature) of
+        false -> invalid_feature(Feature);
+        true ->
+            Updates = [{Fun, Feature}],
+            case knm_number:update(Num, Updates) of
+                {ok, N} -> list_number_feature_permissions(N);
+                {error, Error} -> error_with_number(Num, Error)
+            end
+    end.
+
+%% @public
+-spec feature_permissions_on_number(ne_binary()) -> no_return.
+feature_permissions_on_number(Num) ->
+    case knm_number:get(Num) of
+        {error, Error} -> error_with_number(Num, Error);
+        {ok, N} -> list_number_feature_permissions(N)
+    end.
+
+%% @public
+-spec add_allowed_feature_on_number(ne_binary(), ne_binary()) -> no_return.
+add_allowed_feature_on_number(?NE_BINARY=Feature, ?NE_BINARY=Num) ->
+    edit_feature_permissions_on_number(Num, fun knm_phone_number:add_allowed_feature/2, Feature).
+
+%% @public
+-spec remove_allowed_feature_on_number(ne_binary(), ne_binary()) -> no_return.
+remove_allowed_feature_on_number(?NE_BINARY=Feature, ?NE_BINARY=Num) ->
+    edit_feature_permissions_on_number(Num, fun knm_phone_number:remove_allowed_feature/2, Feature).
+
+%% @public
+-spec add_denied_feature_on_number(ne_binary(), ne_binary()) -> no_return.
+add_denied_feature_on_number(?NE_BINARY=Feature, ?NE_BINARY=Num) ->
+    edit_feature_permissions_on_number(Num, fun knm_phone_number:add_denied_feature/2, Feature).
+
+%% @public
+-spec remove_denied_feature_on_number(ne_binary(), ne_binary()) -> no_return.
+remove_denied_feature_on_number(?NE_BINARY=Feature, ?NE_BINARY=Num) ->
+    edit_feature_permissions_on_number(Num, fun knm_phone_number:remove_denied_feature/2, Feature).
+
+%% @public
+-spec feature_permissions_on_reseller_of(ne_binary()) -> no_return.
+feature_permissions_on_reseller_of(?MATCH_ACCOUNT_RAW(AccountId)) ->
+    Allowed = empty_list_when_undefined(?FEATURES_ALLOWED_RESELLER(AccountId)),
+    Denied = empty_list_when_undefined(?FEATURES_DENIED_RESELLER(AccountId)),
+    ResellerId = kz_services:find_reseller_id(AccountId),
+    io:format("Feature permissions on reseller of ~s (~s):\n", [AccountId, ResellerId]),
+    print_feature_permissions(Allowed, Denied).
+
+%% @private
+-spec empty_list_when_undefined(api_list()) -> ne_binaries().
+empty_list_when_undefined(undefined) -> [];
+empty_list_when_undefined(NeBinaries) -> NeBinaries.
+
+%% @private
+-spec edit_allowed_feature_permissions_on_reseller_of(ne_binary(), fun(), ne_binary()) -> no_return.
+edit_allowed_feature_permissions_on_reseller_of(AccountId, Fun, Feature) ->
+    case is_feature_valid(Feature) of
+        false -> invalid_feature(Feature);
+        true ->
+            Allowed = empty_list_when_undefined(?FEATURES_ALLOWED_RESELLER(AccountId)),
+            NewFeatures = lists:usort(Fun(Feature, Allowed)),
+            ResellerId = kz_services:find_reseller_id(AccountId),
+            _ = kapps_account_config:set(ResellerId, ?KNM_CONFIG_CAT, ?KEY_FEATURES_ALLOW, NewFeatures),
+            feature_permissions_on_reseller_of(AccountId)
+    end.
+
+%% @private
+-spec edit_denied_feature_permissions_on_reseller_of(ne_binary(), fun(), ne_binary()) -> no_return.
+edit_denied_feature_permissions_on_reseller_of(AccountId, Fun, Feature) ->
+    case is_feature_valid(Feature) of
+        false -> invalid_feature(Feature);
+        true ->
+            Denied = empty_list_when_undefined(?FEATURES_DENIED_RESELLER(AccountId)),
+            NewFeatures = lists:usort(Fun(Feature, Denied)),
+            ResellerId = kz_services:find_reseller_id(AccountId),
+            _ = kapps_account_config:set(ResellerId, ?KNM_CONFIG_CAT, ?KEY_FEATURES_DENY, NewFeatures),
+            feature_permissions_on_reseller_of(AccountId)
+    end.
+
+%% @public
+-spec add_allowed_feature_on_reseller_of(ne_binary(), ne_binary()) -> no_return.
+add_allowed_feature_on_reseller_of(?NE_BINARY=Feature, ?MATCH_ACCOUNT_RAW(AccountId)) ->
+    Cons = fun (AFeature, Features) -> [AFeature|Features] end,
+    edit_allowed_feature_permissions_on_reseller_of(AccountId, Cons, Feature).
+
+%% @public
+-spec remove_allowed_feature_on_reseller_of(ne_binary(), ne_binary()) -> no_return.
+remove_allowed_feature_on_reseller_of(?NE_BINARY=Feature, ?MATCH_ACCOUNT_RAW(AccountId)) ->
+    edit_allowed_feature_permissions_on_reseller_of(AccountId, fun lists:delete/2, Feature).
+
+%% @public
+-spec add_denied_feature_on_reseller_of(ne_binary(), ne_binary()) -> no_return.
+add_denied_feature_on_reseller_of(?NE_BINARY=Feature, ?MATCH_ACCOUNT_RAW(AccountId)) ->
+    Cons = fun (AFeature, Features) -> [AFeature|Features] end,
+    edit_denied_feature_permissions_on_reseller_of(AccountId, Cons, Feature).
+
+%% @public
+-spec remove_denied_feature_on_reseller_of(ne_binary(), ne_binary()) -> no_return.
+remove_denied_feature_on_reseller_of(?NE_BINARY=Feature, ?MATCH_ACCOUNT_RAW(AccountId)) ->
+    edit_denied_feature_permissions_on_reseller_of(AccountId, fun lists:delete/2, Feature).
+
+%% @public
+-spec feature_permissions_on_system_config() -> no_return.
+feature_permissions_on_system_config() ->
+    Allowed = knm_providers:system_allowed_features(),
+    io:format("Features allowed on system config document:\n\t~s\n", [list_features(Allowed)]),
+    no_return.
+
+%% @private
+-spec edit_allowed_feature_permissions_on_system_config(fun(), ne_binary()) -> no_return.
+edit_allowed_feature_permissions_on_system_config(Fun, Feature) ->
+    case is_feature_valid(Feature) of
+        false -> invalid_feature(Feature);
+        true ->
+            Allowed = knm_providers:system_allowed_features(),
+            NewFeatures = lists:usort(Fun(Feature, Allowed)),
+            _ = kapps_config:set(?KNM_CONFIG_CAT, ?KEY_FEATURES_ALLOW, NewFeatures),
+            feature_permissions_on_system_config()
+    end.
+
+%% @public
+-spec add_allowed_feature_on_system_config(ne_binary()) -> no_return.
+add_allowed_feature_on_system_config(?NE_BINARY=Feature) ->
+    Cons = fun (AFeature, Features) -> [AFeature|Features] end,
+    edit_allowed_feature_permissions_on_system_config(Cons, Feature).
+
+%% @public
+-spec remove_allowed_feature_on_system_config(ne_binary()) -> no_return.
+remove_allowed_feature_on_system_config(?NE_BINARY=Feature) ->
+    edit_allowed_feature_permissions_on_system_config(fun lists:delete/2, Feature).

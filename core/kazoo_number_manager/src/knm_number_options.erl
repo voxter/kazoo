@@ -15,10 +15,9 @@
         ,batch_run/1, batch_run/2
         ,mdn_run/1
         ,module_name/1
-        ,ported_in/1, ported_in/2
+        ,ported_in/1
         ,public_fields/1
         ,state/1, state/2
-        ,should_delete/1, should_delete/2
 
         ,default/0
         ,mdn_options/0
@@ -51,8 +50,7 @@
                   {'module_name', ne_binary()} |
                   {'ported_in', boolean()} |
                   {'public_fields', kz_json:object()} |
-                  {'state', ne_binary()} |
-                  {'should_delete', boolean()}.
+                  {'state', ne_binary()}.
 
 -type options() :: [option()].
 
@@ -96,8 +94,7 @@ to_phone_number_setters(Options) ->
              {fun knm_phone_number:FName/2, Value}
      end
      || {Option, Value} <- kz_util:uniq(Options),
-        is_atom(Option),
-        Option =/= 'should_delete'
+        is_atom(Option)
     ].
 
 -spec dry_run(options()) -> boolean().
@@ -153,11 +150,8 @@ state(Options, Default) ->
     props:get_binary_value('state', Options, Default).
 
 -spec ported_in(options()) -> boolean().
--spec ported_in(options(), Default) -> boolean() | Default.
 ported_in(Options) ->
-    ported_in(Options, 'false').
-ported_in(Options, Default) ->
-    props:get_is_true('ported_in', Options, Default).
+    props:get_is_true('ported_in', Options, false).
 
 -spec module_name(options()) -> ne_binary().
 module_name(Options) ->
@@ -165,14 +159,6 @@ module_name(Options) ->
         'undefined' -> knm_carriers:default_carrier();
         ModuleName -> ModuleName
     end.
-
--spec should_delete(options()) -> boolean().
--spec should_delete(options(), Default) -> boolean() | Default.
-should_delete(Options) ->
-    should_delete(Options, 'false').
-should_delete(Options, Default) ->
-    props:is_true('should_delete', Options, Default).
-
 
 %%--------------------------------------------------------------------
 %% Public get/set extra_options()

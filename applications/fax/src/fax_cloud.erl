@@ -39,13 +39,17 @@ handle_job_notify(JObj, _Props) ->
     JobId = kz_json:get_value(<<"Fax-JobId">>, JObj),
     AccountDb = kz_json:get_value(<<"Account-DB">>, JObj),
     lager:debug("Checking if JobId ~s in db ~s is a cloud printer job",[JobId, AccountDb]),
-    {'ok', FaxJObj} = kz_datamgr:open_doc(AccountDb, {<<"fax">>, JobId}),
-    case kz_json:get_value(<<"cloud_job_id">>, FaxJObj) of
+    {FetchRes, MaybeFaxJObj} = kz_datamgr:open_doc(AccountDb, {<<"fax">>, JobId}),
+    case FetchRes =:= 'ok'
+        andalso kz_json:get_value(<<"cloud_job_id">>, MaybeFaxJObj)
+    of
+        'false' ->
+            lager:debug("could not fetch cloud printer JobId ~p : ~p",[JobId, MaybeFaxJObj]);
         'undefined' ->
             lager:debug("JobId ~s is not a cloud printer job",[JobId]);
         CloudJobId ->
             lager:debug("JobId ~s is a cloud printer job with Id ~s",[JobId,CloudJobId]),
-            PrinterId = kz_json:get_value(<<"cloud_printer_id">>, FaxJObj),
+            PrinterId = kz_json:get_value(<<"cloud_printer_id">>, MaybeFaxJObj),
             process_job_outcome(PrinterId, CloudJobId, kz_json:get_value(<<"Event-Name">>, JObj))
     end.
 
@@ -173,7 +177,7 @@ send_update_job_status(JobId, Status, Authorization) ->
              ,{"semantic_state_diff", kz_json:encode(Status)}
              ],
 
-    Body = props:to_querystring(Fields),
+    Body = kz_http_util:props_to_querystring(Fields),
 
     case kz_http:post(kz_term:to_list(?JOBCTL_URL), Headers, Body) of
         {'ok', 200, _RespHeaders, RespBody} ->

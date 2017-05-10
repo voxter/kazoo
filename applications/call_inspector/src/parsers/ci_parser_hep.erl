@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (c) 2010-2017, 2600Hz
+%%% @copyright (c) 2015-2017, 2600Hz
 %%% @doc
 %%%
 %%% @end
@@ -28,8 +28,7 @@
                ,socket :: gen_udp:socket()
                ,listen_ip :: ne_binary()
                ,listen_port :: pos_integer()
-               }
-       ).
+               }).
 -type state() :: #state{}.
 
 %%%===================================================================
@@ -40,8 +39,8 @@
 %% @doc Starts the server
 %%--------------------------------------------------------------------
 -spec start_link([ci_parsers_util:parser_args()]) -> startlink_ret().
-start_link([Parser]=Args) ->
-    ServerName = ci_parsers_util:make_name(Parser),
+start_link(Args) ->
+    ServerName = ci_parsers_util:make_name(Args),
     gen_server:start_link({'local', ServerName}, ?MODULE, Args, []).
 
 %%%===================================================================
@@ -141,7 +140,7 @@ handle_info(_Info, State) ->
 -spec terminate(any(), state()) -> 'ok'.
 terminate(_Reason, #state{socket = Socket}) ->
     'ok' = gen_udp:close(Socket),
-    lager:debug("call inspector kamailio parser terminated: ~p", [_Reason]).
+    lager:debug("call inspector hep parser terminated: ~p", [_Reason]).
 
 %%--------------------------------------------------------------------
 %% @private

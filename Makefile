@@ -55,7 +55,7 @@ clean-deps:
 	$(if $(wildcard deps/), rm -r deps/)
 
 .erlang.mk:
-	wget 'https://raw.githubusercontent.com/ninenines/erlang.mk/a7a059504dd229958d8cd059b2a6ab93b4a6805a/erlang.mk' -O $(ROOT)/erlang.mk
+	wget 'https://raw.githubusercontent.com/ninenines/erlang.mk/2016.01.12/erlang.mk' -O $(ROOT)/erlang.mk
 
 deps: deps/Makefile
 	$(MAKE) -C deps/ all
@@ -184,7 +184,7 @@ fmt: $(FMT)
 
 code_checks:
 	@ERL_LIBS=deps/:core/:applications/ $(ROOT)/scripts/no_raw_json.escript
-	@$(ROOT)/scripts/kz_util_diaspora.bash
+	@$(ROOT)/scripts/kz_diaspora.bash
 
 apis:
 	@ERL_LIBS=deps/:core/:applications/ $(ROOT)/scripts/generate-schemas.escript
@@ -196,11 +196,14 @@ apis:
 	@ERL_LIBS=deps/:core/:applications/ $(ROOT)/scripts/generate-fs-headers-hrl.escript
 
 DOCS_ROOT=$(ROOT)/doc/mkdocs
-docs: docs-validate docs-setup docs-build
+docs: docs-validate docs-report docs-setup docs-build
 
 docs-validate:
 	@$(ROOT)/scripts/check-scripts-readme.bash
 	@$(ROOT)/scripts/empty_schema_descriptions.bash
+
+docs-report:
+	@$(ROOT)/scripts/reconcile_docs_to_index.bash
 
 docs-validate:
 
@@ -209,6 +212,7 @@ docs-setup:
 	@$(ROOT)/scripts/setup_docs.bash
 	@cp $(DOCS_ROOT)/mkdocs.yml $(DOCS_ROOT)/mkdocs.local.yml
 	@mkdir -p $(DOCS_ROOT)/theme
+	@if [ -f $(DOCS_ROOT)/theme/global.yml ]; then cat $(DOCS_ROOT)/theme/global.yml >> $(DOCS_ROOT)/mkdocs.local.yml; fi
 
 docs-build:
 	@echo "\ntheme: null\ntheme_dir: '$(DOCS_ROOT)/theme'\ndocs_dir: '$(DOCS_ROOT)/docs'\n" >> $(DOCS_ROOT)/mkdocs.local.yml

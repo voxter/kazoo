@@ -204,7 +204,7 @@ do_full_provisioner_provider(Context) ->
 do_full_provision_contact_list(AccountId) when is_binary(AccountId) ->
     case kz_account:fetch(AccountId) of
         {'ok', JObj} ->
-            Routines = [fun kz_json:public_fields/1
+            Routines = [fun kz_doc:public_fields/1
                        ,fun(J) ->
                                 ResellerId = kz_services:find_reseller_id(AccountId),
                                 kz_json:set_value(<<"provider_id">>, ResellerId, J)
@@ -326,15 +326,17 @@ do_simple_provision(MACAddress, Context) ->
                         ,{"User-Agent", kz_term:to_list(erlang:node())}
                         ,{"Content-Type", "application/x-www-form-urlencoded"}
                         ]),
-            Body = [{"device[mac]", MACAddress}
-                   ,{"device[label]", kz_json:get_value(<<"name">>, JObj)}
-                   ,{"sip[realm]", kz_device:sip_realm(JObj, AccountRealm)}
-                   ,{"sip[username]", kz_device:sip_username(JObj)}
-                   ,{"sip[password]", kz_device:sip_password(JObj)}
-                   ,{"submit", "true"}
-                   ],
-            Encoded = kz_http_util:urlencode(Body),
-            lager:debug("posting to ~s with: ~-300p", [Url, Encoded]),
+            Body =
+                kz_json:from_list(
+                  [{<<"device[mac]">>, MACAddress}
+                  ,{<<"device[label]">>, kz_json:get_ne_binary_value(<<"name">>, JObj)}
+                  ,{<<"sip[realm]">>, kz_device:sip_realm(JObj, AccountRealm)}
+                  ,{<<"sip[username]">>, kz_device:sip_username(JObj)}
+                  ,{<<"sip[password]">>, kz_device:sip_password(JObj)}
+                  ,{<<"submit">>, <<"true">>}
+                  ]),
+            Encoded = kz_http_util:json_to_querystring(Body),
+            lager:debug("posting to ~s with: ~-300s", [Url, Encoded]),
             Res = kz_http:post(Url, Headers, Encoded),
             lager:debug("response from server: ~p", [Res]),
             'true'
@@ -479,13 +481,13 @@ merge_device(MACAddress, Context) ->
                ,fun(J) ->
                         OwnerId = kz_json:get_ne_value(<<"owner_id">>, JObj),
                         Owner = get_owner(OwnerId, AccountId),
-                        kz_json:merge_recursive(J, Owner)
+                        kz_json:merge(J, Owner)
                 end
                ,fun(J) -> kz_json:delete_key(<<"apps">>, J) end
                ,fun(J) -> kz_json:set_value(<<"account_id">>, AccountId, J) end
                ],
     MergedDevice = lists:foldl(fun(F, J) -> F(J) end, JObj, Routines),
-    {'ok', kz_json:public_fields(MergedDevice)}.
+    {'ok', kz_doc:public_fields(MergedDevice)}.
 
 -spec get_owner(api_binary(), ne_binary()) -> kz_json:object().
 get_owner('undefined', _) -> kz_json:new();
@@ -652,7 +654,7 @@ set_global_overrides(_) ->
     [fun(J) ->
              case kz_json:get_value(<<"defaults">>, GlobalDefaults) of
                  'undefined' -> J;
-                 Overrides -> kz_json:merge_recursive(J, Overrides)
+                 Overrides -> kz_json:merge(J, Overrides)
              end
      end
     ].
@@ -673,7 +675,7 @@ set_account_overrides(Context) ->
     [fun(J) ->
              case kz_json:get_value([<<"provision">>, <<"overrides">>], Account) of
                  'undefined' -> J;
-                 Overrides -> kz_json:merge_recursive(J, Overrides)
+                 Overrides -> kz_json:merge(J, Overrides)
              end
      end
     ].
@@ -697,7 +699,7 @@ set_user_overrides(Context) ->
     [fun(J) ->
              case kz_json:get_value([<<"provision">>, <<"overrides">>], User) of
                  'undefined' -> J;
-                 Overrides -> kz_json:merge_recursive(J, Overrides)
+                 Overrides -> kz_json:merge(J, Overrides)
              end
      end
     ].
@@ -716,7 +718,7 @@ set_device_overrides(Context) ->
              case kz_json:get_value([<<"provision">>, <<"overrides">>], Device) of
                  'undefined' -> J;
                  Overrides ->
-                     kz_json:merge_recursive(J, Overrides)
+                     kz_json:merge(J, Overrides)
              end
      end
     ].

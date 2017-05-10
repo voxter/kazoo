@@ -9,7 +9,7 @@
 -module(teletype_new_user).
 
 -export([init/0
-        ,handle_req/2
+        ,handle_req/1
         ]).
 
 -include("teletype.hrl").
@@ -24,7 +24,7 @@
           ])
        ).
 
--define(TEMPLATE_SUBJECT, <<"New user">>).
+-define(TEMPLATE_SUBJECT, <<"Your new VoIP services user profile has been created">>).
 -define(TEMPLATE_CATEGORY, <<"user">>).
 -define(TEMPLATE_NAME, <<"New User">>).
 
@@ -46,10 +46,11 @@ init() ->
                                           ,{'cc', ?TEMPLATE_CC}
                                           ,{'bcc', ?TEMPLATE_BCC}
                                           ,{'reply_to', ?TEMPLATE_REPLY_TO}
-                                          ]).
+                                          ]),
+    teletype_bindings:bind(<<"new_user">>, ?MODULE, 'handle_req').
 
--spec handle_req(kz_json:object(), kz_proplist()) -> 'ok'.
-handle_req(JObj, _Props) ->
+-spec handle_req(kz_json:object()) -> 'ok'.
+handle_req(JObj) ->
     'true' = kapi_notifications:new_user_v(JObj),
     kz_util:put_callid(JObj),
 

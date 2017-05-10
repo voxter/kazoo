@@ -136,12 +136,12 @@ inspect_call_id(CallId, Context) ->
     Req = [{<<"Call-ID">>, CallId}
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
-    case kz_amqp_worker:call(Req
-                            ,fun kapi_inspector:publish_lookup_req/1
-                            ,fun kapi_inspector:lookup_resp_v/1
-                            )
+    case kz_amqp_worker:call_collect(Req
+                                    ,fun kapi_inspector:publish_lookup_req/1
+                                    ,{call_inspector, fun kapi_inspector:lookup_resp_v/1, true}
+                                    )
     of
-        {'ok', JObj} ->
+        {ok, [JObj]} ->
             Chunks   = sanitize(kz_json:get_value(<<"Chunks">>, JObj, [])),
             Analysis = sanitize(kz_json:get_value(<<"Analysis">>, JObj, [])),
             Response = kz_json:from_list(
@@ -152,10 +152,10 @@ inspect_call_id(CallId, Context) ->
                          ]
                         ),
             crossbar_util:response(Response, Context);
-        {'timeout', _Resp} ->
+        {timeout, _Resp} ->
             lager:debug("timeout: ~s ~p", [CallId, _Resp]),
             crossbar_util:response_datastore_timeout(Context);
-        {'error', _E} ->
+        {error, _E} ->
             lager:debug("error: ~s ~p", [CallId, _E]),
             crossbar_util:response_bad_identifier(CallId, Context)
     end.
@@ -185,37 +185,42 @@ send_chunked_cdrs([Db | Dbs], {Req, Context}) ->
     Context1 = cb_context:store(Context, 'start_key', props:get_value('startkey', ViewOptions)),
     Context2 = cb_context:store(Context1, 'page_size', 0),
     Ids = get_cdr_ids(Db, View, ViewOptions),
-
     {Context3, CDRIds} = cb_cdrs:maybe_paginate_and_clean(Context2, Ids),
     send_chunked_cdrs(Dbs, cb_cdrs:load_chunked_cdrs(Db, CDRIds, {Req, Context3})).
 
--spec get_cdr_ids(ne_binary(), ne_binary(), crossbar_doc:view_options()) ->
-                         kz_proplist().
-get_cdr_ids(Db, View, ViewOptions) ->
-    {'ok', Ids} = cb_cdrs:get_cdr_ids(Db, View, ViewOptions),
-    filter_cdr_ids(Ids).
+-define(MATCH_CDR_ID(YYYYMM, CallId), <<YYYYMM:6/binary, "-", CallId/binary>>).
 
--spec filter_cdr_ids(kz_proplist()) -> kz_proplist().
-filter_cdr_ids(Ids) ->
-    Req = [{<<"Call-IDs">>, [CallId || {<<_:7/binary, CallId/binary>>, _} <- Ids]}
+-spec get_cdr_ids(ne_binary(), ne_binary(), crossbar_doc:view_options()) -> kz_proplist().
+get_cdr_ids(Db, View, ViewOptions) ->
+    {ok, Ids} = cb_cdrs:get_cdr_ids(Db, View, ViewOptions),
+    %% Remove leading year, month and dash
+    CallIds = [CallId || {?MATCH_CDR_ID(_,CallId), _CDR} <- Ids],
+    lager:debug("filtering ~p callids", [length(CallIds)]),
+    FilteredCallIds = filter_callids(CallIds),
+    lager:debug("found ~p dialogues", [length(FilteredCallIds)]),
+    [Id || {?MATCH_CDR_ID(_,CallId), _}=Id <- Ids,
+           lists:member(CallId, FilteredCallIds)
+    ].
+
+-spec filter_callids(ne_binaries()) -> ne_binaries().
+filter_callids([]) -> [];
+filter_callids(CallIds) ->
+    Req = [{<<"Call-IDs">>, CallIds}
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
-    case kz_amqp_worker:call(Req
-                            ,fun kapi_inspector:publish_filter_req/1
-                            ,fun kapi_inspector:filter_resp_v/1
-                            )
+    case kz_amqp_worker:call_collect(Req
+                                    ,fun kapi_inspector:publish_filter_req/1
+                                    ,{call_inspector, true}
+                                    )
     of
-        {'ok', JObj} ->
-            FilteredIds = kz_json:get_value(<<"Call-IDs">>, JObj, []),
-
-            [Id ||
-                {<<_:7/binary, CallId/binary>>, _}=Id <- Ids,
-                lists:member(CallId, FilteredIds)
-            ];
-        {'timeout', _Resp} ->
-            lager:debug("timeout: ~p", [_Resp]),
-            [];
-        {'error', _E} ->
+        {ok, JObjs} ->
+            FilterIds = fun (JObj) -> kz_json:get_value(<<"Call-IDs">>, JObj, []) end,
+            lists:usort(lists:flatmap(FilterIds, JObjs));
+        {timeout, JObjs} ->
+            lager:debug("timeout ~s", [kz_json:encode(JObjs)]),
+            FilterIds = fun (JObj) -> kz_json:get_value(<<"Call-IDs">>, JObj, []) end,
+            lists:usort(lists:flatmap(FilterIds, JObjs));
+        {error, _E} ->
             lager:debug("error: ~p", [_E]),
             []
     end.

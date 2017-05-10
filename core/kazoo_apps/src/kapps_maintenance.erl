@@ -19,6 +19,9 @@
         ,migrate/1
         ,migrate_to_4_0/0
         ]).
+-export([parallel_migrate/1
+        ,parallel_migrate/2
+        ]).
 -export([find_invalid_acccount_dbs/0]).
 -export([refresh/0, refresh/1
         ,refresh_account_db/1
@@ -47,6 +50,7 @@
 -export([cleanup_orphan_modbs/0]).
 -export([delete_system_media_references/0]).
 -export([migrate_system/0]).
+-export([validate_system_config/1, cleanup_system_config/1, validate_system_configs/0, cleanup_system_configs/0]).
 
 -export([bind/3, unbind/3]).
 
@@ -121,6 +125,16 @@ migrate(Pause) ->
     _ = kapps_config:migrate(),
 
     Databases = get_databases(),
+    _ = migrate(Pause, Databases),
+
+    %% Migrate settings for kazoo_media
+    io:format("running media migrations...~n"),
+    _ = kazoo_media_maintenance:migrate(),
+
+    'no_return'.
+
+-spec migrate(text() | integer(), ne_binaries()) -> 'no_return'.
+migrate(Pause, Databases) ->
     Accounts = [kz_util:format_account_id(Db, 'encoded')
                 || Db <- Databases,
                    kapps_util:is_account_db(Db)
@@ -132,13 +146,65 @@ migrate(Pause) ->
     io:format("removing depreciated databases...~n"),
     _  = remove_depreciated_databases(Databases),
 
-    kazoo_bindings:map(binding('migrate'), Accounts),
+    kazoo_bindings:map(binding('migrate'), [Accounts]),
 
+    'no_return'.
+
+-spec parallel_migrate(text() | integer()) -> 'no_return'.
+parallel_migrate(Workers) ->
+    parallel_migrate(Workers, 2 * ?MILLISECONDS_IN_SECOND).
+
+-spec parallel_migrate(text() | integer(), text() | integer()) -> 'no_return'.
+parallel_migrate(Workers, Pause) ->
+    _ = migrate_system(),
+    _ = kapps_config:migrate(),
+    {Accounts, Others} = lists:partition(fun kapps_util:is_account_db/1, get_databases()),
+    AccountDbs = [kz_util:format_account_db(Db) || Db <- Accounts],
+    OtherSplit = kz_term:to_integer(length(Others) / kz_term:to_integer(Workers)),
+    AccountSplit = kz_term:to_integer(length(AccountDbs) / kz_term:to_integer(Workers)),
+    SplitDbs = split(AccountSplit, AccountDbs, OtherSplit, Others, []),
+    parallel_migrate(Pause, SplitDbs, []).
+
+-type split_results() :: [{ne_binaries(), ne_binaries()}].
+-spec split(integer(), ne_binaries(), integer(), ne_binaries(), split_results()) -> split_results().
+split(_, [], _, [], Results) -> Results;
+split(AccountSplit, Accounts, OtherSplit, Others, Results) ->
+    {OtherDbs, RemainingOthers} = split(OtherSplit, Others),
+    {AccountDbs, RemainingAccounts} = split(AccountSplit, Accounts),
+    NewResults = [{AccountDbs, OtherDbs}|Results],
+    split(AccountSplit, RemainingAccounts, OtherSplit, RemainingOthers, NewResults).
+
+-spec split(integer(), [any()]) -> {[any()],[any()]}.
+split(Count, List) ->
+    case length(List) >= Count of
+        'false' -> {List, []};
+        'true' -> lists:split(Count, List)
+    end.
+
+-spec parallel_migrate(integer(), split_results(), references()) -> 'no_return'.
+parallel_migrate(_, [], Refs) -> wait_for_parallel_migrate(Refs);
+parallel_migrate(Pause, [{Accounts, Others}|Remaining], Refs) ->
+    Self = self(),
+    Dbs = lists:sort(fun get_database_sort/2, lists:usort(Accounts ++ Others)),
+    Ref = make_ref(),
+    _Pid = kz_util:spawn_link(fun parallel_migrate_worker/4, [Ref, Pause, Dbs, Self]),
+    parallel_migrate(Pause, Remaining, [Ref|Refs]).
+
+-spec parallel_migrate_worker(reference(), integer(), ne_binaries(), pid()) -> reference().
+parallel_migrate_worker(Ref, Pause, Databases, Parent) ->
+    _ = (catch migrate(Pause, Databases)),
+    Parent ! Ref.
+
+-spec wait_for_parallel_migrate(references()) -> 'no_return'.
+wait_for_parallel_migrate([]) ->
     %% Migrate settings for kazoo_media
     io:format("running media migrations...~n"),
     _ = kazoo_media_maintenance:migrate(),
-
-    'no_return'.
+    'no_return';
+wait_for_parallel_migrate([Ref|Refs]) ->
+    receive
+        Ref -> wait_for_parallel_migrate(Refs)
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -175,8 +241,8 @@ refresh(Databases, Pause) ->
 
 refresh([], _, _) -> 'no_return';
 refresh([Database|Databases], Pause, Total) ->
-    io:format("(~p/~p) refreshing database '~s'~n"
-             ,[length(Databases) + 1, Total, Database]),
+    io:format("~p (~p/~p) refreshing database '~s'~n"
+             ,[self(), length(Databases) + 1, Total, Database]),
     _ = refresh(Database),
     _ = case Pause < 1 of
             'false' -> timer:sleep(Pause);
@@ -244,7 +310,6 @@ refresh(?KZ_ACCOUNTS_DB) ->
     Views = [kapps_util:get_view_json('kazoo_apps', ?MAINTENANCE_VIEW_FILE)
             ,kapps_util:get_view_json('kazoo_apps', ?ACCOUNTS_AGG_VIEW_FILE)
             ,kapps_util:get_view_json('kazoo_apps', ?SEARCH_VIEW_FILE)
-            ,kapps_util:get_view_json('notify', ?ACCOUNTS_AGG_NOTIFY_VIEW_FILE)
             ],
     kapps_util:update_views(?KZ_ACCOUNTS_DB, Views, 'true'),
     'ok';
@@ -1230,3 +1295,46 @@ handle_module_rename_doc(JObj) ->
                 {'error', _Error} -> 'false'
             end
     end.
+
+maybe_new({ok, Doc}) -> Doc;
+maybe_new(_) -> kz_json:new().
+
+get_config_document(Id) ->
+    kz_doc:public_fields(maybe_new(kapps_config:get_category(Id))).
+
+-spec validate_system_config(ne_binary()) -> [{_, _}].
+validate_system_config(Id) ->
+    Doc = get_config_document(Id),
+    Keys = kz_json:get_keys(Doc),
+    Name = kapps_config_util:system_schema_name(Id),
+    case kz_json_schema:load(Name) of
+        {error,not_found} ->
+            [{no_schema_for, Id}];
+        {ok, Schema} ->
+            Validation = [ {Key, kz_json_schema:validate(Schema, kz_json:get_value(Key, Doc))} || Key <- Keys ],
+            lists:flatten([ {Key, get_error(Error)} || {Key, Error} <- Validation, not valid(Error) ])
+    end.
+
+-spec valid(any()) -> boolean().
+valid({ok, _}) -> true;
+valid(_) -> false.
+
+get_error({error, Errors}) -> [ get_error(Error) || Error <- Errors ];
+get_error({Code, _Schema, Error, Value, Path}) -> {Code, Error, Value, Path};
+get_error(X) -> X.
+
+-spec cleanup_system_config(ne_binary()) -> ok.
+cleanup_system_config(Id) ->
+    Doc = maybe_new(kapps_config:get_category(Id)),
+    ErrorKeys = [ Key || {Key, _} <- validate_system_config(Id), Key =/= no_schema_for ],
+    NewDoc = lists:foldl(fun(K, A) -> kz_json:delete_key(K, A) end, Doc, ErrorKeys),
+    kz_datamgr:save_doc(?KZ_CONFIG_DB, NewDoc).
+
+-spec cleanup_system_configs() -> [{ok, kz_json:object() | kz_json:objects()} | _].
+cleanup_system_configs() ->
+    [ cleanup_system_config(Id) || {Id, _Err} <- validate_system_configs() ].
+
+-spec validate_system_configs() -> [{ne_binary(), _}].
+validate_system_configs() ->
+    Results = [ {Config, validate_system_config(Config)} || Config <- kapps_config_doc:list_configs() ],
+    [ Result || Result = {_, Status} <- Results, Status =/= [] ].

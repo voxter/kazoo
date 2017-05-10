@@ -122,8 +122,8 @@ get_classifier_regex(JObj) ->
 
 -spec fixture(file:filename()) -> string().
 fixture(Filename) ->
-    Priv = code:priv_dir('kazoo_number_manager'),
-    Fixture = filename:join([Priv, "fixtures", Filename]),
+    Fixture = filename:join([code:priv_dir(?APP), "fixtures", Filename]),
+    ?LOG_DEBUG("loading fixture ~s", [Fixture]),
     read_fixture(file:read_file(Fixture), Fixture).
 
 read_fixture({'ok', Contents}, _F) ->

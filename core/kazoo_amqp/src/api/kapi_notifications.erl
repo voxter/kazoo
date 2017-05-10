@@ -19,6 +19,7 @@
         ,fax_inbound_error/1, fax_inbound_error_v/1
         ,fax_outbound/1, fax_outbound_v/1
         ,fax_outbound_error/1, fax_outbound_error_v/1
+        ,fax_outbound_smtp_error/1, fax_outbound_smtp_error_v/1
         ,register/1, register_v/1
         ,deregister/1, deregister_v/1
         ,first_occurrence/1, first_occurrence_v/1
@@ -46,6 +47,7 @@
         ,notify_update/1, notify_update_v/1
         ,denied_emergency_bridge/1, denied_emergency_bridge_v/1
         ,customer_update/1, customer_update_v/1
+        ,missed_call/1, missed_call_v/1
         ,skel/1, skel_v/1
         ,headers/1
         ,account_db/1
@@ -58,6 +60,7 @@
         ,publish_fax_outbound/1, publish_fax_outbound/2
         ,publish_fax_inbound_error/1, publish_fax_inbound_error/2
         ,publish_fax_outbound_error/1, publish_fax_outbound_error/2
+        ,publish_fax_outbound_smtp_error/1, publish_fax_outbound_smtp_error/2
         ,publish_register/1, publish_register/2
         ,publish_deregister/1, publish_deregister/2
         ,publish_first_occurrence/1, publish_first_occurrence/2
@@ -84,6 +87,7 @@
         ,publish_notify_update/2, publish_notify_update/3
         ,publish_denied_emergency_bridge/1, publish_denied_emergency_bridge/2
         ,publish_customer_update/1, publish_customer_update/2
+        ,publish_missed_call/1, publish_missed_call/2
         ,publish_skel/1, publish_skel/2
         ]).
 
@@ -103,6 +107,7 @@
 -define(NOTIFY_FAX_OUTBOUND, <<"notifications.fax.outbound">>).
 -define(NOTIFY_FAX_INBOUND_ERROR, <<"notifications.fax.inbound_error">>).
 -define(NOTIFY_FAX_OUTBOUND_ERROR, <<"notifications.fax.outbound_error">>).
+-define(NOTIFY_FAX_OUTBOUND_SMTP_ERROR, <<"notifications.fax.outbound_smtp_error">>).
 -define(NOTIFY_DEREGISTER, <<"notifications.sip.deregister">>).
 -define(NOTIFY_FIRST_OCCURRENCE, <<"notifications.sip.first_occurrence">>).
 %%-define(NOTIFY_REGISTER_OVERWRITE, <<"notifications.sip.register_overwrite">>).
@@ -128,15 +133,16 @@
 -define(NOTIFY_SYSTEM_ALERT, <<"notifications.system.alert">>).
 -define(NOTIFY_WEBHOOK_CALLFLOW, <<"notifications.webhook.callflow">>).
 -define(NOTIFY_WEBHOOK_DISABLED, <<"notifications.webhook.disabled">>).
--define(NOTIFY_DENIED_EMERGENCY_BRIDGE, <<"notifications.denied_emergency_bridge">>).
--define(NOTIFY_CUSTOMER_UPDATE, <<"notifications.customer_update">>).
--define(NOTIFY_SKEL, <<"notifications.skel">>).
+-define(NOTIFY_DENIED_EMERGENCY_BRIDGE, <<"notifications.registration.denied_emergency_bridge">>).
+-define(NOTIFY_CUSTOMER_UPDATE, <<"notifications.user.customer_update">>).
+-define(NOTIFY_MISSED_CALL, <<"notifications.sip.missed_call">>).
+-define(NOTIFY_SKEL, <<"notifications.account.skel">>).
 
 %% Notify New Voicemail or Voicemail Saved
 -define(VOICEMAIL_HEADERS, [<<"From-User">>, <<"From-Realm">>
                            ,<<"To-User">>, <<"To-Realm">>
-                           ,<<"Account-DB">>
-                           ,<<"Voicemail-Box">>, <<"Voicemail-Name">>
+                           ,<<"Account-ID">>
+                           ,<<"Voicemail-Box">>, <<"Voicemail-ID">>
                            ,<<"Voicemail-Timestamp">>
                            ]).
 -define(OPTIONAL_VOICEMAIL_HEADERS, [<<"Voicemail-Length">>, <<"Call-ID">>
@@ -154,8 +160,7 @@
                                 ]).
 
 %% Notify Voicemail full
--define(VOICEMAIL_FULL_HEADERS, [<<"Account-DB">>
-                                ,<<"Voicemail-Box">> ,<<"Voicemail-Number">>
+-define(VOICEMAIL_FULL_HEADERS, [<<"Account-ID">>, <<"Voicemail-Box">>
                                 ,<<"Max-Message-Count">> ,<<"Message-Count">>
                                 ]).
 -define(OPTIONAL_VOICEMAIL_FULL_HEADERS, ?DEFAULT_OPTIONAL_HEADERS).
@@ -225,6 +230,20 @@
                                    ,{<<"Event-Name">>, <<"outbound_fax_error">>}
                                    ]).
 -define(FAX_OUTBOUND_ERROR_TYPES, []).
+
+-define(FAX_OUTBOUND_SMTP_ERROR_HEADERS, [<<"Fax-From-Email">>
+                                         ,<<"Errors">>
+                                         ,<<"Account-ID">>
+                                         ]).
+-define(OPTIONAL_FAX_OUTBOUND_SMTP_ERROR_HEADERS, [<<"Fax-To-Email">> | ?DEFAULT_OPTIONAL_HEADERS]).
+-define(FAX_OUTBOUND_SMTP_ERROR_VALUES, [{<<"Event-Category">>, <<"notification">>}
+                                        ,{<<"Event-Name">>, <<"outbound_smtp_fax_error">>}
+                                        ]).
+-define(FAX_OUTBOUND_SMTP_ERROR_TYPES, [{<<"Errors">>, fun(L) when is_list(L) -> kz_term:is_not_empty(L);
+                                                          (_) -> 'false'
+                                                       end
+                                        }
+                                       ]).
 
 %% Notify Deregister
 -define(DEREGISTER_HEADERS, [<<"Username">>, <<"Realm">>, <<"Account-ID">>]).
@@ -302,7 +321,7 @@
 -define(ACCOUNT_ZONE_CHANGE_HEADERS, [<<"Account-ID">>
                                      ,<<"Zones">>
                                      ]).
--define(OPTIONAL_ACCOUNT_ZONE_CHANGE_HEADERS, [?DEFAULT_OPTIONAL_HEADERS]).
+-define(OPTIONAL_ACCOUNT_ZONE_CHANGE_HEADERS, ?DEFAULT_OPTIONAL_HEADERS).
 -define(ACCOUNT_ZONE_CHANGE_VALUES, [{<<"Event-Category">>, <<"notification">>}
                                     ,{<<"Event-Name">>, <<"account_zone_change">>}
                                     ]).
@@ -428,23 +447,28 @@
                             ]).
 -define(LOW_BALANCE_TYPES, []).
 
+%%% Transaction Common Optional Headers
+-define(COMMON_TRANSACTION_HEADERS, [<<"ID">>, <<"Add-Ons">>, <<"Discounts">>
+                                    ,<<"Billing-Address">>, <<"Card-Last-Four">>, <<"Tax-Amount">>
+                                    , <<"Purchase-Order">>, <<"Currency-Code">>
+                                    ]).
+
 %% Notify Top Up
--define(TOPUP_HEADERS, [<<"Account-ID">>]).
--define(OPTIONAL_TOPUP_HEADERS, [<<"Amount">>
-                                ,<<"Response">>
-                                ,<<"Success">>
-                                     | ?DEFAULT_OPTIONAL_HEADERS
-                                ]).
+-define(TOPUP_HEADERS, [<<"Account-ID">>, <<"Amount">>, <<"Timestamp">>
+                       ,<<"Response">>, <<"Success">>
+                       ]).
+-define(OPTIONAL_TOPUP_HEADERS, ?COMMON_TRANSACTION_HEADERS ++ ?DEFAULT_OPTIONAL_HEADERS).
 -define(TOPUP_VALUES, [{<<"Event-Category">>, <<"notification">>}
                       ,{<<"Event-Name">>, <<"topup">>}
                       ]).
 -define(TOPUP_TYPES, []).
 
 %% Notify Transaction
--define(TRANSACTION_HEADERS, [<<"Account-ID">>, <<"Transaction">>]).
--define(OPTIONAL_TRANSACTION_HEADERS, [<<"Billing-ID">>
-                                      ,<<"Service-Plan">>
-                                           | ?DEFAULT_OPTIONAL_HEADERS
+-define(TRANSACTION_HEADERS, [<<"Account-ID">>, <<"Amount">>, <<"Timestamp">>
+                             ,<<"Response">>, <<"Success">>
+                             ]).
+-define(OPTIONAL_TRANSACTION_HEADERS, [<<"Service-Plan">>
+                                           | ?COMMON_TRANSACTION_HEADERS ++ ?DEFAULT_OPTIONAL_HEADERS
                                       ]).
 -define(TRANSACTION_VALUES, [{<<"Event-Category">>, <<"notification">>}
                             ,{<<"Event-Name">>, <<"transaction">>}
@@ -529,6 +553,21 @@
                                 ]).
 -define(CUSTOMER_UPDATE_TYPES, []).
 
+%% Missed Call Alert
+-define(MISSED_CALL_HEADERS, [<<"Account-ID">>,<<"Call-ID">>
+                             ,<<"Call-Bridged">>, <<"Message-Left">>
+                             ]).
+-define(OPTIONAL_MISSED_CALL_HEADERS, [<<"From-User">>, <<"From-Realm">>
+                                      ,<<"To-User">>, <<"To-Realm">>
+                                      ,<<"Caller-ID-Name">>, <<"Caller-ID-Number">>
+                                      ,<<"Timestamp">>, <<"Notify">>, <<"To">>
+                                           | ?DEFAULT_OPTIONAL_HEADERS
+                                      ]).
+-define(MISSED_CALL_VALUES, [{<<"Event-Category">>, <<"notification">>}
+                            ,{<<"Event-Name">>, <<"missed_call">>}
+                            ]).
+-define(MISSED_CALL_TYPES, []).
+
 %% Skeleton
 -define(SKEL_HEADERS, [<<"Account-ID">>, <<"User-ID">>]).
 -define(OPTIONAL_SKEL_HEADERS, ?DEFAULT_OPTIONAL_HEADERS).
@@ -560,6 +599,8 @@ headers(<<"fax_outbound_to_email">>) ->
     ?FAX_OUTBOUND_HEADERS ++ ?OPTIONAL_FAX_OUTBOUND_HEADERS;
 headers(<<"fax_outbound_error_to_email">>) ->
     ?FAX_OUTBOUND_ERROR_HEADERS ++ ?OPTIONAL_FAX_OUTBOUND_ERROR_HEADERS;
+headers(<<"fax_outbound_smtp_error">>) ->
+    ?FAX_OUTBOUND_SMTP_ERROR_HEADERS ++ ?OPTIONAL_FAX_OUTBOUND_SMTP_ERROR_HEADERS;
 headers(<<"low_balance">>) ->
     ?LOW_BALANCE_HEADERS ++ ?OPTIONAL_LOW_BALANCE_HEADERS;
 headers(<<"new_account">>) ->
@@ -606,6 +647,8 @@ headers(<<"denied_emergency_bridge">>) ->
     ?DENIED_EMERGENCY_BRIDGE_HEADERS ++ ?OPTIONAL_DENIED_EMERGENCY_BRIDGE_HEADERS;
 headers(<<"customer_update">>) ->
     ?CUSTOMER_UPDATE_HEADERS ++ ?OPTIONAL_CUSTOMER_UPDATE_HEADERS;
+headers(<<"missed_call">>) ->
+    ?MISSED_CALL_HEADERS ++ ?OPTIONAL_MISSED_CALL_HEADERS;
 headers(<<"skel">>) ->
     ?SKEL_HEADERS ++ ?OPTIONAL_SKEL_HEADERS;
 headers(_Notification) ->
@@ -745,6 +788,24 @@ fax_outbound_error(JObj) -> fax_outbound_error(kz_json:to_proplist(JObj)).
 fax_outbound_error_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?FAX_OUTBOUND_ERROR_HEADERS, ?FAX_OUTBOUND_ERROR_VALUES, ?FAX_OUTBOUND_ERROR_TYPES);
 fax_outbound_error_v(JObj) -> fax_outbound_error_v(kz_json:to_proplist(JObj)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Takes proplist, creates JSON string or error
+%% @end
+%%--------------------------------------------------------------------
+-spec fax_outbound_smtp_error(api_terms()) -> api_formatter_return().
+fax_outbound_smtp_error(Prop) when is_list(Prop) ->
+    case fax_outbound_smtp_error_v(Prop) of
+        'true' -> kz_api:build_message(Prop, ?FAX_OUTBOUND_SMTP_ERROR_HEADERS, ?OPTIONAL_FAX_OUTBOUND_SMTP_ERROR_HEADERS);
+        'false' -> {'error', "Proplist failed validation for outbound_smtp_fax_error"}
+    end;
+fax_outbound_smtp_error(JObj) -> fax_outbound_smtp_error(kz_json:to_proplist(JObj)).
+
+-spec fax_outbound_smtp_error_v(api_terms()) -> boolean().
+fax_outbound_smtp_error_v(Prop) when is_list(Prop) ->
+    kz_api:validate(Prop, ?FAX_OUTBOUND_SMTP_ERROR_HEADERS, ?FAX_OUTBOUND_SMTP_ERROR_VALUES, ?FAX_OUTBOUND_SMTP_ERROR_TYPES);
+fax_outbound_smtp_error_v(JObj) -> fax_outbound_smtp_error_v(kz_json:to_proplist(JObj)).
 
 %%--------------------------------------------------------------------
 %% @doc Register (unregister is a key word) - see wiki
@@ -1211,6 +1272,24 @@ customer_update_v(Prop) when is_list(Prop) ->
 customer_update_v(JObj) -> customer_update_v(kz_json:to_proplist(JObj)).
 
 %%--------------------------------------------------------------------
+%% @doc missed_call notification
+%% Takes proplist, creates JSON string or error
+%% @end
+%%--------------------------------------------------------------------
+-spec missed_call(api_terms()) -> api_formatter_return().
+missed_call(Prop) when is_list(Prop) ->
+    case missed_call_v(Prop) of
+        'true' -> kz_api:build_message(Prop, ?MISSED_CALL_HEADERS, ?OPTIONAL_MISSED_CALL_HEADERS);
+        'false' -> {'error', "Proplist failed validation for missed_call"}
+    end;
+missed_call(JObj) -> missed_call(kz_json:to_proplist(JObj)).
+
+-spec missed_call_v(api_terms()) -> boolean().
+missed_call_v(Prop) when is_list(Prop) ->
+    kz_api:validate(Prop, ?MISSED_CALL_HEADERS, ?MISSED_CALL_VALUES, ?MISSED_CALL_TYPES);
+missed_call_v(JObj) -> missed_call_v(kz_json:to_proplist(JObj)).
+
+%%--------------------------------------------------------------------
 %% @doc skel notification - see wiki
 %% Takes proplist, creates JSON string or error
 %% @end
@@ -1236,6 +1315,7 @@ skel_v(JObj) -> skel_v(kz_json:to_proplist(JObj)).
                        'new_fax' |
                        'inbound_fax_error' |
                        'outbound_fax_error' |
+                       'outbound_smtp_fax_error' |
                        'fax_error' |
                        'register' |
                        'deregister' |
@@ -1261,6 +1341,7 @@ skel_v(JObj) -> skel_v(kz_json:to_proplist(JObj)).
                        'denied_emergency_bridge' |
                        'customer_update' |
                        'service_added' |
+                       'missed_call' |
                        'skel'.
 -type restrictions() :: [restriction()].
 -type option() :: {'restrict_to', restrictions()}.
@@ -1297,6 +1378,9 @@ bind_to_q(Q, ['inbound_fax_error'|T], Props) ->
     bind_to_q(Q, T, Props);
 bind_to_q(Q, ['outbound_fax_error'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_FAX_OUTBOUND_ERROR),
+    bind_to_q(Q, T, Props);
+bind_to_q(Q, ['outbound_smtp_fax_error'|T], Props) ->
+    'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_FAX_OUTBOUND_SMTP_ERROR),
     bind_to_q(Q, T, Props);
 bind_to_q(Q, ['fax_error'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_FAX_INBOUND_ERROR),
@@ -1374,6 +1458,9 @@ bind_to_q(Q, ['denied_emergency_bridge'|T], Props) ->
 bind_to_q(Q, ['customer_update'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_CUSTOMER_UPDATE),
     bind_to_q(Q, T, Props);
+bind_to_q(Q, ['missed_call'|T], Props) ->
+    'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_MISSED_CALL),
+    bind_to_q(Q, T, Props);
 bind_to_q(Q, ['skel'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, ?NOTIFY_SKEL),
     bind_to_q(Q, T, Props);
@@ -1411,6 +1498,9 @@ unbind_q_from(Q, ['inbound_fax_error'|T], Props) ->
     unbind_q_from(Q, T, Props);
 unbind_q_from(Q, ['outbound_fax_error'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q,?NOTIFY_FAX_OUTBOUND_ERROR),
+    unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['outbound_smtp_fax_error'|T], Props) ->
+    'ok' = amqp_util:unbind_q_from_notifications(Q,?NOTIFY_FAX_OUTBOUND_SMTP_ERROR),
     unbind_q_from(Q, T, Props);
 unbind_q_from(Q, ['fax_error'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q,?NOTIFY_FAX_OUTBOUND_ERROR),
@@ -1488,6 +1578,9 @@ unbind_q_from(Q, ['denied_emergency_bridge'|T], Props) ->
 unbind_q_from(Q, ['customer_update'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_CUSTOMER_UPDATE),
     unbind_q_from(Q, T, Props);
+unbind_q_from(Q, ['missed_call'|T], Props) ->
+    'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_MISSED_CALL),
+    unbind_q_from(Q, T, Props);
 unbind_q_from(Q, ['skel'|T], Props) ->
     'ok' = amqp_util:unbind_q_from_notifications(Q, ?NOTIFY_SKEL),
     unbind_q_from(Q, T, Props);
@@ -1554,6 +1647,13 @@ publish_fax_outbound_error(JObj) -> publish_fax_outbound_error(JObj, ?DEFAULT_CO
 publish_fax_outbound_error(Fax, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(Fax, ?FAX_OUTBOUND_ERROR_VALUES, fun fax_outbound_error/1),
     amqp_util:notifications_publish(?NOTIFY_FAX_OUTBOUND_ERROR, Payload, ContentType).
+
+-spec publish_fax_outbound_smtp_error(api_terms()) -> 'ok'.
+-spec publish_fax_outbound_smtp_error(api_terms(), ne_binary()) -> 'ok'.
+publish_fax_outbound_smtp_error(JObj) -> publish_fax_outbound_smtp_error(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_fax_outbound_smtp_error(Fax, ContentType) ->
+    {'ok', Payload} = kz_api:prepare_api_payload(Fax, ?FAX_OUTBOUND_SMTP_ERROR_VALUES, fun fax_outbound_smtp_error/1),
+    amqp_util:notifications_publish(?NOTIFY_FAX_OUTBOUND_SMTP_ERROR, Payload, ContentType).
 
 -spec publish_register(api_terms()) -> 'ok'.
 -spec publish_register(api_terms(), ne_binary()) -> 'ok'.
@@ -1736,6 +1836,13 @@ publish_customer_update(JObj) -> publish_customer_update(JObj, ?DEFAULT_CONTENT_
 publish_customer_update(API, ContentType) ->
     {'ok', Payload} = kz_api:prepare_api_payload(API, ?CUSTOMER_UPDATE_VALUES, fun customer_update/1),
     amqp_util:notifications_publish(?NOTIFY_CUSTOMER_UPDATE, Payload, ContentType).
+
+-spec publish_missed_call(api_terms()) -> 'ok'.
+-spec publish_missed_call(api_terms(), ne_binary()) -> 'ok'.
+publish_missed_call(JObj) -> publish_missed_call(JObj, ?DEFAULT_CONTENT_TYPE).
+publish_missed_call(API, ContentType) ->
+    {'ok', Payload} = kz_api:prepare_api_payload(API, ?MISSED_CALL_VALUES, fun missed_call/1),
+    amqp_util:notifications_publish(?NOTIFY_MISSED_CALL, Payload, ContentType).
 
 -spec publish_skel(api_terms()) -> 'ok'.
 -spec publish_skel(api_terms(), ne_binary()) -> 'ok'.

@@ -11,7 +11,7 @@
 -module(kapps_config).
 
 -include("kazoo_config.hrl").
--include_lib("kazoo_json/include/kazoo_json.hrl").
+-include_lib("kazoo_stdlib/include/kazoo_json.hrl").
 
 -export([get/2, get/3, get/4
         ,get_all_kvs/1
@@ -481,12 +481,14 @@ update_default(Category, Key, Value, Options) ->
     update_category(Category, Key, Value, ?KEY_DEFAULT, Options).
 
 -spec set_node(config_category(), config_key(), any(), ne_binary() | atom()) ->
+                      'ok' |
                       {'ok', kz_json:object()}.
 set_node(Category, _, _, 'undefined') -> get_category(Category);
 set_node(Category, Key, Value, Node) ->
     update_category(Category, Key, Value, Node, [{'node_specific', 'true'}]).
 
 -spec update_category(config_category(), config_key(), any(), ne_binary() | atom(), update_options()) ->
+                             'ok' |
                              {'ok', kz_json:object()} |
                              {'error', any()}.
 update_category('undefined', _, _, _, _) -> 'ok';
@@ -540,7 +542,7 @@ update_category(Category, JObj, PvtFields) ->
         {'error', 'conflict'} ->
             lager:debug("conflict saving ~s, merging and saving", [Category]),
             {'ok', Updated} = kz_datamgr:open_doc(?KZ_CONFIG_DB, Category),
-            Merged = kz_json:merge_jobjs(Updated, kz_json:public_fields(JObj)),
+            Merged = kz_json:merge_jobjs(Updated, kz_doc:public_fields(JObj)),
             lager:debug("updating from ~s to ~s", [kz_doc:revision(JObj), kz_doc:revision(Merged)]),
             update_category(Category, Merged, PvtFields)
     end.
@@ -826,6 +828,14 @@ get_category(Category, 'false') ->
         ,{{<<"stepswitch">>, <<"block_anonymous_caller_id">>}
          ,{<<"privacy">>, <<"block_anonymous_caller_id">>}
          }
+
+        ,{{<<"fax">>, <<"conversion_command">>}
+         ,{<<"fax">>, <<"conversion_pdf_command">>}
+         }
+
+        ,{{<<"media">>, <<"tts_cache">>}
+         ,{<<"speech">>, <<"tts_cache">>}
+         }
         ]).
 
 -spec migrate() -> 'ok'.
@@ -924,7 +934,7 @@ remove_config_setting(Id, Setting) when is_binary(Id) ->
 remove_config_setting(JObj, Setting) ->
     Id = kz_doc:id(JObj),
     Keys = [{Id, Node, Setting}
-            || Node <- kz_json:get_public_keys(JObj)
+            || Node <- kz_doc:get_public_keys(JObj)
            ],
     remove_config_setting(Keys, JObj, []).
 

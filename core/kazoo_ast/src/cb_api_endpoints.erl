@@ -124,9 +124,10 @@ method_as_action(?HTTP_DELETE) -> <<"Remove">>;
 method_as_action(?HTTP_PATCH) -> <<"Patch">>.
 
 ref_doc_header(BaseName) ->
+    CleanedUpName = kz_ast_util:smash_snake(BaseName),
     [[maybe_add_schema(BaseName)]
-    ,["#### About ", kz_binary:ucfirst(BaseName), "\n\n"]
-    ,["### ", kz_binary:ucfirst(BaseName), "\n\n"]
+    ,["#### About ", CleanedUpName, "\n\n"]
+    ,["### ", CleanedUpName, "\n\n"]
     ].
 
 maybe_add_schema(BaseName) ->
@@ -237,9 +238,9 @@ to_swagger_paths(Paths, BasePaths) ->
          || {Path,AllowedMethods} <- kz_json:to_proplist(Paths),
             Method <- kz_json:get_list_value(<<"allowed_methods">>, AllowedMethods, [])
         ],
-    kz_json:merge_recursive(kz_json:set_values(Endpoints, kz_json:new())
-                           ,kz_json:foldl(fun to_swagger_path/3, kz_json:new(), Paths)
-                           ).
+    kz_json:merge(kz_json:set_values(Endpoints, kz_json:new())
+                 ,kz_json:foldl(fun to_swagger_path/3, kz_json:new(), Paths)
+                 ).
 
 to_swagger_path(Path, PathMeta, Acc) ->
     Methods = kz_json:get_value(<<"allowed_methods">>, PathMeta, []),
@@ -754,7 +755,9 @@ def_path_param(<<"{DIRECTORY_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{FAXBOX_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{FAX_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{GROUP_ID}">>=P) -> generic_id_path_param(P);
+def_path_param(<<"{KEY_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{LEDGER_ID}">>=P) -> generic_id_path_param(P);
+def_path_param(<<"{LINK_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{LIST_ENTRY_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{LIST_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{MEDIA_ID}">>=P) -> generic_id_path_param(P);
@@ -792,6 +795,7 @@ def_path_param(<<"{LANGUAGE}">>=P) -> base_path_param(P);
 def_path_param(<<"{LEDGER_ENTRY_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{PLAN_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{PROMPT_ID}">>=P) -> base_path_param(P);
+def_path_param(<<"{PROVIDER_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{SELECTOR_NAME}">>=P) -> base_path_param(P);
 def_path_param(<<"{SMTP_LOG_ID}">>=P) -> base_path_param(P);
 def_path_param(<<"{SOCKET_ID}">>=P) -> base_path_param(P);

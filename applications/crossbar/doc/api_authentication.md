@@ -1,27 +1,41 @@
-### Api_auth
+### API Authentication
 
 Generating an auth token from your API token
 
 Use your account's API token to instruct Crossbar to create an authentication token to be used on subsequent requests requiring authentication.
 
-#### About
+#### Getting your API key from the API (must already authenticate as a user):
 
 Get your API key for your account:
 
-* It can be obtained by users on an account via the accounts API endpoint `api_key`.
-* It can also be accessed by system administrators directly from the database by using `curl` to request the account doc from CouchDB:
-
 ```shell
-curl -v -X PUT \
+curl -v -X GET \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://localhost:15984//accounts/{ACCOUNT_ID}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/api_key
 ```
 
 ```json
-{...
-    "pvt_api_key": "dfdb4869092fcaa210077109e42bdbac255dda8b9fe6eeb962b880bea7f9f372",
-    ...
+{
+   "auth_token":"{AUTH_TOKEN}",
+   "data":{
+      "api_key":"{API_KEY}"
+   },
+   "revision":"{REQUEST_ID}",
+   "request_id":"{REQUEST_ID}",
+   "status":"success"
 }
+```
+
+#### Getting the API Key from the database:
+
+Get your API key by requesting the account document directly from the database (through haproxy):
+```shell
+curl http://127.0.0.1:15984/accounts/{ACCOUNT_ID} 2> /dev/null | egrep -o '"pvt_api_key":"[0-9a-f]+"'
+```
+
+
+```
+"pvt_api_key":"{API_KEY}"
 ```
 
 #### Schema

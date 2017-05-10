@@ -37,7 +37,7 @@
 -record(state, {account_id :: ne_binary()
                ,pids = [] :: pids()
                ,prune_timer_ref :: timer:tref() | 'undefined'
-               ,extra_props = [] :: proplist()
+               ,extra_props = [] :: kz_proplist()
                }).
 -type state() :: #state{}.
 

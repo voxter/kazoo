@@ -9,7 +9,7 @@
 -module(teletype_port_scheduled).
 
 -export([init/0
-        ,handle_req/2
+        ,handle_req/1
         ]).
 
 -include("teletype.hrl").
@@ -24,7 +24,7 @@
          )
        ).
 
--define(TEMPLATE_SUBJECT, <<"Port request scheduled for {{port_request.scheduled_date |date:\"D d M Y\"}}">>).
+-define(TEMPLATE_SUBJECT, <<"Port request '{{port_request.name}}' has been scheduled">>).
 -define(TEMPLATE_CATEGORY, <<"port_request">>).
 -define(TEMPLATE_NAME, <<"Port Scheduled">>).
 
@@ -46,10 +46,11 @@ init() ->
                                           ,{'cc', ?TEMPLATE_CC}
                                           ,{'bcc', ?TEMPLATE_BCC}
                                           ,{'reply_to', ?TEMPLATE_REPLY_TO}
-                                          ]).
+                                          ]),
+    teletype_bindings:bind(<<"port_scheduled">>, ?MODULE, 'handle_req').
 
--spec handle_req(kz_json:object(), kz_proplist()) -> 'ok'.
-handle_req(JObj, _Props) ->
+-spec handle_req(kz_json:object()) -> 'ok'.
+handle_req(JObj) ->
     'true' = kapi_notifications:port_scheduled_v(JObj),
     kz_util:put_callid(JObj),
 

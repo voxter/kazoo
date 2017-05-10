@@ -69,7 +69,8 @@
 -export([get_all_results/2
         ,get_results/2, get_results/3
         ,get_results_count/3
-        ,get_result_keys/1, get_result_keys/3
+        ,get_result_keys/1, get_result_keys/3, get_result_keys/2
+        ,get_result_ids/1, get_result_ids/2, get_result_ids/3
         ,get_single_result/3
         ,design_info/2
         ,design_compact/2
@@ -85,7 +86,7 @@
 
 -export_type([view_option/0, view_options/0
              ,view_listing/0, views_listing/0
-             ,data_error/0
+             ,data_error/0, data_errors/0
              ]).
 
 -include("kz_data.hrl").
@@ -526,13 +527,10 @@ db_import(DbName, ArchiveFile) ->
 %%--------------------------------------------------------------------
 -spec open_cache_doc(text(), docid()) ->
                             {'ok', kz_json:object()} |
-                            data_error() |
-                            {'error', 'not_found'}.
+                            data_error().
 -spec open_cache_doc(text(), docid(), kz_proplist()) ->
                             {'ok', kz_json:object()} |
-                            data_error() |
-                            {'error', 'not_found'}.
-
+                            data_error().
 open_cache_doc(DbName, {DocType, DocId}) ->
     open_cache_doc(DbName, DocId, [{'doc_type', DocType}]);
 open_cache_doc(DbName, DocId) ->
@@ -560,8 +558,8 @@ add_to_doc_cache(DbName, DocId, Doc) ->
     end.
 
 -spec update_cache_doc(text(), ne_binary(), fun((kz_json:object()) -> kz_json:object() | 'skip')) ->
-                              {'ok', kz_json:object()}
-                                  | data_error().
+                              {'ok', kz_json:object()} |
+                              data_error().
 update_cache_doc(DbName, DocId, Fun) when is_function(Fun, 1) ->
     case open_cache_doc(DbName, DocId) of
         {'ok', JObj} ->
@@ -1174,8 +1172,12 @@ maybe_create_view(DbName, Plan, DesignDoc, Options) ->
             kzs_view:get_results(Plan, DbName, DesignDoc, Options)
     end.
 
+-spec get_result_keys(ne_binary(), ne_binary()) ->
+                             {'ok', ne_binaries() | [ne_binaries()]} | data_error().
 -spec get_result_keys(ne_binary(), ne_binary(), view_options()) ->
-                             {'ok', ne_binaries()} | data_error().
+                             {'ok', ne_binaries() | [ne_binaries()]} | data_error().
+get_result_keys(DbName, DesignDoc) ->
+    get_result_keys(DbName, DesignDoc, []).
 get_result_keys(DbName, DesignDoc, Options) ->
     Opts = maybe_add_doc_type_from_view(DesignDoc, Options),
     case kzs_view:get_results(kzs_plan:plan(DbName, Opts), DbName, DesignDoc, Options) of
@@ -1188,6 +1190,23 @@ get_result_keys(JObjs) ->
     [kz_json:get_value(<<"key">>, JObj)
      || JObj <- JObjs
     ].
+
+-spec get_result_ids(ne_binary(), ne_binary()) ->
+                            {'ok', ne_binaries()} | data_error().
+-spec get_result_ids(ne_binary(), ne_binary(), view_options()) ->
+                            {'ok', ne_binaries()} | data_error().
+get_result_ids(DbName, DesignDoc) ->
+    get_result_ids(DbName, DesignDoc, []).
+get_result_ids(DbName, DesignDoc, Options) ->
+    Opts = maybe_add_doc_type_from_view(DesignDoc, Options),
+    case kzs_view:get_results(kzs_plan:plan(DbName, Opts), DbName, DesignDoc, Options) of
+        {'ok', JObjs} -> {'ok', get_result_ids(JObjs)};
+        {'error', _} = Error -> Error
+    end.
+
+-spec get_result_ids(kz_json:objects()) -> ne_binaries().
+get_result_ids(JObjs) ->
+    [kz_doc:id(JObj) || JObj <- JObjs].
 
 %%--------------------------------------------------------------------
 %% @public

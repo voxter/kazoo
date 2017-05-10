@@ -9,7 +9,6 @@
 
 -export([db_classification/1
         ,db_priority/1
-        ,map_keys_to_atoms/1
         ]).
 
 -include_lib("kazoo_number_manager/include/knm_phone_number.hrl").
@@ -25,6 +24,10 @@
 db_classification(Db) when not is_binary(Db) ->
     db_classification(kz_term:to_binary(Db));
 db_classification(<<"_users">>) -> 'external';
+db_classification(<<"_dbs">>) -> 'external';
+db_classification(<<"users">>) -> 'external';
+db_classification(<<"dbs">>) -> 'external';
+db_classification(<<"_nodes">>) -> 'external';
 db_classification(<<"_replicator">>) -> 'external';
 db_classification(<<"_global_changes">>) -> 'external';
 db_classification(<<"ts">>) -> 'deprecated';
@@ -32,6 +35,7 @@ db_classification(<<"crossbar_schemas">>) -> 'deprecated';
 db_classification(<<"registrations">>) -> 'deprecated';
 db_classification(<<"crossbar%2Fsessions">>) -> 'deprecated';
 db_classification(<<"sms">>) -> 'deprecated';
+db_classification(<<"cccps">>) -> 'system';
 db_classification(<<"signups">>) -> 'system'; %% Soon to be deprecated
 db_classification(?KZ_RATES_DB) -> 'ratedeck';
 db_classification(?MATCH_RATEDECK_DB_ENCODED(_)) -> 'ratedeck';
@@ -75,6 +79,9 @@ db_classification(?MATCH_MODB_SUFFIX_RAW(_Account,_Year,_Month)) -> 'modb';%   r
 db_classification(?MATCH_ACCOUNT_UNENCODED(_AccountId)) -> 'account';
 db_classification(?MATCH_ACCOUNT_encoded(_AccountId)) -> 'account';
 db_classification(?MATCH_ACCOUNT_ENCODED(_AccountId)) -> 'account';
+db_classification(?MATCH_PROVISIONER_RAW(_AccountId)) -> 'provisioner';
+db_classification(?MATCH_PROVISIONER_ENCODED(_AccountId)) -> 'provisioner';
+db_classification(?MATCH_PROVISIONER_encoded(_AccountId)) -> 'provisioner';
 db_classification(_Database) ->
     lager:warning("unknown type for database ~s", [_Database]),
     {current_stacktrace, ST} = erlang:process_info(self(),current_stacktrace),
@@ -125,18 +132,6 @@ db_priority(?MATCH_RESOURCE_SELECTORS_UNENCODED(_AccountId)) -> 23;
 db_priority(?MATCH_RESOURCE_SELECTORS_encoded(_AccountId)) -> 23;
 db_priority(?MATCH_RESOURCE_SELECTORS_ENCODED(_AccountId)) -> 23;
 db_priority(?MATCH_RESOURCE_SELECTORS_RAW(_AccountId)) -> 23;
+db_priority(?MATCH_PROVISIONER_ENCODED(_AccountId)) -> 24;
+db_priority(?MATCH_PROVISIONER_encoded(_AccountId)) -> 24;
 db_priority(_Database) -> 24.
-
-%%------------------------------------------------------------------------------
-%% @public
-%% @doc
-%% @end
-%%------------------------------------------------------------------------------
--spec map_keys_to_atoms(map()) -> map().
-map_keys_to_atoms(Map) ->
-    maps:fold(fun map_keys_to_atoms_fold/3, #{}, Map).
-
-map_keys_to_atoms_fold(K, V, Acc) when is_map(V) ->
-    Acc#{kz_term:to_atom(K, 'true') => map_keys_to_atoms(V)};
-map_keys_to_atoms_fold(K, V, Acc) ->
-    Acc#{kz_term:to_atom(K, 'true') => V}.

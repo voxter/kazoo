@@ -7,6 +7,7 @@
         ,system_schema_name/1
         ,account_schema/1
         ,system_schema/1
+        ,system_config_document_schema/1
         ]).
 
 -spec doc_id(ne_binary()) -> ne_binary().
@@ -25,7 +26,7 @@ get_config(Account, Config) ->
 -spec get_config(ne_binary(), ne_binary(), [fun()]) -> kz_json:object().
 get_config(Account, Config, Programm) ->
     Confs = [maybe_new(P(Account, Config)) || P <- Programm],
-    kz_json:merge_recursive(lists:reverse(Confs)).
+    kz_json:merge(lists:reverse(Confs)).
 
 -spec get_reseller_config(ne_binary(), ne_binary()) -> kz_json:object().
 get_reseller_config(Account, Config) ->
@@ -50,7 +51,7 @@ load_config_from_reseller(Account, Config) ->
 
 -spec load_config_from_system(api_binary(), ne_binary()) -> {ok, kz_json:object()} | {error, any()}.
 load_config_from_system(_Account, Config) ->
-    kz_json:get_value(<<"default">>, maybe_new(kapps_config:get_category(Config))).
+    {'ok', kz_json:get_value(<<"default">>, maybe_new(kapps_config:get_category(Config)))}.
 
 -spec load_default_config(api_binary(), ne_binary()) -> {ok, kz_json:object()}.
 load_default_config(_Account, Config) ->
@@ -80,3 +81,14 @@ account_schema(Config) when is_binary(Config) ->
     Name = account_schema_name(Config),
     {'ok', Schema} = kz_json_schema:load(Name),
     Schema.
+
+-spec system_config_document_schema(ne_binary()) -> kz_json:object().
+system_config_document_schema(Id) ->
+    Flat = [
+            {[<<"$schema">>],<<"http://json-schema.org/draft-04/schema#">>}
+           ,{[<<"id">>], <<"system_config">>}
+           ,{[<<"patternProperties">>, <<".+">>, <<"$ref">>], system_schema_name(Id)}
+           ,{[<<"patternProperties">>, <<".+">>, <<"type">>], <<"object">>}
+           ,{[<<"type">>], <<"object">>}
+           ],
+    kz_json:expand(kz_json:from_list(Flat)).

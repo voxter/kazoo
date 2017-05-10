@@ -103,14 +103,24 @@
             "description": "number_manager force port out outbound",
             "type": "boolean"
         },
+        "local_feature_override": {
+            "default": false,
+            "description": "overrides the filtering of external features for local numbers",
+            "type": "boolean"
+        },
         "maximum_search_quantity": {
-            "default": 50,
+            "default": 500,
             "description": "maximum number of returned DIDs in search query",
             "type": "integer"
         },
         "number_search_timeout_ms": {
             "default": 5000,
             "description": "number manager number search timeout in milliseconds",
+            "type": "integer"
+        },
+        "parallel_jobs_count": {
+            "default": 1,
+            "description": "number of concurrent workers that can process a migration at the same time (1=non parallel behavior, MUST be >0)",
             "type": "integer"
         },
         "port_in_module_name": {
@@ -127,6 +137,7 @@
             "type": "string"
         },
         "released_state": {
+            "default": "available",
             "description": "number_manager released state",
             "type": "string"
         },
@@ -135,12 +146,8 @@
             "description": "number_manager should age",
             "type": "boolean"
         },
-        "should_bulk_batch_writes": {
-            "default": false,
-            "description": "number_manager should bulk batch writes",
-            "type": "boolean"
-        },
         "should_permanently_delete": {
+            "default": false,
             "description": "number_manager should permanently delete",
             "type": "boolean"
         },

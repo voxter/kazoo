@@ -196,7 +196,7 @@ do_fire(#webhook{uri = ?NE_BINARY = URI
     lager:debug("sending event ~s via 'get'(~b): ~s", [EventId, Retries, URI]),
 
     Url = kz_term:to_list(<<(kz_term:to_binary(URI))/binary
-                            ,(kz_term:to_binary([$? | kz_json:to_querystring(JObj)]))/binary
+                            ,(kz_term:to_binary([$? | kz_http_util:json_to_querystring(JObj)]))/binary
                           >>),
     Headers = ?HTTP_REQ_HEADERS(Hook),
     Debug = debug_req(Hook, EventId, URI, Headers, <<>>),
@@ -208,7 +208,7 @@ do_fire(#webhook{uri = ?NE_BINARY = URI
                 } = Hook, EventId, JObj) ->
     lager:debug("sending event ~s via 'post'(~b): ~s", [EventId, Retries, URI]),
 
-    Body = kz_json:to_querystring(JObj),
+    Body = kz_http_util:json_to_querystring(JObj),
     Headers = [{"Content-Type", "application/x-www-form-urlencoded"}
                | ?HTTP_REQ_HEADERS(Hook)
               ],
@@ -478,7 +478,7 @@ init_webhooks(Accts, Year, Month) ->
 init_webhook(Acct, Year, Month) ->
     Db = kz_util:format_account_id(kz_json:get_value(<<"key">>, Acct), Year, Month),
     kazoo_modb:maybe_create(Db),
-    lager:debug("updated account_mod ~s", [Db]).
+    lager:debug("updated account_modb ~s", [Db]).
 
 -spec note_failed_attempt(ne_binary(), ne_binary()) -> 'ok'.
 note_failed_attempt(AccountId, HookId) ->
@@ -590,7 +590,7 @@ init_metadata(Id, JObj, MasterAccountDb) ->
         {'error', _} -> load_metadata(MasterAccountDb, JObj);
         {'ok', Doc} ->
             lager:debug("~s already exists, updating", [Id]),
-            Merged = kz_json:merge_recursive(Doc, JObj),
+            Merged = kz_json:merge(Doc, JObj),
             load_metadata(MasterAccountDb, Merged)
     end.
 

@@ -226,9 +226,13 @@ get_request_did(Data, Call) ->
 maybe_use_capture_group(Data, Call) ->
     case kapps_call:kvs_fetch('cf_capture_group', Call) of
         'undefined' ->
-            case kz_endpoint:get(Call) of
-                {'error', _ } -> maybe_bypass_e164(Data, Call);
-                {'ok', Endpoint} -> maybe_apply_dialplan(Endpoint, Data, Call)
+            AuthId = kapps_call:authorizing_id(Call),
+            EndpointId = kapps_call:kvs_fetch(?RESTRICTED_ENDPOINT_KEY, AuthId, Call),
+            case EndpointId =/= 'undefined'
+                andalso kz_endpoint:get(EndpointId, kapps_call:account_db(Call))
+            of
+                {'ok', Endpoint} -> maybe_apply_dialplan(Endpoint, Data, Call);
+                _Else -> maybe_bypass_e164(Data, Call)
             end;
         CaptureGroup ->
             lager:debug("using capture group ~s", [CaptureGroup]),

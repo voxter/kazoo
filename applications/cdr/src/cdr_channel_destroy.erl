@@ -123,7 +123,7 @@ update_ccvs(_, _, JObj) ->
 -spec update_ccvs_foldl(kz_json:path(), kz_json:json_term(), {kz_json:object(), kz_json:object()}) ->
                                {kz_json:object(), kz_json:object()}.
 update_ccvs_foldl(Key, Value,  {JObj, CCVs}=Acc) ->
-    case kz_json:is_private_key(Key) of
+    case kz_doc:is_private_key(Key) of
         'false' -> Acc;
         'true' ->
             {kz_json:set_value(Key, Value, JObj)
@@ -191,7 +191,7 @@ set_interaction(_AccountId, _Timestamp, JObj) ->
 save_cdr(_, _, JObj) ->
     CDRDb = kz_doc:account_db(JObj),
     case cdr_util:save_cdr(CDRDb, kz_json:normalize_jobj(JObj)) of
-        {'error', 'max_retries'} ->
+        {'error', 'max_save_retries'} ->
             lager:error("write failed to ~s, too many retries", [CDRDb]);
         'ok' -> 'ok'
     end.

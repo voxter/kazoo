@@ -12,6 +12,7 @@
 -module(knm_other).
 -behaviour(knm_gen_carrier).
 
+-export([info/0]).
 -export([is_local/0]).
 -export([find_numbers/3]).
 -export([is_number_billable/1]).
@@ -24,21 +25,50 @@
 
 -define(KNM_OTHER_CONFIG_CAT, <<?KNM_CONFIG_CAT/binary, ".other">>).
 
+-define(COUNTRY,
+        kapps_config:get(?KNM_OTHER_CONFIG_CAT, <<"default_country">>, ?KNM_DEFAULT_COUNTRY)).
+
 -ifdef(TEST).
--define(COUNTRY, ?KNM_DEFAULT_COUNTRY).
+-define(PHONEBOOK_URL(Options), props:get_value(phonebook_url, Options)).
 -else.
--define(COUNTRY
-       ,kapps_config:get(?KNM_OTHER_CONFIG_CAT, <<"default_country">>, ?KNM_DEFAULT_COUNTRY)).
+-define(PHONEBOOK_URL(_Options),
+        kapps_config:get(?KNM_OTHER_CONFIG_CAT, <<"phonebook_url">>)).
 -endif.
 
 -ifdef(TEST).
--define(PHONEBOOK_URL(Options)
-       ,props:get_value('phonebook_url', Options)).
--else.
--define(PHONEBOOK_URL(_Options)
-       ,kapps_config:get(?KNM_OTHER_CONFIG_CAT, <<"phonebook_url">>)).
+-define(BLOCKS_RESP, kz_json:from_list(
+                       [{<<"status">>, <<"success">>}
+                       ,{<<"data">>
+                        ,[kz_json:from_list(
+                            [{<<"start_number">>, ?START_BLOCK}
+                            ,{<<"end_number">>, ?END_BLOCK}
+                            ])
+                         ]
+                        }
+                       ])).
+
+
+-define(NUMBERS_DATA, kz_json:from_list(
+                        [{<<"+1415886790", (D + $0)>>, Ext}
+                         || D <- lists:seq(0, 9),
+                            Ext <- [kz_json:from_list([{<<"extension">>, D}])]
+                        ])).
+
+-define(NUMBERS_RESPONSE
+       ,kz_json:from_list([{<<"status">>, <<"success">>}
+                          ,{<<"data">>, ?NUMBERS_DATA}
+                          ])).
 -endif.
 
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec info() -> map().
+info() ->
+    #{?CARRIER_INFO_MAX_PREFIX => 10
+     }.
 
 %%--------------------------------------------------------------------
 %% @public

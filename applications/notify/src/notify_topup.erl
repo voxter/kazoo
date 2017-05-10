@@ -57,6 +57,7 @@ handle_req(JObj, _Props) ->
 %% @private
 %% @doc
 %% create the props used by the template render function
+%% NOTE: amount is expected to be in dollars
 %% @end
 %%--------------------------------------------------------------------
 -spec create_template_props(kz_json:object(), kz_json:object()) -> kz_proplist().
@@ -65,7 +66,7 @@ create_template_props(_, AccountJObj) ->
     Threshold = kz_json:get_value([<<"topup">>, <<"threshold">>], AccountJObj),
     props:filter_empty([
                         {<<"account">>, notify_util:json_to_template_props(AccountJObj)}
-                       ,{<<"amount">>, pretty_print_dollars(wht_util:units_to_dollars(Amount))}
+                       ,{<<"amount">>, pretty_print_dollars(Amount)}
                        ,{<<"threshold">>, pretty_print_dollars(Threshold)}
                        ]).
 
@@ -85,7 +86,7 @@ pretty_print_dollars(Amount) ->
 %% process the AMQP requests
 %% @end
 %%--------------------------------------------------------------------
--spec build_and_send_email(iolist(), iolist(), iolist(), ne_binary() | [ne_binary(),...], proplist()) -> 'ok'.
+-spec build_and_send_email(iolist(), iolist(), iolist(), ne_binary() | [ne_binary(),...], kz_proplist()) -> 'ok'.
 build_and_send_email(TxtBody, HTMLBody, Subject, To, Props) when is_list(To)->
     _ = [build_and_send_email(TxtBody, HTMLBody, Subject, T, Props) || T <- To],
     ok;

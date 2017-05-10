@@ -34,7 +34,9 @@
         ]).
 -export([is_master_account/1]).
 -export([account_depth/1]).
--export([account_has_descendants/1]).
+-export([account_has_descendants/1
+        ,account_descendants/1
+        ]).
 -export([get_account_name/1]).
 -export([find_oldest_doc/1]).
 -export([get_event_type/1]).
@@ -59,7 +61,6 @@
         ]).
 
 -export([media_local_store_url/2]).
--export([system_report/2, system_report/3]).
 
 -include("kazoo_apps.hrl").
 -include_lib("kazoo_caches/include/kazoo_caches.hrl").
@@ -202,19 +203,33 @@ account_depth(Account) ->
     length(kz_account:tree(JObj)).
 
 %%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% List an account's descendants (including the provided AccountId).
+%% @end
+%%--------------------------------------------------------------------
+-spec account_descendants(ne_binary()) -> ne_binaries().
+account_descendants(?MATCH_ACCOUNT_RAW(AccountId)) ->
+    View = <<"accounts/listing_by_descendants">>,
+    ViewOptions = [{startkey, [AccountId]}
+                  ,{endkey, [AccountId, kz_json:new()]}
+                  ],
+    case kz_datamgr:get_results(?KZ_ACCOUNTS_DB, View, ViewOptions) of
+        {ok, JObjs} -> [kz_account:id(JObj) || JObj <- JObjs];
+        {error, _R} ->
+            lager:debug("unable to get descendants of ~s: ~p", [AccountId, _R]),
+            []
+    end.
+
+%%--------------------------------------------------------------------
 %% @public
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
 -spec account_has_descendants(ne_binary()) -> boolean().
 account_has_descendants(Account) ->
-    View = <<"accounts/listing_by_descendants">>,
     AccountId = kz_util:format_account_id(Account),
-    ViewOptions = [{'startkey', [AccountId]}
-                  ,{'endkey', [AccountId, kz_json:new()]}
-                  ],
-    {'ok', JObjs} = kz_datamgr:get_results(?KZ_ACCOUNTS_DB, View, ViewOptions),
-    lists:any(fun (JObj) -> kz_account:id(JObj) =/= AccountId end, JObjs).
+    [] =/= (account_descendants(AccountId) -- [AccountId]).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -702,7 +717,7 @@ try_split(<<_/binary>> = Bin) ->
                             {'error', file:posix() | 'badarg' | 'terminated'}.
 write_tts_file(Path, Say) ->
     lager:debug("trying to save TTS media to ~s", [Path]),
-    {'ok', _, Wav} = kapps_speech:create(Say),
+    {'ok', _, Wav} = kazoo_tts:create(Say),
     file:write_file(Path, Wav).
 
 -spec to_magic_hash(iodata()) -> ne_binary().
@@ -722,22 +737,3 @@ media_local_store_url(Call, JObj) ->
     MediaId = kz_doc:id(JObj),
     MediaName = kz_json:get_value(<<"name">>, JObj),
     kz_datamgr:attachment_url(AccountDb, MediaId, MediaName).
-
--spec system_report({text(), text()} | text(), kapps_call:call()) -> 'ok'.
-system_report({Subject, Msg}, Call) ->
-    system_report(Subject, Msg, Call);
-system_report(Msg, Call) ->
-    system_report(Msg, Msg, Call).
-
--spec system_report(text(), text(), kapps_call:call()) -> 'ok'.
-system_report(Subject, Msg, Call) ->
-    AppName = kapps_call:application_name(Call),
-    AppVersion = kapps_call:application_version(Call),
-    Notify = props:filter_undefined(
-               [{<<"Subject">>, iolist_to_binary(Subject)}
-               ,{<<"Message">>, iolist_to_binary(Msg)}
-               ,{<<"Details">>, kapps_call:to_json(Call)}
-               ,{<<"Account-ID">>, kapps_call:account_id(Call)}
-                | kz_api:default_headers(AppName, AppVersion)
-               ]),
-    kz_amqp_worker:cast(Notify, fun kapi_notifications:publish_system_alert/1).

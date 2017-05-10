@@ -9,7 +9,7 @@
 -module(teletype_webhook_disabled).
 
 -export([init/0
-        ,handle_webhook_disabled/2
+        ,handle_webhook_disabled/1
         ]).
 
 -include("teletype.hrl").
@@ -50,10 +50,11 @@ init() ->
                                           ,{'cc', ?TEMPLATE_CC}
                                           ,{'bcc', ?TEMPLATE_BCC}
                                           ,{'reply_to', ?TEMPLATE_REPLY_TO}
-                                          ]).
+                                          ]),
+    teletype_bindings:bind(<<"webhook_disabled">>, ?MODULE, 'handle_webhook_disabled').
 
--spec handle_webhook_disabled(kz_json:object(), kz_proplist()) -> 'ok'.
-handle_webhook_disabled(JObj, _Props) ->
+-spec handle_webhook_disabled(kz_json:object()) -> 'ok'.
+handle_webhook_disabled(JObj) ->
     'true' = kapi_notifications:webhook_disabled_v(JObj),
     kz_util:put_callid(JObj),
 
@@ -78,6 +79,7 @@ process_req(DataJObj) ->
     teletype_util:send_update(DataJObj, <<"pending">>),
     Macros = [{<<"account">>, teletype_util:account_params(DataJObj)}
              ,{<<"hook">>, hook_data(kz_json:get_value(<<"hook">>, DataJObj))}
+             ,{<<"system">>, teletype_util:system_params()}
              ],
 
     %% Populate templates

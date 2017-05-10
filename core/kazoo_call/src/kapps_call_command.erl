@@ -11,7 +11,6 @@
 %%%-------------------------------------------------------------------
 -module(kapps_call_command).
 
--include_lib("kazoo_translator/include/kazoo_translator.hrl").
 -include("kapps_call_command.hrl").
 
 -export([presence/2, presence/3, presence/4, presence/5]).
@@ -60,7 +59,7 @@
         ,unbridge/1, unbridge/2, unbridge/3
         ,b_bridge_wait/2
         ]).
--export([page/2, page/3, page/4, page/5, page/6, page/7]).
+-export([page/2, page/3, page/4, page/5, page/6, page/7, page/8]).
 -export([hold/1, hold/2
         ,hold_command/1, hold_command/2
         ,b_hold/1, b_hold/2, b_hold/3
@@ -127,7 +126,7 @@
 -export([b_echo/1]).
 -export([b_ring/1]).
 
--export([b_page/2, b_page/3, b_page/4, b_page/5, b_page/6, b_page/7]).
+-export([b_page/2, b_page/3, b_page/4, b_page/5, b_page/6, b_page/7, b_page/8]).
 
 -export([b_prompt/2, b_prompt/3]).
 -export([b_record/2, b_record/3, b_record/4, b_record/5, b_record/6]).
@@ -944,6 +943,7 @@ b_hangup('true', Call) ->
 -spec page(kz_json:objects(), integer(), api_binary(), api_binary(), kapps_call:call()) -> 'ok'.
 -spec page(kz_json:objects(), integer(), api_binary(), api_binary(), api_object(), kapps_call:call()) -> 'ok'.
 -spec page(kz_json:objects(), integer(), api_binary(), api_binary(), api_object(), api_object(), kapps_call:call()) -> 'ok'.
+-spec page(kz_json:objects(), integer(), api_binary(), api_binary(), api_object(), api_object(), api_object(), kapps_call:call()) -> 'ok'.
 
 -spec b_page(kz_json:objects(), kapps_call:call()) ->
                     wait_for_application_return().
@@ -957,6 +957,8 @@ b_hangup('true', Call) ->
                     wait_for_application_return().
 -spec b_page(kz_json:objects(), integer(), api_binary(), api_binary(), api_object(), api_object(), kapps_call:call()) ->
                     wait_for_application_return().
+-spec b_page(kz_json:objects(), integer(), api_binary(), api_binary(), api_object(), api_object(), api_object(), kapps_call:call()) ->
+                    wait_for_application_return().
 
 page(Endpoints, Call) ->
     page(Endpoints, ?DEFAULT_TIMEOUT_S, Call).
@@ -969,6 +971,8 @@ page(Endpoints, Timeout, CIDName, CIDNumber, Call) ->
 page(Endpoints, Timeout, CIDName, CIDNumber, SIPHeaders, Call) ->
     page(Endpoints, Timeout, CIDName, CIDNumber, SIPHeaders, 'undefined', Call).
 page(Endpoints, Timeout, CIDName, CIDNumber, SIPHeaders, CCVs, Call) ->
+    page(Endpoints, Timeout, CIDName, CIDNumber, SIPHeaders, CCVs, 'undefined', Call).
+page(Endpoints, Timeout, CIDName, CIDNumber, SIPHeaders, CCVs, Options, Call) ->
     Command = [{<<"Application-Name">>, <<"page">>}
               ,{<<"Endpoints">>, Endpoints}
               ,{<<"Timeout">>, Timeout}
@@ -976,6 +980,7 @@ page(Endpoints, Timeout, CIDName, CIDNumber, SIPHeaders, CCVs, Call) ->
               ,{<<"Caller-ID-Number">>, CIDNumber}
               ,{<<"Custom-SIP-Headers">>, SIPHeaders}
               ,{<<"Custom-Channel-Vars">>, CCVs}
+              ,{<<"Page-Options">>, Options}
               ],
     send_command(Command, Call).
 
@@ -990,7 +995,9 @@ b_page(Endpoints, Timeout, CIDName, CIDNumber, Call) ->
 b_page(Endpoints, Timeout, CIDName, CIDNumber, SIPHeaders, Call) ->
     b_page(Endpoints, Timeout, CIDName, CIDNumber, SIPHeaders, 'undefined', Call).
 b_page(Endpoints, Timeout, CIDName, CIDNumber, SIPHeaders, CCVs, Call) ->
-    page(Endpoints, Timeout, CIDName, CIDNumber, SIPHeaders, CCVs, Call),
+    b_page(Endpoints, Timeout, CIDName, CIDNumber, SIPHeaders, CCVs, 'undefined', Call).
+b_page(Endpoints, Timeout, CIDName, CIDNumber, SIPHeaders, CCVs, Options, Call) ->
+    page(Endpoints, Timeout, CIDName, CIDNumber, SIPHeaders, CCVs, Options, Call),
     wait_for_application(Call, <<"page">>).
 
 %%--------------------------------------------------------------------
@@ -1373,11 +1380,11 @@ b_play(Media, Terminators, Leg, Call) ->
 -spec tts(api_binary(), api_binary(), api_binary(), api_binaries(), kapps_call:call()) -> ne_binary().
 -spec tts(api_binary(), api_binary(), api_binary(), api_binaries(), api_binary(), kapps_call:call()) -> ne_binary().
 
-tts(SayMe, Call) -> tts(SayMe, <<"female">>, Call).
+tts(SayMe, Call) -> tts(SayMe, kazoo_tts:default_voice(), Call).
 tts(SayMe, Voice, Call) -> tts(SayMe, Voice, kapps_call:language(Call), Call).
 tts(SayMe, Voice, Lang, Call) -> tts(SayMe, Voice, Lang, ?ANY_DIGIT, Call).
 tts(SayMe, Voice, Lang, Terminators, Call) ->
-    tts(SayMe, Voice, Lang, Terminators, ?DEFAULT_TTS_ENGINE(Call), Call).
+    tts(SayMe, Voice, Lang, Terminators, kazoo_tts:default_provider(Call), Call).
 tts(SayMe, Voice, Lang, Terminators, Engine, Call) ->
     NoopId = kz_datamgr:get_uuid(),
 
@@ -1399,13 +1406,13 @@ tts(SayMe, Voice, Lang, Terminators, Engine, Call) ->
 -spec tts_command(api_binary(), api_binary(), api_binary(), api_binaries(), kapps_call:call()) -> kz_json:object().
 -spec tts_command(api_binary(), api_binary(), api_binary(), api_binaries(), api_binary(), kapps_call:call()) -> kz_json:object().
 tts_command(SayMe, Call) ->
-    tts_command(SayMe, <<"female">>, Call).
+    tts_command(SayMe, kazoo_tts:default_voice(), Call).
 tts_command(SayMe, Voice, Call) ->
     tts_command(SayMe, Voice, kapps_call:language(Call), Call).
 tts_command(SayMe, Voice, Language, Call) ->
     tts_command(SayMe, Voice, Language, ?ANY_DIGIT, Call).
 tts_command(SayMe, Voice, Language, Terminators, Call) ->
-    tts_command(SayMe, Voice, Language, Terminators, ?DEFAULT_TTS_ENGINE(Call), Call).
+    tts_command(SayMe, Voice, Language, Terminators, kazoo_tts:default_provider(Call), Call).
 tts_command(SayMe, Voice, Language, Terminators, Engine, Call) ->
     kz_json:from_list(
       props:filter_undefined(
@@ -1421,14 +1428,14 @@ tts_command(SayMe, Voice, Language, Terminators, Engine, Call) ->
 tts_terminators('undefined') -> ?ANY_DIGIT;
 tts_terminators(Terminators) -> Terminators.
 
-tts_voice('undefined') -> <<"female">>;
+tts_voice('undefined') -> kazoo_tts:default_voice();
 tts_voice(Voice) -> Voice.
 
 tts_language('undefined', Call) -> kapps_call:language(Call);
 tts_language(Language, _Call) -> Language.
 
 -spec tts_engine(api_ne_binary(), kapps_call:call()) -> ne_binary().
-tts_engine('undefined', Call) -> ?DEFAULT_TTS_ENGINE(Call);
+tts_engine('undefined', Call) -> kazoo_tts:default_provider(Call);
 tts_engine(Engine, _Call) -> Engine.
 
 -spec b_tts(api_binary(), kapps_call:call()) -> kapps_api_std_return().
@@ -3135,7 +3142,7 @@ store_file(Filename, Url, Tries, Call) ->
 store_file(Filename, Url, Tries, Timeout, Call) ->
     Msg = case kapps_call:kvs_fetch('alert_msg', Call) of
               'undefined' ->
-                  io_lib:format("error storing file ~s from media server ~s",
+                  io_lib:format("Error Storing File ~s From Media Server ~s",
                                 [Filename, kapps_call:switch_nodename(Call)]);
               ErrorMsg -> ErrorMsg
           end,
@@ -3190,7 +3197,11 @@ retry_store_file(0, _Timeout, _API, Msg, Error, Call) ->
     Funs = [{fun kapps_call:kvs_store/3, 'store_error', Error}
            ,{fun kapps_call:kvs_store/3, 'media_server', kapps_call:switch_nodename(Call)}
            ],
-    kapps_util:system_report(Msg, Error, kapps_call:exec(Funs, Call)),
+    kz_notify:detailed_alert(kz_term:to_binary(Msg)
+                            ,kz_term:to_binary(Error)
+                            ,kapps_call:to_proplist(kapps_call:exec(Funs, Call))
+                            ,[]
+                            ),
     {'error', Error};
 retry_store_file(Tries, Timeout, API, Msg, Error, Call) ->
     lager:critical("~s : ~s", [Msg, Error]),

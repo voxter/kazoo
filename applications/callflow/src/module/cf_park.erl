@@ -19,7 +19,7 @@
 
 -define(MOD_CONFIG_CAT, <<(?CF_CONFIG_CAT)/binary, ".park">>).
 
--define(DB_DOC_NAME, kapps_config:get(?MOD_CONFIG_CAT, <<"db_doc_name">>, <<"parked_calls">>)).
+-define(DB_DOC_NAME, kapps_config:get_binary(?MOD_CONFIG_CAT, <<"db_doc_name">>, <<"parked_calls">>)).
 -define(DEFAULT_RINGBACK_TM, kapps_config:get_integer(?MOD_CONFIG_CAT, <<"default_ringback_timeout">>, 120000)).
 -define(DEFAULT_CALLBACK_TM, kapps_config:get_integer(?MOD_CONFIG_CAT, <<"default_callback_timeout">>, 30000)).
 -define(PARKED_CALLS_KEY(Db), {?MODULE, 'parked_calls', Db}).
@@ -28,6 +28,7 @@
 -define(ACCOUNT_PARKED_TYPE(A), kapps_account_config:get(A, ?MOD_CONFIG_CAT, <<"parked_presence_type">>, ?SYSTEM_PARKED_TYPE)).
 -define(PRESENCE_TYPE_KEY, <<"Presence-Type">>).
 -define(PARK_DELAY_CHECK_TIME, ?MILLISECONDS_IN_SECOND * 10).
+-define(PARKING_APP_NAME, <<"park">>).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -352,7 +353,10 @@ do_save_slot(SlotNumber, Slot, ParkedCalls, Call) ->
                     kz_cache:store_local(?CACHE_NAME, ?PARKED_CALLS_KEY(AccountDb), JObj, CacheProps),
                     Ok;
                 {'error', 'conflict'} ->
-                    maybe_resolve_conflict(SlotNumber, Slot, ParkedCalls, Call)
+                    maybe_resolve_conflict(SlotNumber, Slot, ParkedCalls, Call);
+                {'error', _Error} ->
+                    lager:info("error when attempting to store call parking data for slot ~s : ~p", [SlotNumber, _Error]),
+                    {'error', 'occupied'}
             end;
         _Else ->
             lager:debug("ignoring attempt to park terminated call ~s", [CallId]),
@@ -369,11 +373,18 @@ maybe_resolve_conflict(SlotNumber, Slot, ParkedCalls, Call) ->
     case kz_json:get_ne_binary_value([<<"slots">>, SlotNumber, <<"Call-ID">>], JObj1) of
         ExpectedParkedCall ->
             UpdatedJObj = kz_json:set_value([<<"slots">>, SlotNumber], Slot, JObj1),
-            {'ok', JObj2}=Ok = kz_datamgr:save_doc(AccountDb, UpdatedJObj),
-            lager:info("conflict when attempting to store call parking data for slot ~s due to a different slot update", [SlotNumber]),
-            CacheProps = [{'origin', {'db', AccountDb, ?DB_DOC_NAME}}],
-            kz_cache:store_local(?CACHE_NAME, ?PARKED_CALLS_KEY(AccountDb), JObj2, CacheProps),
-            Ok;
+            case kz_datamgr:save_doc(AccountDb, UpdatedJObj) of
+                {'error', 'conflict'} ->
+                    maybe_resolve_conflict(SlotNumber, Slot, ParkedCalls, Call);
+                {'ok', JObj2}=Ok ->
+                    lager:info("conflict when attempting to store call parking data for slot ~s due to a different slot update", [SlotNumber]),
+                    CacheProps = [{'origin', {'db', AccountDb, ?DB_DOC_NAME}}],
+                    kz_cache:store_local(?CACHE_NAME, ?PARKED_CALLS_KEY(AccountDb), JObj2, CacheProps),
+                    Ok;
+                {'error', _Error} ->
+                    lager:info("error when attempting to store call parking data for slot ~s due to a different slot update : ~p", [SlotNumber, _Error]),
+                    {'error', 'occupied'}
+            end;
         CurrentParkedCall ->
             lager:debug("attempt to store parking data conflicted with a recent update to slot ~s", [SlotNumber]),
             CacheProps = [{'origin', {'db', AccountDb, ?DB_DOC_NAME}}],
@@ -532,11 +543,12 @@ get_parked_calls(AccountDb, AccountId) ->
 
 -spec fetch_parked_calls(ne_binary(), ne_binary()) -> kz_json:object().
 fetch_parked_calls(AccountDb, AccountId) ->
-    case kz_datamgr:open_doc(AccountDb, ?DB_DOC_NAME) of
+    DocName = ?DB_DOC_NAME,
+    case kz_datamgr:open_doc(AccountDb, DocName) of
         {'error', 'not_found'} ->
             TS = kz_time:current_tstamp(),
-            Generators = [fun(J) -> kz_doc:set_id(J, <<"parked_calls">>) end
-                         ,fun(J) -> kz_doc:set_type(J, <<"parked_calls">>) end
+            Generators = [fun(J) -> kz_doc:set_id(J, DocName) end
+                         ,fun(J) -> kz_doc:set_type(J, DocName) end
                          ,fun(J) -> kz_doc:set_account_id(J, AccountId) end
                          ,fun(J) -> kz_doc:set_account_db(J, AccountDb) end
                          ,fun(J) -> kz_doc:set_created(J, TS) end
@@ -812,7 +824,7 @@ update_presence(State, Slot) ->
                 ,{<<"Expires">>, Expires}
                 ,{<<"Event-Package">>, <<"dialog">>}
 
-                 | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+                 | kz_api:default_headers(?PARKING_APP_NAME, ?APP_VERSION)
                 ]),
     lager:info("update presence-id '~s' with state: ~s", [PresenceId, State]),
     kz_amqp_worker:cast(Command, fun kapi_presence:publish_dialog/1).
@@ -851,15 +863,14 @@ publish_abandoned(Call, Slot) ->
 %%--------------------------------------------------------------------
 -spec publish_event(kapps_call:call(), ne_binary(), ne_binary()) -> 'ok'.
 publish_event(Call, SlotNumber, Event) ->
-    Cmd = [
-           {<<"Event-Name">>, Event}
-          ,{<<"Call-ID">>, kapps_call:call_id(Call)}
-          ,{<<"Parking-Slot">>, kz_term:to_binary(SlotNumber)}
-          ,{<<"Caller-ID-Number">>, kapps_call:caller_id_number(Call)}
-          ,{<<"Caller-ID-Name">>, kapps_call:caller_id_name(Call)}
-          ,{<<"Callee-ID-Number">>, kapps_call:callee_id_number(Call)}
+    Cmd = [{<<"Call-ID">>, kapps_call:call_id(Call)}
           ,{<<"Callee-ID-Name">>, kapps_call:callee_id_name(Call)}
+          ,{<<"Callee-ID-Number">>, kapps_call:callee_id_number(Call)}
+          ,{<<"Caller-ID-Name">>, kapps_call:caller_id_name(Call)}
+          ,{<<"Caller-ID-Number">>, kapps_call:caller_id_number(Call)}
           ,{<<"Custom-Channel-Vars">>, kapps_call:custom_channel_vars(Call)}
+          ,{<<"Event-Name">>, Event}
+          ,{<<"Parking-Slot">>, kz_term:to_binary(SlotNumber)}
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     kapi_call:publish_event(Cmd).

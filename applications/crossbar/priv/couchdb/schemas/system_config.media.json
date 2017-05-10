@@ -63,6 +63,10 @@
             "description": "media proxy hostname to be used with haproxy",
             "type": "string"
         },
+        "proxy_ip": {
+            "description": "media proxy ip",
+            "type": "string"
+        },
         "proxy_listeners": {
             "default": 25,
             "description": "media proxy listeners",
@@ -75,7 +79,7 @@
         "proxy_port": {
             "default": 24517,
             "description": "media proxy port",
-            "type": "string"
+            "type": "integer"
         },
         "proxy_store_acls": {
             "default": [
@@ -125,11 +129,6 @@
             "default": true,
             "description": "media support account overrides",
             "type": "boolean"
-        },
-        "tts_cache": {
-            "default": 3600000,
-            "description": "media tts cache",
-            "type": "integer"
         },
         "use_https": {
             "default": false,

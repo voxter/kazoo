@@ -28,7 +28,7 @@
         ]).
 
 -include("crossbar.hrl").
--include_lib("kazoo_json/include/kazoo_json.hrl").
+-include_lib("kazoo_stdlib/include/kazoo_json.hrl").
 -include_lib("kazoo_number_manager/include/knm_phone_number.hrl").
 -include_lib("kazoo_number_manager/include/knm_port_request.hrl").
 
@@ -40,7 +40,6 @@
                                 | ?PDF_CONTENT_TYPES
                                ]).
 
--define(AGG_VIEW_DESCENDANTS, <<"accounts/listing_by_descendants">>).
 -define(ACCOUNTS_BY_SIMPLE_ID, <<"accounts/listing_by_simple_id">>).
 -define(PORT_REQ_NUMBERS, <<"port_requests/port_in_numbers">>).
 -define(ALL_PORT_REQ_NUMBERS, <<"port_requests/all_port_in_numbers">>).
@@ -365,9 +364,9 @@ patch_then_notify(Context, PortId, PortState) ->
 -spec do_patch(cb_context:context()) -> cb_context:context().
 do_patch(Context) ->
     UpdatedDoc =
-        kz_json:merge_recursive(cb_context:doc(Context)
-                               ,kz_json:public_fields(cb_context:req_data(Context))
-                               ),
+        kz_json:merge(cb_context:doc(Context)
+                     ,kz_doc:public_fields(cb_context:req_data(Context))
+                     ),
 
     Context1  = crossbar_doc:save(update_port_request_for_save(Context, UpdatedDoc)),
     RespData1 = knm_port_request:public_fields(cb_context:doc(Context1)),
@@ -699,16 +698,10 @@ build_keys(Context, Number) ->
         [AccountId] ->
             [[AccountId, E164]];
         [AccountId, ?PORT_DESCENDANTS] ->
-            ViewOptions = [{'startkey', [AccountId]}
-                          ,{'endkey', [AccountId, kz_json:new()]}
-                          ],
-            case kz_datamgr:get_results(?KZ_ACCOUNTS_DB, ?AGG_VIEW_DESCENDANTS, ViewOptions) of
-                {'error', _R} ->
-                    lager:error("failed to query view ~p", [_R]),
-                    [];
-                {'ok', JObjs} ->
-                    lists:reverse([[kz_doc:id(JObj), E164] || JObj <- JObjs])
-            end
+            lists:reverse(
+              [[AnAccountId, E164]
+               || AnAccountId <- kapps_util:account_descendants(AccountId)
+              ])
     end.
 
 -spec load_summary(cb_context:context(), crossbar_doc:view_options() | [{'normalize', boolean()}]) ->

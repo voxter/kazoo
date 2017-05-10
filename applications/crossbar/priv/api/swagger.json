@@ -179,6 +179,17 @@
             },
             "type": "object"
         },
+        "account_config.omnipresence": {
+            "description": "Schema for omnipresence account_config",
+            "properties": {
+                "dialog_subscribed_mwi_prefix": {
+                    "default": "*98",
+                    "description": "prefix used when subsribing vm updates for dialog",
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
         "account_config.privacy": {
             "description": "Schema for privacy account_config",
             "properties": {
@@ -549,6 +560,12 @@
                     "required": true,
                     "type": "string"
                 },
+                "masqueradable": {
+                    "default": true,
+                    "description": "Whether an application is masqueradable or not",
+                    "required": false,
+                    "type": "boolean"
+                },
                 "name": {
                     "description": "Application name",
                     "maxLength": 64,
@@ -661,11 +678,39 @@
             "required": false,
             "type": "object"
         },
+        "auth.app": {
+            "additionalProperties": true,
+            "description": "app description for authentication providers",
+            "properties": {
+                "client_id": {
+                    "description": "client_id, usually appplication id for oauth providers",
+                    "type": "string"
+                },
+                "email": {
+                    "description": "email for app",
+                    "type": "string"
+                },
+                "provider": {
+                    "description": "provider",
+                    "type": "string"
+                },
+                "secret": {
+                    "description": "secret for app",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "client_id",
+                "provider",
+                "secret"
+            ],
+            "type": "object"
+        },
         "auth.callback": {
             "additionalProperties": true,
             "description": "callback for authentication providers",
             "properties": {
-                "clientId": {
+                "client_id": {
                     "description": "client id, usually appplication id for oauth providers",
                     "type": "string"
                 },
@@ -677,7 +722,7 @@
                     "description": "provider",
                     "type": "string"
                 },
-                "redirecUri": {
+                "redirect_uri": {
                     "description": "redirect uri",
                     "type": "string"
                 },
@@ -688,9 +733,54 @@
             },
             "required": [
                 "provider",
-                "redirectUri",
-                "clientId",
-                "code"
+                "code",
+                "client_id",
+                "redirect_uri"
+            ],
+            "type": "object"
+        },
+        "auth.provider": {
+            "additionalProperties": true,
+            "description": "provider settings for authentication",
+            "properties": {
+                "id": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "id"
+            ],
+            "type": "object"
+        },
+        "auth_provider": {
+            "additionalProperties": true,
+            "description": "authentication providers",
+            "properties": {
+                "enabled": {
+                    "default": true,
+                    "description": "whether or not this authentication provider is enabled",
+                    "type": "boolean"
+                },
+                "provider_name": {
+                    "description": "authentication provider name",
+                    "type": "string"
+                },
+                "provider_type": {
+                    "description": "the type of authentication provider",
+                    "enum": [
+                        "multi_factor",
+                        "oauth"
+                    ],
+                    "type": "string"
+                },
+                "settings": {
+                    "description": "provider configurations",
+                    "type": "object"
+                }
+            },
+            "required": [
+                "provider_name",
+                "provider_type"
             ],
             "type": "object"
         },
@@ -1292,10 +1382,6 @@
                     "description": "Device ID",
                     "type": "string"
                 },
-                "source": {
-                    "description": "Source of generating the endpoint (read-only)",
-                    "type": "string"
-                },
                 "static_invite": {
                     "description": "Override the SIP Username",
                     "type": "string"
@@ -1539,6 +1625,19 @@
                     "required": false,
                     "type": "string"
                 },
+                "ringtones": {
+                    "properties": {
+                        "external": {
+                            "description": "Ring tone for calls from external sources",
+                            "type": "string"
+                        },
+                        "internal": {
+                            "description": "Ring tone for calls from external sources",
+                            "type": "string"
+                        }
+                    },
+                    "type": "object"
+                },
                 "strategy": {
                     "default": "simultaneous",
                     "description": "How to ring the endpoints",
@@ -1773,6 +1872,41 @@
             "required": true,
             "type": "object"
         },
+        "callflows.missed_call_alert": {
+            "description": "Validator for the missed_call_alert callflow's data object",
+            "properties": {
+                "recipients": {
+                    "description": "One or more specific email addresses, Kazoo user ids or a combination of both",
+                    "items": {
+                        "properties": {
+                            "id": {
+                                "description": "The email address/user ID or the list of email addresses/user IDs based on sepecified type",
+                                "type": [
+                                    "string",
+                                    "array"
+                                ]
+                            },
+                            "type": {
+                                "description": "Controls if the ID of this object is a Kazoo user ID or an email address",
+                                "enum": [
+                                    "user",
+                                    "email"
+                                ],
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "type"
+                        ],
+                        "type": "object"
+                    },
+                    "type": "array"
+                }
+            },
+            "required": true,
+            "type": "object"
+        },
         "callflows.move": {
             "description": "Validator for the move callflow's data object",
             "properties": {},
@@ -1874,6 +2008,16 @@
         "callflows.page_group": {
             "description": "Validator for the page_group callflow's data object",
             "properties": {
+                "audio": {
+                    "default": "one-way",
+                    "description": "What kind of audio for the group members",
+                    "enum": [
+                        "one-way",
+                        "two-way"
+                    ],
+                    "required": true,
+                    "type": "string"
+                },
                 "barge_calls": {
                     "description": "Should the Endpoint be interrupted by this call",
                     "type": "boolean"
@@ -1955,6 +2099,11 @@
                 },
                 "default_presence_type": {
                     "description": "Type of presence to update",
+                    "enum": [
+                        "early",
+                        "terminated",
+                        "confirmed"
+                    ],
                     "type": "string"
                 },
                 "default_ringback_timeout": {
@@ -2372,7 +2521,7 @@
                 },
                 "ignore_forward": {
                     "default": true,
-                    "description": "Whether to ring forwarded endpoints",
+                    "description": "If true, will ignore SIP redirect requests for call-forwarded devices",
                     "required": false,
                     "type": "boolean"
                 },
@@ -2387,6 +2536,19 @@
                     "description": "Ringback to use",
                     "required": false,
                     "type": "string"
+                },
+                "ringtones": {
+                    "properties": {
+                        "external": {
+                            "description": "Ring tone for calls from external sources",
+                            "type": "string"
+                        },
+                        "internal": {
+                            "description": "Ring tone for calls from external sources",
+                            "type": "string"
+                        }
+                    },
+                    "type": "object"
                 },
                 "strategy": {
                     "default": "simultaneous",
@@ -2404,6 +2566,27 @@
                     "description": "How long to ring the ring group before continuing, in seconds",
                     "required": false,
                     "type": "integer"
+                }
+            },
+            "required": true,
+            "type": "object"
+        },
+        "callflows.ring_group_toggle": {
+            "description": "Validator for the ring_group_toggle callflow's data object",
+            "properties": {
+                "action": {
+                    "description": "What the module should do. Options are 'login' and 'logout'",
+                    "enum": [
+                        "login",
+                        "logout"
+                    ],
+                    "required": true,
+                    "type": "string"
+                },
+                "callflow_id": {
+                    "description": "The callflow containing the ring group to log in and out of",
+                    "required": true,
+                    "type": "string"
                 }
             },
             "required": true,
@@ -2552,7 +2735,8 @@
                     "description": "What TTS engine to use",
                     "enum": [
                         "flite",
-                        "ispeech"
+                        "ispeech",
+                        "voicefabric"
                     ],
                     "required": false,
                     "type": "string"
@@ -2562,6 +2746,24 @@
                     "description": "The language of the speaker",
                     "required": false,
                     "type": "string"
+                },
+                "terminators": {
+                    "default": [
+                        "1",
+                        "2",
+                        "3",
+                        "4",
+                        "5",
+                        "6",
+                        "7",
+                        "8",
+                        "9",
+                        "*",
+                        "0",
+                        "#"
+                    ],
+                    "description": "What DTMF can terminate playback of the audio",
+                    "type": "array(string)"
                 },
                 "text": {
                     "description": "The text to speak",
@@ -2602,10 +2804,6 @@
                 },
                 "id": {
                     "description": "User ID",
-                    "type": "string"
-                },
-                "source": {
-                    "description": "Source of the endpoint(s)",
                     "type": "string"
                 },
                 "static_invite": {
@@ -3033,6 +3231,18 @@
         "conferences": {
             "description": "Schema for conferences",
             "properties": {
+                "bridge_password": {
+                    "description": "the password used for a conference bridge",
+                    "type": "string"
+                },
+                "bridge_username": {
+                    "description": "the username used for a conference bridge",
+                    "type": "string"
+                },
+                "caller_controls": {
+                    "description": "caller controls (config settings)",
+                    "type": "string"
+                },
                 "conference_numbers": {
                     "default": [],
                     "description": "Defines conference numbers that can be used by members or moderators",
@@ -3050,8 +3260,15 @@
                     "required": false,
                     "type": "string"
                 },
+                "max_members_media": {
+                    "description": "Media to play when the conference is full",
+                    "type": "string"
+                },
+                "max_participants": {
+                    "description": "The maximum number of participants that can join",
+                    "type": "integer"
+                },
                 "member": {
-                    "default": {},
                     "description": "Defines the discovery (call in) properties for a member",
                     "properties": {
                         "join_deaf": {
@@ -3095,7 +3312,6 @@
                     "type": "object"
                 },
                 "moderator": {
-                    "default": {},
                     "description": "Defines the discovery (call in) properties for a moderator",
                     "properties": {
                         "join_deaf": {
@@ -3137,6 +3353,10 @@
                     "required": false,
                     "type": "object"
                 },
+                "moderator_controls": {
+                    "description": "profile on the switch for controlling the conference as a moderator",
+                    "type": "string"
+                },
                 "name": {
                     "description": "A friendly name for the conference",
                     "maxLength": 128,
@@ -3151,16 +3371,42 @@
                     "required": false,
                     "type": "string"
                 },
+                "play_entry_tone": {
+                    "description": "Whether to play an entry tone, or the entry tone to play",
+                    "type": [
+                        "boolean",
+                        "string"
+                    ]
+                },
+                "play_exit_tone": {
+                    "description": "Whether to play an exit tone, or the exit tone to play",
+                    "type": [
+                        "boolean",
+                        "string"
+                    ]
+                },
                 "play_name": {
                     "default": false,
                     "description": "Do we need to announce new conference members?",
                     "required": false,
                     "type": "boolean"
                 },
+                "play_welcome": {
+                    "description": "Whether to play the welcome prompt",
+                    "type": "boolean"
+                },
                 "profile": {
                     "description": "The XML profile name used to configure the conference",
                     "required": false,
                     "type": "string"
+                },
+                "require_moderator": {
+                    "description": "does the conference require a moderator",
+                    "type": "boolean"
+                },
+                "wait_for_moderator": {
+                    "description": "should members wait for a moderator before joining the conference",
+                    "type": "boolean"
                 }
             },
             "required": false,
@@ -5258,9 +5504,6 @@
                     "type": "string"
                 }
             },
-            "required": [
-                "id"
-            ],
             "type": "object"
         },
         "metaflow.hangup": {
@@ -5761,6 +6004,21 @@
                     },
                     "type": "object"
                 },
+                "create_with_state": {
+                    "description": "The state to create numbers in",
+                    "enum": [
+                        "aging",
+                        "available",
+                        "deleted",
+                        "discovery",
+                        "in_service",
+                        "port_in",
+                        "port_out",
+                        "released",
+                        "reserved"
+                    ],
+                    "type": "string"
+                },
                 "e911": {
                     "properties": {
                         "activated_time": {
@@ -5824,6 +6082,8 @@
                         },
                         "region": {
                             "description": "The region (state) where the number is in service",
+                            "maxLength": 2,
+                            "minLength": 2,
                             "type": "string"
                         },
                         "status": {
@@ -7637,6 +7897,10 @@
         "system_config.auth": {
             "description": "Schema for auth system_config",
             "properties": {
+                "default_multi_factor_provider": {
+                    "description": "Default multi factor authentication provider name",
+                    "type": "string"
+                },
                 "secret_for_user_signature": {
                     "description": "auth secret for user signature",
                     "type": "string"
@@ -7646,6 +7910,19 @@
                     "type": "string"
                 }
             },
+            "type": "object"
+        },
+        "system_config.auth.mfa": {
+            "description": "Schema for auth.mfa system_config",
+            "properties": {
+                "default_provider": {
+                    "description": "Default provider name for multi authentication factor",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "default_provider"
+            ],
             "type": "object"
         },
         "system_config.blackhole": {
@@ -7691,12 +7968,12 @@
                     "type": "boolean"
                 },
                 "default_environment": {
-                    "default": [],
+                    "default": "",
                     "description": "braintree default environment",
                     "type": "string"
                 },
                 "default_merchant_id": {
-                    "default": [],
+                    "default": "",
                     "description": "braintree default merchant id",
                     "type": "string"
                 },
@@ -7760,6 +8037,17 @@
                     "default": 5000,
                     "description": "call_command message timeout",
                     "type": "integer"
+                }
+            },
+            "type": "object"
+        },
+        "system_config.call_inspector": {
+            "description": "Schema for call_inspector system_config",
+            "properties": {
+                "startup_parsers": {
+                    "default": {},
+                    "description": "parser specifications. Will be started on app startup",
+                    "type": "object"
                 }
             },
             "type": "object"
@@ -8177,14 +8465,19 @@
                     "description": "cdr ignore loopback bowout",
                     "type": "boolean"
                 },
-                "refresh_timeout": {
-                    "default": 900,
-                    "description": "time in seconds to to trigger cdrs view refresh",
-                    "type": "integer"
+                "refresh_view_enabled": {
+                    "default": false,
+                    "description": "enable or disable the view refresh feature",
+                    "type": "boolean"
                 },
                 "refresh_view_threshold": {
-                    "default": 0,
+                    "default": 10,
                     "description": "number of cdrs to trigger view refresh",
+                    "type": "integer"
+                },
+                "refresh_view_timeout": {
+                    "default": 900,
+                    "description": "time in seconds to to trigger cdrs view refresh",
                     "type": "integer"
                 },
                 "store_anonymous": {
@@ -8328,11 +8621,6 @@
                     "default": true,
                     "description": "crossbar ensure valid schema",
                     "type": "boolean"
-                },
-                "expiry_percentage": {
-                    "default": 75,
-                    "description": "crossbar expiry percentage",
-                    "type": "integer"
                 },
                 "ip": {
                     "description": "crossbar ip",
@@ -8511,15 +8799,20 @@
         "system_config.crossbar.auth": {
             "description": "Schema for crossbar.auth system_config",
             "properties": {
+                "auth_modules": {
+                    "default": {},
+                    "description": "Default crossbar authentication modules configuration",
+                    "type": "object"
+                },
                 "basic_auth_type": {
                     "default": "md5",
                     "description": "crossbar.auth basic auth type",
                     "type": "string"
                 },
-                "kazoo_auth_configs": {
-                    "default": {},
-                    "description": "Kazoo Auth modules' configurations",
-                    "type": "object"
+                "log_failed_login_attempts": {
+                    "default": false,
+                    "description": "Should log failed login attempts",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -8690,6 +8983,11 @@
         "system_config.crossbar.notifications": {
             "description": "Schema for crossbar.notifications system_config",
             "properties": {
+                "inherit_default_values": {
+                    "default": false,
+                    "description": "crossbar.notifications use parent notifications doc as default values, to be overridden by request data (prior to validation)",
+                    "type": "boolean"
+                },
                 "notification_timeout_ms": {
                     "default": 5000,
                     "description": "crossbar.notifications notification timeout in milliseconds",
@@ -8910,6 +9208,22 @@
                     "default": 35,
                     "description": "crossbar.ubiquiti tokens per request",
                     "type": "integer"
+                }
+            },
+            "type": "object"
+        },
+        "system_config.crossbar.voicemail": {
+            "description": "Schema for crossbar.voicemail system_config",
+            "properties": {
+                "normalization_format": {
+                    "default": "mp3",
+                    "description": "Voicemail default audio format",
+                    "type": "string"
+                },
+                "normalize_media": {
+                    "default": false,
+                    "description": "Whether or not normalize voicemail audio file",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -9173,6 +9487,17 @@
                     "description": "ecallmgr event stream idle alert",
                     "type": "integer"
                 },
+                "expandable_macros": {
+                    "default": {
+                        "{account_id}": "${ecallmgr_Account-ID}",
+                        "{billing_id}": "${ecallmgr_Billing-ID}",
+                        "{caller_id_name}": "${caller_id_name}",
+                        "{caller_id_number}": "${caller_id_number}",
+                        "{reseller_id}": "${ecallmgr_Reseller-ID}"
+                    },
+                    "description": "macros that will be expanded at call-time, for use in custom SIP headers",
+                    "type": "object"
+                },
                 "expires_deviation_time": {
                     "default": 180,
                     "description": "ecallmgr expires deviation time",
@@ -9426,11 +9751,6 @@
                     "description": "fax cloud registration pool interval",
                     "type": "integer"
                 },
-                "conversion_command": {
-                    "default": "/usr/bin/gs -q -r204x98 -g1728x1078 -dNOPAUSE -dBATCH -dSAFER -sDEVICE=tiffg3 -sOutputFile=~s -- ~s > /dev/null && echo -n \"success\"",
-                    "description": "fax conversion command",
-                    "type": "string"
-                },
                 "conversion_image_command": {
                     "default": "convert -density 204x98 -units PixelsPerInch -size 1728x1078 ~s ~s > /dev/null && echo -n success",
                     "description": "fax conversion image command",
@@ -9442,7 +9762,7 @@
                     "type": "string"
                 },
                 "conversion_pdf_command": {
-                    "default": "/usr/bin/gs -q -r204x98 -g1728x1078 -dNOPAUSE -dBATCH -dSAFER -sDEVICE=tiffg3 -sOutputFile=~s -- ~s > /dev/null && echo -n \"success\"",
+                    "default": "/usr/bin/gs -q -r204x98 -g1728x1078 -dNOPAUSE -dBATCH -dSAFER -sDEVICE=tiffg3 -sOutputFile=~s -- ~s > /dev/null && echo -n success",
                     "description": "fax conversion pdf command",
                     "type": "string"
                 },
@@ -9571,6 +9891,11 @@
                 "report_faxbox_system_errors": {
                     "default": true,
                     "description": "fax report faxbox system errors",
+                    "type": "boolean"
+                },
+                "report_smtp_errors": {
+                    "default": true,
+                    "description": "Report SMTP-related errors via notifications",
                     "type": "boolean"
                 },
                 "reschedule": {
@@ -9741,6 +10066,16 @@
                     "description": "build timeout (ms) for trie",
                     "type": "integer"
                 },
+                "trie_lru_expires_s": {
+                    "default": 86400,
+                    "description": "How long an entry in the LRU trie can remain",
+                    "type": "integer"
+                },
+                "trie_module": {
+                    "default": "hon_trie",
+                    "description": "Which trie module to use",
+                    "type": "string"
+                },
                 "use_trie": {
                     "default": false,
                     "description": "whether to use the trie to store rates in the VM",
@@ -9774,6 +10109,11 @@
         "system_config.kapps_controller": {
             "description": "Schema for kapps_controller system_config",
             "properties": {
+                "default_apps_ip_address_to_bind": {
+                    "default": "0.0.0.0",
+                    "description": "Default IP which Kazoo Applications can bind into",
+                    "type": "string"
+                },
                 "kapps": {
                     "default": [
                         "blackhole",
@@ -9826,15 +10166,28 @@
         "system_config.kazoo_couch": {
             "description": "Schema for kazoo_couch system_config",
             "properties": {
+                "admin_port": {
+                    "description": "The CouchDB API port, typically 5986",
+                    "type": "integer"
+                },
                 "allow_maintenance_db_delete": {
                     "default": false,
                     "description": "kazoo_couch allow maintenance db delete",
                     "type": "boolean"
                 },
+                "api_port": {
+                    "default": 5984,
+                    "description": "The CouchDB API port, typically 5984",
+                    "type": "integer"
+                },
                 "autocompaction_check": {
                     "default": 60000,
                     "description": "kazoo_couch autocompaction check",
                     "type": "integer"
+                },
+                "bigcouch_cookie": {
+                    "description": "The cookie value of all the BigCouch nodes",
+                    "type": "string"
                 },
                 "compact_automatically": {
                     "default": true,
@@ -10124,6 +10477,10 @@
                     "description": "media proxy hostname to be used with haproxy",
                     "type": "string"
                 },
+                "proxy_ip": {
+                    "description": "media proxy ip",
+                    "type": "string"
+                },
                 "proxy_listeners": {
                     "default": 25,
                     "description": "media proxy listeners",
@@ -10136,7 +10493,7 @@
                 "proxy_port": {
                     "default": 24517,
                     "description": "media proxy port",
-                    "type": "string"
+                    "type": "integer"
                 },
                 "proxy_store_acls": {
                     "default": [
@@ -10186,11 +10543,6 @@
                     "default": true,
                     "description": "media support account overrides",
                     "type": "boolean"
-                },
-                "tts_cache": {
-                    "default": 3600000,
-                    "description": "media tts cache",
-                    "type": "integer"
                 },
                 "use_https": {
                     "default": false,
@@ -10320,6 +10672,44 @@
         "system_config.notify": {
             "description": "Schema for notify system_config",
             "properties": {
+                "autoload_modules": {
+                    "default": [
+                        "teletype_account_zone_change",
+                        "teletype_cnam_request",
+                        "teletype_customer_update",
+                        "teletype_denied_emergency_bridge",
+                        "teletype_deregister",
+                        "teletype_fax_inbound_error_to_email",
+                        "teletype_fax_inbound_to_email",
+                        "teletype_fax_outbound_error_to_email",
+                        "teletype_fax_outbound_smtp_error_to_email",
+                        "teletype_fax_outbound_to_email",
+                        "teletype_first_occurrence",
+                        "teletype_low_balance",
+                        "teletype_new_account",
+                        "teletype_new_user",
+                        "teletype_password_recovery",
+                        "teletype_port_cancel",
+                        "teletype_port_comment",
+                        "teletype_ported",
+                        "teletype_port_pending",
+                        "teletype_port_rejected",
+                        "teletype_port_request_admin",
+                        "teletype_port_request",
+                        "teletype_port_scheduled",
+                        "teletype_port_unconfirmed",
+                        "teletype_service_added",
+                        "teletype_system_alert",
+                        "teletype_template_skel",
+                        "teletype_topup",
+                        "teletype_transaction",
+                        "teletype_voicemail_full",
+                        "teletype_voicemail_to_email",
+                        "teletype_webhook_disabled"
+                    ],
+                    "description": "teletype modules to start when teletype is started",
+                    "type": "array"
+                },
                 "backoff_fudge_ms": {
                     "default": 5000,
                     "description": "notify backoff fudge in milliseconds",
@@ -10806,14 +11196,24 @@
                     "description": "number_manager force port out outbound",
                     "type": "boolean"
                 },
+                "local_feature_override": {
+                    "default": false,
+                    "description": "overrides the filtering of external features for local numbers",
+                    "type": "boolean"
+                },
                 "maximum_search_quantity": {
-                    "default": 50,
+                    "default": 500,
                     "description": "maximum number of returned DIDs in search query",
                     "type": "integer"
                 },
                 "number_search_timeout_ms": {
                     "default": 5000,
                     "description": "number manager number search timeout in milliseconds",
+                    "type": "integer"
+                },
+                "parallel_jobs_count": {
+                    "default": 1,
+                    "description": "number of concurrent workers that can process a migration at the same time (1=non parallel behavior, MUST be >0)",
                     "type": "integer"
                 },
                 "port_in_module_name": {
@@ -10830,6 +11230,7 @@
                     "type": "string"
                 },
                 "released_state": {
+                    "default": "available",
                     "description": "number_manager released state",
                     "type": "string"
                 },
@@ -10838,12 +11239,8 @@
                     "description": "number_manager should age",
                     "type": "boolean"
                 },
-                "should_bulk_batch_writes": {
-                    "default": false,
-                    "description": "number_manager should bulk batch writes",
-                    "type": "boolean"
-                },
                 "should_permanently_delete": {
+                    "default": false,
                     "description": "number_manager should permanently delete",
                     "type": "boolean"
                 },
@@ -10990,7 +11387,8 @@
             "description": "Schema for number_manager.locality system_config",
             "properties": {
                 "url": {
-                    "description": "number_manager.locality url"
+                    "description": "number_manager.locality url",
+                    "type": "string"
                 }
             },
             "type": "object"
@@ -11152,6 +11550,11 @@
         "system_config.omnipresence": {
             "description": "Schema for omnipresence system_config",
             "properties": {
+                "dialog_subscribed_mwi_prefix": {
+                    "default": "*98",
+                    "description": "prefix used when subsribing vm updates for dialog",
+                    "type": "string"
+                },
                 "expire_check_ms": {
                     "default": 1000,
                     "description": "omnipresence expire check in milliseconds",
@@ -11162,23 +11565,9 @@
                     "description": "omnipresence expires fudge in seconds",
                     "type": "integer"
                 },
-                "modules": {
-                    "default": [
-                        "omnip_dialog_amqp",
-                        "omnip_message_summary_amqp",
-                        "omnip_presence_amqp"
-                    ],
-                    "description": "omnipresence modules",
-                    "type": "array"
-                },
                 "subscriptions_sync_enabled": {
                     "default": false,
                     "description": "omnipresence subscriptions sync enabled",
-                    "type": "boolean"
-                },
-                "use_fast_pickup_cookies": {
-                    "default": true,
-                    "description": "omnipresence use fast pickup cookies",
                     "type": "boolean"
                 }
             },
@@ -11227,6 +11616,10 @@
                 "cluster_id": {
                     "description": "provisioner cluster id",
                     "type": "string"
+                },
+                "combo_keys": {
+                    "description": "provisioner combo keys",
+                    "type": "object"
                 },
                 "feature_keys": {
                     "default": {
@@ -11535,6 +11928,16 @@
                     "description": "speech asr freeform url",
                     "type": "string"
                 },
+                "asr_locale": {
+                    "default": "en-us",
+                    "description": "speech asr default locale",
+                    "type": "string"
+                },
+                "asr_mime_type": {
+                    "default": "application/wav",
+                    "description": "speech asr mime type",
+                    "type": "string"
+                },
                 "asr_prefered_content_type": {
                     "default": "application/mpeg",
                     "description": "speech asr prefered content type",
@@ -11564,6 +11967,11 @@
                     "default": "multipart",
                     "description": "speech tts args encode",
                     "type": "string"
+                },
+                "tts_cache": {
+                    "default": 3600000,
+                    "description": "How long, in milliseconds, to cache TTS media files",
+                    "type": "integer"
                 },
                 "tts_default_voice": {
                     "default": "female/en-US",
@@ -11814,6 +12222,12 @@
                     "description": "tasks aging expiry in days",
                     "type": "integer"
                 },
+                "attempt_upload_output_times": {
+                    "default": 5,
+                    "description": "how many times will the upload of the resulting CSV be attempted, cannot be zero",
+                    "minimum": 1,
+                    "type": "integer"
+                },
                 "browse_dbs_interval_s": {
                     "default": 86400,
                     "description": "tasks browse dbs interval in seconds",
@@ -11847,6 +12261,11 @@
                 "low_balance_repeat_s": {
                     "default": 86400,
                     "description": "tasks low balance repeat in seconds",
+                    "type": "integer"
+                },
+                "pause_between_upload_output_attempts_s": {
+                    "default": 10,
+                    "description": "the amount of time to pause between attempts to upload resulting CSV in seconds",
                     "type": "integer"
                 },
                 "send_progress_after_processed": {
@@ -11887,12 +12306,33 @@
             },
             "type": "object"
         },
+        "system_config.tasks.numbers": {
+            "description": "Schema for tasks.numbers system_config",
+            "properties": {
+                "db_page_size": {
+                    "default": 1000,
+                    "description": "maximum count of numbers read from db at once",
+                    "type": "integer"
+                },
+                "import_defaults_to_carrier": {
+                    "default": "knm_local",
+                    "description": "carrier module to use if none provided during numbers import",
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
         "system_config.teletype": {
             "description": "Schema for teletype system_config",
             "properties": {
                 "iterate_over_bcc": {
                     "default": true,
                     "description": "teletype iterate over bcc",
+                    "type": "boolean"
+                },
+                "notice_enabled_by_default": {
+                    "default": true,
+                    "description": "Specify if template is considered enabled by default when teletype tries to process that notification",
                     "type": "boolean"
                 },
                 "render_farm_workers": {
@@ -13092,6 +13532,67 @@
             "required": true,
             "type": "object"
         },
+        "vm_message_metadata": {
+            "description": "Schema for a voicemail message metadata",
+            "properties": {
+                "call_id": {
+                    "description": "The SIP call-id",
+                    "name": "Call ID",
+                    "required": false,
+                    "type": "string"
+                },
+                "caller_id_name": {
+                    "description": "The caller id name",
+                    "maxLength": 35,
+                    "name": "Caller ID Name",
+                    "required": false,
+                    "type": "string"
+                },
+                "caller_id_number": {
+                    "description": "The caller id number",
+                    "maxLength": 35,
+                    "name": "Caller ID Number",
+                    "required": false,
+                    "type": "string"
+                },
+                "folder": {
+                    "description": "The folder the message belongs to",
+                    "enum": [
+                        "deleted",
+                        "saved",
+                        "new"
+                    ],
+                    "name": "Folder",
+                    "required": false,
+                    "type": "string"
+                },
+                "from": {
+                    "description": "The SIP from header",
+                    "name": "From",
+                    "required": false,
+                    "type": "string"
+                },
+                "length": {
+                    "name": "Length",
+                    "required": false,
+                    "type": "integer"
+                },
+                "timestamp": {
+                    "description": "The UTC timestamp, in gregorian seconds, that the voicemail was left on",
+                    "name": "Timestamp",
+                    "required": false,
+                    "type": "integer"
+                },
+                "to": {
+                    "description": "The SIP to header",
+                    "name": "To",
+                    "required": false,
+                    "type": "string"
+                }
+            },
+            "required": true,
+            "type": "object"
+        },
         "vmboxes": {
             "description": "Schema for a voicemail box",
             "properties": {
@@ -13135,6 +13636,16 @@
                     },
                     "required": false,
                     "type": "object"
+                },
+                "media_extension": {
+                    "default": "mp3",
+                    "description": "Voicemail audio format",
+                    "enum": [
+                        "mp3",
+                        "mp4",
+                        "wav"
+                    ],
+                    "type": "string"
                 },
                 "name": {
                     "description": "A friendly name for the voicemail box",
@@ -13620,6 +14131,10 @@
             "required": true,
             "type": "string"
         },
+        "key_id": {
+            "$ref": "#/parameters/id",
+            "name": "{KEY_ID}"
+        },
         "language": {
             "in": "path",
             "name": "{LANGUAGE}",
@@ -13635,6 +14150,10 @@
         "ledger_id": {
             "$ref": "#/parameters/id",
             "name": "{LEDGER_ID}"
+        },
+        "link_id": {
+            "$ref": "#/parameters/id",
+            "name": "{LINK_ID}"
         },
         "list_entry_id": {
             "$ref": "#/parameters/id",
@@ -13698,6 +14217,12 @@
         "prompt_id": {
             "in": "path",
             "name": "{PROMPT_ID}",
+            "required": true,
+            "type": "string"
+        },
+        "provider_id": {
+            "in": "path",
+            "name": "{PROVIDER_ID}",
             "required": true,
             "type": "string"
         },
@@ -17646,6 +18171,117 @@
                 ]
             }
         },
+        "/accounts/{ACCOUNT_ID}/multi_factor": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header",
+                        "required": true
+                    },
+                    {
+                        "$ref": "#/parameters/account_id"
+                    }
+                ]
+            },
+            "put": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header",
+                        "required": true
+                    },
+                    {
+                        "$ref": "#/parameters/account_id"
+                    }
+                ]
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/multi_factor/attempts": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header",
+                        "required": true
+                    },
+                    {
+                        "$ref": "#/parameters/account_id"
+                    }
+                ]
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/multi_factor/attempts/{ATTEMPT_ID}": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header",
+                        "required": true
+                    },
+                    {
+                        "$ref": "#/parameters/attempt_id"
+                    },
+                    {
+                        "$ref": "#/parameters/account_id"
+                    }
+                ]
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/multi_factor/{CONFIG_ID}": {
+            "delete": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/config_id"
+                    },
+                    {
+                        "$ref": "#/parameters/auth_token_header",
+                        "required": true
+                    },
+                    {
+                        "$ref": "#/parameters/account_id"
+                    }
+                ]
+            },
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/config_id"
+                    },
+                    {
+                        "$ref": "#/parameters/auth_token_header",
+                        "required": true
+                    },
+                    {
+                        "$ref": "#/parameters/account_id"
+                    }
+                ]
+            },
+            "patch": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/config_id"
+                    },
+                    {
+                        "$ref": "#/parameters/auth_token_header",
+                        "required": true
+                    },
+                    {
+                        "$ref": "#/parameters/account_id"
+                    }
+                ]
+            },
+            "post": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/config_id"
+                    },
+                    {
+                        "$ref": "#/parameters/auth_token_header",
+                        "required": true
+                    },
+                    {
+                        "$ref": "#/parameters/account_id"
+                    }
+                ]
+            }
+        },
         "/accounts/{ACCOUNT_ID}/notifications": {
             "get": {
                 "parameters": [
@@ -17856,6 +18492,19 @@
                 ]
             }
         },
+        "/accounts/{ACCOUNT_ID}/phone_numbers/carriers_info": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header",
+                        "required": true
+                    },
+                    {
+                        "$ref": "#/parameters/account_id"
+                    }
+                ]
+            }
+        },
         "/accounts/{ACCOUNT_ID}/phone_numbers/check": {
             "post": {
                 "parameters": [
@@ -17988,6 +18637,30 @@
                         "schema": {
                             "$ref": "#/definitions/phone_numbers"
                         }
+                    },
+                    {
+                        "$ref": "#/parameters/auth_token_header",
+                        "required": true
+                    },
+                    {
+                        "$ref": "#/parameters/account_id"
+                    }
+                ]
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/phone_numbers/fix/{PHONE_NUMBER}": {
+            "post": {
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "phone_numbers",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/phone_numbers"
+                        }
+                    },
+                    {
+                        "$ref": "#/parameters/phone_number"
                     },
                     {
                         "$ref": "#/parameters/auth_token_header",
@@ -19445,6 +20118,20 @@
                 ]
             },
             "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/resource_id"
+                    },
+                    {
+                        "$ref": "#/parameters/auth_token_header",
+                        "required": true
+                    },
+                    {
+                        "$ref": "#/parameters/account_id"
+                    }
+                ]
+            },
+            "patch": {
                 "parameters": [
                     {
                         "$ref": "#/parameters/resource_id"
@@ -20966,6 +21653,28 @@
                         "description": "A listing of messages"
                     }
                 }
+            },
+            "put": {
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "vmboxes",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/vmboxes"
+                        }
+                    },
+                    {
+                        "$ref": "#/parameters/vm_box_id"
+                    },
+                    {
+                        "$ref": "#/parameters/auth_token_header",
+                        "required": true
+                    },
+                    {
+                        "$ref": "#/parameters/account_id"
+                    }
+                ]
             }
         },
         "/accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages/raw": {
@@ -21080,6 +21789,31 @@
         "/accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages/{VM_MSG_ID}/raw": {
             "get": {
                 "parameters": [
+                    {
+                        "$ref": "#/parameters/vm_msg_id"
+                    },
+                    {
+                        "$ref": "#/parameters/vm_box_id"
+                    },
+                    {
+                        "$ref": "#/parameters/auth_token_header",
+                        "required": true
+                    },
+                    {
+                        "$ref": "#/parameters/account_id"
+                    }
+                ]
+            },
+            "put": {
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "vmboxes",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/vmboxes"
+                        }
+                    },
                     {
                         "$ref": "#/parameters/vm_msg_id"
                     },
@@ -21585,19 +22319,119 @@
                 ]
             }
         },
+        "/auth/apps": {
+            "get": {}
+        },
+        "/auth/apps/{APP_ID}": {
+            "delete": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/app_id"
+                    }
+                ]
+            },
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/app_id"
+                    }
+                ]
+            },
+            "post": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/app_id"
+                    }
+                ]
+            }
+        },
         "/auth/authorize": {
             "put": {}
         },
         "/auth/callback": {
             "put": {}
         },
+        "/auth/keys": {
+            "get": {}
+        },
+        "/auth/keys/{KEY_ID}": {
+            "delete": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/key_id"
+                    }
+                ]
+            },
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/key_id"
+                    }
+                ]
+            },
+            "post": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/key_id"
+                    }
+                ]
+            }
+        },
         "/auth/links": {
-            "delete": {},
-            "get": {},
-            "post": {}
+            "get": {}
+        },
+        "/auth/links/{LINK_ID}": {
+            "delete": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/link_id"
+                    }
+                ]
+            },
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/link_id"
+                    }
+                ]
+            },
+            "put": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/link_id"
+                    }
+                ]
+            }
+        },
+        "/auth/providers": {
+            "get": {}
+        },
+        "/auth/providers/{PROVIDER_ID}": {
+            "delete": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/provider_id"
+                    }
+                ]
+            },
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/provider_id"
+                    }
+                ]
+            },
+            "post": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/provider_id"
+                    }
+                ]
+            }
         },
         "/auth/tokeninfo": {
-            "get": {}
+            "get": {},
+            "post": {}
         },
         "/google_auth": {
             "put": {
@@ -21825,6 +22659,13 @@
                     }
                 ]
             },
+            "patch": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/system_config_id"
+                    }
+                ]
+            },
             "post": {
                 "parameters": [
                     {
@@ -21852,6 +22693,16 @@
                 ]
             },
             "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/system_config_id"
+                    },
+                    {
+                        "$ref": "#/parameters/node"
+                    }
+                ]
+            },
+            "patch": {
                 "parameters": [
                     {
                         "$ref": "#/parameters/system_config_id"

@@ -20,7 +20,7 @@
         ,authorize/1
         ,authenticate/1
         ,put/2, put/3
-        ,post/2
+        ,post/2, post/3
         ,delete/2
 
         ,set_response/2
@@ -41,6 +41,7 @@
 -define(IDENTIFY, <<"identify">>).
 -define(COLLECTION, <<"collection">>).
 -define(COLLECTION_NUMBERS, <<"numbers">>).
+-define(CARRIERS_INFO, <<"carriers_info">>).
 -define(FIX, <<"fix">>).
 -define(CHANGE_CARRIER, <<"change_carrier">>).
 -define(MIME_TYPES, [{<<"application">>, <<"pdf">>}
@@ -59,6 +60,7 @@
 -define(SCHEMA_PHONE_NUMBERS, <<"phone_numbers">>).
 -define(SCHEMA_FIND_NUMBERS, <<"find_numbers">>).
 
+-define(PUBLIC_FIELDS_STATE, <<"create_with_state">>).
 -define(KEY_PHONEBOOK_FREE_URL, <<"phonebook_url">>).
 -define(PREFIX, <<"prefix">>).
 -define(QUANTITY, <<"quantity">>).
@@ -68,7 +70,13 @@
 -define(COUNTRY, <<"country">>).
 -define(KNM_CONFIG_CAT, <<"number_manager">>).
 
--define(MAX_TOKENS, kapps_config:get_integer(?PHONE_NUMBERS_CONFIG_CAT, <<"activations_per_day">>, 100)).
+-define(UNAUTHORIZED_NUMBERS_LOOKUP(ResellerId)
+       ,kapps_account_config:get_global(ReqResellerId
+                                       ,?KNM_CONFIG_CAT
+                                       ,<<"unauthorized_numbers_lookup">>
+                                       ,'false'
+                                       )).
+
 
 %%%===================================================================
 %%% API
@@ -143,6 +151,8 @@ maybe_authorize(_Verb, _Nouns) ->
 allowed_methods() ->
     [?HTTP_GET].
 
+allowed_methods(?CARRIERS_INFO) ->
+    [?HTTP_GET];
 allowed_methods(?FIX) ->
     [?HTTP_POST];
 allowed_methods(?CLASSIFIERS) ->
@@ -158,6 +168,8 @@ allowed_methods(?CHECK) ->
 allowed_methods(_PhoneNumber) ->
     [?HTTP_GET, ?HTTP_PUT, ?HTTP_POST, ?HTTP_DELETE].
 
+allowed_methods(?FIX, _PhoneNumber) ->
+    [?HTTP_POST];
 allowed_methods(?COLLECTION, ?ACTIVATE) ->
     [?HTTP_PUT];
 allowed_methods(?CLASSIFIERS, _PhoneNumber) ->
@@ -184,6 +196,7 @@ allowed_methods(_PhoneNumber, ?IDENTIFY) ->
 -spec resource_exists(path_token(), path_token()) -> boolean().
 resource_exists() -> 'true'.
 
+resource_exists(?CARRIERS_INFO) -> 'true';
 resource_exists(?FIX) -> 'true';
 resource_exists(?PREFIX) -> 'true';
 resource_exists(?LOCALITY) -> 'true';
@@ -191,6 +204,7 @@ resource_exists(?CHECK) -> 'true';
 resource_exists(?CLASSIFIERS) -> 'true';
 resource_exists(_PhoneNumber) -> 'true'.
 
+resource_exists(?FIX, _PhoneNumber) -> 'true';
 resource_exists(_PhoneNumber, ?ACTIVATE) -> 'true';
 resource_exists(_PhoneNumber, ?RESERVE) -> 'true';
 resource_exists(_PhoneNumber, ?PORT) -> 'true';
@@ -246,6 +260,16 @@ validate_phone_numbers(Context, ?HTTP_GET, _AccountId) ->
         _Prefix -> maybe_find_numbers(Context)
     end.
 
+validate(Context, ?CARRIERS_INFO) ->
+    case pick_account_and_reseller_id(Context) of
+        {error, Reason} ->
+            crossbar_util:response(error, Reason, 404, Context);
+        {ok, AccountId, ResellerId} ->
+            AuthAccountId = cb_context:auth_account_id(Context),
+            cb_context:set_resp_data(cb_context:set_resp_status(Context, 'success')
+                                    ,knm_carriers:info(AuthAccountId, AccountId, ResellerId)
+                                    )
+    end;
 validate(Context, ?FIX) ->
     cb_context:set_resp_data(cb_context:set_resp_status(Context, 'success')
                             ,kz_json:new()
@@ -276,6 +300,10 @@ validate_number(Context, _Number, ?HTTP_PUT) ->
 validate_number(Context, _Number, ?HTTP_DELETE) ->
     validate_delete(Context).
 
+validate(Context, ?FIX, _Num) ->
+    cb_context:set_resp_data(cb_context:set_resp_status(Context, 'success')
+                            ,kz_json:new()
+                            );
 validate(Context, ?COLLECTION, ?ACTIVATE) ->
     validate_collection_request(Context);
 validate(Context, ?CLASSIFIERS, Number) ->
@@ -332,6 +360,13 @@ classified_number(Context, Number, Classifier) ->
                        ,{fun cb_context:set_resp_status/2, 'success'}
                        ]).
 
+-spec post(cb_context:context(), path_token(), path_token()) -> cb_context:context().
+post(Context, ?FIX, Num) ->
+    AccountDb = cb_context:account_db(Context),
+    AuthBy = cb_context:auth_account_id(Context),
+    Result = kazoo_number_manager_maintenance:fix_number(Num, AuthBy, AccountDb),
+    set_response(Result, Context).
+
 -spec post(cb_context:context(), path_token()) -> cb_context:context().
 post(Context, ?FIX) ->
     AccountDb = cb_context:account_db(Context),
@@ -361,10 +396,12 @@ put(Context, ?COLLECTION) ->
     CB = fun() -> ?MODULE:put(cb_context:set_accepting_charges(Context), ?COLLECTION) end,
     set_response(Results, Context, CB);
 put(Context, Number) ->
+    Doc = cb_context:doc(Context),
     Options = [{'auth_by', cb_context:auth_account_id(Context)}
               ,{'assign_to', cb_context:account_id(Context)}
               ,{'dry_run', not cb_context:accepting_charges(Context)}
-              ,{'public_fields', cb_context:doc(Context)}
+              ,{'public_fields', kz_json:delete_key(?PUBLIC_FIELDS_STATE, Doc)}
+               | maybe_ask_for_state(kz_json:get_ne_binary_value(?PUBLIC_FIELDS_STATE, Doc))
               ],
     Result = knm_number:create(Number, Options),
     CB = fun() -> ?MODULE:put(cb_context:set_accepting_charges(Context), Number) end,
@@ -497,7 +534,8 @@ summary(Context) ->
 view_account_phone_numbers(Context) ->
     Ctx = rename_qs_filters(Context),
     Context1 = crossbar_doc:load_view(?CB_LIST, [], Ctx, fun normalize_view_results/2),
-    ListOfNumProps = [fix_available(NumJObj) || NumJObj <- cb_context:resp_data(Context1)],
+    IsAdmin = knm_phone_number:is_admin(cb_context:auth_account_id(Context)),
+    ListOfNumProps = [fix_available(IsAdmin, NumJObj) || NumJObj <- cb_context:resp_data(Context1)],
     PortNumberJObj = maybe_add_port_request_numbers(Context),
     NumbersJObj = lists:foldl(fun kz_json:merge_jobjs/2, PortNumberJObj, ListOfNumProps),
     Service = kz_services:fetch(cb_context:account_id(Context)),
@@ -507,11 +545,12 @@ view_account_phone_numbers(Context) ->
                                     ]),
     cb_context:set_resp_data(Context1, NewRespData).
 
--spec fix_available(kz_json:object()) -> kz_json:object().
-fix_available(NumJObj) ->
+-spec fix_available(boolean(), kz_json:object()) -> kz_json:object().
+fix_available(IsAdmin, NumJObj) ->
     [{Num, JObj}] = kz_json:to_proplist(NumJObj),
     IsLocal = lists:member(?FEATURE_LOCAL, kz_json:get_list_value(<<"features">>, JObj, [])),
     Allowed = knm_providers:available_features(IsLocal
+                                              ,IsAdmin
                                               ,kz_json:get_ne_binary_value(<<"assigned_to">>, JObj)
                                               ,kz_json:get_ne_binary_value(<<"used_by">>, JObj)
                                               ,kz_json:get_list_value(<<"features_allowed">>, JObj, [])
@@ -592,17 +631,27 @@ normalize_port_view_result(Number, Properties) ->
 %%--------------------------------------------------------------------
 -spec maybe_find_numbers(cb_context:context()) -> cb_context:context().
 maybe_find_numbers(Context) ->
+    case pick_account_and_reseller_id(Context) of
+        {error, Reason} ->
+            crossbar_util:response(error, Reason, 404, Context);
+        {ok, AccountId, ResellerId} ->
+            find_numbers(Context, AccountId, ResellerId)
+    end.
+
+-spec pick_account_and_reseller_id(cb_context:context()) -> {ok, ne_binary(), api_ne_binary()} |
+                                                            {error, ne_binary()}.
+pick_account_and_reseller_id(Context) ->
     case kz_json:get_value(<<"reseller_id">>, cb_context:query_string(Context)) of
         'undefined' ->
             case cb_context:account_id(Context) of
                 'undefined' ->
                     AuthAccountId = cb_context:auth_account_id(Context),
-                    find_numbers(Context, AuthAccountId, kz_services:find_reseller_id(AuthAccountId));
+                    {ok, AuthAccountId, kz_services:find_reseller_id(AuthAccountId)};
                 AccountId ->
-                    find_numbers(Context, AccountId, cb_context:reseller_id(Context))
+                    {ok, AccountId, cb_context:reseller_id(Context)}
             end;
         ReqResellerId ->
-            maybe_reseller_id_lookup(Context, ReqResellerId)
+            maybe_reseller_id_lookup(ReqResellerId)
     end.
 
 -spec find_numbers(cb_context:context(), ne_binary(), ne_binary()) -> cb_context:context().
@@ -639,24 +688,19 @@ find_numbers(Context, AccountId, ResellerId) ->
     Context1 = cb_context:set_req_data(Context, kz_json:from_list(Options)),
     cb_context:validate_request_data(?SCHEMA_FIND_NUMBERS, Context1, OnSuccess).
 
--spec maybe_reseller_id_lookup(cb_context:context(), ne_binary()) -> cb_context:context().
-maybe_reseller_id_lookup(Context, ReqResellerId) ->
+-spec maybe_reseller_id_lookup(ne_binary()) -> {ok, ne_binary(), ne_binary()} |
+                                               {error, ne_binary()}.
+maybe_reseller_id_lookup(ReqResellerId) ->
     try
-        case (kz_services:is_reseller(ReqResellerId)
-              orelse cb_context:is_superduper_admin(ReqResellerId)
-             )
-            andalso kapps_account_config:get_global(ReqResellerId
-                                                   ,?KNM_CONFIG_CAT
-                                                   ,<<"unauthorized_numbers_lookup">>
-                                                   ,'false'
-                                                   )
-        of
-            'true' -> find_numbers(Context, ReqResellerId, ReqResellerId);
-            'false' -> crossbar_util:response('error', <<"number search restricted">>, 404, Context)
-        end
+        ?UNAUTHORIZED_NUMBERS_LOOKUP(ReqResellerId)
+            andalso (kz_services:is_reseller(ReqResellerId)
+                     orelse cb_context:is_superduper_admin(ReqResellerId)
+                    )
+    of
+        'true' -> {ok, ReqResellerId, ReqResellerId};
+        'false' -> {error, <<"number search restricted">>}
     catch
-        _:_ ->
-            crossbar_util:response('error', <<"non-existent reseller_id">>, 404, Context)
+        _:_ -> {error, <<"non-existent reseller_id">>}
     end.
 
 %%--------------------------------------------------------------------
@@ -835,22 +879,17 @@ update_phone_numbers_locality_fold(Key, Value, JObj) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec identify(cb_context:context(), ne_binary()) -> cb_context:context().
-identify(Context, Number) ->
-    case knm_number:lookup_account(Number) of
-        {'ok', AccountId, NumberOptions} ->
+identify(Context, Num) ->
+    case knm_number:lookup_account(Num) of
+        {'ok', AccountId, ExtraOptions} ->
             JObj = kz_json:from_list(
                      [{<<"account_id">>, AccountId}
-                     ,{<<"number">>, knm_number_options:number(NumberOptions)}
+                     ,{<<"number">>, knm_number_options:number(ExtraOptions)}
                      ]),
             crossbar_util:response(JObj, Context);
-        {error, {R=not_in_service, _AccountId}} ->
-            lager:debug("~s's account ~p ~s", [Number, _AccountId, R]),
-            set_response({error, R}, Context);
-        {error, {R=account_disabled, _AccountId}} ->
-            lager:debug("~s's account ~p ~s", [Number, _AccountId, R]),
-            set_response({error, R}, Context);
         {'error', _R}=Error ->
-            set_response(Error, Context)
+            Context1 = cb_context:store(Context, num, knm_converters:normalize(Num)),
+            set_response(Error, Context1)
     end.
 
 %%--------------------------------------------------------------------
@@ -895,15 +934,12 @@ set_response({'ok', Thing}, Context, _) ->
         'false' -> crossbar_util:response(Thing, Context)
     end;
 
-set_response(Ret=#{ko := KOs, services := Services, options := Options}, Context, CB) ->
-    case {KOs =/= #{}, Services =:= undefined, knm_number_options:dry_run(Options)} of
-        {true, _, _} ->
-            ResultJObj = knm_numbers:to_json(Ret),
-            crossbar_util:response_400(<<"client error">>, ResultJObj, Context);
-        {_, true, _} ->
+set_response(Ret=#{ko := _KOs, services := Services, options := Options}, Context, CB) ->
+    case {Services =:= undefined, knm_number_options:dry_run(Options)} of
+        {true, _} ->
             ResultJObj = knm_numbers:to_json(Ret),
             crossbar_util:response(ResultJObj, Context);
-        {_, _, true} ->
+        {_, true} ->
             RespJObj = kz_services:dry_run(Services),
             case kz_json:is_empty(RespJObj) of
                 true -> CB();
@@ -923,6 +959,16 @@ set_response({'dry_run', Services, _ActivationCharges}, Context, CB) ->
 
 set_response({'error', 'not_found'}, Context, _) ->
     reply_number_not_found(Context);
+
+set_response({error, {Cause, AccountId}}, Context, _)
+  when Cause =:= not_in_service;
+       Cause =:= account_disabled ->
+    Data = kz_json:from_list(
+             [{<<"cause">>, kz_term:to_binary(Cause)}
+             ,{<<"account_id">>, AccountId}
+             ,{<<"number">>, cb_context:fetch(Context, num)}
+             ]),
+    crossbar_util:response_400(<<"client error">>, Data, Context);
 
 set_response({'error', Data}, Context, _)
   when is_atom(Data) ->
@@ -982,10 +1028,12 @@ numbers_action(Context, ?ACTIVATE, Numbers) ->
               ],
     knm_numbers:move(Numbers, cb_context:account_id(Context), Options);
 numbers_action(Context, ?HTTP_PUT, Numbers) ->
+    ReqData = cb_context:req_data(Context),
     Options = [{'auth_by', cb_context:auth_account_id(Context)}
               ,{'assign_to', cb_context:account_id(Context)}
               ,{'dry_run', not cb_context:accepting_charges(Context)}
-              ,{'public_fields', cb_context:req_data(Context)}
+              ,{'public_fields', kz_json:delete_key(?PUBLIC_FIELDS_STATE, ReqData)}
+               | maybe_ask_for_state(kz_json:get_ne_binary_value(?PUBLIC_FIELDS_STATE, ReqData))
               ],
     knm_numbers:create(Numbers, Options);
 numbers_action(Context, ?HTTP_POST, Numbers) ->
@@ -1013,6 +1061,11 @@ pick_release_or_delete(Context, Options) ->
     lager:debug("picked ~s", [Pick]),
     Pick.
 
+%% @private
+-spec maybe_ask_for_state(api_ne_binary()) -> [{state, ne_binary()}].
+maybe_ask_for_state(undefined) -> [];
+maybe_ask_for_state(StateAskedFor) -> [{state, StateAskedFor}].
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -1024,11 +1077,8 @@ pick_release_or_delete(Context, Options) ->
 has_tokens(Context) -> has_tokens(Context, 1).
 has_tokens(Context, Count) ->
     Name = <<(cb_context:account_id(Context))/binary, "/", ?PHONE_NUMBERS_CONFIG_CAT/binary>>,
-    case kz_buckets:consume_tokens(?APP_NAME
-                                  ,Name
-                                  ,cb_modules_util:token_cost(Context, Count)
-                                  )
-    of
+    Cost = cb_modules_util:token_cost(Context, Count),
+    case kz_buckets:consume_tokens(?APP_NAME, Name, Cost) of
         'true' -> 'true';
         'false' ->
             lager:warning("rate limiting activation limit reached, rejecting"),

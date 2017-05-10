@@ -9,7 +9,7 @@
 -module(teletype_password_recovery).
 
 -export([init/0
-        ,handle_password_recovery/2
+        ,handle_password_recovery/1
         ]).
 
 -include("teletype.hrl").
@@ -18,12 +18,13 @@
 -define(MOD_CONFIG_CAT, <<(?NOTIFY_CONFIG_CAT)/binary, ".", (?TEMPLATE_ID)/binary>>).
 
 -define(TEMPLATE_MACROS
-       ,kz_json:from_list([?MACRO_VALUE(<<"link">>, <<"link">>, <<"Password Reset Link">>, <<"Link going to click to reset password">>)
-                           | ?ACCOUNT_MACROS ++ ?USER_MACROS
-                          ])
+       ,kz_json:from_list(
+          [?MACRO_VALUE(<<"link">>, <<"link">>, <<"Password Reset Link">>, <<"Link to reset password">>)
+           | ?ACCOUNT_MACROS ++ ?USER_MACROS
+          ])
        ).
 
--define(TEMPLATE_SUBJECT, <<"Reset your VoIP services account password.">>).
+-define(TEMPLATE_SUBJECT, <<"Reset your VoIP services user password">>).
 -define(TEMPLATE_CATEGORY, <<"user">>).
 -define(TEMPLATE_NAME, <<"Password Recovery">>).
 
@@ -45,10 +46,11 @@ init() ->
                                           ,{'cc', ?TEMPLATE_CC}
                                           ,{'bcc', ?TEMPLATE_BCC}
                                           ,{'reply_to', ?TEMPLATE_REPLY_TO}
-                                          ]).
+                                          ]),
+    teletype_bindings:bind(<<"password_recovery">>, ?MODULE, 'handle_password_recovery').
 
--spec handle_password_recovery(kz_json:object(), kz_proplist()) -> 'ok'.
-handle_password_recovery(JObj, _Props) ->
+-spec handle_password_recovery(kz_json:object()) -> 'ok'.
+handle_password_recovery(JObj) ->
     'true' = kapi_notifications:password_recovery_v(JObj),
     kz_util:put_callid(JObj),
 

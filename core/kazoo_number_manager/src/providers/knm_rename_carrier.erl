@@ -55,5 +55,7 @@ delete(N) -> N.
 is_valid(Carrier, PN) ->
     case knm_phone_number:is_admin(PN) of
         false -> knm_errors:unauthorized();
-        true -> kz_util:try_load_module(Carrier) =/= false
+        true ->
+            ?LOG_DEBUG("allowing setting carrier to ~p", [Carrier]),
+            true
     end.

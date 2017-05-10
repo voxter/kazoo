@@ -1,6 +1,6 @@
-### Phone_numbers
+### Phone Numbers
 
-#### About Phone_numbers
+#### About Phone Numbers
 
 #### Schema
 
@@ -12,6 +12,7 @@ Key | Description | Type | Default | Required
 `cnam` |   | `object` |   | `false`
 `cnam.display_name` |   | `string(1..15)` |   | `false`
 `cnam.inbound_lookup` |   | `boolean` |   | `false`
+`create_with_state` | The state to create numbers in | `string('aging', 'available', 'deleted', 'discovery', 'in_service', 'port_in', 'port_out', 'released', 'reserved')` |   | `false`
 `e911` |   | `object` |   | `false`
 `e911.activated_time` | The time stamp e911 was provisioned | `string` |   | `false`
 `e911.caller_name` | The name that will show to emergency services | `string(3..)` |   | `false`
@@ -27,7 +28,7 @@ Key | Description | Type | Default | Required
 `e911.longitude` | The e911 provisioning system calculated service address longitude | `string` |   | `false`
 `e911.plus_four` | The extended zip/postal code where the number is in service | `string` |   | `false`
 `e911.postal_code` | The zip/postal code where the number is in service | `string` |   | `true`
-`e911.region` | The region (state) where the number is in service | `string` |   | `true`
+`e911.region` | The region (state) where the number is in service | `string(2)` |   | `true`
 `e911.status` | The e911 provisioning system status for this service address | `string('INVALID', 'GEOCODED', 'PROVISIONED', 'REMOVED', 'ERROR')` |   | `false`
 `e911.street_address` | The street address where the number is in service | `string` |   | `true`
 `porting` | Porting (in) information for the phone number | `object` |   | `false`
@@ -181,6 +182,16 @@ curl -v -X POST \
 
 #### Fetch
 
+> GET /v2/accounts/{ACCOUNT_ID}/phone_numbers/carriers_info
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/carriers_info
+```
+
+#### Fetch
+
 > GET /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}/identify
 
 ```shell
@@ -237,5 +248,15 @@ curl -v -X GET \
 curl -v -X PUT \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/collection/activate
+```
+
+#### Change
+
+> POST /v2/accounts/{ACCOUNT_ID}/phone_numbers/fix/{PHONE_NUMBER}
+
+```shell
+curl -v -X POST \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/fix/{PHONE_NUMBER}
 ```
 

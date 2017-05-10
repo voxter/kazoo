@@ -294,6 +294,21 @@ get_event_type_test_() ->
     ,?_assertEqual({<<"call">>,<<"CHANNEL_CONNECTED">>}, kz_util:get_event_type(kz_json:from_list([EventCategory,EventName])))
     ].
 
+pos_test_() ->
+    [?_assertEqual(-1, kz_binary:pos($A, <<>>))
+    ,?_assertEqual(0, kz_binary:pos($A, <<$A>>))
+    ,?_assertEqual(0, kz_binary:pos($,, <<",,,">>))
+    ,?_assertEqual(1, kz_binary:pos($,, <<"A,,">>))
+    ,?_assertEqual(2, kz_binary:pos($', <<"A,'">>))
+    ,?_assertEqual(-1, kz_binary:pos($B, <<"A,'">>))
+    ].
+
+closests_test_() ->
+    [?_assertEqual([], kz_binary:closests([$A], <<>>))
+    ,?_assertEqual([{$B,1}], kz_binary:closests([$B,$i], <<"ABAAABA">>))
+    ,?_assertEqual([{$B,1}, {$i,6}], kz_binary:closests([$B,$i], <<"ABAAABiA">>))
+    ].
+
 to_hex_test_() ->
     [?_assertEqual("626c61", kz_term:to_hex(bla))
     ,?_assertEqual("626c61", kz_term:to_hex("bla"))
@@ -560,6 +575,10 @@ is_true_false_test_() ->
     ,?_assertEqual(false, kz_term:always_false(bla))
     ,?_assertEqual(false, kz_term:is_ne_binary(bla))
     ,?_assertEqual(true, kz_term:is_ne_binary(<<"bla">>))
+    ,?_assertEqual(false, kz_term:is_ne_binaries(<<"bla">>))
+    ,?_assertEqual(true, kz_term:is_ne_binaries([]))
+    ,?_assertEqual(true, kz_term:is_ne_binaries([<<"cnam">>, <<"bla">>]))
+    ,?_assertEqual(false, kz_term:is_ne_binaries([undefined, <<"bla">>]))
     ,?_assertEqual(true, kz_term:is_boolean(<<"true">>))
     ,?_assertEqual(true, kz_term:is_boolean(<<"false">>))
     ,?_assertEqual(true, kz_term:is_boolean("true"))

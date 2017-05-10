@@ -284,9 +284,12 @@ Parses the core/applications code looking for calls to kapps\_config (module use
 Also parses callflow's action modules looking for keys used to access values in the Data JSON object to build a base JSON schema file for each callflow action.
 
 
-## `kz_util_diaspora.bash`
+## `kz_diaspora.bash`
 
-Script for updating Erlang code to account for functions that used to be in kz\_util and are now moved to alternative modules.
+Script for updating Erlang code to account for functions that have moved modules.
+
+-   kz\_util to alternative modules
+-   kz\_json to kz\_doc for public/private fields
 
 
 ## `no_raw_json.escript`
@@ -302,6 +305,11 @@ Wrapper for running rabbitmq script commands?
 ## rabbitmq-server.init
 
 Init.d script for rabbitmq
+
+
+## `reconcile_docs_to_index.bash`
+
+Finds all docs in the repo and checks which are included in the [mkdocs.yml](file:///home/james/local/git/2600hz/kazoo/doc/mkdocs/mkdocs.yml) index
 
 
 ## setup-dev.sh

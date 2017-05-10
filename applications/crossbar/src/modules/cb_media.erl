@@ -46,8 +46,12 @@
 
 -define(MOD_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".media">>).
 
--define(DEFAULT_VOICE, kapps_config:get(<<"speech">>, <<"tts_default_voice">>, <<"female/en-US">>)).
--define(NORMALIZATION_FORMAT, kapps_config:get(?MOD_CONFIG_CAT, <<"normalization_format">>, <<"mp3">>)).
+-define(DEFAULT_VOICE
+       ,list_to_binary([kazoo_tts:default_voice(), "/", kazoo_tts:default_language()])
+       ).
+-define(NORMALIZATION_FORMAT
+       ,kapps_config:get_binary(?MOD_CONFIG_CAT, <<"normalization_format">>, <<"mp3">>)
+       ).
 
 %%%===================================================================
 %%% API
@@ -309,7 +313,9 @@ maybe_normalize_upload(Context, MediaId, FileJObj) ->
 -spec normalize_upload(cb_context:context(), ne_binary(), kz_json:object(), api_binary()) ->
                               cb_context:context().
 normalize_upload(Context, MediaId, FileJObj) ->
-    normalize_upload(Context, MediaId, FileJObj, kz_json:get_value([<<"headers">>, <<"content_type">>], FileJObj)).
+    normalize_upload(Context, MediaId, FileJObj
+                    ,kz_json:get_ne_binary_value([<<"headers">>, <<"content_type">>], FileJObj)
+                    ).
 
 normalize_upload(Context, MediaId, FileJObj, UploadContentType) ->
     FromExt = kz_mime:to_extension(UploadContentType),
@@ -319,42 +325,12 @@ normalize_upload(Context, MediaId, FileJObj, UploadContentType) ->
               ,[UploadContentType, FromExt, ToExt]
               ),
 
-    case kz_media_util:normalize_media(FromExt
-                                      ,ToExt
-                                      ,kz_json:get_value(<<"contents">>, FileJObj)
-                                      )
-    of
-        {'ok', Contents} ->
-            lager:debug("successfully converted to ~s", [ToExt]),
-            {Major, Minor, _} = cow_mimetypes:all(<<"foo.", (ToExt)/binary>>),
-
-            NewFileJObj = kz_json:set_values([{[<<"headers">>, <<"content_type">>], <<Major/binary, "/", Minor/binary>>}
-                                             ,{[<<"headers">>, <<"content_length">>], iolist_size(Contents)}
-                                             ,{<<"contents">>, Contents}
-                                             ], FileJObj),
-
-            validate_upload(
-              cb_context:setters(Context
-                                ,[{fun cb_context:set_req_files/2, [{<<"original_media">>, FileJObj}
-                                                                   ,{<<"normalized_media">>, NewFileJObj}
-                                                                   ]
-                                  }
-                                 ,{fun cb_context:set_doc/2, kz_json:delete_key(<<"normalization_error">>, cb_context:doc(Context))}
-                                 ]
-                                )
-                           ,MediaId
-                           ,NewFileJObj
-             );
-        {'error', _R} ->
-            lager:warning("failed to convert to ~s: ~p", [ToExt, _R]),
-            Reason = <<"failed to communicate with conversion utility">>,
-            validate_upload(cb_context:set_doc(Context
-                                              ,kz_json:set_value(<<"normalization_error">>, Reason, cb_context:doc(Context))
-                                              )
-                           ,MediaId
-                           ,FileJObj
-                           )
-    end.
+    {UpdatedContext, UpdatedFileJObj}
+        = cb_modules_util:normalize_media_upload(Context, FromExt, ToExt, FileJObj, []),
+    validate_upload(UpdatedContext
+                   ,MediaId
+                   ,UpdatedFileJObj
+                   ).
 
 -spec validate_upload(cb_context:context(), ne_binary(), kz_json:object()) -> cb_context:context().
 validate_upload(Context, MediaId, FileJObj) ->
@@ -508,10 +484,10 @@ maybe_save_tts(Context, _Text, _Voice, _Status) ->
 
 -spec maybe_update_tts(cb_context:context(), ne_binary(), ne_binary(), crossbar_status()) ->
                               cb_context:context().
-maybe_update_tts(Context, Text, Voice, 'success') ->
+maybe_update_tts(Context, Text, VoiceLang, 'success') ->
     JObj = cb_context:doc(Context),
-    Voice = kz_json:get_value([<<"tts">>, <<"voice">>], JObj, ?DEFAULT_VOICE),
-    try kapps_speech:create(Text, Voice) of
+
+    try kazoo_tts:create(Text, VoiceLang) of
         {'error', Reason} ->
             crossbar_doc:delete(Context),
             crossbar_util:response('error', kz_term:to_binary(Reason), Context);
@@ -549,7 +525,7 @@ maybe_update_tts(Context, _Text, _Voice, _Status) -> Context.
 maybe_merge_tts(Context, MediaId, Text, Voice, 'success') ->
     JObj = cb_context:doc(Context),
 
-    case kapps_speech:create(Text, Voice) of
+    case kazoo_tts:create(Text, Voice) of
         {'error', R} ->
             crossbar_util:response('error', kz_term:to_binary(R), Context);
         {'error', 'tts_provider_failure', R} ->
@@ -571,7 +547,7 @@ maybe_merge_tts(Context, MediaId, Text, Voice, 'success') ->
                                                               )
                                    ,MediaId
                                    ),
-            crossbar_doc:load_merge(MediaId, kz_json:public_fields(JObj), Context, ?TYPE_CHECK_OPTION(kzd_media:type()))
+            crossbar_doc:load_merge(MediaId, kz_doc:public_fields(JObj), Context, ?TYPE_CHECK_OPTION(kzd_media:type()))
     end;
 maybe_merge_tts(Context, _MediaId, _Text, _Voice, _Status) ->
     Context.

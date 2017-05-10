@@ -10,8 +10,6 @@
 %%%============================================================================
 -module(kapps_call).
 
--include("kapps_call_command.hrl").
-
 -export([new/0, put_callid/1]).
 -export([from_route_req/1, from_route_req/2]).
 -export([from_route_win/1, from_route_win/2]).
@@ -70,6 +68,8 @@
 -export([set_to_tag/2, to_tag/1]).
 -export([set_from_tag/2, from_tag/1]).
 -export([direction/1]).
+-export([set_call_bridged/2, call_bridged/1]).
+-export([set_message_left/2, message_left/1]).
 
 -export([set_dtmf_collection/2, set_dtmf_collection/3
         ,get_dtmf_collection/1, get_dtmf_collection/2
@@ -132,13 +132,15 @@
         ,stop_recording/1
         ]).
 
+-include("kapps_call_command.hrl").
+
 -record(kapps_call, {call_id :: api_binary()                       %% The UUID of the call
                     ,call_id_helper = fun default_helper_function/2 :: kapps_helper_function()         %% A function used when requesting the call id, to ensure it is up-to-date
                     ,control_q :: api_binary()                   %% The control queue provided on route win
                     ,control_q_helper = fun default_helper_function/2 :: kapps_helper_function()       %% A function used when requesting the call id, to ensure it is up-to-date
                     ,controller_q :: api_binary()                %%
-                    ,caller_id_name = kz_privacy:anonymous_caller_id_name() :: ne_binary()      %% The caller name
-                    ,caller_id_number = kz_privacy:anonymous_caller_id_number() :: ne_binary() %% The caller number
+                    ,caller_id_name :: api_ne_binary()      %% The caller name
+                    ,caller_id_number :: api_ne_binary() %% The caller number
                     ,callee_id_name :: api_binary()                     %% The callee name
                     ,callee_id_number :: api_binary()                   %% The callee number
                     ,switch_nodename = <<>> :: binary()                 %% The switch node name (as known in ecallmgr)
@@ -174,6 +176,8 @@
                     ,to_tag :: api_binary()
                     ,from_tag :: api_binary()
                     ,direction = <<"inbound">> :: ne_binary()
+                    ,call_bridged = 'false' :: boolean()                %% Specified during call termination whether the call had been bridged
+                    ,message_left = 'false' :: boolean()                %% Specified during call termination whether the caller left a voicemail message
                     }).
 
 -type call() :: #kapps_call{}.
@@ -339,7 +343,7 @@ find_account_info(OldId, OldDb, _AccountId) ->
 -spec merge(kz_json:object(), api_object()) -> kz_json:object().
 merge(OldJObj, 'undefined') -> OldJObj;
 merge(OldJObj, JObj) ->
-    kz_json:merge_recursive(OldJObj, JObj).
+    kz_json:merge(OldJObj, JObj).
 
 -spec from_originate_uuid(kz_json:object()) -> call().
 -spec from_originate_uuid(kz_json:object(), call()) -> call().
@@ -389,8 +393,8 @@ from_json(JObj, #kapps_call{ccvs=OldCCVs
                            ,kvs=Kvs
                            ,sip_headers=OldSHs
                            }=Call) ->
-    CCVs = kz_json:merge_recursive(OldCCVs, kz_json:get_value(<<"Custom-Channel-Vars">>, JObj, kz_json:new())),
-    SHs = kz_json:merge_recursive(OldSHs, kz_json:get_value(<<"Custom-SIP-Headers">>, JObj, kz_json:new())),
+    CCVs = kz_json:merge(OldCCVs, kz_json:get_value(<<"Custom-Channel-Vars">>, JObj, kz_json:new())),
+    SHs = kz_json:merge(OldSHs, kz_json:get_value(<<"Custom-SIP-Headers">>, JObj, kz_json:new())),
     KVS = orddict:from_list(kz_json:to_proplist(kz_json:get_value(<<"Key-Value-Store">>, JObj, kz_json:new()))),
     Call#kapps_call{call_id = kz_json:get_ne_value(<<"Call-ID">>, JObj, call_id_direct(Call))
                    ,control_q = kz_json:get_ne_value(<<"Control-Queue">>, JObj, control_queue_direct(Call))
@@ -431,6 +435,8 @@ from_json(JObj, #kapps_call{ccvs=OldCCVs
                    ,to_tag = kz_json:get_ne_value(<<"To-Tag">>, JObj, to_tag(Call))
                    ,from_tag = kz_json:get_ne_value(<<"From-Tag">>, JObj, from_tag(Call))
                    ,direction = kz_json:get_ne_value(<<"Call-Direction">>, JObj, direction(Call))
+                   ,call_bridged = kz_json:is_true(<<"Call-Bridged">>, JObj, call_bridged(Call))
+                   ,message_left = kz_json:is_true(<<"Message-Left">>, JObj, message_left(Call))
                    }.
 
 %%--------------------------------------------------------------------
@@ -504,6 +510,8 @@ to_proplist(#kapps_call{}=Call) ->
     ,{<<"To-Tag">>, to_tag(Call)}
     ,{<<"From-Tag">>, from_tag(Call)}
     ,{<<"Call-Direction">>, direction(Call)}
+    ,{<<"Call-Bridged">>, call_bridged(Call)}
+    ,{<<"Message-Left">>, message_left(Call)}
     ].
 
 -spec is_call(any()) -> boolean().
@@ -656,6 +664,7 @@ maybe_append_caller_id(CallerId, Suffix) ->
 
 -spec set_caller_id(ne_binary(), ne_binary(), call()) -> call().
 -ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
 set_caller_id(CIDNumber, CIDName, #kapps_call{}=Call)
   when is_binary(CIDNumber)
   andalso is_binary(CIDName) ->
@@ -690,6 +699,9 @@ set_caller_id_name(CIDName, #kapps_call{}=Call) when is_binary(CIDName) ->
 -endif.
 
 -spec caller_id_name(call()) -> ne_binary().
+-ifdef(TEST).
+caller_id_name(#kapps_call{caller_id_name=CIDName}) -> CIDName.
+-else.
 caller_id_name(#kapps_call{caller_id_name=CIDName
                           ,account_id=AccountId
                           }) ->
@@ -697,6 +709,7 @@ caller_id_name(#kapps_call{caller_id_name=CIDName
         'true' -> kz_privacy:anonymous_caller_id_name(AccountId);
         'false' -> CIDName
     end.
+-endif.
 
 -spec set_caller_id_number(api_binary(), call()) -> call().
 -ifdef(TEST).
@@ -709,6 +722,9 @@ set_caller_id_number(CIDNumber, #kapps_call{}=Call) ->
 -endif.
 
 -spec caller_id_number(call()) -> ne_binary().
+-ifdef(TEST).
+caller_id_number(#kapps_call{caller_id_number=CIDNumber}) -> CIDNumber.
+-else.
 caller_id_number(#kapps_call{caller_id_number=CIDNumber
                             ,account_id=AccountId
                             }) ->
@@ -716,6 +732,7 @@ caller_id_number(#kapps_call{caller_id_number=CIDNumber
         'true' -> kz_privacy:anonymous_caller_id_number(AccountId);
         'false' -> CIDNumber
     end.
+-endif.
 
 -spec set_callee_id(ne_binary(), ne_binary(), call()) -> call().
 -ifdef(TEST).
@@ -1005,6 +1022,22 @@ from_tag(#kapps_call{from_tag=FromTag}) ->
 -spec direction(call()) -> ne_binary().
 direction(#kapps_call{direction=Direction}) ->
     Direction.
+
+-spec call_bridged(call()) -> boolean().
+call_bridged(#kapps_call{call_bridged=IsBridged}) ->
+    kz_term:is_true(IsBridged).
+
+-spec set_call_bridged(boolean(), call()) -> call().
+set_call_bridged(IsBridged, #kapps_call{}=Call) when is_boolean(IsBridged) ->
+    Call#kapps_call{call_bridged=IsBridged}.
+
+-spec message_left(call()) -> boolean().
+message_left(#kapps_call{message_left=MessageLeft}) ->
+    kz_term:is_true(MessageLeft).
+
+-spec set_message_left(boolean(), call()) -> call().
+set_message_left(MessageLeft, #kapps_call{}=Call) when is_boolean(MessageLeft) ->
+    Call#kapps_call{message_left=MessageLeft}.
 
 -spec remove_custom_channel_vars(kz_json:path(), call()) -> call().
 remove_custom_channel_vars(Keys, #kapps_call{}=Call) ->
@@ -1362,7 +1395,7 @@ get_recordings(Call) ->
 
 %% EUNIT TESTING
 -ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
+
 
 -define(UPDATERS, [fun(C) -> set_call_id(<<"123456789ABCDEF">>, C) end
                   ,fun(C) -> set_control_queue(<<"control_queue">>, C) end
@@ -1408,7 +1441,22 @@ json_conversion_test() -> 'ok'.
 encode_decode_test() ->
     Call = exec(?UPDATERS, new()),
     Call1 = from_json(to_json(Call)),
+    ?assert(eq(Call, Call1)).
 
-    ?assertEqual(Call, Call1).
+eq(Call, Call1) ->
+    eq(tuple_to_list(Call), tuple_to_list(Call1), 1).
+eq([], [], _) -> 'true';
+eq([V|C1], [V|C2], Pos) ->
+    eq(C1, C2, Pos+1);
+eq([V1|C1], [V2|C2], #kapps_call.ccvs=Pos) ->
+    case kz_json:are_equal(V1, V2) of
+        'true' -> eq(C1, C2, Pos+1);
+        'false' ->
+            ?debugFmt("CCVs vary:~n~p~n~p~n", [V1, V2]),
+            'false'
+    end;
+eq([V1|_], [V2|_], Pos) ->
+    ?debugFmt("at ~p, vary:~n~p~n~p~n", [Pos, V1, V2]),
+    'false'.
 
 -endif.

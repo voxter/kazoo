@@ -9,7 +9,7 @@
 -module(teletype_template_skel).
 
 -export([init/0
-        ,handle_req/2
+        ,handle_req/1
         ]).
 
 -include("teletype.hrl").
@@ -19,10 +19,8 @@
 
 -define(TEMPLATE_MACROS
        ,kz_json:from_list(
-          [?MACRO_VALUE(<<"user.first_name">>, <<"first_name">>, <<"First Name">>, <<"First Name">>)
-          ,?MACRO_VALUE(<<"user.last_name">>, <<"last_name">>, <<"Last Name">>, <<"Last Name">>)
-           | ?USER_MACROS
-          ])
+          ?ACCOUNT_MACROS ++ ?USER_MACROS
+         )
        ).
 
 -define(TEMPLATE_SUBJECT, <<"Skeleton Template">>).
@@ -47,10 +45,11 @@ init() ->
                                           ,{'cc', ?TEMPLATE_CC}
                                           ,{'bcc', ?TEMPLATE_BCC}
                                           ,{'reply_to', ?TEMPLATE_REPLY_TO}
-                                          ]).
+                                          ]),
+    teletype_bindings:bind(<<"skel">>, ?MODULE, 'handle_req').
 
--spec handle_req(kz_json:object(), kz_proplist()) -> 'ok'.
-handle_req(JObj, _Props) ->
+-spec handle_req(kz_json:object()) -> 'ok'.
+handle_req(JObj) ->
     'true' = kapi_notifications:skel_v(JObj),
     kz_util:put_callid(JObj),
 
@@ -66,7 +65,7 @@ handle_req(JObj, _Props) ->
 -spec process_req(kz_json:object()) -> 'ok'.
 process_req(DataJObj) ->
     Macros = [{<<"system">>, teletype_util:system_params()}
-             ,{<<"system">>, teletype_util:account_params(DataJObj)}
+             ,{<<"account">>, teletype_util:account_params(DataJObj)}
               | build_macro_data(DataJObj)
              ],
 

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz
+%%% @copyright (C) 2016-2017, 2600Hz
 %%% @doc
 %%% @end
 %%% @contributors
@@ -10,8 +10,31 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("knm.hrl").
 
+info_test_() ->
+    InfoJObj1 = knm_carriers:info(?MASTER_ACCOUNT_ID, ?RESELLER_ACCOUNT_ID, ?RESELLER_ACCOUNT_ID),
+    InfoJObj2 = knm_carriers:info(?MASTER_ACCOUNT_ID, ?CHILD_ACCOUNT_ID, ?RESELLER_ACCOUNT_ID),
+    InfoJObj3 = knm_carriers:info(?MASTER_ACCOUNT_ID, ?CHILD_ACCOUNT_ID, undefined),
+    InfoJObj4 = knm_carriers:info(?MASTER_ACCOUNT_ID, ?CHILD_ACCOUNT_ID, ?CHILD_ACCOUNT_ID),
+    InfoJObj5 = knm_carriers:info(?RESELLER_ACCOUNT_ID, ?RESELLER_ACCOUNT_ID, ?RESELLER_ACCOUNT_ID),
+    [?_assertEqual(10, kz_json:get_value(<<"maximal_prefix_length">>, InfoJObj1))
+    ,?_assertEqual(10, kz_json:get_value(<<"maximal_prefix_length">>, InfoJObj2))
+    ,?_assertEqual(10, kz_json:get_value(<<"maximal_prefix_length">>, InfoJObj3))
+    ,?_assertEqual(3, kz_json:get_value(<<"maximal_prefix_length">>, InfoJObj4))
+    ,?_assert(lists:member(<<"local">>, kz_json:get_value(<<"usable_carriers">>, InfoJObj4)))
+    ,?_assert(sets:is_subset(sets:from_list([?NUMBER_STATE_IN_SERVICE
+                                            ,?NUMBER_STATE_RESERVED
+                                            ,?NUMBER_STATE_AVAILABLE
+                                            ])
+                            ,sets:from_list(kz_json:get_value(<<"usable_creation_states">>, InfoJObj4))
+                            )
+             )
+    ,?_assertEqual([?NUMBER_STATE_IN_SERVICE, ?NUMBER_STATE_RESERVED]
+                  ,lists:usort(kz_json:get_value(<<"usable_creation_states">>, InfoJObj5))
+                  )
+    ].
+
 is_number_billable_test_() ->
-    {ok, N} = knm_number:get(?TEST_OLD_NUM),
+    {ok, N} = knm_number:get(?TEST_OLD1_NUM),
     PN1 = knm_number:phone_number(N),
     PN2 = knm_phone_number:set_module_name(PN1, <<"knm_bandwidth2">>),
     PN3 = knm_phone_number:set_module_name(PN1, <<"wnm_pacwest">>),
@@ -40,12 +63,7 @@ check_test_() ->
 
 find_local_test_() ->
     [{"Finding local numbers not supported"
-     ,?_assertMatch({'error', 'not_available'}
-                   ,knm_local:find_numbers(<<"415">>, 1, [])
-                   )
-     }
-    ,{"Finding local numbers returns empty list"
-     ,?_assertEqual([], knm_carriers:find(<<"415">>))
+     ,?_assertMatch({'error', 'not_available'}, knm_local:find_numbers(<<"415">>, 1, []))
      }
     ].
 

@@ -52,7 +52,7 @@
 -type options() :: [option()].
 -export_type([option/0, options/0]).
 
--define(MAX_SEARCH, 500).
+-define(MAX_SEARCH, kapps_config:get_integer(?KNM_CONFIG_CAT, <<"maximum_search_quantity">>, 500)).
 
 -define(POLLING_INTERVAL, 5000).
 
@@ -60,7 +60,9 @@
 
 -define(EOT, '$end_of_table').
 
--type state() :: #{}.
+-type state() :: #{node => ne_binary()
+                  ,cache => ets:tid() | atom()
+                  }.
 
 -define(ETS_DISCOVERY_CACHE, 'knm_discovery_cache').
 -define(ETS_DISCOVERY_CACHE_OPTIONS, ['bag', 'named_table', {'read_concurrency', 'true'}]).
@@ -245,13 +247,10 @@ find(Options, _) ->
 do_find(Options, 'true') ->
     next(Options);
 do_find(Options, 'false') ->
-    QueryId = query_id(Options),
-    Quantity = quantity(Options),
-    Offset = offset(Options),
-    Payload = [{<<"Query-ID">>, QueryId}
+    Payload = [{<<"Query-ID">>, query_id(Options)}
               ,{<<"Prefix">>, normalized_prefix(Options)}
-              ,{<<"Quantity">>, Quantity}
-              ,{<<"Offset">>, Offset}
+              ,{<<"Quantity">>, quantity(Options)}
+              ,{<<"Offset">>, offset(Options)}
               ,{<<"Account-ID">>, account_id(Options)}
                | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
               ],
@@ -332,7 +331,12 @@ next(Options) ->
     Results = qlc:next_answers(QLC, Quantity),
     qlc:delete_cursor(QLC),
     lager:debug("returning ~B results", [length(Results)]),
-    [kz_json:from_list([{<<"number">>, Num}]) || {Num, _, _, _} <- Results].
+    [kz_json:from_list(
+       [{<<"number">>, Num}
+       ,{<<"state">>, State}
+       ])
+     || {Num, _ModuleName, State, _CarrierData} <- Results
+    ].
 
 %%--------------------------------------------------------------------
 %% @public
@@ -361,7 +365,8 @@ create_discovery(JObj, Options) ->
 
 -spec quantity(options()) -> pos_integer().
 quantity(Options) ->
-    props:get_integer_value('quantity', Options, 1).
+    Quantity = props:get_integer_value('quantity', Options, 1),
+    min(Quantity, ?MAX_SEARCH).
 
 -spec prefix(options()) -> ne_binary().
 -spec prefix(options(), ne_binary()) -> ne_binary().

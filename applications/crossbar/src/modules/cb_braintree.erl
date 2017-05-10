@@ -212,14 +212,14 @@ validate_credits(Context, ?HTTP_GET) ->
     Doc = cb_context:doc(Context),
     BillingAccountId = kz_json:get_integer_value(<<"billing_account_id">>, Doc, AccountId),
     Resp =
-        kz_json:from_list([{<<"amount">>, wht_util:current_account_dollars(AccountId)}
+        kz_json:from_list([{<<"amount">>, current_account_dollars(AccountId)}
                           ,{<<"billing_account_id">>, BillingAccountId}
                           ]),
     crossbar_util:response(Resp, Context);
 validate_credits(Context, ?HTTP_PUT) ->
     Amount = kz_json:get_float_value(<<"amount">>, cb_context:req_data(Context)),
     MaxCredit = kapps_config:get_float(?MOD_CONFIG_CAT, <<"max_account_credit">>, 500.00),
-    FutureAmount = Amount + wht_util:current_account_dollars(cb_context:account_id(Context)),
+    FutureAmount = Amount + current_account_dollars(cb_context:account_id(Context)),
     case FutureAmount > MaxCredit of
         'true' ->
             error_max_credit(Context, MaxCredit, FutureAmount);
@@ -239,6 +239,15 @@ error_max_credit(Context, MaxCredit, FutureAmount) ->
                                       ])
                                    ,Context
                                    ).
+
+-spec current_account_dollars(ne_binary()) -> dollars().
+current_account_dollars(AccountId) ->
+    case wht_util:current_account_dollars(AccountId) of
+        {'ok', Dollars} -> Dollars;
+        {'error', _R} ->
+            lager:debug("failed to get current account ~s dollars, assuming 0: ~p", [AccountId, _R]),
+            0
+    end.
 
 -spec validate_token(cb_context:context(), path_token()) -> cb_context:context().
 validate_token(Context, ?HTTP_GET) ->
@@ -418,7 +427,7 @@ create_credits(Context) ->
             cb_context:setters(Context
                               ,[{fun cb_context:set_resp_status/2, 'success'}
                                ,{fun cb_context:set_doc/2, JObj}
-                               ,{fun cb_context:set_resp_data/2, kz_json:public_fields(JObj)}
+                               ,{fun cb_context:set_resp_data/2, kz_doc:public_fields(JObj)}
                                ]);
         {'error', Reason} ->
             crossbar_util:response('error', <<"transaction error">>, 500, Reason, Context)
@@ -525,13 +534,24 @@ charge_billing_id(Amount, Context) ->
 
     try braintree_transaction:quick_sale(BillingId, kz_term:to_binary(Amount), Props) of
         #bt_transaction{}=Transaction ->
-            kz_notify:transaction(AccountId, braintree_transaction:record_to_json(Transaction)),
+            send_transaction_notify(AccountId, Transaction),
             crossbar_util:response(braintree_transaction:record_to_json(Transaction), Context)
     catch
         'throw':{'api_error', Reason} ->
             crossbar_util:response('error', <<"braintree api error">>, 400, Reason, Context);
         'throw':{Error, Reason} ->
             crossbar_util:response('error', kz_term:to_binary(Error), 500, Reason, Context)
+    end.
+
+-spec send_transaction_notify(ne_binary(), #bt_transaction{}) -> 'ok'.
+send_transaction_notify(AccountId, Transaction) ->
+    Props = [{<<"Account-ID">>, AccountId}
+             | braintree_transaction:record_to_notification_props(Transaction)
+             ++ kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+            ],
+    case kz_amqp_worker:cast(Props, fun kapi_notifications:publish_transaction/1) of
+        'ok' -> lager:debug("transaction notification sent for ~s", [AccountId]);
+        {'error', _R} -> lager:error("failed to send transaction notification for ~s : ~p", [AccountId, _R])
     end.
 
 -spec add_credit_to_account(kz_json:object(), integer(), ne_binary(), ne_binary(), api_binary()) ->

@@ -19,7 +19,7 @@
         ]).
 
 -include("crossbar.hrl").
--include_lib("kazoo_json/include/kazoo_json.hrl").
+-include_lib("kazoo_stdlib/include/kazoo_json.hrl").
 
 %%%===================================================================
 %%% API
@@ -75,7 +75,7 @@ validate(Context, ?HTTP_POST, ConfigId) ->
 -spec validate_with_parent(cb_context:context(), ne_binary(), kz_json:object()) -> cb_context:context().
 validate_with_parent(Context, ConfigId, Parent) ->
     RequestData = strip_id(cb_context:req_data(Context)),
-    FullConfig = kz_json:merge_recursive(Parent, RequestData),
+    FullConfig = kz_json:merge(Parent, RequestData),
     Schema = kapps_config_util:account_schema_name(ConfigId),
     cb_context:validate_request_data(Schema, cb_context:set_req_data(Context, FullConfig),
                                      fun(Ctx) ->
@@ -118,12 +118,12 @@ strip_id(JObj) -> kz_json:delete_key(<<"id">>, JObj, prune).
 
 -spec maybe_save_or_delete(cb_context:context(), path_token()) -> cb_context:context().
 maybe_save_or_delete(Context, ConfigId) ->
-    Stored = kz_json:private_fields(kapps_account_config:get(cb_context:account_id(Context), ConfigId)),
+    Stored = kz_doc:private_fields(kapps_account_config:get(cb_context:account_id(Context), ConfigId)),
     case {cb_context:req_data(Context), kz_doc:revision(Stored)} of
         {?EMPTY_JSON_OBJECT, undefined} -> Context;
         {?EMPTY_JSON_OBJECT, _} ->
             crossbar_doc:delete(cb_context:set_doc(Context, Stored));
         {Diff, _} ->
-            crossbar_doc:save(Context, kz_json:merge_recursive(Stored, Diff), [])
+            crossbar_doc:save(Context, kz_json:merge(Stored, Diff), [])
     end,
     set_config_to_context(ConfigId, Context).

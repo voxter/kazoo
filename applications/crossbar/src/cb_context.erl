@@ -157,7 +157,7 @@ set_accepting_charges(#cb_context{req_json = ReqJObj} = Context) ->
     set_req_json(Context, NewReqJObj).
 
 %% Accessors
--spec account_id(context()) -> api_binary().
+-spec account_id(context()) -> api_ne_binary().
 -spec account_name(context()) -> api_binary().
 -spec account_db(context()) -> api_binary().
 -spec user_id(context()) -> api_binary().
@@ -184,7 +184,7 @@ set_accepting_charges(#cb_context{req_json = ReqJObj} = Context) ->
 -spec query_string(context()) -> kz_json:object().
 -spec req_param(context(), ne_binary()) -> kz_json:api_json_term().
 -spec req_param(context(), ne_binary(), Default) -> kz_json:json_term() | Default.
--spec client_ip(context()) -> ne_binary().
+-spec client_ip(context()) -> api_ne_binary().
 -spec req_id(context()) -> ne_binary().
 -spec auth_account_doc(context()) -> api_object().
 -spec doc(context()) -> api_object() | kz_json:objects().
@@ -281,7 +281,12 @@ auth_account_doc(Context) ->
     end.
 
 auth_user_id(#cb_context{auth_doc='undefined'}) -> 'undefined';
-auth_user_id(#cb_context{auth_doc=JObj}) -> kz_json:get_value(<<"owner_id">>, JObj).
+auth_user_id(#cb_context{auth_doc=JObj}) ->
+    case kz_doc:type(JObj) of
+        <<"user">> -> kz_doc:id(JObj);
+        _ -> kz_json:get_value(<<"owner_id">>, JObj)
+    end.
+
 req_verb(#cb_context{req_verb=ReqVerb}) -> ReqVerb.
 req_data(#cb_context{req_data=ReqData}) -> ReqData.
 req_files(#cb_context{req_files=ReqFiles}) -> ReqFiles.
@@ -318,7 +323,9 @@ path_token(Token) ->
 
 -spec path_tokens(context()) -> ne_binaries().
 path_tokens(#cb_context{raw_path=Path}) ->
-    [ path_token(kz_util:uri_decode(Token)) || Token <- binary:split(Path, <<"/">>, ['global', 'trim'])].
+    [path_token(kz_util:uri_decode(Token))
+     || Token <- binary:split(Path, <<"/">>, ['global', 'trim'])
+    ].
 
 -spec magic_pathed(context()) -> boolean().
 magic_pathed(#cb_context{magic_pathed=MP}) -> MP.
@@ -718,13 +725,11 @@ validate_request_data(Schema=?NE_BINARY, Context) ->
 validate_request_data(SchemaJObj, Context) ->
     Strict = kapps_config:get_is_true(?CONFIG_CAT, <<"schema_strict_validation">>, 'false'),
     try kz_json_schema:validate(SchemaJObj
-                               ,kz_json:public_fields(req_data(Context))
+                               ,kz_doc:public_fields(req_data(Context))
                                )
     of
         {'ok', JObj} ->
-            passed(
-              set_doc(Context, kz_json_schema:add_defaults(JObj, SchemaJObj))
-             );
+            passed(set_doc(Context, JObj));
         {'error', Errors} when Strict ->
             lager:debug("request data did not validate against ~s: ~p", [kz_doc:id(SchemaJObj)
                                                                         ,Errors
@@ -1035,7 +1040,7 @@ system_error_props(Context) ->
 -spec system_error(context(), ne_binary()) -> context().
 system_error(Context, Error) ->
     Notify = props:filter_undefined(
-               [{<<"Subject">>, <<"api error - ", Error/binary>>}
+               [{<<"Subject">>, <<"System Alert: API Error - ", Error/binary>>}
                ,{<<"Message">>, Error}
                ,{<<"Details">>, kz_json:from_list(system_error_props(Context))}
                ,{<<"Account-ID">>, auth_account_id(Context)}

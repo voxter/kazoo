@@ -361,13 +361,13 @@ get_doc_updates(Context) ->
     JObj = cb_context:req_data(Context),
     case kz_json:get_value(<<"updates">>, JObj) of
         'undefined' -> 'undefined';
-        Updates -> kz_json:public_fields(Updates)
+        Updates -> kz_doc:public_fields(Updates)
     end.
 
 -spec update_docs(kz_json:object(), cb_context:context()) ->
                          cb_context:context().
 update_docs(Updates, Context) ->
-    JObjs = [kz_json:merge_recursive(JObj, Updates)
+    JObjs = [kz_json:merge(JObj, Updates)
              || JObj <- cb_context:doc(Context)
             ],
     cb_context:set_doc(Context, JObjs).

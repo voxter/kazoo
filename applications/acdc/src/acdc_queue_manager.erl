@@ -1068,7 +1068,7 @@ update_properties(QueueJObj, State) ->
                ,estimated_wait_time_media = kz_json:get_value(<<"estimated_wait_time_media">>, QueueJObj, Default#state.estimated_wait_time_media)
      }.
 
--spec announce_position(kapps_call:call(), ne_binary(), non_neg_integer(), {boolean(), boolean()}, proplist(), non_neg_integer() | 'undefined') ->
+-spec announce_position(kapps_call:call(), ne_binary(), non_neg_integer(), {boolean(), boolean()}, kz_proplist(), non_neg_integer() | 'undefined') ->
                                non_neg_integer() | 'undefined'.
 announce_position(Call, QueueId, Position, {PosAnnounceEnabled, WaitAnnounceEnabled}, Media, OldAverageWait) ->
     Req = props:filter_undefined(
@@ -1092,7 +1092,7 @@ announce_position(Call, QueueId, Position, {PosAnnounceEnabled, WaitAnnounceEnab
             AverageWait
     end.
 
--spec maybe_position_announcement(non_neg_integer(), boolean(), proplist(), binary()) -> list().
+-spec maybe_position_announcement(non_neg_integer(), boolean(), kz_proplist(), binary()) -> list().
 maybe_position_announcement(_, 'false', _, _) ->
     [];
 maybe_position_announcement(Position, 'true', Media, Language) ->
@@ -1101,14 +1101,14 @@ maybe_position_announcement(Position, 'true', Media, Language) ->
     ,{'say', kz_term:to_binary(Position), <<"number">>}
     ,{'prompt', props:get_value(<<"in_the_queue_media">>, Media), Language, <<"A">>}].
 
--spec maybe_average_wait_announcement(kz_json:object(), boolean(), proplist(), binary(), non_neg_integer() | 'undefined') ->
+-spec maybe_average_wait_announcement(kz_json:object(), boolean(), kz_proplist(), binary(), non_neg_integer() | 'undefined') ->
                                              {non_neg_integer() | 'undefined', list()}.
 maybe_average_wait_announcement(_, 'false', _, _, _) ->
     {'undefined', []};
 maybe_average_wait_announcement(JObj, 'true', Media, Language, OldAverageWait) ->
     average_wait_announcement(JObj, Media, Language, OldAverageWait).
 
--spec average_wait_announcement(kz_json:object(), proplist(), binary(), non_neg_integer() | 'undefined') -> {kz_time(), list()}.
+-spec average_wait_announcement(kz_json:object(), kz_proplist(), binary(), non_neg_integer() | 'undefined') -> {kz_time(), list()}.
 average_wait_announcement(JObj, Media, Language, OldAverageWait) ->
     Abandoned = length(kz_json:get_value(<<"Abandoned">>, JObj, [])),
     Total = length(kz_json:get_value(<<"Abandoned">>, JObj, [])) +
@@ -1176,7 +1176,7 @@ queue_media_list(#state{position_media=PositionMedia
 
 -spec announce_position_loop(pid(), kapps_call:call(), ne_binary()
                             ,{boolean(), boolean()}, non_neg_integer()
-                            ,proplist(), non_neg_integer() | 'undefined'
+                            ,kz_proplist(), non_neg_integer() | 'undefined'
                             ) -> no_return().
 announce_position_loop(Srv, Call, QueueId, AnnouncesEnabled, AnnouncementsTimer, Media, LastAverage) ->
     Position = gen_listener:call(Srv, {'queue_position', kapps_call:call_id(Call)}),
@@ -1188,7 +1188,7 @@ announce_position_loop(Srv, Call, QueueId, AnnouncesEnabled, AnnouncementsTimer,
                                            ,ne_binary()
                                            ,{boolean(), boolean()}
                                            ,non_neg_integer()
-                                           ,proplist()
+                                           ,kz_proplist()
                                            ,announce_pid_list()
                                            ) -> announce_pid_list().
 maybe_schedule_position_announcements(_Call, _, {'false', 'false'}, _, _, Pids) ->

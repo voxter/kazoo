@@ -7,7 +7,7 @@
         ]).
 
 -include_lib("kazoo_ast/include/kz_ast.hrl").
--include_lib("kazoo_json/include/kazoo_json.hrl").
+-include_lib("kazoo_stdlib/include/kazoo_json.hrl").
 
 -define(DEBUG(_Fmt, _Args), 'ok').
 %% -define(DEBUG(Fmt, Args), io:format([$~, $p, $  | Fmt], [?LINE | Args])).
@@ -214,6 +214,10 @@ function_args('ecallmgr_call_control') ->
      ,[?VAR(0, 'CallId'), ?VAR(0, 'Props'), ?VAR(0, 'State')]
      }
     ];
+function_args('ecallmgr_fs_presence') ->
+    {'maybe_build_presence_event'
+    ,[?VAR(0, 'Node'), ?VAR(0, 'UUID'), ?VAR(0, 'Props')]
+    };
 function_args(_M) ->
     {'undefined', []}.
 

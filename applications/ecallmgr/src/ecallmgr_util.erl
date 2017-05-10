@@ -684,12 +684,14 @@ endpoint_jobj_to_record(Endpoint, IncludeVars) ->
 
 -spec endpoint_jobj_to_record_vars(kz_json:object(), bridge_endpoint()) -> bridge_endpoint().
 endpoint_jobj_to_record_vars(Endpoint, #bridge_endpoint{include_channel_vars='true'}=Bridge) ->
-    Bridge#bridge_endpoint{channel_vars = ecallmgr_fs_xml:get_leg_vars(Endpoint)};
+    Bridge#bridge_endpoint{channel_vars=ecallmgr_fs_xml:get_leg_vars(Endpoint)};
 endpoint_jobj_to_record_vars(Endpoint, #bridge_endpoint{include_channel_vars='false'}=Bridge) ->
-    Props = lists:filter(fun({<<"Custom-SIP-Headers">>, _}) -> true;
-                            (_) -> false
-                         end, kz_json:to_proplist(Endpoint)),
-    Bridge#bridge_endpoint{header_vars = ecallmgr_fs_xml:get_leg_vars(Props)}.
+    Props = lists:filter(fun({<<"Custom-SIP-Headers">>, _}) -> 'true';
+                            (_) -> 'false'
+                         end
+                        ,kz_json:to_proplist(Endpoint)
+                        ),
+    Bridge#bridge_endpoint{header_vars=ecallmgr_fs_xml:get_leg_vars(Props)}.
 
 -spec get_endpoint_span(kz_json:object()) -> ne_binary().
 get_endpoint_span(Endpoint) ->
@@ -881,6 +883,20 @@ sip_failover_only(Endpoint) ->
     end.
 
 -spec get_sip_contact(bridge_endpoint()) -> ne_binary().
+-ifdef(TEST).
+get_sip_contact(#bridge_endpoint{invite_format = <<"route">>, route = <<"loopback/", Route/binary>>}) ->
+    <<"loopback/", Route/binary, "/", (?DEFAULT_FREESWITCH_CONTEXT)/binary>>;
+get_sip_contact(#bridge_endpoint{invite_format = <<"route">>, route=Route}) ->
+    Route;
+get_sip_contact(#bridge_endpoint{invite_format = <<"loopback">>, route=Route}) ->
+    <<"loopback/", Route/binary, "/", (?DEFAULT_FREESWITCH_CONTEXT)/binary>>;
+get_sip_contact(#bridge_endpoint{ip_address='undefined'
+                                ,realm=Realm
+                                ,username=Username
+                                }) ->
+    <<Username/binary, "@", Realm/binary>>;
+get_sip_contact(#bridge_endpoint{ip_address=IPAddress}) -> IPAddress.
+-else.
 get_sip_contact(#bridge_endpoint{invite_format = <<"route">>, route = <<"loopback/", Route/binary>>}) ->
     <<"loopback/", Route/binary, "/", (?DEFAULT_FREESWITCH_CONTEXT)/binary>>;
 get_sip_contact(#bridge_endpoint{invite_format = <<"route">>, route=Route}) ->
@@ -894,6 +910,7 @@ get_sip_contact(#bridge_endpoint{ip_address='undefined'
     {'ok', Contact} = ecallmgr_registrar:lookup_contact(Realm, Username),
     binary:replace(Contact, <<">">>, <<>>);
 get_sip_contact(#bridge_endpoint{ip_address=IPAddress}) -> IPAddress.
+-endif.
 
 -spec maybe_clean_contact(ne_binary(), bridge_endpoint()) -> ne_binary().
 maybe_clean_contact(<<"sip:", Contact/binary>>, _Endpoint) -> Contact;
@@ -1053,7 +1070,7 @@ media_path(<<"https://", _/binary>> = URI, _Type, _UUID, _) -> get_fs_playback(U
 media_path(<<?HTTP_GET_PREFIX, _/binary>> = Media, _Type, _UUID, _) -> Media;
 media_path(<<"\$", _/binary>> = Media, _Type, _UUID, _) -> Media;
 media_path(MediaName, Type, UUID, JObj) ->
-    case lookup_media(MediaName, UUID, JObj, Type) of
+    case lookup_media(MediaName, Type, UUID, JObj) of
         {'error', _E} ->
             lager:warning("failed to get media path for ~s: ~p", [MediaName, _E]),
             kz_term:to_binary(MediaName);
@@ -1156,10 +1173,10 @@ convert_kazoo_app_name(App) ->
     [EvtName || {EvtName, AppName} <- ?FS_APPLICATION_NAMES, App =:= AppName].
 
 -type media_types() :: 'new' | 'extant'.
--spec lookup_media(ne_binary(), ne_binary(), kz_json:object(), media_types()) ->
+-spec lookup_media(ne_binary(), media_types(), ne_binary(), kz_json:object()) ->
                           {'ok', ne_binary()} |
                           {'error', any()}.
-lookup_media(MediaName, CallId, JObj, Type) ->
+lookup_media(MediaName, Type, CallId, JObj) ->
     case kz_cache:fetch_local(?ECALLMGR_UTIL_CACHE
                              ,?ECALLMGR_PLAYBACK_MEDIA_KEY(MediaName)
                              )
@@ -1168,23 +1185,21 @@ lookup_media(MediaName, CallId, JObj, Type) ->
             lager:debug("media ~s exists in playback cache as ~s", [MediaName, _Path]),
             Ok;
         {'error', 'not_found'} ->
-            request_media_url(MediaName, CallId, JObj, Type)
+            request_media_url(MediaName, Type, CallId, JObj)
     end.
 
--spec request_media_url(ne_binary(), ne_binary(), kz_json:object(), media_types()) ->
+-spec request_media_url(ne_binary(), media_types(), ne_binary(), kz_json:object()) ->
                                {'ok', ne_binary()} |
                                {'error', any()}.
-request_media_url(MediaName, CallId, JObj, Type) ->
-    Request = kz_json:set_values(
-                props:filter_undefined(
-                  [{<<"Media-Name">>, MediaName}
-                  ,{<<"Stream-Type">>, kz_term:to_binary(Type)}
-                  ,{<<"Call-ID">>, CallId}
-                  ,{<<"Msg-ID">>, kz_binary:rand_hex(8)}
-                   | kz_api:default_headers(<<"media">>, <<"media_req">>, ?APP_NAME, ?APP_VERSION)
-                  ])
-                                ,JObj),
-    case kz_amqp_worker:call_collect(Request
+request_media_url(MediaName, Type, CallId, JObj) ->
+    MsgProps = props:filter_undefined(
+                 [{<<"Media-Name">>, MediaName}
+                 ,{<<"Stream-Type">>, kz_term:to_binary(Type)}
+                 ,{<<"Call-ID">>, CallId}
+                 ,{<<"Msg-ID">>, kz_binary:rand_hex(8)}
+                  | kz_api:default_headers(<<"media">>, <<"media_req">>, ?APP_NAME, ?APP_VERSION)
+                 ]),
+    case kz_amqp_worker:call_collect(kz_json:set_values(MsgProps, JObj)
                                     ,fun kapi_media:publish_req/1
                                     ,{'media_mgr', fun kapi_media:resp_v/1}
                                     )
@@ -1281,8 +1296,9 @@ maybe_add_expires_deviation_ms(Expires) ->
     maybe_add_expires_deviation(Expires) * ?MILLISECONDS_IN_SECOND.
 
 -spec get_dial_separator(api_object() | ne_binary(), kz_json:objects()) -> ne_binary().
-get_dial_separator(?DIAL_METHOD_SIMUL, [_|T]) when T =/= [] -> ?SEPARATOR_SIMULTANEOUS;
 get_dial_separator(?DIAL_METHOD_SINGLE, _Endpoints) -> ?SEPARATOR_SINGLE;
+get_dial_separator(?DIAL_METHOD_SIMUL, [_, _|_]) -> ?SEPARATOR_SIMULTANEOUS;
+get_dial_separator(?DIAL_METHOD_SIMUL, [_]) -> ?SEPARATOR_SINGLE;
 get_dial_separator('undefined', _Endpoints) -> ?SEPARATOR_SINGLE;
 get_dial_separator(JObj, Endpoints) ->
     get_dial_separator(kz_json:get_value(<<"Dial-Endpoint-Method">>, JObj, ?DIAL_METHOD_SINGLE)

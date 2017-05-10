@@ -17,11 +17,11 @@
 
 -define(DEFAULT_SYNC_CONTENT_TYPE, ?DEFAULT_CONTENT_TYPE).
 
--record(sync, {id :: ne_binary() | '_'
-              ,account_id :: ne_binary() | '_'
-              ,items :: ne_binary() | '_'
-              ,url :: binary() | '_'
-              ,method :: ne_binary() | '_'
+-record(sync, {id :: api_ne_binary()
+              ,account_id :: api_ne_binary()
+              ,items :: kz_service_items:items()
+              ,url :: api_ne_binary()
+              ,method :: api_ne_binary()
               ,content_type = ?DEFAULT_SYNC_CONTENT_TYPE :: ne_binary() | '_'
               }).
 -type sync() :: #sync{}.
@@ -56,7 +56,7 @@ is_good_standing(_AccountId, Status) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec sync(any(), any()) -> bookkeeper_sync_result().
+-spec sync(kz_service_items:items(), any()) -> bookkeeper_sync_result().
 sync(Items, AccountId) ->
     Sync = #sync{id = get_sync_id(AccountId)
                 ,account_id = AccountId
@@ -109,7 +109,7 @@ http_payload(#sync{content_type = <<"application/json">>} = Sync) ->
                              ]),
     kz_json:encode(JObj).
 
--spec http_headers(sync()) -> proplist().
+-spec http_headers(sync()) -> kz_proplist().
 http_headers(Sync) ->
     props:filter_empty(
       [{"X-Sync-ID", to_list(Sync#sync.id)}
@@ -182,9 +182,11 @@ handle_topup(BillingId, [Transaction|Transactions]) ->
 -spec send_topup_notification(ne_binary(), kz_transaction:transaction()) -> 'ok'.
 send_topup_notification(BillingId, Transaction) ->
     Props = [{<<"Account-ID">>, BillingId}
-            ,{<<"Amount">>, kz_transaction:amount(Transaction)}
+            ,{<<"Amount">>, wht_util:units_to_dollars(kz_transaction:amount(Transaction))}
             ,{<<"Response">>, <<"Authorized">>}
             ,{<<"Success">>, <<"true">>}
+            ,{<<"ID">>, kz_transaction:id(Transaction)}
+            ,{<<"Timestamp">>, kz_time:current_tstamp()}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ],
     case kz_amqp_worker:cast(Props

@@ -33,7 +33,22 @@
 %%--------------------------------------------------------------------
 -spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
-    repeat(Data, Call, repeats(Data)).
+    repeat(Data, maybe_set_alert(Data, Call), repeats(Data)).
+
+-spec maybe_set_alert(kz_json:object(), kapps_call:call()) -> kapps_call:call().
+maybe_set_alert(Data, Call) ->
+    AlertPath = custom_alert_path(kapps_call:inception(Call)),
+    case kz_json:get_ne_binary_value([<<"ringtones">>, AlertPath], Data) of
+        'undefined' ->
+            Call;
+        Alert ->
+            lager:debug("setting alert to ~s", [Alert]),
+            kapps_call:set_custom_sip_header(<<"Alert-Info">>, Alert, Call)
+    end.
+
+-spec custom_alert_path(api_binary()) -> ne_binary().
+custom_alert_path(_Inception='undefined') -> <<"internal">>;
+custom_alert_path(_Inception) -> <<"external">>.
 
 -spec repeat(kz_json:object(), kapps_call:call(), non_neg_integer()) -> 'ok'.
 repeat(_Data, Call, 0) ->
@@ -134,6 +149,11 @@ start_builder(EndpointId, Member, Call) ->
       end
      ).
 
+-spec is_member_active(kz_json:object()) -> boolean().
+is_member_active(Member) ->
+    DisableUntil = kz_json:get_value(<<"disable_until">>, Member, 0),
+    calendar:datetime_to_gregorian_seconds(calendar:universal_time()) > DisableUntil.
+
 -type endpoint() :: {ne_binary(), kz_json:object()}.
 -type endpoints() :: [endpoint()].
 
@@ -143,7 +163,9 @@ start_builder(EndpointId, Member, Call) ->
 -spec resolve_endpoint_ids(kz_json:object(), kapps_call:call()) -> endpoints().
 resolve_endpoint_ids(Data, Call) ->
     Members = kz_json:get_list_value(<<"endpoints">>, Data, []),
-    ResolvedEndpoints = resolve_endpoint_ids(Members, [], Data, Call),
+    FilteredMembers = lists:filter(fun is_member_active/1, Members),
+    lager:debug("filtered members of ring group ~p", [FilteredMembers]),
+    ResolvedEndpoints = resolve_endpoint_ids(FilteredMembers, [], Data, Call),
 
     FilteredEndpoints = [{Weight, {Id, kz_json:set_value(<<"source">>, kz_term:to_binary(?MODULE), Member)}}
                          || {Type, Id, Weight, Member} <- ResolvedEndpoints,

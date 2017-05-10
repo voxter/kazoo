@@ -22,6 +22,9 @@
         ,name/1, first_name/1, last_name/1
         ,priv_level/1, priv_level/2
         ,is_admin/1
+
+        ,call_restrictions/1, call_restrictions/2
+        ,classifier_restriction/2, classifier_restriction/3, set_classifier_restriction/3
         ]).
 
 -include("kz_documents.hrl").
@@ -37,6 +40,9 @@
 -define(KEY_FIRST_NAME, <<"first_name">>).
 -define(KEY_LAST_NAME, <<"last_name">>).
 -define(KEY_PRIV_LEVEL, <<"priv_level">>).
+
+-define(KEY_CALL_RESTRICTIONS, <<"call_restriction">>).
+-define(KEY_CALL_RESTRICTION_ACTION, <<"action">>).
 
 -define(PVT_TYPE, <<"user">>).
 
@@ -316,3 +322,33 @@ priv_level(Doc, Default) ->
 -spec is_admin(doc()) -> boolean().
 is_admin(Doc) ->
     kz_json:get_binary_value(?KEY_PRIV_LEVEL, Doc) =:= <<"admin">>.
+
+-spec call_restrictions(doc()) -> api_object().
+-spec call_restrictions(doc(), Default) -> kz_json:object() | Default.
+call_restrictions(Doc) ->
+    call_restrictions(Doc, 'undefined').
+call_restrictions(Doc, Default) ->
+    kz_json:get_json_value(?KEY_CALL_RESTRICTIONS, Doc, Default).
+
+-spec classifier_restriction(doc(), ne_binary()) -> api_ne_binary().
+-spec classifier_restriction(doc(), ne_binary(), Default) -> ne_binary() | Default.
+classifier_restriction(Doc, Classifier) ->
+    classifier_restriction(Doc, Classifier, 'undefined').
+classifier_restriction(Doc, Classifier, Default) ->
+    kz_json:get_ne_binary_value([?KEY_CALL_RESTRICTIONS
+                                ,Classifier
+                                ,?KEY_CALL_RESTRICTION_ACTION
+                                ]
+                               ,Doc
+                               ,Default
+                               ).
+
+-spec set_classifier_restriction(doc(), ne_binary(), ne_binary()) -> doc().
+set_classifier_restriction(Doc, Classifier, Action) ->
+    kz_json:set_value([?KEY_CALL_RESTRICTIONS
+                      ,Classifier
+                      ,?KEY_CALL_RESTRICTION_ACTION
+                      ]
+                     ,Action
+                     ,Doc
+                     ).

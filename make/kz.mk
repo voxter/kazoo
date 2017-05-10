@@ -76,6 +76,7 @@ test/$(PROJECT).app: $(TEST_SOURCES)
 	@mkdir -p ebin/
 	ERL_LIBS=$(ELIBS) erlc -v +nowarn_missing_spec $(ERLC_OPTS) $(TEST_PA) -o ebin/ $?
 	@sed "s/{modules, \[\]}/{modules, \[`echo ebin/*.beam | sed 's%\.beam ebin/%, %g;s%ebin/%%;s/\.beam//'`\]}/" src/$(PROJECT).app.src > $@
+	@sed "s/{modules, \[\]}/{modules, \[`echo ebin/*.beam | sed 's%\.beam ebin/%, %g;s%ebin/%%;s/\.beam//'`\]}/" src/$(PROJECT).app.src > ebin/$(PROJECT).app
 
 
 clean: clean-test
@@ -88,6 +89,8 @@ clean-test: $(CLEAN_MOAR)
 ## Use this one when debugging
 test: compile-test
 	ERL_LIBS=$(ELIBS) erl -noshell $(TEST_PA) -eval "case eunit:test([`echo ebin/*.beam | sed 's%\.beam ebin/%, %g;s%ebin/%%;s/\.beam//'`], [verbose]) of ok -> init:stop(); _ -> init:stop(1) end."
+test.%: compile-test
+	ERL_LIBS=$(ELIBS) erl -noshell $(TEST_PA) -eval "case eunit:test([$*], [verbose]) of ok -> init:stop(); _ -> init:stop(1) end."
 
 ## Use this one when CI
 eunit:
@@ -119,3 +122,8 @@ $(FMT):
 fmt: TO_FMT ?= $(shell find src include -iname '*.erl' -or -iname '*.hrl' -or -iname '*.app.src')
 fmt: $(FMT)
 	@$(FMT) $(TO_FMT)
+
+perf: ERLC_OPTS += -pa $(ROOT)/deps/horse/ebin -DPERF +'{parse_transform, horse_autoexport}'
+perf: compile-test
+	$(gen_verbose) @ERL_LIBS=$(ELIBS) erl -noshell  -pa $(ROOT)/deps/horse/ebin -pa $(TEST_PA) \
+		-eval 'horse:app_perf($(PROJECT)), init:stop().'

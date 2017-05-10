@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @copyright (C) 2017, 2600Hz
+%%% @copyright (C) 2016-2017, 2600Hz
 %%% @doc
 %%% @end
 %%% @contributors
@@ -13,13 +13,22 @@
 
 release_unknown_number_test_() ->
     [{"verfiy missing numbers return errors"
-     ,?_assertMatch({'error', 'not_found'}, knm_number:release(?TEST_CREATE_NUM))
+     ,?_assertMatch({error, not_found}, knm_number:release(?TEST_CREATE_NUM))
      }
     ].
 
 release_available_number_test_() ->
-    {'error', Error} = knm_number:release(?TEST_AVAILABLE_NUM),
-    [{"Verify error code for releasing available number"
+    {ok, N} = knm_number:release(?TEST_AVAILABLE_NUM),
+    PN = knm_number:phone_number(N),
+    {error, Error} = knm_number:release(?TEST_TELNYX_NUM),
+    [?_assert(knm_phone_number:is_dirty(PN))
+    ,{"Verify releasing available local number results in deletion"
+     ,?_assertEqual(?NUMBER_STATE_DELETED, knm_phone_number:state(PN))
+     }
+    ,{"verify number assignment"
+     ,?_assertEqual(undefined, knm_phone_number:assigned_to(PN))
+     }
+    ,{"Verify error code for releasing available number"
      ,?_assertEqual(400, knm_errors:code(Error))
      }
     ,{"Verify error for releasing available number"
@@ -28,55 +37,78 @@ release_available_number_test_() ->
     ].
 
 release_in_service_bad_carrier_number_test_() ->
-    {'ok', Released} = knm_number:release(?TEST_IN_SERVICE_BAD_CARRIER_NUM),
-    PhoneNumber = knm_number:phone_number(Released),
-    [{"verify number state is changed"
-     ,?_assertEqual(?NUMBER_STATE_AVAILABLE, knm_phone_number:state(PhoneNumber))
+    {ok, N} = knm_number:release(?TEST_IN_SERVICE_BAD_CARRIER_NUM),
+    PN = knm_number:phone_number(N),
+    [?_assert(knm_phone_number:is_dirty(PN))
+    ,{"verify number state is changed"
+     ,?_assertEqual(?NUMBER_STATE_AVAILABLE, knm_phone_number:state(PN))
+     }
+    ,{"verify available number is unassigned"
+     ,?_assertEqual(undefined, knm_phone_number:assigned_to(PN))
      }
     ,{"verify reserve history is empty now"
-     ,?_assertEqual([], knm_phone_number:reserve_history(PhoneNumber))
+     ,?_assertEqual([], knm_phone_number:reserve_history(PN))
      }
+    ].
+
+release_in_service_mdn_number_test_() ->
+    {ok, N} = knm_number:release(?TEST_IN_SERVICE_MDN, knm_number_options:mdn_options()),
+    PN = knm_number:phone_number(N),
+    [?_assert(knm_phone_number:is_dirty(PN))
+    ,{"verify number state is changed"
+     ,?_assertEqual(?NUMBER_STATE_DELETED, knm_phone_number:state(PN))
+     }
+    ,{"verify number assignment"
+     ,?_assertEqual(undefined, knm_phone_number:assigned_to(PN))
+     }
+    ,{"verify reserve history is empty now"
+     ,?_assertEqual([], knm_phone_number:reserve_history(PN))
+     }
+    ,?_assertEqual(?CARRIER_MDN, knm_phone_number:module_name(PN))
     ].
 
 release_in_service_number_test_() ->
-    {'ok', Released} = knm_number:release(?TEST_IN_SERVICE_NUM),
-    PhoneNumber = knm_number:phone_number(Released),
-    [{"verify number state is changed"
-     ,?_assertNotEqual(?NUMBER_STATE_IN_SERVICE, knm_phone_number:state(PhoneNumber))
+    Num = ?TEST_IN_SERVICE_NUM,
+    {ok, N0} = knm_number:get(Num),
+    PN0 = knm_number:phone_number(N0),
+    {ok, N} = knm_number:release(Num),
+    PN = knm_number:phone_number(N),
+    [?_assertEqual(?NUMBER_STATE_IN_SERVICE, knm_phone_number:state(PN0))
+    ,?_assertEqual([?RESELLER_ACCOUNT_ID], knm_phone_number:reserve_history(PN0))
+    ,?_assertEqual(?RESELLER_ACCOUNT_ID, knm_phone_number:assigned_to(PN0))
+    ,?_assertEqual([?FEATURE_LOCAL], knm_phone_number:features_list(PN0))
+    ,?_assert(knm_phone_number:is_dirty(PN))
+    ,{"verify number state is changed"
+     ,?_assertEqual(?NUMBER_STATE_DELETED, knm_phone_number:state(PN))
+     }
+    ,{"verify number assignment"
+     ,?_assertEqual(undefined, knm_phone_number:assigned_to(PN))
      }
     ,{"verify reserve history is empty now"
-     ,?_assertEqual([], knm_phone_number:reserve_history(PhoneNumber))
+     ,?_assertEqual([], knm_phone_number:reserve_history(PN))
      }
+    ,?_assertEqual([?FEATURE_LOCAL], knm_phone_number:features_list(PN))
     ].
 
 release_with_history_test_() ->
-    {'ok', Unwound} = knm_number:release(?TEST_IN_SERVICE_WITH_HISTORY_NUM),
-    PhoneNumber = knm_number:phone_number(Unwound),
-    [{"verify number state is moved to RESERVED"
-     ,?_assertEqual(?NUMBER_STATE_RESERVED, knm_phone_number:state(PhoneNumber))
+    Num = ?TEST_IN_SERVICE_WITH_HISTORY_NUM,
+    {ok, N0} = knm_number:get(Num),
+    PN0 = knm_number:phone_number(N0),
+    {ok, N} = knm_number:release(Num),
+    PN = knm_number:phone_number(N),
+    [?_assertEqual(?NUMBER_STATE_IN_SERVICE, knm_phone_number:state(PN0))
+    ,?_assertEqual([?RESELLER_ACCOUNT_ID, ?MASTER_ACCOUNT_ID], knm_phone_number:reserve_history(PN0))
+    ,?_assertEqual(?RESELLER_ACCOUNT_ID, knm_phone_number:assigned_to(PN0))
+    ,?_assertEqual([?FEATURE_LOCAL], knm_phone_number:features_list(PN0))
+    ,?_assert(knm_phone_number:is_dirty(PN))
+    ,{"verify number state is moved to RESERVED"
+     ,?_assertEqual(?NUMBER_STATE_RESERVED, knm_phone_number:state(PN))
      }
     ,{"verify reserve history is unwound"
-     ,?_assertEqual([?MASTER_ACCOUNT_ID], knm_phone_number:reserve_history(PhoneNumber))
+     ,?_assertEqual([?MASTER_ACCOUNT_ID], knm_phone_number:reserve_history(PN))
      }
     ,{"verify number is assigned to prev account"
-     ,?_assertEqual(?MASTER_ACCOUNT_ID, knm_phone_number:assigned_to(PhoneNumber))
+     ,?_assertEqual(?MASTER_ACCOUNT_ID, knm_phone_number:assigned_to(PN))
      }
-    ].
-
-release_for_hard_delete_test_() ->
-    {'ok', Deleted} = knm_number:release(?TEST_IN_SERVICE_NUM, [{'should_delete', 'true'}]),
-    PhoneNumber = knm_number:phone_number(Deleted),
-    [{"verify number state is moved to DELETED"
-     ,?_assertEqual(?NUMBER_STATE_DELETED, knm_phone_number:state(PhoneNumber))
-     }
-    ].
-
-release_mdn_test_() ->
-    BaseOptions = knm_number_options:mdn_options(),
-    {'ok', Deleted} = knm_number:release(?TEST_IN_SERVICE_MDN, BaseOptions),
-    PhoneNumber = knm_number:phone_number(Deleted),
-    [{"verify number state is moved to DELETED"
-     ,?_assertEqual(?NUMBER_STATE_DELETED, knm_phone_number:state(PhoneNumber))
-     }
-    ,?_assertEqual(?CARRIER_MDN, knm_phone_number:module_name(PhoneNumber))
+    ,?_assertEqual([?FEATURE_LOCAL], knm_phone_number:features_list(PN))
     ].

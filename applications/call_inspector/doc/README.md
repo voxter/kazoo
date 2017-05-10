@@ -28,7 +28,7 @@ The call_inspector application retrieves SIP packets in two ways:
 1. by listening for [HEP packets](https://2600hz.atlassian.net/wiki/display/docs/Homer+and+Kazoo#HomerandKazoo-C.haveKamailioandorFreeswitchcapture.) sent directly by FreeSwitch and/or Kamailio
 
 The packets are then stored by **callid** in plain text files that can be log-rotated.
-These files are stored in `/tmp/2600hz-call_inspector/{ID}` where `{ID}` is
+These files are stored in `/var/log/kazoo/call_inspector/{ID}` where `{ID}` is
 an md5 hash of the **callid**.
 
 At this point the packets inside these files are either **chunks** or **analysis**.
@@ -115,6 +115,38 @@ Example:
     $ sup call_inspector_maintenance list_active_parsers
     '10.26.0.182:9060'
 
+##### Setup HEP packets capturing for FreeSWITCH
+
+sofia.conf.xml
+
+```xml
+<param name="capture-server" value="udp:192.81.135.31:9060"/>
+```
+
+sipinterface_1.xml
+
+```xml
+<param name="capture-server" value="udp:192.81.135.31:9060"/>
+<param name="sip-capture" value="yes"/>
+```
+
+In your fs_cli: `sofia global siptrace on`
+
+##### Setup HEP packets capturing for Kamailio
+
+Add this to your default.cfg
+
+```
+loadmodule "siptrace.so"
+modparam("siptrace", "duplicate_uri", "sip:192.168.56.42:9061")
+modparam("siptrace", "hep_mode_on", 1)
+modparam("siptrace", "hep_version", 2)
+modparam("siptrace", "hep_capture_id", 1337)
+modparam("siptrace", "trace_to_database", 0)
+modparam("siptrace", "trace_flag", 22)
+modparam("siptrace", "trace_on", 1)
+```
+
 #### Start a Kamailio or FreeSwitch logs parser
 
     sup call_inspector_maintenance start_kamailio_parser {LOGFILE} {IP} {PORT}
@@ -174,6 +206,7 @@ This application does all this for you and uses a clever algorithm to **reorder 
 Dialogues are fetchable by **callid** only:
 
     sup call_inspector_maintenance callid_details {CALLID}
+    sup call_inspector_maintenance inspect_call_id {CALLID}
 
 `{CALLID}` is the string that uniquely identifies the exchange.
 It is the string that one would be using when `grep`ing logs.
@@ -241,3 +274,17 @@ Flush everything:
 
     sup call_inspector_maintenance flush
 
+
+## logrotate configuration
+
+The app will keep filling up its storage directory unless some script removes the oldest ones regularly.
+
+```
+/var/log/kazoo/call_inspector/*/*/* {
+    weekly
+    missingok
+    rotate 0
+}
+```
+
+You can test this command with `logrotate -d`.

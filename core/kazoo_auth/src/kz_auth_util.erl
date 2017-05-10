@@ -12,23 +12,9 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([map_keys_to_atoms/1]).
-
 -export([get_json_from_url/1, get_json_from_url/2]).
-
 -export([fetch_access_code/2, fetch_access_code/3]).
-
--spec map_keys_to_atoms(map()) -> map().
-map_keys_to_atoms(Map) ->
-    maps:fold(fun map_keys_to_atoms_fold/3, #{}, Map).
-
--spec map_keys_to_atoms_fold(ne_binary(), any(), map()) -> map().
-map_keys_to_atoms_fold(K, V, Acc) when is_map(V) ->
-    Acc#{kz_term:to_atom(K, 'true') => map_keys_to_atoms(V)};
-map_keys_to_atoms_fold(K, V, Acc) ->
-    Acc#{kz_term:to_atom(K, 'true') => V}.
-
-
+-export([run/2]).
 
 -spec get_json_from_url(ne_binary()) -> {'ok', kz_json:object()} | {'error', any()}.
 get_json_from_url(Url) ->
@@ -36,7 +22,7 @@ get_json_from_url(Url) ->
 
 -spec get_json_from_url(ne_binary(), kz_proplist()) -> {'ok', kz_json:object()} | {'error', any()}.
 get_json_from_url(Url, ReqHeaders) ->
-    case kz_http:get(kz_term:to_list(Url), ReqHeaders) of
+    case kz_http:get(kz_term:to_list(Url), ReqHeaders, [{ssl, [{versions, ['tlsv1.2']}]}]) of
         {'ok', 200, _RespHeaders, Body} ->
             JObj = kz_json:decode(Body),
             case kz_term:is_empty(JObj) of
@@ -82,9 +68,11 @@ fetch_access_code(#{auth_app := #{name := ClientId
              ,{"code", AuthorizationCode}
              ],
     Body = string:join(lists:append(lists:map(fun({K,V}) -> [string:join([K, kz_term:to_list(V)], "=") ] end, Fields)),"&"),
-    case kz_http:post(kz_term:to_list(URL), Headers, Body) of
+    case kz_http:post(kz_term:to_list(URL), Headers, Body, [{ssl, [{versions, ['tlsv1.2']}]}]) of
         {'ok', 200, _RespHeaders, RespXML} -> {'ok', kz_json:decode(RespXML)};
-        Else -> {'error', Else}
+        Else ->
+            lager:error("~p", [Else]),
+            {'error', Else}
     end.
 
 
@@ -100,4 +88,19 @@ get_app_and_provider(AppId) ->
              ,auth_provider => kz_auth_providers:get_auth_provider(Provider)
              };
         Error -> Error
+    end.
+
+-spec run(map(), list()) -> {ok | error, map()}.
+run(Token, []) -> {ok, Token};
+run(Token, [Fun | Routines]) ->
+    try Fun(Token) of
+        #{error := _Err}=Error -> {error, Error};
+        {ok, NewToken} -> run(NewToken, Routines);
+        {error, Error} -> {error, Token#{error => Error}};
+        NewToken -> run(NewToken, Routines)
+    catch
+        _E:_R ->
+            lager:debug("exception executing ~p : ~p , ~p, ~p", [Fun, _E, _R, Token]),
+            kz_util:log_stacktrace(),
+            {error, Token}
     end.

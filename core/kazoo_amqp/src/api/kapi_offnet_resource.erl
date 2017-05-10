@@ -26,6 +26,7 @@
         ,control_queue/1, control_queue/2
         ,custom_channel_vars/1, custom_channel_vars/2
         ,custom_sip_headers/1, custom_sip_headers/2
+        ,custom_sip_header/2
         ,emergency_caller_id_name/1, emergency_caller_id_name/2
         ,emergency_caller_id_number/1, emergency_caller_id_number/2
         ,fax_identity_name/1, fax_identity_name/2
@@ -211,7 +212,7 @@ resp_v(Prop) when is_list(Prop) ->
     kz_api:validate(Prop, ?OFFNET_RESOURCE_RESP_HEADERS, ?OFFNET_RESOURCE_RESP_VALUES, ?OFFNET_RESOURCE_RESP_TYPES);
 resp_v(JObj) -> resp_v(kz_json:to_proplist(JObj)).
 
--spec bind_q(ne_binary(), proplist()) -> 'ok'.
+-spec bind_q(ne_binary(), kz_proplist()) -> 'ok'.
 bind_q(Queue, _Props) ->
     amqp_util:bind_q_to_resource(Queue, ?KEY_OFFNET_RESOURCE_REQ).
 
@@ -364,6 +365,11 @@ custom_sip_headers(Req) ->
     custom_sip_headers(Req, 'undefined').
 custom_sip_headers(?REQ_TYPE(JObj), Default) ->
     kz_json:get_json_value(?KEY_CSHS, JObj, Default).
+
+-spec custom_sip_header(req(), kz_json:key()) -> kz_json:json_term() | 'undefined'.
+custom_sip_header(Req, Header) ->
+    SipHeaders = custom_sip_headers(Req, kz_json:new()),
+    kz_json:get_value(Header, SipHeaders).
 
 -spec timeout(req()) -> api_integer().
 -spec timeout(req(), Default) -> integer() | Default.

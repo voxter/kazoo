@@ -11,6 +11,7 @@
 
 -export([init/0
         ,allowed_methods/0, allowed_methods/1, allowed_methods/2
+        ,authorize/1
         ,resource_exists/0, resource_exists/1, resource_exists/2
         ,content_types_provided/2
         ,content_types_accepted/2
@@ -66,6 +67,7 @@
 -spec init() -> 'ok'.
 init() ->
     _ = crossbar_bindings:bind(<<"*.allowed_methods.notifications">>, ?MODULE, 'allowed_methods'),
+    _ = crossbar_bindings:bind(<<"*.authorize">>, ?MODULE, 'authorize'),
     _ = crossbar_bindings:bind(<<"*.resource_exists.notifications">>, ?MODULE, 'resource_exists'),
     _ = crossbar_bindings:bind(<<"*.content_types_provided.notifications">>, ?MODULE, 'content_types_provided'),
     _ = crossbar_bindings:bind(<<"*.content_types_accepted.notifications">>, ?MODULE, 'content_types_accepted'),
@@ -99,6 +101,19 @@ allowed_methods(?SMTP_LOG, _SMTPLogId) ->
     [?HTTP_GET];
 allowed_methods(?CUSTOMER_UPDATE, ?MESSAGE) ->
     [?HTTP_POST].
+
+-spec authorize(cb_context:context()) -> boolean().
+authorize(Context) ->
+    authorize(Context, cb_context:req_nouns(Context), cb_context:account_id(Context)).
+
+-spec authorize(cb_context:context(), req_nouns(), api_binary()) -> boolean().
+authorize(_Context, [{<<"notifications">>, [?NE_BINARY=_Id]}], 'undefined') ->
+    lager:debug("allowing system notifications request"),
+    'true';
+authorize(_Context, [{<<"notifications">>, _}, {<<"accounts">>, [AccountId]}], AccountId) ->
+    'true';
+authorize(_Context, _Nouns, _AccountId) ->
+    'false'.
 
 %%--------------------------------------------------------------------
 %% @public
@@ -467,6 +482,8 @@ headers(<<"port_request_admin">>) ->
     kapi_notifications:headers(<<"port_request">>);
 headers(<<"fax_inbound_error_to_email_filtered">>) ->
     kapi_notifications:headers(<<"fax_inbound_error_to_email">>);
+headers(<<"transaction_failed">>) ->
+    kapi_notifications:headers(<<"transaction">>);
 headers(Id) ->
     kapi_notifications:headers(Id).
 
@@ -475,9 +492,15 @@ maybe_add_extra_data(<<"fax_inbound_error_to_email">>, API) ->
     props:set_value(<<"Fax-Result-Code">>, <<"500">>, API);
 maybe_add_extra_data(<<"fax_inbound_error_to_email_filtered">>, API) ->
     props:set_value(<<"Fax-Result-Code">>, <<"49">>, API);
+maybe_add_extra_data(<<"transaction">>, API) ->
+    props:set_value(<<"Success">>, 'true', API);
+maybe_add_extra_data(<<"transaction_failed">>, API) ->
+    props:set_value(<<"Success">>, 'false', API);
 maybe_add_extra_data(_Id, API) -> API.
 
 -spec publish_fun(ne_binary()) -> fun((api_terms()) -> 'ok').
+publish_fun(<<"account_zone_change">>) ->
+    fun kapi_notifications:publish_account_zone_change/1;
 publish_fun(<<"cnam_request">>) ->
     fun kapi_notifications:publish_cnam_request/1;
 publish_fun(<<"customer_update">>) ->
@@ -500,6 +523,8 @@ publish_fun(<<"first_occurrence">>) ->
     fun kapi_notifications:publish_first_occurrence/1;
 publish_fun(<<"low_balance">>) ->
     fun kapi_notifications:publish_low_balance/1;
+publish_fun(<<"missed_call">>) ->
+    fun kapi_notifications:publish_missed_call/1;
 publish_fun(<<"new_account">>) ->
     fun kapi_notifications:publish_new_account/1;
 publish_fun(<<"new_user">>) ->
@@ -531,6 +556,8 @@ publish_fun(<<"system_alert">>) ->
 publish_fun(<<"topup">>) ->
     fun kapi_notifications:publish_topup/1;
 publish_fun(<<"transaction">>) ->
+    fun kapi_notifications:publish_transaction/1;
+publish_fun(<<"transaction_failed">>) ->
     fun kapi_notifications:publish_transaction/1;
 publish_fun(<<"voicemail_full">>) ->
     fun kapi_notifications:publish_voicemail_full/1;
@@ -717,16 +744,35 @@ read_account(Context, Id, LoadFrom) ->
          }
     of
         {404, 'error'} when LoadFrom =:= 'system'; LoadFrom =:= 'system_migrate' ->
-            lager:debug("~s not found in account, reading from master", [Id]),
-            read_system_for_account(Context, Id, LoadFrom);
+            maybe_read_from_parent(Context, Id, LoadFrom, cb_context:reseller_id(Context));
         {_Code, 'success'} ->
-            lager:debug("loaded ~s from account database", [Id]),
+            lager:debug("loaded ~s from account database ~s", [Id, cb_context:account_db(Context)]),
             Context2 = maybe_merge_ancestor_attachments(Context1, Id),
             NewRespData = note_account_override(cb_context:resp_data(Context2)),
             cb_context:set_resp_data(Context2, NewRespData);
         {_Code, _Status} ->
             lager:debug("failed to load ~s: ~p", [Id, _Code]),
             Context1
+    end.
+
+-spec maybe_read_from_parent(cb_context:context(), ne_binary(), load_from(), api_binary()) -> cb_context:context().
+maybe_read_from_parent(Context, Id, LoadFrom, 'undefined') ->
+    lager:debug("~s not found in account and reseller is undefined, reading from master", [Id]),
+    read_system_for_account(Context, Id, LoadFrom);
+maybe_read_from_parent(Context, Id, LoadFrom, ResellerId) ->
+    AccountId = kz_util:format_account_id(cb_context:account_db(Context)),
+    case AccountId =/= ResellerId
+        andalso get_parent_account_id(AccountId) of
+        'false' ->
+            lager:debug("~s not found in account and reached to reseller, reading from master", [Id]),
+            read_system_for_account(Context, Id, LoadFrom);
+        'undefined' ->
+            lager:debug("~s not found in account and parent is undefined, reading from master", [Id]),
+            read_system_for_account(Context, Id, LoadFrom);
+        ParentId ->
+            ParentDb = kz_util:format_account_db(ParentId),
+            lager:debug("account doesn't have ~s, reading from parent account ~s", [Id, ParentDb]),
+            read_account(cb_context:set_account_db(Context, ParentDb), Id, LoadFrom)
     end.
 
 -spec read_system_for_account(cb_context:context(), path_token(), load_from()) ->
@@ -743,6 +789,15 @@ read_system_for_account(Context, Id, LoadFrom) ->
         _Status ->
             lager:debug("failed to read master db for ~s", [Id]),
             Context1
+    end.
+
+-spec get_parent_account_id(ne_binary()) -> api_binary().
+get_parent_account_id(AccountId) ->
+    case kz_account:fetch(AccountId) of
+        {'ok', JObj} -> kz_account:parent_account_id(JObj);
+        {'error', _E} ->
+            lager:error("failed to find parent account for ~s", [AccountId]),
+            'undefined'
     end.
 
 -spec revert_context_to_account(cb_context:context(), cb_context:context()) -> cb_context:context().
@@ -819,13 +874,8 @@ merge_ancestor_attachments(Context, Id, AccountId, AccountId) ->
     end;
 %% Not yet at reseller, try parent account
 merge_ancestor_attachments(Context, Id, AccountId, ResellerId) ->
-    AccountContext = masquerade(Context, AccountId),
-    AccountContext1 = crossbar_doc:load(AccountId, AccountContext, ?TYPE_CHECK_OPTION(kz_account:type())),
-    AccountJObj = cb_context:doc(AccountContext1),
-    case kz_account:parent_account_id(AccountJObj) of
-        'undefined' ->
-            lager:error("where was the parent account for ~s?", [AccountId]),
-            Context;
+    case get_parent_account_id(AccountId) of
+        'undefined' -> Context;
         ParentAccountId ->
             lager:debug("trying attachments in account ~s", [ParentAccountId]),
             try_parent_attachments(Context, Id, AccountId, ParentAccountId, ResellerId)
@@ -1032,7 +1082,7 @@ maybe_inherit_defaults(Context, Doc) ->
 inherit_defaults(Context, 'undefined') -> Context;
 inherit_defaults(Context, InheritedDefaultsDoc) ->
     PublicDefaults = kz_doc:public_fields(InheritedDefaultsDoc),
-    ReqData = kz_json:merge(cb_context:req_data(Context), PublicDefaults),
+    ReqData = kz_json:merge(PublicDefaults, cb_context:req_data(Context)),
     cb_context:set_req_data(Context, ReqData).
 
 -spec update_template(cb_context:context(), path_token(), kz_json:object()) ->

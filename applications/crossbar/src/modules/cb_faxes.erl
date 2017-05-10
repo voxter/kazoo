@@ -489,7 +489,23 @@ on_successful_validation('undefined', Context) ->
             Code = <<"required">>,
             Message = <<"add document url or upload a document">>,
             cb_context:add_validation_error(Property, Code, Message, Context);
-        'false' -> on_success('undefined', Context)
+        'false' -> verify_number(Context)
+    end.
+
+-spec verify_number(cb_context:context()) -> cb_context:context().
+verify_number(Context) ->
+    AccountId = cb_context:account_id(Context),
+    Number = kzd_fax:to_number(cb_context:doc(Context)),
+    case knm_converters:is_reconcilable(Number, AccountId) of
+        'true' ->
+            NormalizedNumber = knm_converters:normalize(Number, AccountId),
+            Doc = kz_json:set_value(<<"to_number">>, NormalizedNumber, cb_context:doc(Context)),
+            on_success(cb_context:set_doc(Context, Doc));
+        'false' ->
+            Property = [<<"document">>,<<"to_number">>],
+            Code = <<"required">>,
+            Message = <<"add a valid number to send the fax to">>,
+            cb_context:add_validation_error(Property, Code, Message, Context)
     end.
 
 %%--------------------------------------------------------------------
@@ -498,8 +514,8 @@ on_successful_validation('undefined', Context) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec on_success(api_binary(), cb_context:context()) -> cb_context:context().
-on_success('undefined', Context) ->
+-spec on_success(cb_context:context()) -> cb_context:context().
+on_success(Context) ->
     AccountId = cb_context:account_id(Context),
     AccountDb = cb_context:account_db(Context),
     ResellerId = cb_context:reseller_id(Context),
@@ -679,7 +695,7 @@ normalize_view_results(JObj, Acc) ->
 normalize_modb_view_results(JObj, Acc) ->
     Doc = kz_json:get_value(<<"doc">>, JObj),
     View = kz_json:get_value(<<"value">>, JObj),
-    [kz_json:public_fields(kz_json:merge_jobjs(View, Doc))|Acc].
+    [kz_doc:public_fields(kz_json:merge_jobjs(View, Doc))|Acc].
 
 -spec maybe_save_attachment(cb_context:context()) -> cb_context:context().
 maybe_save_attachment(Context) ->
@@ -719,7 +735,7 @@ set_pending(Context, DocId) ->
 
 -spec do_put_action(cb_context:context(), ne_binary(), ne_binary(), ne_binary()) -> cb_context:context().
 do_put_action(Context, ?OUTBOX, ?OUTBOX_ACTION_RESUBMIT, Id) ->
-    ReqData = kz_json:public_fields(cb_context:req_data(Context)),
+    ReqData = kz_doc:public_fields(cb_context:req_data(Context)),
     Fun = fun(_Source, Target) -> set_resubmit_data(kz_json:merge_jobjs(ReqData, Target)) end,
     Options = [{'transform', Fun}],
     FromDB = cb_context:account_db(Context),
@@ -729,13 +745,13 @@ do_put_action(Context, ?OUTBOX, ?OUTBOX_ACTION_RESUBMIT, Id) ->
         {'ok', _Doc} ->
             Updates = [{<<"pvt_job_status">>, <<"pending">>}],
             {'ok', UpdatedDoc} = kz_datamgr:update_doc(?KZ_FAXES_DB, NewId, Updates),
-            cb_context:set_resp_data(Context, kz_json:public_fields(UpdatedDoc));
+            cb_context:set_resp_data(Context, kz_doc:public_fields(UpdatedDoc));
         {'error', Error} ->
             lager:error("error resubmitting fax : ~p", [Error]),
             cb_context:add_system_error(<<"error when resubmitting fax">>, Context)
     end;
 do_put_action(Context, ?INBOX, ?INBOX_ACTION_FORWARD, Id) ->
-    ReqData = kz_json:public_fields(cb_context:req_data(Context)),
+    ReqData = kz_doc:public_fields(cb_context:req_data(Context)),
     Fun = fun(_Source, Target) -> set_forward_data(kz_json:merge_jobjs(ReqData, Target)) end,
     Options = [{'transform', Fun}],
     FromDB = cb_context:account_db(Context),
@@ -745,7 +761,7 @@ do_put_action(Context, ?INBOX, ?INBOX_ACTION_FORWARD, Id) ->
         {'ok', _Doc} ->
             Updates = [{<<"pvt_job_status">>, <<"pending">>}],
             {'ok', UpdatedDoc} = kz_datamgr:update_doc(?KZ_FAXES_DB, NewId, Updates),
-            cb_context:set_resp_data(Context, kz_json:public_fields(UpdatedDoc));
+            cb_context:set_resp_data(Context, kz_doc:public_fields(UpdatedDoc));
         {'error', Error} ->
             lager:error("error resubmitting fax : ~p", [Error]),
             cb_context:add_system_error(<<"error when forwarding fax">>, Context)

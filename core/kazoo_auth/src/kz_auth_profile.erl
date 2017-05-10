@@ -11,7 +11,7 @@
 
 -include("kazoo_auth.hrl").
 
--define(UPDATE_CHK_FIELDS, [<<"refresh_token">>
+-define(UPDATE_CHK_FIELDS, [<<"pvt_refresh_token">>
                            ,<<"scope">>
                            ,<<"scopes">>
                            ,<<"email">>
@@ -20,12 +20,19 @@
                            ,<<"profile">>
                            ,<<"pvt_account_id">>
                            ,<<"pvt_owner_id">>
+                           ,<<"display_name">>
+                           ,<<"photo_url">>
                            ]).
 
 -define(PROFILE_EMAIL_FIELDS, [<<"email">>
                               ,<<"emailAddress">>
                               ,<<"email_address">>
+                              ,<<"mail">>
                               ]).
+
+-define(TOKEN_VERIFIED_EMAIL_FIELDS, [<<"email_verified">>
+                                     ,<<"verified_email">>
+                                     ]).
 
 -define(SCOPE_SEPARATORS, [<<" ">>
                           ,<<",">>
@@ -41,6 +48,8 @@ token(Token) ->
     Routines = [fun maybe_load_profile/1
                ,fun maybe_add_user_identity/1
                ,fun maybe_add_user_email/1
+               ,fun maybe_add_display_name/1
+               ,fun maybe_add_photo_url/1
                ,fun maybe_add_user/1
                ],
     token_fold(Token, Routines).
@@ -71,7 +80,7 @@ maybe_load_profile(#{auth_provider := #{profile_url := _ProfileURL}
     Headers = profile_authorization_headers(Token, AccessToken),
     URL = profile_url(Token),
     lager:debug("getting profile from ~s", [URL]),
-    case kz_http:get(kz_term:to_list(URL), Headers) of
+    case kz_http:get(kz_term:to_list(URL), Headers, [{ssl, [{versions, ['tlsv1.2']}]}]) of
         {'ok', 200, _RespHeaders, RespXML} ->
             Token#{profile => kz_json:decode(RespXML)};
         {'ok', 401, _RespHeaders, _RespXML} ->
@@ -136,14 +145,66 @@ maybe_add_user_identity(#{auth_provider := #{profile_identity_field := Field}
             lager:debug("found user identity ~p", [Identity]),
             Token#{user_identity => Identity}
     end;
+maybe_add_user_identity(#{auth_provider := #{profile_identity_fields := Fields}
+                         ,profile := Profile
+                         } = Token) ->
+    Keys = lists:filter(fun(Field) -> kz_json:get_value(Field, Profile) =/= 'undefined' end, Fields),
+    case length(Keys) =:= length(Fields) of
+        'false' ->
+            lager:debug("user identity from fields '~p' not found into ~p", [Fields, Profile]),
+            Token;
+        'true' ->
+            [First | Others] = Fields,
+            V1 = kz_term:to_binary(kz_json:get_value(First, Profile)),
+            Identity = lists:foldl(fun(K, Acc) ->
+                                           V = kz_term:to_binary(kz_json:get_value(K, Profile)),
+                                           <<Acc/binary, "-", V/binary>>
+                                   end, V1, Others),
+            lager:debug("found user identity ~p", [Identity]),
+            Token#{user_identity => Identity}
+    end;
 maybe_add_user_identity(#{auth_provider := #{name := Prov}}=Token) ->
     lager:debug("provider '~s' doesn't support identity profile info", [Prov]),
     Token.
 
+-spec maybe_add_display_name(map()) -> map().
+maybe_add_display_name(#{display_name := _DisplayName} = Token) -> Token;
+maybe_add_display_name(#{profile_error_code := _Error} = Token) -> Token;
+maybe_add_display_name(#{auth_provider := #{profile_displayName_field := Field}
+                        ,profile := Profile
+                        } = Token) ->
+    case kz_json:get_first_defined([Field], Profile) of
+        'undefined' ->
+            lager:debug("user displayName from field '~p' not found into ~p", [Field, Profile]),
+            Token;
+        DisplayName ->
+            lager:debug("found user displayName ~p", [DisplayName]),
+            Token#{display_name => DisplayName}
+    end;
+maybe_add_display_name(#{auth_provider := #{name := Prov}}=Token) ->
+    lager:debug("provider '~s' doesn't support displayName profile info", [Prov]),
+    Token.
+
+-spec maybe_add_photo_url(map()) -> map().
+maybe_add_photo_url(#{photo_url := _PhotoUrl} = Token) -> Token;
+maybe_add_photo_url(#{profile_error_code := _Error} = Token) -> Token;
+maybe_add_photo_url(#{auth_provider := #{profile_photo_url_field := Field}
+                     ,profile := Profile
+                     } = Token) ->
+    case kz_json:get_first_defined([Field], Profile) of
+        'undefined' ->
+            lager:debug("user photoUrl from field '~p' not found into ~p", [Field, Profile]),
+            Token;
+        PhotoUrl ->
+            lager:debug("found user photoUrl ~p", [PhotoUrl]),
+            Token#{photo_url => PhotoUrl}
+    end;
+maybe_add_photo_url(Token) -> Token.
 
 -spec maybe_add_user_email(map()) -> map().
 maybe_add_user_email(#{user_email := _UserEmail} = Token) -> Token;
-maybe_add_user_email(#{verified_token := VerifiedToken} = Token) ->
+maybe_add_user_email(#{verified_token := VerifiedToken} = Token)
+  when VerifiedToken =/= ?EMPTY_JSON_OBJECT ->
     Token#{user_email => kz_json:get_first_defined(?PROFILE_EMAIL_FIELDS, VerifiedToken)};
 maybe_add_user_email(#{profile_error_code := _Error} = Token) -> Token;
 maybe_add_user_email(#{auth_provider := #{profile_email_field := Field}
@@ -180,6 +241,7 @@ maybe_add_user(#{auth_app := #{pvt_user_prefix := Prefix}
                 ,user_identity := Identity
                 } = Token) ->
     DocId = <<Prefix/binary, "-",Identity/binary>>,
+    lager:debug("loading profile data from ~s/~s", [?KZ_AUTH_DB, DocId]),
     case kz_datamgr:open_cache_doc(?KZ_AUTH_DB, DocId) of
         {'ok', OAuthDoc} -> maybe_update_user(DocId, OAuthDoc, Token);
         {'error', 'not_found'} -> update_user(DocId, format_user_doc(Token), Token)
@@ -188,6 +250,7 @@ maybe_add_user(#{auth_provider := #{name := Prefix}
                 ,user_identity := Identity
                 } = Token) ->
     DocId = <<Prefix/binary, "-",Identity/binary>>,
+    lager:debug("loading profile data from ~s/~s", [?KZ_AUTH_DB, DocId]),
     case kz_datamgr:open_cache_doc(?KZ_AUTH_DB, DocId) of
         {'ok', OAuthDoc} -> maybe_update_user(DocId, OAuthDoc, Token);
         {'error', 'not_found'} -> update_user(DocId, format_user_doc(Token), Token)
@@ -309,12 +372,13 @@ format_user_doc(#{auth_provider := #{name := ProviderId} = Provider
                           end, [], Mapping),
 
     Props = [{<<"email">>, EMail}
-            ,{<<"verified_email">>, kz_json:get_value(<<"verified_email">>, Verified)}
+            ,{<<"verified_email">>, kz_json:get_first_defined(?TOKEN_VERIFIED_EMAIL_FIELDS, Verified)}
             ,{<<"access_type">>, maps:get(access_type, Token, 'undefined')}
             ,{<<"scope">>, Scope}
             ,{<<"scopes">>, binary:split(Scope, ?SCOPE_SEPARATORS, ['global'])}
-            ,{<<"refresh_token">>, maps:get(refresh_token, Token, 'undefined')}
             ,{<<"profile">>, Profile}
+            ,{<<"display_name">>, maps:get(display_name, Token, 'undefined')}
+            ,{<<"photo_url">>, maps:get(photo_url, Token, 'undefined')}
             ,{<<"pvt_app_id">>, AppId}
             ,{<<"pvt_app_provider_id">>, ProviderId}
             ,{<<"pvt_app_account_id">>, AppAccountId}
@@ -322,5 +386,6 @@ format_user_doc(#{auth_provider := #{name := ProviderId} = Provider
             ,{<<"pvt_owner_id">>, maps:get(linked_owner_id, Token, 'undefined')}
             ,{<<"pvt_type">>, <<"user">>}
             ,{<<"pvt_user_identity">>, Identity}
+            ,{<<"pvt_refresh_token">>, maps:get(refresh_token, Token, 'undefined')}
             ] ++ MapFields,
     props:filter_empty(Props).

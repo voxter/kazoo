@@ -34,23 +34,24 @@
 
 -type http_method() :: 'get' | 'post'.
 
--record(state, {voice_uri :: api_binary()
-               ,cdr_uri :: api_binary()
-               ,request_format = <<"twiml">> :: api_binary()
+-record(state, {voice_uri :: api_ne_binary()
+               ,cdr_uri :: api_ne_binary()
+               ,request_format = <<"kazoo">> :: ne_binary()
                ,method = 'get' :: http_method()
-               ,call :: kapps_call:call()
-               ,request_id :: kz_http:req_id()
-               ,request_params :: kz_json:object()
-               ,response_code :: ne_binary()
-               ,response_headers :: binaries() | ne_binary()
+               ,call :: kapps_call:call() | 'undefined'
+               ,request_id :: kz_http:req_id() | 'undefined'
+               ,request_params :: api_object()
+               ,response_code :: api_ne_binary()
+               ,response_headers :: binaries() | api_ne_binary()
                ,response_body = <<>> :: binary()
-               ,response_content_type :: binary()
-               ,response_pid :: pid() %% pid of the processing of the response
+               ,response_content_type :: api_binary()
+               ,response_pid :: api_pid() %% pid of the processing of the response
                ,response_event_handlers = [] :: pids()
-               ,response_ref :: reference() %% monitor ref for the pid
+               ,response_ref :: api_reference() %% monitor ref for the pid
                ,debug = 'false' :: boolean()
-               ,requester_queue :: api_binary()
+               ,requester_queue :: api_ne_binary()
                }).
+
 -type state() :: #state{}.
 
 %%%===================================================================
@@ -257,7 +258,7 @@ handle_cast({'cdr', JObj}
                   ,debug=Debug
                   }=State) ->
     JObj1 = kz_json:delete_key(<<"Custom-Channel-Vars">>, JObj),
-    Body =  kz_json:to_querystring(kz_api:remove_defaults(JObj1)),
+    Body =  kz_http_util:json_to_querystring(kz_api:remove_defaults(JObj1)),
     Headers = [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "application/xml,application/xhtml+xml,text/html;q=0.9, text/plain;q=0.8,image/png,*/*;q=0.5"}],
 
     maybe_debug_req(Call, Url, 'post', Headers, Body, Debug),
@@ -407,7 +408,7 @@ handle_info(_Info, State) ->
 %% @doc
 %% Handling messaging bus events
 %%
-%% @spec handle_event(JObj, State) -> {'noreply', proplist()} |
+%% @spec handle_event(JObj, State) -> {'noreply', kz_proplist()} |
 %%                                    ignore
 %% @end
 %%--------------------------------------------------------------------
@@ -463,7 +464,7 @@ send_req(Call, Uri, 'get', Headers, BaseParams, Debug) ->
     UserParams = kzt_translator:get_user_vars(Call),
     Params = kz_json:set_values(BaseParams, UserParams),
     UpdatedCall = kapps_call:kvs_erase(<<"digits_collected">>, Call),
-    send(UpdatedCall, uri(Uri, kz_json:to_querystring(Params)), 'get', Headers ++ [{"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}, {"Accept-Language", binary_to_list(kapps_call:language(Call))}], [], Debug);
+    send(UpdatedCall, uri(Uri, kz_http_util:json_to_querystring(Params)), 'get', Headers ++ [{"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}, {"Accept-Language", binary_to_list(kapps_call:language(Call))}], [], Debug);
 send_req(Call, Uri, 'post', Headers, BaseParams, Debug) ->
     UserParams = kzt_translator:get_user_vars(Call),
     Params = kz_json:set_values(BaseParams, UserParams),
@@ -472,7 +473,7 @@ send_req(Call, Uri, 'post', Headers, BaseParams, Debug) ->
         [] ->
             send(UpdatedCall, Uri, 'post', [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}, {"Accept-Language", binary_to_list(kapps_call:language(Call))}], kz_json:to_querystring(Params), Debug);
         _ ->
-            send(UpdatedCall, Uri, 'post', [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "application/json"}, {"Accept-Language", binary_to_list(kapps_call:language(Call))} | Headers], kz_json:to_querystring(Params), Debug)
+            send(UpdatedCall, Uri, 'post', [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "application/json"}, {"Accept-Language", binary_to_list(kapps_call:language(Call))} | Headers], kz_http_util:json_to_querystring(Params), Debug)
     end.
 
 -spec send(kapps_call:call(), ne_binary(), http_method(), kz_proplist(), iolist(), boolean()) ->
