@@ -42,6 +42,7 @@
 -define(SHOULD_FILTER_RATES,
         kapps_config:get_is_true(?MOD_CONFIG_CAT, <<"should_filter_rates">>, 'false')).
 
+
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
