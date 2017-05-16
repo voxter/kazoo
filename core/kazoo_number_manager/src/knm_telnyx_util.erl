@@ -42,7 +42,6 @@
 -define(SHOULD_FILTER_RATES,
         kapps_config:get_is_true(?MOD_CONFIG_CAT, <<"should_filter_rates">>, 'false')).
 
-
 %%--------------------------------------------------------------------
 %% @public
 %% @doc
@@ -200,7 +199,7 @@ maybe_apply_limit(JObj, ResultField) ->
     kz_json:set_value(ResultField, Result, JObj).
 
 -spec take(non_neg_integer(), list()) -> list().
-take(0, _) -> [];
+take(0, L) -> L;
 take(N, L)
   when is_integer(N), N > 0 ->
     lager:debug("asked for ~p results, got ~p", [N, length(L)]),

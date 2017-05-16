@@ -18,6 +18,7 @@
 -export([is_number_billable/1]).
 -export([should_lookup_cnam/0]).
 -export([check_numbers/1]).
+-export([set_connection_id/1]).
 
 -include("knm.hrl").
 
@@ -109,6 +110,7 @@ acquire_number(Number) ->
                     Reason = kz_json:get_ne_binary_value(<<"message">>, Rep),
                     knm_errors:by_carrier(?MODULE, Reason, Num);
                 OrderId ->
+                    timer:apply_after(1000, ?MODULE, 'set_connection_id', [kz_term:to_list(Num)]),
                     Data = kz_json:from_list([{<<"order_id">>, OrderId}]),
                     PN = knm_phone_number:update_carrier_data(PhoneNumber, Data),
                     knm_number:set_phone_number(Number, PN)
@@ -139,6 +141,15 @@ should_lookup_cnam() -> 'true'.
 
 
 %%% Internals
+
+%% Sets the connection id for the number
+-spec set_connection_id(ne_binary()) -> {ok, _TRef} | {error, _Reason}.
+set_connection_id(Num) ->
+    Req = kz_json:from_list([{<<"connection_id">>, binary_to_integer(kapps_config:get(?MOD_CONFIG_CAT, <<"connection_id">>))}
+                             ]),
+    lager:debug("setting connection id: ~p", [Req]),
+    Rep = knm_telnyx_util:req('put', ["numbers", Num], Req),
+    lager:debug("associating number ~p with connection id ~p: ~p", [Num, Req, kz_json:encode(Rep)]).
 
 -type kind() :: 'npa' | 'tollfree' | 'region'.
 -spec numbers(kind(), pos_integer(), ne_binary(), api_ne_binary()) ->
