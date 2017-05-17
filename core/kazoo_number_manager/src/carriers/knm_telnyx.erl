@@ -110,7 +110,7 @@ acquire_number(Number) ->
                     Reason = kz_json:get_ne_binary_value(<<"message">>, Rep),
                     knm_errors:by_carrier(?MODULE, Reason, Num);
                 OrderId ->
-                    timer:apply_after(5000, ?MODULE, 'set_connection_id', [kz_term:to_list(Num)]),
+                    _ = timer:apply_after(5000, ?MODULE, 'set_connection_id', [kz_term:to_list(Num)]),
                     Data = kz_json:from_list([{<<"order_id">>, OrderId}]),
                     PN = knm_phone_number:update_carrier_data(PhoneNumber, Data),
                     knm_number:set_phone_number(Number, PN)
