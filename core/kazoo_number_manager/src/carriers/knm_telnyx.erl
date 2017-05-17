@@ -143,7 +143,7 @@ should_lookup_cnam() -> 'true'.
 %%% Internals
 
 %% Sets the connection id for the number
--spec set_connection_id(ne_binary()) -> 'ok'.
+-spec set_connection_id(list()) -> 'ok'.
 set_connection_id(Num) ->
     Req = kz_json:from_list([{<<"connection_id">>, binary_to_integer(kapps_config:get(?MOD_CONFIG_CAT, <<"connection_id">>))}
                              ]),
