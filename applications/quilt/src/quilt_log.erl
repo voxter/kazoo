@@ -153,7 +153,7 @@ handle_specific_event({<<"agent">>, <<"logout_queue">>}, JObj) ->
     {AccountId, CallId, QueueId, _, BridgedChannel} = get_common_props(JObj),
     AgentId = kz_json:get_value(<<"Agent-ID">>, JObj),
     ChannelName = lookup_agent_name(AccountId, AgentId),
-    LogoutTimestamp = kz_json:get_integer_value(<<"Timestamp">>, JObj, kz_util:current_tstamp()),
+    LogoutTimestamp = kz_json:get_integer_value(<<"Timestamp">>, JObj, kz_time:current_tstamp()),
     LoginTimestamp = list_to_integer(binary_to_list(get_agent_login_timestamp(AccountId, AgentId, LogoutTimestamp))),
     LoginTime = list_to_binary(integer_to_list(LogoutTimestamp - LoginTimestamp)),
     QueueName = lookup_queue_name(AccountId, QueueId),
