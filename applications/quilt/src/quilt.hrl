@@ -22,9 +22,9 @@
 -define(QUILT_HRL, 'true').
 
 -record(state, {account_id :: ne_binary()
-			   ,agent_id :: ne_binary()
-			   ,queues=[] :: ne_binaries()
-			   ,member_call_id='undefined'
-			   }).
+               ,agent_id :: ne_binary()
+               ,queues=[] :: ne_binaries()
+               ,member_call_id='undefined'
+               }).
 
 -endif.

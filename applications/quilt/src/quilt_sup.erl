@@ -72,17 +72,17 @@ stop_member_fsm(CallId) ->
 
 -spec start_agent_fsm(ne_binary(), ne_binary()) -> sup_startchild_ret().
 start_agent_fsm(AccountId, AgentId) ->
-	FSM = erlang:iolist_to_binary([<<"quilt_agent_fsm-">>, AccountId, <<"-">>, AgentId]),
-	supervisor:start_child(?MODULE
-                        ,?WORKER_NAME_ARGS_TYPE(FSM
-                                               ,'quilt_agent_fsm'
-                                               ,[#state{account_id=AccountId
-                                                       ,agent_id=AgentId
-                                                       ,member_call_id='undefined'
-                                                       }
-                                                ]
-                                               ,'transient'
-                                               )).
+    FSM = erlang:iolist_to_binary([<<"quilt_agent_fsm-">>, AccountId, <<"-">>, AgentId]),
+    supervisor:start_child(?MODULE
+                          ,?WORKER_NAME_ARGS_TYPE(FSM
+                                                 ,'quilt_agent_fsm'
+                                                 ,[#state{account_id=AccountId
+                                                         ,agent_id=AgentId
+                                                         ,member_call_id='undefined'
+                                                         }
+                                                  ]
+                                                 ,'transient'
+                                                 )).
 
 -spec retrieve_agent_fsm(ne_binary(), ne_binary()) ->
                                 {'ok', pid()} | {'error', 'not_found'}.

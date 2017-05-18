@@ -42,15 +42,15 @@ handle_event(Event, StateName, State) ->
 
 -spec handle_sync_event(any(), {pid(),any()}, atom(), state()) -> handle_sync_event_ret(state()).
 handle_sync_event({'queuelogin', JObj}, _From, StateName, #state{queues=Queues}=State)
-                         when StateName =:= 'started'
-                             orelse StateName =:= 'loggedout' ->
+  when StateName =:= 'started'
+       orelse StateName =:= 'loggedout' ->
     {'reply', 'ok', 'ready', State#state{queues=queuelogin(JObj, Queues)}};
 handle_sync_event({'queuelogin', JObj}, _From, StateName, #state{queues=Queues}=State) ->
     {'reply', 'ok', StateName, State#state{queues=queuelogin(JObj, Queues)}};
 
 handle_sync_event({'queuelogoff', JObj}, _From, StateName, #state{queues=Queues}=State)
-                         when StateName =:= 'ready'
-                             orelse StateName =:= 'paused' ->
+  when StateName =:= 'ready'
+       orelse StateName =:= 'paused' ->
     State1 = State#state{queues=queuelogoff(JObj, Queues)},
     NextState = logoff_transition(StateName, State1),
     {'reply', 'ok', NextState, State1};
@@ -58,8 +58,8 @@ handle_sync_event({'queuelogoff', JObj}, _From, StateName, #state{queues=Queues}
     {'reply', 'ok', StateName, State#state{queues=queuelogoff(JObj, Queues)}};
 
 handle_sync_event({'agentlogin', JObj}, _From, StateName, #state{queues=Queues}=State)
-                         when StateName =:= 'started'
-                             orelse StateName =:= 'loggedout' ->
+  when StateName =:= 'started'
+       orelse StateName =:= 'loggedout' ->
     case agentlogin(JObj, Queues) of
         [] -> {'reply', 'ok', StateName, State#state{queues=[]}};
         Queues1 -> {'reply', 'ok', 'ready', State#state{queues=Queues1}}
@@ -68,8 +68,8 @@ handle_sync_event({'agentlogin', JObj}, _From, StateName, #state{queues=Queues}=
     {'reply', 'ok', StateName, State#state{queues=agentlogin(JObj, Queues)}};
 
 handle_sync_event({'agentlogoff', JObj}, _From, StateName, #state{queues=Queues}=State)
-                         when StateName =:= 'ready'
-                             orelse StateName =:= 'paused' ->
+  when StateName =:= 'ready'
+       orelse StateName =:= 'paused' ->
     {'reply', 'ok', 'loggedout', State#state{queues=agentlogoff(JObj, Queues)}};
 handle_sync_event({'agentlogoff', JObj}, _From, StateName, #state{queues=Queues}=State) ->
     {'reply', 'ok', StateName, State#state{queues=agentlogoff(JObj, Queues)}};
