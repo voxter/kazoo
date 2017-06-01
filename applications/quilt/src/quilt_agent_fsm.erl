@@ -31,9 +31,9 @@ start_link(Agent) ->
 %%
 
 -spec init(state()) -> {'ok', 'started', state()}.
-init(Agent) ->
+init(State) ->
     process_flag('trap_exit', 'true'),
-    {'ok', 'started', Agent}.
+    {'ok', 'started', State}.
 
 -spec handle_event(any(), atom(), state()) -> handle_fsm_ret(state()).
 handle_event(Event, StateName, State) ->
@@ -41,30 +41,51 @@ handle_event(Event, StateName, State) ->
     {'next_state', StateName, State}.
 
 -spec handle_sync_event(any(), {pid(),any()}, atom(), state()) -> handle_sync_event_ret(state()).
-handle_sync_event({'agentlogin', JObj}, _From, 'started', _State) ->
-    _ = kz_util:spawn('quilt_log', 'handle_event', [JObj]),
-    {'reply', 'ok', 'ready', #state{member_call_id='undefined'}};
-handle_sync_event({'agentlogin', JObj}, _From, 'loggedout', _State) ->
-    _ = kz_util:spawn('quilt_log', 'handle_event', [JObj]),
-    {'reply', 'ok', 'ready', #state{member_call_id='undefined'}};
-handle_sync_event({'agentlogoff', JObj}, _From, 'paused', _State) ->
-    _ = kz_util:spawn('quilt_log', 'handle_event', [JObj]),
-    {'reply', 'ok', 'loggedout', #state{member_call_id='undefined'}};
-handle_sync_event({'agentlogoff', JObj}, _From, 'ready', _State) ->
-    _ = kz_util:spawn('quilt_log', 'handle_event', [JObj]),
-    {'reply', 'ok', 'loggedout', #state{member_call_id='undefined'}};
-handle_sync_event({'unpauseall', JObj}, _From, 'started', _State) ->
-    _ = kz_util:spawn('quilt_log', 'handle_event', [JObj]),
-    {'reply', 'ok', 'ready', #state{member_call_id='undefined'}};
-handle_sync_event({'unpauseall', JObj}, _From, 'paused', _State) ->
-    _ = kz_util:spawn('quilt_log', 'handle_event', [JObj]),
-    {'reply', 'ok', 'ready', #state{member_call_id='undefined'}};
-handle_sync_event({'pauseall', JObj}, _From, 'started', _State) ->
-    _ = kz_util:spawn('quilt_log', 'handle_event', [JObj]),
-    {'reply', 'ok', 'paused', #state{member_call_id='undefined'}};
-handle_sync_event({'pauseall', JObj}, _From, 'ready', _State) ->
-    _ = kz_util:spawn('quilt_log', 'handle_event', [JObj]),
-    {'reply', 'ok', 'paused', #state{member_call_id='undefined'}};
+handle_sync_event({'queuelogin', JObj}, _From, StateName, #state{queues=Queues}=State)
+  when StateName =:= 'started'
+       orelse StateName =:= 'loggedout' ->
+    {'reply', 'ok', 'ready', State#state{queues=queuelogin(JObj, Queues)}};
+handle_sync_event({'queuelogin', JObj}, _From, StateName, #state{queues=Queues}=State) ->
+    {'reply', 'ok', StateName, State#state{queues=queuelogin(JObj, Queues)}};
+
+handle_sync_event({'queuelogoff', JObj}, _From, StateName, #state{queues=Queues}=State)
+  when StateName =:= 'ready'
+       orelse StateName =:= 'paused' ->
+    State1 = State#state{queues=queuelogoff(JObj, Queues)},
+    NextState = logoff_transition(StateName, State1),
+    {'reply', 'ok', NextState, State1};
+handle_sync_event({'queuelogoff', JObj}, _From, StateName, #state{queues=Queues}=State) ->
+    {'reply', 'ok', StateName, State#state{queues=queuelogoff(JObj, Queues)}};
+
+handle_sync_event({'agentlogin', JObj}, _From, StateName, #state{queues=Queues}=State)
+  when StateName =:= 'started'
+       orelse StateName =:= 'loggedout' ->
+    case agentlogin(JObj, Queues) of
+        [] -> {'reply', 'ok', StateName, State#state{queues=[]}};
+        Queues1 -> {'reply', 'ok', 'ready', State#state{queues=Queues1}}
+    end;
+handle_sync_event({'agentlogin', JObj}, _From, StateName, #state{queues=Queues}=State) ->
+    {'reply', 'ok', StateName, State#state{queues=agentlogin(JObj, Queues)}};
+
+handle_sync_event({'agentlogoff', JObj}, _From, StateName, #state{queues=Queues}=State)
+  when StateName =:= 'ready'
+       orelse StateName =:= 'paused' ->
+    {'reply', 'ok', 'loggedout', State#state{queues=agentlogoff(JObj, Queues)}};
+handle_sync_event({'agentlogoff', JObj}, _From, StateName, #state{queues=Queues}=State) ->
+    {'reply', 'ok', StateName, State#state{queues=agentlogoff(JObj, Queues)}};
+
+handle_sync_event({'unpauseall', JObj}, _From, 'started', State) ->
+    _ = kz_util:spawn(fun quilt_log:handle_event/1, [JObj]),
+    {'reply', 'ok', 'ready', State#state{member_call_id='undefined'}};
+handle_sync_event({'unpauseall', JObj}, _From, 'paused', State) ->
+    _ = kz_util:spawn(fun quilt_log:handle_event/1, [JObj]),
+    {'reply', 'ok', 'ready', State#state{member_call_id='undefined'}};
+handle_sync_event({'pauseall', JObj}, _From, 'started', State) ->
+    _ = kz_util:spawn(fun quilt_log:handle_event/1, [JObj]),
+    {'reply', 'ok', 'paused', State#state{member_call_id='undefined'}};
+handle_sync_event({'pauseall', JObj}, _From, 'ready', State) ->
+    _ = kz_util:spawn(fun quilt_log:handle_event/1, [JObj]),
+    {'reply', 'ok', 'paused', State#state{member_call_id='undefined'}};
 handle_sync_event({'answer', JObj}, _From, 'started', State) ->
     CallId = kz_json:get_value(<<"Call-ID">>, JObj),
     lager:debug("agent answered call with ID: ~p", [CallId]),
@@ -87,11 +108,11 @@ handle_sync_event({'transfer', JObj}, _From, 'incall', State) ->
     %% occur before this one or we get COMPLETEAGENT instead of TRANSFER
     sleep_until_call_stat_processed(CallId),
 
-    _ = kz_util:spawn('quilt_log', 'handle_event', [JObj1]),
-    {'reply', 'ok', 'ready', #state{member_call_id='undefined'}};
-handle_sync_event({'hangup', JObj}, _From, 'incall', _State) ->
-    _ = kz_util:spawn('quilt_log', 'handle_event', [JObj]),
-    {'reply', 'ok', 'ready', #state{member_call_id='undefined'}};
+    _ = kz_util:spawn(fun quilt_log:handle_event/1, [JObj1]),
+    {'reply', 'ok', logoff_transition('ready', State), State#state{member_call_id='undefined'}};
+handle_sync_event({'hangup', JObj}, _From, 'incall', State) ->
+    _ = kz_util:spawn(fun quilt_log:handle_event/1, [JObj]),
+    {'reply', 'ok', logoff_transition('ready', State), State#state{member_call_id='undefined'}};
 handle_sync_event(Event, _From, StateName, State) ->
     lager:debug("unhandled sync event ~p from current state of ~s with state record: ~p", [Event, StateName, State]),
     {'reply', 'ok', StateName, State}.
@@ -120,6 +141,61 @@ code_change(_, StateName, State, _) ->
 %%
 %% Private functions
 %%
+-spec agent_queues(ne_binary(), ne_binary()) -> ne_binaries().
+agent_queues(AccountId, AgentId) ->
+    AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
+    {'ok', User} = kz_datamgr:open_cache_doc(AccountDb, AgentId),
+    kz_json:get_list_value(<<"queues">>, User, []).
+
+-spec queuelogin(kz_json:object(), ne_binaries()) -> ne_binaries().
+queuelogin(JObj, Queues) ->
+    QueueId = kz_json:get_value(<<"Queue-ID">>, JObj),
+    case lists:member(QueueId, Queues) of
+        'true' -> Queues;
+        'false' ->
+            lager:debug("joined queue ~s", [QueueId]),
+            _ = kz_util:spawn(fun quilt_log:handle_event/1, [JObj]),
+            [QueueId | lists:delete(QueueId, Queues)]
+    end.
+
+-spec queuelogoff(kz_json:object(), ne_binaries()) -> ne_binaries().
+queuelogoff(JObj, Queues) ->
+    QueueId = kz_json:get_value(<<"Queue-ID">>, JObj),
+    case lists:member(QueueId, Queues) of
+        'true' ->
+            lager:debug("left queue ~s", [QueueId]),
+            _ = kz_util:spawn(fun quilt_log:handle_event/1, [JObj]),
+            lists:delete(QueueId, Queues);
+        'false' -> Queues
+    end.
+
+-spec agentlogin(kz_json:object(), ne_binaries()) -> ne_binaries().
+agentlogin(JObj, Queues) ->
+    AccountId = kz_json:get_value(<<"Account-ID">>, JObj),
+    AgentId = kz_json:get_value(<<"Agent-ID">>, JObj),
+    AgentQueues = agent_queues(AccountId, AgentId),
+    lists:foldl(fun(QueueId, QueuesAcc) ->
+                        TempJObj = kz_json:set_values([{<<"Queue-ID">>, QueueId}
+                                                      ,{<<"Event-Category">>, <<"agent">>}
+                                                      ,{<<"Event-Name">>, <<"login_queue">>}
+                                                      ], JObj),
+                        queuelogin(TempJObj, QueuesAcc)
+                end, Queues, AgentQueues).
+
+-spec agentlogoff(kz_json:object(), ne_binaries()) -> ne_binaries().
+agentlogoff(JObj, Queues) ->
+    lists:foldl(fun(QueueId, QueuesAcc) ->
+                        TempJObj = kz_json:set_values([{<<"Queue-ID">>, QueueId}
+                                                      ,{<<"Event-Category">>, <<"agent">>}
+                                                      ,{<<"Event-Name">>, <<"logout_queue">>}
+                                                      ], JObj),
+                        queuelogoff(TempJObj, QueuesAcc)
+                end, Queues, Queues).
+
+-spec logoff_transition(atom(), state()) -> atom().
+logoff_transition(_, #state{queues=[]}) -> 'loggedout';
+logoff_transition(StateName, _) -> StateName.
+
 -spec sleep_until_call_stat_processed(ne_binary()) -> 'ok'.
 sleep_until_call_stat_processed(CallId) ->
     Stat = acdc_stats:find_call(CallId),
