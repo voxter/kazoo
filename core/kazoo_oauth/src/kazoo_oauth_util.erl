@@ -342,7 +342,7 @@ oauth_header(URL, CustomParams, ConsumerKey, ConsumerSecret, AccessToken, Access
 -spec oauth_params(ne_binary(), ne_binary(), ne_binary(), ne_binary()) ->
                           kz_proplist().
 oauth_params(ConsumerKey, _ConsumerSecret, AccessToken, _AccessSecret) ->
-    Nonce = binary_to_list(base64:encode(crypto:rand_bytes(32))),
+    Nonce = binary_to_list(base64:encode(crypto:strong_rand_bytes(32))),
     {MegaSecs, Secs, _} = os:timestamp(),
     Timestamp = integer_to_list(MegaSecs * 1000000 + Secs),
 

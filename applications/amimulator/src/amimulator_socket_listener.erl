@@ -37,8 +37,8 @@ login(AccountId) ->
 init(Socket) ->
     process_flag('trap_exit', 'true'),
     %% Random seed used to change md5 challenge
-    <<A:32, B:32, C:32>> = crypto:rand_bytes(12),
-    _ = random:seed({A,B,C}),
+    <<A:32, B:32, C:32>> = crypto:strong_rand_bytes(12),
+    _ = rand:seed({A,B,C}),
 
     gen_server:cast(self(), 'accept'),
     {'ok', #state{listen_socket=Socket}}.

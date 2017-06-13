@@ -55,7 +55,7 @@ handle_event("logoff", _Props) ->
     gen_server:cast(self(), {logout}),
     {logoff, ok};
 handle_event("challenge", Props) ->
-    Challenge = random:uniform(899999999) + 100000000,
+    Challenge = rand:uniform(899999999) + 100000000,
     ActionID = proplists:get_value(<<"ActionID">>, Props),
     Payload = [
                {<<"Asterisk Call Manager/1.1">>},
