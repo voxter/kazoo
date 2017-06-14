@@ -471,7 +471,7 @@ send_req(Call, Uri, 'post', Headers, BaseParams, Debug) ->
     UpdatedCall = kapps_call:kvs_erase(<<"digits_collected">>, Call),
     case Headers of
         [] ->
-            send(UpdatedCall, Uri, 'post', [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}, {"Accept-Language", binary_to_list(kapps_call:language(Call))}], kz_json:to_querystring(Params), Debug);
+            send(UpdatedCall, Uri, 'post', [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"}, {"Accept-Language", binary_to_list(kapps_call:language(Call))}], kz_http_util:json_to_querystring(Params), Debug);
         _ ->
             send(UpdatedCall, Uri, 'post', [{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "application/json"}, {"Accept-Language", binary_to_list(kapps_call:language(Call))} | Headers], kz_http_util:json_to_querystring(Params), Debug)
     end.
