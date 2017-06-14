@@ -3,6 +3,5 @@
     "_id": "callflows.variable_route",
     "description": "Validator for the variable_route callflow's data object",
     "properties": {},
-    "required": true,
     "type": "object"
 }

@@ -16,24 +16,18 @@
         "hunt": {
             "default": true,
             "description": "Determines if the callers can dial internal extensions directly instead of leaving a message",
-            "name": "Hunt",
-            "required": false,
             "type": "boolean"
         },
         "hunt_allow": {
             "description": "A regular expression that an extension the caller dialed must match to be allowed to continue",
             "maxLength": 256,
             "minLength": 1,
-            "name": "Hunt Allow",
-            "required": false,
             "type": "string"
         },
         "hunt_deny": {
             "description": "A regular expression that if matched does not allow the caller to dial directly",
             "maxLength": 256,
             "minLength": 1,
-            "name": "Hunt Deny",
-            "required": false,
             "type": "string"
         },
         "is_setup": {

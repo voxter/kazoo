@@ -23,54 +23,44 @@
             "default": 30,
             "description": "Time between position and hold time announcements.",
             "minimum": 30,
-            "name": "Announce Time (s)",
-            "required": false,
             "type": "integer"
         },
         "breakout": {
-            "name": "Breakout Menu Config",
             "properties": {
                 "dtmf": {
                     "description": "Digit that puts caller into breakout menu",
-                    "name": "Breakout Menu DTMF",
-                    "required": false,
                     "type": "string"
                 },
                 "media": {
                     "description": "Media overrides for breakout menu prompts",
-                    "name": "Breakout Menu Media",
                     "properties": {
                         "call_back_at": {
                             "description": "You will be called back at:",
-                            "required": false,
                             "type": "string"
                         },
                         "callback_registered": {
                             "description": "Your callback has been registered. Goodbye!",
-                            "required": false,
                             "type": "string"
                         },
                         "enter_callback_number": {
                             "description": "Enter a callback number, followed by the pound sign.",
-                            "required": false,
                             "type": "string"
                         },
                         "number_correct": {
                             "description": "If this is correct, press 1. Otherwise, press 2.",
-                            "required": false,
                             "type": "string"
                         },
                         "prompt": {
                             "description": "Press 1 to receive a callback.",
-                            "required": false,
                             "type": "string"
                         }
                     },
-                    "required": false,
                     "type": "object"
                 }
             },
-            "required": false,
+            "required": [
+                "dtmf"
+            ],
             "type": "object"
         },
         "caller_exit_key": {
@@ -110,8 +100,6 @@
         "holdtime_announcements_enabled": {
             "default": false,
             "description": "Enable periodic average hold time announcements to caller.",
-            "name": "Hold Time Announcements Enabled",
-            "required": false,
             "type": "boolean"
         },
         "max_priority": {
@@ -138,15 +126,11 @@
         "position_announcements_enabled": {
             "default": false,
             "description": "Enable periodic position announcements to caller.",
-            "name": "Position Announcements Enabled",
-            "required": false,
             "type": "boolean"
         },
         "preserve_metadata": {
             "default": false,
             "description": "Keep metadata about call recording so it is retrievable by media API",
-            "name": "Preserve Call Recording Metadata",
-            "required": false,
             "type": "boolean"
         },
         "record_caller": {

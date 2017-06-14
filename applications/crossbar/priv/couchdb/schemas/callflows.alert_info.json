@@ -3,6 +3,5 @@
     "_id": "callflows.alert_info",
     "description": "Validator for the alert_info callflow's data object",
     "properties": {},
-    "required": true,
     "type": "object"
 }

@@ -15,7 +15,7 @@ Key | Description | Type | Default | Required
 `announce` | Media ID (or appropriate media URI) of media to play when caller is about to be connected. | `string` |   | `false`
 `announcements_timer` | Time between position and hold time announcements. | `integer` | `30` | `false`
 `breakout` |   | `object` |   | `false`
-`breakout.dtmf` | Digit that puts caller into breakout menu | `string` |   | `false`
+`breakout.dtmf` | Digit that puts caller into breakout menu | `string` |   | `true`
 `breakout.media` | Media overrides for breakout menu prompts | `object` |   | `false`
 `breakout.media.call_back_at` | You will be called back at: | `string` |   | `false`
 `breakout.media.callback_registered` | Your callback has been registered. Goodbye! | `string` |   | `false`

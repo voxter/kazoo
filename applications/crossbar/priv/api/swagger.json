@@ -985,7 +985,8 @@
                     "type": "integer"
                 },
                 "var": {
-                    "description": ""
+                    "description": "Custom variable to check for queue ID",
+                    "type": "string"
                 }
             },
             "type": "object"
@@ -1141,7 +1142,8 @@
                     "type": "string"
                 },
                 "var": {
-                    "description": ""
+                    "description": "Custom variable to check for callflow ID",
+                    "type": "string"
                 }
             },
             "type": "object"
@@ -1358,7 +1360,8 @@
                     "type": "integer"
                 },
                 "var": {
-                    "description": ""
+                    "description": "Custom variable to check for device ID",
+                    "type": "string"
                 }
             },
             "type": "object"
@@ -1826,7 +1829,8 @@
                     "type": "integer"
                 },
                 "var": {
-                    "description": ""
+                    "description": "Custom variable to check for menu ID",
+                    "type": "string"
                 }
             },
             "type": "object"
@@ -2075,7 +2079,8 @@
                     "type": "integer"
                 },
                 "ringback_timeout": {
-                    "description": ""
+                    "description": "How long, in milliseconds, before ringing back",
+                    "type": "integer"
                 },
                 "slot": {
                     "description": "Static slot number to use",
@@ -2123,7 +2128,8 @@
                     "type": "string"
                 },
                 "var": {
-                    "description": ""
+                    "description": "Custom variable to check for pivot URL",
+                    "type": "string"
                 },
                 "voice_url": {
                     "description": "What URL to request the initial Pivot callflow",
@@ -2148,7 +2154,8 @@
                     "type": "string"
                 },
                 "var": {
-                    "description": ""
+                    "description": "Custom variable to check for media ID",
+                    "type": "string"
                 }
             },
             "type": "object"
@@ -2784,7 +2791,8 @@
                     "type": "integer"
                 },
                 "var": {
-                    "description": ""
+                    "description": "Custom variable to check for user ID",
+                    "type": "string"
                 }
             },
             "type": "object"
@@ -2833,7 +2841,8 @@
                     "type": "boolean"
                 },
                 "var": {
-                    "description": ""
+                    "description": "Custom variable to check for vmbox ID",
+                    "type": "string"
                 }
             },
             "type": "object"
