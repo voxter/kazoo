@@ -14,7 +14,7 @@ Key | Description | Type | Default | Required
 `default_callback_timeout` | How long, in seconds, to wait before calling back the parker | `integer` |   | `false`
 `default_presence_type` | Type of presence to update | `string('early', 'terminated', 'confirmed')` |   | `false`
 `default_ringback_timeout` | How long, in milliseconds, before ringing back | `integer` |   | `false`
-`ringback_timeout` |  |   |   | `false`
+`ringback_timeout` | How long, in milliseconds, before ringing back | `integer` |   | `false`
 `slot` | Static slot number to use | `string` |   | `false`
 `slots` | Statically define slots and their configuration | `object` | `{}` | `false`
 
