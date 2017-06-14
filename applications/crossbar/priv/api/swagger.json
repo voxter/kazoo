@@ -962,8 +962,15 @@
         },
         "callflows.acdc_agent_availability": {
             "description": "Validator for the acdc_agent_availability callflow's data object",
-            "properties": {},
-            "required": true,
+            "properties": {
+                "id": {
+                    "description": "ID of the ACDc Queue",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "id"
+            ],
             "type": "object"
         },
         "callflows.acdc_member": {
@@ -1051,7 +1058,6 @@
         "callflows.alert_info": {
             "description": "Validator for the alert_info callflow's data object",
             "properties": {},
-            "required": true,
             "type": "object"
         },
         "callflows.branch_bnumber": {
@@ -1752,7 +1758,6 @@
         "callflows.kvs_set": {
             "description": "Validator for the kvs_set callflow's data object",
             "properties": {},
-            "required": true,
             "type": "object"
         },
         "callflows.language": {
@@ -2545,7 +2550,6 @@
         "callflows.say": {
             "description": "Validator for the say callflow's data object",
             "properties": {},
-            "required": true,
             "type": "object"
         },
         "callflows.send_dtmf": {
@@ -2788,7 +2792,6 @@
         "callflows.variable_route": {
             "description": "Validator for the variable_route callflow's data object",
             "properties": {},
-            "required": true,
             "type": "object"
         },
         "callflows.voicemail": {
@@ -3288,8 +3291,6 @@
                 },
                 "reuse_pronounced_name": {
                     "description": "Force re-using previous name recordings for known users calling into the conference",
-                    "name": "Reuse Pronounced Name",
-                    "required": false,
                     "type": "boolean"
                 },
                 "wait_for_moderator": {
@@ -4036,8 +4037,6 @@
                         "last_name",
                         "both"
                     ],
-                    "name": "Search Fields",
-                    "required": false,
                     "type": "string"
                 },
                 "sort_by": {
@@ -6581,54 +6580,44 @@
                     "default": 30,
                     "description": "Time between position and hold time announcements.",
                     "minimum": 30,
-                    "name": "Announce Time (s)",
-                    "required": false,
                     "type": "integer"
                 },
                 "breakout": {
-                    "name": "Breakout Menu Config",
                     "properties": {
                         "dtmf": {
                             "description": "Digit that puts caller into breakout menu",
-                            "name": "Breakout Menu DTMF",
-                            "required": false,
                             "type": "string"
                         },
                         "media": {
                             "description": "Media overrides for breakout menu prompts",
-                            "name": "Breakout Menu Media",
                             "properties": {
                                 "call_back_at": {
                                     "description": "You will be called back at:",
-                                    "required": false,
                                     "type": "string"
                                 },
                                 "callback_registered": {
                                     "description": "Your callback has been registered. Goodbye!",
-                                    "required": false,
                                     "type": "string"
                                 },
                                 "enter_callback_number": {
                                     "description": "Enter a callback number, followed by the pound sign.",
-                                    "required": false,
                                     "type": "string"
                                 },
                                 "number_correct": {
                                     "description": "If this is correct, press 1. Otherwise, press 2.",
-                                    "required": false,
                                     "type": "string"
                                 },
                                 "prompt": {
                                     "description": "Press 1 to receive a callback.",
-                                    "required": false,
                                     "type": "string"
                                 }
                             },
-                            "required": false,
                             "type": "object"
                         }
                     },
-                    "required": false,
+                    "required": [
+                        "dtmf"
+                    ],
                     "type": "object"
                 },
                 "caller_exit_key": {
@@ -6668,8 +6657,6 @@
                 "holdtime_announcements_enabled": {
                     "default": false,
                     "description": "Enable periodic average hold time announcements to caller.",
-                    "name": "Hold Time Announcements Enabled",
-                    "required": false,
                     "type": "boolean"
                 },
                 "max_priority": {
@@ -6696,15 +6683,11 @@
                 "position_announcements_enabled": {
                     "default": false,
                     "description": "Enable periodic position announcements to caller.",
-                    "name": "Position Announcements Enabled",
-                    "required": false,
                     "type": "boolean"
                 },
                 "preserve_metadata": {
                     "default": false,
                     "description": "Keep metadata about call recording so it is retrievable by media API",
-                    "name": "Preserve Call Recording Metadata",
-                    "required": false,
                     "type": "boolean"
                 },
                 "record_caller": {
@@ -13538,24 +13521,18 @@
                 "hunt": {
                     "default": true,
                     "description": "Determines if the callers can dial internal extensions directly instead of leaving a message",
-                    "name": "Hunt",
-                    "required": false,
                     "type": "boolean"
                 },
                 "hunt_allow": {
                     "description": "A regular expression that an extension the caller dialed must match to be allowed to continue",
                     "maxLength": 256,
                     "minLength": 1,
-                    "name": "Hunt Allow",
-                    "required": false,
                     "type": "string"
                 },
                 "hunt_deny": {
                     "description": "A regular expression that if matched does not allow the caller to dial directly",
                     "maxLength": 256,
                     "minLength": 1,
-                    "name": "Hunt Deny",
-                    "required": false,
                     "type": "string"
                 },
                 "is_setup": {
