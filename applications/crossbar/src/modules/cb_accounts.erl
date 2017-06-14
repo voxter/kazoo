@@ -29,6 +29,9 @@
 -export([notify_new_account/1]).
 -export([is_unique_realm/2]).
 
+%% needed for API docs in cb_api_endpoints
+-export([allowed_methods_on_account/2]).
+
 -compile({no_auto_import,[put/2]}).
 
 -include("crossbar.hrl").
@@ -36,8 +39,6 @@
 -define(SERVER, ?MODULE).
 
 -define(ACCOUNTS_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".accounts">>).
--define(DEFAULT_TIMEZONE
-       ,kapps_config:get_ne_binary(<<"accounts">>, <<"default_timezone">>, <<"America/Los_Angeles">>)).
 
 -define(AGG_VIEW_FILE, <<"views/accounts.json">>).
 -define(AGG_VIEW_SUMMARY, <<"accounts/listing_by_id">>).
@@ -90,17 +91,19 @@ allowed_methods() ->
     [?HTTP_PUT].
 
 allowed_methods(AccountId) ->
-    case kapps_util:get_master_account_id() of
-        {'ok', AccountId} ->
-            lager:debug("accessing master account, disallowing DELETE"),
-            [?HTTP_GET, ?HTTP_PUT, ?HTTP_POST, ?HTTP_PATCH];
-        {'ok', _MasterId} ->
-            [?HTTP_GET, ?HTTP_PUT, ?HTTP_POST, ?HTTP_PATCH, ?HTTP_DELETE];
-        {'error', _E} ->
-            lager:debug("failed to get master account id: ~p", [_E]),
-            lager:info("disallowing DELETE while we can't determine the master account id"),
-            [?HTTP_GET, ?HTTP_PUT, ?HTTP_POST, ?HTTP_PATCH]
-    end.
+    allowed_methods_on_account(AccountId, kapps_util:get_master_account_id()).
+
+-spec allowed_methods_on_account(ne_binary(), {'ok', ne_binary()} | {'error', any()}) ->
+                                        http_methods().
+allowed_methods_on_account(AccountId, {'ok', AccountId}) ->
+    lager:debug("accessing master account, disallowing DELETE"),
+    [?HTTP_GET, ?HTTP_PUT, ?HTTP_POST, ?HTTP_PATCH];
+allowed_methods_on_account(_AccountId, {'ok', _MasterId}) ->
+    [?HTTP_GET, ?HTTP_PUT, ?HTTP_POST, ?HTTP_PATCH, ?HTTP_DELETE];
+allowed_methods_on_account(_AccountId, {'error', _E}) ->
+    lager:debug("failed to get master account id: ~p", [_E]),
+    lager:info("disallowing DELETE while we can't determine the master account id"),
+    [?HTTP_GET, ?HTTP_PUT, ?HTTP_POST, ?HTTP_PATCH].
 
 allowed_methods(_AccountId, ?MOVE) ->
     [?HTTP_POST];
@@ -163,9 +166,12 @@ authorize(_, _, _) -> 'false'.
 -spec validate_resource(cb_context:context()) -> cb_context:context().
 -spec validate_resource(cb_context:context(), path_token()) -> cb_context:context().
 -spec validate_resource(cb_context:context(), path_token(), ne_binary()) -> cb_context:context().
-validate_resource(Context) -> Context.
-validate_resource(Context, AccountId) -> load_account_db(AccountId, Context).
-validate_resource(Context, AccountId, _Path) -> load_account_db(AccountId, Context).
+validate_resource(Context) ->
+    Context.
+validate_resource(Context, AccountId) ->
+    load_account_db(Context, AccountId).
+validate_resource(Context, AccountId, _Path) ->
+    load_account_db(Context, AccountId).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -511,7 +517,7 @@ ensure_account_has_timezone(_AccountId, Context) ->
 get_timezone_from_parent(Context) ->
     case create_new_tree(Context) of
         [_|_]=Tree -> kz_account:timezone(lists:last(Tree));
-        [] -> ?DEFAULT_TIMEZONE
+        [] -> kz_account:default_timezone()
     end.
 
 -spec random_realm() -> ne_binary().
@@ -1285,11 +1291,11 @@ create_new_tree(Context, _Verb, _Nouns) ->
 %% for this account
 %% @end
 %%--------------------------------------------------------------------
--spec load_account_db(ne_binary() | ne_binaries(), cb_context:context()) ->
+-spec load_account_db(cb_context:context(), ne_binary() | ne_binaries()) ->
                              cb_context:context().
-load_account_db([AccountId|_], Context) ->
-    load_account_db(AccountId, Context);
-load_account_db(AccountId, Context) when is_binary(AccountId) ->
+load_account_db(Context, [AccountId|_]) ->
+    load_account_db(Context, AccountId);
+load_account_db(Context, AccountId) when is_binary(AccountId) ->
     case kz_account:fetch(AccountId) of
         {'ok', JObj} ->
             AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
@@ -1559,7 +1565,7 @@ notify_new_account(Context, _AuthDoc) ->
              ,{<<"Account-DB">>, cb_context:account_db(Context)}
               | kz_api:default_headers(?APP_VERSION, ?APP_NAME)
              ],
-    kz_amqp_worker:cast(Notify, fun kapi_notifications:publish_new_account/1).
+    kapps_notify_publisher:cast(Notify, fun kapi_notifications:publish_new_account/1).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1627,7 +1633,8 @@ delete_remove_db(Context) ->
                   {'ok', _} ->
                       _ = provisioner_util:maybe_delete_account(Context),
                       _ = cb_mobile_manager:delete_account(Context),
-                      kz_datamgr:db_delete(cb_context:account_db(Context)),
+                      _Deleted = kz_datamgr:db_delete(cb_context:account_db(Context)),
+                      lager:info("deleting ~s: ~p", [cb_context:account_db(Context), _Deleted]),
                       delete_mod_dbs(Context);
                   {'error', 'not_found'} -> 'true';
                   {'error', _R} ->

@@ -67,7 +67,7 @@ repeat(Data, Call, N) ->
                           'no_endpoints' |
                           'fail'.
 
--spec repeat(kz_json:object(), kapps_call:call(), non_neg_integer(), attempt_result()) -> 'ok'.
+-spec repeat(kz_json:object(), kapps_call:call(), pos_integer(), attempt_result()) -> 'ok'.
 repeat(_Data, Call, _N, 'stop') ->
     cf_exe:stop(Call);
 repeat(Data, Call, N, 'continue') ->
@@ -90,7 +90,7 @@ attempt_endpoints(Endpoints, Data, Call) ->
               ,{<<"Endpoints">>, Endpoints}
               ,{<<"Timeout">>, Timeout}
               ,{<<"Ignore-Early-Media">>, <<"true">>}
-              ,{<<"Ringback">>, kz_media_util:media_path(Ringback, Call)}
+              ,{<<"Ringback">>, kz_media_util:media_path(Ringback, kapps_call:account_id(Call))}
               ,{<<"Fail-On-Single-Reject">>, FailOnSingleReject}
               ,{<<"Dial-Endpoint-Method">>, Strategy}
               ,{<<"Ignore-Forward">>, IgnoreForward}
@@ -162,7 +162,10 @@ is_member_active(Member) ->
 
 -spec resolve_endpoint_ids(kz_json:object(), kapps_call:call()) -> endpoints().
 resolve_endpoint_ids(Data, Call) ->
-    Members = kz_json:get_list_value(<<"endpoints">>, Data, []),
+    Members = case kz_json:get_list_value(<<"endpoints">>, Data) of
+                  undefined -> [];
+                  JObjs -> JObjs
+              end,
     FilteredMembers = lists:filter(fun is_member_active/1, Members),
     lager:debug("filtered members of ring group ~p", [FilteredMembers]),
     ResolvedEndpoints = resolve_endpoint_ids(FilteredMembers, [], Data, Call),

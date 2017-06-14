@@ -83,12 +83,7 @@ authn_resp_xml(JObj) ->
                         kz_json:get_value(<<"Expires">>,JObj)
                        ),
             Username = kz_json:get_value(<<"Auth-Username">>, JObj, UserId),
-            UserEl = user_el([{'number-alias', Number}
-                             ,{'cacheable', Expires}
-                              | user_el_default_props(Username)
-                             ]
-                            ,Elements
-                            ),
+            UserEl = user_el(user_el_props(Number, Username, Expires), Elements),
             DomainEl = domain_el(kz_json:get_value(<<"Auth-Realm">>, JObj, DomainName), UserEl),
             SectionEl = section_el(<<"directory">>, DomainEl),
             {'ok', xmerl:export([SectionEl], 'fs_xml')}
@@ -399,7 +394,7 @@ route_resp_set_winning_node() ->
 route_resp_ringback(JObj) ->
     case kz_json:get_value(<<"Ringback-Media">>, JObj) of
         'undefined' ->
-            {'ok', RBSetting} = ecallmgr_util:get_setting(<<"default_ringback">>, <<"%(2000,4000,440,480)">>),
+            {'ok', RBSetting} = ecallmgr_util:get_setting(<<"default_ringback">>),
             action_el(<<"set">>, <<"ringback=", (kz_term:to_binary(RBSetting))/binary>>);
         Media ->
             MsgId = kz_json:get_value(<<"Msg-ID">>, JObj),
@@ -425,7 +420,7 @@ route_ccvs_list(CCVs) ->
 route_resp_transfer_ringback(JObj) ->
     case kz_json:get_value(<<"Transfer-Media">>, JObj) of
         'undefined' ->
-            {'ok', RBSetting} = ecallmgr_util:get_setting(<<"default_ringback">>, <<"%(2000,4000,440,480)">>),
+            {'ok', RBSetting} = ecallmgr_util:get_setting(<<"default_ringback">>),
             action_el(<<"set">>, <<"transfer_ringback=", (kz_term:to_binary(RBSetting))/binary>>);
         Media ->
             MsgId = kz_json:get_value(<<"Msg-ID">>, JObj),
@@ -458,10 +453,10 @@ check_dtmf_type(Props) ->
 -spec get_leg_vars(kz_json:object() | kz_proplist()) -> iolist().
 get_leg_vars([]) -> [];
 get_leg_vars([_|_]=Prop) ->
-    ["["
+    ["[^^", ?BRIDGE_CHANNEL_VAR_SEPARATOR
     ,string:join([kz_term:to_list(V)
                   || V <- lists:foldr(fun get_channel_vars/2, [], Prop)]
-                ,","
+                ,?BRIDGE_CHANNEL_VAR_SEPARATOR
                 )
     ,"]"
     ];
@@ -566,29 +561,14 @@ sip_headers_fold(<<"Diversions">>, Vs, Vars0) ->
 sip_headers_fold(K, V, Vars0) ->
     [list_to_binary(["sip_h_", K, "=", maybe_expand_macro(kz_term:to_binary(V))]) | Vars0].
 
--ifdef(TEST).
--define(EXPANDABLE_MACROS
+-define(DEFAULT_EXPANDABLE_MACROS
        ,kz_json:from_list([{<<"{caller_id_name}">>, <<"${caller_id_name}">>}
                           ,{<<"{caller_id_number}">>, <<"${caller_id_number}">>}
                           ,{<<"{account_id}">>, <<"${" ?CHANNEL_VAR_PREFIX "Account-ID}">>}
                           ,{<<"{reseller_id}">>, <<"${" ?CHANNEL_VAR_PREFIX "Reseller-ID}">>}
                           ,{<<"{billing_id}">>, <<"${" ?CHANNEL_VAR_PREFIX "Billing-ID}">>}
-                          ]
-                         )
-       ).
--else.
--define(EXPANDABLE_MACROS
-       ,ecallmgr_config:get(<<"expandable_macros">>
-                           ,kz_json:from_list([{<<"{caller_id_name}">>, <<"${caller_id_name}">>}
-                                              ,{<<"{caller_id_number}">>, <<"${caller_id_number}">>}
-                                              ,{<<"{account_id}">>, <<"${" ?CHANNEL_VAR_PREFIX "Account-ID}">>}
-                                              ,{<<"{reseller_id}">>, <<"${" ?CHANNEL_VAR_PREFIX "Reseller-ID}">>}
-                                              ,{<<"{billing_id}">>, <<"${" ?CHANNEL_VAR_PREFIX "Billing-ID}">>}
-                                              ]
-                                             )
-                           )
-       ).
--endif.
+                          ])).
+-define(EXPANDABLE_MACROS, ecallmgr_config:get_json(<<"expandable_macros">>, ?DEFAULT_EXPANDABLE_MACROS)).
 
 -spec maybe_expand_macro(ne_binary()) -> ne_binary().
 maybe_expand_macro(HeaderValue) ->
@@ -606,6 +586,8 @@ diversion_header_fold(<<_/binary>> = V, Vars0) ->
 -spec get_channel_vars_fold(kz_json:path(), kz_json:json_term(), iolist()) -> iolist().
 get_channel_vars_fold(<<"Force-Fax">>, Direction, Acc) ->
     [<<"execute_on_answer='t38_gateway ", Direction/binary, "'">>|Acc];
+get_channel_vars_fold(<<"Channel-Actions">>, Actions, Acc) ->
+    [Actions |Acc];
 get_channel_vars_fold(K, V, Acc) ->
     case lists:keyfind(K, 1, ?SPECIAL_CHANNEL_VARS) of
         'false' ->
@@ -807,14 +789,28 @@ user_el(Props, Children) ->
                ,content=Children
                }.
 
--spec user_el_default_props(xml_attrib_value()) -> kz_proplist().
-user_el_default_props(Id) ->
-    [{'id', Id}
+-spec user_el_props(ne_binary(), ne_binary(), api_integer()) -> kz_proplist().
+user_el_props(Number, Username, 'undefined') ->
+    [{'number-alias', Number}
     ,{'cacheable', ecallmgr_config:get_integer(<<"user_cache_time_in_ms">>
                                               ,?DEFAULT_USER_CACHE_TIME_IN_MS
                                               )
      }
+     | user_el_default_props(Username)
+    ];
+user_el_props(Number, Username, Expires) when Expires < 1 ->
+    [{'number-alias', Number}
+     | user_el_default_props(Username)
+    ];
+user_el_props(Number, Username, Expires) ->
+    [{'number-alias', Number}
+    ,{'cacheable', Expires}
+     | user_el_default_props(Username)
     ].
+
+-spec user_el_default_props(xml_attrib_value()) -> kz_proplist().
+user_el_default_props(Id) ->
+    [{'id', Id}].
 
 -spec chat_user_el(xml_attrib_value(), xml_attrib_value()) -> xml_el().
 chat_user_el(Name, Commands) ->

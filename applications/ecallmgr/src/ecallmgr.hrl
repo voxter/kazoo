@@ -16,12 +16,12 @@
 
 -define(DEFAULT_FETCH_TIMEOUT, 2600).
 
--define(FS_NODES, ecallmgr_config:get(<<"fs_nodes">>, [])).
--define(FS_NODES(Node), ecallmgr_config:get(<<"fs_nodes">>, [], Node)).
+-define(FS_NODES, ecallmgr_config:get_ne_binaries(<<"fs_nodes">>, [])).
+-define(FS_NODES(Node), ecallmgr_config:get_ne_binaries(<<"fs_nodes">>, [], Node)).
 
 -define(ECALLMGR_PLAYBACK_MEDIA_KEY(M), {'playback_media', M}).
 
--define(DEFAULT_FREESWITCH_CONTEXT, ecallmgr_config:get(<<"freeswitch_context">>, <<"context_2">>)).
+-define(DEFAULT_FREESWITCH_CONTEXT, ecallmgr_config:get_ne_binary(<<"freeswitch_context">>, <<"context_2">>)).
 
 -define(SIP_INTERFACE, "sipinterface_1").
 -define(DEFAULT_FS_PROFILE, "sipinterface_1").
@@ -104,6 +104,7 @@
 
 -type channel() :: #channel{}.
 -type channels() :: [channel()].
+-type channel_updates() :: [{pos_integer(), any()}].
 
 -record(conference, {name :: api_binary() | '$1' | '_'
                     ,uuid :: api_binary() | '$1' | '_'
@@ -145,8 +146,8 @@
 -type participant() :: #participant{}.
 -type participants() :: [participant()].
 
--define(DEFAULT_REALM, ecallmgr_config:get(<<"default_realm">>, <<"nodomain.com">>)).
--define(MAX_TIMEOUT_FOR_NODE_RESTART, ecallmgr_config:get_integer(<<"max_timeout_for_node_restart">>, 10 * ?MILLISECONDS_IN_SECOND)). % 10 seconds
+-define(DEFAULT_REALM, ecallmgr_config:get_ne_binary(<<"default_realm">>, <<"nodomain.com">>)).
+-define(MAX_TIMEOUT_FOR_NODE_RESTART, ecallmgr_config:get_integer(<<"max_timeout_for_node_restart">>, 10 * ?MILLISECONDS_IN_SECOND)).
 -define(MAX_NODE_RESTART_FAILURES, 3).
 
 -define(EXPIRES_DEVIATION_TIME,
@@ -166,10 +167,11 @@
 -define(STARTUP_FILE, [code:priv_dir(?APP), "/startup.config"]).
 -define(SETTINGS_FILE, [code:priv_dir(?APP), "/settings.config"]).
 
--define(STARTUP_FILE_CONTENTS, <<"{'fs_nodes', []}.
-{'fs_cmds', [{'load', \"mod_sofia\"}
-             ,{'reloadacl', \"\"}
-]}.">>).
+-define(STARTUP_FILE_CONTENTS, <<"{'fs_nodes', []}.\n"
+                                 "{'fs_cmds', [{'load', \"mod_sofia\"}\n"
+                                 "            ,{'reloadacl', \"\"}\n"
+                                 "            ]}.\n"
+                               >>).
 
 %% We pass Application custom channel variables with our own prefix
 %% When an event occurs, we include all prefixed vars in the API message
@@ -184,6 +186,9 @@
 -define(GET_VAR(Key), <<"variable_", Key/binary>>).
 
 -define(CREDS_KEY(Realm, Username), {'authn', Username, Realm}).
+
+-define(DP_EVENT_VARS, [{<<"Execute-On-Answer">>, <<"execute_on_answer">>}]).
+-define(BRIDGE_CHANNEL_VAR_SEPARATOR, "!").
 
 %% Call and Channel Vars that have a special prefix instead of the standard CHANNEL_VAR_PREFIX prefix
 %% [{AMQP-Header, FS-var-name}]
@@ -229,6 +234,7 @@
                               ,{<<"Origination-UUID">>, <<"origination_uuid">>}
                               ,{<<"Ignore-Display-Updates">>, <<"ignore_display_updates">>}
                               ,{<<"Eavesdrop-Group-ID">>, <<"eavesdrop_group">>}
+                              ,{<<"Media-Webrtc">>, <<"media_webrtc">>}
 
                               ,{<<"Loopback-Bowout">>, <<"loopback_bowout">>}
                               ,{<<"Simplify-Loopback">>, <<"loopback_bowout_on_execute">>}
@@ -306,6 +312,8 @@
                               ,{<<"Conference-Exit-Sound">>, <<"conference_exit_sound">>}
                               ,{<<"SIP-Refer-To">>, <<"sip_refer_to">>}
                               ,{<<"SIP-Referred-By">>, <<"sip_h_Referred-By">>}
+                              ,{<<"Origination-Call-ID">>, <<"sip_origination_call_id">>}
+                              ,{<<"RTCP-MUX">>, <<"rtcp_mux">>}
                               ]).
 
 %% [{FreeSWITCH-App-Name, Kazoo-App-Name}]
@@ -376,7 +384,6 @@
                            ,'sofia::transferee'
                            ,'sofia::replaced'
                            ,'sofia::intercepted'
-                           ,'sofia::register'
                            ]
                           ,'conference::maintenance'
                           ,['spandsp::txfaxresult'
@@ -481,6 +488,8 @@
        ).
 
 -define(FS_ROUTE_MSG(Node, Section, Context), {'route', Node, Section, Context}).
+
+-define(FS_OPTION_MSG(Node), {'option', Node}).
 
 -define(FS_CARRIER_ACL_LIST, <<"trusted">>).
 -define(FS_SBC_ACL_LIST, <<"authoritative">>).

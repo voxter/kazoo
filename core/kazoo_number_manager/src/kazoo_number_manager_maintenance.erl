@@ -35,6 +35,7 @@
 -export([purge_deleted/0, purge_deleted/1]).
 -export([update_number_services_view/1]).
 
+-export([all_features/0]).
 -export([feature_permissions_on_number/1]).
 -export([add_allowed_feature_on_number/2
         ,remove_allowed_feature_on_number/2
@@ -50,16 +51,17 @@
 -export([feature_permissions_on_system_config/0]).
 -export([add_allowed_feature_on_system_config/1
         ,remove_allowed_feature_on_system_config/1
+        ,reset_allowed_features_to_defaults_on_system_config/0
         ]).
 
 -define(TIME_BETWEEN_ACCOUNTS_MS
-       ,kapps_config:get_integer(?KNM_CONFIG_CAT, <<"time_between_accounts_ms">>, ?MILLISECONDS_IN_SECOND)).
+       ,kapps_config:get_pos_integer(?KNM_CONFIG_CAT, <<"time_between_accounts_ms">>, ?MILLISECONDS_IN_SECOND)).
 
 -define(TIME_BETWEEN_NUMBERS_MS
-       ,kapps_config:get_integer(?KNM_CONFIG_CAT, <<"time_between_numbers_ms">>, ?MILLISECONDS_IN_SECOND)).
+       ,kapps_config:get_pos_integer(?KNM_CONFIG_CAT, <<"time_between_numbers_ms">>, ?MILLISECONDS_IN_SECOND)).
 
 -define(PARALLEL_JOBS_COUNT,
-        kapps_config:get_integer(?KNM_CONFIG_CAT, <<"parallel_jobs_count">>, 1)).
+        kapps_config:get_pos_integer(?KNM_CONFIG_CAT, <<"parallel_jobs_count">>, 1)).
 
 -define(LOG(Format, Args)
        ,begin
@@ -193,29 +195,39 @@ refresh_numbers_db(_Thing) ->
     ?LOG("skipping badly formed ~s", [_Thing]).
 
 %% @public
--spec update_number_services_view(ne_binary()) -> ok.
+-spec update_number_services_view(ne_binary()) -> no_return.
 update_number_services_view(?MATCH_ACCOUNT_RAW(AccountId)) ->
     update_number_services_view(kz_util:format_account_db(AccountId));
 update_number_services_view(?MATCH_ACCOUNT_ENCODED(_)=AccountDb) ->
-    JObj = knm_converters:available_classifiers(), %%TODO: per-account classifiers.
-    Pairs = [{Classification, kz_json:get_value([Classification, <<"regex">>], JObj)}
-             || Classification <- kz_json:get_keys(JObj)
+    ClassifiersJObj = knm_converters:available_classifiers(), %%TODO: per-account classifiers.
+    Pairs = [{Classification, kz_json:get_value([Classification, <<"regex">>], ClassifiersJObj)}
+             || Classification <- kz_json:get_keys(ClassifiersJObj)
             ],
     {Classifications, Regexs} = lists:unzip(Pairs),
     MapView = number_services_map(Classifications, Regexs),
     RedView = number_services_red(),
     ViewName = <<"_design/numbers">>,
-    {ok, View} = kz_datamgr:open_doc(AccountDb, ViewName),
-    NewView = kz_json:set_values([{[<<"views">>, <<"reconcile_services">>, <<"map">>], MapView}
-                                 ,{[<<"views">>, <<"reconcile_services">>, <<"reduce">>], RedView}
-                                 ]
-                                ,View
-                                ),
-    case kz_json:are_equal(View, NewView) of
-        true -> ?LOG("View is up to date.", []);
+    View = case kz_datamgr:open_doc(AccountDb, ViewName) of
+               {ok, JObj} -> JObj;
+               {error, _R} ->
+                   lager:debug("reading account view ~s from disk (~p)", [ViewName, _R]),
+                   {ViewName,JObj} = kapps_util:get_view_json('crossbar', <<"account/numbers.json">>),
+                   JObj
+           end,
+    PathMap = [<<"views">>, <<"reconcile_services">>, <<"map">>],
+    PathRed = [<<"views">>, <<"reconcile_services">>, <<"reduce">>],
+    case kz_json:are_equal(MapView, kz_json:get_ne_binary_value(PathMap, View))
+        andalso kz_json:are_equal(RedView, kz_json:get_ne_binary_value(PathRed, View))
+    of
+        true -> no_return;
         false ->
+            NewView = kz_json:set_values([{PathMap, MapView}
+                                         ,{PathRed, RedView}
+                                         ]
+                                        ,View
+                                        ),
             true = kz_datamgr:db_view_update(AccountDb, [{ViewName, NewView}]),
-            ?LOG("View updated!", [])
+            ?LOG("View updated for ~s!", [AccountDb])
     end.
 
 %% @public
@@ -659,10 +671,13 @@ is_feature_valid(Thing) ->
 %% @private
 -spec invalid_feature(ne_binary()) -> no_return.
 invalid_feature(Feature) ->
-    io:format("Feature '~s' is not a known feature. Known features:\n"
-              "\t~s\n"
-             ,[Feature, list_features(?ALL_KNM_FEATURES)]
-             ),
+    io:format("Feature '~s' is not a known feature.\n", [Feature]),
+    all_features().
+
+%% @public
+-spec all_features() -> no_return.
+all_features() ->
+    io:format("Known features:\n\t~s\n", [list_features(?ALL_KNM_FEATURES)]),
     no_return.
 
 %% @private
@@ -809,6 +824,17 @@ feature_permissions_on_system_config() ->
     io:format("Features allowed on system config document:\n\t~s\n", [list_features(Allowed)]),
     no_return.
 
+%% @public
+-spec reset_allowed_features_to_defaults_on_system_config() -> no_return.
+reset_allowed_features_to_defaults_on_system_config() ->
+    set_features_on_system_config(?DEFAULT_FEATURES_ALLOWED_SYSTEM).
+
+%% @private
+-spec set_features_on_system_config(ne_binaries()) -> no_return.
+set_features_on_system_config(Features) ->
+    _ = kapps_config:set(?KNM_CONFIG_CAT, ?KEY_FEATURES_ALLOW, lists:usort(Features)),
+    feature_permissions_on_system_config().
+
 %% @private
 -spec edit_allowed_feature_permissions_on_system_config(fun(), ne_binary()) -> no_return.
 edit_allowed_feature_permissions_on_system_config(Fun, Feature) ->
@@ -816,9 +842,7 @@ edit_allowed_feature_permissions_on_system_config(Fun, Feature) ->
         false -> invalid_feature(Feature);
         true ->
             Allowed = knm_providers:system_allowed_features(),
-            NewFeatures = lists:usort(Fun(Feature, Allowed)),
-            _ = kapps_config:set(?KNM_CONFIG_CAT, ?KEY_FEATURES_ALLOW, NewFeatures),
-            feature_permissions_on_system_config()
+            set_features_on_system_config(Fun(Feature, Allowed))
     end.
 
 %% @public

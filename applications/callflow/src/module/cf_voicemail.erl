@@ -33,6 +33,7 @@
 -define(KEY_MAX_PIN_LENGTH, <<"max_pin_length">>).
 -define(KEY_DELETE_AFTER_NOTIFY, <<"delete_after_notify">>).
 -define(KEY_SAVE_AFTER_NOTIFY, <<"save_after_notify">>).
+-define(KEY_FORCE_REQUIRE_PIN, <<"force_require_pin">>).
 
 -define(MAILBOX_DEFAULT_SIZE
        ,kapps_config:get_integer(?CF_CONFIG_CAT
@@ -85,25 +86,31 @@
                                   ,<<"only_forward">>
                                   )).
 
+-define(FORCE_REQUIRE_PIN
+       ,kapps_config:get_is_true(?CF_CONFIG_CAT
+                                ,[?KEY_VOICEMAIL, ?KEY_FORCE_REQUIRE_PIN]
+                                ,'false'
+                                )
+       ).
+
 -define(DEFAULT_FIND_BOX_PROMPT, <<"vm-enter_id">>).
 
--record(keys, {
-          %% Compose Voicemail
-          operator = <<"0">>
+-record(keys, {operator = <<"0">>
+                   %% Compose Voicemail
               ,login = <<"*">>
 
-              %% Record Review
+                   %% Record Review
               ,save = <<"1">>
               ,listen = <<"2">>
               ,record = <<"3">>
 
-              %% Main Menu
+                   %% Main Menu
               ,hear_new = <<"1">>
               ,hear_saved = <<"2">>
               ,configure = <<"5">>
               ,exit = <<"#">>
 
-              %% Config Menu
+                   %% Config Menu
               ,rec_unavailable  = <<"1">>
               ,rec_name = <<"2">>
               ,set_pin = <<"3">>
@@ -111,7 +118,7 @@
               ,del_temporary_unavailable  = <<"5">>
               ,return_main = <<"0">>
 
-              %% Post playbak
+                   %% Post playbak
               ,keep = <<"1">>
               ,replay = <<"2">>
               ,forward = <<"3">>
@@ -120,9 +127,9 @@
               ,next = <<"6">>
               ,delete = <<"7">>
 
-              %% Greeting or instructions
+                   %% Greeting or instructions
               ,continue = 'undefined'
-         }).
+              }).
 -type vm_keys() :: #keys{}.
 
 -define(KEY_LENGTH, 1).
@@ -394,7 +401,6 @@ compose_voicemail(#mailbox{exists='false'}, _, Call) ->
 compose_voicemail(#mailbox{max_message_count=MaxCount
                           ,message_count=Count
                           ,mailbox_id=VMBId
-                          ,mailbox_number=VMBN
                           ,keys=#keys{login=Login}
                           }=Box, _, Call) when Count >= MaxCount
                                                andalso MaxCount > 0 ->
@@ -405,10 +411,8 @@ compose_voicemail(#mailbox{max_message_count=MaxCount
             ,{<<"Message-Count">>, Count}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ],
-    _ = kz_amqp_worker:call(Props
-                           ,fun kapi_notifications:publish_voicemail_full/1
-                           ,fun kapi_notifications:voicemail_full_v/1
-                           ),
+    kapps_notify_publisher:cast(Props, fun kapi_notifications:publish_voicemail_full/1),
+
     lager:debug("playing mailbox greeting to caller"),
     _ = play_greeting_intro(Box, Call),
     _ = play_greeting(Box, Call),
@@ -450,7 +454,7 @@ play_greeting(#mailbox{skip_greeting='true'}, _Call) -> 'ok';
 play_greeting(#mailbox{temporary_unavailable_media_id= <<_/binary>> = MediaId}
              ,Call
              ) ->
-    Corrected = kz_media_util:media_path(MediaId, Call),
+    Corrected = kz_media_util:media_path(MediaId, kapps_call:account_id(Call)),
     lager:info("mailbox has a temporary greeting which always overrides standard greeting: '~s', corrected to '~s'",
                [MediaId, Corrected]
               ),
@@ -469,7 +473,7 @@ play_greeting(#mailbox{unavailable_media_id='undefined'
                                    ,{'prompt', <<"vm-not_available">>}
                                    ], Call);
 play_greeting(#mailbox{unavailable_media_id=MediaId}, Call) ->
-    Corrected = kz_media_util:media_path(MediaId, Call),
+    Corrected = kz_media_util:media_path(MediaId, kapps_call:account_id(Call)),
     lager:info("mailbox has a greeting: '~s', corrected to '~s'", [MediaId, Corrected]),
     kapps_call_command:play(Corrected, Call).
 
@@ -1773,11 +1777,10 @@ get_mailbox_profile(Data, Call) ->
                     ,pin =
                          kzd_voicemail_box:pin(MailboxJObj, <<>>)
                     ,timezone =
-                         kzd_voicemail_box:timezone(MailboxJObj, ?DEFAULT_TIMEZONE)
+                         kzd_voicemail_box:timezone(MailboxJObj, kz_account:default_timezone())
                     ,mailbox_number =
                          kzd_voicemail_box:mailbox_number(MailboxJObj, kapps_call:request_user(Call))
-                    ,require_pin =
-                         kzd_voicemail_box:pin_required(MailboxJObj)
+                    ,require_pin = should_require_pin(MailboxJObj)
                     ,check_if_owner =
                          kzd_voicemail_box:check_if_owner(MailboxJObj, CheckIfOwner)
                     ,unavailable_media_id =
@@ -1835,6 +1838,13 @@ maybe_use_variable(Data, Call) ->
                 {'ok', _} -> Value;
                 _ -> kz_doc:id(Data)
             end
+    end.
+
+-spec should_require_pin(kz_json:object()) -> boolean().
+should_require_pin(MailboxJObj) ->
+    case ?FORCE_REQUIRE_PIN of
+        'true' -> 'true';
+        'false' -> kzd_voicemail_box:pin_required(MailboxJObj)
     end.
 
 -spec after_notify_action(kz_json:object()) -> atom().

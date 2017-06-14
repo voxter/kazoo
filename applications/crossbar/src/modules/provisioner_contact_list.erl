@@ -31,11 +31,11 @@ build(AccountDb) ->
 contact_to_json(#contact{name=Name
                         ,external_numbers=ExternalNumbers
                         ,internal_numbers=InternalNumbers}) ->
-    Props = [{<<"name">>, Name}
-            ,{<<"external_number">>, first_number(ExternalNumbers)}
-            ,{<<"internal_number">>, first_number(InternalNumbers)}
-            ],
-    kz_json:from_list(props:filter_undefined(Props)).
+    kz_json:from_list(
+      [{<<"name">>, Name}
+      ,{<<"external_number">>, first_number(ExternalNumbers)}
+      ,{<<"internal_number">>, first_number(InternalNumbers)}
+      ]).
 
 first_number([Number|_]) -> Number;
 first_number(_) -> undefined.
@@ -70,7 +70,7 @@ get_extension_contacts(AccountDb) ->
     end.
 
 get_contact_list_includes(AccountDb) ->
-    Default = kapps_config:get(<<"crossbar.contact_list">>, <<"default_includes">>, []),
+    Default = kapps_config:get_jsons(<<"crossbar.contact_list">>, <<"default_includes">>, []),
     case kz_account:fetch(AccountDb) of
         {'ok', JObj} ->
             kz_json:get_value([<<"contact_list">>, <<"includes">>], JObj, Default);

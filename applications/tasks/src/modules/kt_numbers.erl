@@ -19,6 +19,7 @@
 -export([e164/1
         ,account_id/1
         ,carrier_module/1
+        ,state/1
         ,ported_in/1
         ,'cnam.inbound'/1
         ,'prepend.enabled'/1
@@ -28,6 +29,7 @@
 %% Appliers
 -export([list/2
         ,list_all/2
+        ,find/3
         ,dump/2
         ,dump_aging/2, dump_available/2, dump_deleted/2, dump_discovery/2
         ,dump_in_service/2, dump_port_in/2, dump_port_out/2, dump_released/2, dump_reserved/2
@@ -59,6 +61,7 @@
 -define(CATEGORY, "number_management").
 -define(ACTIONS, [<<"list">>
                  ,<<"list_all">>
+                 ,<<"find">>
                  ,<<"dump">>
                  ,<<"dump_aging">>
                  ,<<"dump_available">>
@@ -125,6 +128,7 @@ result_output_header() ->
 -spec list_output_header() -> kz_tasks:output_header().
 list_output_header() ->
     [<<"e164">>
+    ,<<"account_name">>
     ,<<"account_id">>
     ,<<"previously_assigned_to">>
     ,<<"state">>
@@ -184,6 +188,7 @@ list_doc() ->
 optional_public_fields() ->
     [?FEATURE_RENAME_CARRIER]
         ++ (list_output_header() -- [<<"e164">>
+                                    ,<<"account_name">>
                                     ,<<"account_id">>
                                     ,<<"previously_assigned_to">>
                                     ,<<"state">>
@@ -214,6 +219,13 @@ action(<<"list_all">>) ->
     #{<<"description">> => <<"List all numbers assigned to the account starting the task & its subaccounts">>
      ,<<"doc">> => list_doc()
      };
+action(<<"find">>) ->
+    #{<<"description">> => <<"List the given numbers if the authenticated account owns them">>
+     ,<<"doc">> => list_doc()
+     ,<<"expected_content">> => <<"text/csv">>
+     ,<<"mandatory">> => [<<"e164">>]
+     ,<<"optional">> => []
+     };
 action(<<"dump">>) ->
     #{<<"description">> => <<"List all numbers that exist in the system">>
      ,<<"doc">> => list_doc()
@@ -229,7 +241,9 @@ action(<<"import">>) ->
                      "Note: number must be E164-formatted.\n"
                      "Note: number must not be in the system already.\n"
                      "If `account_id` is empty, number will be assigned to account creating task.\n"
-                     "`module_name` will be set only if account creating task is system admin.\n"
+                     "`module_name` will be used only if account creating task is system admin.\n"
+                     "`state` will be used only if account creating task is system admin.\n"
+                     "Note: create new 'available' numbers by setting their `state` to 'available' and running the task with admin credentials.\n"
                      "Note: `carrier_module` defaults to '", (?IMPORT_DEFAULTS_TO_CARRIER)/binary, "'.\n"
                      ?ON_SETTING_PUBLIC_FIELDS
                    >>
@@ -330,6 +344,10 @@ account_id(_) -> 'false'.
 carrier_module(Data) ->
     lists:member(Data, knm_carriers:all_modules()).
 
+-spec state(ne_binary()) -> boolean().
+state(Data) ->
+    knm_phone_number:is_state(Data).
+
 -spec ported_in(ne_binary()) -> boolean().
 ported_in(Cell) -> is_cell_boolean(Cell).
 
@@ -394,6 +412,7 @@ list_number(N) ->
     Failover = knm_phone_number:feature(PN, ?FEATURE_FAILOVER),
 
     #{<<"e164">> => knm_phone_number:number(PN)
+     ,<<"account_name">> => account_name(knm_phone_number:assigned_to(PN))
      ,<<"account_id">> => knm_phone_number:assigned_to(PN)
      ,<<"previously_assigned_to">> => knm_phone_number:prev_assigned_to(PN)
      ,<<"state">> => knm_phone_number:state(PN)
@@ -420,9 +439,13 @@ list_number(N) ->
      ,<<"failover.sip">> => quote(kz_json:get_ne_binary_value(?FAILOVER_SIP, Failover))
      }.
 
+-spec account_name(api_ne_binary()) -> api_ne_binary().
+account_name(undefined) -> undefined;
+account_name(AccountId) -> quote(kapps_util:get_account_name(AccountId)).
+
 -spec quote(api_ne_binary()) -> api_ne_binary().
 quote(undefined) -> undefined;
-quote(Bin) -> <<"'", Bin/binary, "'">>.
+quote(Bin) -> <<$\", Bin/binary, $\">>.
 
 -spec list_all(kz_tasks:extra_args(), kz_tasks:iterator()) -> kz_tasks:iterator().
 list_all(#{account_id := Account}, init) ->
@@ -435,6 +458,10 @@ list_all(#{account_id := Account}, init) ->
 list_all(_, []) -> stop;
 list_all(_, Todo) ->
     list_assigned_to(?KNM_DEFAULT_AUTH_BY, Todo).
+
+-spec find(kz_tasks:extra_args(), kz_tasks:iterator(), kz_tasks:args()) -> kz_tasks:return().
+find(#{auth_account_id := AuthBy}, _IterValue, Args=#{<<"e164">> := Num}) ->
+    handle_result(Args, knm_number:get(Num, [{auth_by,AuthBy}])).
 
 -spec dump(kz_tasks:extra_args(), kz_tasks:iterator()) -> kz_tasks:iterator().
 dump(ExtraArgs, init) ->
@@ -511,6 +538,7 @@ import(#{account_id := Account
       ,AccountIds
       ,Args=#{<<"e164">> := E164
              ,<<"account_id">> := AccountId0
+             ,<<"state">> := State
              ,<<"carrier_module">> := Carrier
              ,<<"ported_in">> := PortedIn
              ,<<"previously_assigned_to">> := _
@@ -523,9 +551,10 @@ import(#{account_id := Account
     Options = [{auth_by, AuthAccountId}
               ,{batch_run, true}
               ,{assign_to, AccountId}
-              ,{module_name, import_module_name(Account, Carrier)}
+              ,{module_name, import_module_name(AuthAccountId, Carrier)}
               ,{ported_in, PortedIn =:= <<"true">>}
               ,{public_fields, public_fields(Args)}
+               | import_state(AuthAccountId, State)
               ],
     Row = handle_result(Args, knm_number:create(E164, Options)),
     {Row, sets:add_element(AccountId, AccountIds)}.
@@ -593,13 +622,22 @@ maybe_nest(_, []) -> [];
 maybe_nest(Feature, Props) -> [{Feature, kz_json:from_list(Props)}].
 
 %% @private
-import_module_name(AccountId, Carrier) ->
-    case kz_util:is_system_admin(AccountId)
+import_module_name(AuthBy, Carrier) ->
+    case kz_util:is_system_admin(AuthBy)
         andalso Carrier
     of
         false -> ?IMPORT_DEFAULTS_TO_CARRIER;
         undefined -> ?IMPORT_DEFAULTS_TO_CARRIER;
         _ -> Carrier
+    end.
+
+%% @private
+import_state(AuthBy, State) ->
+    case kz_util:is_system_admin(AuthBy)
+        andalso undefined =/= State
+    of
+        false -> [];
+        true -> [{state, State}]
     end.
 
 %% @private

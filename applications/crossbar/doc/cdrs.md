@@ -8,6 +8,8 @@ CDRs (Call Detail Records) provide a summary view of a call leg.
 
 Call Detail Records
 
+
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `app_name` | The Kazoo application that issued the CDR | `string` |   | `false`
@@ -52,8 +54,6 @@ Key | Description | Type | Default | Required
 `to` | Built by Kazoo, depending on direction, to represent the To user | `string` |   | `false`
 `to_uri` | The To SIP URI | `string` |   | `false`
 `user_agent` | User agent header from SIP packet | `string` |   | `false`
-
-
 
 
 #### Fetch a summary of CDRs
@@ -142,6 +142,7 @@ These are properties set by Kazoo for internal purposes. These are the propertie
 * `authorizing_id` - Document ID used to authorize this call leg
 * `authorizing_type` - Type of ducument used to authorize call
   * `device` - the call leg is to/from a known Kazoo device
+  * `mobile` - the call leg is to/from a known Kazoo mobile device
   * `resource` - the call leg is from a known offnet carrier
   * `outbound_fax`
 * `bridge_id` - Typically the A-leg's call-id; helps with tracking transfers

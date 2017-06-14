@@ -6,6 +6,8 @@
 
 Trunkstore configuration document - this is old stuff; do not recommend building off this if possible
 
+
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `account` | Information that applies to the account as a whole | `object` |   | `false`
@@ -22,8 +24,8 @@ Key | Description | Type | Default | Required
 `servers.[].DIDs` |   | `object` |   | `false`
 `servers.[].DIDs./^\+?\d*$/` |   | `object` |   | `false`
 `servers.[].DIDs./^\+?\d*$/.caller_id` |   | `object` |   | `false`
-`servers.[].DIDs./^\+?\d*$/.caller_id.cid_name` |   | `string(1..35)` |   | `true`
-`servers.[].DIDs./^\+?\d*$/.caller_id.cid_number` |   | `string(1..35)` |   | `true`
+`servers.[].DIDs./^\+?\d*$/.caller_id.cid_name` |   | `string(1..35)` |   | `false`
+`servers.[].DIDs./^\+?\d*$/.caller_id.cid_number` |   | `string(1..35)` |   | `false`
 `servers.[].DIDs./^\+?\d*$/.failover` | Route inbound call to another destination if this server fails to handle the call | `object` |   | `false`
 `servers.[].DIDs./^\+?\d*$/.failover.e164` | An E.164 formatted DID to dial for failover | `string` |   | `false`
 `servers.[].DIDs./^\+?\d*$/.failover.sip` | A SIP URI (sip:user@host) to call for failover | `string` |   | `false`
@@ -39,8 +41,8 @@ Key | Description | Type | Default | Required
 `servers.[].name` | Human-friendly name of the server | `string(1..)` |   | `false`
 `servers.[].options` |   | `object` |   | `false`
 `servers.[].options.caller_id` |   | `object` |   | `false`
-`servers.[].options.caller_id.cid_name` |   | `string(1..35)` |   | `true`
-`servers.[].options.caller_id.cid_number` |   | `string(1..35)` |   | `true`
+`servers.[].options.caller_id.cid_name` |   | `string(1..35)` |   | `false`
+`servers.[].options.caller_id.cid_number` |   | `string(1..35)` |   | `false`
 `servers.[].options.delay` | The time, in seconds, to wait before attempting to call the server | `integer` | `0` | `false`
 `servers.[].options.enabled` | Is the server ready for sending and receiving calls | `boolean` | `true` | `false`
 `servers.[].options.failover` | Route inbound call to another destination if this server fails to handle the call | `object` |   | `false`
@@ -55,8 +57,6 @@ Key | Description | Type | Default | Required
 `servers.[].options.progress_timeout` | The time, in seconds, to wait for the server to progress in the call, before trying an optionally defined failover route or terminating the call | `integer` |   | `false`
 `servers.[].options.sip_headers` | List of arbitrary SIP headers to add to the INVITE | `array(object)` |   | `false`
 `servers.[].options.timeout` | The time, in seconds, to wait for an answer from the server | `integer` |   | `false`
-
-
 
 
 #### Fetch

@@ -67,30 +67,24 @@ range_view_options(Context, MaxRange, Key) ->
     RangeFrom = range_from(Context, RangeTo, MaxRange, Key),
     range_view_options(Context, MaxRange, Key, RangeFrom, RangeTo).
 range_view_options(Context, MaxRange, Key, RangeFrom, RangeTo) ->
+    Path = <<Key/binary, "_from">>,
     case RangeTo - RangeFrom of
         N when N < 0 ->
-            cb_context:add_validation_error(<<Key/binary, "_from">>
-                                           ,<<"date_range">>
-                                           ,kz_json:from_list(
-                                              [{<<"message">>, <<Key/binary, "_from is prior to ", Key/binary, "_to">>}
-                                              ,{<<"cause">>, RangeFrom}
-                                              ])
-                                           ,Context
-                                           );
+            Msg = kz_json:from_list(
+                    [{<<"message">>, <<Path/binary, " is prior to ", Key/binary, "_to">>}
+                    ,{<<"cause">>, RangeFrom}
+                    ]),
+            cb_context:add_validation_error(Path, <<"date_range">>, Msg, Context);
         N when N > MaxRange ->
-            Message = <<Key/binary, "_to is more than "
-                        ,(kz_term:to_binary(MaxRange))/binary
-                        ," seconds from ", Key/binary, "_from"
-                      >>,
-            cb_context:add_validation_error(<<Key/binary, "_from">>
-                                           ,<<"date_range">>
-                                           ,kz_json:from_list(
-                                              [{<<"message">>, Message}
-                                              ,{<<"cause">>, RangeTo}
-                                              ])
-                                           ,Context
-                                           );
-        _N -> {RangeFrom, RangeTo}
+            Msg = kz_json:from_list(
+                    [{<<"message">>, <<Key/binary, "_to is more than "
+                                       ,(integer_to_binary(MaxRange))/binary
+                                       ," seconds from ", Path/binary>>}
+                    ,{<<"cause">>, RangeTo}
+                    ]),
+            cb_context:add_validation_error(Path, <<"date_range">>, Msg, Context);
+        _ ->
+            {RangeFrom, RangeTo}
     end.
 
 -spec range_modb_view_options(cb_context:context()) ->
@@ -246,13 +240,16 @@ maybe_originate_quickcall(Context) ->
 -spec create_call_from_context(cb_context:context()) -> kapps_call:call().
 create_call_from_context(Context) ->
     Routines =
-        props:filter_undefined(
-          [{fun kapps_call:set_account_db/2, cb_context:account_db(Context)}
-          ,{fun kapps_call:set_account_id/2, cb_context:account_id(Context)}
-          ,{fun kapps_call:set_resource_type/2, <<"audio">>}
-          ,{fun kapps_call:set_owner_id/2, kz_json:get_ne_value(<<"owner_id">>, cb_context:doc(Context))}
-           | request_specific_extraction_funs(Context)
-          ]),
+        [{F, V} ||
+            {F, V} <-
+                [{fun kapps_call:set_account_db/2, cb_context:account_db(Context)}
+                ,{fun kapps_call:set_account_id/2, cb_context:account_id(Context)}
+                ,{fun kapps_call:set_resource_type/2, <<"audio">>}
+                ,{fun kapps_call:set_owner_id/2, kz_json:get_ne_value(<<"owner_id">>, cb_context:doc(Context))}
+                 | request_specific_extraction_funs(Context)
+                ],
+            'undefined' =/= V
+        ],
     kapps_call:exec(Routines, kapps_call:new()).
 
 -spec request_specific_extraction_funs(cb_context:context()) -> kapps_call:exec_funs().
@@ -309,12 +306,12 @@ build_number_uri(Context, Number) ->
 get_endpoints(Call, Context) ->
     get_endpoints(Call, Context, cb_context:req_nouns(Context)).
 
-get_endpoints(Call, Context, ?DEVICES_QCALL_NOUNS(_DeviceId, Number)) ->
+get_endpoints(Call, _Context, ?DEVICES_QCALL_NOUNS(DeviceId, Number)) ->
     Properties = kz_json:from_list([{<<"can_call_self">>, 'true'}
                                    ,{<<"suppress_clid">>, 'true'}
                                    ,{<<"source">>, <<"cb_devices">>}
                                    ]),
-    case kz_endpoint:build(cb_context:doc(Context), Properties, aleg_cid(Number, Call)) of
+    case kz_endpoint:build(DeviceId, Properties, aleg_cid(Number, Call)) of
         {'error', _} -> [];
         {'ok', Endpoints} -> Endpoints
     end;
@@ -358,7 +355,14 @@ originate_quickcall(Endpoints, Call, Context) ->
                 'false' -> cb_context:req_id(Context)
             end,
 
-    {DefaultCIDNumber, DefaultCIDName} = kz_attributes:caller_id(<<"external">>, Call),
+    Number = kapps_call:request_user(Call),
+    AccountId = cb_context:account_id(Context),
+    CIDType = case knm_converters:is_reconcilable(Number, AccountId) of
+                  'true' -> <<"external">>;
+                  'false' -> <<"internal">>
+              end,
+    {DefaultCIDNumber, DefaultCIDName} = kz_attributes:caller_id(CIDType, Call),
+    lager:debug("quickcall default cid ~s : ~s : ~s", [CIDType, DefaultCIDNumber, DefaultCIDName]),
 
     Request =
         kz_json:from_list(

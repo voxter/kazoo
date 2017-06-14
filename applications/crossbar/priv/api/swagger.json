@@ -155,12 +155,38 @@
             "properties": {
                 "call_recording": {
                     "properties": {
+                        "extension": {
+                            "default": "mp3",
+                            "description": "Default media file format",
+                            "type": "string"
+                        },
                         "storage_retry_times": {
                             "default": 5,
                             "description": "media storage retry times",
                             "type": "integer"
                         }
                     }
+                }
+            },
+            "type": "object"
+        },
+        "account_config.notify": {
+            "description": "Schema for notify account_config",
+            "properties": {
+                "notify_presist_exceptions": {
+                    "default": [
+                        "system_alert"
+                    ],
+                    "description": "List of notification types have to be ignored to presist if they failed to publish",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "should_presist_for_retry": {
+                    "default": true,
+                    "description": "Enabled presist of failed to publish notifications for account/system",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -223,10 +249,10 @@
             "description": "describe limits for SIP requests",
             "properties": {
                 "account": {
-                    "$ref": "device_rate_limits"
+                    "$ref": "#/definitions/device_rate_limits"
                 },
                 "device": {
-                    "$ref": "device_rate_limits"
+                    "$ref": "#/definitions/device_rate_limits"
                 }
             },
             "required": [
@@ -238,6 +264,21 @@
         "accounts": {
             "description": "Accounts represent tenants or customers on the system. Each account represents an individual dataset or sandbox that only one tenant can access. The data set is architecturally independent from other tenants.",
             "properties": {
+                "call_recording": {
+                    "additionalProperties": false,
+                    "description": "call recording configuration",
+                    "properties": {
+                        "account": {
+                            "$ref": "#/definitions/call_recording",
+                            "type": "object"
+                        },
+                        "endpoint": {
+                            "$ref": "#/definitions/call_recording",
+                            "type": "object"
+                        }
+                    },
+                    "type": "object"
+                },
                 "call_restriction": {
                     "additionalProperties": {
                         "properties": {
@@ -257,16 +298,16 @@
                     "type": "object"
                 },
                 "call_waiting": {
-                    "$ref": "call_waiting"
+                    "$ref": "#/definitions/call_waiting"
                 },
                 "caller_id": {
-                    "$ref": "caller_id",
+                    "$ref": "#/definitions/caller_id",
                     "default": {},
                     "description": "The account default caller ID parameters",
                     "type": "object"
                 },
                 "dial_plan": {
-                    "$ref": "dialplans",
+                    "$ref": "#/definitions/dialplans",
                     "default": {},
                     "description": "A list of default rules used to modify dialed numbers",
                     "type": "object"
@@ -291,7 +332,7 @@
                     "type": "string"
                 },
                 "metaflows": {
-                    "$ref": "metaflows"
+                    "$ref": "#/definitions/metaflows"
                 },
                 "music_on_hold": {
                     "default": {},
@@ -329,10 +370,9 @@
                 },
                 "realm": {
                     "description": "The realm of the account, ie: 'account1.2600hz.com'",
-                    "format": "uri",
                     "maxLength": 253,
                     "minLength": 4,
-                    "pattern": "^([.\\w_-]+)$",
+                    "pattern": "^[.\\w_-]+$",
                     "type": "string"
                 },
                 "ringtones": {
@@ -363,7 +403,7 @@
                         "notify": {
                             "properties": {
                                 "callback": {
-                                    "$ref": "notify.callback"
+                                    "$ref": "#/definitions/notify.callback"
                                 }
                             },
                             "type": "object"
@@ -468,6 +508,14 @@
                     "description": "Application name",
                     "maxLength": 64,
                     "minLength": 3,
+                    "type": "string"
+                },
+                "phase": {
+                    "description": "Application test phase",
+                    "enum": [
+                        "alpha",
+                        "beta"
+                    ],
                     "type": "string"
                 },
                 "price": {
@@ -674,6 +722,10 @@
                     "description": "Map of caller id number to block",
                     "properties": {},
                     "type": "object"
+                },
+                "should_block_anonymous": {
+                    "description": "Should block Anonymous call",
+                    "type": "boolean"
                 }
             },
             "required": [
@@ -689,6 +741,71 @@
                 },
                 "local": {
                     "type": "object"
+                }
+            },
+            "type": "object"
+        },
+        "call_recording": {
+            "description": "endpoint recording settings",
+            "properties": {
+                "any": {
+                    "$ref": "#/definitions/call_recording.source"
+                },
+                "inbound": {
+                    "$ref": "#/definitions/call_recording.source"
+                },
+                "outbound": {
+                    "$ref": "#/definitions/call_recording.source"
+                }
+            },
+            "type": "object"
+        },
+        "call_recording.parameters": {
+            "properties": {
+                "enabled": {
+                    "description": "is recording enabled",
+                    "type": "boolean"
+                },
+                "format": {
+                    "description": "What format to store the recording on disk",
+                    "enum": [
+                        "mp3",
+                        "wav"
+                    ],
+                    "type": "string"
+                },
+                "record_min_sec": {
+                    "description": "The minimum length, in seconds, the recording must be to be considered successful. Otherwise it is deleted",
+                    "type": "integer"
+                },
+                "record_sample_rate": {
+                    "description": "What sampling rate to use on the recording",
+                    "type": "integer"
+                },
+                "time_limit": {
+                    "description": "Time limit, in seconds, for the recording",
+                    "maximum": 10800,
+                    "minimum": 5,
+                    "type": "integer"
+                },
+                "url": {
+                    "description": "The URL to use when sending the recording for storage",
+                    "format": "uri",
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
+        "call_recording.source": {
+            "properties": {
+                "any": {
+                    "$ref": "#/definitions/call_recording.parameters"
+                },
+                "offnet": {
+                    "$ref": "#/definitions/call_recording.parameters"
+                },
+                "onnet": {
+                    "$ref": "#/definitions/call_recording.parameters"
                 }
             },
             "type": "object"
@@ -777,11 +894,11 @@
                     "type": "object"
                 },
                 "flow": {
-                    "$ref": "callflows.action",
+                    "$ref": "#/definitions/callflows.action",
                     "description": "A callflow node defines a module to execute, data to provide to that module, and zero or more children to branch to"
                 },
                 "metaflow": {
-                    "$ref": "metaflows",
+                    "$ref": "#/definitions/metaflows",
                     "description": "Actions applied to a call outside of the normal callflow, initiated by the caller(s)"
                 },
                 "numbers": {
@@ -1130,7 +1247,7 @@
             "description": "Validator for the Conference callflow element",
             "properties": {
                 "config": {
-                    "$ref": "conferences.json",
+                    "$ref": "#/definitions/conferences",
                     "description": "Build an ad-hoc conference using the conferences JSON schema",
                     "type": "object"
                 },
@@ -1259,8 +1376,10 @@
                 "action": {
                     "description": "What action to perform",
                     "enum": [
+                        "list",
+                        "lists",
                         "manual",
-                        "list"
+                        "static"
                     ],
                     "type": "string"
                 },
@@ -1833,7 +1952,6 @@
                     "type": "boolean"
                 },
                 "endpoints": {
-                    "default": [],
                     "description": "Endpoint IDs (devices, users, etc) included in the ring group",
                     "items": {
                         "description": "ID of the endpoint (device, user, etc)",
@@ -2243,7 +2361,7 @@
             "description": "Validator for the Response callflow action",
             "properties": {
                 "code": {
-                    "default": "486",
+                    "default": 486,
                     "description": "The SIP Hangup code to respond with",
                     "type": "integer"
                 },
@@ -2265,7 +2383,6 @@
             "description": "Validator for the Ring Group callflow element",
             "properties": {
                 "endpoints": {
-                    "default": [],
                     "description": "Endpoint IDs (devices, users, etc) included in the ring group",
                     "items": {
                         "description": "ID of the endpoint (device, user, etc)",
@@ -2549,6 +2666,9 @@
                         "#"
                     ],
                     "description": "What DTMF can terminate playback of the audio",
+                    "items": {
+                        "type": "string"
+                    },
                     "type": "array"
                 },
                 "text": {
@@ -2990,6 +3110,7 @@
                     "type": "integer"
                 },
                 "member": {
+                    "default": {},
                     "description": "Defines the discovery (call in) properties for a member",
                     "properties": {
                         "join_deaf": {
@@ -3026,6 +3147,7 @@
                     "type": "object"
                 },
                 "moderator": {
+                    "default": {},
                     "description": "Defines the discovery (call in) properties for a moderator",
                     "properties": {
                         "join_deaf": {
@@ -3228,10 +3350,6 @@
                                                 "type": "string"
                                             }
                                         },
-                                        "required": [
-                                            "cid_name",
-                                            "cid_number"
-                                        ],
                                         "type": "object"
                                     },
                                     "delay": {
@@ -3426,6 +3544,10 @@
                     },
                     "type": "object"
                 },
+                "call_recording": {
+                    "$ref": "#/definitions/call_recording",
+                    "type": "object"
+                },
                 "call_restriction": {
                     "additionalProperties": {
                         "properties": {
@@ -3445,10 +3567,10 @@
                     "type": "object"
                 },
                 "call_waiting": {
-                    "$ref": "call_waiting"
+                    "$ref": "#/definitions/call_waiting"
                 },
                 "caller_id": {
-                    "$ref": "caller_id",
+                    "$ref": "#/definitions/caller_id",
                     "default": {},
                     "description": "The device caller ID parameters",
                     "type": "object"
@@ -3469,7 +3591,7 @@
                     "type": "string"
                 },
                 "dial_plan": {
-                    "$ref": "dialplans",
+                    "$ref": "#/definitions/dialplans",
                     "default": {},
                     "description": "A list of rules used to modify dialed numbers",
                     "type": "object"
@@ -3615,7 +3737,7 @@
                     "type": "object"
                 },
                 "metaflows": {
-                    "$ref": "metaflows",
+                    "$ref": "#/definitions/metaflows",
                     "description": "The device metaflow parameters"
                 },
                 "music_on_hold": {
@@ -3661,6 +3783,25 @@
                 "provision": {
                     "description": "Provision data",
                     "properties": {
+                        "combo_keys": {
+                            "description": "Feature Keys",
+                            "type": "object"
+                        },
+                        "endpoint_brand": {
+                            "description": "Brand of the phone",
+                            "type": "string"
+                        },
+                        "endpoint_family": {
+                            "description": "Family name of the phone",
+                            "type": "string"
+                        },
+                        "endpoint_model": {
+                            "description": "Model name of the phone",
+                            "type": [
+                                "string",
+                                "integer"
+                            ]
+                        },
                         "feature_keys": {
                             "description": "Feature Keys",
                             "type": "object"
@@ -3711,14 +3852,15 @@
                             "type": "boolean"
                         },
                         "invite_format": {
-                            "default": "username",
+                            "default": "contact",
                             "description": "The SIP request URI invite format",
                             "enum": [
                                 "username",
                                 "npan",
                                 "1npan",
                                 "e164",
-                                "route"
+                                "route",
+                                "contact"
                             ],
                             "type": "string"
                         },
@@ -3747,7 +3889,9 @@
                         },
                         "realm": {
                             "description": "The realm this device should use, overriding the account realm. Should rarely be necessary.",
-                            "format": "uri",
+                            "maxLength": 253,
+                            "minLength": 4,
+                            "pattern": "^[.\\w_-]+$",
                             "type": "string"
                         },
                         "route": {
@@ -3787,6 +3931,9 @@
             "properties": {
                 "system": {
                     "description": "List of system dial plans",
+                    "items": {
+                        "type": "object"
+                    },
                     "type": "array"
                 }
             },
@@ -3852,7 +3999,7 @@
                     "type": "object"
                 },
                 "CNAME": {
-                    "$ref": "domain_hosts",
+                    "$ref": "#/definitions/domain_hosts",
                     "description": "CNAME records",
                     "type": "object"
                 },
@@ -4491,7 +4638,7 @@
                     "type": "string"
                 },
                 "profile": {
-                    "$ref": "profile",
+                    "$ref": "#/definitions/profile",
                     "default": {},
                     "description": "Profile data",
                     "type": "object"
@@ -4968,6 +5115,13 @@
                     "type": "boolean"
                 },
                 "device_id": {
+                    "type": "string"
+                },
+                "dial_strategy": {
+                    "enum": [
+                        "single",
+                        "simultaneous"
+                    ],
                     "type": "string"
                 },
                 "owner_id": {
@@ -5621,10 +5775,6 @@
                     ],
                     "type": "string"
                 },
-                "scheduled_date": {
-                    "description": "Requested scheduled date in gregorain timestamp",
-                    "type": "integer"
-                },
                 "transfer_date": {
                     "description": "Requested transfer date in gregorain timestamp",
                     "type": "integer"
@@ -5633,6 +5783,613 @@
             "required": [
                 "name",
                 "numbers"
+            ],
+            "type": "object"
+        },
+        "port_requests.to_scheduled": {
+            "description": "Schema for a port request to be transitioned to the 'scheduled' state",
+            "properties": {
+                "scheduled_date": {
+                    "description": "Time at which to perform the porting, either as a gregorian timestamp or as datetime",
+                    "properties": {
+                        "date_time": {
+                            "pattern": "^2\\d\\d\\d-\\d\\d-\\d\\d \\d\\d:\\d\\d$",
+                            "type": "string"
+                        },
+                        "timezone": {
+                            "enum": [
+                                "Africa/Abidjan",
+                                "Africa/Accra",
+                                "Africa/Addis_Ababa",
+                                "Africa/Algiers",
+                                "Africa/Asmara",
+                                "Africa/Asmera",
+                                "Africa/Bamako",
+                                "Africa/Bangui",
+                                "Africa/Banjul",
+                                "Africa/Bissau",
+                                "Africa/Blantyre",
+                                "Africa/Brazzaville",
+                                "Africa/Bujumbura",
+                                "Africa/Cairo",
+                                "Africa/Casablanca",
+                                "Africa/Ceuta",
+                                "Africa/Conakry",
+                                "Africa/Dakar",
+                                "Africa/Dar_es_Salaam",
+                                "Africa/Djibouti",
+                                "Africa/Douala",
+                                "Africa/El_Aaiun",
+                                "Africa/Freetown",
+                                "Africa/Gaborone",
+                                "Africa/Harare",
+                                "Africa/Johannesburg",
+                                "Africa/Juba",
+                                "Africa/Kampala",
+                                "Africa/Khartoum",
+                                "Africa/Kigali",
+                                "Africa/Kinshasa",
+                                "Africa/Lagos",
+                                "Africa/Libreville",
+                                "Africa/Lome",
+                                "Africa/Luanda",
+                                "Africa/Lubumbashi",
+                                "Africa/Lusaka",
+                                "Africa/Malabo",
+                                "Africa/Maputo",
+                                "Africa/Maseru",
+                                "Africa/Mbabane",
+                                "Africa/Mogadishu",
+                                "Africa/Monrovia",
+                                "Africa/Nairobi",
+                                "Africa/Ndjamena",
+                                "Africa/Niamey",
+                                "Africa/Nouakchott",
+                                "Africa/Ouagadougou",
+                                "Africa/Porto-Novo",
+                                "Africa/Sao_Tome",
+                                "Africa/Timbuktu",
+                                "Africa/Tripoli",
+                                "Africa/Tunis",
+                                "Africa/Windhoek",
+                                "America/Adak",
+                                "America/Anchorage",
+                                "America/Anguilla",
+                                "America/Antigua",
+                                "America/Araguaina",
+                                "America/Argentina/Buenos_Aires",
+                                "America/Argentina/Catamarca",
+                                "America/Argentina/ComodRivadavia",
+                                "America/Argentina/Cordoba",
+                                "America/Argentina/Jujuy",
+                                "America/Argentina/La_Rioja",
+                                "America/Argentina/Mendoza",
+                                "America/Argentina/Rio_Gallegos",
+                                "America/Argentina/Salta",
+                                "America/Argentina/San_Juan",
+                                "America/Argentina/San_Luis",
+                                "America/Argentina/Tucuman",
+                                "America/Argentina/Ushuaia",
+                                "America/Aruba",
+                                "America/Asuncion",
+                                "America/Atikokan",
+                                "America/Atka",
+                                "America/Bahia",
+                                "America/Bahia_Banderas",
+                                "America/Barbados",
+                                "America/Belem",
+                                "America/Belize",
+                                "America/Blanc-Sablon",
+                                "America/Boa_Vista",
+                                "America/Bogota",
+                                "America/Boise",
+                                "America/Buenos_Aires",
+                                "America/Cambridge_Bay",
+                                "America/Campo_Grande",
+                                "America/Cancun",
+                                "America/Caracas",
+                                "America/Catamarca",
+                                "America/Cayenne",
+                                "America/Cayman",
+                                "America/Chicago",
+                                "America/Chihuahua",
+                                "America/Coral_Harbour",
+                                "America/Cordoba",
+                                "America/Costa_Rica",
+                                "America/Creston",
+                                "America/Cuiaba",
+                                "America/Curacao",
+                                "America/Danmarkshavn",
+                                "America/Dawson",
+                                "America/Dawson_Creek",
+                                "America/Denver",
+                                "America/Detroit",
+                                "America/Dominica",
+                                "America/Edmonton",
+                                "America/Eirunepe",
+                                "America/El_Salvador",
+                                "America/Ensenada",
+                                "America/Fort_Wayne",
+                                "America/Fortaleza",
+                                "America/Glace_Bay",
+                                "America/Godthab",
+                                "America/Goose_Bay",
+                                "America/Grand_Turk",
+                                "America/Grenada",
+                                "America/Guadeloupe",
+                                "America/Guatemala",
+                                "America/Guayaquil",
+                                "America/Guyana",
+                                "America/Halifax",
+                                "America/Havana",
+                                "America/Hermosillo",
+                                "America/Indiana/Indianapolis",
+                                "America/Indiana/Knox",
+                                "America/Indiana/Marengo",
+                                "America/Indiana/Petersburg",
+                                "America/Indiana/Tell_City",
+                                "America/Indiana/Vevay",
+                                "America/Indiana/Vincennes",
+                                "America/Indiana/Winamac",
+                                "America/Indianapolis",
+                                "America/Inuvik",
+                                "America/Iqaluit",
+                                "America/Jamaica",
+                                "America/Jujuy",
+                                "America/Juneau",
+                                "America/Kentucky/Louisville",
+                                "America/Kentucky/Monticello",
+                                "America/Knox_IN",
+                                "America/Kralendijk",
+                                "America/La_Paz",
+                                "America/Lima",
+                                "America/Los_Angeles",
+                                "America/Louisville",
+                                "America/Lower_Princes",
+                                "America/Maceio",
+                                "America/Managua",
+                                "America/Manaus",
+                                "America/Marigot",
+                                "America/Martinique",
+                                "America/Matamoros",
+                                "America/Mazatlan",
+                                "America/Mendoza",
+                                "America/Menominee",
+                                "America/Merida",
+                                "America/Metlakatla",
+                                "America/Mexico_City",
+                                "America/Miquelon",
+                                "America/Moncton",
+                                "America/Monterrey",
+                                "America/Montevideo",
+                                "America/Montreal",
+                                "America/Montserrat",
+                                "America/Nassau",
+                                "America/New_York",
+                                "America/Nipigon",
+                                "America/Nome",
+                                "America/Noronha",
+                                "America/North_Dakota/Beulah",
+                                "America/North_Dakota/Center",
+                                "America/North_Dakota/New_Salem",
+                                "America/Ojinaga",
+                                "America/Panama",
+                                "America/Pangnirtung",
+                                "America/Paramaribo",
+                                "America/Phoenix",
+                                "America/Port-au-Prince",
+                                "America/Port_of_Spain",
+                                "America/Porto_Acre",
+                                "America/Porto_Velho",
+                                "America/Puerto_Rico",
+                                "America/Rainy_River",
+                                "America/Rankin_Inlet",
+                                "America/Recife",
+                                "America/Regina",
+                                "America/Resolute",
+                                "America/Rio_Branco",
+                                "America/Rosario",
+                                "America/Santa_Isabel",
+                                "America/Santarem",
+                                "America/Santiago",
+                                "America/Santo_Domingo",
+                                "America/Sao_Paulo",
+                                "America/Scoresbysund",
+                                "America/Shiprock",
+                                "America/Sitka",
+                                "America/St_Barthelemy",
+                                "America/St_Johns",
+                                "America/St_Kitts",
+                                "America/St_Lucia",
+                                "America/St_Thomas",
+                                "America/St_Vincent",
+                                "America/Swift_Current",
+                                "America/Tegucigalpa",
+                                "America/Thule",
+                                "America/Thunder_Bay",
+                                "America/Tijuana",
+                                "America/Toronto",
+                                "America/Tortola",
+                                "America/Vancouver",
+                                "America/Virgin",
+                                "America/Whitehorse",
+                                "America/Winnipeg",
+                                "America/Yakutat",
+                                "America/Yellowknife",
+                                "Antarctica/Casey",
+                                "Antarctica/Davis",
+                                "Antarctica/DumontDUrville",
+                                "Antarctica/Macquarie",
+                                "Antarctica/Mawson",
+                                "Antarctica/McMurdo",
+                                "Antarctica/Palmer",
+                                "Antarctica/Rothera",
+                                "Antarctica/South_Pole",
+                                "Antarctica/Syowa",
+                                "Antarctica/Vostok",
+                                "Arctic/Longyearbyen",
+                                "Asia/Aden",
+                                "Asia/Almaty",
+                                "Asia/Amman",
+                                "Asia/Anadyr",
+                                "Asia/Aqtau",
+                                "Asia/Aqtobe",
+                                "Asia/Ashgabat",
+                                "Asia/Ashkhabad",
+                                "Asia/Baghdad",
+                                "Asia/Bahrain",
+                                "Asia/Baku",
+                                "Asia/Bangkok",
+                                "Asia/Beirut",
+                                "Asia/Bishkek",
+                                "Asia/Brunei",
+                                "Asia/Calcutta",
+                                "Asia/Choibalsan",
+                                "Asia/Chongqing",
+                                "Asia/Chungking",
+                                "Asia/Colombo",
+                                "Asia/Dacca",
+                                "Asia/Damascus",
+                                "Asia/Dhaka",
+                                "Asia/Dili",
+                                "Asia/Dubai",
+                                "Asia/Dushanbe",
+                                "Asia/Gaza",
+                                "Asia/Harbin",
+                                "Asia/Hebron",
+                                "Asia/Ho_Chi_Minh",
+                                "Asia/Hong_Kong",
+                                "Asia/Hovd",
+                                "Asia/Irkutsk",
+                                "Asia/Istanbul",
+                                "Asia/Jakarta",
+                                "Asia/Jayapura",
+                                "Asia/Jerusalem",
+                                "Asia/Kabul",
+                                "Asia/Kamchatka",
+                                "Asia/Karachi",
+                                "Asia/Kashgar",
+                                "Asia/Kathmandu",
+                                "Asia/Katmandu",
+                                "Asia/Khandyga",
+                                "Asia/Kolkata",
+                                "Asia/Krasnoyarsk",
+                                "Asia/Kuala_Lumpur",
+                                "Asia/Kuching",
+                                "Asia/Kuwait",
+                                "Asia/Macao",
+                                "Asia/Macau",
+                                "Asia/Magadan",
+                                "Asia/Makassar",
+                                "Asia/Manila",
+                                "Asia/Muscat",
+                                "Asia/Nicosia",
+                                "Asia/Novokuznetsk",
+                                "Asia/Novosibirsk",
+                                "Asia/Omsk",
+                                "Asia/Oral",
+                                "Asia/Phnom_Penh",
+                                "Asia/Pontianak",
+                                "Asia/Pyongyang",
+                                "Asia/Qatar",
+                                "Asia/Qyzylorda",
+                                "Asia/Rangoon",
+                                "Asia/Riyadh",
+                                "Asia/Saigon",
+                                "Asia/Sakhalin",
+                                "Asia/Samarkand",
+                                "Asia/Seoul",
+                                "Asia/Shanghai",
+                                "Asia/Singapore",
+                                "Asia/Taipei",
+                                "Asia/Tashkent",
+                                "Asia/Tbilisi",
+                                "Asia/Tehran",
+                                "Asia/Tel_Aviv",
+                                "Asia/Thimbu",
+                                "Asia/Thimphu",
+                                "Asia/Tokyo",
+                                "Asia/Ujung_Pandang",
+                                "Asia/Ulaanbaatar",
+                                "Asia/Ulan_Bator",
+                                "Asia/Urumqi",
+                                "Asia/Ust-Nera",
+                                "Asia/Vientiane",
+                                "Asia/Vladivostok",
+                                "Asia/Yakutsk",
+                                "Asia/Yekaterinburg",
+                                "Asia/Yerevan",
+                                "Atlantic/Azores",
+                                "Atlantic/Bermuda",
+                                "Atlantic/Canary",
+                                "Atlantic/Cape_Verde",
+                                "Atlantic/Faeroe",
+                                "Atlantic/Faroe",
+                                "Atlantic/Jan_Mayen",
+                                "Atlantic/Madeira",
+                                "Atlantic/Reykjavik",
+                                "Atlantic/South_Georgia",
+                                "Atlantic/St_Helena",
+                                "Atlantic/Stanley",
+                                "Australia/ACT",
+                                "Australia/Adelaide",
+                                "Australia/Brisbane",
+                                "Australia/Broken_Hill",
+                                "Australia/Canberra",
+                                "Australia/Currie",
+                                "Australia/Darwin",
+                                "Australia/Eucla",
+                                "Australia/Hobart",
+                                "Australia/LHI",
+                                "Australia/Lindeman",
+                                "Australia/Lord_Howe",
+                                "Australia/Melbourne",
+                                "Australia/NSW",
+                                "Australia/North",
+                                "Australia/Perth",
+                                "Australia/Queensland",
+                                "Australia/South",
+                                "Australia/Sydney",
+                                "Australia/Tasmania",
+                                "Australia/Victoria",
+                                "Australia/West",
+                                "Australia/Yancowinna",
+                                "Brazil/Acre",
+                                "Brazil/DeNoronha",
+                                "Brazil/East",
+                                "Brazil/West",
+                                "CET",
+                                "CST6CDT",
+                                "Canada/Atlantic",
+                                "Canada/Central",
+                                "Canada/East-Saskatchewan",
+                                "Canada/Eastern",
+                                "Canada/Mountain",
+                                "Canada/Newfoundland",
+                                "Canada/Pacific",
+                                "Canada/Saskatchewan",
+                                "Canada/Yukon",
+                                "Chile/Continental",
+                                "Chile/EasterIsland",
+                                "Cuba",
+                                "EET",
+                                "EST",
+                                "EST5EDT",
+                                "Egypt",
+                                "Eire",
+                                "Etc/GMT",
+                                "Etc/GMT+0",
+                                "Etc/GMT+1",
+                                "Etc/GMT+10",
+                                "Etc/GMT+11",
+                                "Etc/GMT+12",
+                                "Etc/GMT+2",
+                                "Etc/GMT+3",
+                                "Etc/GMT+4",
+                                "Etc/GMT+5",
+                                "Etc/GMT+6",
+                                "Etc/GMT+7",
+                                "Etc/GMT+8",
+                                "Etc/GMT+9",
+                                "Etc/GMT-0",
+                                "Etc/GMT-1",
+                                "Etc/GMT-10",
+                                "Etc/GMT-11",
+                                "Etc/GMT-12",
+                                "Etc/GMT-13",
+                                "Etc/GMT-14",
+                                "Etc/GMT-2",
+                                "Etc/GMT-3",
+                                "Etc/GMT-4",
+                                "Etc/GMT-5",
+                                "Etc/GMT-6",
+                                "Etc/GMT-7",
+                                "Etc/GMT-8",
+                                "Etc/GMT-9",
+                                "Etc/GMT0",
+                                "Etc/Greenwich",
+                                "Etc/UCT",
+                                "Etc/UTC",
+                                "Etc/Universal",
+                                "Etc/Zulu",
+                                "Europe/Amsterdam",
+                                "Europe/Andorra",
+                                "Europe/Athens",
+                                "Europe/Belfast",
+                                "Europe/Belgrade",
+                                "Europe/Berlin",
+                                "Europe/Bratislava",
+                                "Europe/Brussels",
+                                "Europe/Bucharest",
+                                "Europe/Budapest",
+                                "Europe/Busingen",
+                                "Europe/Chisinau",
+                                "Europe/Copenhagen",
+                                "Europe/Dublin",
+                                "Europe/Gibraltar",
+                                "Europe/Guernsey",
+                                "Europe/Helsinki",
+                                "Europe/Isle_of_Man",
+                                "Europe/Istanbul",
+                                "Europe/Jersey",
+                                "Europe/Kaliningrad",
+                                "Europe/Kiev",
+                                "Europe/Lisbon",
+                                "Europe/Ljubljana",
+                                "Europe/London",
+                                "Europe/Luxembourg",
+                                "Europe/Madrid",
+                                "Europe/Malta",
+                                "Europe/Mariehamn",
+                                "Europe/Minsk",
+                                "Europe/Monaco",
+                                "Europe/Moscow",
+                                "Europe/Nicosia",
+                                "Europe/Oslo",
+                                "Europe/Paris",
+                                "Europe/Podgorica",
+                                "Europe/Prague",
+                                "Europe/Riga",
+                                "Europe/Rome",
+                                "Europe/Samara",
+                                "Europe/San_Marino",
+                                "Europe/Sarajevo",
+                                "Europe/Simferopol",
+                                "Europe/Skopje",
+                                "Europe/Sofia",
+                                "Europe/Stockholm",
+                                "Europe/Tallinn",
+                                "Europe/Tirane",
+                                "Europe/Tiraspol",
+                                "Europe/Uzhgorod",
+                                "Europe/Vaduz",
+                                "Europe/Vatican",
+                                "Europe/Vienna",
+                                "Europe/Vilnius",
+                                "Europe/Volgograd",
+                                "Europe/Warsaw",
+                                "Europe/Zagreb",
+                                "Europe/Zaporozhye",
+                                "Europe/Zurich",
+                                "GB",
+                                "GB-Eire",
+                                "GMT",
+                                "GMT+0",
+                                "GMT-0",
+                                "GMT0",
+                                "Greenwich",
+                                "HST",
+                                "Hongkong",
+                                "Iceland",
+                                "Indian/Antananarivo",
+                                "Indian/Chagos",
+                                "Indian/Christmas",
+                                "Indian/Cocos",
+                                "Indian/Comoro",
+                                "Indian/Kerguelen",
+                                "Indian/Mahe",
+                                "Indian/Maldives",
+                                "Indian/Mauritius",
+                                "Indian/Mayotte",
+                                "Indian/Reunion",
+                                "Iran",
+                                "Israel",
+                                "Jamaica",
+                                "Japan",
+                                "Kwajalein",
+                                "Libya",
+                                "MET",
+                                "MST",
+                                "MST7MDT",
+                                "Mexico/BajaNorte",
+                                "Mexico/BajaSur",
+                                "Mexico/General",
+                                "NZ",
+                                "NZ-CHAT",
+                                "Navajo",
+                                "PRC",
+                                "PST8PDT",
+                                "Pacific/Apia",
+                                "Pacific/Auckland",
+                                "Pacific/Chatham",
+                                "Pacific/Chuuk",
+                                "Pacific/Easter",
+                                "Pacific/Efate",
+                                "Pacific/Enderbury",
+                                "Pacific/Fakaofo",
+                                "Pacific/Fiji",
+                                "Pacific/Funafuti",
+                                "Pacific/Galapagos",
+                                "Pacific/Gambier",
+                                "Pacific/Guadalcanal",
+                                "Pacific/Guam",
+                                "Pacific/Honolulu",
+                                "Pacific/Johnston",
+                                "Pacific/Kiritimati",
+                                "Pacific/Kosrae",
+                                "Pacific/Kwajalein",
+                                "Pacific/Majuro",
+                                "Pacific/Marquesas",
+                                "Pacific/Midway",
+                                "Pacific/Nauru",
+                                "Pacific/Niue",
+                                "Pacific/Norfolk",
+                                "Pacific/Noumea",
+                                "Pacific/Pago_Pago",
+                                "Pacific/Palau",
+                                "Pacific/Pitcairn",
+                                "Pacific/Pohnpei",
+                                "Pacific/Ponape",
+                                "Pacific/Port_Moresby",
+                                "Pacific/Rarotonga",
+                                "Pacific/Saipan",
+                                "Pacific/Samoa",
+                                "Pacific/Tahiti",
+                                "Pacific/Tarawa",
+                                "Pacific/Tongatapu",
+                                "Pacific/Truk",
+                                "Pacific/Wake",
+                                "Pacific/Wallis",
+                                "Pacific/Yap",
+                                "Poland",
+                                "Portugal",
+                                "ROC",
+                                "ROK",
+                                "Singapore",
+                                "Turkey",
+                                "UCT",
+                                "US/Alaska",
+                                "US/Aleutian",
+                                "US/Arizona",
+                                "US/Central",
+                                "US/East-Indiana",
+                                "US/Eastern",
+                                "US/Hawaii",
+                                "US/Indiana-Starke",
+                                "US/Michigan",
+                                "US/Mountain",
+                                "US/Pacific",
+                                "US/Samoa",
+                                "UTC",
+                                "Universal",
+                                "W-SU",
+                                "WET",
+                                "Zulu"
+                            ]
+                        }
+                    },
+                    "required": [
+                        "timezone",
+                        "date_time"
+                    ],
+                    "type": [
+                        "integer",
+                        "object"
+                    ]
+                }
+            },
+            "required": [
+                "scheduled_date"
             ],
             "type": "object"
         },
@@ -5699,150 +6456,6 @@
                     "type": "string"
                 }
             },
-            "type": "object"
-        },
-        "provisioner_v5": {
-            "description": "Provisioner schema",
-            "properties": {
-                "brand": {
-                    "default": "",
-                    "description": "Brand of the phone",
-                    "type": "string"
-                },
-                "family": {
-                    "default": "",
-                    "description": "Family name of the phone",
-                    "type": "string"
-                },
-                "model": {
-                    "default": "",
-                    "description": "Model name of the phone",
-                    "type": "string"
-                },
-                "name": {
-                    "description": "Name of the phone",
-                    "type": "string"
-                },
-                "settings": {
-                    "description": "Phone's settings",
-                    "properties": {
-                        "codecs": {
-                            "description": "Phone's codecs",
-                            "items": {
-                                "properties": {
-                                    "audio": {
-                                        "description": "Audio codecs",
-                                        "properties": {
-                                            "primary_codec": {
-                                                "description": "Primary codec",
-                                                "type": "string"
-                                            },
-                                            "secondary_codec": {
-                                                "description": "Secondary codec",
-                                                "type": "string"
-                                            }
-                                        },
-                                        "type": "object"
-                                    }
-                                },
-                                "type": "object"
-                            },
-                            "type": "object"
-                        },
-                        "datetime": {
-                            "description": "Date and time settings",
-                            "properties": {
-                                "time": {
-                                    "description": "Time settings",
-                                    "properties": {
-                                        "timezone": {
-                                            "description": "Phone's timezone",
-                                            "type": "string"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            },
-                            "type": "object"
-                        },
-                        "lines": {
-                            "description": "Phone lines",
-                            "items": {
-                                "properties": {
-                                    "advanced": {
-                                        "description": "Advanced settings",
-                                        "properties": {
-                                            "expire": {
-                                                "default": 360,
-                                                "type": "integer"
-                                            },
-                                            "srtp": {
-                                                "default": false,
-                                                "type": "boolean"
-                                            }
-                                        },
-                                        "type": "object"
-                                    },
-                                    "basic": {
-                                        "description": "Basic settings",
-                                        "properties": {
-                                            "display_name": {
-                                                "description": "Friendly name for phone",
-                                                "type": "string"
-                                            },
-                                            "enabled": {
-                                                "default": true,
-                                                "description": "Enable line",
-                                                "type": "boolean"
-                                            }
-                                        },
-                                        "type": "object"
-                                    },
-                                    "sip": {
-                                        "description": "Sip settings",
-                                        "properties": {
-                                            "password": {
-                                                "description": "Line's password",
-                                                "type": "string"
-                                            },
-                                            "realm": {
-                                                "description": "Line's Sip realm",
-                                                "type": "string"
-                                            },
-                                            "username": {
-                                                "description": "Line's username",
-                                                "type": "string"
-                                            }
-                                        },
-                                        "required": [
-                                            "password",
-                                            "username"
-                                        ],
-                                        "type": "object"
-                                    }
-                                },
-                                "required": [
-                                    "basic",
-                                    "sip"
-                                ],
-                                "type": "object"
-                            },
-                            "minItems": 1,
-                            "required": [
-                                "properties"
-                            ],
-                            "type": "object"
-                        }
-                    },
-                    "type": "object"
-                }
-            },
-            "required": [
-                "brand",
-                "family",
-                "model",
-                "settings"
-            ],
             "type": "object"
         },
         "queue_update": {
@@ -6473,7 +7086,7 @@
             "description": "Describes a service plan category",
             "properties": {
                 "_all": {
-                    "$ref": "service_plan.item",
+                    "$ref": "#/definitions/service_plan.item",
                     "description": "Applies item rules to any item in this category",
                     "properties": {
                         "exceptions": {
@@ -6564,7 +7177,7 @@
             "description": "Describes services offered to sub-accounts",
             "properties": {
                 "bookkeepers": {
-                    "$ref": "bookkeepers",
+                    "$ref": "#/definitions/bookkeepers",
                     "type": "object"
                 },
                 "category": {
@@ -6643,11 +7256,11 @@
         "storage": {
             "properties": {
                 "attachments": {
-                    "$ref": "storage.attachments",
+                    "$ref": "#/definitions/storage.attachments",
                     "description": "Defines where and how to store attachments"
                 },
                 "connections": {
-                    "$ref": "storage.connections",
+                    "$ref": "#/definitions/storage.connections",
                     "description": "Describes alternative connections to use (such as alternative CouchDB instances"
                 },
                 "id": {
@@ -6655,8 +7268,11 @@
                     "type": "string"
                 },
                 "plan": {
-                    "$ref": "storage.plan",
+                    "$ref": "#/definitions/storage.plan",
                     "description": "Describes how to store documents depending on the database or document type"
+                },
+                "ui_metadata": {
+                    "type": "object"
                 }
             },
             "type": "object"
@@ -6682,16 +7298,36 @@
                             "description": "Bucket name to store data to",
                             "type": "string"
                         },
+                        "bucket_after_host": {
+                            "description": "use bucket after host as part of url",
+                            "type": "boolean"
+                        },
+                        "folder_base_path": {
+                            "description": "Base path to use as a prefix when saving files",
+                            "type": "string"
+                        },
+                        "folder_path": {
+                            "description": "Custom path to use as a prefix when saving files",
+                            "type": "string"
+                        },
                         "host": {
-                            "description": "Region-specific hostname to use, if applicable",
+                            "description": "the s3 host",
                             "type": "string"
                         },
                         "key": {
                             "description": "AWS Key to use",
                             "type": "string"
                         },
-                        "path": {
-                            "description": "Custom path to use as a prefix when saving files",
+                        "port": {
+                            "description": "port to use",
+                            "type": "integer"
+                        },
+                        "scheme": {
+                            "description": "scheme to use to access host",
+                            "enum": [
+                                "http",
+                                "https"
+                            ],
                             "type": "string"
                         },
                         "secret": {
@@ -6730,8 +7366,16 @@
                 "settings": {
                     "description": "Settings for the Google Drive account",
                     "properties": {
+                        "folder_base_path": {
+                            "description": "base folder path",
+                            "type": "string"
+                        },
                         "folder_id": {
                             "description": "Folder ID in which to store the file, if any",
+                            "type": "string"
+                        },
+                        "folder_path": {
+                            "description": "folder path",
                             "type": "string"
                         },
                         "oauth_doc_id": {
@@ -6842,13 +7486,13 @@
             "description": "schema for storage plan",
             "properties": {
                 "account": {
-                    "$ref": "storage.plan.database"
+                    "$ref": "#/definitions/storage.plan.database"
                 },
                 "modb": {
-                    "$ref": "storage.plan.database"
+                    "$ref": "#/definitions/storage.plan.database"
                 },
                 "system": {
-                    "$ref": "storage.plan.database"
+                    "$ref": "#/definitions/storage.plan.database"
                 }
             },
             "type": "object"
@@ -6857,7 +7501,7 @@
             "description": "schema for database storage plan",
             "properties": {
                 "attachments": {
-                    "$ref": "storage.plan.database.attachment"
+                    "$ref": "#/definitions/storage.plan.database.attachment"
                 },
                 "connection": {
                     "type": "string"
@@ -6874,16 +7518,16 @@
                     "additionalProperties": false,
                     "properties": {
                         "call_recording": {
-                            "$ref": "storage.plan.database.document"
+                            "$ref": "#/definitions/storage.plan.database.document"
                         },
                         "fax": {
-                            "$ref": "storage.plan.database.document"
+                            "$ref": "#/definitions/storage.plan.database.document"
                         },
                         "mailbox_message": {
-                            "$ref": "storage.plan.database.document"
+                            "$ref": "#/definitions/storage.plan.database.document"
                         },
                         "media": {
-                            "$ref": "storage.plan.database.document"
+                            "$ref": "#/definitions/storage.plan.database.document"
                         }
                     },
                     "type": "object"
@@ -6909,7 +7553,7 @@
             "description": "schema for document type storage plan",
             "properties": {
                 "attachments": {
-                    "$ref": "storage.plan.database.attachment"
+                    "$ref": "#/definitions/storage.plan.database.attachment"
                 },
                 "connection": {
                     "type": "string"
@@ -7018,6 +7662,9 @@
                 "schedules": {
                     "default": [],
                     "description": "ananke schedules",
+                    "items": {
+                        "type": "object"
+                    },
                     "type": "array"
                 },
                 "voicemail": {
@@ -7029,17 +7676,17 @@
                                         "attempts": {
                                             "default": 5,
                                             "description": "ananke attempts",
-                                            "type": "string"
+                                            "type": "integer"
                                         },
                                         "interval_s": {
                                             "default": 300,
                                             "description": "ananke interval in seconds",
-                                            "type": "string"
+                                            "type": "integer"
                                         },
                                         "timeout_s": {
                                             "default": 20,
                                             "description": "ananke timeout in seconds",
-                                            "type": "string"
+                                            "type": "integer"
                                         }
                                     }
                                 }
@@ -7286,6 +7933,11 @@
                             "default": "mp3",
                             "description": "Default media file format for Callflow modules",
                             "type": "string"
+                        },
+                        "force_require_pin": {
+                            "default": false,
+                            "description": "If true, ignore the setting on the vmbox and require all users to enter a pin",
+                            "type": "boolean"
                         },
                         "max_box_number_length": {
                             "default": 15,
@@ -7777,6 +8429,9 @@
                 "reverse_proxies": {
                     "default": [],
                     "description": "crossbar reverse proxies",
+                    "items": {
+                        "type": "string"
+                    },
                     "type": "array"
                 },
                 "schema_strict_validation": {
@@ -7981,6 +8636,9 @@
                 "default_includes": {
                     "default": [],
                     "description": "crossbar.contact_list default includes",
+                    "items": {
+                        "type": "object"
+                    },
                     "type": "array"
                 }
             },
@@ -8011,7 +8669,8 @@
                     "type": "string"
                 },
                 "provisioning_type": {
-                    "description": "crossbar.devices provisioning type"
+                    "description": "crossbar.devices provisioning type",
+                    "type": "string"
                 },
                 "provisioning_url": {
                     "description": "crossbar.devices provisioning url",
@@ -8302,6 +8961,18 @@
                     "description": "datamgr default archive folder",
                     "type": "string"
                 },
+                "max_bulk_insert": {
+                    "default": 2000,
+                    "description": "maximum number of documents that will be inserted in a single request",
+                    "minimum": 1,
+                    "type": "integer"
+                },
+                "max_bulk_read": {
+                    "default": 2000,
+                    "description": "maximum number of documents that will be read in a single request",
+                    "minimum": 1,
+                    "type": "integer"
+                },
                 "no_caching_doc_types": {
                     "default": [
                         "media",
@@ -8543,8 +9214,9 @@
                     "type": "string"
                 },
                 "default_ringback": {
+                    "default": "%(2000,4000,440,480)",
                     "description": "ecallmgr default ringback",
-                    "type": "object"
+                    "type": "string"
                 },
                 "event_stream_idle_alert": {
                     "default": 0,
@@ -8610,6 +9282,9 @@
                 "fs_nodes": {
                     "default": [],
                     "description": "ecallmgr fs nodes",
+                    "items": {
+                        "type": "string"
+                    },
                     "type": "array"
                 },
                 "fs_profiles": {
@@ -8618,7 +9293,11 @@
                     "type": "object"
                 },
                 "fs_reconnect_cmds": {
-                    "description": "ecallmgr fs reconnect cmds"
+                    "description": "ecallmgr fs reconnect cmds",
+                    "items": {
+                        "type": "object"
+                    },
+                    "type": "array"
                 },
                 "gateways": {
                     "default": {},
@@ -8744,7 +9423,8 @@
                     "type": "boolean"
                 },
                 "sofia_conf": {
-                    "description": "ecallmgr sofia conf"
+                    "description": "ecallmgr sofia conf",
+                    "type": "boolean"
                 },
                 "tcp_packet_type": {
                     "default": 2,
@@ -8931,7 +9611,7 @@
                     "type": "string"
                 },
                 "inbound_t38_default": {
-                    "default": true,
+                    "default": "true",
                     "description": "fax inbound t38 default",
                     "type": "string"
                 },
@@ -9138,6 +9818,10 @@
                     },
                     "type": "array"
                 },
+                "mobile_rate": {
+                    "description": "Object defining rate for Kazoo mobile",
+                    "type": "object"
+                },
                 "rate_version": {
                     "description": "If defined, use rates with this version",
                     "type": "string"
@@ -9258,6 +9942,7 @@
             "description": "Schema for kazoo_couch system_config",
             "properties": {
                 "admin_port": {
+                    "default": 5986,
                     "description": "The CouchDB API port, typically 5986",
                     "type": "integer"
                 },
@@ -9735,6 +10420,9 @@
                 "routines": {
                     "default": [],
                     "description": "modb routines",
+                    "items": {
+                        "type": "string"
+                    },
                     "type": "array"
                 }
             },
@@ -9795,9 +10483,43 @@
                     "description": "notify notification app",
                     "type": "string"
                 },
+                "notify_presist_enabled": {
+                    "default": true,
+                    "description": "Enabled presist of failed to publish notifications globally",
+                    "type": "boolean"
+                },
+                "notify_presist_exceptions": {
+                    "default": [
+                        "system_alert"
+                    ],
+                    "description": "List of notification types have to be ignored to presist if they failed to publish",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "notify_presist_temprorary_force_exceptions": {
+                    "default": [],
+                    "description": "List of notification types have to be ignored temprorary globally to presist if they failed to publish",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "notify_publisher_timeout_ms": {
+                    "default": 10000,
+                    "description": "Timeout in milliseconds when publishing notification using notify publisher",
+                    "minimum": 1,
+                    "type": "integer"
+                },
                 "search_rep_email": {
                     "default": true,
                     "description": "notify search rep email",
+                    "type": "boolean"
+                },
+                "should_presist_for_retry": {
+                    "default": true,
+                    "description": "Enabled presist of failed to publish notifications for account/system",
                     "type": "boolean"
                 },
                 "use_federated_listener": {
@@ -9814,6 +10536,9 @@
                 "default_to": {
                     "default": "",
                     "description": "notify.cnam_request default to",
+                    "items": {
+                        "type": "string"
+                    },
                     "type": "string"
                 }
             },
@@ -9825,6 +10550,9 @@
                 "default_to": {
                     "default": "",
                     "description": "notify.deregister default to",
+                    "items": {
+                        "type": "string"
+                    },
                     "type": "string"
                 },
                 "html_content_transfer_encoding": {
@@ -9895,6 +10623,9 @@
                 "default_to": {
                     "default": "",
                     "description": "notify.first_occurrence default to",
+                    "items": {
+                        "type": "string"
+                    },
                     "type": "string"
                 },
                 "html_content_transfer_encoding": {
@@ -9927,6 +10658,9 @@
                 "default_to": {
                     "default": "",
                     "description": "notify.new_account default to",
+                    "items": {
+                        "type": "string"
+                    },
                     "type": "string"
                 },
                 "html_content_transfer_encoding": {
@@ -9948,6 +10682,9 @@
                 "default_to": {
                     "default": "",
                     "description": "notify.password_recovery default to",
+                    "items": {
+                        "type": "string"
+                    },
                     "type": "string"
                 },
                 "html_content_transfer_encoding": {
@@ -9973,6 +10710,9 @@
                 "default_to": {
                     "default": "",
                     "description": "notify.port_cancel default to",
+                    "items": {
+                        "type": "string"
+                    },
                     "type": "string"
                 }
             },
@@ -9988,6 +10728,9 @@
                 "default_to": {
                     "default": "",
                     "description": "notify.port_request default to",
+                    "items": {
+                        "type": "string"
+                    },
                     "type": "string"
                 }
             },
@@ -9997,7 +10740,14 @@
             "description": "Schema for notify.port_request_admin system_config",
             "properties": {
                 "default_to": {
-                    "description": "notify.port_request_admin default to"
+                    "description": "notify.port_request_admin default to",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": [
+                        "string",
+                        "array"
+                    ]
                 }
             },
             "type": "object"
@@ -10008,6 +10758,9 @@
                 "default_to": {
                     "default": "",
                     "description": "notify.ported default to",
+                    "items": {
+                        "type": "string"
+                    },
                     "type": "string"
                 },
                 "send_from_admin_email": {
@@ -10024,6 +10777,9 @@
                 "default_to": {
                     "default": "",
                     "description": "notify.system_alert default to",
+                    "items": {
+                        "type": "string"
+                    },
                     "type": "string"
                 },
                 "enable_email_alerts": {
@@ -10054,6 +10810,9 @@
                 "default_to": {
                     "default": "",
                     "description": "notify.topup default to",
+                    "items": {
+                        "type": "string"
+                    },
                     "type": "string"
                 },
                 "html_content_transfer_encoding": {
@@ -10075,6 +10834,9 @@
                 "default_to": {
                     "default": "",
                     "description": "notify.transaction default to",
+                    "items": {
+                        "type": "string"
+                    },
                     "type": "string"
                 },
                 "html_content_transfer_encoding": {
@@ -10099,7 +10861,14 @@
                     "type": "boolean"
                 },
                 "default_to": {
-                    "description": "notify.voicemail_full default to"
+                    "description": "notify.voicemail_full default to",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": [
+                        "string",
+                        "array"
+                    ]
                 }
             },
             "type": "object"
@@ -10125,19 +10894,19 @@
             "properties": {
                 "allow_port_transition_from_submitted_to_scheduled": {
                     "default": false,
-                    "description": "Should number ports be allowed to transition from submitted to scheduled?",
+                    "description": "should number ports be allowed to transition from submitted to scheduled?",
                     "type": "boolean"
                 },
                 "available_module_name": {
                     "default": "knm_local",
-                    "description": "number_manager available module name",
+                    "description": "default carrier module name to use when creating a number",
                     "type": "string"
                 },
                 "carrier_modules": {
                     "default": [
                         "knm_local"
                     ],
-                    "description": "number_manager carrier modules",
+                    "description": "carrier modules to perform number search & ordering from",
                     "items": {
                         "type": "string"
                     },
@@ -10179,14 +10948,14 @@
                             "regex": "^(.*)$"
                         }
                     },
-                    "description": "number_manager classifiers",
+                    "description": "regular expressions & billing names for numbers",
                     "type": "object"
                 },
                 "converters": {
                     "default": [
                         "regex"
                     ],
-                    "description": "number_manager converters",
+                    "description": "suffix for the KNM module to use for E164, NPAN and 1NPAN normalization of numbers",
                     "items": {
                         "type": "string"
                     },
@@ -10194,38 +10963,42 @@
                 },
                 "default_force_outbound": {
                     "default": false,
-                    "description": "number_manager default force outbound",
+                    "description": "should we 'force_outbound' when this feature is not set on the number?",
                     "type": "boolean"
                 },
                 "e164_converters": {
-                    "description": "number_manager e164 converters",
+                    "description": "regular expressions to convert numbers to E164 format",
                     "type": "object"
                 },
                 "features": {
                     "properties": {
                         "allow": {
-                            "description": "Number features a number is allowed to enable or disable"
+                            "description": "number features a number is allowed to edit",
+                            "items": {
+                                "type": "string"
+                            },
+                            "type": "array"
                         }
                     }
                 },
                 "fetch_account_from_ports": {
                     "default": true,
-                    "description": "number_manager fetch account from ports",
+                    "description": "should we also search ports when trying to `/identify` a number?",
                     "type": "boolean"
                 },
                 "force_local_outbound": {
                     "default": true,
-                    "description": "number_manager force local outbound",
+                    "description": "default value for 'force_outbound' for local numbers only",
                     "type": "boolean"
                 },
                 "force_port_in_outbound": {
                     "default": true,
-                    "description": "number_manager force port in outbound",
+                    "description": "default value for 'force_outbound' for port_in numbers only",
                     "type": "boolean"
                 },
                 "force_port_out_outbound": {
                     "default": true,
-                    "description": "number_manager force port out outbound",
+                    "description": "default value for 'force_outbound' for port_out numbers only",
                     "type": "boolean"
                 },
                 "local_feature_override": {
@@ -10235,60 +11008,69 @@
                 },
                 "maximum_search_quantity": {
                     "default": 500,
-                    "description": "maximum number of returned DIDs in search query",
+                    "description": "maximum number of returned DIDs in a search query",
+                    "minimum": 1,
                     "type": "integer"
                 },
                 "number_search_timeout_ms": {
                     "default": 5000,
                     "description": "number manager number search timeout in milliseconds",
+                    "minimum": 1,
                     "type": "integer"
                 },
                 "parallel_jobs_count": {
                     "default": 1,
                     "description": "number of concurrent workers that can process a migration at the same time (1=non parallel behavior, MUST be >0)",
+                    "minimum": 1,
                     "type": "integer"
                 },
                 "port_in_module_name": {
                     "default": "knm_local",
-                    "description": "the kazoo number manager module name that completed port request numbers should be created with",
+                    "description": "completed port requests will create numbers with this carrier module name",
                     "type": "string"
                 },
                 "providers": {
-                    "description": "Number features sub accounts are allowed to enable or disable"
+                    "description": "legacy value for number_manager.features.allow",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
                 },
                 "reconcile_regex": {
                     "default": "^\\+?1?\\d{10}$|^\\+[2-9]\\d{7,}$|^011\\d*$|^00\\d*$",
-                    "description": "number_manager reconcile regex",
+                    "description": "if a number matches this regular expression then it is reconcilable",
                     "type": "string"
                 },
                 "released_state": {
                     "default": "available",
-                    "description": "number_manager released state",
+                    "description": "state to put numbers in when they are being released and their reserve history is empty",
                     "type": "string"
                 },
                 "should_age": {
                     "default": false,
-                    "description": "number_manager should age",
+                    "description": "Should numbers go through an aging period before being available?",
                     "type": "boolean"
                 },
                 "should_permanently_delete": {
                     "default": false,
-                    "description": "number_manager should permanently delete",
+                    "description": "when disconnecting numbers, if this flag is true they will be deleted otherwise they will go back to a pool. Local numbers are not affected by this flag",
                     "type": "boolean"
                 },
                 "time_between_accounts_ms": {
                     "default": 1000,
-                    "description": "number_manager time between accounts in milliseconds",
+                    "description": "time to pause in between the processing of accounts in milliseconds",
+                    "minimum": 1,
                     "type": "integer"
                 },
                 "time_between_numbers_ms": {
                     "default": 1000,
-                    "description": "number_manager time between numbers in milliseconds",
+                    "description": "time to pause in between the processing of numbers in milliseconds",
+                    "minimum": 1,
                     "type": "integer"
                 },
                 "unauthorized_numbers_lookup": {
                     "default": false,
-                    "description": "number_manager unauthorized numbers lookup",
+                    "description": "should number search be allowed for unauthenticated API requests?",
                     "type": "boolean"
                 }
             },
@@ -10299,12 +11081,12 @@
             "properties": {
                 "debug": {
                     "default": false,
-                    "description": "number_manager.bandwidth debug",
+                    "description": "should debug mode be activated for the legacy knm_bandwidth?",
                     "type": "boolean"
                 },
                 "developer_key": {
                     "default": "",
-                    "description": "number_manager.bandwidth developer key",
+                    "description": "developer key for the legacy Bandwidth API",
                     "type": "string"
                 },
                 "enable_provisioning": {
@@ -10338,7 +11120,7 @@
             "properties": {
                 "account_id": {
                     "default": "",
-                    "description": "number_manager.bandwidth2 account id",
+                    "description": "account ID for the asynchronous Bandwidth API",
                     "type": "string"
                 },
                 "api_password": {
@@ -10353,7 +11135,7 @@
                 },
                 "debug": {
                     "default": false,
-                    "description": "number_manager.bandwidth2 debug",
+                    "description": "should the debug mode be activated for the asynchronous Bandwidth API?",
                     "type": "boolean"
                 },
                 "enable_provisioning": {
@@ -10364,6 +11146,7 @@
                 "max_search_quantity": {
                     "default": 500,
                     "description": "number_manager.bandwidth2 max search quantity",
+                    "minimum": 1,
                     "type": "integer"
                 },
                 "order_name_prefix": {
@@ -10428,11 +11211,6 @@
         "system_config.number_manager.other": {
             "description": "Schema for number_manager.other system_config",
             "properties": {
-                "default_country": {
-                    "default": "US",
-                    "description": "number_manager.other default country",
-                    "type": "string"
-                },
                 "endpoints": {
                     "description": "number_manager.other endpoints"
                 },
@@ -10483,7 +11261,7 @@
                     "type": "boolean"
                 },
                 "monthly_recurring_cost": {
-                    "default": 1,
+                    "default": 1.0,
                     "description": "number_manager.telnyx monthly recurring cost",
                     "type": "number"
                 },
@@ -10494,12 +11272,12 @@
                 },
                 "should_filter_rates": {
                     "default": false,
-                    "description": "number_manager.telnyx should filter rates",
+                    "description": "should search results be filtered based on configured allowed cost?",
                     "type": "boolean"
                 },
                 "should_keep_best_effort": {
                     "default": false,
-                    "description": "number_manager.telnyx should keep best effort",
+                    "description": "should search results also contain 'best effort' results?",
                     "type": "boolean"
                 },
                 "token": {
@@ -10507,8 +11285,8 @@
                     "type": "string"
                 },
                 "upfront_cost": {
-                    "default": 1,
-                    "description": "number_manager.telnyx upfront cost",
+                    "default": 1.0,
+                    "description": "allowed upfront cost when acquiring number",
                     "type": "number"
                 },
                 "user": {
@@ -10639,15 +11417,96 @@
                     "type": "string"
                 },
                 "combo_keys": {
+                    "default": {
+                        "cisco": {
+                            "_": {
+                                "line": "",
+                                "parking": "",
+                                "personal_parking": "",
+                                "presence": "",
+                                "speed_dial": ""
+                            }
+                        },
+                        "grandstream": {
+                            "_": {
+                                "line": "0",
+                                "parking": "19",
+                                "personal_parking": "11",
+                                "presence": "11",
+                                "speed_dial": "10"
+                            }
+                        },
+                        "obihai": {
+                            "_": {
+                                "line": "Call Appearance",
+                                "parking": "Call Park Monitor",
+                                "personal_parking": "Busy Lamp Field",
+                                "presence": "Busy Lamp Field",
+                                "speed_dial": "Speed Dial"
+                            }
+                        },
+                        "yealink": {
+                            "_": {
+                                "line": "15",
+                                "parking": "10",
+                                "personal_parking": "10",
+                                "presence": "16",
+                                "speed_dial": "13"
+                            }
+                        }
+                    },
                     "description": "provisioner combo keys",
                     "type": "object"
                 },
                 "feature_keys": {
+                    "default": {
+                        "cisco": {
+                            "_": {
+                                "parking": "",
+                                "personal_parking": "",
+                                "presence": "",
+                                "speed_dial": ""
+                            }
+                        },
+                        "grandstream": {
+                            "_": {
+                                "parking": "9",
+                                "personal_parking": "1",
+                                "presence": "1",
+                                "speed_dial": "0"
+                            }
+                        },
+                        "obihai": {
+                            "_": {
+                                "parking": "Call Park Monitor",
+                                "personal_parking": "Busy Lamp Field",
+                                "presence": "Busy Lamp Field",
+                                "speed_dial": "Speed Dial"
+                            }
+                        },
+                        "polycom": {
+                            "_": {
+                                "parking": "automata",
+                                "personal_parking": "automata",
+                                "presence": "normal",
+                                "speed_dial": "normal"
+                            }
+                        },
+                        "yealink": {
+                            "_": {
+                                "parking": "10",
+                                "personal_parking": "10",
+                                "presence": "16",
+                                "speed_dial": "13"
+                            }
+                        }
+                    },
                     "description": "provisioner feature keys",
                     "type": "object"
                 },
                 "provisioning_type": {
-                    "description": "provisioner provisioning type"
+                    "description": "provisioner provisioning type",
+                    "type": "string"
                 },
                 "provisioning_url": {
                     "description": "provisioner provisioning url",
@@ -10675,6 +11534,9 @@
                 "modules": {
                     "default": [],
                     "description": "pusher modules",
+                    "items": {
+                        "type": "string"
+                    },
                     "type": "array"
                 }
             },
@@ -10710,6 +11572,7 @@
             "description": "Schema for reorder system_config",
             "properties": {
                 "assume_inbound_e164": {
+                    "default": false,
                     "description": "reorder assume inbound e164",
                     "type": "boolean"
                 },
@@ -11024,6 +11887,9 @@
                 "default_audio_codecs": {
                     "default": [],
                     "description": "stepswitch default audio codecs",
+                    "items": {
+                        "type": "string"
+                    },
                     "type": "array"
                 },
                 "default_bypass_media": {
@@ -11039,10 +11905,14 @@
                 "default_codecs": {
                     "default": [],
                     "description": "stepswitch default codecs",
+                    "items": {
+                        "type": "string"
+                    },
                     "type": "array"
                 },
                 "default_emergency_cid_number": {
-                    "description": "stepswitch default emergency cid number"
+                    "description": "stepswitch default emergency cid number",
+                    "type": "string"
                 },
                 "default_formatters": {
                     "description": "stepswitch default formatters"
@@ -11069,6 +11939,9 @@
                 "default_video_codecs": {
                     "default": [],
                     "description": "stepswitch default video codecs",
+                    "items": {
+                        "type": "string"
+                    },
                     "type": "array"
                 },
                 "default_weight": {
@@ -11084,7 +11957,7 @@
                 "deny_emergency_bridge_code": {
                     "default": 486,
                     "description": "stepswitch deny emergency bridge code",
-                    "type": "string"
+                    "type": "integer"
                 },
                 "deny_emergency_bridge_media": {
                     "default": "prompt://system_media/stepswitch-emergency_not_configured/",
@@ -11207,16 +12080,19 @@
                 "aging_expiry_d": {
                     "default": 90,
                     "description": "tasks aging expiry in days",
+                    "minimum": 0,
                     "type": "integer"
                 },
                 "attempt_upload_output_times": {
                     "default": 5,
                     "description": "how many times will the upload of the resulting CSV be attempted, cannot be zero",
+                    "minimum": 1,
                     "type": "integer"
                 },
                 "browse_dbs_interval_s": {
                     "default": 86400,
                     "description": "tasks browse dbs interval in seconds",
+                    "minimum": 1,
                     "type": "integer"
                 },
                 "crawler_delay_time_ms": {
@@ -11227,6 +12103,7 @@
                 "crawler_timer_ms": {
                     "default": 86400000,
                     "description": "tasks crawler timer in milliseconds",
+                    "minimum": 0,
                     "type": "integer"
                 },
                 "cycle_delay_time_ms": {
@@ -11237,6 +12114,7 @@
                 "discovery_expiry_d": {
                     "default": 1,
                     "description": "tasks discovery expiry in days",
+                    "minimum": 0,
                     "type": "integer"
                 },
                 "interaccount_delay_ms": {
@@ -11252,11 +12130,13 @@
                 "pause_between_upload_output_attempts_s": {
                     "default": 10,
                     "description": "the amount of time to pause between attempts to upload resulting CSV in seconds",
+                    "minimum": 0,
                     "type": "integer"
                 },
                 "send_progress_after_processed": {
                     "default": 1000,
                     "description": "tasks send progress after processed",
+                    "minimum": 1,
                     "type": "integer"
                 },
                 "should_archive_modbs": {
@@ -11287,6 +12167,63 @@
                 "wait_after_row_ms": {
                     "default": 500,
                     "description": "tasks wait after row in milliseconds",
+                    "minimum": 0,
+                    "type": "integer"
+                }
+            },
+            "type": "object"
+        },
+        "system_config.tasks.notify_resend": {
+            "description": "Schema for tasks.notify_resend system_config",
+            "properties": {
+                "cycle_delay_time_ms": {
+                    "default": 300000,
+                    "description": "Timeout in milliseconds between each cycle",
+                    "type": "integer"
+                },
+                "max_doc_read": {
+                    "default": 20,
+                    "description": "Max number of notifications to read from database for each cycle",
+                    "type": "integer"
+                },
+                "max_retries": {
+                    "default": 3,
+                    "description": "Default max retries to re-publish",
+                    "type": "integer"
+                },
+                "reschedule_rules": {
+                    "default": {
+                        "voicemail_new": {
+                            "rules": {
+                                "after_15_mins": {
+                                    "attempt": 1,
+                                    "retries": 4,
+                                    "retry_after_s": 900
+                                },
+                                "after_45_mins": {
+                                    "attempt": 2,
+                                    "retries": 4,
+                                    "retry_after_s": 2700
+                                },
+                                "after_one_day": {
+                                    "attempt": 4,
+                                    "retries": 4,
+                                    "retry_after_s": 86400
+                                },
+                                "after_two_hours": {
+                                    "attempt": 3,
+                                    "retries": 4,
+                                    "retry_after_s": 7200
+                                }
+                            }
+                        }
+                    },
+                    "description": "Re-schedule rules for each notification type to apply",
+                    "type": "object"
+                },
+                "retry_after_fudge_s": {
+                    "default": 600000,
+                    "description": "Constant time in seconds which would be multipy with attemtps to set retry time",
                     "type": "integer"
                 }
             },
@@ -11582,9 +12519,6 @@
             "description": "Schema for token restrictions",
             "properties": {
                 "restrictions": {
-                    "required": [
-                        "^\\w+$"
-                    ],
                     "type": "object"
                 }
             },
@@ -11871,9 +12805,9 @@
                 },
                 "account_realm": {
                     "description": "The account realm of the user",
-                    "format": "uri",
-                    "maxLength": 64,
-                    "minLength": 1,
+                    "maxLength": 253,
+                    "minLength": 4,
+                    "pattern": "^[.\\w_-]+$",
                     "type": "string"
                 },
                 "credentials": {
@@ -12006,6 +12940,10 @@
                     },
                     "type": "object"
                 },
+                "call_recording": {
+                    "$ref": "#/definitions/call_recording",
+                    "type": "object"
+                },
                 "call_restriction": {
                     "additionalProperties": {
                         "properties": {
@@ -12025,10 +12963,10 @@
                     "type": "object"
                 },
                 "call_waiting": {
-                    "$ref": "call_waiting"
+                    "$ref": "#/definitions/call_waiting"
                 },
                 "caller_id": {
-                    "$ref": "caller_id",
+                    "$ref": "#/definitions/caller_id",
                     "default": {},
                     "description": "The device caller ID parameters",
                     "type": "object"
@@ -12045,7 +12983,7 @@
                     "type": "object"
                 },
                 "dial_plan": {
-                    "$ref": "dialplans",
+                    "$ref": "#/definitions/dialplans",
                     "default": {},
                     "description": "A list of rules used to modify dialed numbers",
                     "type": "object"
@@ -12246,7 +13184,7 @@
                     "type": "object"
                 },
                 "metaflows": {
-                    "$ref": "metaflows",
+                    "$ref": "#/definitions/metaflows",
                     "description": "The device metaflow parameters"
                 },
                 "music_on_hold": {
@@ -12279,7 +13217,7 @@
                     "type": "string"
                 },
                 "profile": {
-                    "$ref": "profile",
+                    "$ref": "#/definitions/profile",
                     "default": {},
                     "description": "User's profile data",
                     "type": "object"
@@ -12343,7 +13281,7 @@
                         "notify": {
                             "properties": {
                                 "callback": {
-                                    "$ref": "notify.callback"
+                                    "$ref": "#/definitions/notify.callback"
                                 }
                             },
                             "type": "object"
@@ -12463,7 +13401,7 @@
                 "notify": {
                     "properties": {
                         "callback": {
-                            "$ref": "notify.callback"
+                            "$ref": "#/definitions/notify.callback"
                         }
                     },
                     "type": "object"
@@ -12717,7 +13655,7 @@
     },
     "externalDocs": {
         "description": "Kazoo documentation's Git repository",
-        "url": "https://github.com/2600hz/kazoo/tree/master/applications/crossbar/doc"
+        "url": "https://docs.2600hz.com/dev"
     },
     "host": "localhost:8000",
     "info": {
@@ -13141,6 +14079,15 @@
             "minLength": 39,
             "name": "RECORDING_ID",
             "pattern": "^[0-9a-f-]+$",
+            "required": true,
+            "type": "string"
+        },
+        "REPORT_ID": {
+            "in": "path",
+            "maxLength": 39,
+            "minLength": 39,
+            "name": "REPORT_ID",
+            "pattern": "^report\\-[0-9a-f]+$",
             "required": true,
             "type": "string"
         },
@@ -19477,6 +20424,26 @@
                 }
             }
         },
+        "/accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/timeline": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/PORT_REQUEST_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
         "/accounts/{ACCOUNT_ID}/presence": {
             "get": {
                 "parameters": [
@@ -19514,6 +20481,9 @@
                 "parameters": [
                     {
                         "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/REPORT_ID"
                     },
                     {
                         "$ref": "#/parameters/ACCOUNT_ID"
@@ -23372,37 +24342,9 @@
                 }
             }
         },
-        "/google_auth": {
-            "put": {
-                "parameters": [
-                    {
-                        "in": "body",
-                        "name": "google_auth",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/google_auth"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "request succeeded"
-                    }
-                }
-            }
-        },
         "/ip_auth": {
             "put": {
-                "parameters": [
-                    {
-                        "in": "body",
-                        "name": "ip_auth",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/ip_auth"
-                        }
-                    }
-                ],
+                "parameters": [],
                 "responses": {
                     "200": {
                         "description": "request succeeded"

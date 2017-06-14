@@ -179,24 +179,21 @@ log_failed_mfa_attempts(Claims, AuthConfig, Reason) ->
     LogId = ?ATTEMPT_LOG_ID(Year, Month),
 
     Doc = kz_json:from_list(
-            props:filter_undefined(
-              [{<<"_id">>, LogId}
-              ,{<<"auth_type">>, <<"multi_factor">>}
-              ,{<<"debug_type">>, <<"failed">>}
-              ,{<<"message">>, kz_term:to_binary(Reason)}
-              ,{<<"auth_config_origin">>, kz_json:get_value(<<"from">>, AuthConfig)}
-              ,{<<"mfa_config_origin">>
-               ,props:get_value([<<"mfa_options">>, <<"account_id">>], Claims, <<"system">>)
-               }
-              ,{<<"timestamp">>, Now}
-              ,{<<"pvt_account_db">>, ModDb}
-              ,{<<"pvt_account_id">>, AccountId}
-              ,{<<"pvt_type">>, <<"login_attempt">>}
-              ,{<<"pvt_created">>, Now}
-              ,{<<"pvt_modified">>, Now}
-              ]
-             )
-           ),
+            [{<<"_id">>, LogId}
+            ,{<<"auth_type">>, <<"multi_factor">>}
+            ,{<<"debug_type">>, <<"failed">>}
+            ,{<<"message">>, kz_term:to_binary(Reason)}
+            ,{<<"auth_config_origin">>, kz_json:get_value(<<"from">>, AuthConfig)}
+            ,{<<"mfa_config_origin">>
+             ,props:get_value([<<"mfa_options">>, <<"account_id">>], Claims, <<"system">>)
+             }
+            ,{<<"timestamp">>, Now}
+            ,{<<"pvt_account_db">>, ModDb}
+            ,{<<"pvt_account_id">>, AccountId}
+            ,{<<"pvt_type">>, <<"login_attempt">>}
+            ,{<<"pvt_created">>, Now}
+            ,{<<"pvt_modified">>, Now}
+            ]),
     _ = kazoo_modb:save_doc(ModDb, Doc),
     'ok'.
 
@@ -227,7 +224,7 @@ is_auth_module_enabled(Method, Config) ->
 %%      3.2. If not reseller get parent's AccountId and go to (1)
 %% @end
 %%--------------------------------------------------------------------
--spec auth_config(kz_json:object()) -> kz_json:object().
+-spec auth_config(api_ne_binary()) -> kz_json:object().
 auth_config(AccountId) ->
     account_auth_config(AccountId, master_account_id()).
 
@@ -237,7 +234,7 @@ auth_config(AccountId) ->
 %% then system_config if couldn't find configs in account's
 %% @end
 %%--------------------------------------------------------------------
--spec account_auth_config(api_binary(), api_binary()) -> kz_json:object().
+-spec account_auth_config(api_ne_binary(), api_ne_binary()) -> kz_json:object().
 account_auth_config('undefined', _MasterId) ->
     system_auth_config();
 account_auth_config(MasterId, ?NE_BINARY = MasterId) ->
@@ -247,7 +244,7 @@ account_auth_config(AccountId, MasterId) ->
     IsReseller = kz_services:is_reseller(AccountId),
     account_auth_config(AccountId, MasterId, IsReseller).
 
--spec account_auth_config(ne_binary(), api_binary(), boolean()) -> kz_json:object().
+-spec account_auth_config(ne_binary(), api_ne_binary(), boolean()) -> kz_json:object().
 account_auth_config(AccountId, MasterId, IsReseller) ->
     auth_config_from_doc(account_auth_config(AccountId), AccountId, MasterId, IsReseller).
 
@@ -261,7 +258,7 @@ account_auth_config(AccountId) ->
 %% either go to parent's account or system config
 %% @end
 %%--------------------------------------------------------------------
--spec auth_config_from_doc(kz_std_return(), ne_binary(), api_binary(), boolean()) -> kz_json:object().
+-spec auth_config_from_doc(kz_std_return(), ne_binary(), api_ne_binary(), boolean()) -> kz_json:object().
 auth_config_from_doc({'ok', Configs}, AccountId, MasterId, _IsReseller) ->
     case kz_json:is_empty(Configs) of
         'true' -> account_auth_config(account_parent(AccountId), MasterId);
@@ -276,7 +273,7 @@ auth_config_from_doc({'error', Reason}, _AccountId, _MasterId, 'true') ->
         andalso lager:debug("failed to get auth configs for reseller account ~s getting system wide configs", [_AccountId]),
     system_auth_config();
 auth_config_from_doc({'error', _Reason}, AccountId, MasterId, 'false') ->
-    lager:debug("failed to get auth configs for account ~s getting parent account configs"),
+    lager:debug("failed to get auth configs for account ~s getting parent account configs", [AccountId]),
     account_auth_config(account_parent(AccountId), MasterId).
 
 %%--------------------------------------------------------------------

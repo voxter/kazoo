@@ -22,6 +22,20 @@
 -define(ELEVEN_AM_START, 39600).
 -define(FIVE_PM_STOP, 61200).
 
+monday_failure_test_() ->
+    Date = {Y=2017,M=6,D=12},
+    Time = {11,47,7},
+    Seconds = calendar:datetime_to_gregorian_seconds({Date, Time}),
+
+    Rule = {rule,<<"TESTRULEID">>,undefined,<<"TODTest">>,<<"weekly">>,1,[],[<<"monday">>],<<"first">>,1,Date,0,86400,false},
+    #rule{wtime_start=TStart}=Rule,
+
+    PrevDay  = kz_date:normalize({Y, M, D - 1}),
+    BaseDate = cf_temporal_route:next_rule_date(Rule, PrevDay),
+    BaseTime = calendar:datetime_to_gregorian_seconds({BaseDate, {0,0,0}}),
+
+    ?_assertNot(Seconds < (BaseTime + TStart)).
+
 sort_wdays_test() ->
     Sorted = [<<"monday">>, <<"tuesday">>, <<"wednesday">>, <<"thursday">>, <<"friday">>, <<"saturday">>, <<"sunday">>],
     Shuffled = kz_term:shuffle_list(Sorted),

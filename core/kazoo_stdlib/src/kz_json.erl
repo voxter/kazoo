@@ -93,6 +93,7 @@
         ]).
 
 -export([sum/2, sum/3]).
+-export([sum_jobjs/1, sum_jobjs/2]).
 -export_type([sumer/0]).
 
 -export([order_by/3]).
@@ -244,8 +245,8 @@ are_equal(JObj1, JObj2) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec from_list(json_proplist()) -> object().
-from_list([]) -> new();
-from_list(L) when is_list(L) -> ?JSON_WRAPPER(L).
+from_list(L) when is_list(L) ->
+    ?JSON_WRAPPER(props:filter_undefined(L)).
 
 -spec from_list_recursive(json_proplist()) -> object().
 from_list_recursive([]) -> new();
@@ -255,9 +256,10 @@ from_list_recursive(L)
 
 -spec recursive_from_list(list()) -> object().
 recursive_from_list([First | _]=List)
-  when is_list(List)
-       andalso is_tuple(First)  ->
-    set_values([{kz_term:to_binary(K), recursive_from_list(V)} || {K,V} <- List], new());
+  when is_list(List), is_tuple(First) ->
+    from_list([{kz_term:to_binary(K), recursive_from_list(V)}
+               || {K,V} <- List
+              ]);
 recursive_from_list(X) when is_float(X) -> X;
 recursive_from_list(X) when is_integer(X) -> X;
 recursive_from_list(X) when is_atom(X) -> X;
@@ -322,6 +324,8 @@ merge_left(_K, {'right', ?JSON_WRAPPER(_)=Right}) ->
     {'ok', merge(fun merge_left/2, Right, new())};
 merge_left(_K, {'right', V}) -> {'ok', V};
 
+merge_left(_K, {'both', ?EMPTY_JSON_OBJECT=Left, ?JSON_WRAPPER(_)=_Right}) ->
+    {'ok', Left};
 merge_left(_K, {'both', ?JSON_WRAPPER(_)=Left, ?JSON_WRAPPER(_)=Right}) ->
     {'ok', merge(fun merge_left/2, Left, Right)};
 merge_left(_K, {'both', Left, _Right}) -> {'ok', Left}.
@@ -340,6 +344,8 @@ merge_right(_K, {'right', ?JSON_WRAPPER(_)=Right}) ->
     {'ok', merge(fun merge_right/2, new(), Right)};
 merge_right(_K, {'right', V}) -> {'ok', V};
 
+merge_right(_K, {'both', ?JSON_WRAPPER(_)=_Left, ?EMPTY_JSON_OBJECT=Right}) ->
+    {'ok', Right};
 merge_right(_K, {'both', ?JSON_WRAPPER(_)=Left, ?JSON_WRAPPER(_)=Right}) ->
     {'ok', merge(fun merge_right/2, Left, Right)};
 merge_right(_K, {'both', _Left, Right}) -> {'ok', Right}.
@@ -433,6 +439,27 @@ sum(?JSON_WRAPPER(_)=JObj1, Value, Sumer, Keys)
     Syek = lists:reverse(Keys),
     V = get_value(Syek, JObj1),
     set_value(Syek, Sumer(V, Value), JObj1).
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Sum (deep) JSON objects.
+%% Default sumer function only sums numbers. For other kinds of values,
+%% the value from JObj1 is kept untouched. If it is undefined it takes the value from the other JObjs.
+%% @end
+%%--------------------------------------------------------------------
+-spec sum_jobjs(objects()) -> object().
+sum_jobjs(JObjs) -> sum_jobjs(JObjs, fun default_sumer/2).
+
+-spec sum_jobjs(objects(), sumer()) -> object().
+sum_jobjs([], Sumer)
+  when is_function(Sumer, 2) -> new();
+sum_jobjs([?JSON_WRAPPER(_)=JObj], Sumer)
+  when is_function(Sumer, 2) -> JObj;
+sum_jobjs([FirstJObj|JObjs], Sumer)
+  when is_function(Sumer, 2) ->
+    F = fun (JObj, Carry) -> sum(Carry, JObj, fun default_sumer/2) end,
+    lists:foldl(F, FirstJObj, JObjs).
 
 %%--------------------------------------------------------------------
 %% @public

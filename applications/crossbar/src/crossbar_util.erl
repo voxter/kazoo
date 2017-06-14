@@ -22,8 +22,10 @@
         ,response_redirect/4
         ]).
 -export([response_202/2, response_202/3]).
--export([response_400/3]).
--export([response_402/2]).
+-export([response_400/3
+        ,response_401/1
+        ,response_402/2
+        ]).
 -export([response_faulty_request/1]).
 -export([response_bad_identifier/2]).
 -export([response_conflicting_docs/1]).
@@ -57,6 +59,7 @@
         ,get_account_lang/1
         ,get_language/1
         ,get_language/2
+        ,get_token_restrictions/3
         ]).
 -export([get_user_timezone/2
         ,get_account_timezone/1
@@ -114,6 +117,10 @@ response_202(Msg, JTerm, Context) ->
                           cb_context:context().
 response_400(Message, Data, Context) ->
     create_response('error', Message, 400, Data, Context).
+
+-spec response_401(cb_context:context()) -> cb_context:context().
+response_401(Context) ->
+    response('error', <<"invalid credentials">>, 401, Context).
 
 -spec response_402(kz_json:object(), cb_context:context()) ->
                           cb_context:context().
@@ -760,15 +767,12 @@ format_app(Lang, AppJObj) ->
     I18N = kzd_app:i18n(AppJObj),
     DefaultLabel = kz_json:get_value([?DEFAULT_LANGUAGE, <<"label">>], I18N),
     kz_json:from_list(
-      props:filter_undefined(
-        [{<<"id">>, kzd_app:id(AppJObj)}
-        ,{<<"name">>, kzd_app:name(AppJObj)}
-        ,{<<"api_url">>, kzd_app:api_url(AppJObj)}
-        ,{<<"source_url">>, kzd_app:source_url(AppJObj)}
-        ,{<<"label">>, kz_json:get_value([Lang, <<"label">>], I18N, DefaultLabel)}
-        ]
-       )
-     ).
+      [{<<"id">>, kzd_app:id(AppJObj)}
+      ,{<<"name">>, kzd_app:name(AppJObj)}
+      ,{<<"api_url">>, kzd_app:api_url(AppJObj)}
+      ,{<<"source_url">>, kzd_app:source_url(AppJObj)}
+      ,{<<"label">>, kz_json:get_value([Lang, <<"label">>], I18N, DefaultLabel)}
+      ]).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -856,7 +860,7 @@ get_account_lang(AccountId) ->
             'error'
     end.
 
--spec get_user_timezone(api_binary(), api_binary()) -> api_binary().
+-spec get_user_timezone(api_ne_binary(), api_ne_binary()) -> api_ne_binary().
 get_user_timezone(AccountId, 'undefined') ->
     get_account_timezone(AccountId);
 get_user_timezone(AccountId, UserId) ->
@@ -866,7 +870,7 @@ get_user_timezone(AccountId, UserId) ->
         {'error', _E} -> get_account_timezone(AccountId)
     end.
 
--spec get_account_timezone(api_binary()) -> api_binary().
+-spec get_account_timezone(api_ne_binary()) -> api_ne_binary().
 get_account_timezone('undefined') ->
     'undefined';
 get_account_timezone(AccountId) ->
@@ -921,7 +925,7 @@ create_auth_token(Context, AuthModule) ->
     case kz_json:is_empty(JObj) of
         'true' ->
             lager:debug("empty doc, no auth token created"),
-            response('error', <<"invalid credentials">>, 401, Context);
+            response_401(Context);
         'false' ->
             create_auth_token(Context, AuthModule, JObj)
     end.
@@ -939,7 +943,6 @@ create_auth_token(Context, AuthModule, JObj) ->
               ,{<<"owner_id">>, OwnerId}
               ,{<<"as">>, kz_json:get_value(<<"as">>, Data)}
               ,{<<"api_key">>, kz_json:get_value(<<"api_key">>, Data)}
-              ,{<<"restrictions">>, get_token_restrictions(AuthModule, AccountId, OwnerId)}
               ,{<<"method">>, kz_term:to_binary(AuthModule)}
               ]),
     JObjToken = kz_doc:update_pvt_parameters(kz_json:from_list(Token)
@@ -1300,7 +1303,6 @@ update_descendants_count(AccountId, JObj, NewCount) ->
         {'error', _E} -> 'error';
         {'ok', NewDoc} ->
             _ = replicate_account_definition(NewDoc),
-            io:format("updated descendant count for ~s~n", [AccountId]),
             'ok'
     end.
 

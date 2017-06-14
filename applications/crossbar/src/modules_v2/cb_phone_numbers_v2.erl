@@ -71,7 +71,7 @@
 -define(KNM_CONFIG_CAT, <<"number_manager">>).
 
 -define(UNAUTHORIZED_NUMBERS_LOOKUP(ResellerId)
-       ,kapps_account_config:get_global(ReqResellerId
+       ,kapps_account_config:get_global(ResellerId
                                        ,?KNM_CONFIG_CAT
                                        ,<<"unauthorized_numbers_lookup">>
                                        ,'false'
@@ -716,16 +716,14 @@ find_prefix(Context) ->
         City ->
             case get_prefix(City) of
                 {'ok', JObj} ->
-                    cb_context:set_resp_data(
-                      cb_context:set_resp_status(Context, 'success')
+                    cb_context:set_resp_data(cb_context:set_resp_status(Context, 'success')
                                             ,JObj
-                     );
+                                            );
                 {'error', Error} ->
                     lager:error("error while prefix for city ~s: ~p", [City, Error]),
-                    cb_context:set_resp_data(
-                      cb_context:set_resp_status(Context, 'error')
+                    cb_context:set_resp_data(cb_context:set_resp_status(Context, 'error')
                                             ,Error
-                     )
+                                            )
             end
     end.
 

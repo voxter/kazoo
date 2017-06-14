@@ -65,19 +65,26 @@ handle_system_alert(JObj) ->
     end.
 
 -spec handle_req_as_http(kz_json:object(), api_binary(), boolean()) -> 'ok'.
-handle_req_as_http(JObj, 'undefined', UseEmail) ->
-    handle_req_as_email(JObj, UseEmail);
+handle_req_as_http(_JObj, 'undefined', _UseEmail) -> 'ok';
 handle_req_as_http(JObj, Url, UseEmail) ->
     Headers = [{"Content-Type", "application/json"}],
     Encoded = kz_json:encode(JObj),
     case kz_http:post(kz_term:to_list(Url), Headers, Encoded) of
         {'ok', _2xx, _ResponseHeaders, _ResponseBody}
           when (_2xx - 200) < 100 -> %% ie: match "2"++_
+            _ = not UseEmail
+                andalso teletype_util:send_update(JObj, <<"completed">>),
             lager:debug("JSON data successfully POSTed to '~s'", [Url]);
         _Error ->
             lager:debug("failed to POST JSON data to ~p for reason: ~p", [Url,_Error]),
-            handle_req_as_email(JObj, UseEmail)
+            maybe_send_email(JObj, UseEmail)
     end.
+
+-spec maybe_send_email(kz_json:object(), boolean()) -> 'ok'.
+maybe_send_email(JObj, 'false') ->
+    handle_req_as_email(JObj, 'true');
+maybe_send_email(_JObj, 'true') ->
+    'ok'.
 
 -spec handle_req_as_email(kz_json:object(), boolean() | kz_json:object()) -> 'ok'.
 handle_req_as_email(_JObj, 'false') ->
@@ -85,7 +92,7 @@ handle_req_as_email(_JObj, 'false') ->
 handle_req_as_email(JObj, 'true') ->
     %% Gather data for template
     case teletype_util:is_notice_enabled_default(?TEMPLATE_ID) of
-        'false' -> lager:debug("notification handling not configured");
+        'false' -> teletype_util:notification_disabled(JObj, ?TEMPLATE_ID);
         'true' -> process_req(JObj)
     end.
 

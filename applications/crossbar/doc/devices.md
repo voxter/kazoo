@@ -9,6 +9,8 @@ Devices like fax machines, SIP phones, soft phone clients, and cell phones (via 
 
 A device be it a SIP phone or landline number
 
+
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `call_forward` | The device call forward parameters | `object` |   | `false`
@@ -20,6 +22,7 @@ Key | Description | Type | Default | Required
 `call_forward.number` | The number to forward calls to | `string(0..15)` |   | `false`
 `call_forward.require_keypress` | Determines if the callee is prompted to press 1 to accept the call | `boolean` | `true` | `false`
 `call_forward.substitute` | Determines if the call forwarding replaces the device | `boolean` | `true` | `false`
+`call_recording` |   | `object` |   | `false`
 `call_restriction` | Device level call restrictions for each available number classification | `object` | `{}` | `false`
 `call_waiting` |   | [#/definitions/call_waiting](#call_waiting) |   | `false`
 `caller_id` | The device caller ID parameters | `object` | `{}` | `false`
@@ -57,10 +60,13 @@ Key | Description | Type | Default | Required
 `owner_id` | The ID of the user object that 'owns' the device | `string(32)` |   | `false`
 `presence_id` | Static presence ID (used instead of SIP username) | `string` |   | `false`
 `provision` | Provision data | `object` |   | `false`
+`provision.combo_keys` | Feature Keys | `object` |   | `false`
+`provision.combo_keys./^[0-9]+$/` |   | `object, null` |   | `false`
+`provision.endpoint_brand` | Brand of the phone | `string` |   | `false`
+`provision.endpoint_family` | Family name of the phone | `string` |   | `false`
+`provision.endpoint_model` | Model name of the phone | `string, integer` |   | `false`
 `provision.feature_keys` | Feature Keys | `object` |   | `false`
-`provision.feature_keys./^[0-9]+$/` |   | `object` |   | `false`
-`provision.feature_keys./^[0-9]+$/.type` | Feature key type | `string('presence', 'parking', 'personal_parking', 'speed_dial')` |   | `true`
-`provision.feature_keys./^[0-9]+$/.value` | Feature key value | `string, integer` |   | `true`
+`provision.feature_keys./^[0-9]+$/` |   | `object, null` |   | `false`
 `register_overwrite_notify` | When true enables overwrite notifications | `boolean` | `false` | `false`
 `ringtones` | Ringtone Parameters | `object` | `{}` | `false`
 `ringtones.external` | The alert info SIP header added when the call is from internal sources | `string(0..256)` |   | `false`
@@ -69,30 +75,58 @@ Key | Description | Type | Default | Required
 `sip.custom_sip_headers` | A property list of SIP headers beging with the prefix 'X-' | `object` |   | `false`
 `sip.expire_seconds` | The time, in seconds, sent to the provisioner for the registration period that the device should be configured with. | `integer` | `300` | `false`
 `sip.ignore_completed_elsewhere` | When set to false the phone should not consider ring group calls answered elsewhere as missed | `boolean` |   | `false`
-`sip.invite_format` | The SIP request URI invite format | `string('username', 'npan', '1npan', 'e164', 'route')` | `username` | `false`
+`sip.invite_format` | The SIP request URI invite format | `string('username', 'npan', '1npan', 'e164', 'route', 'contact')` | `contact` | `false`
 `sip.ip` | IP address for this device | `string` |   | `false`
 `sip.method` | Method of authentication | `string('password', 'ip')` | `password` | `false`
 `sip.number` | The number used if the invite format is 1npan, npan, or e164 (if not set the dialed number is used) | `string` |   | `false`
 `sip.password` | SIP authentication password | `string(5..32)` |   | `false`
-`sip.realm` | The realm this device should use, overriding the account realm. Should rarely be necessary. | `string` |   | `false`
+`sip.realm` | The realm this device should use, overriding the account realm. Should rarely be necessary. | `string(4..253)` |   | `false`
 `sip.route` | The SIP URL used if the invite format is 'route' | `string` |   | `false`
 `sip.static_route` | Sends all inbound calls to this string (instead of dialed number or username) | `string` |   | `false`
 `sip.username` | SIP authentication username | `string(2..32)` |   | `false`
 `suppress_unregister_notifications` | When true disables deregister notifications | `boolean` | `false` | `false`
 `timezone` | Device's timezone | `string` |   | `false`
+##### call_recording
+
+endpoint recording settings
 
 
+Key | Description | Type | Default | Required
+--- | ----------- | ---- | ------- | --------
+`any` |   | [#/definitions/call_recording.source](#call_recordingsource) |   | `false`
+`inbound` |   | [#/definitions/call_recording.source](#call_recordingsource) |   | `false`
+`outbound` |   | [#/definitions/call_recording.source](#call_recordingsource) |   | `false`
+##### call_recording.parameters
+
+
+Key | Description | Type | Default | Required
+--- | ----------- | ---- | ------- | --------
+`enabled` | is recording enabled | `boolean` |   | `false`
+`format` | What format to store the recording on disk | `string('mp3', 'wav')` |   | `false`
+`record_min_sec` | The minimum length, in seconds, the recording must be to be considered successful. Otherwise it is deleted | `integer` |   | `false`
+`record_sample_rate` | What sampling rate to use on the recording | `integer` |   | `false`
+`time_limit` | Time limit, in seconds, for the recording | `integer` |   | `false`
+`url` | The URL to use when sending the recording for storage | `string` |   | `false`
+##### call_recording.source
+
+
+Key | Description | Type | Default | Required
+--- | ----------- | ---- | ------- | --------
+`any` |   | [#/definitions/call_recording.parameters](#call_recordingparameters) |   | `false`
+`offnet` |   | [#/definitions/call_recording.parameters](#call_recordingparameters) |   | `false`
+`onnet` |   | [#/definitions/call_recording.parameters](#call_recordingparameters) |   | `false`
 ##### call_waiting
 
 Parameters for server-side call waiting
 
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `enabled` | Determines if server side call waiting is enabled/disabled | `boolean` |   | `false`
-
 ##### caller_id
 
 Defines caller ID settings based on the type of call being made
+
 
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
@@ -105,18 +139,18 @@ Key | Description | Type | Default | Required
 `internal` | The default caller ID used when dialing internal extensions | `object` |   | `false`
 `internal.name` | The caller id name for the object type | `string(0..35)` |   | `false`
 `internal.number` | The caller id name for the object type | `string(0..35)` |   | `false`
-
 ##### dialplans
 
 Permit local dialing by converting the dialed number to a routable form
 
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
-`system` | List of system dial plans | `array()` |   | `false`
-
+`system` | List of system dial plans | `array(object)` |   | `false`
 ##### metaflow
 
 A metaflow node defines a module to execute, data to provide to that module, and one or more children to branch to
+
 
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
@@ -124,10 +158,10 @@ Key | Description | Type | Default | Required
 `children./.+/` |   | [#/definitions/metaflow](#metaflow) |   | `false`
 `data` | The data/arguments of the metaflow module | `object` |   | `false`
 `module` | The name of the metaflow module to execute at this node | `string(1..64)` |   | `true`
-
 ##### metaflows
 
 Actions applied to a call outside of the normal callflow, initiated by the caller(s)
+
 
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
@@ -138,7 +172,6 @@ Key | Description | Type | Default | Required
 `numbers./^[0-9]+$/` |   | [#/definitions/metaflow](#metaflow) |   | `false`
 `patterns` | A list of patterns with their flows | `object` |   | `false`
 `patterns./.+/` |   | [#/definitions/metaflow](#metaflow) |   | `false`
-
 
 
 #### Fetch summary of devices in account

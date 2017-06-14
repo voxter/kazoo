@@ -5,13 +5,13 @@
 -type queue_strategy() :: 'rr' | 'mi'.
 
 -record(state, {ignored_member_calls = dict:new() :: dict:dict()
-               ,account_id :: api_binary()
-               ,queue_id :: api_binary()
-               ,supervisor :: pid()
+               ,account_id :: api_ne_binary()
+               ,queue_id :: api_ne_binary()
+               ,supervisor :: api_pid()
                ,strategy = 'rr' :: queue_strategy() % round-robin | most-idle
                ,strategy_state :: strategy_state() % based on the strategy
                ,enter_when_empty = 'true' :: boolean() % allow caller into queue if no agents are logged in
-               ,moh :: api_binary()
+               ,moh :: api_ne_binary()
                ,current_member_calls = [] :: list() % ordered list of current members waiting
                ,pos_announce_enabled = 'false' :: boolean()
                ,wait_announce_enabled = 'false' :: boolean()
@@ -29,7 +29,7 @@
 
 -type queue_strategy_state() :: queue:queue() | ne_binaries().
 -type ss_details() :: {non_neg_integer(), 'busy' | 'undefined'}.
--record(strategy_state, {agents :: queue_strategy_state()
+-record(strategy_state, {agents :: queue_strategy_state() | 'undefined'
                                    %% details include # of agent processes and availability
                         ,details = dict:new() :: dict:dict(ne_binary(), ss_details())
                         }).

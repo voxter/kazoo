@@ -8,6 +8,8 @@ Users represent just that, your users of the system. You can assign multiple dev
 
 Schema for a user
 
+
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `call_forward` | The device call forward parameters | `object` |   | `false`
@@ -19,6 +21,7 @@ Key | Description | Type | Default | Required
 `call_forward.number` | The number to forward calls to | `string(0..35)` |   | `false`
 `call_forward.require_keypress` | Determines if the callee is prompted to press 1 to accept the call | `boolean` | `true` | `false`
 `call_forward.substitute` | Determines if the call forwarding replaces the device | `boolean` | `true` | `false`
+`call_recording` |   | `object` |   | `false`
 `call_restriction` | Device level call restrictions for each available number classification | `object` | `{}` | `false`
 `call_waiting` |   | [#/definitions/call_waiting](#call_waiting) |   | `false`
 `caller_id` | The device caller ID parameters | `object` | `{}` | `false`
@@ -75,19 +78,47 @@ Key | Description | Type | Default | Required
 `voicemail` |   | `object` |   | `false`
 `voicemail.notify` |   | `object` |   | `false`
 `voicemail.notify.callback` |   | [#/definitions/notify.callback](#notifycallback) |   | `false`
+##### call_recording
+
+endpoint recording settings
 
 
+Key | Description | Type | Default | Required
+--- | ----------- | ---- | ------- | --------
+`any` |   | [#/definitions/call_recording.source](#call_recordingsource) |   | `false`
+`inbound` |   | [#/definitions/call_recording.source](#call_recordingsource) |   | `false`
+`outbound` |   | [#/definitions/call_recording.source](#call_recordingsource) |   | `false`
+##### call_recording.parameters
+
+
+Key | Description | Type | Default | Required
+--- | ----------- | ---- | ------- | --------
+`enabled` | is recording enabled | `boolean` |   | `false`
+`format` | What format to store the recording on disk | `string('mp3', 'wav')` |   | `false`
+`record_min_sec` | The minimum length, in seconds, the recording must be to be considered successful. Otherwise it is deleted | `integer` |   | `false`
+`record_sample_rate` | What sampling rate to use on the recording | `integer` |   | `false`
+`time_limit` | Time limit, in seconds, for the recording | `integer` |   | `false`
+`url` | The URL to use when sending the recording for storage | `string` |   | `false`
+##### call_recording.source
+
+
+Key | Description | Type | Default | Required
+--- | ----------- | ---- | ------- | --------
+`any` |   | [#/definitions/call_recording.parameters](#call_recordingparameters) |   | `false`
+`offnet` |   | [#/definitions/call_recording.parameters](#call_recordingparameters) |   | `false`
+`onnet` |   | [#/definitions/call_recording.parameters](#call_recordingparameters) |   | `false`
 ##### call_waiting
 
 Parameters for server-side call waiting
 
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `enabled` | Determines if server side call waiting is enabled/disabled | `boolean` |   | `false`
-
 ##### caller_id
 
 Defines caller ID settings based on the type of call being made
+
 
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
@@ -100,18 +131,18 @@ Key | Description | Type | Default | Required
 `internal` | The default caller ID used when dialing internal extensions | `object` |   | `false`
 `internal.name` | The caller id name for the object type | `string(0..35)` |   | `false`
 `internal.number` | The caller id name for the object type | `string(0..35)` |   | `false`
-
 ##### dialplans
 
 Permit local dialing by converting the dialed number to a routable form
 
+
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
-`system` | List of system dial plans | `array()` |   | `false`
-
+`system` | List of system dial plans | `array(object)` |   | `false`
 ##### metaflow
 
 A metaflow node defines a module to execute, data to provide to that module, and one or more children to branch to
+
 
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
@@ -119,10 +150,10 @@ Key | Description | Type | Default | Required
 `children./.+/` |   | [#/definitions/metaflow](#metaflow) |   | `false`
 `data` | The data/arguments of the metaflow module | `object` |   | `false`
 `module` | The name of the metaflow module to execute at this node | `string(1..64)` |   | `true`
-
 ##### metaflows
 
 Actions applied to a call outside of the normal callflow, initiated by the caller(s)
+
 
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
@@ -133,10 +164,10 @@ Key | Description | Type | Default | Required
 `numbers./^[0-9]+$/` |   | [#/definitions/metaflow](#metaflow) |   | `false`
 `patterns` | A list of patterns with their flows | `object` |   | `false`
 `patterns./.+/` |   | [#/definitions/metaflow](#metaflow) |   | `false`
-
 ##### notify.callback
 
 Schema for a callback options
+
 
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
@@ -146,10 +177,10 @@ Key | Description | Type | Default | Required
 `number` | Number for callback notifications about new messages | `string` |   | `false`
 `schedule` | Schedules interval between callbacks | `array(integer)` |   | `false`
 `timeout_s` | How long will system wait for answer to callback | `integer` |   | `false`
-
 ##### profile
 
 Defines user extended properties
+
 
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
@@ -164,7 +195,6 @@ Key | Description | Type | Default | Required
 `role` | To specify the function or part played in a particular situation by the user | `string` |   | `false`
 `sort-string` | To specify the family name or given name text to be used for national-language-specific sorting of the FN and N types | `string` |   | `false`
 `title` | To specify the position or job of the user | `string` |   | `false`
-
 
 
 #### Fetch summary of users in account

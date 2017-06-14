@@ -182,10 +182,10 @@ handle_config_req(Node, Id, <<"acl.conf">>, _Props) ->
             {'ok', Resp} = ecallmgr_fs_xml:not_found(),
             freeswitch:fetch_reply(Node, Id, 'configuration', iolist_to_binary(Resp))
     end;
+
 handle_config_req(Node, Id, <<"sofia.conf">>, _Props) ->
     kz_util:put_callid(Id),
-
-    case kz_term:is_true(ecallmgr_config:get(<<"sofia_conf">>)) of
+    case ecallmgr_config:is_true(<<"sofia_conf">>) of
         'false' ->
             lager:info("sofia conf disabled"),
             {'ok', Resp} = ecallmgr_fs_xml:not_found(),
@@ -204,6 +204,7 @@ handle_config_req(Node, Id, <<"sofia.conf">>, _Props) ->
                     freeswitch:fetch_reply(Node, Id, 'configuration', iolist_to_binary(Resp))
             end
     end;
+
 handle_config_req(Node, Id, <<"conference.conf">>, Data) ->
     kz_util:put_callid(Id),
     fetch_conference_config(Node, Id, kzd_freeswitch:event_name(Data), Data);
@@ -234,7 +235,7 @@ generate_acl_xml(SysconfResp) ->
 
 -spec default_sip_profiles(atom()) -> kz_json:object().
 default_sip_profiles(Node) ->
-    Gateways = case kz_term:is_true(ecallmgr_config:get(<<"process_gateways">>, 'false')) of
+    Gateways = case ecallmgr_config:is_true(<<"process_gateways">>) of
                    'false' -> kz_json:new();
                    'true' ->
                        SysconfResp = ecallmgr_config:fetch(<<"gateways">>, kz_json:new()),
