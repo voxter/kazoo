@@ -190,7 +190,7 @@ play_participants_count(Call, 1) ->
     kapps_call_command:prompt(<<"conf-single">>, Call),
     'ok';
 play_participants_count(Call, Count) when is_integer(Count)
-                                         andalso Count > 0 ->
+                                          andalso Count > 0 ->
     kapps_call_command:audio_macro([{'prompt', <<"conf-there_are">>}
                                    ,{'say', kz_term:to_binary(Count), <<"number">>}
                                    ,{'prompt', <<"conf-other_participants">>}
