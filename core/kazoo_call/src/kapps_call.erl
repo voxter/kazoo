@@ -1257,7 +1257,7 @@ set_custom_kvs_collection(Collection, Key, Value, Call) ->
     Collections = custom_kvs_collections(Call),
     OldCollection = custom_kvs_collection(Collection, Call),
     NewCollection = kz_json:set_value(Key, Value, OldCollection),
-    kapps_call:kvs_store(
+    ?MODULE:kvs_store(
         ?KVS_DB,
         kz_json:set_value(Collection, NewCollection, Collections),
         Call
@@ -1277,7 +1277,7 @@ custom_kvs_collection(Collection, Call) ->
 
 -spec custom_kvs_collections(call()) -> any().
 custom_kvs_collections(Call) ->
-    kapps_call:kvs_fetch(?KVS_DB, kz_json:new(), Call).
+    ?MODULE:kvs_fetch(?KVS_DB, kz_json:new(), Call).
 
 -spec set_custom_kvs_mode(binary(), call()) -> call().
 set_custom_kvs_mode(Mode, Call) ->
