@@ -1193,9 +1193,10 @@ maybe_list_conf(Number, Props) ->
     case conf_id_for_number(Number, props:get_value(<<"AccountId">>, Props)) of
         'undefined' -> 'undefined';
         ConfId ->
-            case conf_details(ConfId) of
-                {[]} -> 'undefined';
-                ConfDetails ->
+            ConfDetails = conf_details(ConfId),
+            case kz_json:is_empty(ConfDetails) of
+                'true' -> 'undefined';
+                'false' ->
                     participant_payloads(kz_json:get_value(<<"Participants">>, ConfDetails)
                                         ,kz_json:get_value(<<"Run-Time">>, ConfDetails)
                                         ,props:get_value(<<"ActionID">>, Props)
