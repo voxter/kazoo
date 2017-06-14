@@ -12,7 +12,8 @@
             "type": "string"
         },
         "var": {
-            "description": ""
+            "description": "Custom variable to check for media ID",
+            "type": "string"
         }
     },
     "type": "object"

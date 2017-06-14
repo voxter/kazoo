@@ -8,7 +8,8 @@
             "type": "string"
         },
         "var": {
-            "description": ""
+            "description": "Custom variable to check for callflow ID",
+            "type": "string"
         }
     },
     "type": "object"

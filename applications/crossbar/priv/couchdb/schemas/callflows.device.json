@@ -33,7 +33,8 @@
             "type": "integer"
         },
         "var": {
-            "description": ""
+            "description": "Custom variable to check for device ID",
+            "type": "string"
         }
     },
     "type": "object"

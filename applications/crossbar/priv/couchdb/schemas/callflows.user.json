@@ -47,7 +47,8 @@
             "type": "integer"
         },
         "var": {
-            "description": ""
+            "description": "Custom variable to check for user ID",
+            "type": "string"
         }
     },
     "type": "object"

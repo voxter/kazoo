@@ -31,7 +31,8 @@
             "type": "integer"
         },
         "ringback_timeout": {
-            "description": ""
+            "description": "How long, in milliseconds, before ringing back",
+            "type": "integer"
         },
         "slot": {
             "description": "Static slot number to use",
