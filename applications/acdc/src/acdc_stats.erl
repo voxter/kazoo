@@ -1337,7 +1337,8 @@ update_call_stat(Id, Updates, Props) ->
 
 -spec maybe_add_summary_stat(call_stat()) -> boolean().
 maybe_add_summary_stat(#call_stat{status=Status}=Stat)
-  when Status =:= <<"processed">> orelse Status =:= <<"abandoned">> ->
+  when Status =:= <<"processed">>
+      orelse Status =:= <<"abandoned">> ->
     ets:insert(call_summary_table_id(), call_stat_to_summary_stat(Stat));
 maybe_add_summary_stat(_) -> 'false'.
 
