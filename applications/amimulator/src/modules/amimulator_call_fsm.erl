@@ -319,8 +319,8 @@ answered_bridge(Call, OtherCall, State) ->
             lager:debug("bridge, updating answered id to ~p", [CallId]),
             case ami_sm:call(<<CallId/binary, "-queue;2">>) of
                 'undefined' ->
-                    FlipDir = amimulator_call:ccv(<<"Flip-Direction-On-Bridge">>, Call) =:= <<"true">> orelse
-                        amimulator_call:ccv(<<"Device-QuickCall">>, Call) =:= <<"true">>,
+                    FlipDir = amimulator_call:ccv(<<"Flip-Direction-On-Bridge">>, Call) =:= <<"true">>
+                        orelse amimulator_call:ccv(<<"Device-QuickCall">>, Call) =:= <<"true">>,
                     RevDirCall = case FlipDir of
                                      'true' ->
                                          Direction = case amimulator_call:direction(Call) of

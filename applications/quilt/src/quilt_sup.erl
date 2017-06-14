@@ -55,14 +55,14 @@ retrieve_member_fsm(CallId) ->
 stop_member_fsm(CallId) ->
     Name = erlang:iolist_to_binary([<<"quilt_member_fsm-">>, CallId]),
     case retrieve_member_fsm(CallId) of
-        {'ok', _FSM} -> 
+        {'ok', _FSM} ->
             lager:debug("terminating member FSM: ~p", [Name]),
             case supervisor:terminate_child(?MODULE, Name) of
                 'ok' -> lager:debug("member fsm terminated");
                 {'error', E} -> lager:debug("member fsm not terminated (~s)", [E])
             end,
             supervisor:delete_child(?MODULE, Name);
-        _ -> 
+        _ ->
             lager:debug("could not find member FSM to terminate: ~p", [Name])
     end.
 
@@ -97,11 +97,11 @@ retrieve_agent_fsm(AccountId, AgentId) ->
 stop_agent_fsm(AccountId, AgentId) ->
     Name = erlang:iolist_to_binary([<<"quilt_agent_fsm-">>, AccountId, <<"-">>, AgentId]),
     case retrieve_agent_fsm(AccountId, AgentId) of
-        {'ok', FSM} -> 
+        {'ok', FSM} ->
             lager:debug("terminating agent FSM: ~p", [Name]),
             _ = supervisor:terminate_child(?MODULE, FSM),
             supervisor:delete_child(?MODULE, Name);
-        _ -> 
+        _ ->
             lager:debug("could not find agent FSM to terminate: ~p", [Name])
     end.
 

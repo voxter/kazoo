@@ -64,7 +64,7 @@ handle_call({'get_patterns', EndpointId}, _, #state{endpoint_patterns=Ps}=State)
 handle_call(_Request, _From, State) ->
     {'noreply', State}.
 
--spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).  
+-spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast({'update', JObj, _Props}, #state{code_fsm_pid=FSM
                                             ,endpoint_numbers=Ns
                                             ,endpoint_patterns=Ps
