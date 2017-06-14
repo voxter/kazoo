@@ -34,7 +34,7 @@ Key | Description | Type | Default | Required
 `do_not_disturb.enabled` | Is do-not-disturb enabled for this device? | `boolean` |   | `false`
 `enabled` | Determines if the device is currently enabled | `boolean` | `true` | `false`
 `exclude_from_queues` | Do not ring this device when calling user/agent in queue | `boolean` | `false` | `false`
-`language` | The language for the device | `string` |   | `false`
+`language` | The language for the device | `string` | `en-us` | `false`
 `media` | The device media parameters | `object` | `{}` | `false`
 `media.audio` | The audio media parameters | `object` | `{}` | `false`
 `media.audio.codecs` | A list of audio codecs the device supports | `array(string('OPUS', 'CELT@32000h', 'G7221@32000h', 'G7221@16000h', 'G722', 'speex@32000h', 'speex@16000h', 'PCMU', 'PCMA', 'G729', 'GSM', 'CELT@48000h', 'CELT@64000h', 'G722_16', 'G722_32', 'CELT_48', 'CELT_64', 'Speex', 'speex'))` | `["PCMU"]` | `false`

@@ -37,6 +37,9 @@
             "default": false,
             "description": "Allow login if caller has a single mailbox",
             "type": "boolean"
+        },
+        "var": {
+            "description": ""
         }
     },
     "type": "object"

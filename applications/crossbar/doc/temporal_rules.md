@@ -15,7 +15,7 @@ Key | Description | Type | Default | Required
 `interval` | The recurrence interval for this rule | `integer` | `1` | `false`
 `month` | The recurrence month for this rule | `integer` |   | `false`
 `name` | A friendly name for the temporal rule | `string(1..128)` |   | `true`
-`ordinal` | The recurrence ordinal for this rule | `string('every', 'first', 'second', 'third', 'fourth', 'fifth', 'last')` |   | `false`
+`ordinal` | The recurrence ordinal for this rule | `string('range', 'every', 'first', 'second', 'third', 'fourth', 'fifth', 'last')` |   | `false`
 `start_date` | The date that any recurrence should be calculated as starting on | `integer` | `62586115200` | `false`
 `time_window_start` | Seconds from the start of a day to stop considering this rule valid | `integer` |   | `false`
 `wdays` | The recurrence weekdays for this rule | `array(string('monday', 'tuesday', 'wednesday', 'wensday', 'thursday', 'friday', 'saturday', 'sunday'))` |   | `false`

@@ -1,0 +1,13 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "system_config.amimulator",
+    "description": "Schema for amimulator system_config",
+    "properties": {
+        "port": {
+            "default": 5038,
+            "description": "amimulator port to provide AMI socket",
+            "type": "integer"
+        }
+    },
+    "type": "object"
+}

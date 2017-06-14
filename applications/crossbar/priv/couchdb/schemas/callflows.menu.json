@@ -10,6 +10,9 @@
         "interdigit_timeout": {
             "description": "Amount of time, in milliseconds, to wait between keypresses",
             "type": "integer"
+        },
+        "var": {
+            "description": ""
         }
     },
     "type": "object"

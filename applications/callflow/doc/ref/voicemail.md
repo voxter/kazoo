@@ -16,5 +16,6 @@ Key | Description | Type | Default | Required
 `interdigit_timeout` | The amount of time (in milliseconds) to wait for the caller to press the next digit after pressing a digit | `integer` | `2000` | `false`
 `max_message_length` | Max length of the message that caller can leave in voicemail box | `integer` | `500` | `false`
 `single_mailbox_login` | Allow login if caller has a single mailbox | `boolean` | `false` | `false`
+`var` |  |   |   | `false`
 
 

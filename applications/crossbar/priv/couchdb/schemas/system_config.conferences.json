@@ -71,6 +71,11 @@
                 }
             }
         },
+        "reuse_pronounced_name": {
+            "default": false,
+            "description": "conferences reuse pronounced name instead of re-recording when entering conference",
+            "type": "boolean"
+        },
         "review_name": {
             "default": false,
             "description": "conferences review name",

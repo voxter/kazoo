@@ -1,0 +1,12 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "system_config.number_manager.acrovoice",
+    "description": "Schema for number_manager.acrovoice system_config",
+    "properties": {
+        "api_key": {
+            "description": "number_manager.acrovoice API key to Acrovoice e911 portal",
+            "type": "string"
+        }
+    },
+    "type": "object"
+}

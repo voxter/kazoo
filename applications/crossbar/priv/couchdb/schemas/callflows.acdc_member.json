@@ -10,6 +10,9 @@
         "priority": {
             "description": "assign a priority to the caller",
             "type": "integer"
+        },
+        "var": {
+            "description": ""
         }
     },
     "type": "object"

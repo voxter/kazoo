@@ -960,6 +960,12 @@
             },
             "type": "object"
         },
+        "callflows.acdc_agent_availability": {
+            "description": "Validator for the acdc_agent_availability callflow's data object",
+            "properties": {},
+            "required": true,
+            "type": "object"
+        },
         "callflows.acdc_member": {
             "description": "Validator for the acdc_member callflow's data object",
             "properties": {
@@ -970,6 +976,9 @@
                 "priority": {
                     "description": "assign a priority to the caller",
                     "type": "integer"
+                },
+                "var": {
+                    "description": ""
                 }
             },
             "type": "object"
@@ -1037,6 +1046,12 @@
                     ]
                 }
             },
+            "type": "object"
+        },
+        "callflows.alert_info": {
+            "description": "Validator for the alert_info callflow's data object",
+            "properties": {},
+            "required": true,
             "type": "object"
         },
         "callflows.branch_bnumber": {
@@ -1118,6 +1133,9 @@
                 "id": {
                     "description": "The Callflow ID to branch to",
                     "type": "string"
+                },
+                "var": {
+                    "description": ""
                 }
             },
             "type": "object"
@@ -1332,6 +1350,9 @@
                     "default": 0,
                     "description": "Time, in seconds, to wait for device to bridge",
                     "type": "integer"
+                },
+                "var": {
+                    "description": ""
                 }
             },
             "type": "object"
@@ -1728,6 +1749,12 @@
             },
             "type": "object"
         },
+        "callflows.kvs_set": {
+            "description": "Validator for the kvs_set callflow's data object",
+            "properties": {},
+            "required": true,
+            "type": "object"
+        },
         "callflows.language": {
             "description": "Validator for the Language callflow element",
             "properties": {
@@ -1792,6 +1819,9 @@
                 "interdigit_timeout": {
                     "description": "Amount of time, in milliseconds, to wait between keypresses",
                     "type": "integer"
+                },
+                "var": {
+                    "description": ""
                 }
             },
             "type": "object"
@@ -2039,6 +2069,9 @@
                     "description": "How long, in milliseconds, before ringing back",
                     "type": "integer"
                 },
+                "ringback_timeout": {
+                    "description": ""
+                },
                 "slot": {
                     "description": "Static slot number to use",
                     "type": "string"
@@ -2084,6 +2117,9 @@
                     ],
                     "type": "string"
                 },
+                "var": {
+                    "description": ""
+                },
                 "voice_url": {
                     "description": "What URL to request the initial Pivot callflow",
                     "pattern": "^https?://",
@@ -2105,6 +2141,9 @@
                 "id": {
                     "description": "Media ID or URL of the media to play",
                     "type": "string"
+                },
+                "var": {
+                    "description": ""
                 }
             },
             "type": "object"
@@ -2503,6 +2542,12 @@
             ],
             "type": "object"
         },
+        "callflows.say": {
+            "description": "Validator for the say callflow's data object",
+            "properties": {},
+            "required": true,
+            "type": "object"
+        },
         "callflows.send_dtmf": {
             "description": "Validator for the Send DTMF callflow action",
             "properties": {
@@ -2733,8 +2778,17 @@
                     "default": 20,
                     "description": "Timeout, in seconds, to wait for answer",
                     "type": "integer"
+                },
+                "var": {
+                    "description": ""
                 }
             },
+            "type": "object"
+        },
+        "callflows.variable_route": {
+            "description": "Validator for the variable_route callflow's data object",
+            "properties": {},
+            "required": true,
             "type": "object"
         },
         "callflows.voicemail": {
@@ -2774,6 +2828,9 @@
                     "default": false,
                     "description": "Allow login if caller has a single mailbox",
                     "type": "boolean"
+                },
+                "var": {
+                    "description": ""
                 }
             },
             "type": "object"
@@ -3229,6 +3286,12 @@
                     "description": "does the conference require a moderator",
                     "type": "boolean"
                 },
+                "reuse_pronounced_name": {
+                    "description": "Force re-using previous name recordings for known users calling into the conference",
+                    "name": "Reuse Pronounced Name",
+                    "required": false,
+                    "type": "boolean"
+                },
                 "wait_for_moderator": {
                     "description": "should members wait for a moderator before joining the conference",
                     "type": "boolean"
@@ -3617,6 +3680,7 @@
                     "type": "boolean"
                 },
                 "language": {
+                    "default": "en-us",
                     "description": "The language for the device",
                     "type": "string"
                 },
@@ -3962,6 +4026,18 @@
                 "name": {
                     "description": "The name of the directory",
                     "minLength": 1,
+                    "type": "string"
+                },
+                "search_fields": {
+                    "default": "both",
+                    "description": "Which fields to search in when a caller enters characters",
+                    "enum": [
+                        "first_name",
+                        "last_name",
+                        "both"
+                    ],
+                    "name": "Search Fields",
+                    "required": false,
                     "type": "string"
                 },
                 "sort_by": {
@@ -6501,8 +6577,61 @@
                     "description": "Media ID (or appropriate media URI) of media to play when caller is about to be connected.",
                     "type": "string"
                 },
+                "announcements_timer": {
+                    "default": 30,
+                    "description": "Time between position and hold time announcements.",
+                    "minimum": 30,
+                    "name": "Announce Time (s)",
+                    "required": false,
+                    "type": "integer"
+                },
+                "breakout": {
+                    "name": "Breakout Menu Config",
+                    "properties": {
+                        "dtmf": {
+                            "description": "Digit that puts caller into breakout menu",
+                            "name": "Breakout Menu DTMF",
+                            "required": false,
+                            "type": "string"
+                        },
+                        "media": {
+                            "description": "Media overrides for breakout menu prompts",
+                            "name": "Breakout Menu Media",
+                            "properties": {
+                                "call_back_at": {
+                                    "description": "You will be called back at:",
+                                    "required": false,
+                                    "type": "string"
+                                },
+                                "callback_registered": {
+                                    "description": "Your callback has been registered. Goodbye!",
+                                    "required": false,
+                                    "type": "string"
+                                },
+                                "enter_callback_number": {
+                                    "description": "Enter a callback number, followed by the pound sign.",
+                                    "required": false,
+                                    "type": "string"
+                                },
+                                "number_correct": {
+                                    "description": "If this is correct, press 1. Otherwise, press 2.",
+                                    "required": false,
+                                    "type": "string"
+                                },
+                                "prompt": {
+                                    "description": "Press 1 to receive a callback.",
+                                    "required": false,
+                                    "type": "string"
+                                }
+                            },
+                            "required": false,
+                            "type": "object"
+                        }
+                    },
+                    "required": false,
+                    "type": "object"
+                },
                 "caller_exit_key": {
-                    "default": "#",
                     "description": "Key caller can press while on hold to exit the queue and continue in the callflow",
                     "enum": [
                         "1",
@@ -6536,6 +6665,13 @@
                     "description": "Allows a caller to enter a queue and wait when no agents are available",
                     "type": "boolean"
                 },
+                "holdtime_announcements_enabled": {
+                    "default": false,
+                    "description": "Enable periodic average hold time announcements to caller.",
+                    "name": "Hold Time Announcements Enabled",
+                    "required": false,
+                    "type": "boolean"
+                },
                 "max_priority": {
                     "description": "Maximum possible priority level queue will support. Can not be redefined for existing queue.",
                     "maximum": 255,
@@ -6556,6 +6692,20 @@
                     "maxLength": 128,
                     "minLength": 1,
                     "type": "string"
+                },
+                "position_announcements_enabled": {
+                    "default": false,
+                    "description": "Enable periodic position announcements to caller.",
+                    "name": "Position Announcements Enabled",
+                    "required": false,
+                    "type": "boolean"
+                },
+                "preserve_metadata": {
+                    "default": false,
+                    "description": "Keep metadata about call recording so it is retrievable by media API",
+                    "name": "Preserve Call Recording Metadata",
+                    "required": false,
+                    "type": "boolean"
                 },
                 "record_caller": {
                     "default": false,
@@ -7656,6 +7806,17 @@
             },
             "type": "object"
         },
+        "system_config.amimulator": {
+            "description": "Schema for amimulator system_config",
+            "properties": {
+                "port": {
+                    "default": 5038,
+                    "description": "amimulator port to provide AMI socket",
+                    "type": "integer"
+                }
+            },
+            "type": "object"
+        },
         "system_config.ananke": {
             "description": "Schema for ananke system_config",
             "properties": {
@@ -8120,6 +8281,11 @@
                     "description": "callflow.park default callback timeout",
                     "type": "integer"
                 },
+                "default_ringback_time": {
+                    "default": 120000,
+                    "description": "callflow.park default ringback time",
+                    "type": "integer"
+                },
                 "default_ringback_timeout": {
                     "default": 120000,
                     "description": "callflow.park default ringback timeout",
@@ -8320,6 +8486,11 @@
                             "type": "object"
                         }
                     }
+                },
+                "reuse_pronounced_name": {
+                    "default": false,
+                    "description": "conferences reuse pronounced name instead of re-recording when entering conference",
+                    "type": "boolean"
                 },
                 "review_name": {
                     "default": false,
@@ -11076,6 +11247,16 @@
             },
             "type": "object"
         },
+        "system_config.number_manager.acrovoice": {
+            "description": "Schema for number_manager.acrovoice system_config",
+            "properties": {
+                "api_key": {
+                    "description": "number_manager.acrovoice API key to Acrovoice e911 portal",
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
         "system_config.number_manager.bandwidth": {
             "description": "Schema for number_manager.bandwidth system_config",
             "properties": {
@@ -12447,6 +12628,7 @@
                 "ordinal": {
                     "description": "The recurrence ordinal for this rule",
                     "enum": [
+                        "range",
                         "every",
                         "first",
                         "second",
@@ -13352,6 +13534,29 @@
                     "default": false,
                     "description": "Delete the voicemail after the notification has been sent (Voicemail is not stored in the database if this option is selected)",
                     "type": "boolean"
+                },
+                "hunt": {
+                    "default": true,
+                    "description": "Determines if the callers can dial internal extensions directly instead of leaving a message",
+                    "name": "Hunt",
+                    "required": false,
+                    "type": "boolean"
+                },
+                "hunt_allow": {
+                    "description": "A regular expression that an extension the caller dialed must match to be allowed to continue",
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "name": "Hunt Allow",
+                    "required": false,
+                    "type": "string"
+                },
+                "hunt_deny": {
+                    "description": "A regular expression that if matched does not allow the caller to dial directly",
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "name": "Hunt Deny",
+                    "required": false,
+                    "type": "string"
                 },
                 "is_setup": {
                     "default": false,
@@ -14494,6 +14699,23 @@
                 }
             }
         },
+        "/accounts/{ACCOUNT_ID}/agents/stats_summary": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
         "/accounts/{ACCOUNT_ID}/agents/status": {
             "get": {
                 "parameters": [
@@ -14588,6 +14810,26 @@
                     }
                 }
             },
+            "post": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/USER_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/agents/{USER_ID}/restart": {
             "post": {
                 "parameters": [
                     {
@@ -16735,6 +16977,26 @@
                 }
             }
         },
+        "/accounts/{ACCOUNT_ID}/devices/owned_by/{USER_ID}": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/USER_ID"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
         "/accounts/{ACCOUNT_ID}/devices/status": {
             "get": {
                 "parameters": [
@@ -17049,6 +17311,23 @@
                 }
             },
             "put": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/faxboxes/default_fax_smtp_domain": {
+            "get": {
                 "parameters": [
                     {
                         "$ref": "#/parameters/auth_token_header"
@@ -20600,6 +20879,23 @@
             }
         },
         "/accounts/{ACCOUNT_ID}/queues/stats": {
+            "get": {
+                "parameters": [
+                    {
+                        "$ref": "#/parameters/auth_token_header"
+                    },
+                    {
+                        "$ref": "#/parameters/ACCOUNT_ID"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
+        "/accounts/{ACCOUNT_ID}/queues/stats_summary": {
             "get": {
                 "parameters": [
                     {

@@ -33,6 +33,9 @@
             ],
             "type": "string"
         },
+        "var": {
+            "description": ""
+        },
         "voice_url": {
             "description": "What URL to request the initial Pivot callflow",
             "pattern": "^https?://",

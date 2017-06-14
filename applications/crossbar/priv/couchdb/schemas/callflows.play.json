@@ -10,6 +10,9 @@
         "id": {
             "description": "Media ID or URL of the media to play",
             "type": "string"
+        },
+        "var": {
+            "description": ""
         }
     },
     "type": "object"

@@ -76,13 +76,13 @@ allowed_methods() ->
 
 allowed_methods(?STATUS_PATH_TOKEN) ->
     [?HTTP_GET];
-allowed_methods(_) ->
+allowed_methods(_DeviceId) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE].
 
-allowed_methods(?OWNED_BY_PATH_TOKEN, _) ->
+allowed_methods(?OWNED_BY_PATH_TOKEN, _UserId) ->
     [?HTTP_GET].
 
-allowed_methods(_, ?QUICKCALL_PATH_TOKEN, _) ->
+allowed_methods(_DeviceId, ?QUICKCALL_PATH_TOKEN, _PhoneNumber) ->
     [?HTTP_GET].
 
 %%--------------------------------------------------------------------

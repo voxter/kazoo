@@ -44,6 +44,7 @@ Key | Description | Type | Default | Required
 `play_welcome` | Whether to play the welcome prompt | `boolean` |   | `false`
 `profile` | The XML profile name used to configure the conference | `string` |   | `false`
 `require_moderator` | does the conference require a moderator | `boolean` |   | `false`
+`reuse_pronounced_name` | Force re-using previous name recordings for known users calling into the conference | `boolean` |   | `false`
 `wait_for_moderator` | should members wait for a moderator before joining the conference | `boolean` |   | `false`
 
 

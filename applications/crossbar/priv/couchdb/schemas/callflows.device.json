@@ -31,6 +31,9 @@
             "default": 0,
             "description": "Time, in seconds, to wait for device to bridge",
             "type": "integer"
+        },
+        "var": {
+            "description": ""
         }
     },
     "type": "object"
