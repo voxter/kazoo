@@ -96,7 +96,7 @@
 
                ,notifications :: api_object()
 
-               ,callback_details :: {ne_binary(), ne_binary()}
+               ,callback_details :: {ne_binary(), ne_binary()} | 'undefined'
                }).
 -type state() :: #state{}.
 

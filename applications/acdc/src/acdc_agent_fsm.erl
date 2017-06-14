@@ -114,8 +114,8 @@
                ,wrapup_timeout = 0 :: integer() % optionally set on win
                ,wrapup_ref :: api_reference()
 
-               ,sync_ref :: reference()
-               ,pause_ref :: reference() | 'infinity'
+               ,sync_ref :: api_reference()
+               ,pause_ref :: api_reference() | 'infinity'
                ,pause_alias :: api_binary()
 
                ,member_call :: kapps_call:call()

@@ -22,7 +22,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {table_id :: integer()}).
+-record(state, {table_id :: ets:tid()}).
 -type state() :: #state{}.
 
 %%%===================================================================
