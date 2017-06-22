@@ -120,8 +120,7 @@ handle(Data, Call) ->
                               )
     of
         {'ok', Users} ->
-            State = #directory{
-                       sort_by = get_sort_by(kz_json:get_value(<<"sort_by">>, DirJObj, <<"last_name">>))
+            State = #directory{sort_by = get_sort_by(kz_json:get_value(<<"sort_by">>, DirJObj, <<"last_name">>))
                               ,search_fields = get_search_fields(kz_json:get_value(<<"search_fields">>, DirJObj, <<"both">>))
                               ,min_dtmf = kz_json:get_integer_value(<<"min_dtmf">>, DirJObj, 3)
                               ,max_dtmf = kz_json:get_integer_value(<<"max_dtmf">>, DirJObj, 0)
