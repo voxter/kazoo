@@ -66,14 +66,23 @@ stop_member_fsm(CallId) ->
             lager:debug("could not find member FSM to terminate: ~p", [Name])
     end.
 
-%% 
+%%
 %% Queue agent fsm
 %%
 
 -spec start_agent_fsm(ne_binary(), ne_binary()) -> sup_startchild_ret().
 start_agent_fsm(AccountId, AgentId) ->
     FSM = erlang:iolist_to_binary([<<"quilt_agent_fsm-">>, AccountId, <<"-">>, AgentId]),
-    supervisor:start_child(?MODULE, ?WORKER_NAME_ARGS_TYPE(FSM, 'quilt_agent_fsm', [#state{member_call_id='undefined'}], 'transient')).
+    supervisor:start_child(?MODULE
+                          ,?WORKER_NAME_ARGS_TYPE(FSM
+                                                 ,'quilt_agent_fsm'
+                                                 ,[#state{account_id=AccountId
+                                                         ,agent_id=AgentId
+                                                         ,member_call_id='undefined'
+                                                         }
+                                                  ]
+                                                 ,'transient'
+                                                 )).
 
 -spec retrieve_agent_fsm(ne_binary(), ne_binary()) ->
                                 {'ok', pid()} | {'error', 'not_found'}.
