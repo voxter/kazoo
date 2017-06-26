@@ -15,7 +15,6 @@
 -export([ccv/2, delete_ccv/2]).
 -export([control_queue/1, set_control_queue/2]).
 -export([acdc_queue_id/1, set_acdc_queue_id/2]).
--export([agent_id/1, set_agent_id/2]).
 -export([username/1]).
 -export([to_user/1]).
 -export([from_user/1]).
@@ -314,14 +313,6 @@ acdc_queue_id(#call{acdc_queue_id=QueueId}) ->
 -spec set_acdc_queue_id(api_binary(), call()) -> call().
 set_acdc_queue_id(QueueId, Call) ->
     Call#call{acdc_queue_id=QueueId}.
-
--spec agent_id(call()) -> api_binary().
-agent_id(#call{agent_id=AgentId}) ->
-    AgentId.
-
--spec set_agent_id(api_binary(), call()) -> call().
-set_agent_id(AgentId, Call) ->
-    Call#call{agent_id=AgentId}.
 
 -spec username(call()) -> api_binary().
 username(#call{username=Username}) ->
