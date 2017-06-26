@@ -525,8 +525,8 @@ set_other_id(#call{direction=Direction}=Call) ->
 set_other_id(<<"inbound">>, #call{callee_id_name=CIDName
                                  ,callee_id_number=CIDNumber
                                  }=Call) when (CIDName =:= 'undefined') or (CIDNumber =:= 'undefined') ->
-    Updaters = [fun(Call2) -> set_callee_id_name(amimulator_call:to_user(Call2), Call2) end
-               ,fun(Call2) -> set_callee_id_number(amimulator_call:to_user(Call2), Call2) end
+    Updaters = [fun(Call2) -> set_callee_id_name(?MODULE:to_user(Call2), Call2) end
+               ,fun(Call2) -> set_callee_id_number(?MODULE:to_user(Call2), Call2) end
                ],
     lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters);
 set_other_id(<<"inbound">>, Call) ->
@@ -534,8 +534,8 @@ set_other_id(<<"inbound">>, Call) ->
 set_other_id(<<"outbound">>, #call{caller_id_name=CIDName
                                   ,caller_id_number=CIDNumber
                                   }=Call) when (CIDName =:= 'undefined') or (CIDNumber =:= 'undefined') ->
-    Updaters = [fun(Call2) -> set_caller_id_name(amimulator_call:from_user(Call2), Call2) end
-               ,fun(Call2) -> set_caller_id_number(amimulator_call:from_user(Call2), Call2) end
+    Updaters = [fun(Call2) -> set_caller_id_name(?MODULE:from_user(Call2), Call2) end
+               ,fun(Call2) -> set_caller_id_number(?MODULE:from_user(Call2), Call2) end
                ],
     lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters);
 set_other_id(<<"outbound">>, Call) ->
