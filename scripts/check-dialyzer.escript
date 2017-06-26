@@ -179,28 +179,28 @@ do_scan(PLT, Path) ->
     io:format("scanning ~p\n", [Path]),
     dialyzer:run([ {'init_plt', PLT}
                  , {'analysis_type', 'succ_typings'}
-                 %% , {'files_rec', [Path]}
+                   %% , {'files_rec', [Path]}
                  , {'files', [Path]}
                  , {'warnings', [ 'no_undefined_callbacks'
 
-                              , 'unmatched_returns'
-                              , 'error_handling'  %% Warn about functions that only return with exception
-                              , 'race_conditions'
-                              %% , 'overspecs'  %% "… is a subtype of any()"
-                              , 'underspecs'    %% Has issues for < R17
-                              %% , 'specdiffs'  %% "… is a subtype of any()"
+                                , 'unmatched_returns'
+                                , 'error_handling'  %% Warn about functions that only return with exception
+                                , 'race_conditions'
+                                  %% , 'overspecs'  %% "… is a subtype of any()"
+                                , 'underspecs'    %% Has issues for < R17
+                                  %% , 'specdiffs'  %% "… is a subtype of any()"
 
-                              , 'no_return'  %% Suppress warnings for functions that will never return a value
-                              %% , 'no_unused'
-                              %% , 'no_improper_lists'
-                              %% , 'no_fun_app'
-                              %% , 'no_match'
-                              %% , 'no_opaque'
-                              %% , 'no_fail_call'
-                              %% , 'no_contracts'
-                              %% , 'no_behaviours'
+                                , 'no_return'  %% Suppress warnings for functions that will never return a value
+                                  %% , 'no_unused'
+                                  %% , 'no_improper_lists'
+                                  %% , 'no_fun_app'
+                                  %% , 'no_match'
+                                  %% , 'no_opaque'
+                                  %% , 'no_fail_call'
+                                  %% , 'no_contracts'
+                                  %% , 'no_behaviours'
 
-                              ]}
+                                ]}
                  ]).
 
 usage() ->
