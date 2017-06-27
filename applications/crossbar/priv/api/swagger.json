@@ -11423,6 +11423,9 @@
         "system_config.number_manager.telnyx": {
             "description": "Schema for number_manager.telnyx system_config",
             "properties": {
+                "connection_id": {
+                    "description": "number_manager.telnyx connection id that new numbers should be associated with"
+                },
                 "debug": {
                     "default": false,
                     "description": "number_manager.telnyx debug",
