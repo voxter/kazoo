@@ -157,7 +157,7 @@ should_lookup_cnam() -> 'true'.
 -spec set_connection_id(list()) -> 'ok'.
 set_connection_id(Num) ->
     Req = kz_json:from_list([{<<"connection_id">>, binary_to_integer(kapps_config:get(?MOD_CONFIG_CAT, <<"connection_id">>))}
-                             ]),
+                            ]),
     lager:debug("setting connection id: ~p", [Req]),
     Rep = knm_telnyx_util:req('put', ["numbers", Num], Req),
     lager:debug("associating number ~p with connection id ~p: ~p", [Num, Req, kz_json:encode(Rep)]),

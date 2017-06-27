@@ -558,6 +558,7 @@
     "number_manager.simwood.auth_username": "number_manager.simwood auth username",
     "number_manager.simwood.numbers_api_url": "number_manager.simwood numbers api url",
     "number_manager.simwood.simwood_account_id": "number_manager.simwood simwood account id",
+    "number_manager.telnyx.connection_id": "number_manager.telnyx connection id that new numbers should be associated with",
     "number_manager.telnyx.debug": "number_manager.telnyx debug",
     "number_manager.telnyx.enable_provisioning": "number_manager.telnyx enable provisioning",
     "number_manager.telnyx.monthly_recurring_cost": "number_manager.telnyx monthly recurring cost",
