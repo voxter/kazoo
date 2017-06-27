@@ -419,7 +419,8 @@ query_cur_statuses(RespQ, MsgId, Match) ->
             kapi_acdc_stats:publish_agent_cur_status_err(RespQ, Resp);
         Stats ->
             QueryResults = lists:foldl(fun query_status_fold/2, kz_json:new(), Stats),
-            Results = kz_json:map(fun(AgentId, {[{_Timestamp, StatusJObj}]}) ->
+            Results = kz_json:map(fun(AgentId, QueryResult) ->
+                                          StatusJObj = hd(kz_json:values(QueryResult)),
                                           {AgentId, StatusJObj}
                                   end, QueryResults),
             Resp = [{<<"Agents">>, Results}

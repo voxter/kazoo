@@ -3,6 +3,5 @@
     "_id": "callflows.say",
     "description": "Validator for the say callflow's data object",
     "properties": {},
-    "required": true,
     "type": "object"
 }

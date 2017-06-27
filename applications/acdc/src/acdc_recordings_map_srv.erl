@@ -22,7 +22,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {table_id :: integer()}).
+-record(state, {table_id :: ets:tid()}).
 -type state() :: #state{}.
 
 %%%===================================================================
@@ -88,7 +88,7 @@ handle_call({'register', Call, RecordingJObj}, _From, #state{table_id=TabId}=Sta
             ets:insert(TabId, {kapps_call:call_id(Call), Pid}),
             Pid;
         [{_, Pid}] ->
-            kz_media_recording:update_control_queue(Pid, kapps_call:control_queue(Call)),
+            kzc_recording:update_control_queue(Pid, kapps_call:control_queue(Call)),
             Pid
     end,
     {'reply', Pid, State};

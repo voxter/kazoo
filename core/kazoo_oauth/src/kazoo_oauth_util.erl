@@ -286,7 +286,8 @@ maybe_oauth_headers(AccountId, URL, Params) ->
             AccessSecret = kz_json:get_value(<<"pvt_oauth_access_secret">>, AccountDoc),
             Provider = kz_json:get_value(<<"pvt_oauth_provider">>, AccountDoc),
 
-            case ConsumerKey =/= 'undefined' andalso Provider =/= 'undefined' of
+            case ConsumerKey =/= 'undefined'
+                andalso Provider =/= 'undefined' of
                 'true' -> [oauth_header(URL, Params, ConsumerKey, ConsumerSecret, AccessToken, AccessSecret)];
                 'false' -> []
             end;

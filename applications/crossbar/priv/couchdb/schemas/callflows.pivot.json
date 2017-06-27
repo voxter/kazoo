@@ -33,6 +33,10 @@
             ],
             "type": "string"
         },
+        "var": {
+            "description": "Custom variable to check for pivot URL",
+            "type": "string"
+        },
         "voice_url": {
             "description": "What URL to request the initial Pivot callflow",
             "pattern": "^https?://",

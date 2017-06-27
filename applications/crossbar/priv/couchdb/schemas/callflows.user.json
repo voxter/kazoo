@@ -45,6 +45,10 @@
             "default": 20,
             "description": "Timeout, in seconds, to wait for answer",
             "type": "integer"
+        },
+        "var": {
+            "description": "Custom variable to check for user ID",
+            "type": "string"
         }
     },
     "type": "object"

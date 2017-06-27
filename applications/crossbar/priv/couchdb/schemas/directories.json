@@ -33,8 +33,6 @@
                 "last_name",
                 "both"
             ],
-            "name": "Search Fields",
-            "required": false,
             "type": "string"
         },
         "sort_by": {

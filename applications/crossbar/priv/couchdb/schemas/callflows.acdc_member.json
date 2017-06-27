@@ -10,6 +10,10 @@
         "priority": {
             "description": "assign a priority to the caller",
             "type": "integer"
+        },
+        "var": {
+            "description": "Custom variable to check for queue ID",
+            "type": "string"
         }
     },
     "type": "object"

@@ -159,8 +159,6 @@
         },
         "reuse_pronounced_name": {
             "description": "Force re-using previous name recordings for known users calling into the conference",
-            "name": "Reuse Pronounced Name",
-            "required": false,
             "type": "boolean"
         },
         "wait_for_moderator": {

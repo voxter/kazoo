@@ -171,8 +171,8 @@ process_message(#member_call{call=Call
                             }=MC, BreakoutState, Timeout, Start, Wait, JObj, {<<"call_event">>,<<"CHANNEL_EXECUTE_COMPLETE">>}) ->
     case kz_json:get_first_defined([<<"Application-Name">>
                                    ,[<<"Request">>, <<"Application-Name">>]
-                                   ], JObj) =:= <<"noop">> andalso
-        kz_json:get_value(<<"Application-Response">>, JObj) =:= NoopId of
+                                   ], JObj) =:= <<"noop">>
+        andalso kz_json:get_value(<<"Application-Response">>, JObj) =:= NoopId of
         'true' -> cf_exe:amqp_send(Call, MemberCall, fun kapi_acdc_queue:publish_member_call/1);
         'false' -> 'ok'
     end,

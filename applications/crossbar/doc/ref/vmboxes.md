@@ -12,6 +12,9 @@ Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `check_if_owner` | Determines if when the user calls their own voicemail they should be prompted to sign in | `boolean` | `true` | `false`
 `delete_after_notify` | Delete the voicemail after the notification has been sent (Voicemail is not stored in the database if this option is selected) | `boolean` | `false` | `false`
+`hunt` | Determines if the callers can dial internal extensions directly instead of leaving a message | `boolean` | `true` | `false`
+`hunt_allow` | A regular expression that an extension the caller dialed must match to be allowed to continue | `string(1..256)` |   | `false`
+`hunt_deny` | A regular expression that if matched does not allow the caller to dial directly | `string(1..256)` |   | `false`
 `is_setup` | Determines if the user has completed the initial configuration | `boolean` | `false` | `false`
 `mailbox` | The voicemail box number | `string(1..30)` |   | `true`
 `media` | The media (prompt) parameters | `object` | `{}` | `false`

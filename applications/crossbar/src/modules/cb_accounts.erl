@@ -148,7 +148,8 @@ authorize(Context) ->
 authorize(Context, ?HTTP_GET, [{_, [AccountId, ?SIBLINGS]}|_]) ->
     IsAdmin = cb_modules_util:is_admin(Context),
     IsParent = cb_modules_util:is_parent_account(Context, AccountId),
-    case IsAdmin andalso IsParent of
+    case IsAdmin
+        andalso IsParent of
         'true' -> 'true';
         'false' -> 'halt'
     end;

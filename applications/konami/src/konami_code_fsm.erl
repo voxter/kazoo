@@ -610,7 +610,8 @@ maybe_other_leg_answered(#state{b_endpoint_ids=EndpointIds
                         ,EndpointId
                         ,OtherLegCallId
                         ) ->
-    case lists:member(OtherLegCallId, OtherLegCandidates) andalso lists:member(EndpointId, EndpointIds) of
+    case lists:member(OtherLegCallId, OtherLegCandidates)
+        andalso lists:member(EndpointId, EndpointIds) of
         'true' ->
             lager:debug("used candidate other leg ~s because of endpoint id (~s) matchup", [OtherLegCallId, EndpointId]),
             endpoint_answered(State, OtherLegCallId, EndpointId);

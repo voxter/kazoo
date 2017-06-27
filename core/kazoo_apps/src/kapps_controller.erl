@@ -106,7 +106,8 @@ get_running_apps() ->
 get_running_apps(IncludeHidden) ->
     [AppData
      || {App, _Desc, _Vsn}=AppData <- application:which_applications(),
-        IncludeHidden orelse is_kapp(App)
+        IncludeHidden
+            orelse is_kapp(App)
     ].
 
 -spec running_apps_list() -> atoms() | string().

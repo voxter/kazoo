@@ -170,7 +170,7 @@ do_update_e911(E911, AccountId, NPAN, Stamp, Signature) ->
                  | address_fields(E911)
                 ],
         Headers = [{"Content-Type", "application/x-www-form-urlencoded"}],
-        Body = iolist_to_binary(props:to_querystring(Props)),
+        Body = iolist_to_binary(kz_http_util:props_to_querystring(Props)),
         case kz_http:post(?RESELLER_URL(AccountId), Headers, Body) of
             {'ok', Code, _, RespData} -> handle_update_resp(Code, RespData);
             {'error', _}=E -> E
@@ -274,7 +274,7 @@ do_remove_number(AccountId, NPAN, Stamp, Signature) ->
             ,{<<"signature">>, Signature}
             ],
     Headers = [{"Content-Type", "application/x-www-form-urlencoded"}],
-    Body = iolist_to_binary(props:to_querystring(Props)),
+    Body = iolist_to_binary(kz_http_util:props_to_querystring(Props)),
     case kz_http:post(?RESELLER_URL(AccountId), Headers, Body) of
         {'ok', Code, _, RespData} -> handle_delete_resp(Code, RespData);
         {'error', _}=E -> E

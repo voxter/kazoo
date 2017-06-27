@@ -37,6 +37,10 @@
             "default": false,
             "description": "Allow login if caller has a single mailbox",
             "type": "boolean"
+        },
+        "var": {
+            "description": "Custom variable to check for vmbox ID",
+            "type": "string"
         }
     },
     "type": "object"

@@ -96,7 +96,7 @@
 
                ,notifications :: api_object()
 
-               ,callback_details :: {ne_binary(), ne_binary()}
+               ,callback_details :: {ne_binary(), ne_binary()} | 'undefined'
                }).
 -type state() :: #state{}.
 
@@ -328,8 +328,8 @@ connect_req({'member_call_cancel', JObj}, #state{queue_proc=Srv
                                                 ,caller_exit_key=DTMF
                                                 }=State) ->
     CallId = kapps_call:call_id(Call),
-    case kz_json:get_value(<<"Reason">>, JObj) =:= <<"dtmf_exit">> andalso
-        kz_json:get_value(<<"Call-ID">>, JObj) =:= CallId of
+    case kz_json:get_value(<<"Reason">>, JObj) =:= <<"dtmf_exit">>
+        andalso kz_json:get_value(<<"Call-ID">>, JObj) =:= CallId of
         'true' ->
             lager:debug("member pressed the exit key (~s)", [DTMF]),
 
@@ -477,8 +477,8 @@ connecting({'member_call_cancel', JObj}, #state{queue_proc=Srv
                                                ,caller_exit_key=DTMF
                                                }=State) ->
     CallId = kapps_call:call_id(Call),
-    case kz_json:get_value(<<"Reason">>, JObj) =:= <<"dtmf_exit">> andalso
-        kz_json:get_value(<<"Call-ID">>, JObj) =:= CallId of
+    case kz_json:get_value(<<"Reason">>, JObj) =:= <<"dtmf_exit">>
+        andalso kz_json:get_value(<<"Call-ID">>, JObj) =:= CallId of
         'true' ->
             lager:debug("member pressed the exit key (~s)", [DTMF]),
 

@@ -66,3 +66,13 @@ curl -v -X DELETE \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxboxes/{FAXBOX_ID}
 ```
 
+#### Fetch
+
+> GET /v2/accounts/{ACCOUNT_ID}/faxboxes/default_fax_smtp_domain
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/faxboxes/default_fax_smtp_domain
+```
+

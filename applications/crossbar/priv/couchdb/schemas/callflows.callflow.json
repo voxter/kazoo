@@ -6,6 +6,10 @@
         "id": {
             "description": "The Callflow ID to branch to",
             "type": "string"
+        },
+        "var": {
+            "description": "Custom variable to check for callflow ID",
+            "type": "string"
         }
     },
     "type": "object"

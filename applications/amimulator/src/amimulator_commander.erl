@@ -1193,9 +1193,10 @@ maybe_list_conf(Number, Props) ->
     case conf_id_for_number(Number, props:get_value(<<"AccountId">>, Props)) of
         'undefined' -> 'undefined';
         ConfId ->
-            case conf_details(ConfId) of
-                {[]} -> 'undefined';
-                ConfDetails ->
+            ConfDetails = conf_details(ConfId),
+            case kz_json:is_empty(ConfDetails) of
+                'true' -> 'undefined';
+                'false' ->
                     participant_payloads(kz_json:get_value(<<"Participants">>, ConfDetails)
                                         ,kz_json:get_value(<<"Run-Time">>, ConfDetails)
                                         ,props:get_value(<<"ActionID">>, Props)
@@ -1249,12 +1250,9 @@ kick_conf(Number, ParticipantId, Props) ->
     case conf_id_for_number(Number, props:get_value(<<"AccountId">>, Props)) of
         'undefined' -> 'ok';
         ConfId ->
-            ConfDetails = conf_details(ConfId),
-            CallId = participant_call_id(ParticipantId, kz_json:get_value(<<"Participants">>, ConfDetails)),
-            Payload = amimulator_util:maybe_leave_conference(CallId),
             Conference = kapps_conference:set_id(ConfId, kapps_conference:new()),
             kapps_conference_command:kick(ParticipantId, Conference),
-            Payload
+            'undefined'
     end.
 
 conf_id_for_number(Number, AccountId) ->

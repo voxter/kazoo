@@ -15,7 +15,6 @@
 -export([ccv/2, delete_ccv/2]).
 -export([control_queue/1, set_control_queue/2]).
 -export([acdc_queue_id/1, set_acdc_queue_id/2]).
--export([agent_id/1, set_agent_id/2]).
 -export([username/1]).
 -export([to_user/1]).
 -export([from_user/1]).
@@ -315,14 +314,6 @@ acdc_queue_id(#call{acdc_queue_id=QueueId}) ->
 set_acdc_queue_id(QueueId, Call) ->
     Call#call{acdc_queue_id=QueueId}.
 
--spec agent_id(call()) -> api_binary().
-agent_id(#call{agent_id=AgentId}) ->
-    AgentId.
-
--spec set_agent_id(api_binary(), call()) -> call().
-set_agent_id(AgentId, Call) ->
-    Call#call{agent_id=AgentId}.
-
 -spec username(call()) -> api_binary().
 username(#call{username=Username}) ->
     Username.
@@ -525,8 +516,8 @@ set_other_id(#call{direction=Direction}=Call) ->
 set_other_id(<<"inbound">>, #call{callee_id_name=CIDName
                                  ,callee_id_number=CIDNumber
                                  }=Call) when (CIDName =:= 'undefined') or (CIDNumber =:= 'undefined') ->
-    Updaters = [fun(Call2) -> set_callee_id_name(amimulator_call:to_user(Call2), Call2) end
-               ,fun(Call2) -> set_callee_id_number(amimulator_call:to_user(Call2), Call2) end
+    Updaters = [fun(Call2) -> set_callee_id_name(?MODULE:to_user(Call2), Call2) end
+               ,fun(Call2) -> set_callee_id_number(?MODULE:to_user(Call2), Call2) end
                ],
     lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters);
 set_other_id(<<"inbound">>, Call) ->
@@ -534,8 +525,8 @@ set_other_id(<<"inbound">>, Call) ->
 set_other_id(<<"outbound">>, #call{caller_id_name=CIDName
                                   ,caller_id_number=CIDNumber
                                   }=Call) when (CIDName =:= 'undefined') or (CIDNumber =:= 'undefined') ->
-    Updaters = [fun(Call2) -> set_caller_id_name(amimulator_call:from_user(Call2), Call2) end
-               ,fun(Call2) -> set_caller_id_number(amimulator_call:from_user(Call2), Call2) end
+    Updaters = [fun(Call2) -> set_caller_id_name(?MODULE:from_user(Call2), Call2) end
+               ,fun(Call2) -> set_caller_id_number(?MODULE:from_user(Call2), Call2) end
                ],
     lists:foldl(fun(Updater, Call2) -> Updater(Call2) end, Call, Updaters);
 set_other_id(<<"outbound">>, Call) ->
