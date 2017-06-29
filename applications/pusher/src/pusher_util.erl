@@ -32,13 +32,16 @@
 %%  ,binary() | 'PBES2-params'
 %% }.
 
+-type keycert() :: {'undefined' |
+                    {'PrivateKeyInfo' | 'RSAPrivateKey', binary()}
+                   ,api_binary()
+                   }.
+-export_type([keycert/0]).
+
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
 
--type keycert() :: {'undefined' | {'PrivateKeyInfo', binary()}
-                   ,api_binary()
-                   }.
 -spec binary_to_keycert(binary()) -> keycert().
 binary_to_keycert(Binary) ->
     RSAEntries = public_key:pem_decode(Binary),

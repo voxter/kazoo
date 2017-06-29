@@ -2,8 +2,6 @@
 -behaviour(gen_server).
 
 -include("pusher.hrl").
--include_lib("apns/include/apns.hrl").
--include_lib("apns/include/localized.hrl").
 
 -define(SERVER, ?MODULE).
 
@@ -87,7 +85,8 @@ maybe_load_apns(App, _, 'undefined') ->
     'undefined';
 maybe_load_apns(App, ETS, CertBin) ->
     {Key, Cert} = pusher_util:binary_to_keycert(CertBin),
-    case apns:connect(#apns_connection{cert=Cert, key=Key}) of
+    Connection = apns_connection:default_connection('cert', 'undefined'),
+    case apns:connect(set_key_and_cert({Key, Cert}, Connection)) of
         {'ok', Pid} ->
             ets:insert(ETS, {App, Pid}),
             Pid;
@@ -98,3 +97,7 @@ maybe_load_apns(App, ETS, CertBin) ->
             lager:error("Error loading apns ~p", [Reason]),
             'undefined'
     end.
+
+-spec set_key_and_cert(pusher_util:keycert(), map()) -> map().
+set_key_and_cert({Key, Cert}, #{}=Connection) ->
+    Connection#{}
