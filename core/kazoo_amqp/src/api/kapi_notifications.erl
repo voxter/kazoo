@@ -1359,7 +1359,8 @@ bind_q(Queue, Props) ->
 
 -spec bind_to_q(ne_binary(), restrictions() | 'undefined', kz_proplist()) -> 'ok'.
 bind_to_q(Q, 'undefined', _) ->
-    'ok' = amqp_util:bind_q_to_notifications(Q, <<"notifications.*.*">>);
+    'ok' = amqp_util:bind_q_to_notifications(Q, <<"notifications.*.*">>),
+    'ok' = amqp_util:bind_q_to_notifications(Q, voicemail_routing_key([{<<"Account-ID">>, <<"*">>}]));
 bind_to_q(Q, ['new_voicemail'|T], Props) ->
     'ok' = amqp_util:bind_q_to_notifications(Q, voicemail_routing_key([{<<"Account-ID">>, props:get_value('account_id', Props, <<"*">>)}])),
     bind_to_q(Q, T, Props);
