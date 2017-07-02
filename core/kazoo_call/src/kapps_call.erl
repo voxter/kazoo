@@ -1278,7 +1278,7 @@ set_custom_kvs(JObj, Call) ->
     NewCollection = kz_json:merge(fun kz_json:merge_right/2
                                  ,OldCollection
                                  ,JObj),
-    kapps_call:kvs_store(
+    ?MODULE:kvs_store(
         ?KVS_DB,
         kz_json:set_value(?COLLECTION_KVS, NewCollection, Collections),
         Call
