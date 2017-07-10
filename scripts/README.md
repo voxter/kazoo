@@ -650,3 +650,9 @@ Part of the great rename, converts Whistle-related names to Kazoo-specific names
 ## `make-swag.sh`
 
 Generate API clients in multiple languages from the Swagger file.
+
+# Buildkite Scripts
+- buildkite-build-rpm.sh
+- buildkite-deploy-rpm.sh
+- buildkite-test.sh
+- fpm-build-rpm.sh

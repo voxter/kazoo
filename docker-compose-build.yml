@@ -1,0 +1,15 @@
+version: '3'
+services:
+  couchdb:
+    image: couchdb
+  rabbitmq:
+    image: rabbitmq
+  build:
+    build:
+      context: .
+      dockerfile: Dockerfile.build
+    volumes:
+      - .:/app
+    depends_on:
+      - couchdb
+      - rabbitmq

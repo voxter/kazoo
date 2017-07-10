@@ -1,0 +1,27 @@
+FROM synlay/erlang:19.3
+
+RUN apt-get update \
+    && apt-get install -y \
+        rpm \
+        wget \
+        python \
+        python-dev \
+        python-pip \
+        ruby \
+        ruby-dev \
+        rubygems \
+        nodejs \
+        npm \
+        vim \
+        emacs \
+        couchdb \
+        build-essential \
+    && pip install --upgrade pip \
+    && pip install PyYAML mkdocs pyembed-markdown jsonschema \
+    && gem install --no-ri --no-rdoc fpm \
+    && npm install -g swagger-tools
+
+RUN update-alternatives --install /usr/bin/node node /usr/bin/nodejs 10
+
+WORKDIR /app
+CMD ["tail", "-f", "/dev/null"]

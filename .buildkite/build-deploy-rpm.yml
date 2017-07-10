@@ -1,0 +1,24 @@
+steps:
+  - trigger: 'kazoo-tests'
+    branches: '${BUILDKITE_BRANCH}'
+    build:
+      message: '${BUILDKITE_MESSAGE}'
+      commit: '${BUILDKITE_COMMIT}'
+      branch: '${BUILDKITE_BRANCH}'
+  
+  - wait
+
+  - label: ':construction: Build package'
+    command: './scripts/buildkite-build-rpm.sh'
+    artifact_paths: '*.rpm'
+    plugins:
+      docker-compose#v1.3.2:
+        run: build
+        config: docker-compose-build.yml
+
+  - wait
+  
+  - label: ':ship: Update YUM repo with new package'
+    command: './scripts/buildkite-deploy-rpm.sh'
+    agents:
+      queue: 'repo'

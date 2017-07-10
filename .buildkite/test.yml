@@ -1,0 +1,8 @@
+steps:
+  - label: ':hammer_and_wrench: Run full test suite'
+    command: './scripts/buildkite-test.sh'
+    artifact_paths: '*.buildkite.log'
+    plugins:
+      docker-compose#v1.3.2:
+        run: build
+        config: docker-compose-build.yml
