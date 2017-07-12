@@ -56,6 +56,8 @@ keycert_fold({'Certificate', Bin, 'not_encrypted'}, {Key, 'undefined'}) ->
     {Key, Bin};
 keycert_fold({'PrivateKeyInfo', Bin, 'not_encrypted'}, {'undefined', Cert}) ->
     {{'PrivateKeyInfo', Bin}, Cert};
+keycert_fold({'RSAPrivateKey', Bin, 'not_encrypted'}, {'undefined', Cert}) ->
+    {{'RSAPrivateKey', Bin}, Cert};
 keycert_fold(_Entry, KeyCert) ->
     KeyCert.
 

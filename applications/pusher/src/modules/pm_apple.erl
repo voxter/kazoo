@@ -58,14 +58,16 @@ maybe_send_push_notification(Pid, JObj) ->
     TokenID = kz_json:get_value(<<"Token-ID">>, JObj),
     Sender = kz_json:get_value(<<"Alert-Body">>, JObj),
     CallId = kz_json:get_value(<<"Call-ID">>, JObj),
-    apns:send_message(Pid, #apns_msg{device_token = kz_term:to_list(TokenID)
-                                    ,sound = <<"ring.caf">>
-                                    ,extra = [{<<"call-id">>, CallId}]
-                                    ,alert = #loc_alert{args = [Sender]
-                                                       ,key = <<"IC_MSG">>
-                                                       }
-                                    }
-                     ).
+    apns:push_notification(Pid
+                          ,TokenID
+                          ,#{aps => #{alert => #{'loc-key' => <<"IC_MSG">>
+                                                ,'loc-args' => [Sender]
+                                                }
+                                     ,sound => <<"ring.caf">>
+                                     }
+                            ,'call-id' => CallId
+                            }
+                          ).
 
 -spec get_apns(api_binary(), ets:tid()) -> api_pid().
 get_apns('undefined', _) -> 'undefined';
@@ -85,7 +87,7 @@ maybe_load_apns(App, _, 'undefined') ->
     'undefined';
 maybe_load_apns(App, ETS, CertBin) ->
     {Key, Cert} = pusher_util:binary_to_keycert(CertBin),
-    Connection = apns_connection:default_connection('cert', 'undefined'),
+    Connection = apns_connection:default_connection('certdata', 'undefined'),
     case apns:connect(set_key_and_cert({Key, Cert}, Connection)) of
         {'ok', Pid} ->
             ets:insert(ETS, {App, Pid}),
@@ -98,6 +100,8 @@ maybe_load_apns(App, ETS, CertBin) ->
             'undefined'
     end.
 
--spec set_key_and_cert(pusher_util:keycert(), map()) -> map().
-set_key_and_cert({Key, Cert}, #{}=Connection) ->
-    Connection#{}
+-spec set_key_and_cert(pusher_util:keycert(), apns_connection:connection()) -> apns_connection:connection().
+set_key_and_cert({Key, Cert}, Connection) ->
+    Connection#{keydata := Key
+               ,certdata := Cert
+               }.
