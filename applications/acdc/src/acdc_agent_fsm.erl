@@ -2180,25 +2180,31 @@ find_endpoint_id(_EP, EPId) -> EPId.
 -spec monitor_endpoint(api_object(), ne_binary(), server_ref()) -> _.
 monitor_endpoint('undefined', _, _) -> 'ok';
 monitor_endpoint(EP, AccountId, AgentListener) ->
+    Username = find_username(EP),
+
     %% Bind for outbound call requests
     acdc_agent_listener:add_endpoint_bindings(AgentListener
                                      ,cf_util:get_sip_realm(EP, AccountId)
-                                     ,find_username(EP)
+                                     ,Username
                                     ),
     %% Inform us of device changes
     catch gproc:reg(?ENDPOINT_UPDATE_REG(AccountId, find_endpoint_id(EP))),
-    catch gproc:reg(?NEW_CHANNEL_REG(AccountId, find_username(EP))).
+    catch gproc:reg(?NEW_CHANNEL_REG(AccountId, Username)),
+    catch gproc:reg(?DESTROYED_CHANNEL_REG(AccountId, Username)).
 
 -spec unmonitor_endpoint(wh_json:object(), ne_binary(), server_ref()) -> _.
 unmonitor_endpoint(EP, AccountId, AgentListener) ->
+    Username = find_username(EP),
+
     %% Bind for outbound call requests
     acdc_agent_listener:remove_endpoint_bindings(AgentListener
                                         ,cf_util:get_sip_realm(EP, AccountId)
-                                        ,find_username(EP)
+                                        ,Username
                                        ),
     %% Inform us of device changes
     catch gproc:unreg(?ENDPOINT_UPDATE_REG(AccountId, find_endpoint_id(EP))),
-    catch gproc:unreg(?NEW_CHANNEL_REG(AccountId, find_username(EP))).
+    catch gproc:unreg(?NEW_CHANNEL_REG(AccountId, Username)),
+    catch gproc:unreg(?DESTROYED_CHANNEL_REG(AccountId, Username)).
 
 -spec maybe_add_endpoint(ne_binary(), wh_json:object(), wh_json:objects(), ne_binary(), server_ref()) -> _.
 maybe_add_endpoint(EPId, EP, EPs, AccountId, AgentListener) ->
