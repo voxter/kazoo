@@ -11,6 +11,8 @@ steps:
   - label: ':construction: Build package'
     command: './scripts/buildkite-build-rpm.sh'
     artifact_paths: '*.rpm'
+    agents:
+      docker: 'true'
     plugins:
       docker-compose#v1.3.2:
         run: build
@@ -22,3 +24,4 @@ steps:
     command: './scripts/buildkite-deploy-rpm.sh'
     agents:
       queue: 'repo'
+      repo: 'yum'

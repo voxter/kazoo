@@ -15,4 +15,5 @@ fpm -s dir \
     -d "kazoo-sounds" \
     -d "bash-completion" \
     -d "esl-erlang >= 19.3" \
-    --after-install scripts/rpm/after-install.sh $@ .
+    --after-install scripts/rpm/after-install.sh \
+    $@ .
