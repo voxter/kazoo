@@ -2492,7 +2492,6 @@ handle_resume(#state{agent_listener=AgentListener
 
     acdc_agent_listener:update_agent_status(AgentListener, <<"resume">>),
 
-    acdc_agent_listener:send_status_resume(AgentListener),
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
     {'next_state', 'ready', State#state{pause_ref='undefined'}}.
 
