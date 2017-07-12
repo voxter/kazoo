@@ -52,27 +52,23 @@ status() ->
 -spec new(wh_json:object()) -> sup_startchild_ret().
 -spec new(ne_binary(), ne_binary()) -> sup_startchild_ret().
 new(JObj) ->
-    case find_agent_supervisor(wh_doc:account_id(JObj)
-                               ,wh_doc:id(JObj)
-                              )
-    of
-        'undefined' -> supervisor:start_child(?MODULE, [JObj]);
-        P when is_pid(P) -> lager:debug("agent already started here: ~p", [P])
-    end.
+    acdc_agent_manager:start_agent(wh_doc:account_id(JObj)
+                                   ,wh_doc:id(JObj)
+                                   ,[JObj]
+                                  ).
 
 new(AcctId, AgentId) ->
-    case find_agent_supervisor(AcctId, AgentId) of
-        'undefined' ->
-            {'ok', Agent} = couch_mgr:open_doc(wh_util:format_account_id(AcctId, 'encoded'), AgentId),
-            supervisor:start_child(?MODULE, [Agent]);
-        P when is_pid(P) -> lager:debug("agent already started here: ~p", [P])
-    end.
+    {'ok', Agent} = couch_mgr:open_doc(wh_util:format_account_id(AcctId, 'encoded'), AgentId),
+    acdc_agent_manager:start_agent(AcctId
+                                   ,AgentId
+                                   ,[Agent]
+                                  ).
 
 new(AcctId, AgentId, AgentJObj, Queues) ->
-    case find_agent_supervisor(AcctId, AgentId) of
-        'undefined' -> supervisor:start_child(?MODULE, [AgentJObj, AcctId, AgentId, Queues]);
-        P when is_pid(P) -> lager:debug("agent already started here: ~p", [P])
-    end.
+    acdc_agent_manager:start_agent(AcctId
+                                   ,AgentId
+                                   ,[AgentJObj, AcctId, AgentId, Queues]
+                                  ).
 
 -spec new_thief(whapps_call:call(), ne_binary()) -> sup_startchild_ret().
 new_thief(Call, QueueId) -> supervisor:start_child(?MODULE, [Call, QueueId]).

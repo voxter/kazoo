@@ -15,7 +15,9 @@
 -behaviour(gen_listener).
 
 %% API
--export([start_link/0]).
+-export([start_link/0
+         ,start_agent/3
+        ]).
 
 %% gen_server callbacks
 -export([init/1
@@ -79,6 +81,15 @@ start_link() ->
                              ]
                             ,[]
                            ).
+%%--------------------------------------------------------------------
+%% @doc
+%% Start a new agent supervisor
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec start_agent(ne_binary(), ne_binary(), list()) -> sup_startchild_ret().
+start_agent(AccountId, AgentId, Args) ->
+    gen_listener:call(?SERVER, {'start_agent', AccountId, AgentId, Args}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -113,6 +124,14 @@ init([]) ->
 %%                                   {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+handle_call({'start_agent', AccountId, AgentId, Args}, _, State) ->
+    case acdc_agents_sup:find_agent_supervisor(AccountId, AgentId) of
+        'undefined' ->
+            {'reply', supervisor:start_child('acdc_agents_sup', Args), State};
+        Sup ->
+            lager:error("agent ~s(~s) already started here: ~p", [AgentId, AccountId, Sup]),
+            {'reply', {'already_started', Sup}, State}
+    end;
 handle_call(_Request, _From, State) ->
     Reply = 'ok',
     {'reply', Reply, State}.
@@ -148,6 +167,9 @@ handle_cast(_Msg, State) ->
 handle_info(?HOOK_EVT(AccountId, <<"CHANNEL_CREATE">>, JObj), State) ->
     lager:debug("channel_create event"),
     _ = wh_util:spawn('acdc_agent_handler', 'handle_new_channel', [JObj, AccountId]),
+    {'noreply', State};
+handle_info(?HOOK_EVT(AccountId, <<"CHANNEL_DESTROY">>, JObj), State) ->
+    _ = wh_util:spawn('acdc_agent_handler', 'handle_destroyed_channel', [JObj, AccountId]),
     {'noreply', State};
 handle_info(?HOOK_EVT(_AccountId, _EventName, _JObj), State) ->
     lager:debug("ignoring ~s for account ~s on call ~s", [_EventName, _AccountId, wh_json:get_value(<<"Call-ID">>, _JObj)]),
