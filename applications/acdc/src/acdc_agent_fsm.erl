@@ -1031,6 +1031,10 @@ ringing('current_call', _, #state{member_call=Call
 %%--------------------------------------------------------------------
 -spec ringing_callback(any(), state()) -> handle_fsm_ret(state()).
 -spec ringing_callback(any(), atom(), state()) -> handle_sync_event_ret(state()).
+ringing_callback({'sync_req', JObj}, #state{agent_listener=AgentListener}=State) ->
+    lager:debug("recv sync_req from ~s", [kz_json:get_value(<<"Server-ID">>, JObj)]),
+    acdc_agent_listener:send_sync_resp(AgentListener, 'ringing_callback', JObj),
+    {'next_state', 'ringing_callback', State};
 ringing_callback({'originate_uuid', ACallId, ACtrlQ}, #state{agent_listener=AgentListener}=State) ->
     lager:debug("recv originate_uuid for agent call ~s(~s)", [ACallId, ACtrlQ]),
     acdc_agent_listener:originate_uuid(AgentListener, ACallId, ACtrlQ),
@@ -1164,6 +1168,10 @@ ringing_callback('current_call', _, #state{member_call=Call
 %%--------------------------------------------------------------------
 -spec awaiting_callback(any(), state()) -> handle_fsm_ret(state()).
 -spec awaiting_callback(any(), atom(), state()) -> handle_sync_event_ret(state()).
+awaiting_callback({'sync_req', JObj}, #state{agent_listener=AgentListener}=State) ->
+    lager:debug("recv sync_req from ~s", [kz_json:get_value(<<"Server-ID">>, JObj)]),
+    acdc_agent_listener:send_sync_resp(AgentListener, 'awaiting_callback', JObj),
+    {'next_state', 'awaiting_callback', State};
 awaiting_callback({'originate_uuid', MemberCallbackCallId, CtrlQ}, #state{member_callback_candidates=Candidates}=State) ->
     lager:debug("recv originate_uuid for member callback call ~s(~s)", [MemberCallbackCallId, CtrlQ]),
     {'next_state', 'awaiting_callback', State#state{member_callback_candidates=props:set_value(MemberCallbackCallId, CtrlQ, Candidates)}};
@@ -1685,6 +1693,10 @@ paused('current_call', _, State) ->
 
 -spec outbound(any(), state()) -> handle_fsm_ret(state()).
 -spec outbound(any(), atom(), state()) -> handle_sync_event_ret(state()).
+outbound({'sync_req', JObj}, #state{agent_listener=AgentListener}=State) ->
+    lager:debug("recv sync_req from ~s", [kz_json:get_value(<<"Server-ID">>, JObj)]),
+    acdc_agent_listener:send_sync_resp(AgentListener, 'outbound', JObj),
+    {'next_state', 'outbound', State};
 outbound({'playback_stop', _JObj}, State) ->
     {'next_state', 'outbound', State};
 outbound(?DESTROYED_CHANNEL(CallId, Cause), #state{agent_listener=AgentListener
