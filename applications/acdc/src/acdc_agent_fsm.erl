@@ -1110,8 +1110,13 @@ ringing_callback(?NEW_CHANNEL_TO(CallId, MemberCallId), State) ->
     cancel_if_failed_originate(CallId, MemberCallId, 'ringing_callback', State);
 ringing_callback({'playback_stop', _}, #state{agent_callback_call='undefined'}=State) ->
     {'next_state', 'ringing_callback', State};
-ringing_callback({'playback_stop', _JObj}, #state{monitoring='true'}=State) ->
-    {'next_state', 'awaiting_callback', State};
+ringing_callback({'playback_stop', _JObj}, #state{member_call=Call
+                                                  ,member_call_id=MemberCallId
+                                                  ,monitoring='true'
+                                                 }=State) ->
+    {'next_state', 'awaiting_callback', State#state{member_original_call=Call
+                                                    ,member_original_call_id=MemberCallId
+                                                   }};
 ringing_callback({'playback_stop', _JObj}, #state{agent_listener=AgentListener
                                                   ,member_call=Call
                                                   ,member_call_id=MemberCallId
@@ -1188,7 +1193,6 @@ awaiting_callback({'shared_failure', JObj}, #state{agent_listener=AgentListener
     end;
 awaiting_callback({'shared_call_id', JObj}, #state{agent_listener=AgentListener
                                                    ,member_call=MemberCall
-                                                   ,member_call_id=MemberCallId
                                                    ,member_callback_candidates=Candidates
                                                    ,monitoring='true'
                                                   }=State) ->
@@ -1202,8 +1206,6 @@ awaiting_callback({'shared_call_id', JObj}, #state{agent_listener=AgentListener
                                            ,member_call_id=NewMemberCallId
                                            ,member_callback_flag='true'
                                            ,member_callback_candidates=props:set_value(NewMemberCallId, NewMemberCall, Candidates)
-                                           ,member_original_call=MemberCall
-                                           ,member_original_call_id=MemberCallId
                                            ,connect_failures=0
                                           }};
 awaiting_callback({'shared_call_id', _}, State) ->
@@ -1311,6 +1313,8 @@ awaiting_callback({'leg_created', CallId, OtherLegCallId}=Evt, #state{agent_list
             Candidates1 = props:set_value(OtherLegCallId, CtrlQ, []),
             {'next_state', 'awaiting_callback', State#state{member_callback_candidates=Candidates1}}
     end;
+awaiting_callback({'playback_stop', _JObj}, State) ->
+    {'next_state', 'awaiting_callback', State};
 awaiting_callback({'usurp_control', _}, State) ->
     {'next_state', 'awaiting_callback', State};
 awaiting_callback(Evt, State) ->
