@@ -729,6 +729,7 @@ handle_cast({'originate_callback_to_agent', Call, WinJObj, EPs, CDRUrl, Recordin
                             ,cdr_urls=dict:store(whapps_call:call_id(Call), CDRUrl,
                                                  dict:store(AgentCallIds, CDRUrl, Urls)
                                                 )
+                            ,preserve_metadata=wh_json:is_true(<<"Preserve-Metadata">>, WinJObj, 'false')
                             ,recording_url=RecordingUrl
                            }
      ,'hibernate'};
