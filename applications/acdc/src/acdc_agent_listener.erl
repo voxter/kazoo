@@ -1360,6 +1360,7 @@ do_originate_callback_return(MyQ, Call) ->
               ,{<<"Authorizing-Type">>, whapps_call:authorizing_type(Call)}
               ,{<<"Channel-Authorized">>, 'true'}
               ,{<<"From-URI">>, <<FromUser/binary, "@", (whapps_call:account_realm(Call))/binary>>}
+              ,{<<"Retain-CID">>, 'true'}
              ]),
 
     TargetCallId = create_call_id(),
@@ -1390,9 +1391,9 @@ do_originate_callback_return(MyQ, Call) ->
                  ,{<<"Application-Name">>, <<"bridge">>}
                  ,{<<"Timeout">>, 60}
 
-                 ,{<<"Outbound-Caller-ID-Name">>, whapps_call:callee_id_name(Call)}
+                 ,{<<"Outbound-Caller-ID-Name">>, whapps_call:callee_id_number(Call)}
                  ,{<<"Outbound-Caller-ID-Number">>, whapps_call:callee_id_number(Call)}
-                 ,{<<"Caller-ID-Name">>, whapps_call:callee_id_name(Call)}
+                 ,{<<"Caller-ID-Name">>, whapps_call:callee_id_number(Call)}
                  ,{<<"Caller-ID-Number">>, whapps_call:callee_id_number(Call)}
 
                  ,{<<"Existing-Call-ID">>, TransferorLeg}
