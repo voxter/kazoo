@@ -22,7 +22,7 @@
 
 -define(SERVER, ?MODULE).
 
--define(CHILDREN, [?WORKER_TYPE('kz_media_recording', 'transient')]).
+-define(CHILDREN, [?WORKER_TYPE('kzc_recording', 'transient')]).
 
 %%%===================================================================
 %%% API functions
