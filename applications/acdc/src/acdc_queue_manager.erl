@@ -1257,9 +1257,9 @@ try_publish_call_exited_position({CallId, Index}, #state{account_id=AccountId
 try_publish_call_exited_position('false', _) ->
     lager:error("call id not found in list of calls").
 
--spec cancel_position_announcements({ne_binary(), kapps_call:call()} | 'false', mgr_state()) ->
+-spec cancel_position_announcements(kapps_call:call() | 'false', mgr_state()) ->
                                            announce_pid_list().
-cancel_position_announcements({_, Call}, #state{pos_announce_pids=Pids}) ->
+cancel_position_announcements(Call, #state{pos_announce_pids=Pids}) ->
     maybe_cancel_position_announcements(Call, Pids);
 cancel_position_announcements('false', #state{pos_announce_pids=Pids}) ->
     Pids.
