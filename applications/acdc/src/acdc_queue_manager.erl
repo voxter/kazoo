@@ -1226,49 +1226,43 @@ maybe_cancel_position_announcements(Call, Pids) ->
     lists:keydelete(kapps_call:call_id(Call), 1, Pids).
 
 -spec maybe_remove_queue_member(api_binary(), mgr_state()) -> mgr_state().
-maybe_remove_queue_member(CallId, #state{account_id=AccountId
-                                        ,queue_id=QueueId
-                                        ,current_member_calls=CurrentCalls
-                                        ,pos_announce_pids=Pids
-                                        }=State) ->
-    Call = lists:keyfind(CallId, 2, CurrentCalls),
+maybe_remove_queue_member(CallId, #state{current_member_calls=CurrentCalls}=State) ->
+    lager:debug("removing call id ~s", [CallId]),
 
-    {Map, _} = lists:mapfoldr(fun(X, I) -> {{X, I}, I + 1} end, 1, CurrentCalls),
-    Index = case lists:keyfind(Call, 1, Map) of
-                {_, Index2} ->
-                    lager:debug("removing call id ~s", [CallId]),
-                    Index2;
-                _Result ->
-                    lager:debug("call id ~p", [CallId]),
-                    lists:foreach(fun(Call2) ->
-                                          lager:debug("current call id ~p", [kapps_call:call_id(Call2)])
-                                  end, CurrentCalls),
-                    'undefined'
-            end,
+    publish_call_exited_position(CallId, State),
+    UpdatedAnnouncePids = cancel_position_announcements(lists:keyfind(CallId, 2, CurrentCalls), State),
 
+    State#state{current_member_calls=lists:keydelete(CallId, 2, CurrentCalls)
+               ,pos_announce_pids=UpdatedAnnouncePids
+               }.
+
+-spec publish_call_exited_position(api_binary(), mgr_state()) -> 'ok'.
+publish_call_exited_position(CallId, #state{current_member_calls=CurrentCalls}=State) ->
+    {Map, _} = lists:mapfoldr(fun(Call, Index) ->
+                                      {{kapps_call:call_id(Call), Index}, Index+1}
+                              end, 1, CurrentCalls),
+    try_publish_call_exited_position(lists:keyfind(CallId, 1, Map), State).
+
+-spec try_publish_call_exited_position({ne_binary(), pos_integer()} | 'false', mgr_state()) -> 'ok'.
+try_publish_call_exited_position({CallId, Index}, #state{account_id=AccountId
+                                                        ,queue_id=QueueId
+                                                        }) ->
     Prop = [{<<"Account-ID">>, AccountId}
            ,{<<"Queue-ID">>, QueueId}
            ,{<<"Call-ID">>, CallId}
            ,{<<"Exited-Position">>, Index}
             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
+    kapi_acdc_stats:publish_call_exited_position(Prop);
+try_publish_call_exited_position('false', _) ->
+    lager:error("call id not found in list of calls").
 
-    case Index of
-        'undefined' -> 'ok';
-        _Other -> kapi_acdc_stats:publish_call_exited_position(Prop)
-    end,
-
-    UpdatedMemberCalls = lists:delete(Call, CurrentCalls),
-
-    %% Cancel position announcements
-    UpdatedAnnouncePids = case lists:keyfind(CallId, 2, CurrentCalls) of
-                              'false' -> Pids;
-                              Call -> maybe_cancel_position_announcements(Call, Pids)
-                          end,
-
-    State#state{current_member_calls=UpdatedMemberCalls
-               ,pos_announce_pids=UpdatedAnnouncePids
-               }.
+-spec cancel_position_announcements(kapps_call:call() | 'false', mgr_state()) ->
+                                           announce_pid_list().
+cancel_position_announcements('false', #state{pos_announce_pids=Pids}) ->
+    Pids;
+cancel_position_announcements(Call, #state{pos_announce_pids=Pids}) ->
+    maybe_cancel_position_announcements(Call, Pids).
 
 %%--------------------------------------------------------------------
 %% @private
