@@ -81,7 +81,7 @@ collect_more_digits(Data, Call, AlreadyCollected, MaxDigits) ->
 
 -spec truncate_after_terminator(ne_binary(), ne_binaries()) -> ne_binary().
 truncate_after_terminator(AlreadyCollected, Terminators) ->
-    hd(binary:split(AlreadyCollected, Terminators, ['global'])).
+    hd(binary:split(AlreadyCollected, Terminators)).
 
 -spec collection_name(kz_json:object()) -> ne_binary().
 collection_name(Data) ->
