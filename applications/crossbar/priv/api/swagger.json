@@ -1504,6 +1504,16 @@
             "required": true,
             "type": "object"
         },
+        "callflows.flush_dtmf": {
+            "description": "Validator for the flush_dtmf callflow's data object",
+            "properties": {
+                "collection_name": {
+                    "description": "Flush collected DTMF in a named key",
+                    "type": "string"
+                }
+            },
+            "type": "object"
+        },
         "callflows.group": {
             "description": "Validator for the group callflow's data object",
             "properties": {
