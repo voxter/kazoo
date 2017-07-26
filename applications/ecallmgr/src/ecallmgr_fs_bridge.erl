@@ -158,24 +158,20 @@ handle_bypass_media(DP, _Node, _UUID, #channel{profile=ChannelProfile}, JObj) ->
 
 -spec maybe_bypass_endpoint_media(kz_json:objects(), ne_binary(), ne_binary(), kz_proplist()) -> kz_proplist().
 maybe_bypass_endpoint_media(Endpoints, BridgeProfile, ChannelProfile, DP) ->
-    BypassOnAll = lists:foldl(fun(EP, 'none') ->
-                                      case bypass_endpoint_media_enabled(EP, BridgeProfile, ChannelProfile) of
-                                          'true' -> 'true';
-                                          'false' -> 'none'
-                                      end;
-                                 (EP, BypassOnAll1) ->
-                                      BypassOnAll1
-                                          andalso bypass_endpoint_media_enabled(EP, BridgeProfile, ChannelProfile)
-                              end, 'none', Endpoints),
-    case BypassOnAll of
+    ShouldBypass = lists:all(fun(Endpoint) ->
+                                     bypass_endpoint_media_enabled(Endpoint
+                                                                  ,BridgeProfile
+                                                                  ,ChannelProfile
+                                                                  )
+                             end, Endpoints),
+    case ShouldBypass of
         'true' -> [{"application", "set bypass_media=true"}|DP];
-        'false' -> DP;
-        'none' -> DP
+        'false' -> DP
     end.
 
 -spec bypass_endpoint_media_enabled(kz_json:object(), ne_binary(), ne_binary()) -> boolean().
 bypass_endpoint_media_enabled(Endpoint, BridgeProfile, ChannelProfile) ->
-    EndpointProfile = kz_json:get_value(<<"SIP-Interface">>, Endpoint, BridgeProfile),
+    EndpointProfile = kz_json:get_ne_binary_value(<<"SIP-Interface">>, Endpoint, BridgeProfile),
     kz_json:is_true(<<"Bypass-Media">>, Endpoint)
         andalso EndpointProfile =:= ChannelProfile.
 
