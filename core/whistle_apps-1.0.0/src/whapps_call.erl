@@ -113,7 +113,7 @@
         ]).
 
 -export([custom_kv/2, set_custom_kv/3
-         ,custom_kvs/1
+         ,custom_kvs/1, set_custom_kvs/2
          ,custom_kvs_mode/1, set_custom_kvs_mode/2
         ]).
 
@@ -1130,6 +1130,21 @@ set_custom_kvs_collection(Collection, Key, Value, Call) ->
 -spec custom_kvs(call()) -> wh_json:object().
 custom_kvs(Call) ->
     custom_kvs_collection(?COLLECTION_KVS, Call).
+
+-spec set_custom_kvs([{binary(), wh_json:json_term()}] | wh_json:object(), call()) ->
+                            call().
+set_custom_kvs([], Call) -> Call;
+set_custom_kvs([{Key, Value}|KVs], Call) ->
+    set_custom_kvs(KVs, set_custom_kv(Key, Value, Call));
+set_custom_kvs(JObj, Call) ->
+    Collections = custom_kvs_collections(Call),
+    OldCollection = custom_kvs_collection(?COLLECTION_KVS, Call),
+    NewCollection = wh_json:merge_jobjs(JObj, OldCollection),
+    ?MODULE:kvs_store(
+        ?KVS_DB,
+        wh_json:set_value(?COLLECTION_KVS, NewCollection, Collections),
+        Call
+    ).
 
 -spec custom_kvs_mode(call()) -> wh_json:json_term().
 custom_kvs_mode(Call) ->

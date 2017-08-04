@@ -1226,8 +1226,12 @@ awaiting_callback({'channel_answered', JObj}=Evt, #state{account_id=AccountId
             lager:info("member answered phone on ~s", [CallId]),
 
             %% Update control queue so call recordings work
+            %% Also preserve some metadata included in call recordings
+            CustomKVs = whapps_call:custom_kvs(OriginalMemberCall),
             MemberCall = whapps_call:exec([fun(Call) -> whapps_call:set_account_id(AccountId, Call) end
                                            ,fun(Call) -> whapps_call:set_control_queue(CtrlQ, Call) end
+                                           ,fun(Call) -> whapps_call:set_custom_channel_var(<<"Queue-ID">>, QueueId, Call) end
+                                           ,fun(Call) -> whapps_call:set_custom_kvs(CustomKVs, Call) end
                                           ], whapps_call:from_json(JObj)),
 
             wapi_acdc_agent:publish_shared_call_id([{<<"Account-ID">>, AccountId}
@@ -2492,7 +2496,6 @@ handle_resume(#state{agent_listener=AgentListener
 
     acdc_agent_listener:update_agent_status(AgentListener, <<"resume">>),
 
-    acdc_agent_listener:send_status_resume(AgentListener),
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
     {'next_state', 'ready', State#state{pause_ref='undefined'}}.
 
