@@ -26,6 +26,7 @@ deps/zucchini-1.0.0/src/zucchini_parser.erl
 deps/slex-*/src/slex_parser.erl
 deps/slex-*/src/slex_scanner.erl
 deps/erlang_localtime-*/include/tz_index.hrl
+deps/pqueue-1.7.1/typescript
 deps/rabbitmq_server-*/codegen/amqp_codegen.pyc
 deps/rabbitmq_server-*/deps.mk
 deps/rabbitmq_server-*/dist/
