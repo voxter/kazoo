@@ -4,7 +4,7 @@
 %% mi :: Most Idle
 -type queue_strategy() :: 'rr' | 'mi'.
 
--type queue_strategy_state() :: queue:queue() | ne_binaries().
+-type queue_strategy_state() :: pqueue4:queue() | ne_binaries().
 -type ss_details() :: {non_neg_integer(), 'busy' | 'undefined'}.
 -record(strategy_state, {agents :: queue_strategy_state() | 'undefined'
                                    %% details include # of agent processes and availability
