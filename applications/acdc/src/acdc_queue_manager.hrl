@@ -31,7 +31,7 @@
 -type ss_details() :: {non_neg_integer(), 'busy' | 'undefined'}.
 -record(strategy_state, {agents :: queue_strategy_state()
                           %% details include # of agent processes and availability
-                         ,details = dict:new() :: dict(ne_binary(), ss_details())
+                         ,details = dict:new() :: dict()
                         }).
 -type strategy_state() :: #strategy_state{}.
 

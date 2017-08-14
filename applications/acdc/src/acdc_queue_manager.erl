@@ -932,11 +932,11 @@ remove_agent('mi', AgentId, #strategy_state{agents=AgentL
                              }
     end.
 
--spec incr_agent(ne_binary(), dict(ne_binary(), ss_details())) -> dict(ne_binary(), ss_details()).
+-spec incr_agent(ne_binary(), dict()) -> dict().
 incr_agent(AgentId, Details) ->
     dict:update(AgentId, fun({Count, Busy}) -> {Count + 1, Busy} end, {1, 'undefined'}, Details).
 
--spec decr_agent(ne_binary(), dict(ne_binary(), ss_details())) -> dict(ne_binary(), ss_details()).
+-spec decr_agent(ne_binary(), dict()) -> dict().
 decr_agent(AgentId, Details) ->
     dict:update(AgentId, fun({Count, Busy}) when Count > 1 -> {Count - 1, Busy};
                             ({_, Busy}) -> {0, Busy} end
