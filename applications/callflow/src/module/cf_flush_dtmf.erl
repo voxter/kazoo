@@ -20,11 +20,11 @@
 %% Entry point for this module
 %% @end
 %%--------------------------------------------------------------------
--spec handle(kz_json:object(), kapps_call:call()) -> 'ok'.
+-spec handle(wh_json:object(), whapps_call:call()) -> 'ok'.
 handle(Data, Call) ->
     Collection = collection_name(Data),
-    cf_exe:continue(kapps_call:set_dtmf_collection('undefined', Collection, Call)).
+    cf_exe:continue(whapps_call:set_dtmf_collection('undefined', Collection, Call)).
 
--spec collection_name(kz_json:object()) -> ne_binary().
+-spec collection_name(wh_json:object()) -> ne_binary().
 collection_name(Data) ->
-    kz_json:get_ne_binary_value(<<"collection_name">>, Data, <<"default">>).
+    wh_json:get_ne_binary_value(<<"collection_name">>, Data, <<"default">>).
