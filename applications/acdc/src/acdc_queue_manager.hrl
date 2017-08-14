@@ -27,7 +27,7 @@
                }).
 -type mgr_state() :: #state{}.
 
--type queue_strategy_state() :: queue() | ne_binaries().
+-type queue_strategy_state() :: pqueue4:pqueue() | ne_binaries().
 -type ss_details() :: {non_neg_integer(), 'busy' | 'undefined'}.
 -record(strategy_state, {agents :: queue_strategy_state()
                           %% details include # of agent processes and availability

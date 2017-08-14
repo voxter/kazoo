@@ -540,7 +540,6 @@ connecting({'retry', RetryJObj}, #state{agent_ring_timer_ref=AgentRef
         {RetryAgentId, RetryProcId} ->
             lager:debug("recv retry from our winning agent ~s(~s)", [RetryAgentId, RetryProcId]),
 
-            lager:debug("but wait, we have others who wanted to try"),
             gen_fsm:send_event(self(), {'timeout', 'undefined', ?COLLECT_RESP_MESSAGE}),
 
             maybe_stop_timer(CollectRef),
@@ -977,7 +976,7 @@ maybe_pick_winner(#state{connect_resps=CRs
                          ,notifications=Notifications
                         }=State) ->
     case acdc_queue_manager:pick_winner(Mgr, CRs) of
-        {[Winner|_], Rest} ->
+        {[Winner|_], _} ->
             QueueOpts = [{<<"Ring-Timeout">>, RingTimeout}
                          ,{<<"Wrapup-Timeout">>, AgentWrapup}
                          ,{<<"Caller-Exit-Key">>, CallerExitKey}
@@ -994,16 +993,15 @@ maybe_pick_winner(#state{connect_resps=CRs
             lager:debug("sending win to ~s(~s)", [wh_json:get_value(<<"Agent-ID">>, Winner)
                                                   ,wh_json:get_value(<<"Process-ID">>, Winner)
                                                  ]),
-            {'connecting', State#state{connect_resps=Rest
+            {'connecting', State#state{connect_resps=[]
                                        ,collect_ref='undefined'
                                        ,agent_ring_timer_ref=start_agent_ring_timer(RingTimeout)
                                        ,member_call_winner=Winner
                                       }};
-        'undefined' ->
-            lager:debug("no more responses to choose from"),
-
-            acdc_queue_listener:cancel_member_call(Srv),
-            {'ready', clear_member_call(State)}
+        {[], []} ->
+            lager:info("no response from the winner"),
+            {_, NextState, State1} = maybe_connect_re_req(Mgr, Srv, #state{connect_resps=[]}),
+            {NextState, State1}
     end.
 
 -spec have_agents_responded(wh_json:objects(), ne_binaries()) -> boolean().

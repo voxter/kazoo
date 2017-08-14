@@ -20,6 +20,8 @@
          ,most_recent_db_statuses/1, most_recent_db_statuses/2, most_recent_db_statuses/3
 
          ,changed/2
+
+         ,agent_priority/1
         ]).
 
 -export([async_most_recent_ets_statuses/4
@@ -423,3 +425,7 @@ changed([F|From], To, Add, Rm) ->
         'true' -> changed(From, lists:delete(F, To), Add, Rm);
         'false' -> changed(From, To, Add, [F|Rm])
     end.
+
+-spec agent_priority(wh_json:object()) -> agent_priority().
+agent_priority(AgentJObj) ->
+    -1 * wh_json:get_integer_value(<<"acdc_agent_priority">>, AgentJObj, 0).
