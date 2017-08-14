@@ -132,8 +132,8 @@ t_ss_size_empty() ->
 
 t_ss_size_one_busy() ->
     SS = #strategy_state{agents=[]},
-    SS1 = acdc_queue_manager:update_strategy_with_agent('mi', SS, ?AGENT_ID, 'add', 'undefined'),
-    SS2 = acdc_queue_manager:update_strategy_with_agent('mi', SS1, ?AGENT_ID, 'remove', 'busy'),
+    SS1 = acdc_queue_manager:update_strategy_with_agent('mi', SS, ?AGENT_ID, 0, 'add', 'undefined'),
+    SS2 = acdc_queue_manager:update_strategy_with_agent('mi', SS1, ?AGENT_ID, 0, 'remove', 'busy'),
     [?_assertEqual(0, acdc_queue_manager:ss_size(SS2, 'free'))
      ,?_assertEqual(1, acdc_queue_manager:ss_size(SS2, 'logged_in'))].
 
@@ -175,12 +175,12 @@ init(Super, AccountId, QueueId, QueueJObj) ->
                                                                   ,strategy_state=StrategyState
                                                                  })}.
 
-handle_cast({'agent_available', AgentId}, #state{strategy=Strategy
-                                                 ,strategy_state=StrategyState
-                                                 % ,supervisor=QueueSup
-                                                }=State) when is_binary(AgentId) ->
+handle_cast({'agent_available', AgentId, Priority}, #state{strategy=Strategy
+                                                           ,strategy_state=StrategyState
+                                                           % ,supervisor=QueueSup
+                                                          }=State) when is_binary(AgentId) ->
     lager:info("adding agent ~s to strategy ~s", [AgentId, Strategy]),
-    StrategyState1 = acdc_queue_manager:update_strategy_with_agent(Strategy, StrategyState, AgentId, 'add', 'undefined'),
+    StrategyState1 = acdc_queue_manager:update_strategy_with_agent(Strategy, StrategyState, AgentId, Priority, 'add', 'undefined'),
     % maybe_start_queue_workers(QueueSup, ss_size(StrategyState1, 'logged_in')),
     {'noreply', State#state{strategy_state=StrategyState1}
      ,'hibernate'};
