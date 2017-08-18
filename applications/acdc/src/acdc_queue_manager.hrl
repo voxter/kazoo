@@ -28,10 +28,12 @@
 -type mgr_state() :: #state{}.
 
 -type queue_strategy_state() :: pqueue4:pqueue() | ne_binaries().
--type ss_details() :: {non_neg_integer(), 'busy' | 'undefined'}.
+-type ss_details() :: {non_neg_integer(), 'ringing' | 'busy' | 'undefined'}.
 -record(strategy_state, {agents :: queue_strategy_state()
                           %% details include # of agent processes and availability
                          ,details = dict:new() :: dict()
+                         ,ringing_agents = [] :: ne_binaries()
+                         ,busy_agents = [] :: ne_binaries()
                         }).
 -type strategy_state() :: #strategy_state{}.
 
