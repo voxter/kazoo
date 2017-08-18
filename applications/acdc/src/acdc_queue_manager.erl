@@ -416,9 +416,12 @@ handle_call('next_winner', _, #state{strategy='rr'
     end;
 
 handle_call('current_agents', _, #state{strategy='rr'
-                                       ,strategy_state=#strategy_state{agents=Q}
+                                       ,strategy_state=#strategy_state{agents=Q
+                                                                      ,ringing_agents=RingingAgents
+                                                                      ,busy_agents=BusyAgents
+                                                                      }
                                        }=State) ->
-    {'reply', pqueue4:to_list(Q), State};
+    {'reply', pqueue4:to_list(Q) ++ RingingAgents ++ BusyAgents, State};
 handle_call('current_agents', _, #state{strategy='mi'
                                        ,strategy_state=#strategy_state{agents=L}
                                        }=State) ->
@@ -527,15 +530,19 @@ handle_cast({'agent_available', JObj}, State) ->
                 ,kz_json:get_integer_value(<<"Priority">>, JObj, 0)
                 }, State);
 
-handle_cast({'agent_ringing', AgentId}, #state{strategy=Strategy
-                                              ,strategy_state=StrategyState
-                                              }=State) when is_binary(AgentId) ->
+handle_cast({'agent_ringing', AgentId, Priority}, #state{strategy=Strategy
+                                                        ,strategy_state=StrategyState
+                                                        }=State) when is_binary(AgentId) ->
     lager:info("agent ~s ringing, maybe updating strategy ~s", [AgentId, Strategy]),
 
-    StrategyState1 = maybe_update_strategy(Strategy, StrategyState, AgentId),
-    {'noreply', State#state{strategy_state=StrategyState1}, 'hibernate'};
+    StrategyState1 = update_strategy_with_agent(Strategy, StrategyState, AgentId, Priority, 'remove', 'ringing'),
+    {'noreply', State#state{strategy_state=StrategyState1}
+    ,'hibernate'};
 handle_cast({'agent_ringing', JObj}, State) ->
-    handle_cast({'agent_ringing', kz_json:get_value(<<"Agent-ID">>, JObj)}, State);
+    handle_cast({'agent_ringing'
+                ,kz_json:get_ne_binary_value(<<"Agent-ID">>, JObj)
+                ,kz_json:get_integer_value(<<"Priority">>, JObj, 0)
+                }, State);
 
 handle_cast({'agent_busy', AgentId, Priority}, #state{strategy=Strategy
                                                      ,strategy_state=StrategyState
@@ -815,19 +822,19 @@ pick_winner(CRs, 'mi', _) ->
 
     {[MostIdle|Same], Other}.
 
--spec update_strategy_with_agent(queue_strategy(), strategy_state(), ne_binary(), agent_priority(), 'add' | 'remove', 'busy' | 'undefined') ->
+-spec update_strategy_with_agent(queue_strategy(), strategy_state(), ne_binary(), agent_priority(), 'add' | 'remove', 'ringing' | 'busy' | 'undefined') ->
                                         strategy_state().
-update_strategy_with_agent('rr', SS, AgentId, Priority, Action, Busy) ->
-    update_rr_strategy_with_agent(SS, AgentId, Priority, Action, Busy);
-update_strategy_with_agent('mi', SS, AgentId, _, Action, Busy) ->
-    update_mi_strategy_with_agent(SS, AgentId, Action, Busy).
+update_strategy_with_agent('rr', SS, AgentId, Priority, Action, Flag) ->
+    update_rr_strategy_with_agent(SS, AgentId, Priority, Action, Flag);
+update_strategy_with_agent('mi', SS, AgentId, _, Action, Flag) ->
+    update_mi_strategy_with_agent(SS, AgentId, Action, Flag).
 
--spec update_rr_strategy_with_agent(strategy_state(), ne_binary(), agent_priority(), 'add' | 'remove', 'busy' | 'undefined') ->
+-spec update_rr_strategy_with_agent(strategy_state(), ne_binary(), agent_priority(), 'add' | 'remove', 'ringing' | 'busy' | 'undefined') ->
                                            strategy_state().
 update_rr_strategy_with_agent(#strategy_state{agents=AgentQueue
                                              ,details=Details
                                              }=SS
-                             ,AgentId, Priority, 'add', Busy
+                             ,AgentId, Priority, 'add', Flag
                              ) ->
     SS1 = case pqueue4:remove_unique(fun(AgentId1) when AgentId =:= AgentId1 ->
                                              'true';
@@ -843,24 +850,22 @@ update_rr_strategy_with_agent(#strategy_state{agents=AgentQueue
                                    ,details=incr_agent(AgentId, Details)
                                    }
           end,
-    set_busy(AgentId, Busy, SS1);
-update_rr_strategy_with_agent(SS, AgentId, _Priority, 'remove', 'busy') ->
-    set_busy(AgentId, 'busy', SS);
-update_rr_strategy_with_agent(#strategy_state{agents=AgentQueue}=SS, AgentId, _Priority, 'remove', 'undefined') ->
+    set_flag(AgentId, Flag, SS1);
+update_rr_strategy_with_agent(#strategy_state{agents=AgentQueue}=SS, AgentId, _Priority, 'remove', Flag) ->
     SS1 = case lists:member(AgentId, pqueue4:to_list(AgentQueue)) of
               'false' -> SS;
               'true' ->
                   lager:info("removing agent ~s from strategy rr", [AgentId]),
                   remove_agent('rr', AgentId, SS)
           end,
-    set_busy(AgentId, 'undefined', SS1).
+    set_flag(AgentId, Flag, SS1).
 
--spec update_mi_strategy_with_agent(strategy_state(), ne_binary(), 'add' | 'remove', 'busy' | 'undefined') ->
+-spec update_mi_strategy_with_agent(strategy_state(), ne_binary(), 'add' | 'remove', 'ringing' | 'busy' | 'undefined') ->
                                            strategy_state().
 update_mi_strategy_with_agent(#strategy_state{agents=AgentL
                                              ,details=Details
                                              }=SS
-                             ,AgentId, 'add', Busy
+                             ,AgentId, 'add', Flag
                              ) ->
     SS1 = case lists:member(AgentId, AgentL) of
               'true' -> SS;
@@ -870,17 +875,15 @@ update_mi_strategy_with_agent(#strategy_state{agents=AgentL
                                    ,details=incr_agent(AgentId, Details)
                                    }
           end,
-    set_busy(AgentId, Busy, SS1);
-update_mi_strategy_with_agent(SS, AgentId, 'remove', 'busy') ->
-    set_busy(AgentId, 'busy', SS);
-update_mi_strategy_with_agent(#strategy_state{agents=AgentL}=SS, AgentId, 'remove', 'undefined') ->
+    set_flag(AgentId, Flag, SS1);
+update_mi_strategy_with_agent(#strategy_state{agents=AgentL}=SS, AgentId, 'remove', Flag) ->
     SS1 = case lists:member(AgentId, AgentL) of
               'false' -> SS;
               'true' ->
                   lager:info("removing agent ~s from strategy mi", [AgentId]),
                   remove_agent('mi', AgentId, SS)
           end,
-    set_busy(AgentId, 'undefined', SS1).
+    set_flag(AgentId, Flag, SS1).
 
 -spec remove_agent(queue_strategy(), ne_binary(), strategy_state()) -> strategy_state().
 remove_agent('rr', AgentId, #strategy_state{agents=AgentQueue
@@ -913,26 +916,31 @@ remove_agent('mi', AgentId, #strategy_state{agents=AgentL
 
 -spec incr_agent(ne_binary(), dict:dict()) -> dict:dict().
 incr_agent(AgentId, Details) ->
-    dict:update(AgentId, fun({Count, Busy}) -> {Count + 1, Busy} end, {1, 'undefined'}, Details).
+    dict:update(AgentId, fun({Count, Flag}) -> {Count + 1, Flag} end, {1, 'undefined'}, Details).
 
 -spec decr_agent(ne_binary(), dict:dict()) -> dict:dict().
 decr_agent(AgentId, Details) ->
-    dict:update(AgentId, fun({Count, Busy}) when Count > 1 -> {Count - 1, Busy};
-                            ({_, Busy}) -> {0, Busy} end
+    dict:update(AgentId, fun({Count, Flag}) when Count > 1 -> {Count - 1, Flag};
+                            ({_, Flag}) -> {0, Flag} end
                ,{0, 'undefined'}, Details).
 
--spec set_busy(ne_binary(), 'busy' | 'undefined', strategy_state()) -> strategy_state().
-set_busy(AgentId, Busy, #strategy_state{details=Details}=SS) ->
-    SS#strategy_state{details=dict:update(AgentId, fun({Count, _}) -> {Count, Busy} end, {0, Busy}, Details)}.
-
-maybe_update_strategy('mi', StrategyState, _AgentId) -> StrategyState;
-maybe_update_strategy('rr', #strategy_state{agents=AgentQueue}=SS, AgentId) ->
-    case pqueue4:pout(AgentQueue) of
-        {{'value', AgentId, Priority}, AgentQueue1} ->
-            lager:debug("agent ~s was front of queue, moving", [AgentId]),
-            SS#strategy_state{agents=pqueue4:in(AgentId, Priority, AgentQueue1)};
-        _ -> SS
-    end.
+-spec set_flag(ne_binary(), 'ringing' | 'busy' | 'undefined', strategy_state()) -> strategy_state().
+set_flag(AgentId, Flag, #strategy_state{details=Details
+                                       ,ringing_agents=RingingAgents
+                                       ,busy_agents=BusyAgents
+                                       }=SS) ->
+    RingingAgents1 = case Flag of
+                         'ringing' -> [AgentId | lists:delete(AgentId, RingingAgents)];
+                         _ -> lists:delete(AgentId, RingingAgents)
+                     end,
+    BusyAgents1 = case Flag of
+                      'busy' -> [AgentId | lists:delete(AgentId, BusyAgents)];
+                      _ -> lists:delete(AgentId, BusyAgents)
+                  end,
+    SS#strategy_state{details=dict:update(AgentId, fun({Count, _}) -> {Count, Flag} end, {0, Flag}, Details)
+                     ,ringing_agents=RingingAgents1
+                     ,busy_agents=BusyAgents1
+                     }.
 
 %% If A's idle time is greater, it should come before B
 -spec sort_agent(kz_json:object(), kz_json:object()) -> boolean().
@@ -1036,20 +1044,24 @@ call_position(CallId, [Call|Calls], Position) ->
     end.
 
 -spec ss_size(strategy_state(), 'free' | 'logged_in') -> integer().
-ss_size(#strategy_state{agents=Agents}, 'logged_in') ->
+ss_size(#strategy_state{agents=Agents
+                       ,ringing_agents=RingingAgents
+                       ,busy_agents=BusyAgents
+                       }, 'logged_in') ->
     case pqueue4:is_queue(Agents) of
         'true' -> pqueue4:len(Agents);
         'false' -> length(Agents)
-    end;
+    end + length(RingingAgents) + length(BusyAgents);
 ss_size(#strategy_state{agents=Agents
                        ,details=Details
+                       ,ringing_agents=RingingAgents
                        }, 'free') when is_list(Agents) ->
     lists:foldl(fun(AgentId, Count) ->
                         case dict:find(AgentId, Details) of
                             {'ok', {ProcCount, 'undefined'}} when ProcCount > 0 -> Count + 1;
                             _ -> Count
                         end
-                end, 0, Agents);
+                end, 0, Agents) + length(RingingAgents);
 ss_size(#strategy_state{agents=Agents}=SS, 'free') ->
     ss_size(SS#strategy_state{agents=pqueue4:to_list(Agents)}, 'free').
 

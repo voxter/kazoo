@@ -532,7 +532,9 @@ sync_resp_v(JObj) ->
 %%------------------------------------------------------------------------------
 %% Agent Change
 %%   available: when an agent logs in, tell its configured queues
-%%   ringing: when an agent is being run, forward queues' round robin
+%%   ringing: remove agent from acdc_queue_manager temporarily
+%%   busy: remove agent from acdc_queue_manager temporarily, mark as busy
+%%   unavailable: fully remove agent from acdc_queue_manager
 %%------------------------------------------------------------------------------
 agent_change_publish_key(Prop) when is_list(Prop) ->
     agent_change_routing_key(props:get_value(<<"Account-ID">>, Prop)
