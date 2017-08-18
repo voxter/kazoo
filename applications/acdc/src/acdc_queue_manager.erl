@@ -61,6 +61,34 @@
 -compile('export_all').
 -endif.
 
+-ifdef(ERL_VERSION_GT_5_10).
+-define(QUEUE_MODULE, 'pqueue4').
+-define(QUEUE_IN(Winner, Priority, Queue), pqueue4:in(Winner, Priority, Queue)).
+-define(QUEUE_OUT(Queue), pqueue4:pout(Queue)).
+-define(QUEUE_OUT_RETURN(Winner, Priority), {'value', Winner, Priority}).
+-define(QUEUE_FILTER(AgentId, Queue)
+        ,pqueue4:remove_unique(fun(AgentId1) when AgentId =:= AgentId1 ->
+                                       'true';
+                                  (_) ->
+                                       'false'
+                               end, Queue)
+       ).
+-else.
+-define(QUEUE_MODULE, 'queue').
+-define(QUEUE_IN(Winner, _, Queue), queue:in(Winner, Queue)).
+-define(QUEUE_OUT(Queue), queue:out(Queue)).
+-define(QUEUE_OUT_RETURN(Winner, _), {'value', Winner}).
+-define(QUEUE_FILTER(AgentId, Queue)
+        ,{queue:member(AgentId, Queue)
+          ,queue:filter(fun(AgentId1) when AgentId =:= AgentId1 ->
+                                'false';
+                           (_) ->
+                                'true'
+                        end, Queue)
+         }
+       ).
+-endif.
+
 -define(BINDINGS(A, Q), [{'conf', [{'type', <<"queue">>}
                                    ,{'db', wh_util:format_account_id(A, 'encoded')}
                                    ,{'id', Q}
@@ -415,9 +443,9 @@ handle_call('next_winner', _, #state{strategy='mi'}=State) ->
 handle_call('next_winner', _, #state{strategy='rr'
                                      ,strategy_state=#strategy_state{agents=Agents}=SS
                                     }=State) ->
-    case pqueue4:pout(Agents) of
-        {{'value', Winner, Priority}, Agents1} ->
-            {'reply', Winner, State#state{strategy_state=SS#strategy_state{agents=pqueue4:in(Winner, Priority, Agents1)}}, 'hibernate'};
+    case ?QUEUE_OUT(Agents) of
+        {?QUEUE_OUT_RETURN(Winner, Priority), Agents1} ->
+            {'reply', Winner, State#state{strategy_state=SS#strategy_state{agents=?QUEUE_IN(Winner, Priority, Agents1)}}, 'hibernate'};
         {'empty', _} ->
             {'reply', 'undefined', State}
     end;
@@ -428,7 +456,7 @@ handle_call('current_agents', _, #state{strategy='rr'
                                                                         ,busy_agents=BusyAgents
                                                                        }
                                        }=State) ->
-    {'reply', pqueue4:to_list(Q) ++ RingingAgents ++ BusyAgents, State};
+    {'reply', ?QUEUE_MODULE:to_list(Q) ++ RingingAgents ++ BusyAgents, State};
 handle_call('current_agents', _, #state{strategy='mi'
                                         ,strategy_state=#strategy_state{agents=L}
                                        }=State) ->
@@ -857,23 +885,19 @@ update_rr_strategy_with_agent(#strategy_state{agents=AgentQueue
                                              }=SS
                               ,AgentId, Priority, 'add', Flag
                              ) ->
-    SS1 = case pqueue4:remove_unique(fun(AgentId1) when AgentId =:= AgentId1 ->
-                                             'true';
-                                        (_) ->
-                                             'false'
-                                     end, AgentQueue) of
+    SS1 = case ?QUEUE_FILTER(AgentId, AgentQueue) of
               {'true', AgentQueue1} ->
                   lager:info("re-adding agent ~s (prio ~b) to strategy rr", [AgentId, -1 * Priority]),
-                  SS#strategy_state{agents=pqueue4:in(AgentId, Priority, AgentQueue1)};
+                  SS#strategy_state{agents=?QUEUE_IN(AgentId, Priority, AgentQueue1)};
               {'false', AgentQueue1} ->
                   lager:info("adding agent ~s (prio ~b) to strategy rr", [AgentId, -1 * Priority]),
-                  SS#strategy_state{agents=pqueue4:in(AgentId, Priority, AgentQueue1)
+                  SS#strategy_state{agents=?QUEUE_IN(AgentId, Priority, AgentQueue1)
                                     ,details=incr_agent(AgentId, Details)
                                    }
           end,
     set_flag(AgentId, Flag, SS1);
 update_rr_strategy_with_agent(#strategy_state{agents=AgentQueue}=SS, AgentId, _Priority, 'remove', Flag) ->
-    SS1 = case lists:member(AgentId, pqueue4:to_list(AgentQueue)) of
+    SS1 = case lists:member(AgentId, ?QUEUE_MODULE:to_list(AgentQueue)) of
               'false' -> SS;
               'true' ->
                   lager:info("removing agent ~s from strategy rr", [AgentId]),
@@ -914,11 +938,7 @@ remove_agent('rr', AgentId, #strategy_state{agents=AgentQueue
         {'ok', {Count, _}} when Count > 1 ->
             SS#strategy_state{details=decr_agent(AgentId, Details)};
         _ ->
-            {_, AgentQueue1} = pqueue4:remove_unique(fun(AgentId1) when AgentId1 =:= AgentId -> 'true';
-                                                        (_) -> 'false'
-                                                     end
-                                                     ,AgentQueue
-                                                    ),
+            {_, AgentQueue1} = ?QUEUE_FILTER(AgentId, AgentQueue),
             SS#strategy_state{agents=AgentQueue1
                               ,details=decr_agent(AgentId, Details)
                              }
@@ -994,7 +1014,7 @@ create_strategy_state(Strategy, AcctDb, QueueId) ->
     create_strategy_state(Strategy, #strategy_state{}, AcctDb, QueueId).
 
 create_strategy_state('rr', #strategy_state{agents='undefined'}=SS, AcctDb, QueueId) ->
-    create_strategy_state('rr', SS#strategy_state{agents=pqueue4:new()}, AcctDb, QueueId);
+    create_strategy_state('rr', SS#strategy_state{agents=?QUEUE_MODULE:new()}, AcctDb, QueueId);
 create_strategy_state('rr', #strategy_state{agents=AgentQ}=SS, AcctDb, QueueId) ->
     case couch_mgr:get_results(AcctDb, <<"queues/agents_listing">>, [{'key', QueueId}]) of
         {'ok', []} -> lager:debug("no agents around"), SS;
@@ -1006,7 +1026,7 @@ create_strategy_state('rr', #strategy_state{agents=AgentQ}=SS, AcctDb, QueueId) 
                                  end, JObjs),
             Q1 = lists:foldl(fun({AgentId, Priority}, Q) ->
                                      lager:info("adding agent ~s (prio ~b) to strategy rr", [AgentId, -1 * Priority]),
-                                     pqueue4:in(AgentId, Priority, Q)
+                                     ?QUEUE_IN(AgentId, Priority, Q)
                              end
                              ,AgentQ
                              ,lists:usort(AgentMap)
@@ -1044,7 +1064,7 @@ create_strategy_state('mi', #strategy_state{agents=AgentL}=SS, AcctDb, QueueId) 
     end.
 
 update_strategy_state(Srv, 'rr', #strategy_state{agents=AgentQueue}) ->
-    L = pqueue4:to_list(AgentQueue),
+    L = ?QUEUE_MODULE:to_list(AgentQueue),
     update_strategy_state(Srv, L);
 update_strategy_state(Srv, 'mi', #strategy_state{agents=AgentL}) ->
     update_strategy_state(Srv, AgentL).
@@ -1056,8 +1076,8 @@ ss_size(#strategy_state{agents=Agents
                         ,ringing_agents=RingingAgents
                         ,busy_agents=BusyAgents
                        }, 'logged_in') ->
-    case pqueue4:is_queue(Agents) of
-        'true' -> pqueue4:len(Agents);
+    case ?QUEUE_MODULE:is_queue(Agents) of
+        'true' -> ?QUEUE_MODULE:len(Agents);
         'false' -> length(Agents)
     end + length(RingingAgents) + length(BusyAgents);
 ss_size(#strategy_state{agents=Agents
@@ -1071,7 +1091,7 @@ ss_size(#strategy_state{agents=Agents
                         end
                 end, 0, Agents) + length(RingingAgents);
 ss_size(#strategy_state{agents=Agents}=SS, 'free') ->
-    ss_size(SS#strategy_state{agents=pqueue4:to_list(Agents)}, 'free').
+    ss_size(SS#strategy_state{agents=?QUEUE_MODULE:to_list(Agents)}, 'free').
 
 %%--------------------------------------------------------------------
 %% @private

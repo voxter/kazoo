@@ -27,7 +27,11 @@
                }).
 -type mgr_state() :: #state{}.
 
+-ifdef(ERL_VERSION_GT_5_10).
 -type queue_strategy_state() :: pqueue4:pqueue() | ne_binaries().
+-else.
+-type queue_strategy_state() :: queue() | ne_binaries().
+-endif.
 -type ss_details() :: {non_neg_integer(), 'ringing' | 'busy' | 'undefined'}.
 -record(strategy_state, {agents :: queue_strategy_state()
                           %% details include # of agent processes and availability
