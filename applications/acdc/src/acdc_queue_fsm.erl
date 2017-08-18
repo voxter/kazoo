@@ -1000,7 +1000,7 @@ maybe_pick_winner(#state{connect_resps=CRs
                                       }};
         {[], []} ->
             lager:info("no response from the winner"),
-            {_, NextState, State1} = maybe_connect_re_req(Mgr, Srv, #state{connect_resps=[]}),
+            {_, NextState, State1} = maybe_connect_re_req(Mgr, Srv, State#state{connect_resps=[]}),
             {NextState, State1}
     end.
 
