@@ -615,7 +615,7 @@ check_emergency_caller_id(UserId, Context) ->
 check_acdc_agent_priority_supported(UserId, Context) ->
     check_user_schema(UserId, Context).
 -else.
-check_acdc_agent_priority_supported(_, Context) ->
+check_acdc_agent_priority_supported(UserId, Context) ->
     lager:error("cannot use acdc_agent_priority - upgrade to Erlang R16 or above"),
     cb_context:add_validation_error(
         [<<"acdc_agent_priority">>]
@@ -623,7 +623,7 @@ check_acdc_agent_priority_supported(_, Context) ->
         ,wh_json:from_list([
             {<<"message">>, <<"acdc_agent_priority is not supported on this instance">>}
          ])
-        ,Context
+        ,check_user_schema(UserId, Context)
     ).
 -endif.
 
