@@ -141,13 +141,8 @@ build_push_fold(K, V, Acc, JObj, Params) ->
                 'undefined' -> Acc;
                 V1 -> kz_json:set_value(K, V1, Acc)
             end;
-        V2 -> kz_json:set_value(K, convert_type(V2), Acc)
+        V2 -> kz_json:set_value(K, V2, Acc)
     end.
-
--spec convert_type(kz_json:json_term()) -> kz_json:json_term().
-convert_type(<<"true">>) -> 'true';
-convert_type(<<"false">>) -> 'false';
-convert_type(V) -> V.
 
 -spec send_reply(ne_binary(), kz_json:object()) -> 'ok'.
 send_reply(Token, JObj) ->
