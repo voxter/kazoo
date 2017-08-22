@@ -26,7 +26,6 @@
                          ,[{'type', <<"user">>}]
                          ,[{'type', <<"callflow">>}]
                          ,[{'type', <<"device">>}]
-                         ,[{'type', <<"vmbox">>}]
                          ,[{'type', <<"parked_calls">>}]
                          ,[{'doc_id', ?MANUAL_PRESENCE_DOC}]
                          ]).
