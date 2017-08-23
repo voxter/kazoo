@@ -21,4 +21,4 @@ steps:
   - label: ':ship: Update YUM repo with new package'
     command: './scripts/buildkite-deploy-rpm.sh'
     agents:
-      repo: 'yum'
+      queue: 'repo'
