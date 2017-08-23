@@ -19,12 +19,6 @@
             "description": "Media ID (or appropriate media URI) of media to play when caller is about to be connected.",
             "type": "string"
         },
-        "announcements_timer": {
-            "default": 30,
-            "description": "Time between position and hold time announcements.",
-            "minimum": 30,
-            "type": "integer"
-        },
         "breakout": {
             "properties": {
                 "dtmf": {
@@ -97,11 +91,6 @@
             "description": "Allows a caller to enter a queue and wait when no agents are available",
             "type": "boolean"
         },
-        "holdtime_announcements_enabled": {
-            "default": false,
-            "description": "Enable periodic average hold time announcements to caller.",
-            "type": "boolean"
-        },
         "max_priority": {
             "description": "Maximum possible priority level queue will support. Can not be redefined for existing queue.",
             "maximum": 255,
@@ -122,11 +111,6 @@
             "maxLength": 128,
             "minLength": 1,
             "type": "string"
-        },
-        "position_announcements_enabled": {
-            "default": false,
-            "description": "Enable periodic position announcements to caller.",
-            "type": "boolean"
         },
         "preserve_metadata": {
             "default": false,

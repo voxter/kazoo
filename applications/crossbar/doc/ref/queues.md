@@ -13,7 +13,6 @@ Key | Description | Type | Default | Required
 `agent_ring_timeout` | In seconds, how long to ring an agent before progressing to the next agent available | `integer` | `15` | `false`
 `agent_wrapup_time` | Pre-defined wait period applied after an agent handles a customer call | `integer` | `0` | `false`
 `announce` | Media ID (or appropriate media URI) of media to play when caller is about to be connected. | `string` |   | `false`
-`announcements_timer` | Time between position and hold time announcements. | `integer` | `30` | `false`
 `breakout` |   | `object` |   | `false`
 `breakout.dtmf` | Digit that puts caller into breakout menu | `string` |   | `true`
 `breakout.media` | Media overrides for breakout menu prompts | `object` |   | `false`
@@ -26,12 +25,10 @@ Key | Description | Type | Default | Required
 `cdr_url` | An optional HTTP URL to POST the CDR | `string` |   | `false`
 `connection_timeout` | In seconds, how long to try to connect the caller before progressing past the queue callflow action | `integer` | `3600` | `false`
 `enter_when_empty` | Allows a caller to enter a queue and wait when no agents are available | `boolean` | `true` | `false`
-`holdtime_announcements_enabled` | Enable periodic average hold time announcements to caller. | `boolean` | `false` | `false`
 `max_priority` | Maximum possible priority level queue will support. Can not be redefined for existing queue. | `integer` |   | `false`
 `max_queue_size` | How many callers are allowed to wait on hold in the queue (0 for no limit) | `integer` | `0` | `false`
 `moh` | Media ID (or appropriate media URI) of media to play while caller is on hold. | `string` |   | `false`
 `name` | A friendly name for the queue | `string(1..128)` |   | `true`
-`position_announcements_enabled` | Enable periodic position announcements to caller. | `boolean` | `false` | `false`
 `preserve_metadata` | Keep metadata about call recording so it is retrievable by media API | `boolean` | `false` | `false`
 `record_caller` | When enabled, a caller's audio will be recorded | `boolean` | `false` | `false`
 `recording_url` | An optional HTTP URL to PUT the call recording after the call ends (and should respond to GET for retrieving the audio data) | `string` |   | `false`
