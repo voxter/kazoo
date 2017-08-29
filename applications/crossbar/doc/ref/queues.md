@@ -13,6 +13,15 @@ Key | Description | Type | Default | Required
 `agent_ring_timeout` | In seconds, how long to ring an agent before progressing to the next agent available | `integer` | `15` | `false`
 `agent_wrapup_time` | Pre-defined wait period applied after an agent handles a customer call | `integer` | `0` | `false`
 `announce` | Media ID (or appropriate media URI) of media to play when caller is about to be connected. | `string` |   | `false`
+`announcements` | Configuration for periodic announcements to callers waiting in the queue | `object` |   | `false`
+`announcements.interval` | Time between announcements | `integer` | `30` | `false`
+`announcements.media` | Custom prompts to be played for the announcements | `object` |   | `false`
+`announcements.media.in_the_queue` | Played after the numeric position | `string` |   | `true`
+`announcements.media.increase_in_call_volume` | Played if the estimated wait time has increased since the previous wait time announcement | `string` |   | `true`
+`announcements.media.the_estimated_wait_time_is` | Played before the estimated wait time media | `string` |   | `true`
+`announcements.media.you_are_at_position` | Played before the numeric position | `string` |   | `true`
+`announcements.position_announcements_enabled` | Whether announcements of the caller's position in the queue should be played | `boolean` |   | `false`
+`announcements.wait_time_announcements_enabled` | Whether announcements of the estimated wait time in the queue should be played | `boolean` |   | `false`
 `breakout` |   | `object` |   | `false`
 `breakout.dtmf` | Digit that puts caller into breakout menu | `string` |   | `true`
 `breakout.media` | Media overrides for breakout menu prompts | `object` |   | `false`
