@@ -95,17 +95,22 @@ handle_ringback(Node, UUID, JObj) ->
     end.
 
 -spec maybe_ringback_from_language(atom(), ne_binary(), kz_json:object()) -> 'ok'.
-maybe_ringback_from_language(_Node, _UUID, JObj) ->
+maybe_ringback_from_language(Node, UUID, JObj) ->
     case kz_json:get_ne_binary_value(<<"Language">>, JObj) of
         'undefined' -> 'ok';
-        <<"en-ca">> -> <<"${ca-ring}">>;
-        <<"en-gb">> -> <<"${uk-ring}">>;
-        <<"en-us">> -> <<"${us-ring}">>;
-        <<Lang:2/binary, _/binary>> -> <<"${", Lang/binary, "-ring}">>;
+        <<"en-ca">> -> ringback_from_language(Node, UUID, <<"${ca-ring}">>);
+        <<"en-gb">> -> ringback_from_language(Node, UUID, <<"${uk-ring}">>);
+        <<"en-us">> -> ringback_from_language(Node, UUID, <<"${us-ring}">>);
+        <<Lang:2/binary, _/binary>> ->
+            ringback_from_language(Node, UUID, <<"${", Lang/binary, "-ring}">>);
         Lang ->
             lager:error("invalid language ~s for ringback", [Lang]),
             'ok'
     end.
+
+-spec ringback_from_language(atom(), ne_binary(), ne_binary()) -> 'ok'.
+ringback_from_language(Node, UUID, Ringback) ->
+    ecallmgr_fs_command:set(Node, UUID, [{<<"ringback">>, Ringback}]).
 
 -spec maybe_early_media(atom(), ne_binary(), kz_json:object(), kz_json:objects()) -> ecallmgr_util:send_cmd_ret().
 maybe_early_media(Node, UUID, JObj, Endpoints) ->
