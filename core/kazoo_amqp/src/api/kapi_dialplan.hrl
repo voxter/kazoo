@@ -66,6 +66,7 @@
         ,<<"Ignore-Early-Media">>
         ,<<"Ignore-Forward">>
         ,<<"Insert-At">>
+        ,<<"Language">>
         ,<<"Media">>
         ,<<"Outbound-Callee-ID-Name">>
         ,<<"Outbound-Callee-ID-Number">>
