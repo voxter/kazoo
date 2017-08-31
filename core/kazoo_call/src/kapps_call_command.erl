@@ -55,8 +55,8 @@
         ,receive_fax/4
         ,b_receive_fax/1
         ]).
--export([bridge/2, bridge/3, bridge/4, bridge/5, bridge/6, bridge/7
-        ,b_bridge/2, b_bridge/3, b_bridge/4, b_bridge/5, b_bridge/6, b_bridge/7, b_bridge/8
+-export([bridge/2, bridge/3, bridge/4, bridge/5, bridge/6, bridge/7, bridge/8, bridge/9
+        ,b_bridge/2, b_bridge/3, b_bridge/4, b_bridge/5, b_bridge/6, b_bridge/7, b_bridge/8, b_bridge/9
         ,unbridge/1, unbridge/2, unbridge/3
         ,b_bridge_wait/2
         ]).
@@ -1048,7 +1048,7 @@ bridge_command(Endpoints, Timeout, Strategy, IgnoreEarlyMedia, Ringback, SIPHead
     ,{<<"Fail-On-Single-Reject">>, FailOnSingleReject}
     ,{<<"Dial-Endpoint-Method">>, Strategy}
     ,{<<"Custom-SIP-Headers">>, SIPHeaders}
-    ,{<<"Ignore-Forward">>, IgnoreFoward}
+    ,{<<"Ignore-Forward">>, IgnoreForward}
     ,{<<"Language">>, kapps_call:language(Call)}
     ].
 
