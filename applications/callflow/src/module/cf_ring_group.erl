@@ -74,7 +74,7 @@ attempt_endpoints(Endpoints, Data, Call) ->
     lager:info("attempting ring group of ~b members with strategy ~s", [length(Endpoints), Strategy]),
     case kapps_call_command:b_bridge(Endpoints, Timeout, Strategy, <<"true">>
                                     ,kz_media_util:media_path(Ringback, Call)
-                                    ,'undefined', IgnoreForward, FailOnSingleReject
+                                    ,'undefined', IgnoreForward, FailOnSingleReject, Call
                                     )
     of
         {'ok', _} ->
