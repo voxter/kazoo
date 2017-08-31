@@ -34,7 +34,7 @@ handle(Data, Call) ->
     lager:info("attempting ~b user devices with strategy ~s", [length(Endpoints), Strategy]),
     case length(Endpoints) > 0
         andalso kapps_call_command:b_bridge(Endpoints, Timeout, Strategy, IgnoreEarlyMedia
-                                           ,'undefined', 'undefined', <<"false">>, FailOnSingleReject
+                                           ,'undefined', 'undefined', <<"false">>, FailOnSingleReject, Call
                                            )
     of
         'false' ->

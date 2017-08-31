@@ -62,7 +62,7 @@ bridge_to_endpoints(Data, Call) ->
             IgnoreEarlyMedia = kz_endpoints:ignore_early_media(Endpoints),
 
             kapps_call_command:b_bridge(Endpoints, Timeout, kapi_dialplan:dial_method_single(), IgnoreEarlyMedia
-                                       ,'undefined', 'undefined', <<"false">>, FailOnSingleReject
+                                       ,'undefined', 'undefined', <<"false">>, FailOnSingleReject, Call
                                        )
     end.
 
