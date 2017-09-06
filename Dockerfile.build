@@ -1,27 +1,53 @@
-FROM synlay/erlang:19.3
+FROM centos
 
-RUN apt-get update \
-    && apt-get install -y \
-        rpm \
+RUN yum install -y epel-release
+
+COPY voxter-couchdb.repo /etc/yum.repos.d
+
+COPY voxter-erlang.repo /etc/yum.repos.d
+
+COPY voxter-kazoo-configs.repo /etc/yum.repos.d
+
+RUN yum install -y \
+    # Kazoo
+        curl \
+        esl-erlang-19.3 \
+        expat \
+        expat-devel \
+        gcc \
+        gcc-c++ \
+        git \
+        htmldoc \
+        libxslt \
+        libxslt-devel \
+        make \
+        ncurses-devel \
+        openssl \
+        openssl-devel \
+        unzip \
         wget \
-        python \
-        python-dev \
-        python-pip \
-        ruby \
-        ruby-dev \
-        rubygems \
+        zip \
+        zlib-devel \
+    # Node
+    && rpm -ivh https://kojipkgs.fedoraproject.org//packages/http-parser/2.7.1/3.el7/x86_64/http-parser-2.7.1-3.el7.x86_64.rpm \
+    && yum install -y \
         nodejs \
         npm \
-        vim \
-        emacs \
+    # Tests
         couchdb \
-        build-essential \
+        emacs \
+        python \
+        python-pip \
+    && ln -s /opt/couchdb/bin/couchjs /usr/local/bin \
     && pip install --upgrade pip \
-    && pip install PyYAML mkdocs pyembed-markdown jsonschema \
-    && gem install --no-ri --no-rdoc fpm \
-    && npm install -g swagger-tools
-
-RUN update-alternatives --install /usr/bin/node node /usr/bin/nodejs 10
+    && pip install jsonschema \
+    && npm install -g swagger-tools \
+    # FPM
+    && yum install -y \
+        ruby \
+        ruby-devel \
+        rubygems \
+    && gem install --no-ri --no-rdoc fpm
 
 WORKDIR /app
 CMD ["tail", "-f", "/dev/null"]

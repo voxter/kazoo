@@ -1,7 +1,7 @@
 #!/bin/bash
 
 VERSION=`git describe --abbrev=0 --tags`
-ITTERATION=1
+ITTERATION=2
 ARCH=x86_64
 
 fpm -s dir \
