@@ -44,6 +44,7 @@ RUN yum install -y \
     && npm install -g swagger-tools \
     # FPM
     && yum install -y \
+        rpm-build \
         ruby \
         ruby-devel \
         rubygems \
