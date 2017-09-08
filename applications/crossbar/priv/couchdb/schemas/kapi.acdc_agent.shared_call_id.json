@@ -1,38 +1,36 @@
 {
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "_id": "kapi.acdc_queue.member_connect_accepted",
-    "description": "AMQP API for acdc_queue.member_connect_accepted",
+    "_id": "kapi.acdc_agent.shared_call_id",
+    "description": "AMQP API for acdc_agent.shared_call_id",
     "properties": {
         "Account-ID": {
+            "type": "string"
+        },
+        "Agent-Call-ID": {
             "type": "string"
         },
         "Agent-ID": {
             "type": "string"
         },
-        "Call-ID": {
-            "type": "string"
-        },
         "Event-Category": {
             "enum": [
-                "member"
+                "agent"
             ],
             "type": "string"
         },
         "Event-Name": {
             "enum": [
-                "connect_accepted"
+                "shared_call_id"
             ],
             "type": "string"
         },
-        "Old-Call-ID": {
-            "type": "string"
-        },
-        "Process-ID": {
+        "Member-Call-ID": {
             "type": "string"
         }
     },
     "required": [
-        "Call-ID"
+        "Account-ID",
+        "Agent-ID"
     ],
     "type": "object"
 }

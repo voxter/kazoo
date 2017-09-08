@@ -1,7 +1,7 @@
 {
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "_id": "kapi.acdc_stats.status_outbound",
-    "description": "AMQP API for acdc_stats.status_outbound",
+    "_id": "kapi.acdc_stats.call_summary_req",
+    "description": "AMQP API for acdc_stats.call_summary_req",
     "properties": {
         "Account-ID": {
             "type": "string"
@@ -9,44 +9,33 @@
         "Agent-ID": {
             "type": "string"
         },
-        "Call-ID": {
-            "type": "string"
-        },
-        "Caller-ID-Name": {
-            "type": "string"
-        },
-        "Caller-ID-Number": {
+        "End-Range": {
             "type": "string"
         },
         "Event-Category": {
             "enum": [
-                "acdc_status_stat"
+                "acdc_stat"
             ],
             "type": "string"
         },
         "Event-Name": {
             "enum": [
-                "outbound"
+                "call_summary_req"
             ],
             "type": "string"
         },
-        "Pause-Alias": {
+        "Queue-ID": {
             "type": "string"
         },
-        "Pause-Time": {
-            "type": "integer"
-        },
-        "Timestamp": {
+        "Start-Range": {
             "type": "string"
         },
-        "Wait-Time": {
-            "type": "integer"
+        "Status": {
+            "type": "string"
         }
     },
     "required": [
-        "Account-ID",
-        "Agent-ID",
-        "Timestamp"
+        "Account-ID"
     ],
     "type": "object"
 }

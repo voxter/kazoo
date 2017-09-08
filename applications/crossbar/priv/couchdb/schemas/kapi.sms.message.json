@@ -110,6 +110,9 @@
         "Ignore-Completed-Elsewhere": {
             "type": "string"
         },
+        "Ignore-Display-Updates": {
+            "type": "string"
+        },
         "Ignore-Early-Media": {
             "type": "string"
         },

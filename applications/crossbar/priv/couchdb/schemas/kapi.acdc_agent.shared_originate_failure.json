@@ -1,7 +1,7 @@
 {
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "_id": "kapi.acdc_queue.member_connect_accepted",
-    "description": "AMQP API for acdc_queue.member_connect_accepted",
+    "_id": "kapi.acdc_agent.shared_originate_failure",
+    "description": "AMQP API for acdc_agent.shared_originate_failure",
     "properties": {
         "Account-ID": {
             "type": "string"
@@ -9,30 +9,28 @@
         "Agent-ID": {
             "type": "string"
         },
-        "Call-ID": {
-            "type": "string"
-        },
-        "Event-Category": {
+        "Blame": {
             "enum": [
                 "member"
             ],
             "type": "string"
         },
-        "Event-Name": {
+        "Event-Category": {
             "enum": [
-                "connect_accepted"
+                "agent"
             ],
             "type": "string"
         },
-        "Old-Call-ID": {
-            "type": "string"
-        },
-        "Process-ID": {
+        "Event-Name": {
+            "enum": [
+                "shared_failure"
+            ],
             "type": "string"
         }
     },
     "required": [
-        "Call-ID"
+        "Account-ID",
+        "Agent-ID"
     ],
     "type": "object"
 }

@@ -1,7 +1,7 @@
 {
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "_id": "kapi.acdc_stats.call_waiting",
-    "description": "AMQP API for acdc_stats.call_waiting",
+    "_id": "kapi.acdc_queue.member_callback_reg",
+    "description": "AMQP API for acdc_queue.member_callback_reg",
     "properties": {
         "Account-ID": {
             "type": "string"
@@ -9,31 +9,19 @@
         "Call-ID": {
             "type": "string"
         },
-        "Caller-ID-Name": {
-            "type": "string"
-        },
-        "Caller-ID-Number": {
-            "type": "string"
-        },
-        "Caller-Priority": {
-            "type": "string"
-        },
-        "Entered-Position": {
-            "type": "string"
-        },
-        "Entered-Timestamp": {
-            "type": "string"
-        },
         "Event-Category": {
             "enum": [
-                "acdc_call_stat"
+                "member"
             ],
             "type": "string"
         },
         "Event-Name": {
             "enum": [
-                "waiting"
+                "callback_reg"
             ],
+            "type": "string"
+        },
+        "Number": {
             "type": "string"
         },
         "Queue-ID": {
@@ -43,6 +31,7 @@
     "required": [
         "Account-ID",
         "Call-ID",
+        "Number",
         "Queue-ID"
     ],
     "type": "object"

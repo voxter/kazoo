@@ -1,12 +1,9 @@
 {
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "_id": "kapi.acdc_stats.status_update",
-    "description": "AMQP API for acdc_stats.status_update",
+    "_id": "kapi.acdc_stats.call_marked_callback",
+    "description": "AMQP API for acdc_stats.call_marked_callback",
     "properties": {
         "Account-ID": {
-            "type": "string"
-        },
-        "Agent-ID": {
             "type": "string"
         },
         "Call-ID": {
@@ -15,33 +12,26 @@
         "Caller-ID-Name": {
             "type": "string"
         },
-        "Caller-ID-Number": {
-            "type": "string"
-        },
         "Event-Category": {
             "enum": [
-                "acdc_status_stat"
+                "acdc_call_stat"
             ],
             "type": "string"
         },
-        "Event-Name": {},
-        "Pause-Alias": {
+        "Event-Name": {
+            "enum": [
+                "marked_callback"
+            ],
             "type": "string"
         },
-        "Pause-Time": {
-            "type": "integer"
-        },
-        "Timestamp": {
+        "Queue-ID": {
             "type": "string"
-        },
-        "Wait-Time": {
-            "type": "integer"
         }
     },
     "required": [
         "Account-ID",
-        "Agent-ID",
-        "Timestamp"
+        "Call-ID",
+        "Queue-ID"
     ],
     "type": "object"
 }

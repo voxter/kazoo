@@ -1,32 +1,26 @@
 {
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "_id": "kapi.acdc_agent.stats_req",
-    "description": "AMQP API for acdc_agent.stats_req",
+    "_id": "kapi.pivot.succeeded",
+    "description": "AMQP API for pivot.succeeded",
     "properties": {
-        "Account-ID": {
-            "type": "string"
-        },
-        "Agent-ID": {
-            "type": "string"
-        },
         "Call-ID": {
             "type": "string"
         },
         "Event-Category": {
             "enum": [
-                "agent"
+                "pivot"
             ],
             "type": "string"
         },
         "Event-Name": {
             "enum": [
-                "stats_req"
+                "succeeded"
             ],
             "type": "string"
         }
     },
     "required": [
-        "Account-ID"
+        "Call-ID"
     ],
     "type": "object"
 }

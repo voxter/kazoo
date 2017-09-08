@@ -1,32 +1,26 @@
 {
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "_id": "kapi.acdc_agent.stats_req",
-    "description": "AMQP API for acdc_agent.stats_req",
+    "_id": "kapi.acdc_stats.agent_calls_err",
+    "description": "AMQP API for acdc_stats.agent_calls_err",
     "properties": {
-        "Account-ID": {
-            "type": "string"
-        },
-        "Agent-ID": {
-            "type": "string"
-        },
-        "Call-ID": {
+        "Error-Reason": {
             "type": "string"
         },
         "Event-Category": {
             "enum": [
-                "agent"
+                "acdc_stat"
             ],
             "type": "string"
         },
         "Event-Name": {
             "enum": [
-                "stats_req"
+                "agent_calls_err"
             ],
             "type": "string"
         }
     },
     "required": [
-        "Account-ID"
+        "Error-Reason"
     ],
     "type": "object"
 }

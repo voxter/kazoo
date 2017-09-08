@@ -1,52 +1,47 @@
 {
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "_id": "kapi.acdc_stats.status_outbound",
-    "description": "AMQP API for acdc_stats.status_outbound",
+    "_id": "kapi.acdc_stats.call_summary_resp",
+    "description": "AMQP API for acdc_stats.call_summary_resp",
     "properties": {
-        "Account-ID": {
+        "Abandoned": {
             "type": "string"
         },
-        "Agent-ID": {
+        "Data": {
             "type": "string"
         },
-        "Call-ID": {
-            "type": "string"
-        },
-        "Caller-ID-Name": {
-            "type": "string"
-        },
-        "Caller-ID-Number": {
+        "Entered-Position": {
             "type": "string"
         },
         "Event-Category": {
             "enum": [
-                "acdc_status_stat"
+                "acdc_stat"
             ],
             "type": "string"
         },
         "Event-Name": {
             "enum": [
-                "outbound"
+                "call_summary_resp"
             ],
             "type": "string"
         },
-        "Pause-Alias": {
+        "Exited-Position": {
             "type": "string"
         },
-        "Pause-Time": {
-            "type": "integer"
-        },
-        "Timestamp": {
+        "Handled": {
             "type": "string"
         },
-        "Wait-Time": {
+        "Processed": {
+            "type": "string"
+        },
+        "Query-Time": {
             "type": "integer"
+        },
+        "Waiting": {
+            "type": "string"
         }
     },
     "required": [
-        "Account-ID",
-        "Agent-ID",
-        "Timestamp"
+        "Query-Time"
     ],
     "type": "object"
 }

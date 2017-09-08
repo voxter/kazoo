@@ -102,6 +102,9 @@
         "Duration-Seconds": {
             "type": "string"
         },
+        "Endpoint-Disposition": {
+            "type": "string"
+        },
         "Event-Category": {
             "enum": [
                 "call_event"

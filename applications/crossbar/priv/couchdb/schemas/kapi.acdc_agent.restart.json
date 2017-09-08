@@ -1,7 +1,7 @@
 {
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "_id": "kapi.acdc_stats.status_update",
-    "description": "AMQP API for acdc_stats.status_update",
+    "_id": "kapi.acdc_agent.restart",
+    "description": "AMQP API for acdc_agent.restart",
     "properties": {
         "Account-ID": {
             "type": "string"
@@ -9,39 +9,42 @@
         "Agent-ID": {
             "type": "string"
         },
-        "Call-ID": {
-            "type": "string"
-        },
-        "Caller-ID-Name": {
-            "type": "string"
-        },
-        "Caller-ID-Number": {
-            "type": "string"
-        },
         "Event-Category": {
             "enum": [
-                "acdc_status_stat"
+                "agent"
             ],
             "type": "string"
         },
-        "Event-Name": {},
-        "Pause-Alias": {
+        "Event-Name": {
+            "enum": [
+                "restart"
+            ],
             "type": "string"
         },
-        "Pause-Time": {
-            "type": "integer"
-        },
-        "Timestamp": {
+        "Presence-ID": {
             "type": "string"
         },
-        "Wait-Time": {
+        "Presence-State": {
+            "enum": [
+                "trying",
+                "online",
+                "offline",
+                "early",
+                "confirmed",
+                "terminated"
+            ],
+            "type": "string"
+        },
+        "Queue-ID": {
+            "type": "string"
+        },
+        "Time-Limit": {
             "type": "integer"
         }
     },
     "required": [
         "Account-ID",
-        "Agent-ID",
-        "Timestamp"
+        "Agent-ID"
     ],
     "type": "object"
 }

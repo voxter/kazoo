@@ -18,15 +18,19 @@ Key | Description | Type | Default | Required
 `announcements.media.increase_in_call_volume` | Played if the estimated wait time has increased since the previous wait time announcement | `string()` |   | `true`
 `announcements.media.the_estimated_wait_time_is` | Played before the estimated wait time media | `string()` |   | `true`
 `announcements.media.you_are_at_position` | Played before the numeric position | `string()` |   | `true`
+`announcements.media` | Custom prompts to be played for the announcements | `object()` |   | `false`
 `announcements.position_announcements_enabled` | Whether announcements of the caller's position in the queue should be played | `boolean()` |   | `false`
 `announcements.wait_time_announcements_enabled` | Whether announcements of the estimated wait time in the queue should be played | `boolean()` |   | `false`
+`announcements` | Configuration for periodic announcements to callers waiting in the queue | `object()` |   | `false`
 `breakout.dtmf` | Digit that puts caller into breakout menu | `string()` |   | `true`
 `breakout.media.call_back_at` | You will be called back at: | `string()` |   | `false`
 `breakout.media.callback_registered` | Your callback has been registered. Goodbye! | `string()` |   | `false`
 `breakout.media.enter_callback_number` | Enter a callback number, followed by the pound sign. | `string()` |   | `false`
 `breakout.media.number_correct` | If this is correct, press 1. Otherwise, press 2. | `string()` |   | `false`
 `breakout.media.prompt` | Press 1 to receive a callback. | `string()` |   | `false`
-`caller_exit_key` | Key caller can press while on hold to exit the queue and continue in the callflow | `string('1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '*' | '0' | '#')` | `#` | `false`
+`breakout.media` | Media overrides for breakout menu prompts | `object()` |   | `false`
+`breakout` |   | `object()` |   | `false`
+`caller_exit_key` | Key caller can press while on hold to exit the queue and continue in the callflow | `string('1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '*' | '0' | '#')` |   | `false`
 `cdr_url` | An optional HTTP URL to POST the CDR | `string()` |   | `false`
 `connection_timeout` | In seconds, how long to try to connect the caller before progressing past the queue callflow action | `integer()` | `3600` | `false`
 `enter_when_empty` | Allows a caller to enter a queue and wait when no agents are available | `boolean()` | `true` | `false`

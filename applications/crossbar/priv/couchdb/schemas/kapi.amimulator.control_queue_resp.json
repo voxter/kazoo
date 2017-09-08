@@ -1,32 +1,30 @@
 {
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "_id": "kapi.acdc_agent.stats_req",
-    "description": "AMQP API for acdc_agent.stats_req",
+    "_id": "kapi.amimulator.control_queue_resp",
+    "description": "AMQP API for amimulator.control_queue_resp",
     "properties": {
-        "Account-ID": {
-            "type": "string"
-        },
-        "Agent-ID": {
-            "type": "string"
-        },
         "Call-ID": {
+            "type": "string"
+        },
+        "Control-Queue": {
             "type": "string"
         },
         "Event-Category": {
             "enum": [
-                "agent"
+                "amimulator"
             ],
             "type": "string"
         },
         "Event-Name": {
             "enum": [
-                "stats_req"
+                "control_queue_resp"
             ],
             "type": "string"
         }
     },
     "required": [
-        "Account-ID"
+        "Call-ID",
+        "Control-Queue"
     ],
     "type": "object"
 }
