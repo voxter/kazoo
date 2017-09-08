@@ -708,9 +708,10 @@ response_auth(JObj, AccountId, UserId) ->
 -spec populate_resp(kz_json:object(), api_binary(), api_binary()) -> kz_json:object().
 populate_resp(JObj, 'undefined', _UserId) -> JObj;
 populate_resp(JObj, AccountId, UserId) ->
+    Language = get_language(AccountId, UserId),
     Props = props:filter_undefined(
-              [{<<"apps">>, load_apps(AccountId, UserId)}
-              ,{<<"language">>, get_language(AccountId, UserId)}
+              [{<<"apps">>, load_apps(AccountId, UserId, Language)}
+              ,{<<"language">>, Language}
               ,{<<"account_name">>, kapps_util:get_account_name(AccountId)}
               ,{<<"is_reseller">>, kz_services:is_reseller(AccountId)}
               ,{<<"reseller_id">>, kz_services:find_reseller_id(AccountId)}
@@ -724,34 +725,13 @@ populate_resp(JObj, AccountId, UserId) ->
 %%--------------------------------------------------------------------
 -spec load_apps(ne_binary(), ne_binary()) -> kz_json:objects().
 load_apps(AccountId, UserId) ->
-    Apps = cb_apps_util:allowed_apps(AccountId),
-    FilteredApps = filter_apps(Apps, AccountId, UserId),
-    format_apps(AccountId, UserId, FilteredApps).
+    Language = get_language(AccountId, UserId),
+    load_apps(AccountId, UserId, Language).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
--spec filter_apps(kz_json:objects(), ne_binary(), ne_binary()) ->
-                         kz_json:objects().
-filter_apps(Apps, AccountId, UserId) ->
-    OnlyAuthorized =
-        fun(App) ->
-                AppId = kz_doc:id(App),
-                cb_apps_util:is_authorized(AccountId, UserId, AppId)
-        end,
-    lists:filter(OnlyAuthorized, Apps).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
--spec format_apps(ne_binary(), ne_binary(), kz_json:objects()) -> kz_json:objects().
-format_apps(AccountId=?NE_BINARY, UserId, AppJObjs) ->
-    Lang = get_language(AccountId, UserId),
-    [format_app(Lang, AppJObj)
+-spec load_apps(ne_binary(), ne_binary(), ne_binary()) -> kz_json:objects().
+load_apps(AccountId, UserId, Language) ->
+    AppJObjs = cb_apps_util:authorized_apps(AccountId, UserId),
+    [format_app(Language, AppJObj)
      || AppJObj <- AppJObjs
     ].
 
@@ -1092,7 +1072,7 @@ format_emergency_caller_id_number(Context, Emergency) ->
     end.
 
 %% @public
--type refresh_type() :: 'user' | 'device' | 'sys_info'.
+-type refresh_type() :: 'user' | 'device' | 'sys_info' | 'account'.
 
 -spec maybe_refresh_fs_xml(refresh_type(), cb_context:context()) -> 'ok'.
 maybe_refresh_fs_xml(Kind, Context) ->
@@ -1130,6 +1110,10 @@ maybe_refresh_fs_xml('device', Context, Precondition) ->
                               ,DbDoc
                               ),
     'ok';
+maybe_refresh_fs_xml('account', Context, _) ->
+    Devices = get_account_devices(cb_context:account_id(Context)),
+    Realm = kz_util:get_account_realm(cb_context:account_db(Context)),
+    lists:foreach(fun(DevDoc) -> refresh_fs_xml(Realm, DevDoc) end, Devices);
 maybe_refresh_fs_xml('sys_info', Context, Precondition) ->
     Doc = cb_context:doc(Context),
     Servers = kz_json:get_value(<<"servers">>, Doc, []),
@@ -1195,7 +1179,7 @@ refresh_fs_xml(Context) ->
 
 -spec refresh_fs_xml(ne_binary(), kz_json:object()) -> 'ok'.
 refresh_fs_xml(Realm, Doc) ->
-    case kz_device:sip_username(Doc) of
+    case kz_device:sip_username(Doc, kz_json:get_value(<<"username">>, Doc)) of
         'undefined' -> 'ok';
         Username ->
             lager:debug("flushing fs xml for user '~s' at '~s'", [Username,Realm]),
@@ -1217,6 +1201,17 @@ get_devices_by_owner(AccountDb, OwnerId) ->
         {'ok', JObjs} -> [kz_json:get_value(<<"doc">>, JObj) || JObj <- JObjs];
         {'error', _R} ->
             lager:warning("unable to find documents owned by ~s: ~p", [OwnerId, _R]),
+            []
+    end.
+
+-spec get_account_devices(api_binary()) -> ne_binaries().
+get_account_devices('undefined') -> [];
+get_account_devices(Account) ->
+    AccountDb = kz_util:format_account_db(Account),
+    case kz_datamgr:get_results(AccountDb, <<"devices/crossbar_listing">>, []) of
+        {'ok', JObjs} -> [kz_json:get_value(<<"value">>, JObj) || JObj <- JObjs];
+        {'error', _R} ->
+            lager:warning("unable to find device documents owned by ~s: ~p", [AccountDb, _R]),
             []
     end.
 

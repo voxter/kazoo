@@ -305,7 +305,7 @@ post(Context, AccountId) ->
 
     case cb_context:resp_status(Context1) of
         'success' ->
-            _ = kz_util:spawn(fun notification_util:maybe_notify_account_change/2, [Existing, cb_context:doc(Context1)]),
+            _ = kz_util:spawn(fun notification_util:maybe_notify_account_change/2, [Existing, Context]),
             _ = kz_util:spawn(fun provisioner_util:maybe_update_account/1, [Context1]),
 
             JObj = cb_context:doc(Context1),
@@ -1186,7 +1186,7 @@ account_from_tree(JObj) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Normalizes the resuts of a view
+%% Normalizes the results of a view
 %% @end
 %%--------------------------------------------------------------------
 -spec normalize_view_results(kz_json:object(), kz_json:objects()) -> kz_json:objects().
