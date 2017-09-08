@@ -83,7 +83,7 @@ collect_more_digits(Data, Call, AlreadyCollected, MaxDigits) ->
             lager:debug("failed to collect DTMF: ~p", [_E])
     end.
 
--spec truncate_after_terminator(ne_binary(), ne_binaries()) -> ne_binary().
+-spec truncate_after_terminator(binary(), ne_binaries()) -> binary().
 truncate_after_terminator(AlreadyCollected, Terminators) ->
     hd(binary:split(AlreadyCollected, Terminators)).
 
