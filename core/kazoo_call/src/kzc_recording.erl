@@ -76,6 +76,7 @@
                ,verb = 'put'              :: atom()
                ,account_id                :: api_ne_binary()
                ,event = 'undefined'       :: api_object()
+               ,origin                    :: ne_binary()
                ,preserve_metadata = 'false' :: boolean()
                ,extra_metadata            :: kz_proplist() | 'undefined'
                }).
@@ -193,6 +194,8 @@ init([Call, Data]) ->
     Url = kz_json:get_ne_binary_value(<<"url">>, Data),
     ShouldStore = should_store_recording(AccountId, Url),
     Verb = kz_json:get_atom_value(<<"method">>, Data, 'put'),
+    Request = kapps_call:request_user(Call),
+    Origin = kz_json:get_ne_binary_value(<<"origin">>, Data, <<"untracked : ", Request/binary>>),
 
     {'ok', #state{url=Url
                  ,format=Format
@@ -211,6 +214,7 @@ init([Call, Data]) ->
                  ,retries = ?STORAGE_RETRY_TIMES(AccountId)
                  ,verb = Verb
                  ,account_id = AccountId
+                 ,origin = Origin
                  ,preserve_metadata = PreserveMetadata
                  ,extra_metadata = ExtraMetadata
                  }}.
@@ -492,6 +496,7 @@ store_recording_meta(#state{call=Call
                            ,interaction_id=InteractionId
                            ,url=Url
                            ,event=JObj
+                           ,origin=Origin
                            ,extra_metadata=ExtraMetadata
                            }) ->
     CallId = kapps_call:call_id(Call),
@@ -528,6 +533,8 @@ store_recording_meta(#state{call=Call
                        ,{<<"language">>, kapps_call:language(Call)}
                        ,{<<"custom_kvs">>, kapps_call:custom_kvs(Call)}
                        ,{<<"_id">>, DocId}
+                       ,{<<"origin">>, Origin}
+                       ,{<<"custom_channel_vars">>, kz_call_event:custom_channel_vars(JObj)}
                         | ExtraMetadata
                        ]
                       )
@@ -697,7 +704,7 @@ save_recording(#state{call=Call, media=Media}=State, _) ->
 -spec start_recording(kapps_call:call(), ne_binary(), pos_integer(), ne_binary(), api_integer(), api_integer()) -> 'ok'.
 start_recording(Call, MediaName, TimeLimit, MediaDocId, SampleRate, RecordMinSec) ->
     lager:debug("starting recording of ~s", [MediaName]),
-    FollowTransfer = kapps_call:kvs_fetch('recording_follow_transer', 'true', Call),
+    FollowTransfer = kapps_call:kvs_fetch('recording_follow_transfer', 'true', Call),
     Props = [{<<"Media-Name">>, MediaName}
             ,{<<"Follow-Transfer">>, FollowTransfer}
             ,{<<"Media-Recording-ID">>, MediaDocId}

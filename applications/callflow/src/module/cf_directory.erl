@@ -126,7 +126,7 @@ handle(Data, Call) ->
                               ,max_dtmf = kz_json:get_integer_value(<<"max_dtmf">>, DirJObj, 0)
                               ,confirm_match = kz_json:is_true(<<"confirm_match">>, DirJObj, 'false')
                               ,digits_collected = <<>>
-                      },
+                              },
             Users1 = sort_users(Users, State#directory.sort_by),
             _ = log(Users1),
             directory_start(Call, State#directory{users=Users1}, Users1);
