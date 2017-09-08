@@ -472,7 +472,8 @@
                              ,<<"Response">>, <<"Success">>
                              ]).
 -define(OPTIONAL_TRANSACTION_HEADERS, [<<"Service-Plan">>
-                                           | ?COMMON_TRANSACTION_HEADERS ++ ?DEFAULT_OPTIONAL_HEADERS
+                                           | ?COMMON_TRANSACTION_HEADERS
+                                       ++ ?DEFAULT_OPTIONAL_HEADERS
                                       ]).
 -define(TRANSACTION_VALUES, [{<<"Event-Category">>, <<"notification">>}
                             ,{<<"Event-Name">>, <<"transaction">>}
