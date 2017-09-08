@@ -2003,7 +2003,24 @@
                     "type": "string"
                 },
                 "custom_sip_headers": {
-                    "description": "Custom SIP Headers to include on the outgoing INVITE",
+                    "anyOf": [
+                        {
+                            "$ref": "custom_sip_headers"
+                        },
+                        {
+                            "properties": {
+                                "in": {
+                                    "$ref": "custom_sip_headers",
+                                    "description": "Custom SIP Headers to be applied to calls inbound to Kazoo from the endpoint"
+                                },
+                                "out": {
+                                    "$ref": "custom_sip_headers",
+                                    "description": "Custom SIP Headers to be applied to calls outbound from Kazoo to the endpoint"
+                                }
+                            }
+                        }
+                    ],
+                    "description": "A property list of SIP headers",
                     "type": "object"
                 },
                 "do_not_normalize": {
@@ -2451,7 +2468,24 @@
                     "type": "string"
                 },
                 "custom_sip_headers": {
-                    "description": "Custom SIP Headers to include on the outgoing INVITE",
+                    "anyOf": [
+                        {
+                            "$ref": "custom_sip_headers"
+                        },
+                        {
+                            "properties": {
+                                "in": {
+                                    "$ref": "custom_sip_headers",
+                                    "description": "Custom SIP Headers to be applied to calls inbound to Kazoo from the endpoint"
+                                },
+                                "out": {
+                                    "$ref": "custom_sip_headers",
+                                    "description": "Custom SIP Headers to be applied to calls outbound from Kazoo to the endpoint"
+                                }
+                            }
+                        }
+                    ],
+                    "description": "A property list of SIP headers",
                     "type": "object"
                 },
                 "do_not_normalize": {
@@ -3066,10 +3100,24 @@
                     "type": "object"
                 },
                 "custom_sip_headers": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
-                    "description": "A property list of SIP headers beging with the prefix 'X-'",
+                    "anyOf": [
+                        {
+                            "$ref": "custom_sip_headers"
+                        },
+                        {
+                            "properties": {
+                                "in": {
+                                    "$ref": "custom_sip_headers",
+                                    "description": "Custom SIP Headers to be applied to calls inbound to Kazoo from the endpoint"
+                                },
+                                "out": {
+                                    "$ref": "custom_sip_headers",
+                                    "description": "Custom SIP Headers to be applied to calls outbound from Kazoo to the endpoint"
+                                }
+                            }
+                        }
+                    ],
+                    "description": "A property list of SIP headers",
                     "type": "object"
                 },
                 "digits_dialed": {
@@ -3624,6 +3672,10 @@
                 }
             }
         },
+        "custom_sip_headers": {
+            "description": "Custom SIP headers applied to an INVITE",
+            "type": "object"
+        },
         "device_rate_limits": {
             "description": "describe limits for SIP requests",
             "properties": {
@@ -4028,10 +4080,24 @@
                     "description": "SIP Parameters",
                     "properties": {
                         "custom_sip_headers": {
-                            "additionalProperties": {
-                                "type": "string"
-                            },
-                            "description": "A property list of SIP headers beging with the prefix 'X-'",
+                            "anyOf": [
+                                {
+                                    "$ref": "custom_sip_headers"
+                                },
+                                {
+                                    "properties": {
+                                        "in": {
+                                            "$ref": "custom_sip_headers",
+                                            "description": "Custom SIP Headers to be applied to calls inbound to Kazoo from the endpoint"
+                                        },
+                                        "out": {
+                                            "$ref": "custom_sip_headers",
+                                            "description": "Custom SIP Headers to be applied to calls outbound from Kazoo to the endpoint"
+                                        }
+                                    }
+                                }
+                            ],
+                            "description": "A property list of SIP headers",
                             "type": "object"
                         },
                         "expire_seconds": {
@@ -23398,7 +23464,24 @@
                                 "uniqueItems": true
                             },
                             "custom_sip_headers": {
-                                "default": {},
+                                "anyOf": [
+                                    {
+                                        "$ref": "custom_sip_headers"
+                                    },
+                                    {
+                                        "properties": {
+                                            "in": {
+                                                "$ref": "custom_sip_headers",
+                                                "description": "Custom SIP Headers to be applied to calls inbound to Kazoo from the endpoint"
+                                            },
+                                            "out": {
+                                                "$ref": "custom_sip_headers",
+                                                "description": "Custom SIP Headers to be applied to calls outbound from Kazoo to the endpoint"
+                                            }
+                                        }
+                                    }
+                                ],
+                                "description": "A property list of SIP headers",
                                 "type": "object"
                             },
                             "custom_sip_interface": {
