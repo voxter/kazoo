@@ -21,16 +21,8 @@
                ,enter_when_empty = 'true' :: boolean() % allow caller into queue if no agents are logged in
                ,moh :: api_ne_binary()
                ,current_member_calls = [] :: list() % ordered list of current members waiting
-               ,pos_announce_enabled = 'false' :: boolean()
-               ,wait_announce_enabled = 'false' :: boolean()
-               ,announcements_timer = 30 :: non_neg_integer()
-               ,pos_announce_pids = [] :: announce_pid_list()
-
-               ,position_media = <<"queue-you_are_at_position">> :: binary()
-               ,in_the_queue_media = <<"queue-in_the_queue">> :: binary()
-               ,increase_call_volume_media = <<"queue-increase_in_call_volume">> :: binary()
-               ,estimated_wait_time_media = <<"queue-the_estimated_wait_time_is">> :: binary()
-
+               ,announcements_config = [] :: kz_proplist()
+               ,announcements_pids = #{} :: announcements_pids()
                ,registered_callbacks = [] :: list()
                }).
 -type mgr_state() :: #state{}.

@@ -48,8 +48,6 @@
         ,code_change/3
         ]).
 
--export([announce_position_loop/7]).
-
 -ifdef(TEST).
 -export([ss_size/2
         ,update_strategy_with_agent/5
@@ -383,9 +381,9 @@ handle_call({'should_ignore_member_call', {AccountId, QueueId, CallId}=K}, _, #s
 handle_call({'up_next', CallId}, _, #state{strategy_state=SS
                                           ,current_member_calls=CurrentCalls
                                           }=State) ->
-    Available = ss_size(SS, 'free'),
-    Reply = up_next_fold(lists:reverse(CurrentCalls), CallId, Available),
-    {'reply', Reply, State};
+    FreeAgents = ss_size(SS, 'free'),
+    Position = call_position(CallId, lists:reverse(CurrentCalls)),
+    {'reply', FreeAgents >= Position, State};
 
 handle_call('config', _, #state{account_id=AccountId
                                ,queue_id=QueueId
@@ -426,23 +424,9 @@ handle_call('current_agents', _, #state{strategy='mi'
                                        }=State) ->
     {'reply', L, State};
 
-handle_call({'queue_position', CallId}, _, #state{current_member_calls=CurrentCalls
-                                                 }=State) ->
-    Call = lists:keyfind(CallId, 2, CurrentCalls),
-
-    {Map, _} = lists:mapfoldr(fun(X, I) -> {{X, I}, I + 1} end, 1, CurrentCalls),
-    Index = case lists:keyfind(Call, 1, Map) of
-                {_, Index2} ->
-                    Index2;
-                _Result ->
-                    lager:debug("call id ~p", [CallId]),
-                    lists:foreach(fun(Call2) ->
-                                          lager:debug("current call id ~p", [kapps_call:call_id(Call2)])
-                                  end, CurrentCalls),
-                    'true' = kz_json:get_value(<<"Stop">>, kz_json:new())
-            end,
-
-    {'reply', Index, State};
+handle_call({'queue_position', CallId}, _, #state{current_member_calls=CurrentCalls}=State) ->
+    Position = call_position(CallId, lists:reverse(CurrentCalls)),
+    {'reply', Position, State};
 
 handle_call({'callback_details', CallId}, _, #state{registered_callbacks=Callbacks}=State) ->
     {'reply', props:get_value(CallId, Callbacks), State};
@@ -619,11 +603,9 @@ handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
 
 handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
                                               ,queue_id=QueueId
-                                              ,pos_announce_enabled=PosAnnounceEnabled
-                                              ,wait_announce_enabled=WaitAnnounceEnabled
-                                              ,announcements_timer=AnnouncementsTimer
                                               ,current_member_calls=CurrentCalls
-                                              ,pos_announce_pids=Pids
+                                              ,announcements_config=AnnouncementsConfig
+                                              ,announcements_pids=AnnouncementsPids
                                               }=State) ->
     Position = length(CurrentCalls)+1,
     Call = kapps_call:set_custom_channel_var(<<"Queue-Position">>
@@ -648,17 +630,16 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
 
     acdc_util:presence_update(AccountId, QueueId, ?PRESENCE_RED_FLASH),
 
-    %% Schedule position announcements
-    UpdatedAnnouncePids = maybe_schedule_position_announcements(
-                            Call
-                                                               ,QueueId
-                                                               ,{PosAnnounceEnabled, WaitAnnounceEnabled}
-                                                               ,AnnouncementsTimer
-                                                               ,queue_media_list(State)
-                                                               ,Pids),
+    %% Schedule position/wait time announcements
+    AnnouncementsPids1 = case acdc_announcements_sup:maybe_start_announcements(self(), Call, AnnouncementsConfig) of
+                             'false' -> AnnouncementsPids;
+                             {'ok', Pid} ->
+                                 CallId = kapps_call:call_id(Call),
+                                 AnnouncementsPids#{CallId => Pid}
+                         end,
 
     {'noreply', State#state{current_member_calls=[Call | CurrentCalls]
-                           ,pos_announce_pids=UpdatedAnnouncePids
+                           ,announcements_pids=AnnouncementsPids1
                            }};
 
 handle_cast({'handle_queue_member_add', JObj}, #state{current_member_calls=CurrentCalls}=State) ->
@@ -669,14 +650,14 @@ handle_cast({'handle_queue_member_add', JObj}, #state{current_member_calls=Curre
     {'noreply', State#state{current_member_calls = [Call | lists:keydelete(CallId, 2, CurrentCalls)]}};
 
 handle_cast({'handle_queue_member_remove', CallId}, State) ->
-    State1 = maybe_remove_queue_member(CallId, State),
+    State1 = remove_queue_member(CallId, State),
     State2 = maybe_remove_callback_reg(CallId, State1),
     {'noreply', State2};
 
 handle_cast({'handle_member_callback_reg', JObj}, #state{account_id=AccountId
                                                         ,queue_id=QueueId
                                                         ,current_member_calls=CurrentCalls
-                                                        ,pos_announce_pids=Pids
+                                                        ,announcements_pids=Pids
                                                         ,registered_callbacks=RegCallbacks}=State) ->
     CallId = kz_json:get_value(<<"Call-ID">>, JObj),
     case lists:keyfind(CallId, 2, CurrentCalls) of
@@ -689,7 +670,7 @@ handle_cast({'handle_member_callback_reg', JObj}, #state{account_id=AccountId
             Call1 = callback_flag(AccountId, QueueId, Call),
             CIDPrepend = kapps_call:kvs_fetch('prepend_cid_name', Call1),
             {'noreply', State#state{current_member_calls=lists:keyreplace(CallId, 2, CurrentCalls, Call1)
-                                   ,pos_announce_pids=maybe_cancel_position_announcements(Call1, Pids)
+                                   ,announcements_pids=cancel_position_announcements(Call, Pids)
                                    ,registered_callbacks=[{CallId, {Number, CIDPrepend}} | RegCallbacks]
                                    }}
     end;
@@ -1014,6 +995,19 @@ update_strategy_state(Srv, 'mi', #strategy_state{agents=AgentL}) ->
 update_strategy_state(Srv, L) ->
     [gen_listener:cast(Srv, {'sync_with_agent', A}) || A <- L].
 
+-spec call_position(ne_binary(), [kapps_call:call()]) -> api_integer().
+-spec call_position(ne_binary(), [kapps_call:call()], pos_integer()) -> pos_integer().
+call_position(CallId, Calls) ->
+    call_position(CallId, Calls, 1).
+
+call_position(_, [], _) ->
+    'undefined';
+call_position(CallId, [Call|Calls], Position) ->
+    case kapps_call:call_id(Call) of
+        CallId -> Position;
+        _ -> call_position(CallId, Calls, Position + 1)
+    end.
+
 -spec ss_size(strategy_state(), 'free' | 'logged_in') -> integer().
 ss_size(#strategy_state{agents=Agents}, 'logged_in') ->
     case queue:is_queue(Agents) of
@@ -1032,22 +1026,6 @@ ss_size(#strategy_state{agents=Agents
 ss_size(#strategy_state{agents=Agents}=SS, 'free') ->
     ss_size(SS#strategy_state{agents=queue:to_list(Agents)}, 'free').
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns true if CallId is within the first Max elements of Calls
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec up_next_fold([kapps_call:call()], ne_binary(), integer()) -> boolean().
-up_next_fold(Calls, _, Max) when Max >= length(Calls) -> 'true';
-up_next_fold(_, _, 0) -> 'false';
-up_next_fold([Call|Calls], CallId, Max) ->
-    case kapps_call:call_id(Call) of
-        CallId -> 'true';
-        _ -> up_next_fold(Calls, CallId, Max-1)
-    end.
-
 maybe_start_queue_workers(QueueSup, AgentCount) ->
     WSup = acdc_queue_sup:workers_sup(QueueSup),
     case acdc_queue_workers_sup:worker_count(WSup) of
@@ -1057,160 +1035,31 @@ maybe_start_queue_workers(QueueSup, AgentCount) ->
 
 -spec update_properties(kz_json:object(), mgr_state()) -> mgr_state().
 update_properties(QueueJObj, State) ->
-    Default = #state{},
     State#state{
       enter_when_empty=kz_json:is_true(<<"enter_when_empty">>, QueueJObj, 'true')
                ,moh=kz_json:get_ne_value(<<"moh">>, QueueJObj)
-               ,pos_announce_enabled=kz_json:is_true(<<"position_announcements_enabled">>, QueueJObj, 'false')
-               ,wait_announce_enabled=kz_json:is_true(<<"holdtime_announcements_enabled">>, QueueJObj, 'false')
-               ,announcements_timer=kz_json:get_integer_value(<<"announcements_timer">>, QueueJObj, 30)
-
-               ,position_media = kz_json:get_value(<<"position_media">>, QueueJObj, Default#state.position_media)
-               ,in_the_queue_media = kz_json:get_value(<<"in_the_queue_media">>, QueueJObj, Default#state.in_the_queue_media)
-               ,increase_call_volume_media = kz_json:get_value(<<"increase_call_volume_media">>, QueueJObj, Default#state.increase_call_volume_media)
-               ,estimated_wait_time_media = kz_json:get_value(<<"estimated_wait_time_media">>, QueueJObj, Default#state.estimated_wait_time_media)
+               ,announcements_config=announcements_config(QueueJObj)
      }.
 
--spec announce_position(kapps_call:call(), ne_binary(), non_neg_integer(), {boolean(), boolean()}, kz_proplist(), non_neg_integer() | 'undefined') ->
-                               non_neg_integer() | 'undefined'.
-announce_position(Call, QueueId, Position, {PosAnnounceEnabled, WaitAnnounceEnabled}, Media, OldAverageWait) ->
-    Req = props:filter_undefined(
-            [{<<"Account-ID">>, kapps_call:account_id(Call)}
-            ,{<<"Queue-ID">>, QueueId}
-             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-            ]),
-    case kapps_util:amqp_pool_request(Req
-                                     ,fun kapi_acdc_stats:publish_current_calls_req/1
-                                     ,fun kapi_acdc_stats:current_calls_resp_v/1
-                                     )
-    of
-        {'error', _E} ->
-            lager:debug("failed to recv resp from AMQP: ~p", [_E]),
-            'undefined';
-        {'ok', Resp} ->
-            {AverageWait, Prompts} = maybe_average_wait_announcement(Resp, WaitAnnounceEnabled, Media, kapps_call:language(Call), OldAverageWait),
-            Prompt = maybe_position_announcement(Position, PosAnnounceEnabled, Media, kapps_call:language(Call)) ++
-                Prompts,
-            kapps_call_command:audio_macro(Prompt, Call),
-            AverageWait
-    end.
+-spec announcements_config(kz_json:object()) -> kz_proplist().
+announcements_config(Config) ->
+    kz_json:recursive_to_proplist(
+      kz_json:get_json_value(<<"announcements">>, Config, kz_json:new())).
 
--spec maybe_position_announcement(non_neg_integer(), boolean(), kz_proplist(), binary()) -> list().
-maybe_position_announcement(_, 'false', _, _) ->
-    [];
-maybe_position_announcement(Position, 'true', Media, Language) ->
-    lager:debug("position ~p", [Position]),
-    [{'prompt', props:get_value(<<"position_media">>, Media), Language, <<"A">>}
-    ,{'say', kz_term:to_binary(Position), <<"number">>}
-    ,{'prompt', props:get_value(<<"in_the_queue_media">>, Media), Language, <<"A">>}].
-
--spec maybe_average_wait_announcement(kz_json:object(), boolean(), kz_proplist(), binary(), non_neg_integer() | 'undefined') ->
-                                             {non_neg_integer() | 'undefined', list()}.
-maybe_average_wait_announcement(_, 'false', _, _, _) ->
-    {'undefined', []};
-maybe_average_wait_announcement(JObj, 'true', Media, Language, OldAverageWait) ->
-    average_wait_announcement(JObj, Media, Language, OldAverageWait).
-
--spec average_wait_announcement(kz_json:object(), kz_proplist(), binary(), non_neg_integer() | 'undefined') -> {kz_time(), list()}.
-average_wait_announcement(JObj, Media, Language, OldAverageWait) ->
-    Abandoned = length(kz_json:get_value(<<"Abandoned">>, JObj, [])),
-    Total = length(kz_json:get_value(<<"Abandoned">>, JObj, [])) +
-        length(kz_json:get_value(<<"Handled">>, JObj, [])) +
-        length(kz_json:get_value(<<"Processed">>, JObj, [])),
-    TotalWait = lists:foldl(fun(Key, Acc) ->
-                                    CallList = kz_json:get_value(Key, JObj, []),
-                                    Acc + lists:foldl(fun(Call, Acc2) ->
-                                                              Acc2 + kz_json:get_value(<<"wait_time">>, Call, 0)
-                                                      end
-                                                     ,0
-                                                     ,CallList)
-                            end
-                           ,0
-                           ,[<<"Waiting">>, <<"Handled">>, <<"Processed">>]),
-    time_prompts(format_time(calc_average_wait(Abandoned, Total, TotalWait)), OldAverageWait, Media, Language).
-
-calc_average_wait(Same, Same, TotalWait) ->
-    TotalWait;
-calc_average_wait(Abandoned, Total, TotalWait) ->
-    TotalWait div (Total - Abandoned).
-
-format_time(Time) ->
-    {Time div 3600, Time rem 3600 div 60, Time rem 60}.
-
-time_prompts({0, 0, 0}=AverageWait, _, _, _) ->
-    {AverageWait, []};
-time_prompts({Hour, Min, Sec}=Time, {Hour2, Min2, Sec2}, Media, Language) when (Hour * 3600 + Min * 60 + Sec) > (Hour2 * 3600 + Min2 * 60 + Sec2) ->
-    {Time, [{'prompt', props:get_value(<<"increase_call_volume_media">>, Media), Language, <<"A">>}
-           ,{'prompt', props:get_value(<<"estimated_wait_time_media">>, Media), Language, <<"A">>}
-            | time_prompts2(Time, Language)
-           ]};
-time_prompts(Time, _, Media, Language) ->
-    {Time, [{'prompt', props:get_value(<<"estimated_wait_time_media">>, Media), Language, <<"A">>}
-            | time_prompts2(Time, Language)
-           ]}.
-
-time_prompts2({0, 0, _}, Language) ->
-    [{'prompt', <<"queue-less_than_1_minute">>, Language, <<"A">>}];
-time_prompts2({0, Min, _}, Language) when Min =< 5 ->
-    [{'prompt', <<"queue-about_5_minutes">>, Language, <<"A">>}];
-time_prompts2({0, Min, _}, Language) when Min =< 10 ->
-    [{'prompt', <<"queue-about_10_minutes">>, Language, <<"A">>}];
-time_prompts2({0, Min, _}, Language) when Min =< 15 ->
-    [{'prompt', <<"queue-about_15_minutes">>, Language, <<"A">>}];
-time_prompts2({0, Min, _}, Language) when Min =< 30 ->
-    [{'prompt', <<"queue-about_30_minutes">>, Language, <<"A">>}];
-time_prompts2({0, Min, _}, Language) when Min =< 45 ->
-    [{'prompt', <<"queue-about_45_minutes">>, Language, <<"A">>}];
-time_prompts2({0, _, _}, Language) ->
-    [{'prompt', <<"queue-about_1_hour">>, Language, <<"A">>}];
-time_prompts2({_, _, _}, Language) ->
-    [{'prompt', <<"queue-at_least_1_hour">>, Language, <<"A">>}].
-
-queue_media_list(#state{position_media=PositionMedia
-                       ,in_the_queue_media=InTheQueueMedia
-                       ,increase_call_volume_media=IncreaseCallVolumeMedia
-                       ,estimated_wait_time_media=EstimatedWaitTimeMedia
-                       }) ->
-    [{<<"position_media">>, PositionMedia}
-    ,{<<"in_the_queue_media">>, InTheQueueMedia}
-    ,{<<"increase_call_volume_media">>, IncreaseCallVolumeMedia}
-    ,{<<"estimated_wait_time_media">>, EstimatedWaitTimeMedia}
-    ].
-
--spec announce_position_loop(pid(), kapps_call:call(), ne_binary()
-                            ,{boolean(), boolean()}, non_neg_integer()
-                            ,kz_proplist(), non_neg_integer() | 'undefined'
-                            ) -> no_return().
-announce_position_loop(Srv, Call, QueueId, AnnouncesEnabled, AnnouncementsTimer, Media, LastAverage) ->
-    Position = gen_listener:call(Srv, {'queue_position', kapps_call:call_id(Call)}),
-    NewAverage = announce_position(Call, QueueId, Position, AnnouncesEnabled, Media, LastAverage),
-    timer:sleep(AnnouncementsTimer * 1000),
-    announce_position_loop(Srv, Call, QueueId, AnnouncesEnabled, AnnouncementsTimer, Media, NewAverage).
-
--spec maybe_schedule_position_announcements(kapps_call:call()
-                                           ,ne_binary()
-                                           ,{boolean(), boolean()}
-                                           ,non_neg_integer()
-                                           ,kz_proplist()
-                                           ,announce_pid_list()
-                                           ) -> announce_pid_list().
-maybe_schedule_position_announcements(_Call, _, {'false', 'false'}, _, _, Pids) ->
-    Pids;
-maybe_schedule_position_announcements(Call, QueueId, AnnouncesEnabled, AnnouncementsTimer, Media, Pids) when AnnouncementsTimer < 30 ->
-    maybe_schedule_position_announcements(Call, QueueId, AnnouncesEnabled, 30, Media, Pids);
-maybe_schedule_position_announcements(Call, QueueId, AnnouncesEnabled, AnnouncementsTimer, Media, Pids) ->
-    [{kapps_call:call_id(Call), spawn(
-                                  ?MODULE
-                                     ,'announce_position_loop'
-                                     ,[self(), Call, QueueId, AnnouncesEnabled, AnnouncementsTimer, Media, 'undefined']
-                                 )} | Pids].
-
--spec maybe_cancel_position_announcements(kapps_call:call(), announce_pid_list()) -> announce_pid_list().
-maybe_cancel_position_announcements(Call, Pids) ->
+-spec cancel_position_announcements(kapps_call:call() | 'false', map()) ->
+                                           map().
+cancel_position_announcements('false', Pids) -> Pids;
+cancel_position_announcements(Call, Pids) ->
     CallId = kapps_call:call_id(Call),
-    case lists:keyfind(CallId, 1, Pids) of
-        {_, Pid} ->
-            erlang:exit(Pid, 'call_done'),
+    case catch maps:get(CallId, Pids) of
+        {'badkey', _} ->
+            lager:debug("did not have the announcements for call ~s", [CallId]),
+            Pids;
+        Pid ->
+            lager:debug("cancelling announcements for ~s", [CallId]),
+            Pids1 = maps:remove(CallId, Pids),
+            acdc_announcements_sup:stop_announcements(Pid),
+
             %% Attempt to skip remaining announcement media, but don't flush hangups
             NoopId = kz_datamgr:get_uuid(),
             Command = [{<<"Application-Name">>, <<"noop">>}
@@ -1218,22 +1067,21 @@ maybe_cancel_position_announcements(Call, Pids) ->
                       ,{<<"Insert-At">>, <<"now">>}
                       ,{<<"Filter-Applications">>, [<<"play">>, <<"say">>, <<"play">>]}
                       ],
-            kapps_call_command:send_command(Command, Call);
-        _ ->
-            lager:debug("she caught me without the pid... it wasn't me"),
-            'ok'
-    end,
-    lists:keydelete(kapps_call:call_id(Call), 1, Pids).
+            kapps_call_command:send_command(Command, Call),
+            Pids1
+    end.
 
--spec maybe_remove_queue_member(api_binary(), mgr_state()) -> mgr_state().
-maybe_remove_queue_member(CallId, #state{current_member_calls=CurrentCalls}=State) ->
+-spec remove_queue_member(api_binary(), mgr_state()) -> mgr_state().
+remove_queue_member(CallId, #state{current_member_calls=CurrentCalls
+                                  ,announcements_pids=AnnouncementsPids
+                                  }=State) ->
     lager:debug("removing call id ~s", [CallId]),
 
     publish_call_exited_position(CallId, State),
-    UpdatedAnnouncePids = cancel_position_announcements(lists:keyfind(CallId, 2, CurrentCalls), State),
+    AnnouncementsPids1 = cancel_position_announcements(lists:keyfind(CallId, 2, CurrentCalls), AnnouncementsPids),
 
     State#state{current_member_calls=lists:keydelete(CallId, 2, CurrentCalls)
-               ,pos_announce_pids=UpdatedAnnouncePids
+               ,announcements_pids=AnnouncementsPids1
                }.
 
 -spec publish_call_exited_position(api_binary(), mgr_state()) -> 'ok'.
@@ -1256,13 +1104,6 @@ try_publish_call_exited_position({CallId, Index}, #state{account_id=AccountId
     kapi_acdc_stats:publish_call_exited_position(Prop);
 try_publish_call_exited_position('false', _) ->
     lager:error("call id not found in list of calls").
-
--spec cancel_position_announcements(kapps_call:call() | 'false', mgr_state()) ->
-                                           announce_pid_list().
-cancel_position_announcements('false', #state{pos_announce_pids=Pids}) ->
-    Pids;
-cancel_position_announcements(Call, #state{pos_announce_pids=Pids}) ->
-    maybe_cancel_position_announcements(Call, Pids).
 
 %%--------------------------------------------------------------------
 %% @private
