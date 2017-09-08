@@ -52,7 +52,7 @@
         ,publish_shared_call_id/1, publish_shared_call_id/2
         ]).
 
--include_lib("kazoo/include/kz_types.hrl").
+-include_lib("kazoo_stdlib/include/kz_types.hrl").
 -include_lib("kazoo_amqp/include/kz_api.hrl").
 
 %%------------------------------------------------------------------------------
