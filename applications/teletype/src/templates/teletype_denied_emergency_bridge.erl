@@ -24,8 +24,9 @@
           ,?MACRO_VALUE(<<"call.emergency_caller_id_name">>, <<"emergency_caller_id_name">>, <<"Emergency Caller ID Name">>, <<"Emergency Caller ID Name">>)
           ,?MACRO_VALUE(<<"call.emergency_caller_id_number">>, <<"emergency_caller_id_number">>, <<"Emergency Caller ID Number">>, <<"Emergency Caller ID Number">>)
           ,?MACRO_VALUE(<<"call.call_id">>, <<"call_id">>, <<"Call ID">>, <<"Call ID">>)
-           | ?ACCOUNT_MACROS
-          ])
+           | ?COMMON_TEMPLATE_MACROS
+          ]
+         )
        ).
 
 -define(TEMPLATE_SUBJECT, <<"Blocked emergency call from account '{{account.name}}'">>).
@@ -55,8 +56,14 @@ init() ->
 
 -spec handle_req(kz_json:object()) -> 'ok'.
 handle_req(JObj) ->
-    'true' = kapi_notifications:denied_emergency_bridge_v(JObj),
-    kz_util:put_callid(JObj),
+    handle_req(JObj, kapi_notifications:denied_emergency_bridge_v(JObj)).
+
+-spec handle_req(kz_json:object(), boolean()) -> 'ok'.
+handle_req(JObj, 'false') ->
+    lager:debug("invalid data for ~s", [?TEMPLATE_ID]),
+    teletype_util:send_update(JObj, <<"failed">>, <<"validation_failed">>);
+handle_req(JObj, 'true') ->
+    lager:debug("valid data for ~s, processing...", [?TEMPLATE_ID]),
 
     %% Gather data for template
     DataJObj = kz_json:normalize(JObj),
@@ -82,7 +89,7 @@ process_req(DataJObj) ->
                          || {ContentType, Template} <- Templates
                         ],
 
-    {'ok', TemplateMetaJObj} = teletype_templates:fetch_notification(?TEMPLATE_ID, teletype_util:find_account_id(DataJObj)),
+    {'ok', TemplateMetaJObj} = teletype_templates:fetch_notification(?TEMPLATE_ID, kapi_notifications:account_id(DataJObj)),
 
     Subject = teletype_util:render_subject(
                 kz_json:find(<<"subject">>, [DataJObj, TemplateMetaJObj])

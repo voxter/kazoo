@@ -18,6 +18,7 @@
                 "    'enabled': doc.enabled,",
                 "    'device_type': doc.device_type || 'sip_device',",
                 "    'mobile': doc.mobile,",
+                "    'call_recording': doc.call_recording,",
                 "    'contact_list': doc.contact_list",
                 "  });",
                 "}"
@@ -60,7 +61,8 @@
                 "      'owner_id': doc.owner_id,",
                 "      'enabled': doc.enabled,",
                 "      'device_type': doc.device_type || 'sip_device',",
-                "      'hotdesked': os !== doc.owner_id",
+                "      'hotdesked': os !== doc.owner_id,",
+                "      'call_recording': doc.call_recording",
                 "    });",
                 "  });",
                 "}"

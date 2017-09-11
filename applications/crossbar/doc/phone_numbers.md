@@ -13,53 +13,47 @@ Schema for a number
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `carrier_name` |   | `string(1..30)` |   | `false`
-`cnam` |   | `object` |   | `false`
 `cnam.display_name` |   | `string(1..15)` |   | `false`
-`cnam.inbound_lookup` |   | `boolean` |   | `false`
-`create_with_state` | The state to create numbers in | `string('aging', 'available', 'deleted', 'discovery', 'in_service', 'port_in', 'port_out', 'released', 'reserved')` |   | `false`
-`e911` |   | `object` |   | `false`
-`e911.activated_time` | The time stamp e911 was provisioned | `string` |   | `false`
+`cnam.inbound_lookup` |   | `boolean()` |   | `false`
+`cnam` |   | `object()` |   | `false`
+`create_with_state` | The state to create numbers in | `string('aging' | 'available' | 'deleted' | 'discovery' | 'in_service' | 'port_in' | 'port_out' | 'released' | 'reserved')` |   | `false`
+`e911.activated_time` | The time stamp e911 was provisioned | `string()` |   | `false`
 `e911.caller_name` | The name that will show to emergency services | `string(3..)` |   | `false`
-`e911.extended_address` | The suit/floor/apt. address where the number is in service | `string` |   | `false`
-`e911.latitude` | The e911 provisioning system calculated service address latitude | `string` |   | `false`
-`e911.legacy_data` | Legacy E911 information | `object` |   | `false`
-`e911.legacy_data.house_number` | The name that will show to emergency services | `string` |   | `false`
-`e911.legacy_data.predirectional` | The name that will show to emergency services | `string` |   | `false`
-`e911.legacy_data.streetname` | The name that will show to emergency services | `string` |   | `false`
-`e911.legacy_data.suite` | The name that will show to emergency services | `string` |   | `false`
-`e911.locality` | The locality (city) where the number is in service | `string` |   | `true`
-`e911.location_id` | The e911 provisioning system internal id for this service address | `string` |   | `false`
-`e911.longitude` | The e911 provisioning system calculated service address longitude | `string` |   | `false`
-`e911.plus_four` | The extended zip/postal code where the number is in service | `string` |   | `false`
-`e911.postal_code` | The zip/postal code where the number is in service | `string` |   | `true`
+`e911.extended_address` | The suit/floor/apt. address where the number is in service | `string()` |   | `false`
+`e911.latitude` | The e911 provisioning system calculated service address latitude | `string()` |   | `false`
+`e911.legacy_data.house_number` | The name that will show to emergency services | `string()` |   | `false`
+`e911.legacy_data.predirectional` | The name that will show to emergency services | `string()` |   | `false`
+`e911.legacy_data.streetname` | The name that will show to emergency services | `string()` |   | `false`
+`e911.legacy_data.suite` | The name that will show to emergency services | `string()` |   | `false`
+`e911.legacy_data` | Legacy E911 information | `object()` |   | `false`
+`e911.locality` | The locality (city) where the number is in service | `string()` |   | `true`
+`e911.location_id` | The e911 provisioning system internal id for this service address | `string()` |   | `false`
+`e911.longitude` | The e911 provisioning system calculated service address longitude | `string()` |   | `false`
+`e911.plus_four` | The extended zip/postal code where the number is in service | `string()` |   | `false`
+`e911.postal_code` | The zip/postal code where the number is in service | `string()` |   | `true`
 `e911.region` | The region (state) where the number is in service | `string(2)` |   | `true`
-`e911.status` | The e911 provisioning system status for this service address | `string('INVALID', 'GEOCODED', 'PROVISIONED', 'REMOVED', 'ERROR')` |   | `false`
-`e911.street_address` | The street address where the number is in service | `string` |   | `true`
-`porting` | Porting (in) information for the phone number | `object` |   | `false`
-`porting.billing_account_id` | The account id the losing carrier has on file | `string` |   | `false`
-`porting.billing_extended_address` | The suit/floor/apt. address the losing carrier has on file | `string` |   | `false`
-`porting.billing_locality` | The locality (city) the losing carrier has on file | `string` |   | `false`
-`porting.billing_name` | The name or company name the losing carrier has on file | `string` |   | `false`
-`porting.billing_postal_code` | The zip/postal code the losing carrier has on file | `string` |   | `false`
-`porting.billing_region` | The region (state) the losing carrier has on file | `string` |   | `false`
-`porting.billing_street_address` | The street address the losing carrier has on file | `string` |   | `false`
-`porting.billing_telephone_number` | The BTN of the account the number belongs to | `string` |   | `false`
-`porting.comments` | An array of comments | `array(string)` |   | `false`
-`porting.comments.[]` |   | `string` |   | `false`
-`porting.customer_contact` | The phone number that can be used to contact the owner of the number | `string` |   | `false`
-`porting.port_id` | The id of the port request | `string` |   | `false`
-`porting.requested_port_date` | The requested port date | `string` |   | `false`
-`porting.service_provider` | The name of the losing carrier | `string` |   | `false`
+`e911.status` | The e911 provisioning system status for this service address | `string('INVALID' | 'GEOCODED' | 'PROVISIONED' | 'REMOVED' | 'ERROR')` |   | `false`
+`e911.street_address` | The street address where the number is in service | `string()` |   | `true`
+`e911` |   | `object()` |   | `false`
+`porting.billing_account_id` | The account id the losing carrier has on file | `string()` |   | `false`
+`porting.billing_extended_address` | The suit/floor/apt. address the losing carrier has on file | `string()` |   | `false`
+`porting.billing_locality` | The locality (city) the losing carrier has on file | `string()` |   | `false`
+`porting.billing_name` | The name or company name the losing carrier has on file | `string()` |   | `false`
+`porting.billing_postal_code` | The zip/postal code the losing carrier has on file | `string()` |   | `false`
+`porting.billing_region` | The region (state) the losing carrier has on file | `string()` |   | `false`
+`porting.billing_street_address` | The street address the losing carrier has on file | `string()` |   | `false`
+`porting.billing_telephone_number` | The BTN of the account the number belongs to | `string()` |   | `false`
+`porting.comments.[]` |   | `string()` |   | `false`
+`porting.comments` | An array of comments | `array(string())` |   | `false`
+`porting.customer_contact` | The phone number that can be used to contact the owner of the number | `string()` |   | `false`
+`porting.port_id` | The id of the port request | `string()` |   | `false`
+`porting.requested_port_date` | The requested port date | `string()` |   | `false`
+`porting.service_provider` | The name of the losing carrier | `string()` |   | `false`
+`porting` | Porting (in) information for the phone number | `object()` |   | `false`
 
 
-#### Search for numbers
 
-Looks for numbers using the carrier module set up for your account.
-
-- `PREFIX`: a 3-digit number prefix such as an area code (e.g. `415`)
-- `QUANTITY`: maximum amount of numbers to be returned (e.g. `2`)
-- `OFFSET`: page number (e.g. `0`)
-- `COUNTRY`: ISO3166 alpha-2 country code (e.g. `US`)
+#### Fetch
 
 > GET /v2/phone_numbers?prefix={PREFIX}&quantity={QUANTITY}&offset={OFFSET}&country={COUNTRY}
 
@@ -177,8 +171,11 @@ curl -v -X GET \
             "voip_innovations"
         ],
         "usable_creation_states": [
-            "reserved",
-            "in_service"
+            "aging",
+            "available",
+            "in_service",
+            "port_in",
+            "reserved"
         ]
     },
     "node": "{NODE}",
@@ -437,6 +434,52 @@ curl -v -X POST \
             "inbound_cnam"
         ],
         "id": "{PHONE_NUMBER}",
+        "my_own_field": "some other value",
+        "state": "in_service",
+        "used_by": "callflow"
+    },
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
+    "status": "success"
+}
+```
+
+
+#### Patch public fields of a number
+
+> PATCH /v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
+
+```shell
+curl -v -X PATCH \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    -d '{"data":{"my_own_field":42}}' \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}
+```
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": {
+        "_read_only": {
+            "created": 63635220353,
+            "features": [
+                "outbound_cnam",
+                "inbound_cnam"
+            ],
+            "modified": 63635220353,
+            "state": "in_service",
+            "used_by": "callflow"
+        },
+        "cnam": {
+            "display_name": "My caller ID",
+            "inbound_lookup": true
+        },
+        "features": [
+            "outbound_cnam",
+            "inbound_cnam"
+        ],
+        "id": "{PHONE_NUMBER}",
+        "my_own_field": 42,
         "state": "in_service",
         "used_by": "callflow"
     },
@@ -864,6 +907,51 @@ curl -v -X POST \
                 },
                 "id": "{PHONE_NUMBER2}",
                 "myfield": 1337,
+                "state": "reserved"
+            }
+        }
+    },
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
+    "status": "success"
+}
+```
+
+
+#### Patch public fields of a list of numbers
+
+> PATCH /v2/accounts/{ACCOUNT_ID}/phone_numbers/collection
+
+```shell
+curl -v -X PATCH \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    -d '{"data": {"numbers": ["{PHONE_NUMBER1}", "{PHONE_NUMBER2}"], "myfield": 2337}}' \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/phone_numbers/collection
+```
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": {
+        "success": {
+            "{PHONE_NUMBER1}": {
+                "_read_only": {
+                    "created": 63628454912,
+                    "modified": 63628454912,
+                    "state": "reserved"
+                },
+                "id": "{PHONE_NUMBER1}",
+                "myfield": 2337,
+                "state": "reserved"
+            },
+            "{PHONE_NUMBER2}": {
+                "_read_only": {
+                    "created": 63628454912,
+                    "modified": 63628454912,
+                    "state": "reserved"
+                },
+                "id": "{PHONE_NUMBER2}",
+                "myfield": 2337,
                 "state": "reserved"
             }
         }

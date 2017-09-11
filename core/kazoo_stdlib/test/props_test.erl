@@ -12,7 +12,7 @@
 
 -ifdef(PROPER).
 -include_lib("proper/include/proper.hrl").
--include_lib("kazoo/include/kz_types.hrl").
+-include_lib("kazoo_stdlib/include/kz_types.hrl").
 -endif.
 
 -include_lib("eunit/include/eunit.hrl").
@@ -85,6 +85,30 @@ is_defined_test_() ->
     [?_assertEqual(Expected, props:is_defined(Key, Props))
      || {Props, Key, Expected} <- Tests
     ].
+
+bools_test_() ->
+    Props1 = [{key, undefined}],
+    Props2 = [{key, <<"undefined">>}],
+    Props3 = [{key, <<"false">>}],
+    Props4 = [{key, false}],
+    Props5 = [{key, <<"true">>}],
+    Props6 = [{key, true}],
+    [?_assertEqual(undefined, props:is_true(key, []))
+    ,?_assertEqual(undefined, props:is_true(key, Props1))
+    ,?_assertEqual(false, props:is_true(key, Props2))
+    ,?_assertEqual(false, props:is_true(key, Props3))
+    ,?_assertEqual(false, props:is_true(key, Props4))
+    ,?_assertEqual(true, props:is_true(key, Props5))
+    ,?_assertEqual(true, props:is_true(key, Props6))
+    ,?_assertEqual(undefined, props:is_false(key, []))
+    ,?_assertEqual(undefined, props:is_false(key, Props1))
+    ,?_assertEqual(false, props:is_false(key, Props2))
+    ,?_assertEqual(true, props:is_false(key, Props3))
+    ,?_assertEqual(true, props:is_false(key, Props4))
+    ,?_assertEqual(false, props:is_false(key, Props5))
+    ,?_assertEqual(false, props:is_false(key, Props6))
+    ].
+
 
 -ifdef(PROPER).
 

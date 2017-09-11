@@ -41,7 +41,7 @@
         ,code_change/3
         ]).
 
--include_lib("kazoo/include/kz_types.hrl").
+-include_lib("kazoo_stdlib/include/kz_types.hrl").
 
 -define(APP_NAME, <<"kzc_recording">>).
 -define(APP_VERSION, <<"4.0.0">>).
@@ -75,6 +75,8 @@
                ,retries = 0               :: non_neg_integer()
                ,verb = 'put'              :: atom()
                ,account_id                :: api_ne_binary()
+               ,event = 'undefined'       :: api_object()
+               ,origin                    :: ne_binary()
                ,preserve_metadata = 'false' :: boolean()
                ,extra_metadata            :: kz_proplist() | 'undefined'
                }).
@@ -161,7 +163,7 @@ handle_call_event(JObj, Props) ->
         {<<"call_event">>, <<"RECORD_STOP">>} ->
             Media = get_response_media(JObj),
             FreeSWITCHNode = kz_call_event:switch_nodename(JObj),
-            gen_listener:cast(Pid, {'record_stop', Media, FreeSWITCHNode});
+            gen_listener:cast(Pid, {'record_stop', Media, FreeSWITCHNode, JObj});
         {_Cat, _Evt} -> 'ok'
     end.
 
@@ -192,6 +194,8 @@ init([Call, Data]) ->
     Url = kz_json:get_ne_binary_value(<<"url">>, Data),
     ShouldStore = should_store_recording(AccountId, Url),
     Verb = kz_json:get_atom_value(<<"method">>, Data, 'put'),
+    Request = kapps_call:request_user(Call),
+    Origin = kz_json:get_ne_binary_value(<<"origin">>, Data, <<"untracked : ", Request/binary>>),
 
     {'ok', #state{url=Url
                  ,format=Format
@@ -210,6 +214,7 @@ init([Call, Data]) ->
                  ,retries = ?STORAGE_RETRY_TIMES(AccountId)
                  ,verb = Verb
                  ,account_id = AccountId
+                 ,origin = Origin
                  ,preserve_metadata = PreserveMetadata
                  ,extra_metadata = ExtraMetadata
                  }}.
@@ -267,7 +272,7 @@ handle_cast('stop_recording', #state{media={_, MediaName}
 handle_cast('stop_recording', #state{is_recording='false'}=State) ->
     lager:debug("received stop recording and we're not recording, exiting"),
     {'stop', 'normal', State};
-handle_cast({'record_stop', {_, MediaName}=Media, FS},
+handle_cast({'record_stop', {_, MediaName}=Media, FS, JObj},
             #state{media={_, MediaName}
                   ,is_recording='true'
                   ,stop_received='false'
@@ -276,7 +281,11 @@ handle_cast({'record_stop', {_, MediaName}=Media, FS},
     lager:debug("received record_stop, storing recording"),
     Call1 = kapps_call:kvs_store(<<"FreeSwitch-Node">>, FS, Call),
     gen_server:cast(self(), 'store_recording'),
-    {'noreply', State#state{media=Media, call=Call1, stop_received='true'}};
+    {'noreply', State#state{media=Media
+                           ,call=Call1
+                           ,stop_received='true'
+                           ,event=JObj
+                           }};
 handle_cast({'record_stop', {_, MediaName}, _FS}, #state{media={_, MediaName}
                                                         ,is_recording='false'
                                                         ,stop_received='false'
@@ -486,9 +495,16 @@ store_recording_meta(#state{call=Call
                            ,cdr_id=CdrId
                            ,interaction_id=InteractionId
                            ,url=Url
+                           ,event=JObj
+                           ,origin=Origin
                            ,extra_metadata=ExtraMetadata
                            }) ->
     CallId = kapps_call:call_id(Call),
+    Timestamp = kz_call_event:timestamp(JObj),
+    Length = kz_call_event:recording_length(JObj),
+    Seconds = Length div ?MILLISECONDS_IN_SECOND,
+    Start = Timestamp - Seconds,
+
     BaseMediaDoc = kz_json:from_list(
                      props:filter_empty(
                        [{<<"name">>, MediaName}
@@ -499,8 +515,15 @@ store_recording_meta(#state{call=Call
                        ,{<<"source_type">>, kz_term:to_binary(?MODULE)}
                        ,{<<"from">>, kapps_call:from(Call)}
                        ,{<<"to">>, kapps_call:to(Call)}
+                       ,{<<"request">>, kapps_call:request(Call)}
+                       ,{<<"direction">>, kapps_call:direction(Call)}
+                       ,{<<"start">>, Start}
+                       ,{<<"duration">>, Seconds}
+                       ,{<<"duration_ms">>, Length}
                        ,{<<"caller_id_number">>, kapps_call:caller_id_number(Call)}
                        ,{<<"caller_id_name">>, kapps_call:caller_id_name(Call)}
+                       ,{<<"callee_id_number">>, kapps_call:callee_id_number(Call)}
+                       ,{<<"callee_id_name">>, kapps_call:callee_id_name(Call)}
                        ,{<<"call_id">>, CallId}
                        ,{<<"owner_id">>, kapps_call:owner_id(Call)}
                        ,{<<"url">>, Url}
@@ -510,6 +533,8 @@ store_recording_meta(#state{call=Call
                        ,{<<"language">>, kapps_call:language(Call)}
                        ,{<<"custom_kvs">>, kapps_call:custom_kvs(Call)}
                        ,{<<"_id">>, DocId}
+                       ,{<<"origin">>, Origin}
+                       ,{<<"custom_channel_vars">>, kz_call_event:custom_channel_vars(JObj)}
                         | ExtraMetadata
                        ]
                       )
@@ -517,7 +542,7 @@ store_recording_meta(#state{call=Call
 
     MediaDoc = kz_doc:update_pvt_parameters(BaseMediaDoc, Db, [{'type', <<"call_recording">>}]),
     case kazoo_modb:save_doc(Db, MediaDoc, [{ensure_saved, true}]) of
-        {'ok', JObj} -> kz_doc:revision(JObj);
+        {'ok', Doc} -> kz_doc:revision(Doc);
         {'error', _}= Err -> Err
     end.
 
@@ -679,7 +704,7 @@ save_recording(#state{call=Call, media=Media}=State, _) ->
 -spec start_recording(kapps_call:call(), ne_binary(), pos_integer(), ne_binary(), api_integer(), api_integer()) -> 'ok'.
 start_recording(Call, MediaName, TimeLimit, MediaDocId, SampleRate, RecordMinSec) ->
     lager:debug("starting recording of ~s", [MediaName]),
-    FollowTransfer = kapps_call:kvs_fetch('recording_follow_transer', 'true', Call),
+    FollowTransfer = kapps_call:kvs_fetch('recording_follow_transfer', 'true', Call),
     Props = [{<<"Media-Name">>, MediaName}
             ,{<<"Follow-Transfer">>, FollowTransfer}
             ,{<<"Media-Recording-ID">>, MediaDocId}

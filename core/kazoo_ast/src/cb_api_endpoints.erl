@@ -16,12 +16,15 @@
 -include_lib("crossbar/src/crossbar.hrl").
 
 -define(REF_PATH
-       ,filename:join([code:lib_dir('crossbar'), "doc", "ref"])).
+       ,code:lib_dir('crossbar'), "doc", "ref"
+       ).
 -define(REF_PATH(Module)
-       ,filename:join([?REF_PATH, <<Module/binary,".md">>])).
+       ,filename:join([?REF_PATH, <<Module/binary,".md">>])
+       ).
 
 -define(SWAGGER_JSON
-       ,filename:join([code:priv_dir('crossbar'), "api", "swagger.json"])).
+       ,filename:join([code:priv_dir('crossbar'), "api", "swagger.json"])
+       ).
 
 -define(SCHEMA_SECTION, <<"#### Schema\n\n">>).
 -define(SUB_SCHEMA_SECTION_HEADER, <<"#####">>).
@@ -36,9 +39,38 @@
 to_ref_doc() ->
     lists:foreach(fun api_to_ref_doc/1, ?MODULE:get()).
 
+to_ref_doc('crossbar_doc'=Module) ->
+    Filters = filters_from_module(Module),
+    filters_to_ref_doc(Filters);
 to_ref_doc(CBModule) ->
     Path = code:which(CBModule),
     api_to_ref_doc(hd(process_module(Path, []))).
+
+-define(FILTER_ROW(Filter, OperatesOn, Description)
+       ,[kz_binary:join([Filter, OperatesOn, Description], <<" | ">>), $\n]
+       ).
+-define(FILTER_HEADER
+       ,["#### Available Filters\n\n"
+        ,?FILTER_ROW(<<"Filter">>, <<"Operates On">>, <<"Description">>)
+        ,?FILTER_ROW(<<"------">>, <<"-----------">>, <<"-----------">>)
+        ]
+       ).
+-define(FILTER_DOC
+       ,["### Query String Filters\n\n"
+         "#### About Filters\n\n"
+        ]).
+
+-spec filters_to_ref_doc(kz_json:object()) -> 'ok'.
+filters_to_ref_doc(Filters) ->
+    ReversedTable = kz_json:foldl(fun filter_to_ref_doc/3, [], Filters),
+    'ok' = file:write_file(?REF_PATH(<<"filters">>)
+                          ,[?FILTER_DOC
+                           ,?FILTER_HEADER
+                           ,lists:reverse(ReversedTable)]
+                          ).
+
+filter_to_ref_doc(Filter, OperatesOn, Acc) ->
+    [?FILTER_ROW(<<"`", Filter/binary, "`">>, <<"`", OperatesOn/binary, "`">>, <<>>) | Acc].
 
 api_to_ref_doc([]) -> 'ok';
 api_to_ref_doc({Module, Paths}) ->
@@ -225,7 +257,8 @@ process_schema(Filename, Definitions) ->
                 end
                 || {Path,V}=KV <- kz_json:to_proplist(kz_json:flatten(JObj0)),
                    not lists:member(<<"patternProperties">>, Path),
-                   not lists:member(<<"kazoo-validation">>, Path)
+                   not lists:member(<<"kazoo-validation">>, Path),
+                   not lists:member(<<"oneOf">>, Path)
                ])),
     Name = kz_term:to_binary(filename:basename(Filename, ".json")),
     kz_json:set_value(Name, JObj, Definitions).
@@ -840,6 +873,7 @@ def_path_param(<<"{TEMPORAL_RULE_SET}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{USER_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{VM_BOX_ID}">>=P) -> generic_id_path_param(P);
 def_path_param(<<"{WEBHOOK_ID}">>=P) -> generic_id_path_param(P);
+def_path_param(<<"{MIGRATION_ID}">>=P) -> generic_id_path_param(P);
 
 %% When param represents an MoDB id (i.e. 32+4+2 bytes of hexa & 1 dash):
 def_path_param(<<"{CDR_ID}">>=P) -> modb_id_path_param(P);
@@ -938,3 +972,27 @@ def_path_param(<<"{UUID}">>=P) ->
 def_path_param(_Param) ->
     io:format(standard_error, "No Swagger definition of path parameter '~s'.\n", [_Param]),
     halt(1).
+
+filters_from_module(Module) ->
+    Options = [{'accumulator', kz_json:new()}
+              ,{'clause', fun handle_filter_clause/3}
+              ,{'function', fun maybe_process_function/3}
+              ],
+    kazoo_ast:walk_modules([Module], Options).
+
+maybe_process_function('filter_prop', 3, Acc) -> Acc;
+maybe_process_function(_F, _A, Acc) -> {'skip', Acc}.
+
+handle_filter_clause([?VAR('Doc'), ?BINARY_MATCH([?BINARY_STRING(FilterName)]), ?VAR('Val')], _Guards, Acc) ->
+    kz_json:set_value(kz_term:to_binary(FilterName), <<"{VALUE}">>, Acc);
+handle_filter_clause([?VAR('Doc'), ?BINARY_MATCH([?BINARY_STRING(FilterName)]), ?VAR('Key')], _Guards, Acc) ->
+    kz_json:set_value(kz_term:to_binary(FilterName), <<"{KEY}">>, Acc);
+handle_filter_clause([?VAR('Doc')
+                     ,?BINARY_MATCH([?BINARY_STRING(FilterName)
+                                    ,?BINARY_VAR('Key')
+                                    ])
+                     ,?VAR('Val')
+                     ], _Guards, Acc) ->
+    kz_json:set_value(kz_term:to_binary(FilterName ++ "{KEY}"), <<"{VALUE}">>, Acc);
+handle_filter_clause([?VAR('_') | _], _Guards, Acc) ->
+    Acc.

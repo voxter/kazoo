@@ -9,12 +9,12 @@
 -define(IN, ?OUT ++ ".src").
 
 -include_lib("erlang_localtime/include/tz_index.hrl").
--include_lib("kazoo/include/kz_types.hrl").
+-include_lib("kazoo_stdlib/include/kz_types.hrl").
 
 main(_) ->
     {ok, SchemaBin} = file:read_file(?IN),
     SchemaJObj = kz_json:decode(SchemaBin),
-    TZEnumPath = [<<"properties">>, <<"scheduled_date">>, <<"properties">>, <<"timezone">>, <<"enum">>],
+    TZEnumPath = [<<"properties">>, <<"schedule_on">>, <<"properties">>, <<"timezone">>, <<"enum">>],
     [<<"America/Los_Angeles">>] = kz_json:get_list_value(TZEnumPath, SchemaJObj),
     Enum = unique_values(?tz_index),
     NewSchemaJObj = kz_json:set_value(TZEnumPath, lists:sort(sets:to_list(Enum)), SchemaJObj),

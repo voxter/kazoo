@@ -563,8 +563,18 @@ are_all_there(Values, Keys, Vs, Ks) ->
                                   ,{<<"k3">>, ?K3_JOBJ}
                                   ,{<<"k4">>, [1,2,3]}
                                   ])).
-codec_test() ->
-    ?assertEqual(?CODEC_JOBJ, kz_json:decode(kz_json:encode(?CODEC_JOBJ))).
+-define(PROPS_WITH_UNDEFINED, [{<<"a">>, 42}
+                              ,{<<"b">>, undefined}
+                              ]).
+
+codec_test_() ->
+    [?_assertEqual(?CODEC_JOBJ, kz_json:decode(kz_json:encode(?CODEC_JOBJ)))
+    ,?_assertThrow({error,{invalid_ejson,undefined}}, kz_json:encode(undefined))
+    ,?_assertThrow({error,{invalid_ejson,undefined}}, kz_json:encode(?JSON_WRAPPER(?PROPS_WITH_UNDEFINED)))
+    ,?_assert(kz_json:are_equal(kz_json:from_list(?PROPS_WITH_UNDEFINED)
+                               ,kz_json:decode(kz_json:encode(kz_json:from_list(?PROPS_WITH_UNDEFINED)))
+                               ))
+    ].
 
 find_value_test_() ->
     JObjs = kz_json:decode(<<"[{\"k1\":\"v1\"},{\"k1\":\"v2\"}]">>),
@@ -747,6 +757,13 @@ merge_vs_merge_recursive_test_() ->
     ,?_assert(kz_json:are_equal(M2, ?REQUEST))
     ,?_assert(kz_json:are_equal(M3, ?REQUEST))
     ].
+
+set_value_test_() ->
+    JObj = kz_json:from_list([{<<189>>,[]}]),
+    Key = [<<189>>,<<0>>],
+    Value = null,
+    JObj1 = kz_json:set_value(Key, Value, JObj),
+    [{"prop_set_value error", ?_assertEqual(Value, kz_json:get_value(Key, JObj1, Value))}].
 
 -ifdef(PERF).
 -define(REPEAT, 100000).

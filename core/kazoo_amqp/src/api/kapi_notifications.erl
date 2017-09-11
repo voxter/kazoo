@@ -50,7 +50,7 @@
         ,missed_call/1, missed_call_v/1
         ,skel/1, skel_v/1
         ,headers/1
-        ,account_db/1
+        ,account_id/1, account_db/1
         ]).
 
 -export([publish_voicemail_new/1, publish_voicemail_new/2
@@ -199,7 +199,7 @@
                                             ,<<"Call-ID">>, <<"Fax-Info">>, <<"Fax-ID">>
                                             ,<<"Owner-ID">>, <<"FaxBox-ID">>
                                             ,<<"Fax-Notifications">>, <<"Fax-Error">>
-                                            ,<<"Fax-Timestamp">>
+                                            ,<<"Fax-Timestamp">>, <<"Fax-Result-Code">>
                                                  | ?DEFAULT_OPTIONAL_HEADERS
                                             ]).
 -define(FAX_INBOUND_ERROR_VALUES, [{<<"Event-Category">>, <<"notification">>}
@@ -472,7 +472,8 @@
                              ,<<"Response">>, <<"Success">>
                              ]).
 -define(OPTIONAL_TRANSACTION_HEADERS, [<<"Service-Plan">>
-                                           | ?COMMON_TRANSACTION_HEADERS ++ ?DEFAULT_OPTIONAL_HEADERS
+                                           | ?COMMON_TRANSACTION_HEADERS
+                                       ++ ?DEFAULT_OPTIONAL_HEADERS
                                       ]).
 -define(TRANSACTION_VALUES, [{<<"Event-Category">>, <<"notification">>}
                             ,{<<"Event-Name">>, <<"transaction">>}
@@ -480,7 +481,7 @@
 -define(TRANSACTION_TYPES, []).
 
 %% Notify New Service Addition (from service audit log)
--define(SERVICE_ADDED_HEADERS, [<<"Account-ID">>, <<"Audit-Log">>]).
+-define(SERVICE_ADDED_HEADERS, [<<"Account-ID">>, <<"Audit-Log">>, <<"Time-Stamp">>]).
 -define(OPTIONAL_SERVICE_ADDED_HEADERS, ?DEFAULT_OPTIONAL_HEADERS).
 -define(SERVICE_ADDED_VALUES, [{<<"Event-Category">>, <<"notification">>}
                               ,{<<"Event-Name">>, <<"service_added">>}
@@ -580,14 +581,34 @@
                      ]).
 -define(SKEL_TYPES, []).
 
--spec account_db(kz_json:object()) -> api_binary().
+-spec account_id(kz_json:object()) -> api_binary().
+account_id(JObj) ->
+    Paths = [<<"account_id">>
+            ,[<<"account">>, <<"_id">>]
+            ,<<"pvt_account_id">>
+            ,<<"_id">>, <<"id">>
+            ,<<"Account-ID">>
+            ,[<<"details">>, <<"account_id">>]
+            ,[<<"Details">>, <<"Account-ID">>]
+            ,[<<"details">>, <<"custom_channel_vars">>, <<"account_id">>]
+            ,[<<"Details">>, <<"Custom-Channel-Vars">>, <<"Account-ID">>]
+            ],
+    kz_json:get_first_defined(Paths, JObj).
+
+-spec account_db(kz_json:object()) -> api_ne_binary().
 account_db(JObj) ->
-    Check = [<<"account_db">>, <<"pvt_account_db">>, <<"Account-DB">>],
-    case kz_json:get_first_defined(Check, JObj) of
+    Paths = [<<"account_db">>, <<"pvt_account_db">>, <<"Account-DB">>],
+    case kz_json:get_first_defined(Paths, JObj) of
         'undefined' ->
-            kz_util:format_account_id(kz_json:get_ne_binary_value(<<"Account-ID">>, JObj), 'encoded');
-        Value ->
-            Value
+            case account_id(JObj) of
+                'undefined' -> 'undefined';
+                AccountId -> kz_util:format_account_db(AccountId)
+            end;
+        ?MATCH_MODB_SUFFIX_RAW(_, _, _)=Db -> kz_util:format_account_modb(Db, 'encoded');
+        ?MATCH_MODB_SUFFIX_UNENCODED(_, _, _)=Db -> kz_util:format_account_modb(Db, 'encoded');
+        ?MATCH_MODB_SUFFIX_ENCODED(_, _, _)=Db -> Db;
+        ?NE_BINARY=Db -> kz_util:format_account_db(Db);
+        _ -> 'undefined'
     end.
 
 -spec headers(ne_binary()) -> ne_binaries().

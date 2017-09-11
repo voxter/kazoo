@@ -25,15 +25,15 @@
 
 -export_type([validation_error/0, validation_errors/0]).
 
--include_lib("kazoo/include/kz_types.hrl").
--include_lib("kazoo/include/kz_databases.hrl").
+-include_lib("kazoo_stdlib/include/kz_types.hrl").
+-include_lib("kazoo_stdlib/include/kz_databases.hrl").
 -include_lib("kazoo_documents/include/kazoo_documents.hrl").
 -include_lib("kazoo_stdlib/include/kazoo_json.hrl").
 
 -define(DEFAULT_OPTIONS, [{'schema_loader_fun', fun load/1}
                          ,{'allowed_errors', 'infinity'}
                          ,{'extra_validator', fun kz_json_schema_extensions:extra_validator/2}
-                         ,{'setter_fun', fun kz_json:set_value/3}
+                         ,{'setter_fun', fun set_value/3}
                          ,{'validator_options', ['use_defaults'
                                                 ,'apply_defaults_to_empty_objects'
                                                 ]}
@@ -42,7 +42,7 @@
 -spec load(ne_binary() | string()) -> {'ok', kz_json:object()} |
                                       {'error', any()}.
 load(<<"./", Schema/binary>>) -> load(Schema);
-load(<<"file://", Schema/binary>>) -> fload(Schema);
+load(<<"file://", Schema/binary>>) -> load(Schema);
 load(<<_/binary>> = Schema) ->
     case kz_datamgr:open_cache_doc(?KZ_SCHEMA_DB, Schema, [{'cache_failures', ['not_found']}]) of
         {'error', _E}=E -> E;
@@ -882,3 +882,18 @@ filter(JObj, Schema) ->
                                  ,kz_json:flatten(JObj)
                                  ),
     kz_json:expand(FilteredFlat).
+
+set_value(Path, Value, JObj) ->
+    FixedPath = fix_path(Path),
+    kz_json:set_value(FixedPath, Value, JObj).
+
+-spec fix_path(kz_json:path()) -> kz_json:path().
+fix_path(Path) ->
+    [fix_el(El) || El <- Path].
+
+%% JSON array indicies are 0-indexed, Erlang's are 1-indexed
+%% If an indicie is found, convert (incr) from JSON- to Erlang-based indicie
+-spec fix_el(kz_json:key() | non_neg_integer()) -> kz_json:key() | non_neg_integer().
+fix_el(I) when is_integer(I) -> I+1;
+fix_el(El) -> El.
+

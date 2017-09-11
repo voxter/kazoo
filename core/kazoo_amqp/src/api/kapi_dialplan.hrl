@@ -10,7 +10,7 @@
 %%% Fix KAZOO-3406: Sponsored by Velvetech LLC, implemented by SIPLABS LLC
 %%%-------------------------------------------------------------------
 -ifndef(KAPI_DIALPLAN_HRL).
--include_lib("kazoo/include/kz_types.hrl").
+-include_lib("kazoo_stdlib/include/kz_types.hrl").
 
 %% For dialplan messages, what does the Invite-Format param accept as values?
 -define(INVITE_FORMAT_TUPLE, {<<"Invite-Format">>
@@ -87,7 +87,7 @@
                            ,{<<"Enable-T38-Gateway">>, [<<"self">>, <<"peer">>]}
                            ,?INSERT_AT_TUPLE
                            ]).
--define(BRIDGE_REQ_TYPES, [{<<"Endpoints">>, fun is_list/1}
+-define(BRIDGE_REQ_TYPES, [{<<"Endpoints">>, fun kz_json:are_json_objects/1}
                           ,{<<"Custom-SIP-Headers">>, fun kz_json:is_json_object/1}
                           ,{<<"Custom-Channel-Vars">>, fun kz_json:is_json_object/1}
                           ,{<<"Continue-On-Fail">>, fun kz_term:is_boolean/1}
@@ -806,10 +806,10 @@
                          ,{<<"Event-Name">>, <<"command">>}
                          ,{<<"Application-Name">>, <<"transfer">>}
                          ,{<<"Transfer-Type">>, [<<"blind">>, <<"attended">>]}
+                         ,{<<"Transfer-Leg">>, [<<"bleg">>, <<"both">>]}
                          ,?INSERT_AT_TUPLE
                          ]).
 -define(TRANSFER_TYPES, [{<<"Call-ID">>, fun is_binary/1}
-                        ,{<<"Transfer-Leg">>, fun(T) -> lists:member(T, [<<"bleg">>, <<"both">>]) end}
                         ]).
 
 %% media_macro

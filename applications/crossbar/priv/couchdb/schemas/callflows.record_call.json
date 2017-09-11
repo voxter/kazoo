@@ -20,6 +20,10 @@
             ],
             "type": "string"
         },
+        "label": {
+            "description": "Label to include in the origin of call recording",
+            "type": "string"
+        },
         "media_name": {
             "description": "the name of media",
             "type": "string"
@@ -43,6 +47,7 @@
             "type": "integer"
         },
         "time_limit": {
+            "default": 3600,
             "description": "Time limit, in seconds, for the recording",
             "maximum": 10800,
             "minimum": 5,

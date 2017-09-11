@@ -1,7 +1,7 @@
 -ifndef(ACDC_HRL).
--include_lib("kazoo/include/kz_types.hrl").
--include_lib("kazoo/include/kz_log.hrl").
--include_lib("kazoo/include/kz_databases.hrl").
+-include_lib("kazoo_stdlib/include/kz_types.hrl").
+-include_lib("kazoo_stdlib/include/kz_log.hrl").
+-include_lib("kazoo_stdlib/include/kz_databases.hrl").
 -include_lib("kazoo/include/kz_api_literals.hrl").
 -include("acdc_config.hrl").
 
@@ -57,6 +57,12 @@
 -define(ARCHIVE_WINDOW, ?ACDC_ARCHIVE_WINDOW).
 
 -define(RESOURCE_TYPES_HANDLED, [<<"audio">>, <<"video">>]).
+
+-define(PRINT(Str), ?PRINT(Str, [])).
+-define(PRINT(Fmt, Args), begin
+                              lager:info(Fmt, Args),
+                              io:format(Fmt++"\n", Args)
+                          end).
 
 -define(ACDC_HRL, 'true').
 -endif.

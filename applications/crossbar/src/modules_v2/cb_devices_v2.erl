@@ -681,7 +681,7 @@ load_device_status(Context) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Normalizes the resuts of a view
+%% Normalizes the results of a view
 %% @end
 %%--------------------------------------------------------------------
 -spec normalize_view_results(kz_json:object(), kz_json:objects()) -> kz_json:objects().
@@ -896,7 +896,7 @@ remove_if_mobile(MDN, Context) ->
                 Mobile ->
                     lager:debug("hard removing old mdn ~s with mobile properties ~s"
                                ,[Normalized, kz_json:encode(Mobile)]),
-                    _ = knm_number:release(Normalized, knm_number_options:mdn_options()),
+                    _ = knm_number:delete(Normalized, knm_number_options:mdn_options()),
                     Context
             end;
         {'error', _R} ->

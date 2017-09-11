@@ -19,14 +19,20 @@ if [[ ! -z "$($CHANGED)" ]]; then
   TO_FMT="$(echo $($CHANGED))" make fmt
 fi
 
-echo "--- Make"
-make
-
 echo "--- Make deps"
 make deps
 
+echo "--- Make compile-test"
+make compile-test
+
 echo "--- Make eunit"
 make eunit
+
+echo "--- Make clean"
+make clean
+
+echo "--- Make"
+make
 
 echo "--- Make code_checks"
 make code_checks

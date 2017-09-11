@@ -1,7 +1,7 @@
 -ifndef(KZ_VOICEMAIL_HRL).
 
--include_lib("kazoo/include/kz_types.hrl").
--include_lib("kazoo/include/kz_log.hrl").
+-include_lib("kazoo_stdlib/include/kz_types.hrl").
+-include_lib("kazoo_stdlib/include/kz_log.hrl").
 -include_lib("kazoo_documents/include/kazoo_documents.hrl").
 
 -define(VMBOX_CB_LIST, <<"vmboxes/crossbar_listing">>).
@@ -28,13 +28,6 @@
 -type update_funs() :: [fun((kz_json:object()) -> kz_json:object())].
 
 -type next_account() :: {ne_binary(), gregorian_seconds(), gregorian_seconds()}.
-
--define(MODB_MSG_ID(Year, Month, Id),
-        <<(kz_term:to_binary(Year))/binary
-          ,(kz_time:pad_month(Month))/binary
-          ,"-"
-          ,(Id)/binary
-        >>).
 
 -define(KZ_VOICEMAIL_HRL, 'true').
 -endif.

@@ -75,7 +75,7 @@ get_temporal_rules() ->
           ,wdays=?RULE_DEFAULT_WDAYS
           ,ordinal= <<"range">>
           ,month=?RULE_DEFAULT_MONTH
-          ,start_date=cf_temporal_route:get_date(?YEAR_2000, ?TIMEZONE)
+          ,start_date=kz_date:from_gregorian_seconds(?YEAR_2000, ?TIMEZONE)
           ,wtime_start=?ELEVEN_AM_START
           ,wtime_stop=?FIVE_PM_STOP
           ,rule_set='false'
@@ -89,7 +89,7 @@ get_temporal_rules() ->
           ,wdays=[<<"monday">>, <<"tuesday">>, <<"wensday">>, <<"thursday">>, <<"friday">>]
           ,ordinal=?RULE_DEFAULT_ORDINAL
           ,month=?RULE_DEFAULT_MONTH
-          ,start_date=cf_temporal_route:get_date(?YEAR_2000, ?TIMEZONE)
+          ,start_date=kz_date:from_gregorian_seconds(?YEAR_2000, ?TIMEZONE)
           ,wtime_start=?NINE_AM_START
           ,wtime_stop=?FIVE_PM_STOP
           ,rule_set='false'

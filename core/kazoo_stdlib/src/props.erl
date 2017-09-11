@@ -34,8 +34,8 @@
         ,to_log/1, to_log/2
         ]).
 
--include_lib("kazoo/include/kz_types.hrl").
--include_lib("kazoo/include/kz_log.hrl").
+-include_lib("kazoo_stdlib/include/kz_types.hrl").
+-include_lib("kazoo_stdlib/include/kz_log.hrl").
 
 %% don't import the get_keys/1 that fetches keys from the process dictionary
 -compile({'no_auto_import', [get_keys/1]}).
@@ -266,7 +266,7 @@ delete(K, Props) ->
 delete_keys([], Props) -> Props;
 delete_keys([_|_]=Ks, Props) -> lists:foldl(fun delete/2, Props, Ks).
 
--spec is_defined(kz_proplist_property(), kz_proplist()) -> boolean().
+-spec is_defined(kz_proplist_property() | kz_proplist_key(), kz_proplist()) -> boolean().
 is_defined({Key, _}, Props) -> get_value(Key, Props) =/= 'undefined';
 is_defined(Key, Props) -> get_value(Key, Props) =/= 'undefined'.
 

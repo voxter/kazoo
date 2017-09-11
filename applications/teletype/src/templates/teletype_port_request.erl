@@ -17,7 +17,12 @@
 -define(TEMPLATE_ID, <<"port_request">>).
 -define(MOD_CONFIG_CAT, <<(?NOTIFY_CONFIG_CAT)/binary, ".", (?TEMPLATE_ID)/binary>>).
 
--define(TEMPLATE_MACROS, kz_json:from_list(?PORT_REQUEST_MACROS ++ ?ACCOUNT_MACROS)).
+-define(TEMPLATE_MACROS
+       ,kz_json:from_list(
+          ?PORT_REQUEST_MACROS
+          ++ ?COMMON_TEMPLATE_MACROS
+         )
+       ).
 
 -define(TEMPLATE_SUBJECT, <<"Number port request for account '{{account.name}}'">>).
 -define(TEMPLATE_CATEGORY, <<"port_request">>).
@@ -46,8 +51,14 @@ init() ->
 
 -spec handle_req(kz_json:object()) -> 'ok'.
 handle_req(JObj) ->
-    'true' = kapi_notifications:port_request_v(JObj),
-    kz_util:put_callid(JObj),
+    handle_req(JObj, kapi_notifications:port_request_v(JObj)).
+
+-spec handle_req(kz_json:object(), boolean()) -> 'ok'.
+handle_req(JObj, 'false') ->
+    lager:debug("invalid data for ~s", [?TEMPLATE_ID]),
+    teletype_util:send_update(JObj, <<"failed">>, <<"validation_failed">>);
+handle_req(JObj, 'true') ->
+    lager:debug("valid data for ~s, processing...", [?TEMPLATE_ID]),
 
     %% Gather data for template
     DataJObj = kz_json:normalize(JObj),
@@ -83,7 +94,7 @@ handle_port_request(DataJObj) ->
     RenderedTemplates = teletype_templates:render(?TEMPLATE_ID, Macros, DataJObj),
 
     {'ok', TemplateMetaJObj} =
-        teletype_templates:fetch_notification(?TEMPLATE_ID, teletype_util:find_account_id(DataJObj)),
+        teletype_templates:fetch_notification(?TEMPLATE_ID, kapi_notifications:account_id(DataJObj)),
 
     Subject0 = kz_json:find(<<"subject">>, [DataJObj, TemplateMetaJObj], ?TEMPLATE_SUBJECT),
     Subject = teletype_util:render_subject(Subject0, Macros),

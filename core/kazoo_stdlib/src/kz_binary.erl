@@ -34,7 +34,7 @@
         ]).
 -export([pos/2, closests/2]).
 
--include_lib("kazoo/include/kz_types.hrl").
+-include_lib("kazoo_stdlib/include/kz_types.hrl").
 
 %%--------------------------------------------------------------------
 %% @public
@@ -61,7 +61,7 @@ pad_left(Bin, _Size, _Value) -> Bin.
 %% @end
 %%--------------------------------------------------------------------
 -spec join([text() | atom(),...]) -> binary().
--spec join([text() | atom(),...], iodata()) -> binary().
+-spec join([text() | atom(),...], iodata() | char()) -> binary().
 
 join(Bins) -> join(Bins, <<", ">>).
 join([], _) -> <<>>;
@@ -96,7 +96,7 @@ clean(Bin, Opts) ->
 
 
 -spec strip(binary()) -> binary().
--spec strip(binary(), 'both' | 'left' | 'right' | char() | [char()]) -> binary().
+-spec strip(binary(), 'both' | 'left' | 'right' | char() | nonempty_string()) -> binary().
 -spec strip_left(binary(), char() | binary()) -> binary().
 -spec strip_right(binary(), char() | binary()) -> binary().
 strip(B) -> strip(B, 'both').
@@ -204,10 +204,6 @@ rand_hex(Size) when is_integer(Size)
                     andalso Size > 0 ->
     kz_term:to_hex_binary(crypto:strong_rand_bytes(Size)).
 
--spec reverse(binary()) -> binary().
-reverse(Bin) ->
-    kz_term:to_binary(lists:reverse(kz_term:to_list(Bin))).
-
 -spec ucfirst(ne_binary()) -> ne_binary().
 ucfirst(<<F:8, Bin/binary>>) -> <<(kz_term:to_upper_char(F)):8, Bin/binary>>.
 
@@ -230,3 +226,9 @@ closests(Chars, Bin) ->
                 Pos =/= -1
             ],
     lists:keysort(2, Pairs).
+
+-spec reverse(binary()) -> binary().
+reverse(Binary) ->
+    Size = erlang:size(Binary)*8,
+    <<X:Size/integer-little>> = Binary,
+    <<X:Size/integer-big>>.
