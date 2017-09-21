@@ -50,7 +50,7 @@
 
 -ifdef(TEST).
 -export([ss_size/2
-        ,update_strategy_with_agent/5
+        ,update_strategy_with_agent/6
         ]).
 -endif.
 

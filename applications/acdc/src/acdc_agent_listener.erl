@@ -486,8 +486,8 @@ handle_cast({'refresh_config', Qs, Priority, StateName}, #state{agent_priority=P
                         {_, Rm1} = acdc_agent_util:changed(Queues, Qs),
                         Add1 = lists:subtract(Queues, Rm1),
                         lists:foreach(fun(Queue) ->
-                                            lager:debug("prio update for queue ~s", [Queue])
-                                    end, Queues),
+                                              lager:debug("prio update for queue ~s", [Queue])
+                                      end, Queues),
                         {Add1, Rm1}
                 end,
 
