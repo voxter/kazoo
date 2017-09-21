@@ -14,6 +14,7 @@
 *.dump
 *.orig
 *.DS_Store
+*typescript
 core/*/test/*.beam
 core/*/test/*.app
 applications/*/priv/archive_data/*
