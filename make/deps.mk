@@ -8,6 +8,7 @@ DEPS = amqp_client \
 	eflame \
 	eiconv \
 	erlang_localtime \
+	erlcloud \
 	erlsom \
 	erlydtl \
 	escalus \
@@ -58,12 +59,17 @@ dep_jiffy = git https://github.com/fenollp/jiffy patch-1  ## See https://github.
 dep_nklib = git https://github.com/NetComposer/nklib
 dep_plists = hex 1.0.0
 
-dep_couchbeam = git https://github.com/2600hz/couchbeam 1.4.1a
+dep_erlcloud = git https://github.com/lazedo/erlcloud 54fe6b96eb0bc591b80161fc552afb821072222c
+## waiting on pull request https://github.com/erlcloud/erlcloud/pull/437
+
+dep_couchbeam = git https://github.com/2600hz/couchbeam 1.4.1b
 ###dep_couchbeam = git https://github.com/benoitc/couchbeam 1.4.1
 ### waiting for pull requests
 ### https://github.com/benoitc/couchbeam/pull/158
 ### https://github.com/benoitc/couchbeam/pull/164
 ### https://github.com/benoitc/couchbeam/pull/165
+### https://github.com/benoitc/couchbeam/pull/166
+### https://github.com/benoitc/couchbeam/pull/174
 
 dep_jesse = git https://github.com/2600hz/jesse 1.5-rc6
 ##dep_jesse = git https://github.com/for-GET/jesse 1.5.0-rc2

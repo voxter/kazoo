@@ -95,25 +95,25 @@
                         "cb_api_auth": {
                             "enabled": true,
                             "log_failed_attempts": true,
-                            "log_successful_attempts": true,
+                            "log_successful_attempts": false,
                             "token_auth_expiry_s": 3600
                         },
                         "cb_auth": {
                             "enabled": true,
                             "log_failed_attempts": true,
-                            "log_successful_attempts": true,
+                            "log_successful_attempts": false,
                             "token_auth_expiry_s": 3600
                         },
                         "cb_ip_auth": {
                             "enabled": true,
                             "log_failed_attempts": true,
-                            "log_successful_attempts": true,
+                            "log_successful_attempts": false,
                             "token_auth_expiry_s": 3600
                         },
                         "cb_ubiquiti_auth": {
                             "enabled": true,
                             "log_failed_attempts": true,
-                            "log_successful_attempts": true,
+                            "log_successful_attempts": false,
                             "token_auth_expiry_s": 3600
                         },
                         "cb_user_auth": {
@@ -16045,7 +16045,13 @@
                 "Text": {
                     "type": "string"
                 },
+                "Timezone": {
+                    "type": "string"
+                },
                 "To": {
+                    "type": "string"
+                },
+                "User-ID": {
                     "type": "string"
                 }
             },
@@ -25678,6 +25684,11 @@
                     "default": "early",
                     "description": "callflow.park parked presence type",
                     "type": "string"
+                },
+                "valet_reservation_cleanup_time_ms": {
+                    "default": 3000,
+                    "description": "callflow park valet_reservation_cleanup_time_ms",
+                    "type": "integer"
                 }
             },
             "type": "object"
@@ -25958,6 +25969,7 @@
                 "maximum_range": {
                     "default": 2682000,
                     "description": "crossbar maximum range",
+                    "minimum": 1,
                     "type": "integer"
                 },
                 "pagination_page_size": {
@@ -26136,25 +26148,25 @@
                         "cb_api_auth": {
                             "enabled": true,
                             "log_failed_attempts": true,
-                            "log_successful_attempts": true,
+                            "log_successful_attempts": false,
                             "token_auth_expiry_s": 3600
                         },
                         "cb_auth": {
                             "enabled": true,
                             "log_failed_attempts": true,
-                            "log_successful_attempts": true,
+                            "log_successful_attempts": false,
                             "token_auth_expiry_s": 3600
                         },
                         "cb_ip_auth": {
                             "enabled": true,
                             "log_failed_attempts": true,
-                            "log_successful_attempts": true,
+                            "log_successful_attempts": false,
                             "token_auth_expiry_s": 3600
                         },
                         "cb_ubiquiti_auth": {
                             "enabled": true,
                             "log_failed_attempts": true,
-                            "log_successful_attempts": true,
+                            "log_successful_attempts": false,
                             "token_auth_expiry_s": 3600
                         },
                         "cb_user_auth": {
@@ -30797,9 +30809,6 @@
                             "description": "The audio media parameters",
                             "properties": {
                                 "codecs": {
-                                    "default": [
-                                        "PCMU"
-                                    ],
                                     "description": "A list of audio codecs the device supports",
                                     "items": {
                                         "enum": [

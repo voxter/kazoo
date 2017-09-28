@@ -333,25 +333,28 @@ merge_attribute_caller_id(AccountJObj, AccountJAttr, UserJAttr, EndpointJAttr) -
 
 -spec merge_call_recording(kz_json:object()) -> kz_json:object().
 merge_call_recording(JObj) ->
-    AnyOrig = kz_json:get_json_value(<<"any">>, JObj, kz_json:new()),
-    kz_json:foldl(fun(K, V, Acc) ->
-                          AnyDest = kz_json:get_json_value(<<"any">>, V, kz_json:new()),
-                          V2 = kz_json:foldl(fun(K1, V1, Acc1) ->
-                                                     kz_json:set_value(K1, kz_json:merge(AnyDest, V1), Acc1)
-                                             end
-                                            ,kz_json:new()
-                                            ,kz_json:delete_key(<<"any">>, V)
-                                            ),
-                          kz_json:set_value(K, V2, Acc)
-                  end
-                 ,kz_json:new()
-                 ,kz_json:foldl(fun(K, V, Acc) ->
-                                        kz_json:set_value(K, kz_json:merge(AnyOrig, V), Acc)
-                                end
-                               ,kz_json:new()
-                               ,kz_json:delete_key(<<"any">>, JObj)
-                               )
-                 ).
+    AnyDirections = [<<"inbound">>, <<"outbound">>],
+    AnyNets = [<<"onnet">>, <<"offnet">>],
+
+    AnyDirection = kz_json:get_json_value(<<"any">>, JObj, kz_json:new()),
+    F1 = fun(K1, V1) -> merge_call_recording(K1, V1, AnyDirection) end,
+    JObj1 = lists:foldl(F1, kz_json:delete_key(<<"any">>, JObj), AnyDirections),
+    F2 = fun(K, V, Acc) -> merge_call_recording(K, V, Acc, AnyNets) end,
+    kz_json:foldl(F2, JObj1, JObj1).
+
+-spec merge_call_recording(ne_binary(), kz_json:object(), kz_json:object()) -> kz_json:object().
+merge_call_recording(K, JObj, ToMerge) ->
+    case kz_json:get_json_value(K, JObj) of
+        'undefined' -> kz_json:set_value(K, ToMerge, JObj);
+        V -> kz_json:set_value(K, kz_json:merge(ToMerge, V), JObj)
+    end.
+
+-spec merge_call_recording(ne_binary(), kz_json:object(), kz_json:object(), ne_binaries()) -> kz_json:object().
+merge_call_recording(K, JObj, Acc, List) ->
+    Any = kz_json:get_json_value(<<"any">>, JObj, kz_json:from_list([{<<"enabled">>, false}])),
+    Fun = fun(K1, V1) -> merge_call_recording(K1, V1, Any) end,
+    kz_json:set_value(K, lists:foldl(Fun, kz_json:delete_key(<<"any">>, JObj), List), Acc).
+
 
 -spec get_account_record_call_properties(api_object()) -> kz_json:object().
 get_account_record_call_properties(JObj) ->
@@ -1427,13 +1430,17 @@ maybe_add_diversion(JObj, Endpoint, _Inception, Call) ->
 
 -spec maybe_add_sip_headers(kz_json:object(), kz_json:object(), kapps_call:call()) -> kz_json:object().
 maybe_add_sip_headers(JObj, Endpoint, Call) ->
+    lists:foldl(fun merge_custom_sip_headers/2, JObj, get_sip_headers(Endpoint, Call)).
+
+-spec get_sip_headers(kz_json:object(), kapps_call:call()) -> kz_json:objects().
+get_sip_headers(Endpoint, Call) ->
     case ?MODULE:get(Call) of
-        {'error', _} -> JObj;
+        {'error', _} ->
+            [kz_device:custom_sip_headers_inbound(Endpoint)];
         {'ok', AuthorizingEndpoint} ->
-            MergeHeaders = [kz_device:custom_sip_headers_inbound(Endpoint)
-                           ,kz_device:custom_sip_headers_outbound(AuthorizingEndpoint)
-                           ],
-            lists:foldl(fun merge_custom_sip_headers/2, JObj, MergeHeaders)
+            [kz_device:custom_sip_headers_inbound(Endpoint)
+            ,kz_device:custom_sip_headers_outbound(AuthorizingEndpoint)
+            ]
     end.
 
 -spec merge_custom_sip_headers(kz_json:object(), kz_json:object()) -> kz_json:object().
