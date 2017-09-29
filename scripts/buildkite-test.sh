@@ -62,7 +62,9 @@ if [[ 0 -ne `git status --porcelain | wc -l` ]]; then
 fi
 
 echo "--- Swagger Tools"
+set +e
 time swagger-tools validate applications/crossbar/priv/api/swagger.json
+set -e
 
 echo "--- Make xref"
 make xref
