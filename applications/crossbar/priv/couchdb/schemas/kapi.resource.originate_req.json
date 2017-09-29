@@ -143,6 +143,9 @@
         "Intercept-Unbridged-Only": {
             "type": "string"
         },
+        "Language": {
+            "type": "string"
+        },
         "Loopback-Bowout": {
             "type": "string"
         },
