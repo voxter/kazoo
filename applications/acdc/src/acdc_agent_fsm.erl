@@ -1838,7 +1838,10 @@ handle_event({'update_presence', _, _}=Event, StateName, #state{agent_state_upda
     NewQueue = [Event | Queue],
     {'next_state', StateName, State#state{agent_state_updates=NewQueue}};
 handle_event({'refresh', AgentJObj}, StateName, #state{agent_listener=AgentListener}=State) ->
-    acdc_agent_listener:refresh_config(AgentListener, kz_json:get_value(<<"queues">>, AgentJObj), StateName),
+    acdc_agent_listener:refresh_config(AgentListener
+                                      ,kz_json:get_value(<<"queues">>, AgentJObj)
+                                      ,acdc_agent_util:agent_priority(AgentJObj)
+                                      ,StateName),
     {'next_state', StateName, State};
 handle_event('load_endpoints', StateName, #state{agent_listener='undefined'}=State) ->
     lager:debug("agent proc not ready, not loading endpoints yet"),

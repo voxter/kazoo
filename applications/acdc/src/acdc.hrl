@@ -45,6 +45,8 @@
                           'ringing_callback' | 'awaiting_callback' |
                           'answered' | 'wrapup' | 'paused' | 'outbound'.
 
+-type agent_priority() :: -128..128.
+
 %% Check for cleanup every 5 minutes
 -define(CLEANUP_PERIOD, kapps_config:get_integer(?CONFIG_CAT, <<"cleanup_period_ms">>, 360000)).
 
