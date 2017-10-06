@@ -12,6 +12,7 @@ Schema for a user
 
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
+`acdc_agent_priority` | A call distribution priority for this agent from -128 to 128 | `integer()` |   | `false`
 `call_forward.direct_calls_only` | Determines if the calls that are not directly sent to the device should be forwarded | `boolean()` | `false` | `false`
 `call_forward.enabled` | Determines if the call forwarding should be used | `boolean()` | `false` | `false`
 `call_forward.failover` | Enable the call-forwarding parameters if the device is offline | `boolean()` | `false` | `false`
