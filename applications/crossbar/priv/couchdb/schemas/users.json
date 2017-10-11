@@ -7,8 +7,6 @@
             "description": "A call distribution priority for this agent from -128 to 128",
             "maximum": 128,
             "minimum": -128,
-            "name": "ACDc Agent Priority",
-            "required": false,
             "type": "integer"
         },
         "call_forward": {

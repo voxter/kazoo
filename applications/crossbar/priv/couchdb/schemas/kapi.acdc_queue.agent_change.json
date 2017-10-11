@@ -30,6 +30,9 @@
             ],
             "type": "string"
         },
+        "Priority": {
+            "type": "string"
+        },
         "Process-ID": {
             "type": "string"
         },

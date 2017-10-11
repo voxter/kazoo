@@ -50,7 +50,9 @@ echo "--- Make validate-schemas"
 make validate-schemas
 
 echo "--- Make validate-swagger"
+set +e
 make validate-swagger
+set -e
 
 echo "--- ??"
 if [[ 0 -ne `git status --porcelain | wc -l` ]]; then
