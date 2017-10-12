@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VERSION=`git describe --abbrev=0 --tags`
+VERSION=`git describe --tags`
 ITTERATION=1
 ARCH=x86_64
 
