@@ -490,12 +490,9 @@ wait_for_listener(Supervisor, FSM, Props, IsThief) ->
 %%--------------------------------------------------------------------
 -spec wait(any(), state()) -> handle_fsm_ret(state()).
 -spec wait(any(), atom(), state()) -> handle_sync_event_ret(state()).
-wait({'listener', AgentListener, NextState, SyncRef}, #state{account_id=AccountId
-                                                            ,agent_id=AgentId
-                                                            }=State) ->
+wait({'listener', AgentListener, NextState, SyncRef}, State) ->
     lager:debug("setting agent proc to ~p", [AgentListener]),
     acdc_agent_listener:fsm_started(AgentListener, self()),
-    acdc_agent_stats:agent_ready(AccountId, AgentId),
     {'next_state', NextState, State#state{agent_listener=AgentListener
                                          ,sync_ref=SyncRef
                                          ,agent_listener_id=acdc_util:proc_id()
