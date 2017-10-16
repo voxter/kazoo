@@ -106,15 +106,15 @@ sync_req_routing_key(AcctId, Id) ->
 -define(OPTIONAL_SYNC_RESP_HEADERS, [<<"Call-ID">>, <<"Time-Left">>, <<"Process-ID">>]).
 -define(SYNC_RESP_VALUES, [{<<"Event-Category">>, <<"agent">>}
                           ,{<<"Event-Name">>, <<"sync_resp">>}
-                          ,{<<"Status">>, [<<"init">>
-                                          ,<<"sync">>
+                          ,{<<"Status">>, [<<"sync">>
                                           ,<<"ready">>
-                                          ,<<"waiting">>
                                           ,<<"ringing">>
+                                          ,<<"ringing_callback">>
+                                          ,<<"awaiting_callback">>
                                           ,<<"answered">>
                                           ,<<"wrapup">>
                                           ,<<"paused">>
-                                          ,<<"monitoring">>
+                                          ,<<"outbound">>
                                           ]}
                           ]).
 -define(SYNC_RESP_TYPES, []).
