@@ -27,7 +27,7 @@ monday_failure_test_() ->
     Time = {11,47,7},
     Seconds = calendar:datetime_to_gregorian_seconds({Date, Time}),
 
-    Rule = {rule,<<"TESTRULEID">>,undefined,<<"TODTest">>,<<"weekly">>,1,[],[<<"monday">>],<<"first">>,1,Date,0,86400,false},
+    Rule = {rule,<<"TESTRULEID">>,undefined,<<"TODTest">>,<<"weekly">>,1,[],[<<"monday">>],<<"first">>,1,Date,0,86400},
     #rule{wtime_start=TStart}=Rule,
 
     PrevDay  = kz_date:normalize({Y, M, D - 1}),
@@ -62,7 +62,6 @@ get_temporal_route() ->
              ,timezone=?TIMEZONE
              ,routes=?ROUTES
              ,interdigit_timeout=20000
-             ,rule_set='false'
              }.
 
 get_temporal_rules() ->
@@ -78,7 +77,6 @@ get_temporal_rules() ->
           ,start_date=kz_date:from_gregorian_seconds(?YEAR_2000, ?TIMEZONE)
           ,wtime_start=?ELEVEN_AM_START
           ,wtime_stop=?FIVE_PM_STOP
-          ,rule_set='false'
           }
     ,#rule{id=?ROUTE_NO(2)
           ,enabled='true'
@@ -92,7 +90,6 @@ get_temporal_rules() ->
           ,start_date=kz_date:from_gregorian_seconds(?YEAR_2000, ?TIMEZONE)
           ,wtime_start=?NINE_AM_START
           ,wtime_stop=?FIVE_PM_STOP
-          ,rule_set='false'
           }
     ].
 

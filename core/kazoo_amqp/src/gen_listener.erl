@@ -848,7 +848,8 @@ callback_handle_event(JObj
              ]
             ,NewModuleState
             };
-        {'EXIT', _Why} ->
+        {'EXIT', Why} ->
+            lager:error("CRASH in handle_event: ~p", [Why]),
             [{'server', Self}
             ,{'queue', Queue}
             ,{'other_queues', props:get_keys(OtherQueues)}
@@ -861,8 +862,10 @@ callback_handle_event(JObj
                                    {'EXIT', any()}.
 callback_handle_event(JObj, BasicDeliver, Module, ModuleState) ->
     case erlang:function_exported(Module, 'handle_event', 3) of
-        'true' -> catch Module:handle_event(JObj, BasicDeliver, ModuleState);
-        'false' -> catch Module:handle_event(JObj, ModuleState)
+        'true' ->
+            catch Module:handle_event(JObj, BasicDeliver, ModuleState);
+        'false' ->
+            catch Module:handle_event(JObj, ModuleState)
     end.
 
 %% allow wildcard (<<"*">>) in the Key to match either (or both) Category and Name
