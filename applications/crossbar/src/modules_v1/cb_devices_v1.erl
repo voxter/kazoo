@@ -13,12 +13,12 @@
 -module(cb_devices_v1).
 
 -export([init/0
-        ,allowed_methods/0, allowed_methods/1, allowed_methods/2, allowed_methods/3
-        ,resource_exists/0, resource_exists/1, resource_exists/2, resource_exists/3
+        ,allowed_methods/0, allowed_methods/1, allowed_methods/3
+        ,resource_exists/0, resource_exists/1, resource_exists/3
         ,billing/1
         ,authenticate/1
         ,authorize/1
-        ,validate/1, validate/2, validate/3, validate/4
+        ,validate/1, validate/2, validate/4
         ,put/1
         ,post/2
         ,delete/2
@@ -28,7 +28,6 @@
 -include("crossbar.hrl").
 
 -define(STATUS_PATH_TOKEN, <<"status">>).
--define(OWNED_BY_PATH_TOKEN, <<"owned_by">>).
 
 -define(MOD_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".devices">>).
 
@@ -68,7 +67,6 @@ init() ->
 %%--------------------------------------------------------------------
 -spec allowed_methods() -> http_methods().
 -spec allowed_methods(path_token()) -> http_methods().
--spec allowed_methods(path_token(), path_token()) -> http_methods().
 -spec allowed_methods(path_token(), path_token(), path_token()) -> http_methods().
 
 allowed_methods() ->
@@ -78,9 +76,6 @@ allowed_methods(?STATUS_PATH_TOKEN) ->
     [?HTTP_GET];
 allowed_methods(_DeviceId) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE].
-
-allowed_methods(?OWNED_BY_PATH_TOKEN, _UserId) ->
-    [?HTTP_GET].
 
 allowed_methods(_DeviceId, ?QUICKCALL_PATH_TOKEN, _PhoneNumber) ->
     [?HTTP_GET].
@@ -95,12 +90,10 @@ allowed_methods(_DeviceId, ?QUICKCALL_PATH_TOKEN, _PhoneNumber) ->
 %%--------------------------------------------------------------------
 -spec resource_exists() -> 'true'.
 -spec resource_exists(path_token()) -> 'true'.
--spec resource_exists(path_token(), path_token()) -> 'true'.
 -spec resource_exists(path_token(), path_token(), path_token()) -> 'true'.
 
 resource_exists() -> 'true'.
 resource_exists(_) -> 'true'.
-resource_exists(?OWNED_BY_PATH_TOKEN, _) -> 'true'.
 resource_exists(_, ?QUICKCALL_PATH_TOKEN, _) -> 'true'.
 
 %%--------------------------------------------------------------------
@@ -156,7 +149,6 @@ authorize(_Nouns, _Verb) -> 'false'.
 %%--------------------------------------------------------------------
 -spec validate(cb_context:context()) -> cb_context:context().
 -spec validate(cb_context:context(), path_token()) -> cb_context:context().
--spec validate(cb_context:context(), path_token(), path_token()) -> cb_context:context().
 validate(Context) ->
     validate_devices(Context, cb_context:req_verb(Context)).
 
@@ -178,9 +170,6 @@ validate_device(Context, DeviceId, ?HTTP_POST) ->
     validate_request(DeviceId, Context);
 validate_device(Context, DeviceId, ?HTTP_DELETE) ->
     load_device(DeviceId, Context).
-
-validate(Context, ?OWNED_BY_PATH_TOKEN, UserId) ->
-    load_users_device_summary(Context, UserId).
 
 -spec validate(cb_context:context(), ne_binary(), ne_binary(), any()) -> cb_context:context().
 validate(Context, DeviceId, ?QUICKCALL_PATH_TOKEN, _) ->
