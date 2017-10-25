@@ -34756,26 +34756,6 @@
                 }
             }
         },
-        "/accounts/{ACCOUNT_ID}/devices/owned_by/{USER_ID}": {
-            "get": {
-                "parameters": [
-                    {
-                        "$ref": "#/parameters/auth_token_header"
-                    },
-                    {
-                        "$ref": "#/parameters/USER_ID"
-                    },
-                    {
-                        "$ref": "#/parameters/ACCOUNT_ID"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "request succeeded"
-                    }
-                }
-            }
-        },
         "/accounts/{ACCOUNT_ID}/devices/status": {
             "get": {
                 "parameters": [
