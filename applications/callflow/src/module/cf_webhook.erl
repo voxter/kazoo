@@ -50,12 +50,13 @@ format_call_data(Call) ->
 -spec set_hook(kz_json:object(), kz_json:object()) -> kz_json:object().
 set_hook(Data, CallJObj) ->
     Now = calendar:datetime_to_gregorian_seconds(calendar:local_time()),
-    kz_json:from_list(props:filter_undefined(
-      [{<<"_id">>, kz_term:to_binary(Now)}
-      ,{<<"uri">>, kz_json:get_ne_binary_value(<<"uri">>, Data)}
-      ,{<<"hook">>, <<"callflow">>}
-      ,{<<"http_verb">>, kz_json:get_ne_binary_value(<<"http_verb">>, Data)}
-      ,{<<"retries">>, kz_json:get_integer_value(<<"retries">>, Data)}
-      ,{<<"pvt_account_id">>, kz_json:get_ne_binary_value(<<"account_id">>, CallJObj)}
-      ,{<<"custom_data">>, kz_json:get_json_value(<<"custom_data">>, Data)}
-      ])).
+    kz_json:from_list(
+      props:filter_undefined(
+        [{<<"_id">>, kz_term:to_binary(Now)}
+        ,{<<"uri">>, kz_json:get_ne_binary_value(<<"uri">>, Data)}
+        ,{<<"hook">>, <<"callflow">>}
+        ,{<<"http_verb">>, kz_json:get_ne_binary_value(<<"http_verb">>, Data)}
+        ,{<<"retries">>, kz_json:get_integer_value(<<"retries">>, Data)}
+        ,{<<"pvt_account_id">>, kz_json:get_ne_binary_value(<<"account_id">>, CallJObj)}
+        ,{<<"custom_data">>, kz_json:get_json_value(<<"custom_data">>, Data)}
+        ])).
