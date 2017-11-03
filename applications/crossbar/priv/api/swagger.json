@@ -18659,7 +18659,13 @@
                 "From": {
                     "type": "string"
                 },
+                "From-Realm": {
+                    "type": "string"
+                },
                 "From-Tag": {
+                    "type": "string"
+                },
+                "From-User": {
                     "type": "string"
                 },
                 "Presence-ID": {
@@ -18685,7 +18691,13 @@
                 "To": {
                     "type": "string"
                 },
+                "To-Realm": {
+                    "type": "string"
+                },
                 "To-Tag": {
+                    "type": "string"
+                },
+                "To-User": {
                     "type": "string"
                 }
             },
@@ -29645,6 +29657,12 @@
                 "retries": {
                     "default": 1,
                     "description": "smtp_client retries",
+                    "type": "integer"
+                },
+                "send_timeout_ms": {
+                    "default": 10000,
+                    "description": "Timeout in milliseconds waiting for response from SMTP server",
+                    "minimum": 1,
                     "type": "integer"
                 },
                 "tls": {
