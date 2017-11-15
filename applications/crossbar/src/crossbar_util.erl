@@ -38,7 +38,6 @@
 -export([response_auth/1
         ,response_auth/2
         ,response_auth/3
-        ,response_auth/4
         ]).
 -export([get_account_realm/1, get_account_realm/2
         ,get_account_doc/1, get_account_doc/2
@@ -694,8 +693,6 @@ enable_account(AccountId) ->
                            kz_json:object().
 -spec response_auth(kz_json:object(), api_binary(), api_binary()) ->
                            kz_json:object().
--spec response_auth(kz_json:object(), api_binary(), api_binary(), api_binary()) ->
-                           kz_json:object().
 response_auth(JObj) ->
     AccountId = kz_json:get_first_defined([<<"account_id">>, <<"pvt_account_id">>], JObj),
     OwnerId = kz_json:get_first_defined([<<"owner_id">>, <<"user_id">>], JObj),
@@ -706,15 +703,11 @@ response_auth(JObj, AccountId) ->
     response_auth(JObj, AccountId, OwnerId).
 
 response_auth(JObj, AccountId, UserId) ->
-    response_auth(JObj, AccountId, UserId, 'undefined').
+    populate_resp(JObj, AccountId, UserId).
 
-response_auth(JObj, AccountId, UserId, AuthRefreshToken) ->
-    populate_resp(JObj, AccountId, UserId, AuthRefreshToken).
-
--spec populate_resp(kz_json:object(), api_binary(), api_binary(), api_binary()) ->
-                           kz_json:object().
-populate_resp(JObj, 'undefined', _UserId, _AuthRefreshToken) -> JObj;
-populate_resp(JObj, AccountId, UserId, AuthRefreshToken) ->
+-spec populate_resp(kz_json:object(), api_binary(), api_binary()) -> kz_json:object().
+populate_resp(JObj, 'undefined', _UserId) -> JObj;
+populate_resp(JObj, AccountId, UserId) ->
     Language = get_language(AccountId, UserId),
     Props = props:filter_undefined(
               [{<<"apps">>, load_apps(AccountId, UserId, Language)}
@@ -722,7 +715,6 @@ populate_resp(JObj, AccountId, UserId, AuthRefreshToken) ->
               ,{<<"account_name">>, kapps_util:get_account_name(AccountId)}
               ,{<<"is_reseller">>, kz_services:is_reseller(AccountId)}
               ,{<<"reseller_id">>, kz_services:find_reseller_id(AccountId)}
-              ,{<<"auth_refresh_token">>, AuthRefreshToken}
               ]),
     kz_json:set_values(Props, JObj).
 

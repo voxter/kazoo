@@ -9,7 +9,6 @@
 
 -export([create_auth_token/2
         ,validate_auth_token/1, validate_auth_token/2
-        ,validate_refresh_token/1
         ,authorize_auth_token/1
         ,log_success_auth/4, log_success_auth/5, log_success_auth/6
         ,log_failed_auth/4, log_failed_auth/5, log_failed_auth/6
@@ -17,8 +16,6 @@
         ]).
 
 -include("crossbar.hrl").
-
--define(TOKEN_AUTH_REFRESH_EXPIRY, kapps_config:get_integer(?APP_NAME, <<"token_auth_refresh_expiry">>, ?SECONDS_IN_DAY)).
 
 -define(DEFAULT_METHOD_CONFIG(LogSuccess),
         kz_json:from_list(
@@ -100,8 +97,7 @@ create_auth_token(Context, Method, JObj) ->
                       ,{<<"owner_id">>, OwnerId}
                       ]),
             RespObj = kz_json:set_values(Props, kz_json:delete_key(<<"Claims">>, JObj)),
-            AuthRefreshToken = maybe_create_auth_refresh_token(AccountId, OwnerId),
-            Resp = crossbar_util:response_auth(RespObj, AccountId, OwnerId, AuthRefreshToken),
+            Resp = crossbar_util:response_auth(RespObj, AccountId, OwnerId),
             lager:debug("created new local auth token: ~s", [kz_json:encode(Resp)]),
 
             log_success_auth(Method, <<"jwt_auth_token">>, <<"authentication resulted in token creation">>, Context, AccountId, AuthConfig),
@@ -158,26 +154,6 @@ maybe_create_token(Context, Claims, AuthConfig, Method, 'true') ->
         {'error', 401, _MFAReq}=Retry -> Retry
     end.
 
--spec maybe_create_auth_refresh_token(api_binary(), api_binary()) ->
-                                             api_binary().
-maybe_create_auth_refresh_token('undefined', _) -> 'undefined';
-maybe_create_auth_refresh_token(_, 'undefined') -> 'undefined';
-maybe_create_auth_refresh_token(AccountId, OwnerId) ->
-    Expiration = erlang:system_time('seconds') + ?TOKEN_AUTH_REFRESH_EXPIRY,
-    TokenJObj = kz_json:from_list([{<<"account_id">>, AccountId}
-                                  ,{<<"owner_id">>, OwnerId}
-                                  ,{<<"exp">>, Expiration}
-                                  ]),
-    TokenJObj1 = kz_doc:update_pvt_parameters(TokenJObj, ?KZ_TOKEN_DB),
-    case kz_datamgr:save_doc(?KZ_TOKEN_DB, TokenJObj1) of
-        {'ok', Doc} ->
-            AuthRefreshToken = kz_doc:id(Doc),
-            lager:debug("created new refresh token ~s", [AuthRefreshToken]),
-            AuthRefreshToken;
-        {'error', R} ->
-            lager:error("could not create new refresh token, ~p", [R])
-    end.
-
 -spec validate_auth_token(map() | ne_binary()) ->
                                  {ok, kz_json:object()} | {error, any()}.
 -spec validate_auth_token(map() | ne_binary(), kz_proplist()) ->
@@ -191,22 +167,6 @@ validate_auth_token(Token, Options) ->
         Other -> Other
     end.
 
--spec validate_refresh_token(ne_binary()) ->
-                                    {'ok', kz_json:object() | {'error', any()}}.
-validate_refresh_token(Token) ->
-    case kz_datamgr:open_cache_doc(?KZ_TOKEN_DB, Token) of
-        {'ok', TokenJObj} -> validate_refresh_token_expiry(TokenJObj);
-        E -> E
-    end.
-
--spec validate_refresh_token_expiry(kz_json:object()) ->
-                                           {'ok', kz_json:object()} |
-                                           {'error', ne_binary()}.
-validate_refresh_token_expiry(TokenJObj) ->
-    case erlang:system_time('seconds') > kz_json:get_integer_value(<<"exp">>, TokenJObj) of
-        'true' -> {'error', <<"token expired">>};
-        'false' -> {'ok', TokenJObj}
-    end.
 
 -spec authorize_auth_token(map() | ne_binary()) -> {'ok', kz_json:object()} | {'error', any()}.
 authorize_auth_token(Token) ->
