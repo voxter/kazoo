@@ -518,20 +518,20 @@ maybe_bridge(Call, OtherCall) ->
     end.
 
 dial(Channel, Destination, CallerIDNum, CallerIDName, ConnectedLineNum, ConnectedLineName, Uniqueid, DestUniqueid, Dialstring) ->
-    [
-     {<<"Event">>, <<"Dial">>},
-     {<<"Privilege">>, <<"call,all">>},
-     {<<"SubEvent">>, <<"Begin">>},
-     {<<"Channel">>, Channel},
-     {<<"Destination">>, Destination},
-     {<<"CallerIDNum">>, CallerIDNum},
-     {<<"CallerIDName">>, CallerIDName},
-     {<<"ConnectedLineNum">>, ConnectedLineNum},
-     {<<"ConnectedLineName">>, ConnectedLineName},
-     {<<"UniqueID">>, Uniqueid},
-     {<<"DestUniqueid">>, DestUniqueid},
-     {<<"Dialstring">>, Dialstring}
-    ].
+    props:filter_undefined([
+                            {<<"Event">>, <<"Dial">>},
+                            {<<"Privilege">>, <<"call,all">>},
+                            {<<"SubEvent">>, <<"Begin">>},
+                            {<<"Channel">>, Channel},
+                            {<<"Destination">>, Destination},
+                            {<<"CallerIDNum">>, CallerIDNum},
+                            {<<"CallerIDName">>, CallerIDName},
+                            {<<"ConnectedLineNum">>, ConnectedLineNum},
+                            {<<"ConnectedLineName">>, ConnectedLineName},
+                            {<<"UniqueID">>, Uniqueid},
+                            {<<"DestUniqueid">>, DestUniqueid},
+                            {<<"Dialstring">>, Dialstring}
+                           ]).
 
 bridge(SourceChannel, DestChannel, SourceCallId, DestCallId, SourceCID, DestCID) ->
     [
