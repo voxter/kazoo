@@ -42617,6 +42617,15 @@
                 }
             }
         },
+        "/auth/refresh": {
+            "post": {
+                "responses": {
+                    "200": {
+                        "description": "request succeeded"
+                    }
+                }
+            }
+        },
         "/auth/tokeninfo": {
             "get": {
                 "responses": {
@@ -43055,15 +43064,6 @@
                 }
             },
             "get": {
-                "responses": {
-                    "200": {
-                        "description": "request succeeded"
-                    }
-                }
-            }
-        },
-        "/token_auth/refresh": {
-            "post": {
                 "responses": {
                     "200": {
                         "description": "request succeeded"
