@@ -32026,14 +32026,6 @@
             "required": true,
             "type": "string"
         },
-        "REFRESH_TOKEN": {
-            "description": "authentication refresh token",
-            "in": "header",
-            "maxLength": 32,
-            "minLength": 32,
-            "name": "REFRESH_TOKEN",
-            "type": "string"
-        },
         "REPORT_ID": {
             "in": "path",
             "maxLength": 39,
@@ -32214,6 +32206,14 @@
             "in": "path",
             "name": "WHITELABEL_DOMAIN",
             "required": true,
+            "type": "string"
+        },
+        "X-Auth-Refresh-Token": {
+            "description": "authentication refresh token",
+            "in": "header",
+            "maxLength": 32,
+            "minLength": 32,
+            "name": "X-Auth-Refresh-Token",
             "type": "string"
         },
         "auth_token_header": {
