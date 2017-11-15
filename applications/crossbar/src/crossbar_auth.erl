@@ -98,6 +98,7 @@ create_auth_token(Context, Method, JObj) ->
                       ]),
             RespObj = kz_json:set_values(Props, kz_json:delete_key(<<"Claims">>, JObj)),
             Resp = crossbar_util:response_auth(RespObj, AccountId, OwnerId),
+
             lager:debug("created new local auth token: ~s", [kz_json:encode(Resp)]),
 
             log_success_auth(Method, <<"jwt_auth_token">>, <<"authentication resulted in token creation">>, Context, AccountId, AuthConfig),
@@ -166,7 +167,6 @@ validate_auth_token(Token, Options) ->
         {'error', 'no_jwt_signed_token'} -> maybe_db_token(Token);
         Other -> Other
     end.
-
 
 -spec authorize_auth_token(map() | ne_binary()) -> {'ok', kz_json:object()} | {'error', any()}.
 authorize_auth_token(Token) ->
