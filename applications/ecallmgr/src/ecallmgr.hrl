@@ -1,7 +1,7 @@
 -ifndef(ECALLMGR_HRL).
 
--include_lib("kazoo/include/kz_types.hrl").
--include_lib("kazoo/include/kz_log.hrl").
+-include_lib("kazoo_stdlib/include/kz_types.hrl").
+-include_lib("kazoo_stdlib/include/kz_log.hrl").
 -include_lib("kazoo_documents/include/kazoo_documents.hrl").
 
 -include("fs_event_filters.hrl").
@@ -483,6 +483,7 @@
 
 -define(FS_EVENT_REG_MSG(Node, EvtName), {'event', Node, EvtName}).
 -define(FS_CALL_EVENT_REG_MSG(Node, EvtName), {'call_event', Node, EvtName}).
+-define(FS_CALL_EVENT_MSG(Node, EvtName, CallId), {'call_event', Node, EvtName, CallId}).
 -define(FS_CALL_EVENTS_PROCESS_REG(Node, CallId)
        ,{'n', 'l', {'call_events_process', Node, CallId}}
        ).

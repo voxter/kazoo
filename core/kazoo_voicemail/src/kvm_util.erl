@@ -176,12 +176,12 @@ get_change_vmbox_funs(AccountId, NewBoxId, NBoxJ, OldBoxId, ToId) ->
     Timestamp = kz_time:current_tstamp(),
     {{Y, M, _}, _} = calendar:gregorian_seconds_to_datetime(Timestamp),
     Year = kz_term:to_binary(Y),
-    Month = kz_time:pad_month(M),
+    Month = kz_date:pad_month(M),
 
     NewId = case ToId of
-                'undefined' -> ?MODB_MSG_ID(Year, Month, kz_binary:rand_hex(16));
-                <<Year:4/binary, Month:2/binary, _Rest/binary>> -> ToId;
-                _OldId -> ?MODB_MSG_ID(Year, Month, kz_binary:rand_hex(16))
+                'undefined' -> kazoo_modb_util:modb_id(Year, Month, kz_binary:rand_hex(16));
+                ?MATCH_MODB_PREFIX(Year, Month,  _Rest) -> ToId;
+                _OldId -> kazoo_modb_util:modb_id(Year, Month, kz_binary:rand_hex(16))
             end,
     AccountDb = get_db(AccountId, NewId),
 

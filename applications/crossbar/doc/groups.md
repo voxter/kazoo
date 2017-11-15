@@ -10,13 +10,14 @@ Validator for the group
 
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
-`endpoints` | Endpoints included into group | `object` | `{}` | `true`
-`music_on_hold` | The music on hold parameters | `object` | `{}` | `false`
+`endpoints` | Endpoints included into group | `object()` | `{}` | `true`
 `music_on_hold.media_id` | The ID of a media object that should be used as music on hold | `string(0..128)` |   | `false`
+`music_on_hold` | The music on hold parameters | `object()` | `{}` | `false`
 `name` | A friendly name for the group | `string(1..128)` |   | `true`
 
 
-#### Get groups for a given account
+
+#### Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/groups
 
@@ -40,6 +41,29 @@ curl -v -X GET \
 }
 ```
 
+#### Fetch all groups containing a user
+
+> GET /v2/accounts/{ACCOUNT_ID}/users/{USER_ID}/groups
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/users/{USER_ID}/groups
+```
+
+```json
+{
+    "data": [
+        {
+            "id": "18ccfd6cea456cbdd38133e5aa726ec4",
+            "name": "Group Name",
+            "features": [],
+            "endpoints": 2
+        }
+    ],
+    "status": "success"
+}
+```
 
 #### Create a group for a given account
 

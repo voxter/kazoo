@@ -333,25 +333,28 @@ merge_attribute_caller_id(AccountJObj, AccountJAttr, UserJAttr, EndpointJAttr) -
 
 -spec merge_call_recording(kz_json:object()) -> kz_json:object().
 merge_call_recording(JObj) ->
-    AnyOrig = kz_json:get_json_value(<<"any">>, JObj, kz_json:new()),
-    kz_json:foldl(fun(K, V, Acc) ->
-                          AnyDest = kz_json:get_json_value(<<"any">>, V, kz_json:new()),
-                          V2 = kz_json:foldl(fun(K1, V1, Acc1) ->
-                                                     kz_json:set_value(K1, kz_json:merge(AnyDest, V1), Acc1)
-                                             end
-                                            ,kz_json:new()
-                                            ,kz_json:delete_key(<<"any">>, V)
-                                            ),
-                          kz_json:set_value(K, V2, Acc)
-                  end
-                 ,kz_json:new()
-                 ,kz_json:foldl(fun(K, V, Acc) ->
-                                        kz_json:set_value(K, kz_json:merge(AnyOrig, V), Acc)
-                                end
-                               ,kz_json:new()
-                               ,kz_json:delete_key(<<"any">>, JObj)
-                               )
-                 ).
+    AnyDirections = [<<"inbound">>, <<"outbound">>],
+    AnyNets = [<<"onnet">>, <<"offnet">>],
+
+    AnyDirection = kz_json:get_json_value(<<"any">>, JObj, kz_json:new()),
+    F1 = fun(K1, V1) -> merge_call_recording(K1, V1, AnyDirection) end,
+    JObj1 = lists:foldl(F1, kz_json:delete_key(<<"any">>, JObj), AnyDirections),
+    F2 = fun(K, V, Acc) -> merge_call_recording(K, V, Acc, AnyNets) end,
+    kz_json:foldl(F2, JObj1, JObj1).
+
+-spec merge_call_recording(ne_binary(), kz_json:object(), kz_json:object()) -> kz_json:object().
+merge_call_recording(K, JObj, ToMerge) ->
+    case kz_json:get_json_value(K, JObj) of
+        'undefined' -> kz_json:set_value(K, ToMerge, JObj);
+        V -> kz_json:set_value(K, kz_json:merge(ToMerge, V), JObj)
+    end.
+
+-spec merge_call_recording(ne_binary(), kz_json:object(), kz_json:object(), ne_binaries()) -> kz_json:object().
+merge_call_recording(K, JObj, Acc, List) ->
+    Any = kz_json:get_json_value(<<"any">>, JObj, kz_json:from_list([{<<"enabled">>, false}])),
+    Fun = fun(K1, V1) -> merge_call_recording(K1, V1, Any) end,
+    kz_json:set_value(K, lists:foldl(Fun, kz_json:delete_key(<<"any">>, JObj), List), Acc).
+
 
 -spec get_account_record_call_properties(api_object()) -> kz_json:object().
 get_account_record_call_properties(JObj) ->
@@ -630,6 +633,7 @@ build(Endpoint, Properties, Call) ->
                             {'ok', kz_json:objects()} |
                             {'error', build_errors()}.
 build_endpoint(Endpoint, Properties, Call) ->
+    lager:debug("attempting to build endpoint ~s", [kz_doc:id(Endpoint)]),
     case should_create_endpoint(Endpoint, Properties, Call) of
         'ok' -> create_endpoints(Endpoint, Properties, Call);
         {'error', _}=E -> E
@@ -1069,7 +1073,7 @@ create_sip_endpoint(Endpoint, Properties, Call) ->
                                  kz_json:object().
 create_sip_endpoint(Endpoint, Properties, #clid{}=Clid, Call) ->
     SIPJObj = kz_json:get_json_value(<<"sip">>, Endpoint),
-    PushJObj = kz_json:get_json_value(<<"push">>, Endpoint, kz_json:new()),
+    PushJObj = push_properties(Endpoint),
     PushHeaders = push_headers(PushJObj),
     SIPEndpoint = kz_json:from_list(
                     props:filter_empty(
@@ -1143,9 +1147,10 @@ maybe_build_failover(Endpoint, Clid, Call) ->
 
 -spec maybe_build_push_failover(kz_json:object(), clid(), kapps_call:call()) -> api_object().
 maybe_build_push_failover(Endpoint, Clid, Call) ->
-    case kz_json:get_value(<<"push">>, Endpoint) of
-        'undefined' -> 'undefined';
-        PushJObj -> build_push_failover(Endpoint, Clid, PushJObj, Call)
+    PushJObj = push_properties(Endpoint),
+    case kz_json:is_empty(PushJObj) of
+        'true' -> 'undefined';
+        'false' -> build_push_failover(Endpoint, Clid, PushJObj, Call)
     end.
 
 -spec build_push_failover(kz_json:object(), clid(), kz_json:object(), kapps_call:call()) -> api_object().
@@ -1186,11 +1191,22 @@ build_push_failover(Endpoint, Clid, PushJObj, Call) ->
         ,{<<"Metaflows">>, kz_json:get_value(<<"metaflows">>, Endpoint)}
         ])).
 
+-spec push_properties(kz_json:object()) -> kz_json:object().
+push_properties(Endpoint) ->
+    PushJObj = kz_json:get_json_value(<<"push">>, Endpoint, kz_json:new()),
+    case kz_json:get_ne_binary_value(<<"Token-Type">>, PushJObj) of
+        'undefined' -> PushJObj;
+        TokenType ->
+            TokenApp = kz_json:get_ne_binary_value(<<"Token-App">>, PushJObj),
+            ExtraHeaders = kapps_config:get_json(<<"pusher">>, [TokenType, <<"extra_headers">>], kz_json:new(), TokenApp),
+            kz_json:merge(PushJObj, ExtraHeaders)
+    end.
+
 -spec push_headers(kz_json:object()) -> kz_json:object().
 push_headers(PushJObj) ->
-    kz_json:foldl(fun(K, V, Acc) ->
-                          kz_json:set_value(<<"X-KAZOO-PUSHER-", K/binary>>, V, Acc)
-                  end, kz_json:new(), PushJObj).
+    kz_json:map(fun(K, V) ->
+                        {<<"X-KAZOO-PUSHER-", K/binary>>, V}
+                end, PushJObj).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1415,13 +1431,17 @@ maybe_add_diversion(JObj, Endpoint, _Inception, Call) ->
 
 -spec maybe_add_sip_headers(kz_json:object(), kz_json:object(), kapps_call:call()) -> kz_json:object().
 maybe_add_sip_headers(JObj, Endpoint, Call) ->
+    lists:foldl(fun merge_custom_sip_headers/2, JObj, get_sip_headers(Endpoint, Call)).
+
+-spec get_sip_headers(kz_json:object(), kapps_call:call()) -> kz_json:objects().
+get_sip_headers(Endpoint, Call) ->
     case ?MODULE:get(Call) of
-        {'error', _} -> JObj;
+        {'error', _} ->
+            [kz_device:custom_sip_headers_inbound(Endpoint)];
         {'ok', AuthorizingEndpoint} ->
-            MergeHeaders = [kz_device:custom_sip_headers_inbound(Endpoint)
-                           ,kz_device:custom_sip_headers_outbound(AuthorizingEndpoint)
-                           ],
-            lists:foldl(fun merge_custom_sip_headers/2, JObj, MergeHeaders)
+            [kz_device:custom_sip_headers_inbound(Endpoint)
+            ,kz_device:custom_sip_headers_outbound(AuthorizingEndpoint)
+            ]
     end.
 
 -spec merge_custom_sip_headers(kz_json:object(), kz_json:object()) -> kz_json:object().

@@ -373,7 +373,9 @@ db_view_cleanup(DbName) when ?VALID_DBNAME(DbName) ->
 db_view_cleanup(DbName) ->
     case maybe_convert_dbname(DbName) of
         {'ok', Db} -> db_view_cleanup(Db);
-        {'error', _}=E -> E
+        {'error', _Reason} ->
+            lager:debug("failed to convert db name ~s: ~p", [DbName, _Reason]),
+            'false'
     end.
 
 -spec db_view_update(ne_binary(), views_listing()) -> boolean().
@@ -625,6 +627,20 @@ open_doc(DbName, {DocType, DocId}) ->
 open_doc(DbName, DocId) ->
     open_doc(DbName, DocId, []).
 
+-ifdef(TEST).
+open_doc(DbName, {DocType, DocId}, Options) ->
+    open_doc(DbName, DocId, maybe_add_doc_type(DocType, Options));
+open_doc(DbName, DocId, Options) when ?VALID_DBNAME(DbName) ->
+    {_, ST} = erlang:process_info(self(), current_stacktrace),
+    kz_util:log_stacktrace(ST),
+    io:format(user, "\n~s:open_doc(~p, ~p, ~p)\n", [?MODULE, DbName, DocId, Options]),
+    kzs_doc:open_doc(kzs_plan:plan(DbName, Options), DbName, DocId, Options);
+open_doc(DbName, DocId, Options) ->
+    case maybe_convert_dbname(DbName) of
+        {'ok', Db} -> open_doc(Db, DocId, Options);
+        {'error', _}=E -> E
+    end.
+-else.
 open_doc(DbName, {DocType, DocId}, Options) ->
     open_doc(DbName, DocId, maybe_add_doc_type(DocType, Options));
 open_doc(DbName, DocId, Options) when ?VALID_DBNAME(DbName) ->
@@ -634,6 +650,7 @@ open_doc(DbName, DocId, Options) ->
         {'ok', Db} -> open_doc(Db, DocId, Options);
         {'error', _}=E -> E
     end.
+-endif.
 
 %%--------------------------------------------------------------------
 %% @public

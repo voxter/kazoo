@@ -8,6 +8,8 @@ DEPS = amqp_client \
 	eflame \
 	eiconv \
 	erlang_localtime \
+	erlazure \
+	erlcloud \
 	erlsom \
 	erlydtl \
 	escalus \
@@ -30,6 +32,7 @@ DEPS = amqp_client \
 	plists \
 	poolboy \
 	proper \
+	pqueue \
 	recon \
 	reloader \
 	syslog \
@@ -54,21 +57,27 @@ dep_eflame = git https://github.com/slfritchie/eflame 7b0bb1a7e8c8482a59421a3a50
 dep_eiconv = git https://github.com/zotonic/eiconv
 dep_escalus = git https://github.com/esl/escalus 0de0463c345a1ade6fccfb9aadad719b58a1cef5
 dep_exml = git https://github.com/paulgray/exml 2.2.1
-dep_jiffy = hex 0.14.7
+dep_jiffy = git https://github.com/fenollp/jiffy patch-1  ## See https://github.com/davisp/jiffy/pull/152
 dep_nklib = git https://github.com/NetComposer/nklib
-dep_plists = git https://github.com/essen/plists
+dep_plists = hex 1.0.0
+dep_pqueue = hex 1.7.2
 
-dep_couchbeam = git https://github.com/2600hz/couchbeam 1.4.1a
+dep_erlcloud = git https://github.com/lazedo/erlcloud 54fe6b96eb0bc591b80161fc552afb821072222c
+## waiting on pull request https://github.com/erlcloud/erlcloud/pull/437
+
+dep_erlazure = git https://github.com/lazedo/erlazure.git add-start-link
+
+dep_couchbeam = git https://github.com/2600hz/couchbeam 1.4.1b
 ###dep_couchbeam = git https://github.com/benoitc/couchbeam 1.4.1
 ### waiting for pull requests
 ### https://github.com/benoitc/couchbeam/pull/158
 ### https://github.com/benoitc/couchbeam/pull/164
 ### https://github.com/benoitc/couchbeam/pull/165
+### https://github.com/benoitc/couchbeam/pull/166
+### https://github.com/benoitc/couchbeam/pull/174
 
-##dep_jesse = git https://github.com/for-GET/jesse 1.4.0
-## pull request pending
-## https://github.com/for-GET/jesse/pull/42
-dep_jesse = git https://github.com/2600hz/jesse 1.5-rc5
+dep_jesse = git https://github.com/2600hz/jesse 1.5-rc6
+##dep_jesse = git https://github.com/for-GET/jesse 1.5.0-rc2
 
 dep_lager = git https://github.com/erlang-lager/lager 3.2.1
 dep_trie = git https://github.com/okeuday/trie v1.5.4

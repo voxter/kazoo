@@ -676,7 +676,7 @@ expire_objects(_Tab, _AuxTables, []) -> 0;
 expire_objects(Tab, AuxTables, Objects) ->
     _ = maybe_exec_expired_callbacks(Objects),
     Keys = [K || {_, K, _} <- Objects],
-    lager:debug("expiring keys ~p", [Keys]),
+    _ = [lager:debug("expiring key ~p", [K]) || K <- Keys],
     maybe_remove_objects(Tab, Keys),
     lists:foreach(fun(Aux) -> maybe_remove_objects(Aux, Keys) end, AuxTables),
     length(Objects).
@@ -816,11 +816,8 @@ handle_store(#cache_obj{key=Key
             ) ->
     lager:debug("storing ~p for ~ps", [Key, Expires]),
     'true' = ets:insert(Tab, CacheObj#cache_obj{origin='undefined'}),
-    lager:debug("inserted ~p", [Key]),
     insert_origin_pointers(Origins, CacheObj, PointerTab),
-    lager:debug("inserted origin pointers for ~p", [Key]),
     State1 = maybe_exec_store_callbacks(State, Key, Value),
-    lager:debug("exec store callbacks"),
     maybe_update_expire_period(State1, Expires).
 
 -spec maybe_update_expire_period(state(), integer()) -> state().
@@ -833,7 +830,6 @@ maybe_update_expire_period(#state{expire_period=ExpirePeriod
     NewRef = case erlang:read_timer(Ref) of
                  Left when Left =< Expires -> Ref;
                  _Left ->
-                     lager:debug("cancelling timer with ~p left", [_Left]),
                      _ = erlang:cancel_timer(Ref),
                      start_expire_period_timer(Expires)
              end,

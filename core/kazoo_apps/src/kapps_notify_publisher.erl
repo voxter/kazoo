@@ -8,6 +8,7 @@
 
 -export([call_collect/2
         ,cast/2
+        ,is_completed/1
         ]).
 
 -include_lib("kazoo_apps.hrl").
@@ -25,6 +26,8 @@
        ).
 
 -define(DEFAULT_TYPE_EXCEPTION, [<<"system_alert">>
+                                ,<<"voicemail_save">>
+                                ,<<"register">>
                                 ]).
 -define(GLOBAL_FORCE_NOTIFY_TYPE_EXCEPTION,
         kapps_config:get_ne_binaries(?NOTIFY_CAT, <<"notify_presist_temprorary_force_exceptions">>, [])
@@ -35,8 +38,8 @@
 
 %%--------------------------------------------------------------------
 %% @doc Publish notification and collect notify update messages from
-%%      teletype, useful if you want to make sure teletype proccessed
-%%      the notifaction compeletly (e.g. new voicemail)
+%%      teletype, useful if you want to make sure teletype processed
+%%      the notification completely (e.g. new voicemail)
 %%--------------------------------------------------------------------
 -spec call_collect(api_terms(), kz_amqp_worker:publish_fun()) -> kz_amqp_worker:request_return().
 call_collect(Req, PublishFun) ->
@@ -69,14 +72,13 @@ cast(Req, PublishFun) ->
 %% @private
 %% @doc handle amqp worker responses
 -spec handle_resp(api_ne_binary(), api_terms(), kz_amqp_worker:request_return()) -> 'ok'.
-handle_resp(_NotifyType, _Req, 'ok') -> 'ok';
 handle_resp(NotifyType, Req, {'ok', _}=Resp) -> check_for_failure(NotifyType, Req, Resp);
 handle_resp(NotifyType, Req, {'error', Error}) -> maybe_handle_error(NotifyType, Req, error_to_failure_reason(Error));
-handle_resp(NotifyType, Req, {'returned', _, Resp}) -> check_for_failure(NotifyType, Req, {'returned', Resp});
+handle_resp(NotifyType, Req, {'returned', _, Resp}) -> check_for_failure(NotifyType, Req, {'returned', [Resp]});
 handle_resp(NotifyType, Req, {'timeout', _}=Resp) -> check_for_failure(NotifyType, Req, Resp).
 
 %% @private
-%% @doc check for notify update messages from teeltype/notify apps
+%% @doc check for notify update messages from teletype/notify apps
 -spec check_for_failure(api_ne_binary(), api_terms(), {'ok' | 'returned' | 'timeout', kz_json:objects()}) -> 'ok'.
 check_for_failure(NotifyType, Req, {_ErrorType, Responses}=Resp) ->
     case is_completed(Responses) of
@@ -86,7 +88,7 @@ check_for_failure(NotifyType, Req, {_ErrorType, Responses}=Resp) ->
 
 -spec maybe_handle_error(api_binary(), api_terms(), any()) -> 'ok'.
 maybe_handle_error('undefined', _Req, _Error) ->
-    lager:error("not saving undefined notification");
+    lager:warning("not saving undefined notification");
 maybe_handle_error(NotifyType, Req, Error) ->
     AccountId = find_account_id(Req),
     should_presist_notify(AccountId)
@@ -97,7 +99,7 @@ maybe_handle_error(NotifyType, Req, Error) ->
 %% @doc save pay load to db to retry later
 -spec handle_error(ne_binary(), api_terms(), any()) -> 'ok'.
 handle_error(NotifyType, Req, Error) ->
-    lager:error("attempt for publishing notifcation ~s was unsuccessful: ~p", [NotifyType, Error]),
+    lager:warning("attempt for publishing notification ~s was unsuccessful: ~p", [NotifyType, Error]),
     Props = props:filter_undefined(
               [{<<"description">>, <<"failed to publish notification">>}
               ,{<<"failure_reason">>, error_to_failure_reason(Error)}
@@ -105,12 +107,13 @@ handle_error(NotifyType, Req, Error) ->
               ,{<<"payload">>, Req}
               ,{<<"attempts">>, 1}
               ]),
-    JObj = kz_doc:update_pvt_parameters(
-             kz_json:from_list_recursive(Props), 'undefined', [{'type', <<"failed_notify">>}
-                                                              ,{'account_id', find_account_id(Req)}
-                                                              ,{'account_db', ?KZ_PENDING_NOTIFY_DB}
-                                                              ]
-            ),
+    JObj = kz_doc:update_pvt_parameters(kz_json:from_list_recursive(Props)
+                                       ,'undefined'
+                                       , [{'type', <<"failed_notify">>}
+                                         ,{'account_id', find_account_id(Req)}
+                                         ,{'account_db', ?KZ_PENDING_NOTIFY_DB}
+                                         ]
+                                       ),
     save_pending_notification(NotifyType, JObj, 2).
 
 -spec save_pending_notification(ne_binary(), kz_json:object(), integer()) -> 'ok'.
@@ -119,7 +122,7 @@ save_pending_notification(_NotifyType, _JObj, Loop) when Loop < 0 ->
 save_pending_notification(NotifyType, JObj, Loop) ->
     case kz_datamgr:save_doc(?KZ_PENDING_NOTIFY_DB, JObj) of
         {'ok', _} ->
-            lager:error("payload for failed notification ~s publish attempt was saved", [NotifyType]);
+            lager:warning("payload for failed notification ~s publish attempt was saved to ~s", [NotifyType, kz_doc:id(JObj)]);
         {'error', 'not_found'} ->
             kapps_maintenance:refresh(?KZ_PENDING_NOTIFY_DB),
             save_pending_notification(NotifyType, JObj, Loop - 1);
@@ -136,7 +139,7 @@ save_pending_notification(NotifyType, JObj, Loop) ->
 -spec collecting(kz_json:objects()) -> boolean().
 collecting([JObj|_]) ->
     case kapi_notifications:notify_update_v(JObj)
-        andalso kz_json:get_value(<<"Status">>, JObj)
+        andalso kz_json:get_ne_binary_value(<<"Status">>, JObj)
     of
         <<"completed">> -> 'true';
         <<"failed">> -> 'true';
@@ -149,38 +152,58 @@ collecting([JObj|_]) ->
 is_completed([]) -> 'false';
 is_completed([JObj|_]) ->
     case kapi_notifications:notify_update_v(JObj)
-        andalso kz_json:get_value(<<"Status">>, JObj)
+        andalso kz_json:get_ne_binary_value(<<"Status">>, JObj)
     of
         <<"completed">> -> 'true';
-        <<"failed">> -> maybe_ignore_failure(kz_json:get_ne_binary_value(<<"Failure-Message">>, JObj));
+        <<"failed">> ->
+            FailureMsg = kz_json:get_ne_binary_value(<<"Failure-Message">>, JObj),
+            ShouldIgnore = should_ignore_failure(FailureMsg),
+            lager:debug("teletype failed with reason ~s, ignoring: ", [FailureMsg, ShouldIgnore]),
+            ShouldIgnore;
         %% FIXME: Is pending enough to consider publish was successful? at least teletype recieved the notification!
         %% <<"pending">> -> 'true';
         _ -> 'false'
     end.
 
--spec maybe_ignore_failure(api_ne_binary()) -> boolean().
-maybe_ignore_failure(<<"missing_from">>) -> 'true';
-maybe_ignore_failure(<<"invalid_to_addresses">>) -> 'true';
-maybe_ignore_failure(<<"no_to_addresses">>) -> 'true';
-maybe_ignore_failure(<<"email_encoding_failed">>) -> 'true';
-maybe_ignore_failure(_) -> 'false'.
+-spec should_ignore_failure(api_ne_binary()) -> boolean().
+should_ignore_failure(<<"missing_from">>) -> 'true';
+should_ignore_failure(<<"invalid_to_addresses">>) -> 'true';
+should_ignore_failure(<<"no_to_addresses">>) -> 'true';
+should_ignore_failure(<<"email_encoding_failed">>) -> 'true';
+should_ignore_failure(<<"validation_failed">>) -> 'true';
+should_ignore_failure(<<"missing_data:", _/binary>>) -> 'true';
+should_ignore_failure(<<"failed_template:", _/binary>>) -> 'true'; %% rendering problems
+should_ignore_failure(<<"template_error:", _/binary>>) -> 'true'; %% rendering problems
+should_ignore_failure(<<"no teletype template modules responded">>) -> 'true'; %% no module is binded?
+should_ignore_failure(<<"unknown error throw-ed">>) -> 'true';
+
+%% explicitly not ignoring these below:
+should_ignore_failure(<<"unknown_template_error">>) -> 'false'; %% maybe something went wrong with template, trying later?
+should_ignore_failure(<<"no_attachment">>) -> 'false'; %% probably fax or voicemail is not stored in storage yet, retry later
+should_ignore_failure(<<"badmatch">>) -> 'false'; %% not ignoring it yet (voicemail_new)
+should_ignore_failure(_) -> 'false'.
 
 %% @private
 %% @doc try to find account id in different part of payload(copied from teletype_util)
--spec find_account_id(api_terms()) -> api_binary().
+-spec find_account_id(api_terms()) -> api_ne_binary().
+find_account_id(Req) when is_list(Req) ->
+    find_account_id(Req, fun props:get_first_defined/2);
 find_account_id(Req) ->
-    props:get_first_defined([<<"account_id">>
-                            ,[<<"account">>, <<"_id">>]
-                            ,<<"pvt_account_id">>
-                            ,<<"_id">>, <<"id">>
-                            ,<<"Account-ID">>
-                            ,[<<"details">>, <<"account_id">>]
-                            ,[<<"Details">>, <<"Account-ID">>]
-                            ,[<<"details">>, <<"custom_channel_vars">>, <<"account_id">>]
-                            ,[<<"Details">>, <<"Custom-Channel-Vars">>, <<"Account-ID">>]
-                            ]
-                           ,Req
-                           ).
+    find_account_id(Req, fun kz_json:get_first_defined/2).
+
+find_account_id(Req, Get) ->
+    Get([<<"account_id">>
+        ,[<<"account">>, <<"_id">>]
+        ,<<"pvt_account_id">>
+        ,<<"_id">>, <<"id">>
+        ,<<"Account-ID">>
+        ,[<<"details">>, <<"account_id">>]
+        ,[<<"Details">>, <<"Account-ID">>]
+        ,[<<"details">>, <<"custom_channel_vars">>, <<"account_id">>]
+        ,[<<"Details">>, <<"Custom-Channel-Vars">>, <<"Account-ID">>]
+        ]
+       ,Req
+       ).
 
 %% @private
 %% @doc convert error to human understandable string

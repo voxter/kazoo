@@ -11,8 +11,9 @@
 
 -export([start_link/0]).
 -export([is_up/1]).
--export([whapp_count/1
-        ,whapp_count/2
+-export([whapp_count/1, whapp_count/2
+        ,whapp_role_count/2, whapp_role_count/3
+        ,node_role_count/1, node_role_count/2
         ,whapp_oldest_node/1
         ,whapp_oldest_node/2
         ]).
@@ -49,8 +50,8 @@
 
 -export_type([request_acc/0]).
 
--include_lib("kazoo/include/kz_types.hrl").
--include_lib("kazoo/include/kz_log.hrl").
+-include_lib("kazoo_stdlib/include/kz_types.hrl").
+-include_lib("kazoo_stdlib/include/kz_log.hrl").
 
 -define(SERVER, ?MODULE).
 
@@ -91,6 +92,7 @@
                ,zone = 'local' :: atom()
                ,version :: ne_binary()
                ,zones = [] :: kz_proplist()
+               ,me = 'undefined' :: kz_node() | 'undefined'
                }).
 -type nodes_state() :: #state{}.
 
@@ -263,6 +265,7 @@ print_node_status(#kz_node{zone=NodeZone
                           ,kapps=Whapps
                           ,globals=Globals
                           ,node_info=NodeInfo
+                          ,roles=Roles
                           }=Node
                  ,Zone
                  ) ->
@@ -271,8 +274,14 @@ print_node_status(#kz_node{zone=NodeZone
     _ = maybe_print_md5(MD5),
     io:format(?SIMPLE_ROW_STR, [<<"Version">>, Version]),
     io:format(?SIMPLE_ROW_STR, [<<"Memory Usage">>, MemoryUsage]),
-    io:format(?SIMPLE_ROW_NUM, [<<"Processes">>, Processes]),
-    io:format(?SIMPLE_ROW_NUM, [<<"Ports">>, Ports]),
+    if Processes > 0 ->
+            io:format(?SIMPLE_ROW_NUM, [<<"Processes">>, Processes]);
+       true -> true
+    end,
+    if Ports > 0 ->
+            io:format(?SIMPLE_ROW_NUM, [<<"Ports">>, Ports]);
+       true -> true
+    end,
 
     _ = maybe_print_zone(kz_term:to_binary(NodeZone)
                         ,kz_term:to_binary(Zone)
@@ -285,6 +294,7 @@ print_node_status(#kz_node{zone=NodeZone
 
     _ = maybe_print_kapps(Whapps),
     _ = maybe_print_media_servers(Node),
+    _ = maybe_print_roles(Roles),
 
     io:format("~n").
 
@@ -317,6 +327,54 @@ maybe_print_kapps(Whapps) ->
 
 -spec compare_apps({binary(), any()}, {binary(), any()}) -> boolean().
 compare_apps({K1,_}, {K2,_}) -> K1 < K2.
+
+-spec maybe_print_roles(kz_proplist()) -> 'ok'.
+maybe_print_roles(Roles) ->
+    case lists:sort(fun compare_apps/2, Roles) of
+        []-> 'ok';
+        SortedRoles ->
+            io:format(?HEADER_COL ": ", [<<"Roles">>]),
+            simple_list(props:get_keys(SortedRoles)),
+            lists:foreach(fun print_role/1, SortedRoles)
+    end.
+
+-spec print_role({ne_binary(), kz_json:object()}) -> 'ok'.
+print_role({<<"Dispatcher">>, Data}) ->
+    Groups = kz_json:get_json_value(<<"Groups">>, Data, kz_json:new()),
+    Keys = lists:sort(kz_json:get_keys(Groups)),
+    lists:foreach(fun(Group) ->
+                          GData = kz_json:get_json_value(Group, Groups),
+                          print_dispatcher({Group, GData})
+                  end, Keys);
+print_role({<<"Presence">>, Data}) ->
+    kz_json:foreach(fun print_presence/1, Data);
+print_role({<<"Registrar">>, Data}) ->
+    io:format(?SIMPLE_ROW_NUM, [<<"Registrations">>, kz_json:get_integer_value(<<"Registrations">>, Data, 0)]);
+print_role(_) -> 'ok'.
+
+-spec print_dispatcher({ne_binary(), kz_json:object()}) -> 'ok'.
+print_dispatcher({Group, Data})->
+    io:format(?HEADER_COL ": ", [<<"Dispatcher ", Group/binary>>]),
+    Sets = kz_json:get_keys(Data),
+    M = lists:map(fun(S) ->
+                          URI = kz_json:get_ne_binary_value([S, <<"destination">>], Data),
+                          Flags = kz_json:get_ne_binary_value([S, <<"flags">>], Data),
+                          <<URI/binary," (", Flags/binary, ")  ">>
+                  end, Sets),
+    simple_list(M, 0).
+
+-spec print_presence({ne_binary(), kz_json:object()}) -> 'ok'.
+print_presence({Group, Data}) ->
+    io:format(?HEADER_COL ": ", [Group]),
+    simple_list(format_presence_data(Data)).
+
+-spec format_presence_data(kz_json:object()) -> ne_binaries().
+format_presence_data(Data) ->
+    kz_json:foldl(fun format_presence_data/3, [], Data).
+
+-spec format_presence_data(ne_binary(), term(), ne_binaries()) -> ne_binaries().
+format_presence_data(K, V, Acc) ->
+    [<<K/binary, " (", (kz_term:to_binary(V))/binary, ") ">> | Acc].
 
 -spec maybe_print_media_servers(kz_node()) -> 'ok'.
 maybe_print_media_servers(#kz_node{media_servers=MediaServers
@@ -385,6 +443,19 @@ status_list([{Whapp, #whapp_info{startup=Started,roles=Roles}}|Whapps], _Column)
     io:format("~-25s", [Print]),
     io:format("~s", [kz_binary:join(Roles, <<" , ">>)]),
     status_list(Whapps, 4).
+
+-spec simple_list(ne_binaries()) -> 'ok'.
+-spec simple_list(ne_binaries(), 0..5) -> 'ok'.
+
+simple_list(List) -> simple_list(List, 0).
+
+simple_list([], _) -> io:format("~n", []);
+simple_list(List, Column) when Column > 4 ->
+    io:format("~n" ++ ?HEADER_COL ++ "  ", [""]),
+    simple_list(List, 0);
+simple_list([Item|Items], Column) ->
+    io:format("~s ", [Item]),
+    simple_list(Items, Column + 1).
 
 -spec flush() -> 'ok'.
 flush() ->
@@ -554,24 +625,36 @@ handle_info('expire_nodes', #state{node=ThisNode, tab=Tab}=State) ->
     _ = kz_util:spawn(fun notify_expire/2, [Nodes, State]),
     _ = erlang:send_after(?EXPIRE_PERIOD, self(), 'expire_nodes'),
     {'noreply', State};
+
 handle_info({'heartbeat', Ref}
            ,#state{heartbeat_ref=Ref
                   ,tab=Tab
+                  ,me=Me
                   }=State
            ) ->
     Heartbeat = ?HEARTBEAT,
     Reference = erlang:make_ref(),
+    _ = erlang:send_after(Heartbeat, self(), {'heartbeat', Reference}),
     try create_node(Heartbeat, State) of
         Node ->
             _ = ets:insert(Tab, Node),
-            kz_amqp_worker:cast(advertise_payload(Node), fun kapi_nodes:publish_advertise/1)
+            kz_amqp_worker:cast(advertise_payload(Node), fun kapi_nodes:publish_advertise/1),
+            {'noreply', State#state{heartbeat_ref=Reference, me=Node}}
     catch
+        'exit' : {'timeout' , _} when Me =/= 'undefined' ->
+            NewMe = Me#kz_node{expires=Heartbeat},
+            _ = ets:insert(Tab, NewMe),
+            lager:notice("timeout creating node sending old data"),
+            {'noreply', State#state{heartbeat_ref=Reference, me=NewMe}};
+        'exit' : {'timeout' , _} ->
+            lager:warning("timeout creating node, no data to send"),
+            {'noreply', State#state{heartbeat_ref=Reference}};
         _E:_N ->
             lager:error("error creating node ~p : ~p", [_E, _N]),
-            kz_util:log_stacktrace()
-    end,
-    _ = erlang:send_after(Heartbeat, self(), {'heartbeat', Reference}),
-    {'noreply', State#state{heartbeat_ref=Reference}};
+            kz_util:log_stacktrace(),
+            {'noreply', State#state{heartbeat_ref=Reference}}
+    end;
+
 handle_info({'DOWN', Ref, 'process', Pid, _}
            ,#state{notify_new=NewSet
                   ,notify_expire=ExpireSet
@@ -784,12 +867,13 @@ from_json(JObj, State) ->
             ,zone=get_zone(JObj, State)
             ,globals=kz_json:to_proplist(kz_json:get_value(<<"Globals">>, JObj, kz_json:new()))
             ,node_info=kz_json:get_json_value(<<"Node-Info">>, JObj)
+            ,roles=kz_json:to_proplist(kz_json:get_json_value(<<"Roles">>, JObj, kz_json:new()))
             }.
 
 -spec kapps_from_json(api_terms()) -> kapps_info().
 -spec whapp_from_json(binary(), kz_json:object()) -> {binary(), whapp_info()}.
--spec whapp_info_from_json(kz_json:object()) -> whapp_info().
--spec whapp_info_from_json(kz_json:object(), {kz_json:json_terms(), kz_json:keys()}) -> whapp_info().
+-spec whapp_info_from_json(ne_binary(), kz_json:object()) -> whapp_info().
+-spec whapp_info_from_json(ne_binary(), whapp_info(), {kz_json:json_terms(), kz_json:keys()}) -> whapp_info().
 
 kapps_from_json(Whapps) when is_list(Whapps) ->
     [{Whapp, #whapp_info{}} || Whapp <- Whapps];
@@ -798,16 +882,20 @@ kapps_from_json(JObj) ->
     [whapp_from_json(Key, JObj) || Key <- Keys].
 
 whapp_from_json(Key, JObj) ->
-    {Key, whapp_info_from_json(kz_json:get_value(Key, JObj))}.
+    {Key, whapp_info_from_json(Key, kz_json:get_value(Key, JObj))}.
 
-whapp_info_from_json(JObj) ->
-    whapp_info_from_json(#whapp_info{}, kz_json:get_values(JObj)).
+whapp_info_from_json(Key, JObj) ->
+    whapp_info_from_json(Key, #whapp_info{}, kz_json:get_values(JObj)).
 
-whapp_info_from_json(Info, {[], []}) -> Info;
-whapp_info_from_json(Info, {[V | V1], [<<"Roles">> | K1]}) ->
-    whapp_info_from_json(Info#whapp_info{roles=V}, {V1, K1});
-whapp_info_from_json(Info, {[V | V1], [<<"Startup">> | K1]}) ->
-    whapp_info_from_json(Info#whapp_info{startup=V}, {V1, K1}).
+whapp_info_from_json(_Key, Info, {[], []}) -> Info;
+whapp_info_from_json(Key, Info, {[V | V1], [<<"Roles">> | K1]}) ->
+    whapp_info_from_json(Key, Info#whapp_info{roles=V}, {V1, K1});
+whapp_info_from_json(<<"kamailio">> = Key, Info, {[V | V1], [<<"Startup">> | K1]}) ->
+    whapp_info_from_json(Key, Info#whapp_info{startup=kz_time:unix_seconds_to_gregorian_seconds(V)}, {V1, K1});
+whapp_info_from_json(Key, Info, {[V | V1], [<<"Startup">> | K1]}) ->
+    whapp_info_from_json(Key, Info#whapp_info{startup=V}, {V1, K1});
+whapp_info_from_json(Key, Info, {[_V | V1], [_K | K1]}) ->
+    whapp_info_from_json(Key, Info, {V1, K1}).
 
 -spec kapps_to_json(kapps_info()) -> kz_json:object().
 -spec whapp_to_json({ne_binary(), whapp_info()}) -> {ne_binary(), kz_json:object()}.
@@ -987,4 +1075,120 @@ node_encoded() ->
             application:set_env(?APP_NAME_ATOM, 'node_encoded', Encoded),
             Encoded;
         {'ok', Encoded} -> Encoded
+    end.
+
+-spec whapp_role_count(text(), text()) -> integer().
+whapp_role_count(Whapp, Role) ->
+    whapp_role_count(Whapp, Role, 'false').
+
+-spec whapp_role_count(text(), text(), text() | boolean() | 'remote') -> integer().
+whapp_role_count(Whapp, Role, Arg) when not is_atom(Arg) ->
+    whapp_role_count(Whapp, Role, kz_term:to_atom(Arg, 'true'));
+whapp_role_count(Whapp, Role, 'false') ->
+    MatchSpec = [{#kz_node{kapps='$1'
+                          ,zone = local_zone()
+                          ,_ = '_'
+                          }
+                 ,[{'=/=', '$1', []}]
+                 ,['$1']
+                 }],
+    determine_whapp_role_count(kz_term:to_binary(Whapp), kz_term:to_binary(Role), MatchSpec);
+whapp_role_count(Whapp, Role, 'true') ->
+    MatchSpec = [{#kz_node{kapps='$1'
+                          ,_ = '_'
+                          }
+                 ,[{'=/=', '$1', []}]
+                 ,['$1']
+                 }],
+    determine_whapp_role_count(kz_term:to_binary(Whapp), kz_term:to_binary(Role), MatchSpec);
+whapp_role_count(Whapp, Role, 'remote') ->
+    Zone = local_zone(),
+    MatchSpec = [{#kz_node{kapps='$1'
+                          ,zone='$2'
+                          ,_ = '_'
+                          }
+                 ,[{'andalso'
+                   ,{'=/=', '$1', []}
+                   ,{'=/=', '$2', {'const', Zone}}
+                   }]
+                 ,['$1']
+                 }],
+    determine_whapp_role_count(kz_term:to_binary(Whapp), kz_term:to_binary(Role), MatchSpec);
+whapp_role_count(Whapp, Role, Unhandled) ->
+    lager:debug("invalid parameters ~p , ~p , ~p", [Whapp, Role, Unhandled]),
+    0.
+
+-spec determine_whapp_role_count(ne_binary(), ne_binary(), ets:match_spec()) -> non_neg_integer().
+determine_whapp_role_count(Whapp, Role, MatchSpec) ->
+    lists:foldl(fun(Whapps, Acc) when is_list(Whapps) ->
+                        determine_whapp_role_count_fold(Whapps, Role, Acc, Whapp)
+                end
+               ,0
+               ,ets:select(?MODULE, MatchSpec)
+               ).
+
+-spec determine_whapp_role_count_fold(kapps_info(), ne_binary(), non_neg_integer(), ne_binary()) -> non_neg_integer().
+determine_whapp_role_count_fold(Whapps, Role, Acc, Whapp) ->
+    case props:is_defined(Whapp, Whapps)
+        andalso lists:member(Role, (props:get_value(Whapp, Whapps))#whapp_info.roles)
+    of
+        'true' -> Acc + 1;
+        'false' -> Acc
+    end.
+
+-spec node_role_count(text()) -> integer().
+node_role_count(Role) ->
+    node_role_count(Role, 'false').
+
+-spec node_role_count(text(), text() | boolean() | 'remote') -> integer().
+node_role_count(Role, Arg) when not is_atom(Arg) ->
+    node_role_count(Role, kz_term:to_atom(Arg, 'true'));
+node_role_count(Role, 'false') ->
+    MatchSpec = [{#kz_node{roles='$1'
+                          ,zone = local_zone()
+                          ,_ = '_'
+                          }
+                 ,[{'=/=', '$1', []}]
+                 ,['$1']
+                 }],
+    determine_node_role_count(kz_term:to_binary(Role), MatchSpec);
+node_role_count(Role, 'true') ->
+    MatchSpec = [{#kz_node{roles='$1'
+                          ,_ = '_'
+                          }
+                 ,[{'=/=', '$1', []}]
+                 ,['$1']
+                 }],
+    determine_node_role_count(kz_term:to_binary(Role), MatchSpec);
+node_role_count(Role, 'remote') ->
+    Zone = local_zone(),
+    MatchSpec = [{#kz_node{roles='$1'
+                          ,zone='$2'
+                          ,_ = '_'
+                          }
+                 ,[{'andalso'
+                   ,{'=/=', '$1', []}
+                   ,{'=/=', '$2', {'const', Zone}}
+                   }]
+                 ,['$1']
+                 }],
+    determine_node_role_count(kz_term:to_binary(Role), MatchSpec);
+node_role_count(Role, Unhandled) ->
+    lager:debug("invalid parameters ~p , ~p , ~p", [Role, Unhandled]),
+    0.
+
+-spec determine_node_role_count(ne_binary(), ets:match_spec()) -> non_neg_integer().
+determine_node_role_count(Role, MatchSpec) ->
+    lists:foldl(fun(Roles, Acc) when is_list(Roles) ->
+                        determine_node_role_count_fold(Roles, Acc, Role)
+                end
+               ,0
+               ,ets:select(?MODULE, MatchSpec)
+               ).
+
+-spec determine_node_role_count_fold(kz_proplist(), non_neg_integer(), ne_binary()) -> non_neg_integer().
+determine_node_role_count_fold(Roles, Acc, Role) ->
+    case props:is_defined(Role, Roles) of
+        'true' -> Acc + 1;
+        'false' -> Acc
     end.

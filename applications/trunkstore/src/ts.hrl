@@ -1,7 +1,7 @@
 -ifndef(TS_HRL).
--include_lib("kazoo/include/kz_types.hrl").
--include_lib("kazoo/include/kz_log.hrl").
--include_lib("kazoo/include/kz_databases.hrl").
+-include_lib("kazoo_stdlib/include/kz_types.hrl").
+-include_lib("kazoo_stdlib/include/kz_log.hrl").
+-include_lib("kazoo_stdlib/include/kz_databases.hrl").
 -include_lib("kazoo_number_manager/include/knm_phone_number.hrl").
 
 -define(APP_NAME, <<"trunkstore">>).
@@ -44,10 +44,10 @@
                            ,acctdb = <<>> :: binary()
                            ,route_req_jobj = kz_json:new() :: kz_json:object()
                            ,ep_data = kz_json:new() :: kz_json:object() %% data for the endpoint, either an actual endpoint or an offnet request
-                           ,amqp_worker :: pid()
+                           ,amqp_worker :: api_pid()
                            ,callctl_q :: api_ne_binary()
                            ,call_cost = 0.0 :: float()
-                           ,failover :: kz_json:object()
+                           ,failover :: api_object()
                            }).
 
 -record(route_flags, {callid = <<>> :: binary()                      % unique call ID

@@ -26,7 +26,7 @@
         ]).
 
 -include("notify.hrl").
--include_lib("kazoo/include/kz_databases.hrl").
+-include_lib("kazoo_stdlib/include/kz_databases.hrl").
 
 %%--------------------------------------------------------------------
 %% @private
@@ -269,7 +269,7 @@ find_notification_settings(_, []) ->
     lager:debug("unable to get service props, pvt_tree for the account was empty", []),
     kz_json:new();
 find_notification_settings([_, Module], Tree) ->
-    case kz_datamgr:open_cache_doc(?KZ_ACCOUNTS_DB, lists:last(Tree)) of
+    case kz_account:fetch(lists:last(Tree)) of
         {'error', _} -> kz_json:new();
         {'ok', JObj} ->
             lager:debug("looking for notifications '~s' service info in: ~s"
@@ -347,14 +347,15 @@ find_admin([AcctId|Tree]) ->
                   ],
     case kz_datamgr:get_results(AccountDb, <<"maintenance/listing_by_type">>, ViewOptions) of
         {'ok', Users} ->
-            case [User
+            case [Doc
                   || User <- Users,
-                     kz_json:get_value([<<"doc">>, <<"priv_level">>], User) =:= <<"admin">>,
-                     kz_json:get_ne_value([<<"doc">>, <<"email">>], User) =/= 'undefined'
+                     Doc <- [kz_json:get_value(<<"doc">>, User)],
+                     kzd_user:is_account_admin(Doc),
+                     kz_term:is_not_empty(kzd_user:email(Doc))
                  ]
             of
                 [] -> find_admin(Tree);
-                [Admin|_] -> kz_json:get_value(<<"doc">>, Admin)
+                [Admin|_] -> Admin
             end;
         _E ->
             lager:debug("faild to find users in ~s: ~p", [AccountDb, _E]),

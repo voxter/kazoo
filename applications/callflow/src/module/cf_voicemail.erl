@@ -1777,7 +1777,7 @@ get_mailbox_profile(Data, Call) ->
                     ,pin =
                          kzd_voicemail_box:pin(MailboxJObj, <<>>)
                     ,timezone =
-                         kzd_voicemail_box:timezone(MailboxJObj, kz_account:default_timezone())
+                         kzd_voicemail_box:timezone(MailboxJObj)
                     ,mailbox_number =
                          kzd_voicemail_box:mailbox_number(MailboxJObj, kapps_call:request_user(Call))
                     ,require_pin = should_require_pin(MailboxJObj)

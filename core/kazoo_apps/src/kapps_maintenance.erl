@@ -9,9 +9,6 @@
 %%%-------------------------------------------------------------------
 -module(kapps_maintenance).
 
--include_lib("kazoo_number_manager/include/knm_phone_number.hrl").
--include("kazoo_apps.hrl").
-
 -export([rebuild_token_auth/0
         ,rebuild_token_auth/1
         ]).
@@ -55,6 +52,11 @@
 -export([bind/3, unbind/3]).
 
 -export([flush_account_views/0]).
+-export([flush_getby_cache/0]).
+
+-include_lib("kazoo_number_manager/include/knm_phone_number.hrl").
+-include_lib("kazoo_caches/include/kazoo_caches.hrl").
+-include("kazoo_apps.hrl").
 
 binding('migrate') -> <<"maintenance.migrate">>;
 binding('refresh') -> <<"maintenance.refresh">>;
@@ -277,6 +279,7 @@ refresh(?KZ_OAUTH_DB) ->
     kazoo_oauth_maintenance:register_common_providers();
 refresh(?KZ_AUTH_DB) ->
     kz_datamgr:db_create(?KZ_AUTH_DB),
+    kazoo_auth_maintenance:register_common_providers(),
     kazoo_auth_maintenance:refresh();
 refresh(?KZ_WEBHOOKS_DB=Part) ->
     kazoo_bindings:map(binding({'refresh', Part}), []);
@@ -294,7 +297,9 @@ refresh(?KZ_SIP_DB) ->
     kapps_util:update_views(?KZ_SIP_DB, Views, 'true');
 refresh(?KZ_SCHEMA_DB) ->
     kz_datamgr:db_create(?KZ_SCHEMA_DB),
+    kz_datamgr:suppress_change_notice(),
     kz_datamgr:revise_docs_from_folder(?KZ_SCHEMA_DB, 'crossbar', "schemas"),
+    kz_datamgr:enable_change_notice(),
     'ok';
 refresh(?KZ_MEDIA_DB) ->
     kz_datamgr:db_create(?KZ_MEDIA_DB),
@@ -1181,7 +1186,7 @@ purge_doc_type(Type, Account, ChunkSize) ->
         {'error', _}=E -> E;
         {'ok', []} -> 'ok';
         {'ok', Ds} ->
-            lager:debug('deleting up to ~p documents of type ~p', [ChunkSize, Type]),
+            lager:debug("deleting up to ~p documents of type ~p", [ChunkSize, Type]),
             kz_datamgr:del_docs(Db, [kz_json:get_value(<<"doc">>, D) || D <- Ds]),
             purge_doc_type(Type, Account, ChunkSize)
     end.
@@ -1353,3 +1358,8 @@ cleanup_system_configs() ->
 validate_system_configs() ->
     Results = [ {Config, validate_system_config(Config)} || Config <- kapps_config_doc:list_configs() ],
     [ Result || Result = {_, Status} <- Results, Status =/= [] ].
+
+-spec flush_getby_cache() -> 'ok'.
+flush_getby_cache() ->
+    kz_cache:flush_local(?KAPPS_GETBY_CACHE),
+    'ok'.

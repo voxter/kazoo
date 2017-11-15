@@ -69,25 +69,26 @@ Schema for a port request
 
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
-`bill` | Billing information of the losing carrier | `object` |   | `false`
-`bill.extended_address` | The suite/floor/apt of the billing address the losing carrier has on record | `string` |   | `false`
-`bill.locality` | The locality (city) of the billing address the losing carrier has on record | `string` |   | `false`
-`bill.name` | The losing carrier billing/account name | `string` |   | `false`
-`bill.postal_code` | The zip/postal code of the billing address the losing carrier has on record | `string` |   | `false`
-`bill.region` | The region (state) of the billing address the losing carrier has on record | `string` |   | `false`
-`bill.street_address` | The address of the billing address the losing carrier has on record | `string` |   | `false`
-`comments` | The history of comments made on a port request | `array(object)` |   | `false`
+`bill.extended_address` | The suite/floor/apt of the billing address the losing carrier has on record | `string()` |   | `false`
+`bill.locality` | The locality (city) of the billing address the losing carrier has on record | `string()` |   | `false`
+`bill.name` | The losing carrier billing/account name | `string()` |   | `false`
+`bill.postal_code` | The zip/postal code of the billing address the losing carrier has on record | `string()` |   | `false`
+`bill.region` | The region (state) of the billing address the losing carrier has on record | `string()` |   | `false`
+`bill.street_address` | The address of the billing address the losing carrier has on record | `string()` |   | `false`
+`bill` | Billing information of the losing carrier | `object()` |   | `false`
+`comments` | The history of comments made on a port request | `array(object())` |   | `false`
 `name` | A friendly name for the port request | `string(1..128)` |   | `true`
-`notifications` | Status notifications | `object` |   | `false`
-`notifications.email` | Inbound Email Notifications | `object` |   | `false`
-`notifications.email.send_to` | A list or string of email recipent(s) | `string, array(string)` |   | `false`
-`numbers` | The numbers to port in | `object` |   | `true`
-`numbers./\+?[0-9]+/` |   | `object` |   | `false`
-`port_state` | What state the port request is currently in | `string('unconfirmed', 'pending', 'submitted', 'scheduled', 'completed', 'rejected', 'canceled')` | `unconfirmed` | `false`
-`transfer_date` | Requested transfer date in gregorain timestamp | `integer` |   | `false`
+`notifications.email.send_to` | A list or string of email recipent(s) | `string() | array(string())` |   | `false`
+`notifications.email` | Inbound Email Notifications | `object()` |   | `false`
+`notifications` | Status notifications | `object()` |   | `false`
+`numbers./\+?[0-9]+/` |   | `object()` |   | `false`
+`numbers` | The numbers to port in | `object()` |   | `true`
+`port_state` | What state the port request is currently in | `string('unconfirmed' | 'pending' | 'submitted' | 'scheduled' | 'completed' | 'rejected' | 'canceled')` | `unconfirmed` | `false`
+`transfer_date` | Requested transfer date in gregorain timestamp | `integer()` |   | `false`
 
 
-#### List port requests
+
+#### Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/port_requests
 
@@ -328,7 +329,7 @@ curl -v -X GET \
                         "+12025559042": {}
                     },
                     "port_state": "scheduled",
-                    "schedule_at": {
+                    "schedule_on": {
                         "date_time": "2017-06-24 12:00",
                         "timezone": "America/New_York"
                     },
@@ -830,6 +831,54 @@ curl -v -X DELETE \
 }
 ```
 
+#### Listing all port requests by their last transition to the `submitted` state
+
+> GET /v2/accounts/{ACCOUNT_ID}/port_requests/last_submitted
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/port_requests/last_submitted
+```
+
+```json
+{
+    "auth_token": "{AUTH_TOKEN}",
+    "data": [
+        {
+            "id": "{PORT_REQUEST_ID}",
+            "transition": {
+                "authorization": {
+                    "account": {
+                        "id": "{AUTH_ACCOUNT_ID}",
+                        "name": "{AUTH_ACCOUNT_NAME}"
+                    },
+                    "user": {
+                        "id": "0d46906ff1eb36bff4d09b5b32fc14be",
+                        "first_name": "John",
+                        "last_name": "Doe"
+                    }
+                },
+                "reason": "this was approved by Jane Doe",
+                "timestamp": 63664096014,
+                "transition": {
+                    "new": "submitted",
+                    "previous": "unconfirmed"
+                },
+                "type": "transition"
+            }
+        ]
+    },
+    "node": "{NODE}",
+    "request_id": "{REQUEST_ID}",
+    "revision": "{REVISION}",
+    "status": "success",
+    "timestamp": "2017-06-07T23:07:09",
+    "version": "4.1.12"
+}
+```
+
+
 #### Listing transitions and comments
 
 > GET /v2/accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/timeline
@@ -1041,10 +1090,13 @@ curl -v -X PATCH \
 
 > PATCH /v2/accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/scheduled
 
+Note: `schedule_on` is a required field for this state transition.
+Note: `scheduled_date` is an automatically added timestamp computed from the value of the `schedule_on` object.
+
 ```shell
 curl -v -X PATCH \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    -d '{"data": {"scheduled_date": {"timezone":"America/Los_Angeles", "date_time":"2017-06-24 12:00"}}}' \
+    -d '{"data": {"schedule_on": {"timezone":"America/Los_Angeles", "date_time":"2017-06-24 12:00"}}}' \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/scheduled
 ```
 
@@ -1059,7 +1111,7 @@ curl -v -X PATCH \
             "+12025559000": {}
         },
         "port_state": "scheduled",
-        "schedule_at": {
+        "schedule_on": {
             "date_time": "2017-06-24 12:00",
             "timezone": "America/Los_Angeles"
         },

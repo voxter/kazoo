@@ -87,12 +87,30 @@ handle_ringback(Node, UUID, JObj) ->
                                   ,JObj
                                   )
     of
-        'undefined' -> 'ok';
+        'undefined' -> maybe_ringback_from_language(Node, UUID, JObj);
         Media ->
             Stream = ecallmgr_util:media_path(Media, 'extant', UUID, JObj),
             lager:debug("bridge has custom ringback: ~s", [Stream]),
             ecallmgr_fs_command:set(Node, UUID, [{<<"ringback">>, Stream}])
     end.
+
+-spec maybe_ringback_from_language(atom(), ne_binary(), kz_json:object()) -> 'ok'.
+maybe_ringback_from_language(Node, UUID, JObj) ->
+    case kz_json:get_ne_binary_value(<<"Language">>, JObj) of
+        'undefined' -> 'ok';
+        <<"en-ca">> -> ringback_from_language(Node, UUID, <<"${ca-ring}">>);
+        <<"en-gb">> -> ringback_from_language(Node, UUID, <<"${uk-ring}">>);
+        <<"en-us">> -> ringback_from_language(Node, UUID, <<"${us-ring}">>);
+        <<Lang:2/binary, _/binary>> ->
+            ringback_from_language(Node, UUID, <<"${", Lang/binary, "-ring}">>);
+        Lang ->
+            lager:error("invalid language ~s for ringback", [Lang]),
+            'ok'
+    end.
+
+-spec ringback_from_language(atom(), ne_binary(), ne_binary()) -> 'ok'.
+ringback_from_language(Node, UUID, Ringback) ->
+    ecallmgr_fs_command:set(Node, UUID, [{<<"ringback">>, Ringback}]).
 
 -spec maybe_early_media(atom(), ne_binary(), kz_json:object(), kz_json:objects()) -> ecallmgr_util:send_cmd_ret().
 maybe_early_media(Node, UUID, JObj, Endpoints) ->
@@ -158,15 +176,25 @@ handle_bypass_media(DP, _Node, _UUID, #channel{profile=ChannelProfile}, JObj) ->
     end.
 
 -spec maybe_bypass_endpoint_media(kz_json:objects(), ne_binary(), ne_binary(), kz_proplist()) -> kz_proplist().
-maybe_bypass_endpoint_media([Endpoint], BridgeProfile, ChannelProfile, DP) ->
-    EndpointProfile = kz_json:get_value(<<"SIP-Interface">>, Endpoint, BridgeProfile),
-    case kz_json:is_true(<<"Bypass-Media">>, Endpoint)
-        andalso EndpointProfile =:= ChannelProfile of
+maybe_bypass_endpoint_media(Endpoints, BridgeProfile, ChannelProfile, DP) ->
+    ShouldBypass = lists:all(fun(Endpoint) ->
+                                     bypass_endpoint_media_enabled(Endpoint
+                                                                  ,BridgeProfile
+                                                                  ,ChannelProfile
+                                                                  )
+                             end
+                            ,Endpoints
+                            ),
+    case ShouldBypass of
         'true' -> [{"application", "set bypass_media=true"}|DP];
         'false' -> DP
-    end;
-maybe_bypass_endpoint_media(_, _, _, DP) ->
-    DP.
+    end.
+
+-spec bypass_endpoint_media_enabled(kz_json:object(), ne_binary(), ne_binary()) -> boolean().
+bypass_endpoint_media_enabled(Endpoint, BridgeProfile, ChannelProfile) ->
+    EndpointProfile = kz_json:get_ne_binary_value(<<"SIP-Interface">>, Endpoint, BridgeProfile),
+    kz_json:is_true(<<"Bypass-Media">>, Endpoint)
+        andalso EndpointProfile =:= ChannelProfile.
 
 -spec handle_ccvs(kz_proplist(), atom(), ne_binary(), channel(), kz_json:object()) -> kz_proplist().
 handle_ccvs(DP, Node, UUID, _Channel, JObj) ->

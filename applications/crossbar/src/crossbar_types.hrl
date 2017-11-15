@@ -1,7 +1,9 @@
 -ifndef(CROSSBAR_TYPES_INCLUDED).
--include_lib("kazoo/include/kz_types.hrl").
+-include_lib("kazoo_stdlib/include/kz_types.hrl").
 
 -define(CATCH_ALL, <<"_">>).
+-define(HARD_DELETE, 'false').
+-define(SOFT_DELETE, 'true').
 
 -type crossbar_status() :: 'success' | 'error' | 'fatal' | 'halt'.
 -type crossbar_module_result() :: {crossbar_status(), kz_proplist()} |

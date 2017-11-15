@@ -18,9 +18,10 @@
 
         ,name/1, name/2, set_name/2
         ,realm/1, realm/2, set_realm/2
-        ,language/1, set_language/2
+        ,language/1, language/2, set_language/2
         ,timezone/1, timezone/2, set_timezone/2, default_timezone/0
         ,parent_account_id/1
+        ,get_parent_account/1, get_parent_account_id/1
         ,tree/1, tree/2 ,set_tree/2
         ,notification_preference/1, set_notification_preference/2
         ,is_enabled/1, enable/1, disable/1
@@ -220,9 +221,12 @@ set_realm(JObj, Realm) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec language(doc()) -> api_binary().
+-spec language(doc()) -> api_ne_binary().
+-spec language(doc(), Default) -> ne_binary() | Default.
 language(JObj) ->
-    kz_json:get_value(?LANGUAGE, JObj).
+    language(JObj, 'undefined').
+language(JObj, Default) ->
+    kz_json:get_ne_binary_value(?LANGUAGE, JObj, Default).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -238,32 +242,50 @@ set_language(JObj, Language) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec timezone(ne_binary() | doc()) -> api_ne_binary().
--spec timezone(ne_binary() | doc(), Default) -> ne_binary() | Default.
-timezone(AccountId)
-  when is_binary(AccountId) ->
-    {'ok', JObj} = fetch(AccountId),
-    timezone(JObj);
+-spec timezone(api_ne_binary() | doc()) -> ne_binary().
+timezone('undefined') -> default_timezone();
+timezone(AccountId) when is_binary(AccountId) ->
+    case fetch(AccountId) of
+        {'ok', JObj} -> timezone(JObj);
+        {'error', _R} ->
+            lager:debug("failed to open account ~s definition, returning system's default timezone"),
+            default_timezone()
+    end;
 timezone(JObj) ->
     timezone(JObj, 'undefined').
-timezone(AccountId, Default)
-  when is_binary(AccountId) ->
-    {'ok', JObj} = fetch(AccountId),
-    timezone(JObj, Default);
+
+-spec timezone(api_ne_binary() | doc(), Default) -> ne_binary() | Default.
+timezone('undefined', 'undefined') ->
+    default_timezone();
+timezone('undefined', <<"inherit">>) -> %% UI-1808
+    default_timezone();
+timezone('undefined', Default) ->
+    Default;
+timezone(AccountId, Default) when is_binary(AccountId) ->
+    case fetch(AccountId) of
+        {'ok', JObj} -> timezone(JObj, Default);
+        {'error', _R} when Default =:= 'undefined';
+                           Default =:= <<"inherit">> -> %% UI-1808
+            lager:debug("failed to open account ~s definition, returning system's default timezone"),
+            default_timezone();
+        {'error', _} ->
+            Default
+    end;
 timezone(JObj, Default) ->
     case kz_json:get_value(?TIMEZONE, JObj, Default) of
-        <<"inherit">> -> parent_timezone(kz_doc:account_id(JObj), parent_account_id(JObj));
+        <<"inherit">> -> parent_timezone(kz_doc:account_id(JObj), parent_account_id(JObj)); %% UI-1808
         'undefined' -> parent_timezone(kz_doc:account_id(JObj), parent_account_id(JObj));
         TZ -> TZ
     end.
 
 -spec parent_timezone(ne_binary(), api_ne_binary()) -> ne_binary().
-parent_timezone(AccountId, AccountId) -> ?DEFAULT_TIMEZONE;
-parent_timezone(_AccountId, 'undefined') -> ?DEFAULT_TIMEZONE;
+parent_timezone(AccountId, AccountId) -> default_timezone();
+parent_timezone(_AccountId, 'undefined') -> default_timezone();
 parent_timezone(_AccountId, ParentId) -> timezone(ParentId).
 
 -spec default_timezone() -> ne_binary().
-default_timezone() -> ?DEFAULT_TIMEZONE.
+default_timezone() ->
+    kapps_config:get_ne_binary(<<"accounts">>, <<"default_timezone">>, <<"America/Los_Angeles">>).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -305,8 +327,7 @@ set_home_zone(JObj, Zone) ->
 %%--------------------------------------------------------------------
 -spec low_balance_threshold(ne_binary() | doc()) -> api_float().
 low_balance_threshold(Thing) ->
-    ConfigCat = <<"notify.low_balance">>,
-    Default = kapps_config:get_float(ConfigCat, <<"threshold">>, 5.00),
+    Default = kapps_config:get_float(<<"notify.low_balance">>, <<"threshold">>, 5.00),
     low_balance_threshold(Thing, Default).
 
 -spec low_balance_threshold(ne_binary() | doc(), Default) -> float() | Default.
@@ -439,6 +460,33 @@ parent_account_id(JObj) ->
     case tree(JObj) of
         [] -> 'undefined';
         Ancestors -> lists:last(Ancestors)
+    end.
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec get_parent_account(ne_binary()) -> {'ok', doc()} | {'error', any()}.
+get_parent_account(AccountId) ->
+    case get_parent_account_id(AccountId) of
+        'undefined' -> {'error', 'not_found'};
+        ParentId ->
+            fetch(ParentId)
+    end.
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec get_parent_account_id(ne_binary()) -> api_binary().
+get_parent_account_id(AccountId) ->
+    case fetch(AccountId) of
+        {'ok', JObj} -> parent_account_id(JObj);
+        {'error', _R} ->
+            lager:debug("failed to open account's ~s parent: ~p", [AccountId, _R]),
+            'undefined'
     end.
 
 %%--------------------------------------------------------------------

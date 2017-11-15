@@ -262,8 +262,13 @@ store_recording_meta(#{media := {_, MediaName}
                       ,call_id := CallId
                       ,event := JObj
                       ,account_id := AccountId
+                      ,origin := Origin
                       }) ->
     Ext = filename:extension(MediaName),
+    Timestamp = kz_call_event:timestamp(JObj),
+    Length = kz_call_event:recording_length(JObj),
+    Seconds = Length div ?MILLISECONDS_IN_SECOND,
+    Start = Timestamp - Seconds,
     BaseMediaDoc = kz_json:from_list(
                      [{<<"name">>, MediaName}
                      ,{<<"description">>, <<"recording ", MediaName/binary>>}
@@ -271,16 +276,25 @@ store_recording_meta(#{media := {_, MediaName}
                      ,{<<"media_type">>, Ext}
                      ,{<<"media_source">>, <<"recorded">>}
                      ,{<<"source_type">>, kz_term:to_binary(?MODULE)}
-                      %%                        ,{<<"from">>, kz_call_event: kapps_call:from(Call)}
-                      %%                        ,{<<"to">>, kapps_call:to(Call)}
+                     ,{<<"from">>, kz_json:get_ne_binary_value(<<"From">>, JObj)}
+                     ,{<<"to">>, kz_json:get_ne_binary_value(<<"To">>, JObj)}
+                     ,{<<"request">>, kz_json:get_ne_binary_value(<<"Request">>, JObj)}
+                     ,{<<"direction">>, kz_call_event:call_direction(JObj)}
+                     ,{<<"start">>, Start}
+                     ,{<<"duration">>, Seconds}
+                     ,{<<"duration_ms">>, Length}
                      ,{<<"caller_id_number">>, kz_call_event:caller_id_number(JObj)}
                      ,{<<"caller_id_name">>, kz_call_event:caller_id_name(JObj)}
+                     ,{<<"callee_id_number">>, kz_call_event:callee_id_number(JObj)}
+                     ,{<<"callee_id_name">>, kz_call_event:callee_id_name(JObj)}
                      ,{<<"call_id">>, CallId}
                      ,{<<"owner_id">>, kz_call_event:custom_channel_var(JObj, <<"Owner-ID">>)}
                      ,{<<"url">>, Url}
                      ,{<<"cdr_id">>, CdrId}
                      ,{<<"interaction_id">>, InteractionId}
                      ,{<<"_id">>, DocId}
+                     ,{<<"origin">>, Origin}
+                     ,{<<"custom_channel_vars">>, kz_call_event:custom_channel_vars(JObj)}
                      ]
                     ),
 
@@ -462,7 +476,7 @@ record_call_command(EndpointId, Inception, Data, Call) ->
     {Year, Month, _} = erlang:date(),
     CallId = kapps_call:call_id(Call),
     RecordingId = kz_binary:rand_hex(16),
-    MediaDocId = ?MATCH_MODB_PREFIX(kz_term:to_binary(Year), kz_time:pad_month(Month), RecordingId),
+    MediaDocId = ?MATCH_MODB_PREFIX(kz_term:to_binary(Year), kz_date:pad_month(Month), RecordingId),
     DefaultMediaName = get_media_name(kz_binary:rand_hex(16), Format),
     MediaName = kz_json:get_value(?RECORDING_ID_KEY, Data, DefaultMediaName),
     Media = [{<<"Application-Name">>, <<"record_call">>}
@@ -509,7 +523,7 @@ maybe_save_recording(_Pid, EndpointId, JObj) ->
     {Year, Month, _} = erlang:date(),
     AccountDb = kz_util:format_account_modb(kazoo_modb:get_modb(AccountId, Year, Month),'encoded'),
     CallId = kz_call_event:call_id(JObj),
-    CdrId = ?MATCH_MODB_PREFIX(kz_term:to_binary(Year), kz_time:pad_month(Month), CallId),
+    CdrId = ?MATCH_MODB_PREFIX(kz_term:to_binary(Year), kz_date:pad_month(Month), CallId),
     DocId = kz_call_event:custom_channel_var(JObj, <<"Media-Recording-ID">>),
     InteractionId = kz_call_event:custom_channel_var(JObj, <<?CALL_INTERACTION_ID>>),
     Url = kz_json:get_ne_binary_value(<<"url">>, Data),
@@ -528,5 +542,6 @@ maybe_save_recording(_Pid, EndpointId, JObj) ->
              ,account_id => AccountId
              ,call_id => CallId
              ,event => JObj
+             ,origin => <<"inbound from ", Inception/binary, " to endpoint">>
              },
     save_recording(Store).

@@ -775,7 +775,7 @@ move_doc(JObj) ->
     AccountId = kz_doc:account_id(JObj),
     AccountMODb = kazoo_modb:get_modb(AccountId, Year, Month),
     ToDB = kz_util:format_account_modb(AccountMODb, 'encoded'),
-    ToId = ?MATCH_MODB_PREFIX(kz_term:to_binary(Year), kz_time:pad_month(Month), FromId),
+    ToId = ?MATCH_MODB_PREFIX(kz_term:to_binary(Year), kz_date:pad_month(Month), FromId),
     Options = ['override_existing_document'
               ,{'transform', fun(_, B) -> kz_json:set_value(<<"folder">>, <<"outbox">>, B) end}
               ],
@@ -799,9 +799,10 @@ notify_fields(JObj, Resp) ->
 
     ToNumber = kz_term:to_binary(kz_json:get_value(<<"to_number">>, JObj)),
     ToName = kz_term:to_binary(kz_json:get_value(<<"to_name">>, JObj, ToNumber)),
-    Notify = [E || E <- kz_json:get_value([<<"notifications">>,<<"email">>,<<"send_to">>], JObj, [])
-                       ,not kz_term:is_empty(E)
-             ],
+    Emails = kz_json:get_first_defined([[<<"notifications">>, <<"email">>, <<"send_to">>]
+                                       ,[<<"notifications">>, <<"outbound">>, <<"email">>, <<"send_to">>]
+                                       ], JObj, []),
+    Notify = [E || E <- Emails, not kz_term:is_empty(E)],
 
     props:filter_empty(
       [{<<"Caller-ID-Name">>, kz_json:get_value(<<"from_name">>, JObj)}

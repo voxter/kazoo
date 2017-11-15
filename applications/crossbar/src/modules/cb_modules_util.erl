@@ -494,7 +494,7 @@ is_admin(Context) ->
 -spec is_admin(ne_binary(), ne_binary()) -> boolean().
 is_admin(AccountDb, UserId) ->
     {'ok', JObj} = kz_datamgr:open_cache_doc(AccountDb, UserId),
-    kzd_user:is_admin(JObj).
+    kzd_user:is_account_admin(JObj).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -631,12 +631,7 @@ remove_plaintext_password(Context) ->
                              ),
     cb_context:set_doc(Context, Doc).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
+%% @public
 -spec validate_number_ownership(ne_binaries(), cb_context:context()) ->
                                        cb_context:context().
 validate_number_ownership(Numbers, Context) ->

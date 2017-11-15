@@ -3,6 +3,12 @@
     "_id": "users",
     "description": "Schema for a user",
     "properties": {
+        "acdc_agent_priority": {
+            "description": "A call distribution priority for this agent from -128 to 128",
+            "maximum": 128,
+            "minimum": -128,
+            "type": "integer"
+        },
         "call_forward": {
             "description": "The device call forward parameters",
             "properties": {
@@ -133,6 +139,10 @@
             "minLength": 1,
             "type": "string"
         },
+        "formatters": {
+            "$ref": "formatters",
+            "type": "object"
+        },
         "hotdesk": {
             "default": {},
             "description": "The user hotdesk parameters",
@@ -149,7 +159,7 @@
                 },
                 "keep_logged_in_elsewhere": {
                     "default": false,
-                    "description": "Determines if user should be able to login to mutliple phones simultaneously",
+                    "description": "Determines if user should be able to login to multiple phones simultaneously",
                     "type": "boolean"
                 },
                 "pin": {
@@ -185,9 +195,6 @@
                     "description": "The audio media parameters",
                     "properties": {
                         "codecs": {
-                            "default": [
-                                "PCMU"
-                            ],
                             "description": "A list of audio codecs the device supports",
                             "items": {
                                 "enum": [

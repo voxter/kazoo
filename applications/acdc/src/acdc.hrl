@@ -1,7 +1,7 @@
 -ifndef(ACDC_HRL).
--include_lib("kazoo/include/kz_types.hrl").
--include_lib("kazoo/include/kz_log.hrl").
--include_lib("kazoo/include/kz_databases.hrl").
+-include_lib("kazoo_stdlib/include/kz_types.hrl").
+-include_lib("kazoo_stdlib/include/kz_log.hrl").
+-include_lib("kazoo_stdlib/include/kz_databases.hrl").
 -include_lib("kazoo/include/kz_api_literals.hrl").
 -include("acdc_config.hrl").
 
@@ -39,11 +39,13 @@
 
 -type deliveries() :: [gen_listener:basic_deliver()].
 
--type announce_pid_list() :: [{api_binary(), pid()},...] | [].
+-type announcements_pids() :: #{ne_binary() => pid()}.
 
 -type fsm_state_name() :: 'wait' | 'sync' | 'ready' | 'ringing' |
                           'ringing_callback' | 'awaiting_callback' |
                           'answered' | 'wrapup' | 'paused' | 'outbound'.
+
+-type agent_priority() :: -128..128.
 
 %% Check for cleanup every 5 minutes
 -define(CLEANUP_PERIOD, kapps_config:get_integer(?CONFIG_CAT, <<"cleanup_period_ms">>, 360000)).
@@ -57,6 +59,12 @@
 -define(ARCHIVE_WINDOW, ?ACDC_ARCHIVE_WINDOW).
 
 -define(RESOURCE_TYPES_HANDLED, [<<"audio">>, <<"video">>]).
+
+-define(PRINT(Str), ?PRINT(Str, [])).
+-define(PRINT(Fmt, Args), begin
+                              lager:info(Fmt, Args),
+                              io:format(Fmt++"\n", Args)
+                          end).
 
 -define(ACDC_HRL, 'true').
 -endif.

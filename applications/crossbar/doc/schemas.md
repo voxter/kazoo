@@ -11,7 +11,7 @@ This excludes Kazoo-managed private fields (top-level keys prefixed with `"_"` o
 
 
 
-#### Fetch a listing of available schemas
+#### Fetch
 
 > GET /v2/schemas
 
@@ -103,6 +103,8 @@ curl -v -X GET \
     "status": "success"
 }
 ```
+
+The default fetch will retrieve only the documents meant for the APIs to operate on (doc and `system_config` schemas). Kazoo also has the internal JSON APIs available as JSON schemas, which can be fetched via `/v2/schemas?internals=true`.
 
 #### Fetch the schema definitions
 

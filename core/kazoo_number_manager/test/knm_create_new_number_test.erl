@@ -31,11 +31,11 @@ create_new_number_test_() ->
     ,{"Verify new phone number database is properly set"
      ,?_assertEqual(<<"numbers%2F%2B1555">>, knm_phone_number:number_db(PN))
      }
-    ,{"Verify new phone number is in RESERVED state"
-     ,?_assertEqual(?NUMBER_STATE_RESERVED, knm_phone_number:state(PN))
+    ,{"Verify new phone number is in service"
+     ,?_assertEqual(?NUMBER_STATE_IN_SERVICE, knm_phone_number:state(PN))
      }
-    ,{"Verify the reseller account is listed in reserve history"
-     ,?_assertEqual([?RESELLER_ACCOUNT_ID], knm_phone_number:reserve_history(PN))
+    ,{"Verify reserve history is empty"
+     ,?_assertEqual([], knm_phone_number:reserve_history(PN))
      }
     ,{"Verify the local carrier module is being used"
      ,?_assertEqual(?CARRIER_LOCAL, knm_phone_number:module_name(PN))
@@ -71,11 +71,11 @@ create_with_carrier_test_() ->
     ,{"Verify new phone number database is properly set"
      ,?_assertEqual(<<"numbers%2F%2B1555">>, knm_phone_number:number_db(PN))
      }
-    ,{"Verify new phone number is in RESERVED state"
-     ,?_assertEqual(?NUMBER_STATE_RESERVED, knm_phone_number:state(PN))
+    ,{"Verify new phone number is in service"
+     ,?_assertEqual(?NUMBER_STATE_IN_SERVICE, knm_phone_number:state(PN))
      }
-    ,{"Verify the reseller account is listed in reserve history"
-     ,?_assertEqual([?RESELLER_ACCOUNT_ID], knm_phone_number:reserve_history(PN))
+    ,{"Verify reserve history is empty"
+     ,?_assertEqual([], knm_phone_number:reserve_history(PN))
      }
     ,{"Verify the given carrier module is being used"
      ,?_assertEqual(CarrierModule, knm_phone_number:module_name(PN))
@@ -111,11 +111,11 @@ reseller_new_number_test_() ->
     ,{"Verify new phone number database is properly set"
      ,?_assertEqual(<<"numbers%2F%2B1555">>, knm_phone_number:number_db(PN))
      }
-    ,{"Verify new phone number is in RESERVED state"
-     ,?_assertEqual(?NUMBER_STATE_RESERVED, knm_phone_number:state(PN))
+    ,{"Verify new phone number is in service"
+     ,?_assertEqual(?NUMBER_STATE_IN_SERVICE, knm_phone_number:state(PN))
      }
-    ,{"Verify the reseller account is listed in reserve history"
-     ,?_assertEqual([?RESELLER_ACCOUNT_ID], knm_phone_number:reserve_history(PN))
+    ,{"Verify reserve history is empty"
+     ,?_assertEqual([], knm_phone_number:reserve_history(PN))
      }
     ,{"Verify the local carrier module is being used"
      ,?_assertEqual(?CARRIER_LOCAL, knm_phone_number:module_name(PN))
@@ -189,11 +189,11 @@ create_existing_number_test_() ->
     ,{"Verify new phone number database is properly set"
      ,?_assertEqual(<<"numbers%2F%2B1555">>, knm_phone_number:number_db(PN))
      }
-    ,{"Verify new phone number is in RESERVED state"
-     ,?_assertEqual(?NUMBER_STATE_RESERVED, knm_phone_number:state(PN))
+    ,{"Verify new phone number is in service"
+     ,?_assertEqual(?NUMBER_STATE_IN_SERVICE, knm_phone_number:state(PN))
      }
-    ,{"Verify the reseller account is listed in reserve history"
-     ,?_assertEqual([?RESELLER_ACCOUNT_ID], knm_phone_number:reserve_history(PN))
+    ,{"Verify reserve history is empty"
+     ,?_assertEqual([], knm_phone_number:reserve_history(PN))
      }
     ,{"Verify the local carrier module is being used"
      ,?_assertEqual(?CARRIER_LOCAL, knm_phone_number:module_name(PN))
@@ -257,7 +257,7 @@ create_dry_run_test_() ->
              }
             ],
     {'dry_run', Services, Charges} = knm_number:create(?TEST_CREATE_NUM, Props),
-    %% Eventually make a stub service plan to test this
+    %%TODO: make a stub service plan to test this
     [{"Verify charges for dry_run"
      ,?_assertEqual(0, Charges)
      }
@@ -295,16 +295,17 @@ create_non_existing_mobile_number_test_() ->
           ,{<<"device-id">>, kz_binary:rand_hex(32)}
           ]),
     PublicFields = kz_json:from_list([{<<"mobile">>, MobileField}]),
-    Props = [{'auth_by', ?MASTER_ACCOUNT_ID}
+    Props = [{auth_by, ?MASTER_ACCOUNT_ID}
             ,{assign_to, ?RESELLER_ACCOUNT_ID}
-            ,{'dry_run', 'false'}
-            ,{'public_fields', PublicFields}
-            ,{'module_name', ?CARRIER_MDN}
+            ,{dry_run, false}
+            ,{public_fields, PublicFields}
+            ,{module_name, ?CARRIER_MDN}
+            ,{mdn_run, true}
             ,{<<"auth_by_account">>
-             ,kz_account:set_allow_number_additions(?RESELLER_ACCOUNT_DOC, 'true')
+             ,kz_account:set_allow_number_additions(?RESELLER_ACCOUNT_DOC, true)
              }
             ],
-    {'ok', N} = knm_number:create(?TEST_CREATE_NUM, Props),
+    {ok, N} = knm_number:create(?TEST_CREATE_NUM, Props),
     PN = knm_number:phone_number(N),
     [?_assert(knm_phone_number:is_dirty(PN))
     ,{"Verify phone number is assigned to reseller account"

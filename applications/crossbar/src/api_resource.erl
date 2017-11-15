@@ -38,6 +38,7 @@
         ,multiple_choices/2
         ,generate_etag/2
         ,expires/2
+        ,get_range/2
         ]).
 
 -include("crossbar.hrl").
@@ -176,6 +177,13 @@ find_version(Path) ->
 
 -spec maybe_allow_proxy_req(ne_binary(), ne_binary()) -> ne_binary().
 maybe_allow_proxy_req(Peer, ForwardIP) ->
+    ShouldCheck = kapps_config:get_is_true(?APP_NAME, <<"check_reverse_proxies">>, 'true'),
+    maybe_allow_proxy_req(Peer, ForwardIP, ShouldCheck).
+
+-spec maybe_allow_proxy_req(ne_binary(), ne_binary(), boolean()) -> ne_binary().
+maybe_allow_proxy_req(_Peer, ForwardIP, 'false') ->
+    ForwardIP;
+maybe_allow_proxy_req(Peer, ForwardIP, 'true') ->
     case is_proxied(Peer) of
         'true' ->
             lager:info("request is from expected reverse proxy: ~s", [ForwardIP]),
@@ -190,7 +198,7 @@ maybe_allow_proxy_req(Peer, ForwardIP) ->
 -spec is_proxied(ne_binary()) -> boolean().
 -spec is_proxied(ne_binary(), ne_binaries()) -> boolean().
 is_proxied(Peer) ->
-    Proxies = kapps_config:get_ne_binaries(?APP_NAME, <<"reverse_proxies">>, []),
+    Proxies = kapps_config:get_ne_binaries(?APP_NAME, <<"reverse_proxies">>, [<<"127.0.0.1">>]),
     is_proxied(Peer, Proxies).
 
 is_proxied(_Peer, []) -> 'false';
@@ -618,8 +626,12 @@ does_request_validate(Req, Context0) ->
             {'false', Req, Context2};
         'false' ->
             lager:debug("failed to validate resource"),
-            Data = cb_context:resp_data(Context2),
-            Msg  = kz_json:get_value(<<"message">>, Data, <<"validation failed">>),
+            Msg = case cb_context:resp_error_msg(Context2) of
+                      'undefined' ->
+                          Data = cb_context:resp_data(Context2),
+                          kz_json:get_value(<<"message">>, Data, <<"validation failed">>);
+                      Message -> Message
+                  end,
             api_util:halt(Req, cb_context:set_resp_error_msg(Context2, Msg))
     end.
 
@@ -776,7 +788,28 @@ to_binary(Req, Context, 'undefined') ->
     RespData = cb_context:resp_data(Context),
     Event = api_util:create_event_name(Context, <<"to_binary">>),
     _ = crossbar_bindings:map(Event, {Req, Context}),
-    {RespData, api_util:set_resp_headers(Req, Context), Context};
+    %% Handle HTTP range header
+    case cb_context:req_header(Context, <<"range">>) of
+        'undefined' ->
+            {RespData, api_util:set_resp_headers(Req, Context), Context};
+        RangeHeader ->
+            RangeData={Content, Start, End, Length, FileLength} = get_range(RespData, RangeHeader),
+            ErrorCode = resp_error_code_for_range(RangeData),
+            Setters = [{fun cb_context:set_resp_data/2, Content}
+                      ,{fun cb_context:set_resp_error_code/2, ErrorCode}
+                      ,{fun cb_context:add_resp_headers/2
+                       ,[{<<"Content-Length">>, kz_term:to_binary(Length)}
+                        ,{<<"Content-Range">>, kz_term:to_binary(io_lib:fwrite("bytes ~B-~B/~B", [Start, End, FileLength]))}
+                        ,{<<"Accept-Ranges">>, <<"bytes">>}
+                        ]
+                       }
+                      ],
+            NewContext = cb_context:setters(Context, Setters),
+            %% Respond, possibly with 206
+            {'ok', Req1} = cowboy_req:reply(kz_term:to_binary(ErrorCode), cb_context:resp_headers(NewContext), Content, Req),
+            {'halt', Req1, NewContext}
+    end;
+
 to_binary(Req, Context, Accept) ->
     lager:debug("request has overridden accept header: ~s", [Accept]),
     case to_fun(Context, Accept, 'to_binary') of
@@ -785,6 +818,27 @@ to_binary(Req, Context, Accept) ->
             lager:debug("calling ~s instead of to_binary to render response", [Fun]),
             (?MODULE):Fun(Req, Context)
     end.
+
+-type range_response() :: {ne_binary(), pos_integer(), pos_integer(), pos_integer(), pos_integer()}.
+
+-spec get_range(ne_binary(), ne_binary()) -> range_response().
+get_range(Data, RangeHeader) ->
+    FileLength = size(Data),
+    lager:debug("recieved range header ~p for file size ~p", [RangeHeader, FileLength]),
+    {Start, End} = case cowboy_http:range(RangeHeader) of
+                       {<<"bytes">>, [{S, 'infinity'}]} -> {S, FileLength};
+                       {<<"bytes">>, [{S, E}]} when E < FileLength -> {S, E + 1};
+                       _Thing ->
+                           lager:info("invalid range specification ~p", [RangeHeader]),
+                           {0, FileLength}
+                   end,
+    ContentLength = End - Start,
+    <<_:Start/binary, Content:ContentLength/binary, _/binary>> = Data,
+    {Content, Start, End - 1, ContentLength, FileLength}.
+
+-spec resp_error_code_for_range(range_response()) -> 200 | 206.
+resp_error_code_for_range({_Content, _Start, _End, FileLength, FileLength}) -> 200;
+resp_error_code_for_range({_Content, _Start, _End, _Length, _FileLength}) -> 206.
 
 -spec send_file(cowboy_req:req(), cb_context:context()) -> api_util:pull_file_response_return().
 send_file(Req, Context) ->
@@ -832,10 +886,12 @@ to_csv(Req, Context) ->
     case cb_context:fetch(Context1, 'is_chunked') of
         'true' -> {'halt', Req1, Context1};
         _ ->
-            RespHeaders = [{<<"Content-Type">>, <<"application/octet-stream">>}
-                          ,{<<"Content-Disposition">>, <<"attachment; filename=\"data.csv\"">>}
-                           | cb_context:resp_headers(Context1)
-                          ],
+            RespHeaders =
+                props:insert_values([{<<"content-type">>, <<"application/octet-stream">>}
+                                    ,{<<"content-disposition">>, <<"attachment; filename=\"data.csv\"">>}
+                                    ]
+                                   ,cb_context:resp_headers(Context1)
+                                   ),
             {csv_body(cb_context:resp_data(Context))
             ,api_util:set_resp_headers(Req1, cb_context:set_resp_headers(Context1, RespHeaders))
             ,Context1

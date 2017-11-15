@@ -11,8 +11,7 @@
 
 -export([load/2, load/3
         ,load_merge/2, load_merge/3, load_merge/4
-        ,merge/3
-        ,patch_and_validate/3
+        ,patch_and_validate/3, patch_and_validate/4
         ,load_view/3, load_view/4, load_view/5, load_view/6
         ,load_attachment/4, load_docs/2
         ,save/1, save/2, save/3
@@ -103,7 +102,7 @@ pagination_page_size(_Context, ?VERSION_1) -> 'undefined';
 pagination_page_size(Context, _Version) ->
     case cb_context:req_value(Context, <<"page_size">>) of
         'undefined' -> pagination_page_size();
-        V -> kz_term:to_integer(V)
+        V -> try kz_term:to_integer(V) catch _:_ -> 'undefined' end
     end.
 
 %%--------------------------------------------------------------------
@@ -299,31 +298,31 @@ load_merge(DocId, DataJObj, Context, Options) ->
 
 load_merge(DocId, DataJObj, Context, Options, 'undefined') ->
     Context1 = load(DocId, Context, Options),
-    case cb_context:resp_status(Context1) of
-        'success' ->
+    case success =:= cb_context:resp_status(Context1) of
+        false -> Context1;
+        true ->
             lager:debug("loaded doc ~s(~s), merging", [DocId, kz_doc:revision(cb_context:doc(Context1))]),
-            merge(DataJObj, cb_context:doc(Context1), Context1);
-        _Status -> Context1
+            Merged = kz_json:merge_jobjs(kz_doc:private_fields(cb_context:doc(Context1)), DataJObj),
+            handle_datamgr_success(Merged, Context1)
     end;
 load_merge(_DocId, _DataJObj, Context, _Options, BypassJObj) ->
     handle_datamgr_success(BypassJObj, Context).
-
--spec merge(kz_json:object(), kz_json:object(), cb_context:context()) ->
-                   cb_context:context().
-merge(DataJObj, JObj, Context) ->
-    PrivJObj = kz_doc:private_fields(JObj),
-    handle_datamgr_success(kz_json:merge_jobjs(PrivJObj, DataJObj), Context).
 
 -type validate_fun() :: fun((ne_binary(), cb_context:context()) -> cb_context:context()).
 
 -spec patch_and_validate(ne_binary(), cb_context:context(), validate_fun()) ->
                                 cb_context:context().
--spec patch_and_validate_doc(ne_binary(), cb_context:context(), validate_fun(), crossbar_status()) ->
-                                    cb_context:context().
+-spec patch_and_validate(ne_binary(), cb_context:context(), validate_fun(), load_options()) ->
+                                cb_context:context().
 patch_and_validate(Id, Context, ValidateFun) ->
-    Context1 = load(Id, Context, ?TYPE_CHECK_OPTION_ANY),
+    patch_and_validate(Id, Context, ValidateFun, ?TYPE_CHECK_OPTION_ANY).
+
+patch_and_validate(Id, Context, ValidateFun, LoadOptions) ->
+    Context1 = load(Id, Context, LoadOptions),
     patch_and_validate_doc(Id, Context1, ValidateFun, cb_context:resp_status(Context1)).
 
+-spec patch_and_validate_doc(ne_binary(), cb_context:context(), validate_fun(), crossbar_status()) ->
+                                    cb_context:context().
 patch_and_validate_doc(Id, Context, ValidateFun, 'success') ->
     PatchedJObj = patch_the_doc(cb_context:req_data(Context), cb_context:doc(Context)),
     Context1 = cb_context:set_req_data(Context, PatchedJObj),
@@ -749,19 +748,22 @@ maybe_delete_doc(Context, DocId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(cb_context:context()) -> cb_context:context().
--spec delete(cb_context:context(), 'permanent' | 'soft') -> cb_context:context().
+-spec delete(cb_context:context(), boolean()) -> cb_context:context().
 
 delete(Context) ->
-    delete(Context, 'soft').
+    delete(Context, cb_context:should_soft_delete(Context)).
 
-delete(Context, 'soft') ->
+delete(Context, ?SOFT_DELETE) ->
     Doc = cb_context:doc(Context),
+    lager:info("soft-deleting doc ~s", [kz_doc:id(Doc)]),
     case kz_datamgr:lookup_doc_rev(cb_context:account_db(Context), kz_doc:id(Doc)) of
         {'ok', Rev}   -> soft_delete(Context, Rev);
         {'error', _E} -> soft_delete(Context, kz_doc:revision(Doc))
     end;
-delete(Context, 'permanent') ->
-    do_delete(Context, cb_context:doc(Context), fun kz_datamgr:del_doc/2).
+delete(Context, ?HARD_DELETE) ->
+    Doc = cb_context:doc(Context),
+    lager:info("hard-deleting doc ~s", [kz_doc:id(Doc)]),
+    do_delete(Context, Doc, fun kz_datamgr:del_doc/2).
 
 -spec soft_delete(cb_context:context(), api_binary()) -> cb_context:context().
 soft_delete(Context, Rev) ->
@@ -1108,6 +1110,15 @@ handle_json_success(JObj, Context, ?HTTP_PUT) ->
                        ,{fun cb_context:set_resp_data/2, kz_doc:public_fields(JObj)}
                        ,{fun cb_context:set_resp_etag/2, rev_to_etag(JObj)}
                        ,{fun cb_context:set_resp_headers/2, RespHeaders}
+                       ]);
+handle_json_success(JObj, Context, ?HTTP_DELETE) ->
+    Public = kz_doc:public_fields(JObj),
+    RespJObj = kz_json:set_value([<<"_read_only">>, <<"deleted">>], 'true', Public),
+    cb_context:setters(Context
+                      ,[{fun cb_context:set_doc/2, JObj}
+                       ,{fun cb_context:set_resp_status/2, 'success'}
+                       ,{fun cb_context:set_resp_data/2, RespJObj}
+                       ,{fun cb_context:set_resp_etag/2, rev_to_etag(JObj)}
                        ]);
 handle_json_success(JObj, Context, _Verb) ->
     cb_context:setters(Context

@@ -9,7 +9,7 @@
 -module(teletype_password_recovery).
 
 -export([init/0
-        ,handle_password_recovery/1
+        ,handle_req/1
         ]).
 
 -include("teletype.hrl").
@@ -20,8 +20,10 @@
 -define(TEMPLATE_MACROS
        ,kz_json:from_list(
           [?MACRO_VALUE(<<"link">>, <<"link">>, <<"Password Reset Link">>, <<"Link to reset password">>)
-           | ?ACCOUNT_MACROS ++ ?USER_MACROS
-          ])
+           | ?USER_MACROS
+           ++ ?COMMON_TEMPLATE_MACROS
+          ]
+         )
        ).
 
 -define(TEMPLATE_SUBJECT, <<"Reset your VoIP services user password">>).
@@ -47,12 +49,18 @@ init() ->
                                           ,{'bcc', ?TEMPLATE_BCC}
                                           ,{'reply_to', ?TEMPLATE_REPLY_TO}
                                           ]),
-    teletype_bindings:bind(<<"password_recovery">>, ?MODULE, 'handle_password_recovery').
+    teletype_bindings:bind(<<"password_recovery">>, ?MODULE, 'handle_req').
 
--spec handle_password_recovery(kz_json:object()) -> 'ok'.
-handle_password_recovery(JObj) ->
-    'true' = kapi_notifications:password_recovery_v(JObj),
-    kz_util:put_callid(JObj),
+-spec handle_req(kz_json:object()) -> 'ok'.
+handle_req(JObj) ->
+    handle_req(JObj, kapi_notifications:password_recovery_v(JObj)).
+
+-spec handle_req(kz_json:object(), boolean()) -> 'ok'.
+handle_req(JObj, 'false') ->
+    lager:debug("invalid data for ~s", [?TEMPLATE_ID]),
+    teletype_util:send_update(JObj, <<"failed">>, <<"validation_failed">>);
+handle_req(JObj, 'true') ->
+    lager:debug("valid data for ~s, processing...", [?TEMPLATE_ID]),
 
     %% Gather data for template
     DataJObj = kz_json:normalize(JObj),
@@ -63,17 +71,11 @@ handle_password_recovery(JObj) ->
         'true' -> process_req(DataJObj)
     end.
 
--spec get_user(kzd_user:doc()) -> kz_proplist().
-get_user(DataJObj) ->
-    [{<<"password">>, kz_json:get_value(<<"password">>, DataJObj)}
-     | teletype_util:user_params(DataJObj)
-    ].
-
 -spec build_macro_data(kz_json:object()) -> kz_proplist().
 build_macro_data(DataJObj) ->
     [{<<"system">>, teletype_util:system_params()}
     ,{<<"account">>, teletype_util:account_params(DataJObj)}
-    ,{<<"user">>, get_user(DataJObj)}
+    ,{<<"user">>, teletype_util:user_params(DataJObj)}
     ,{<<"link">>, [kz_json:get_value(<<"password_reset_link">>, DataJObj)]}
     ].
 
@@ -86,7 +88,7 @@ process_req(DataJObj) ->
 
     {'ok', TemplateMetaJObj} =
         teletype_templates:fetch_notification(?TEMPLATE_ID
-                                             ,teletype_util:find_account_id(DataJObj)
+                                             ,kapi_notifications:account_id(DataJObj)
                                              ),
 
     Subject = teletype_util:render_subject(kz_json:find(<<"subject">>, [DataJObj, TemplateMetaJObj], ?TEMPLATE_SUBJECT)
@@ -94,9 +96,31 @@ process_req(DataJObj) ->
                                           ),
 
     Emails0 = teletype_util:find_addresses(DataJObj, TemplateMetaJObj, ?MOD_CONFIG_CAT),
-    Emails = props:set_value(<<"to">>, [kz_json:get_value(<<"email">>, DataJObj)], Emails0),
+    Emails = props:set_value(<<"to">>, get_email_address(DataJObj, Emails0), Emails0),
 
     case teletype_util:send_email(Emails, Subject, RenderedTemplates) of
         'ok' -> teletype_util:send_update(DataJObj, <<"completed">>);
         {'error', Reason} -> teletype_util:send_update(DataJObj, <<"failed">>, Reason)
+    end.
+
+-spec get_email_address(kz_json:object(), kz_proplist()) -> api_ne_binaries().
+get_email_address(DataJObj, Emails0) ->
+    ToEmails = props:get_value(<<"to">>, Emails0),
+    case kz_json:get_value(<<"email">>, DataJObj) of
+        <<"Email">> ->
+            case teletype_util:is_preview(DataJObj) of
+                'true' -> ToEmails;
+                'false' -> []
+            end;
+        ?NE_BINARY=UserEmail ->
+            [UserEmail];
+        [] ->
+            ToEmails;
+        Emails when is_list(Emails) ->
+            case [E || E <- Emails, kz_term:is_ne_binary(E)] of
+                [] -> ToEmails;
+                Es -> Es
+            end;
+        _Other ->
+            ToEmails
     end.

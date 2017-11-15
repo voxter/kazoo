@@ -3,9 +3,6 @@
 set -x
 set -e
 
-echo "--- :dash: Running make clean"
-make clean
-
 echo "--- :construction: Running make"
 make
 

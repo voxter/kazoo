@@ -490,12 +490,9 @@ wait_for_listener(Supervisor, FSM, Props, IsThief) ->
 %%--------------------------------------------------------------------
 -spec wait(any(), state()) -> handle_fsm_ret(state()).
 -spec wait(any(), atom(), state()) -> handle_sync_event_ret(state()).
-wait({'listener', AgentListener, NextState, SyncRef}, #state{account_id=AccountId
-                                                            ,agent_id=AgentId
-                                                            }=State) ->
+wait({'listener', AgentListener, NextState, SyncRef}, State) ->
     lager:debug("setting agent proc to ~p", [AgentListener]),
     acdc_agent_listener:fsm_started(AgentListener, self()),
-    acdc_agent_stats:agent_ready(AccountId, AgentId),
     {'next_state', NextState, State#state{agent_listener=AgentListener
                                          ,sync_ref=SyncRef
                                          ,agent_listener_id=acdc_util:proc_id()
@@ -1034,6 +1031,10 @@ ringing('current_call', _, #state{member_call=Call
 %%--------------------------------------------------------------------
 -spec ringing_callback(any(), state()) -> handle_fsm_ret(state()).
 -spec ringing_callback(any(), atom(), state()) -> handle_sync_event_ret(state()).
+ringing_callback({'sync_req', JObj}, #state{agent_listener=AgentListener}=State) ->
+    lager:debug("recv sync_req from ~s", [kz_json:get_value(<<"Server-ID">>, JObj)]),
+    acdc_agent_listener:send_sync_resp(AgentListener, 'ringing_callback', JObj),
+    {'next_state', 'ringing_callback', State};
 ringing_callback({'originate_uuid', ACallId, ACtrlQ}, #state{agent_listener=AgentListener}=State) ->
     lager:debug("recv originate_uuid for agent call ~s(~s)", [ACallId, ACtrlQ]),
     acdc_agent_listener:originate_uuid(AgentListener, ACallId, ACtrlQ),
@@ -1167,6 +1168,10 @@ ringing_callback('current_call', _, #state{member_call=Call
 %%--------------------------------------------------------------------
 -spec awaiting_callback(any(), state()) -> handle_fsm_ret(state()).
 -spec awaiting_callback(any(), atom(), state()) -> handle_sync_event_ret(state()).
+awaiting_callback({'sync_req', JObj}, #state{agent_listener=AgentListener}=State) ->
+    lager:debug("recv sync_req from ~s", [kz_json:get_value(<<"Server-ID">>, JObj)]),
+    acdc_agent_listener:send_sync_resp(AgentListener, 'awaiting_callback', JObj),
+    {'next_state', 'awaiting_callback', State};
 awaiting_callback({'originate_uuid', MemberCallbackCallId, CtrlQ}, #state{member_callback_candidates=Candidates}=State) ->
     lager:debug("recv originate_uuid for member callback call ~s(~s)", [MemberCallbackCallId, CtrlQ]),
     {'next_state', 'awaiting_callback', State#state{member_callback_candidates=props:set_value(MemberCallbackCallId, CtrlQ, Candidates)}};
@@ -1688,6 +1693,10 @@ paused('current_call', _, State) ->
 
 -spec outbound(any(), state()) -> handle_fsm_ret(state()).
 -spec outbound(any(), atom(), state()) -> handle_sync_event_ret(state()).
+outbound({'sync_req', JObj}, #state{agent_listener=AgentListener}=State) ->
+    lager:debug("recv sync_req from ~s", [kz_json:get_value(<<"Server-ID">>, JObj)]),
+    acdc_agent_listener:send_sync_resp(AgentListener, 'outbound', JObj),
+    {'next_state', 'outbound', State};
 outbound({'playback_stop', _JObj}, State) ->
     {'next_state', 'outbound', State};
 outbound(?DESTROYED_CHANNEL(CallId, Cause), #state{agent_listener=AgentListener
@@ -1838,7 +1847,10 @@ handle_event({'update_presence', _, _}=Event, StateName, #state{agent_state_upda
     NewQueue = [Event | Queue],
     {'next_state', StateName, State#state{agent_state_updates=NewQueue}};
 handle_event({'refresh', AgentJObj}, StateName, #state{agent_listener=AgentListener}=State) ->
-    acdc_agent_listener:refresh_config(AgentListener, kz_json:get_value(<<"queues">>, AgentJObj), StateName),
+    acdc_agent_listener:refresh_config(AgentListener
+                                      ,kz_json:get_value(<<"queues">>, AgentJObj)
+                                      ,acdc_agent_util:agent_priority(AgentJObj)
+                                      ,StateName),
     {'next_state', StateName, State};
 handle_event('load_endpoints', StateName, #state{agent_listener='undefined'}=State) ->
     lager:debug("agent proc not ready, not loading endpoints yet"),

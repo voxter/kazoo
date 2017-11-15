@@ -52,7 +52,7 @@
         ,publish_shared_call_id/1, publish_shared_call_id/2
         ]).
 
--include_lib("kazoo/include/kz_types.hrl").
+-include_lib("kazoo_stdlib/include/kz_types.hrl").
 -include_lib("kazoo_amqp/include/kz_api.hrl").
 
 %%------------------------------------------------------------------------------
@@ -106,15 +106,15 @@ sync_req_routing_key(AcctId, Id) ->
 -define(OPTIONAL_SYNC_RESP_HEADERS, [<<"Call-ID">>, <<"Time-Left">>, <<"Process-ID">>]).
 -define(SYNC_RESP_VALUES, [{<<"Event-Category">>, <<"agent">>}
                           ,{<<"Event-Name">>, <<"sync_resp">>}
-                          ,{<<"Status">>, [<<"init">>
-                                          ,<<"sync">>
+                          ,{<<"Status">>, [<<"sync">>
                                           ,<<"ready">>
-                                          ,<<"waiting">>
                                           ,<<"ringing">>
+                                          ,<<"ringing_callback">>
+                                          ,<<"awaiting_callback">>
                                           ,<<"answered">>
                                           ,<<"wrapup">>
                                           ,<<"paused">>
-                                          ,<<"monitoring">>
+                                          ,<<"outbound">>
                                           ]}
                           ]).
 -define(SYNC_RESP_TYPES, []).

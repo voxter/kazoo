@@ -121,6 +121,10 @@
             "description": "Do not ring this device when calling user/agent in queue",
             "type": "boolean"
         },
+        "formatters": {
+            "$ref": "formatters",
+            "type": "object"
+        },
         "language": {
             "default": "en-us",
             "description": "The language for the device",
@@ -238,6 +242,10 @@
                         }
                     },
                     "type": "object"
+                },
+                "webrtc": {
+                    "description": "If true forces a webrtc compatible SDP on the INVITE.",
+                    "type": "boolean"
                 }
             },
             "type": "object"
@@ -408,10 +416,24 @@
             "description": "SIP Parameters",
             "properties": {
                 "custom_sip_headers": {
-                    "additionalProperties": {
-                        "type": "string"
-                    },
-                    "description": "A property list of SIP headers beging with the prefix 'X-'",
+                    "anyOf": [
+                        {
+                            "$ref": "custom_sip_headers"
+                        },
+                        {
+                            "properties": {
+                                "in": {
+                                    "$ref": "custom_sip_headers",
+                                    "description": "Custom SIP Headers to be applied to calls inbound to Kazoo from the endpoint"
+                                },
+                                "out": {
+                                    "$ref": "custom_sip_headers",
+                                    "description": "Custom SIP Headers to be applied to calls outbound from Kazoo to the endpoint"
+                                }
+                            }
+                        }
+                    ],
+                    "description": "A property list of SIP headers",
                     "type": "object"
                 },
                 "expire_seconds": {

@@ -10,7 +10,7 @@
 
 -include("teletype.hrl").
 
--export([init/2
+-export([init/1, init/2
         ,renderer_name/2
         ,render/2, render/3, render/4
         ,preview/3
@@ -18,6 +18,11 @@
         ,write_templates_to_disk/2
         ]).
 -export([doc_id/1]).
+-export([params/1]).
+
+-ifdef(TEST).
+-export([master_content_types/1]).
+-endif.
 
 -type macro() :: {ne_binary(), ne_binary() | number() | macros()}.
 -type macros() :: [macro()].
@@ -31,6 +36,32 @@
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
+-spec init(module()) -> ok.
+init(Module)
+  when is_atom(Module) ->
+    init(Module:id(), params(Module)).
+
+-spec params(module() | ne_binary()) -> kz_proplist().
+params(TemplateId=?NE_BINARY) ->
+    Module = kz_term:to_atom(<<(?APP_NAME)/binary, "_", TemplateId/binary>>, true),
+    params(Module);
+params(Module)
+  when is_atom(Module) ->
+    TemplateId = Module:id(),
+    ModConfigCat = teletype_util:mod_config_cat(TemplateId),
+    [{macros, Module:macros()}
+    ,{subject, Module:subject()}
+    ,{category, Module:category()}
+    ,{friendly_name, Module:friendly_name()}
+    ,{to, Module:to(ModConfigCat)}
+    ,{from, Module:from(ModConfigCat)}
+    ,{cc, Module:cc(ModConfigCat)}
+    ,{bcc, Module:bcc(ModConfigCat)}
+    ,{reply_to, Module:reply_to(ModConfigCat)}
+    ,{html, TemplateId}
+    ,{text, TemplateId}
+    ].
+
 -spec init(ne_binary(), init_params()) -> 'ok'.
 init(TemplateId, Params) ->
     UpdatedParams = props:set_values([{'html', TemplateId}
@@ -52,8 +83,8 @@ init(TemplateId, Params) ->
 
 -spec compile_master_renderers(ne_binary()) -> 'ok'.
 compile_master_renderers(TemplateId) ->
-    _ = [build_renderer(TemplateId, ContentType, Template) ||
-            {ContentType, Template} <- fetch_master_attachments(TemplateId)
+    _ = [build_renderer(TemplateId, ContentType, Template)
+         || {ContentType, Template} <- fetch_master_attachments(TemplateId)
         ],
     lager:debug("built master renderers for ~s", [TemplateId]).
 
@@ -62,7 +93,9 @@ build_renderer(TemplateId, ContentType, Template) ->
     ModuleName = renderer_name(TemplateId, ContentType),
     case kz_template:compile(Template, ModuleName,[{'auto_escape', 'false'}]) of
         {'ok', _} -> 'ok';
-        {'error', _} -> throw({'error', 'failed_template', ModuleName})
+        {'error', _E} ->
+            lager:debug("failed to render '~s': ~p", [TemplateId, _E]),
+            throw({'error', 'failed_template', ModuleName})
     end.
 
 -type template_attachment() :: {ne_binary(), binary()}.
@@ -74,9 +107,9 @@ fetch_master_attachments(TemplateId) ->
 
 -spec fetch_attachments(ne_binary(), ne_binary()) -> template_attachments().
 fetch_attachments(TemplateId, Account) ->
-    AccountDb = case Account of
-                    ?KZ_CONFIG_DB -> ?KZ_CONFIG_DB;
-                    Account -> kz_util:format_account_db(Account)
+    AccountDb = case ?KZ_CONFIG_DB =:= Account of
+                    true -> ?KZ_CONFIG_DB;
+                    false -> kz_util:format_account_db(Account)
                 end,
     DocId = doc_id(TemplateId),
     case fetch_notification(TemplateId, AccountDb) of
@@ -148,12 +181,12 @@ templates_source(_TemplateId, 'undefined') ->
     'undefined';
 templates_source(_TemplateId, ?KZ_CONFIG_DB) ->
     ?KZ_CONFIG_DB;
-templates_source(TemplateId, <<_/binary>> = AccountId) ->
-    lager:debug("trying to fetch template ~s for ~s", [TemplateId, AccountId]),
-    ResellerId = kz_services:find_reseller_id(AccountId),
+templates_source(TemplateId, ?MATCH_ACCOUNT_RAW(AccountId)) ->
+    ?LOG_DEBUG("trying to fetch template ~s for ~s", [TemplateId, AccountId]),
+    ResellerId = teletype_util:find_reseller_id(AccountId),
     templates_source(TemplateId, AccountId, ResellerId);
 templates_source(TemplateId, DataJObj) ->
-    case teletype_util:find_account_id(DataJObj) of
+    case kapi_notifications:account_id(DataJObj) of
         'undefined' -> ?KZ_CONFIG_DB;
         AccountId -> templates_source(TemplateId, AccountId)
     end.
@@ -169,6 +202,12 @@ templates_source(TemplateId, AccountId, AccountId) ->
         {'error', _E} -> 'undefined'
     end;
 templates_source(TemplateId, AccountId, ResellerId) ->
+    bypass_templates_source(TemplateId, AccountId, ResellerId).
+
+-ifdef(TEST).
+bypass_templates_source(?NE_BINARY, ?MATCH_ACCOUNT_RAW(_), ?MATCH_ACCOUNT_RAW(_)) -> ?KZ_CONFIG_DB.
+-else.
+bypass_templates_source(TemplateId, AccountId, ResellerId) ->
     case fetch_notification(TemplateId, AccountId) of
         {'error', 'not_found'} ->
             parent_templates_source(TemplateId, AccountId, ResellerId);
@@ -176,6 +215,7 @@ templates_source(TemplateId, AccountId, ResellerId) ->
             templates_source_has_attachments(TemplateId, AccountId, ResellerId, Template);
         {'error', _E} -> 'undefined'
     end.
+-endif.
 
 -spec templates_source_has_attachments(ne_binary(), ne_binary(), ne_binary(), kz_json:object()) ->
                                               api_binary().
@@ -199,12 +239,12 @@ parent_templates_source(TemplateId, AccountId, ResellerId) ->
 fetch_notification(TemplateId, ?KZ_CONFIG_DB) ->
     fetch_notification(TemplateId, ?KZ_CONFIG_DB, 'undefined');
 fetch_notification(TemplateId, Account) ->
-    fetch_notification(TemplateId, Account, kz_services:find_reseller_id(Account)).
+    fetch_notification(TemplateId, Account, teletype_util:find_reseller_id(Account)).
 
 fetch_notification(TemplateId, 'undefined', _ResellerId) ->
     kz_datamgr:open_cache_doc(?KZ_CONFIG_DB, doc_id(TemplateId), [{'cache_failures', ['not_found']}]);
-fetch_notification(TemplateId, ?KZ_CONFIG_DB, _ResellerId) ->
-    kz_datamgr:open_cache_doc(?KZ_CONFIG_DB, doc_id(TemplateId), [{'cache_failures', ['not_found']}]);
+fetch_notification(TemplateId, Db=?KZ_CONFIG_DB, _ResellerId) ->
+    kz_datamgr:open_cache_doc(Db, doc_id(TemplateId), [{'cache_failures', ['not_found']}]);
 fetch_notification(TemplateId, AccountId, AccountId) ->
     AccountDb = kz_util:format_account_db(AccountId),
     DocId = doc_id(TemplateId),
@@ -229,29 +269,37 @@ render_masters(TemplateId, Macros) ->
     ].
 
 master_content_types(TemplateId) ->
-    case fetch_notification(TemplateId, ?KZ_CONFIG_DB) of
+    case from_system_config(TemplateId) of
         {'ok', NotificationJObj} ->
-            kz_json:foldl(fun master_content_type/3
-                         ,[]
-                         ,kz_doc:attachments(NotificationJObj)
-                         );
+            [kz_json:get_ne_binary_value(<<"content_type">>, AttachmentJObj)
+             || {_,AttachmentJObj} <- kz_json:to_proplist(kz_doc:attachments(NotificationJObj))
+            ];
         {'error', _E} ->
             lager:warning("failed to find master notification ~s", [TemplateId]),
             []
     end.
 
--spec master_content_type(ne_binary(), kz_json:object(), ne_binaries()) -> ne_binaries().
-master_content_type(_AttachmentName, AttachmentProps, Acc) ->
-    [kz_json:get_value(<<"content_type">>, AttachmentProps) | Acc].
+-ifdef(TEST).
+from_system_config(?NE_BINARY=TemplateId) ->
+    JObj = kz_json:from_list(lists:keymap(fun kz_term:to_binary/1, 1, params(TemplateId))),
+    FakeAttachments = kz_json:from_list_recursive(
+                        [{<<"template.text/html">>, [{<<"content_type">>, <<"text/html">>}]}
+                        ,{<<"template.text/plain">>, [{<<"content_type">>, <<"text/plain">>}]}
+                        ]),
+    {ok, kz_json:set_value(<<"_attachments">>, FakeAttachments, JObj)}.
+-else.
+from_system_config(TemplateId) -> fetch_notification(TemplateId, ?KZ_CONFIG_DB).
+-endif.
 
 -spec render_master(ne_binary(), ne_binary(), macros()) -> ne_binary().
-render_master(<<_/binary>> = TemplateId, <<_/binary>> = ContentType, Macros) ->
+render_master(?NE_BINARY=TemplateId, ?NE_BINARY=ContentType, Macros) ->
     ModuleName = renderer_name(TemplateId, ContentType),
     case kz_template:render(ModuleName, Macros) of
         {'ok', IOList} ->
             iolist_to_binary(IOList);
-        {'error', _} ->
-            throw({'error', 'template_error'})
+        {'error', _R} ->
+            lager:debug("failed to render '~s': ~p", [TemplateId, _R]),
+            throw({'error', 'template_error', <<"failed to render template ", TemplateId/binary>>})
     end.
 
 -spec render_accounts(ne_binary(), ne_binary(), macros()) -> kz_proplist().
@@ -595,7 +643,7 @@ update_macro(MacroKey, MacroValue, {_IsUpdated, TemplateJObj}=Acc) ->
 %%--------------------------------------------------------------------
 -spec attachment_name(ne_binary()) -> ne_binary().
 attachment_name(ContentType) ->
-    kz_binary:clean(<<"template.", (kz_http_util:urlencode(ContentType))/binary>>).
+    kz_binary:clean(<<"template.", ContentType/binary>>).
 
 %%--------------------------------------------------------------------
 %% @private

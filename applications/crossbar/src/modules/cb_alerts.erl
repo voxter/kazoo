@@ -264,7 +264,7 @@ view_keys(Context) ->
     AccountId = cb_context:account_id(Context),
     OwnerId = kz_json:get_value(<<"owner_id">>, AuthDoc),
 
-    IsAdmin = is_user_admin(AccountId, OwnerId),
+    IsAdmin = kzd_user:is_account_admin(AccountId, OwnerId),
 
     Routines = [fun(K) ->
                         [[<<"all">>, <<"all">>]
@@ -307,25 +307,6 @@ view_keys(Context) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec is_user_admin(ne_binary(), api_binary()) -> boolean().
-is_user_admin(_Account, 'undefined') -> 'false';
-is_user_admin(Account, UserId) ->
-    AccountDb = kz_util:format_account_id(Account, 'encoded'),
-    case kz_datamgr:open_cache_doc(AccountDb, UserId) of
-        {'error', _} -> 'false';
-        {'ok', JObj} ->
-            case kz_json:get_value(<<"priv_level">>, JObj) of
-                <<"admin">> -> 'true';
-                _ -> 'false'
-            end
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%%
-%% @end
-%%--------------------------------------------------------------------
 -spec add_descendants(ne_binary(), boolean(), list()) -> list().
 add_descendants(Descendant, 'false', Keys) ->
     [[<<"descendants">>, [Descendant, <<"all">>]]
@@ -342,7 +323,7 @@ add_descendants(Descendant, 'true', Keys) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Normalizes the resuts of a view
+%% Normalizes the results of a view
 %% @end
 %%--------------------------------------------------------------------
 -spec normalize_view_results(kz_json:object(), kz_json:objects()) -> kz_json:objects().

@@ -32,7 +32,6 @@
 
 -define(STATUS_PATH_TOKEN, <<"status">>).
 -define(CHECK_SYNC_PATH_TOKEN, <<"sync">>).
--define(OWNED_BY_PATH_TOKEN, <<"owned_by">>).
 
 -define(MOD_CONFIG_CAT, <<(?CONFIG_CAT)/binary, ".devices">>).
 
@@ -94,9 +93,7 @@ allowed_methods(_DeviceId) ->
     [?HTTP_GET, ?HTTP_PATCH, ?HTTP_POST, ?HTTP_DELETE].
 
 allowed_methods(_DeviceId, ?CHECK_SYNC_PATH_TOKEN) ->
-    [?HTTP_POST];
-allowed_methods(?OWNED_BY_PATH_TOKEN, _UserId) ->
-    [?HTTP_GET].
+    [?HTTP_POST].
 
 allowed_methods(_DeviceId, ?QUICKCALL_PATH_TOKEN, _PhoneNumber) ->
     [?HTTP_GET].
@@ -116,8 +113,7 @@ allowed_methods(_DeviceId, ?QUICKCALL_PATH_TOKEN, _PhoneNumber) ->
 
 resource_exists() -> 'true'.
 resource_exists(_DeviceId) -> 'true'.
-resource_exists(_DeviceId, ?CHECK_SYNC_PATH_TOKEN) -> 'true';
-resource_exists(?OWNED_BY_PATH_TOKEN, _) -> 'true'.
+resource_exists(_DeviceId, ?CHECK_SYNC_PATH_TOKEN) -> 'true'.
 resource_exists(_DeviceId, ?QUICKCALL_PATH_TOKEN, _Number) -> 'true'.
 
 %%--------------------------------------------------------------------
@@ -244,9 +240,7 @@ validate_patch(Context, DeviceId) ->
     crossbar_doc:patch_and_validate(DeviceId, Context, fun validate_request/2).
 
 validate(Context, DeviceId, ?CHECK_SYNC_PATH_TOKEN) ->
-    load_device(DeviceId, Context);
-validate(Context, ?OWNED_BY_PATH_TOKEN, UserId) ->
-    load_users_device_summary(Context, UserId).
+    load_device(DeviceId, Context).
 
 validate(Context, DeviceId, ?QUICKCALL_PATH_TOKEN, _ToDial) ->
     Context1 = crossbar_util:maybe_validate_quickcall(load_device(DeviceId, Context)),
@@ -681,7 +675,7 @@ load_device_status(Context) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Normalizes the resuts of a view
+%% Normalizes the results of a view
 %% @end
 %%--------------------------------------------------------------------
 -spec normalize_view_results(kz_json:object(), kz_json:objects()) -> kz_json:objects().
@@ -896,7 +890,7 @@ remove_if_mobile(MDN, Context) ->
                 Mobile ->
                     lager:debug("hard removing old mdn ~s with mobile properties ~s"
                                ,[Normalized, kz_json:encode(Mobile)]),
-                    _ = knm_number:release(Normalized, knm_number_options:mdn_options()),
+                    _ = knm_number:delete(Normalized, knm_number_options:mdn_options()),
                     Context
             end;
         {'error', _R} ->

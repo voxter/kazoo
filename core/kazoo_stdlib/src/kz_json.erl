@@ -35,6 +35,7 @@
 -export([is_true/2, is_true/3, is_false/2, is_false/3]).
 -export([is_empty/1]).
 -export([is_json_object/1, is_json_object/2
+        ,are_json_objects/1
         ,is_valid_json_object/1
         ,is_json_term/1
         ]).
@@ -98,7 +99,7 @@
 
 -export([order_by/3]).
 
--include_lib("kazoo/include/kz_log.hrl").
+-include_lib("kazoo_stdlib/include/kz_log.hrl").
 -include_lib("kazoo_stdlib/include/kazoo_json.hrl").
 
 -export_type([json_proplist/0
@@ -195,6 +196,10 @@ is_json_object(_) -> 'false'.
 is_json_object(Key, JObj) ->
     is_json_object(get_value(Key, JObj)).
 
+-spec are_json_objects(list()) -> boolean().
+are_json_objects(JObjs) when is_list(JObjs) ->
+    lists:all(fun is_json_object/1, JObjs).
+
 -spec is_valid_json_object(any()) -> boolean().
 is_valid_json_object(MaybeJObj) ->
     try
@@ -269,7 +274,7 @@ recursive_from_list(X) when is_list(X) ->
         'false' -> [recursive_from_list(Xn) || Xn <- X]
     end;
 recursive_from_list(X) when is_binary(X) -> X;
-recursive_from_list({_Y, _M, _D}=Date) -> kz_time:iso8601_date(Date);
+recursive_from_list({_Y, _M, _D}=Date) -> kz_date:to_iso8601_extended(Date);
 recursive_from_list({{_, _, _}, {_, _, _}}=DateTime) -> kz_time:iso8601(DateTime);
 recursive_from_list(_Else) -> null.
 
@@ -1057,8 +1062,8 @@ no_prune([K], JObj) when not is_list(JObj) ->
         [] -> new();
         L -> from_list(L)
     end;
-no_prune([K|T], Array) when is_list(Array) ->
-    {Less, [V|More]} = lists:split(kz_term:to_integer(K)-1, Array),
+no_prune([K|T], Array) when is_list(Array), is_integer(K) ->
+    {Less, [V|More]} = lists:split(K-1, Array),
     case {is_json_object(V), T, V} of
         {'true', [_|_]=Keys, JObj} ->
             Less ++ [no_prune(Keys, JObj)] ++ More;

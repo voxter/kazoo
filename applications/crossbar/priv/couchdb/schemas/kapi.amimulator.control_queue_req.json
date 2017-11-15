@@ -1,0 +1,26 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "kapi.amimulator.control_queue_req",
+    "description": "AMQP API for amimulator.control_queue_req",
+    "properties": {
+        "Call-ID": {
+            "type": "string"
+        },
+        "Event-Category": {
+            "enum": [
+                "amimulator"
+            ],
+            "type": "string"
+        },
+        "Event-Name": {
+            "enum": [
+                "control_queue_req"
+            ],
+            "type": "string"
+        }
+    },
+    "required": [
+        "Call-ID"
+    ],
+    "type": "object"
+}

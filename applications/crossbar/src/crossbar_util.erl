@@ -63,7 +63,6 @@
         ,get_token_restrictions/3
         ]).
 -export([get_user_timezone/2
-        ,get_account_timezone/1
         ]).
 -export([apply_response_map/2]).
 -export([maybe_remove_attachments/1]).
@@ -698,14 +697,13 @@ enable_account(AccountId) ->
 -spec response_auth(kz_json:object(), api_binary(), api_binary(), api_binary()) ->
                            kz_json:object().
 response_auth(JObj) ->
-    response_auth(JObj
-                 ,kz_json:get_first_defined([<<"account_id">>, <<"pvt_account_id">>], JObj)
-                 ,kz_json:get_first_defined([<<"owner_id">>, <<"user_id">>], JObj)
-                 ).
+    AccountId = kz_json:get_first_defined([<<"account_id">>, <<"pvt_account_id">>], JObj),
+    OwnerId = kz_json:get_first_defined([<<"owner_id">>, <<"user_id">>], JObj),
+    response_auth(JObj, AccountId, OwnerId).
 
 response_auth(JObj, AccountId) ->
-    UserId  = kz_json:get_value(<<"owner_id">>, JObj),
-    response_auth(JObj, AccountId, UserId).
+    OwnerId = kz_json:get_first_defined([<<"owner_id">>, <<"user_id">>], JObj),
+    response_auth(JObj, AccountId, OwnerId).
 
 response_auth(JObj, AccountId, UserId) ->
     response_auth(JObj, AccountId, UserId, 'undefined').
@@ -717,9 +715,10 @@ response_auth(JObj, AccountId, UserId, AuthRefreshToken) ->
                            kz_json:object().
 populate_resp(JObj, 'undefined', _UserId, _AuthRefreshToken) -> JObj;
 populate_resp(JObj, AccountId, UserId, AuthRefreshToken) ->
+    Language = get_language(AccountId, UserId),
     Props = props:filter_undefined(
-              [{<<"apps">>, load_apps(AccountId, UserId)}
-              ,{<<"language">>, get_language(AccountId, UserId)}
+              [{<<"apps">>, load_apps(AccountId, UserId, Language)}
+              ,{<<"language">>, Language}
               ,{<<"account_name">>, kapps_util:get_account_name(AccountId)}
               ,{<<"is_reseller">>, kz_services:is_reseller(AccountId)}
               ,{<<"reseller_id">>, kz_services:find_reseller_id(AccountId)}
@@ -734,34 +733,13 @@ populate_resp(JObj, AccountId, UserId, AuthRefreshToken) ->
 %%--------------------------------------------------------------------
 -spec load_apps(ne_binary(), ne_binary()) -> kz_json:objects().
 load_apps(AccountId, UserId) ->
-    Apps = cb_apps_util:allowed_apps(AccountId),
-    FilteredApps = filter_apps(Apps, AccountId, UserId),
-    format_apps(AccountId, UserId, FilteredApps).
+    Language = get_language(AccountId, UserId),
+    load_apps(AccountId, UserId, Language).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
--spec filter_apps(kz_json:objects(), ne_binary(), ne_binary()) ->
-                         kz_json:objects().
-filter_apps(Apps, AccountId, UserId) ->
-    OnlyAuthorized =
-        fun(App) ->
-                AppId = kz_doc:id(App),
-                cb_apps_util:is_authorized(AccountId, UserId, AppId)
-        end,
-    lists:filter(OnlyAuthorized, Apps).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% @end
-%%--------------------------------------------------------------------
--spec format_apps(ne_binary(), ne_binary(), kz_json:objects()) -> kz_json:objects().
-format_apps(AccountId=?NE_BINARY, UserId, AppJObjs) ->
-    Lang = get_language(AccountId, UserId),
-    [format_app(Lang, AppJObj)
+-spec load_apps(ne_binary(), ne_binary(), ne_binary()) -> kz_json:objects().
+load_apps(AccountId, UserId, Language) ->
+    AppJObjs = cb_apps_util:authorized_apps(AccountId, UserId),
+    [format_app(Language, AppJObj)
      || AppJObj <- AppJObjs
     ].
 
@@ -868,23 +846,11 @@ get_account_lang(AccountId) ->
             'error'
     end.
 
--spec get_user_timezone(api_ne_binary(), api_ne_binary()) -> api_ne_binary().
-get_user_timezone(AccountId, 'undefined') ->
-    get_account_timezone(AccountId);
+-spec get_user_timezone(api_ne_binary(), api_ne_binary()) -> ne_binary().
 get_user_timezone(AccountId, UserId) ->
-    AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
-    case kz_datamgr:open_cache_doc(AccountDb, UserId) of
+    case kzd_user:fetch(AccountId, UserId) of
         {'ok', UserJObj} -> kzd_user:timezone(UserJObj);
-        {'error', _E} -> get_account_timezone(AccountId)
-    end.
-
--spec get_account_timezone(api_ne_binary()) -> api_ne_binary().
-get_account_timezone('undefined') ->
-    'undefined';
-get_account_timezone(AccountId) ->
-    case kz_account:fetch(AccountId) of
-        {'ok', AccountJObj} -> kz_account:timezone(AccountJObj);
-        {'error', _E} -> 'undefined'
+        {'error', _E} -> kz_account:timezone(AccountId)
     end.
 
 -spec apply_response_map(cb_context:context(), kz_proplist()) -> cb_context:context().
@@ -994,8 +960,10 @@ get_priv_level(_AccountId, 'undefined') ->
     cb_token_restrictions:default_priv_level();
 get_priv_level(AccountId, OwnerId) ->
     AccountDB = kz_util:format_account_db(AccountId),
-    {'ok', Doc} = kz_datamgr:open_cache_doc(AccountDB, OwnerId),
-    kz_json:get_ne_value(<<"priv_level">>, Doc).
+    case kz_datamgr:open_cache_doc(AccountDB, OwnerId) of
+        {'ok', Doc} -> kzd_user:priv_level(Doc);
+        {'error', _} -> cb_token_restrictions:default_priv_level()
+    end.
 
 -spec get_system_token_restrictions(atom()) -> api_object().
 get_system_token_restrictions(AuthModule) ->
@@ -1112,7 +1080,7 @@ format_emergency_caller_id_number(Context, Emergency) ->
     end.
 
 %% @public
--type refresh_type() :: 'user' | 'device' | 'sys_info'.
+-type refresh_type() :: 'user' | 'device' | 'sys_info' | 'account'.
 
 -spec maybe_refresh_fs_xml(refresh_type(), cb_context:context()) -> 'ok'.
 maybe_refresh_fs_xml(Kind, Context) ->
@@ -1150,6 +1118,10 @@ maybe_refresh_fs_xml('device', Context, Precondition) ->
                               ,DbDoc
                               ),
     'ok';
+maybe_refresh_fs_xml('account', Context, _) ->
+    Devices = get_account_devices(cb_context:account_id(Context)),
+    Realm = kz_util:get_account_realm(cb_context:account_db(Context)),
+    lists:foreach(fun(DevDoc) -> refresh_fs_xml(Realm, DevDoc) end, Devices);
 maybe_refresh_fs_xml('sys_info', Context, Precondition) ->
     Doc = cb_context:doc(Context),
     Servers = kz_json:get_value(<<"servers">>, Doc, []),
@@ -1215,7 +1187,7 @@ refresh_fs_xml(Context) ->
 
 -spec refresh_fs_xml(ne_binary(), kz_json:object()) -> 'ok'.
 refresh_fs_xml(Realm, Doc) ->
-    case kz_device:sip_username(Doc) of
+    case kz_device:sip_username(Doc, kz_json:get_value(<<"username">>, Doc)) of
         'undefined' -> 'ok';
         Username ->
             lager:debug("flushing fs xml for user '~s' at '~s'", [Username,Realm]),
@@ -1237,6 +1209,17 @@ get_devices_by_owner(AccountDb, OwnerId) ->
         {'ok', JObjs} -> [kz_json:get_value(<<"doc">>, JObj) || JObj <- JObjs];
         {'error', _R} ->
             lager:warning("unable to find documents owned by ~s: ~p", [OwnerId, _R]),
+            []
+    end.
+
+-spec get_account_devices(api_binary()) -> ne_binaries().
+get_account_devices('undefined') -> [];
+get_account_devices(Account) ->
+    AccountDb = kz_util:format_account_db(Account),
+    case kz_datamgr:get_results(AccountDb, <<"devices/crossbar_listing">>, []) of
+        {'ok', JObjs} -> [kz_json:get_value(<<"value">>, JObj) || JObj <- JObjs];
+        {'error', _R} ->
+            lager:warning("unable to find device documents owned by ~s: ~p", [AccountDb, _R]),
             []
     end.
 
@@ -1336,13 +1319,11 @@ maybe_validate_quickcall(Context) ->
     end.
 
 maybe_validate_quickcall(Context, 'success') ->
-    AllowAnon = kz_json:get_value(<<"allow_anonymous_quickcalls">>, cb_context:doc(Context)),
+    AllowAnon = kz_json:is_true(<<"allow_anonymous_quickcalls">>, cb_context:doc(Context)),
 
-    case kz_term:is_true(AllowAnon)
+    case AllowAnon
         orelse cb_context:is_authenticated(Context)
-        orelse (AllowAnon =:= 'undefined'
-                andalso kapps_config:get_is_true(?CONFIG_CAT, <<"default_allow_anonymous_quickcalls">>, 'true')
-               )
+        orelse kapps_config:get_is_true(?CONFIG_CAT, <<"default_allow_anonymous_quickcalls">>, 'true')
     of
         'false' -> cb_context:add_system_error('invalid_credentials', Context);
         'true' -> Context

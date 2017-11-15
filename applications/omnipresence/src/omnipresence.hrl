@@ -1,9 +1,9 @@
 -ifndef(OMNIPRESENCE_HRL).
 
 %% Typical includes needed
--include_lib("kazoo/include/kz_types.hrl").
--include_lib("kazoo/include/kz_log.hrl").
--include_lib("kazoo/include/kz_databases.hrl").
+-include_lib("kazoo_stdlib/include/kz_types.hrl").
+-include_lib("kazoo_stdlib/include/kz_log.hrl").
+-include_lib("kazoo_stdlib/include/kz_databases.hrl").
 
 -define(APP_NAME, <<"omnipresence">>).
 -define(APP_VERSION, <<"4.0.0">>).
@@ -32,7 +32,6 @@
                             ,stalker                              :: api_binary() | '_' | '$2' % amqp queue to publish updates to
                             ,expires = 0                          :: non_neg_integer() | '_' | '$2'
                             ,timestamp = kz_time:current_tstamp() :: gregorian_seconds() | '_' | '$1'
-                            ,protocol = <<"sip">>                 :: ne_binary() | '_' % protocol
                             ,username                             :: api_binary() | '_'
                             ,realm                                :: api_binary() | '_'
                             ,normalized_user                      :: api_binary() | '_' | '$1'

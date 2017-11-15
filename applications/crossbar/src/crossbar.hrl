@@ -1,8 +1,8 @@
 -ifndef(CROSSBAR_HRL).
 
--include_lib("kazoo/include/kz_types.hrl").
--include_lib("kazoo/include/kz_log.hrl").
--include_lib("kazoo/include/kz_databases.hrl").
+-include_lib("kazoo_stdlib/include/kz_types.hrl").
+-include_lib("kazoo_stdlib/include/kz_log.hrl").
+-include_lib("kazoo_stdlib/include/kz_databases.hrl").
 -include_lib("kazoo/include/kz_system_config.hrl").
 -include_lib("kazoo_documents/include/kazoo_documents.hrl").
 
@@ -105,6 +105,7 @@
                          ,'cb_services'
                          ,'cb_simple_authz'
                          ,'cb_sms'
+                         ,'cb_tasks'
                          ,'cb_templates'
                          ,'cb_temporal_rules'
                          ,'cb_temporal_rules_sets'
@@ -179,10 +180,10 @@
                     ,host_url = <<>> :: binary()
                     }).
 
--define(MAX_RANGE, kapps_config:get_integer(?CONFIG_CAT
-                                           ,<<"maximum_range">>
-                                           ,(?SECONDS_IN_DAY * 31 + ?SECONDS_IN_HOUR)
-                                           )
+-define(MAX_RANGE, kapps_config:get_pos_integer(?CONFIG_CAT
+                                               ,<<"maximum_range">>
+                                               ,(?SECONDS_IN_DAY * 31 + ?SECONDS_IN_HOUR)
+                                               )
        ).
 
 -define(OPTION_EXPECTED_TYPE, 'expected_type').
