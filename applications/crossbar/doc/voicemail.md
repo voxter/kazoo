@@ -22,7 +22,7 @@ Schema for a voicemail box
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `check_if_owner` | Determines if when the user calls their own voicemail they should be prompted to sign in | `boolean()` | `true` | `false`
-`delete_after_notify` | Delete the voicemail after the notification has been sent (Voicemail is not stored in the database if this option is selected) | `boolean()` | `false` | `false`
+`delete_after_notify` | Move the voicemail to delete folder after the notification has been sent | `boolean()` | `false` | `false`
 `hunt` | Determines if the callers can dial internal extensions directly instead of leaving a message | `boolean()` | `true` | `false`
 `hunt_allow` | A regular expression that an extension the caller dialed must match to be allowed to continue | `string(1..256)` |   | `false`
 `hunt_deny` | A regular expression that if matched does not allow the caller to dial directly | `string(1..256)` |   | `false`
@@ -40,7 +40,7 @@ Key | Description | Type | Default | Required
 `owner_id` | The ID of the user object that 'owns' the voicemail box | `string(32)` |   | `false`
 `pin` | The pin number for the voicemail box | `string(4..15)` |   | `false`
 `require_pin` | Determines if a pin is required to check the voicemail from the users devices | `boolean()` | `false` | `false`
-`save_after_notify` | Save the voicemail after the notification has been sent (This setting will override delete_after_notify) | `boolean()` | `false` | `false`
+`save_after_notify` | Move the voicemail to save folder after the notification has been sent (This setting will override delete_after_notify) | `boolean()` | `false` | `false`
 `skip_greeting` | Determines if the greeting should be skipped | `boolean()` | `false` | `false`
 `skip_instructions` | Determines if the instructions after the greeting and prior to composing a message should be played | `boolean()` | `false` | `false`
 `timezone` | The default timezone | `string(5..32)` |   | `false`

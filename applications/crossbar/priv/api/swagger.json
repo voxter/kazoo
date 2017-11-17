@@ -18659,7 +18659,13 @@
                 "From": {
                     "type": "string"
                 },
+                "From-Realm": {
+                    "type": "string"
+                },
                 "From-Tag": {
+                    "type": "string"
+                },
+                "From-User": {
                     "type": "string"
                 },
                 "Presence-ID": {
@@ -18685,7 +18691,13 @@
                 "To": {
                     "type": "string"
                 },
+                "To-Realm": {
+                    "type": "string"
+                },
                 "To-Tag": {
+                    "type": "string"
+                },
+                "To-User": {
                     "type": "string"
                 }
             },
@@ -25587,7 +25599,8 @@
                             "description": "Default media file format for Callflow modules",
                             "type": "string"
                         }
-                    }
+                    },
+                    "type": "object"
                 },
                 "calls_consume_tokens": {
                     "default": true,
@@ -25698,7 +25711,7 @@
                         },
                         "message_retention_duration": {
                             "default": 93,
-                            "description": "callflow message retention duration",
+                            "description": "Voicemail message retention duration in days",
                             "type": "integer"
                         },
                         "migrate_interaccount_delay_ms": {
@@ -25731,7 +25744,8 @@
                             "description": "Enable or disable the ability to prepend a message when forwarding a voicemail message",
                             "type": "string"
                         }
-                    }
+                    },
+                    "type": "object"
                 }
             },
             "type": "object"
@@ -29647,6 +29661,12 @@
                     "description": "smtp_client retries",
                     "type": "integer"
                 },
+                "send_timeout_ms": {
+                    "default": 10000,
+                    "description": "Timeout in milliseconds waiting for response from SMTP server",
+                    "minimum": 1,
+                    "type": "integer"
+                },
                 "tls": {
                     "description": "smtp_client tls",
                     "type": "string"
@@ -31268,7 +31288,7 @@
                 },
                 "delete_after_notify": {
                     "default": false,
-                    "description": "Delete the voicemail after the notification has been sent (Voicemail is not stored in the database if this option is selected)",
+                    "description": "Move the voicemail to delete folder after the notification has been sent",
                     "type": "boolean"
                 },
                 "hunt": {
@@ -31369,7 +31389,7 @@
                 },
                 "save_after_notify": {
                     "default": false,
-                    "description": "Save the voicemail after the notification has been sent (This setting will override delete_after_notify)",
+                    "description": "Move the voicemail to save folder after the notification has been sent (This setting will override delete_after_notify)",
                     "type": "boolean"
                 },
                 "skip_greeting": {
