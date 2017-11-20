@@ -602,6 +602,28 @@ curl -v -X POST \
 }
 ```
 
+#### Send a SIP NOTIFY to a device
+
+Kazoo will generate the NOTIFY packet if the device is registered.
+
+POST body options:
+
+Key | Type | Description
+--- | ---- | -----------
+`event` | `string()` | The value of the Event header in the NOTIFY packet
+
+> POST /v2/accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}/notify
+
+```shell
+curl -v -X POST \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{"data":{
+        "event": "event",
+        }}' \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}/notify
+```
+
 #### Execute a quick call
 
 Ring the device; once answered, connect to `{PHONE_NUMBER}`

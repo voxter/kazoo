@@ -301,6 +301,16 @@ curl -v -X POST \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}/sync
 ```
 
+#### Change
+
+> POST /v2/accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}/notify
+
+```shell
+curl -v -X POST \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}/notify
+```
+
 #### Fetch
 
 > GET /v2/accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}/quickcall/{PHONE_NUMBER}
