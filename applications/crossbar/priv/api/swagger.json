@@ -42617,15 +42617,6 @@
                 }
             }
         },
-        "/auth/refresh": {
-            "post": {
-                "responses": {
-                    "200": {
-                        "description": "request succeeded"
-                    }
-                }
-            }
-        },
         "/auth/tokeninfo": {
             "get": {
                 "responses": {
