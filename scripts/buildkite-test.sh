@@ -43,7 +43,7 @@ echo "--- Script validate-js"
 echo "--- Make apis"
 make apis
 
-echo "--- Make docs"
+# echo "--- Make docs"
 # make docs
 
 echo "--- Make validate-schemas"
