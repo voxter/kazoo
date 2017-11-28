@@ -29729,7 +29729,7 @@
                 },
                 "asr_preferred_content_type": {
                     "default": "application/wav",
-                    "description": "speech asr prefered content type",
+                    "description": "speech asr preferred content type",
                     "type": "string"
                 },
                 "asr_provider": {
