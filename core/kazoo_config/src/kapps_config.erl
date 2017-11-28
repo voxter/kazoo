@@ -974,6 +974,10 @@ get_category(Category, 'false') ->
         ,{{<<"media">>, <<"tts_cache">>}
          ,{<<"speech">>, <<"tts_cache">>}
          }
+
+        ,{{<<"speech">>, <<"asr_prefered_content_type">>}
+         ,{<<"speech">>, <<"asr_preferred_content_type">>}
+         }
         ]).
 
 -spec migrate() -> 'ok'.
