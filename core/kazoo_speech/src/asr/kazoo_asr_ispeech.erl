@@ -39,14 +39,14 @@ validate_content_type(ContentType) ->
 freeform(Content, ContentType, Locale, Options) ->
     case maybe_convert_content(Content, ContentType) of
         {'error', _}=E -> E;
-        Content1 -> exec_freeform(Content1, ContentType, Locale, Options)
+        {Content1, ContentType1} -> exec_freeform(Content1, ContentType1, Locale, Options)
     end.
 
 -spec commands(ne_binary(), ne_binaries(), ne_binary(), ne_binary(), kz_proplist()) -> asr_resp().
 commands(Content, Commands, ContentType, Locale, Options) ->
     case maybe_convert_content(Content, ContentType) of
         {'error', _}=E -> E;
-        Content1 -> exec_commands(Content1, Commands, ContentType, Locale, Options)
+        {Content1, ContentType1} -> exec_commands(Content1, Commands, ContentType1, Locale, Options)
     end.
 
 -spec make_request(ne_binary(), kz_proplist(), iolist(), kz_proplist()) -> kz_http:ret().
