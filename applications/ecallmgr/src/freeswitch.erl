@@ -28,7 +28,6 @@
         ]).
 -export([nixevent/2]).
 -export([sendevent/3
-        ,sendevent/5
         ,sendevent_custom/3
         ]).
 -export([sendmsg/3]).
@@ -314,19 +313,8 @@ nixevent(Node, Event) ->
     nixevent(Node, [Event]).
 
 -spec sendevent(atom(), ne_binary(), list()) -> 'ok'.
--spec sendevent(atom(), ne_binary(), list(), api_binary(), api_binary()) -> 'ok'.
 sendevent(Node, EventName, Headers) ->
-    sendevent(Node, EventName, Headers, 'undefined', 'undefined').
-
-sendevent(Node, EventName, Headers, 'undefined', _) ->
-    gen_server:cast({'mod_kazoo', Node}, {'sendevent', EventName, Headers});
-sendevent(Node, EventName, Headers, Body, ContentType) ->
-    Headers1 = [{"body", Body}
-               ,{"content-length", kz_term:to_list(byte_size(Body))}
-               ,{"content-type", ContentType}
-                | Headers
-               ],
-    gen_server:cast({'mod_kazoo', Node}, {'sendevent', EventName, Headers1}).
+    gen_server:cast({'mod_kazoo', Node}, {'sendevent', EventName, Headers}).
 
 -spec sendevent_custom(atom(), atom(), list()) -> 'ok'.
 sendevent_custom(Node, SubClassName, Headers) ->
