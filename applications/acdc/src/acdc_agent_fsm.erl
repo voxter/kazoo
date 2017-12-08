@@ -1119,6 +1119,40 @@ ringing_callback({'channel_answered', JObj}, State) ->
     {'next_state', 'ringing_callback', State#state{agent_call_id=CallId
                                                   ,agent_callback_call=ACall
                                                   }};
+ringing_callback(?DESTROYED_CHANNEL(ACallId, _Cause), #state{agent_call_id=ACallId
+                                                            ,connect_failures=Fails
+                                                            ,max_connect_failures=MaxFails
+                                                            ,monitoring='true'
+                                                            }=State) ->
+    NewFSMState = clear_call(State, 'failed'),
+    NextState = return_to_state(Fails+1, MaxFails),
+    case NextState of
+        'paused' -> {'next_state', 'paused', NewFSMState};
+        'ready' -> apply_state_updates(NewFSMState)
+    end;
+ringing_callback(?DESTROYED_CHANNEL(ACallId, Cause), #state{account_id=AccountId
+                                                           ,agent_id=AgentId
+                                                           ,agent_listener=AgentListener
+                                                           ,member_call_id=CallId
+                                                           ,member_call_queue_id=QueueId
+                                                           ,agent_call_id=ACallId
+                                                           ,max_connect_failures=MaxFails
+                                                           ,connect_failures=Fails
+                                                           }=State) ->
+    lager:info("agent hungup ~s while they were supposed to wait for a callback", [ACallId]),
+
+    acdc_agent_listener:member_connect_retry(AgentListener, CallId),
+
+    acdc_stats:call_missed(AccountId, QueueId, AgentId, CallId, Cause),
+
+    acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
+
+    NewFSMState = clear_call(State, 'failed'),
+    NextState = return_to_state(Fails+1, MaxFails),
+    case NextState of
+        'paused' -> {'next_state', 'paused', NewFSMState};
+        'ready' -> apply_state_updates(NewFSMState)
+    end;
 ringing_callback(?NEW_CHANNEL_TO(CallId, MemberCallId), #state{member_call_id=MemberCallId}=State) ->
     lager:debug("new channel ~s for agent", [CallId]),
     {'next_state', 'ringing_callback', State};
