@@ -70,7 +70,7 @@ handle_specific_event(<<"del-member">>, EventJObj) ->
     CallId = kz_json:get_value(<<"Call-ID">>, EventJObj),
     CachedConfPart = ami_sm:conf_cache(CallId),
     Channel = props:get_value(<<"Channel">>, CachedConfPart),
-    CallerIdName = props:get_value(<<"CallerIdnum">>, CachedConfPart),
+    CallerIdName = props:get_value(<<"CallerIDnum">>, CachedConfPart),
     Timestamp = props:get_value(<<"Timestamp">>, CachedConfPart),
     {MegaSecs, Secs, _MicroSecs} = os:timestamp(),
     Duration = (MegaSecs * 1000000 + Secs) - Timestamp,
