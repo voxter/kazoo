@@ -434,7 +434,7 @@ supported_classification(DID) ->
         <<"did_us">> -> 'true';
         <<"tollfree_us">> -> 'true';
         Classification ->
-            lager:error("unsupported number classification ~s (only did_us is supported by acrovoice)", [Classification]),
+            lager:error("unsupported number classification ~s (only North American numbers are supported by acrovoice)", [Classification]),
             'false'
     end.
 
