@@ -306,12 +306,11 @@ handle_delete_resp_error(Props) ->
 %%--------------------------------------------------------------------
 -spec address_fields(kz_json:object()) -> kz_proplist().
 address_fields(E911) ->
-    {FirstName, LastName} = split_customer_name(kz_json:get_binary_value(<<"customer_name">>, E911, <<>>)),
+    LastName = kz_json:get_binary_value(<<"customer_name">>, E911, <<>>),
     {StreetNum, StreetName} = address_parts(kz_json:get_binary_value(<<"street_address">>, E911, <<>>)),
     Province = get_state_province_abbreviation(kz_json:get_binary_value(<<"region">>, E911, <<>>)),
 
     props:filter_undefined([{<<"newLastName">>, ?T(LastName, 100)}
-                           ,{<<"newFirstName">>, ?T(FirstName, 38)}
                            ,{<<"newSuite">>, ?T(kz_json:get_binary_value(<<"extended_address">>, E911, <<>>), 30)}
                            ,{<<"newStreetNum">>, ?T(StreetNum, 10)}
                            ,{<<"newStreetName">>, ?T(StreetName, 84)}
@@ -319,13 +318,6 @@ address_fields(E911) ->
                            ,{<<"newProvince">>, ?T(Province, 2)}
                            ,{<<"newPostalCode">>, ?T(kz_json:get_binary_value(<<"postal_code">>, E911, <<>>), 11)}
                            ]).
-
--spec split_customer_name(binary()) -> {binary(), binary()}.
-split_customer_name(Name) ->
-    case binary:split(Name, <<" ">>) of
-        [FirstName] -> {FirstName, <<>>};
-        [FirstName, LastName] -> {FirstName, LastName}
-    end.
 
 -spec address_parts(binary()) -> {binary(), binary()}.
 address_parts(Address) ->
