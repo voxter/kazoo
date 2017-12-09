@@ -327,7 +327,7 @@ address_parts(Address) ->
             try kz_term:to_integer(StreetNum) of
                 _ -> {StreetNum, StreetName}
             catch
-                error:badarg -> {<<>>, StreetName}
+                error:badarg -> {<<>>, Address}
             end
     end.
 
