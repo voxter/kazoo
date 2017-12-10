@@ -3863,7 +3863,6 @@
                     "type": "object"
                 },
                 "language": {
-                    "default": "en-us",
                     "description": "The language for the device",
                     "type": "string"
                 },
