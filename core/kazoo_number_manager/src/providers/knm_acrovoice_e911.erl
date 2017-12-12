@@ -432,8 +432,9 @@ get_state_province_abbreviation(StateOrProvince) ->
 supported_classification(DID) ->
     case knm_converters:classify(DID) of
         <<"did_us">> -> 'true';
+        <<"tollfree_us">> -> 'true';
         Classification ->
-            lager:error("unsupported number classification ~s (only did_us is supported by acrovoice)", [Classification]),
+            lager:error("unsupported number classification ~s (only North American numbers are supported by acrovoice)", [Classification]),
             'false'
     end.
 
