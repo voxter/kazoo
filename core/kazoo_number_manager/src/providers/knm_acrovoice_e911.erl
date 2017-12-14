@@ -309,6 +309,7 @@ address_fields(E911) ->
     LastName = kz_json:get_binary_value(<<"customer_name">>, E911, <<>>),
     {StreetNum, StreetName} = address_parts(kz_json:get_binary_value(<<"street_address">>, E911, <<>>)),
     Province = get_state_province_abbreviation(kz_json:get_binary_value(<<"region">>, E911, <<>>)),
+    Other = lat_long(kz_json:get_ne_binary_value(<<"latitude">>, E911), kz_json:get_ne_binary_value(<<"longitude">>, E911)),
 
     props:filter_undefined([{<<"newLastName">>, ?T(LastName, 100)}
                            ,{<<"newSuite">>, ?T(kz_json:get_binary_value(<<"extended_address">>, E911, <<>>), 30)}
@@ -317,6 +318,7 @@ address_fields(E911) ->
                            ,{<<"newCity">>, ?T(kz_json:get_binary_value(<<"locality">>, E911, <<>>), 38)}
                            ,{<<"newProvince">>, ?T(Province, 2)}
                            ,{<<"newPostalCode">>, ?T(kz_json:get_binary_value(<<"postal_code">>, E911, <<>>), 11)}
+                           ,{<<"newOther">>, ?T(Other, 38)}
                            ]).
 
 -spec address_parts(binary()) -> {binary(), binary()}.
@@ -419,6 +421,12 @@ get_state_province_abbreviation(StateOrProvince) ->
             end;
         Abbreviation -> Abbreviation
     end.
+
+-spec lat_long(api_binary(), api_binary()) -> api_binary().
+lat_long('undefined', _) -> 'undefined';
+lat_long(_, 'undefined') -> 'undefined';
+lat_long(Latitude, Longitude) ->
+    <<"Latitude: ", Latitude/binary, " Longitude: ", Longitude/binary>>.
 
 -spec supported_classification(ne_binary()) -> boolean().
 supported_classification(DID) ->
