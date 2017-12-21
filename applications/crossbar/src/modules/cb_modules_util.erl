@@ -38,12 +38,20 @@
         ,normalize_media_upload/5
 
         ,update_voicemail_creds/4
+        ,should_update_voicemail_creds/1
         ]).
 
 -include("crossbar.hrl").
 -include_lib("kazoo_stdlib/include/kazoo_json.hrl").
 
 -define(QCALL_NUMBER_FILTER, [<<" ">>, <<",">>, <<".">>, <<"-">>, <<"(">>, <<")">>]).
+
+-define(PIN_PASS_SYNC
+       ,kapps_config:get_is_true(<<"voicemail">>
+                                ,<<"pin_pass_sync">>
+                                ,'false'
+                                )
+       ).
 
 -spec range_view_options(cb_context:context()) ->
                                 {gregorian_seconds(), gregorian_seconds()} |
@@ -810,15 +818,20 @@ update_voicemail_creds(UserId, Username, Password, Context) ->
                     kz_datamgr:save_doc(AccountDb, Doc1),
                     'ok'
             end;
-        'false' ->
-            lager:debug("username is not numeric, not updating creds"),
-            'ok'
+        'false' -> 'ok'
     end.
 
 -spec should_update_voicemail_creds(ne_binary()) -> boolean().
+-spec should_update_voicemail_creds(ne_binary(), boolean()) -> boolean().
 should_update_voicemail_creds(Username) ->
+    should_update_voicemail_creds(Username, ?PIN_PASS_SYNC).
+
+should_update_voicemail_creds(_, 'false') -> 'false';
+should_update_voicemail_creds(Username, _) ->
     case catch kz_term:to_integer(Username) of
-        {'EXIT', _} -> 'false';
+        {'EXIT', _} ->
+            lager:debug("username is not numeric, not updating creds"),
+            'false';
         _ -> 'true'
     end.
 

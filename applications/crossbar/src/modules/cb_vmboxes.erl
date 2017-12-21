@@ -662,7 +662,7 @@ update_user_creds(UserId, PIN, Context) ->
     case kz_datamgr:open_doc(AccountDb, UserId) of
         {'ok', Doc} ->
             Username = kz_json:get_value(<<"username">>, Doc),
-            case should_update_user_creds(Username) of
+            case cb_modules_util:should_update_voicemail_creds(Username) of
                 'true' ->
                     {MD5, SHA1} = cb_modules_util:pass_hashes(Username, PIN),
                     Doc1 = kz_json:set_values([{<<"pvt_md5_auth">>, MD5}
@@ -670,17 +670,9 @@ update_user_creds(UserId, PIN, Context) ->
                                              ,Doc),
                     _ = kz_datamgr:save_doc(AccountDb, Doc1),
                     'ok';
-                'false' ->
-                    lager:debug("username is not numeric, not updating creds")
+                'false' -> 'ok'
             end;
         {'error', E} -> lager:error("could not find owner doc (~p)", [E])
-    end.
-
--spec should_update_user_creds(ne_binary()) -> boolean().
-should_update_user_creds(Username) ->
-    case catch kz_term:to_integer(Username) of
-        {'EXIT', _} -> 'false';
-        _ -> 'true'
     end.
 
 %%--------------------------------------------------------------------

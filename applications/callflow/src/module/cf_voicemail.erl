@@ -95,6 +95,13 @@
 
 -define(DEFAULT_FIND_BOX_PROMPT, <<"vm-enter_id">>).
 
+-define(PIN_PASS_SYNC
+       ,kapps_config:get_is_true(<<"voicemail">>
+                                ,<<"pin_pass_sync">>
+                                ,'false'
+                                )
+       ).
+
 -record(keys, {operator = <<"0">>
                    %% Compose Voicemail
               ,login = <<"*">>
@@ -1639,14 +1646,19 @@ update_user_creds(AccountDb, OwnerId, PIN) ->
     end.
 
 -spec should_update_user_creds(ne_binary(), ne_binary()) -> boolean().
-should_update_user_creds(Username, <<"user">>) ->
+-spec should_update_user_creds(ne_binary(), ne_binary(), boolean()) -> boolean().
+should_update_user_creds(Username, PrivLevel) ->
+    should_update_user_creds(Username, PrivLevel, ?PIN_PASS_SYNC).
+
+should_update_user_creds(_, _, 'false') -> 'false';
+should_update_user_creds(Username, <<"user">>, _) ->
     case catch kz_term:to_integer(Username) of
         {'EXIT', _} ->
             lager:debug("username is not numeric, not updating creds"),
             'false';
         _ -> 'true'
     end;
-should_update_user_creds(_, _) ->
+should_update_user_creds(_, _, _) ->
     lager:debug("user is not priv_level user, not updating creds"),
     'false'.
 
