@@ -1,5 +1,5 @@
-[voxter-kazoo-configs]
-name=Kazoo and Deps config files
+[voxter-noarch]
+name=Voxter Repo - Noarch
 baseurl=http://repo.voxter.net/development/CentOS_$releasever/noarch
 enabled=1
 gpgcheck=0

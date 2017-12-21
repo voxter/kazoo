@@ -2,11 +2,9 @@ FROM centos
 
 RUN yum install -y epel-release
 
-COPY voxter-couchdb.repo /etc/yum.repos.d
+COPY voxter-basearch.repo /etc/yum.repos.d
 
-COPY voxter-erlang.repo /etc/yum.repos.d
-
-COPY voxter-kazoo-configs.repo /etc/yum.repos.d
+COPY voxter-noarch.repo /etc/yum.repos.d
 
 RUN yum install -y \
     # Kazoo

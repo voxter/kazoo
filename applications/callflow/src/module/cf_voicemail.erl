@@ -1639,7 +1639,8 @@ update_user_creds(AccountDb, OwnerId, PIN) ->
                     Doc1 = kz_json:set_values([{<<"pvt_md5_auth">>, MD5}
                                               ,{<<"pvt_sha1_auth">>, SHA1}]
                                              ,Doc),
-                    _ = kz_datamgr:save_doc(AccountDb, Doc1);
+                    Doc2 = kz_auth_identity:reset_doc_secret(Doc1),
+                    _ = kz_datamgr:save_doc(AccountDb, Doc2);
                 'false' -> 'ok'
             end;
         {'error', E} -> lager:error("could not find owner doc (~p)", [E])

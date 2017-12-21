@@ -718,7 +718,9 @@ rehash_creds(UserId, Username, Password, Context) ->
 
     cb_modules_util:update_voicemail_creds(UserId, Username, Password, Context),
 
-    cb_context:set_doc(Context, kz_json:delete_key(<<"password">>, JObj1)).
+    crossbar_auth:reset_identity_secret(
+      cb_context:set_doc(Context, kz_json:delete_key(<<"password">>, JObj1))
+     ).
 
 %%--------------------------------------------------------------------
 %% @private
