@@ -30284,6 +30284,17 @@
             },
             "type": "object"
         },
+        "system_config.voicemail": {
+            "description": "Schema for voicemail system_config",
+            "properties": {
+                "pin_pass_sync": {
+                    "default": false,
+                    "description": "voicemail pin_pass_sync",
+                    "type": "boolean"
+                }
+            },
+            "type": "object"
+        },
         "system_config.webhooks": {
             "description": "Schema for webhooks system_config",
             "properties": {

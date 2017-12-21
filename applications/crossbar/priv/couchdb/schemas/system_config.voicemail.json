@@ -1,0 +1,13 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "_id": "system_config.voicemail",
+    "description": "Schema for voicemail system_config",
+    "properties": {
+        "pin_pass_sync": {
+            "default": false,
+            "description": "voicemail pin_pass_sync",
+            "type": "boolean"
+        }
+    },
+    "type": "object"
+}
