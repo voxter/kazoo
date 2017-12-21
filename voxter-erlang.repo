@@ -1,5 +1,5 @@
-[voxter-erlang]
-name=Erlang R19
-baseurl=http://repo.voxter.net/development/CentOS_$releasever/erlang/x86_64
+[voxter-noarch]
+name=Voxter Repo - Noarch
+baseurl=http://repo.voxter.net/development/CentOS_$releasever/noarch
 enabled=1
 gpgcheck=0
