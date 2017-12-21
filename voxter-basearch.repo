@@ -1,0 +1,5 @@
+[voxter-basearch]
+name=Voxter Repo - $basearch
+baseurl=http://repo.voxter.net/development/CentOS_$releasever/$basearch
+enabled=1
+gpgcheck=0

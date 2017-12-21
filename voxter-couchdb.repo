@@ -1,5 +1,0 @@
-[voxter-couchdb]
-name=Voxter - Apache CouchDB
-baseurl=http://repo.voxter.net/development/CentOS_$releasever/x86_64
-enabled=1
-gpgcheck=0
