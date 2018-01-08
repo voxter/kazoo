@@ -66,7 +66,6 @@ init() ->
     _ = crossbar_bindings:bind(<<"*.execute.post.vmboxes">>, ?MODULE, 'post'),
     _ = crossbar_bindings:bind(<<"*.execute.patch.vmboxes">>, ?MODULE, 'patch'),
     _ = crossbar_bindings:bind(<<"*.execute.delete.vmboxes">>, ?MODULE, 'delete'),
-    _ = crossbar_bindings:bind(<<"*.finish_request.post.vmboxes">>, ?MODULE, 'finish_request'),
     ok.
 
 %%--------------------------------------------------------------------
@@ -1065,7 +1064,6 @@ load_attachment_from_message(Doc, Context, Timezone) ->
                       ,{fun cb_context:add_resp_headers/2
                        ,[{<<"Content-Type">>, kz_doc:attachment_content_type(Doc, AttachmentId)}
                         ,{<<"Content-Disposition">>, <<"attachment; filename=", Filename/binary>>}
-                        ,{<<"Content-Length">>, kz_doc:attachment_length(Doc, AttachmentId)}
                         ]
                        }
                       ],
@@ -1156,7 +1154,6 @@ create_zip_file(WorkDir, Files, Context) ->
               ,{fun cb_context:add_resp_headers/2
                ,[{<<"Content-Type">>, <<"application/zip">>}
                 ,{<<"Content-Disposition">>, <<"attachment; filename=", (kz_term:to_binary(ZipName))/binary>>}
-                ,{<<"Content-Length">>, filelib:file_size(ZipPath)}
                 ]
                }
               ],

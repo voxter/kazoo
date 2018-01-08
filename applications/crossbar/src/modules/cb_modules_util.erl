@@ -39,6 +39,8 @@
 
         ,update_voicemail_creds/4
         ,should_update_voicemail_creds/1
+
+        ,normalize_alphanum_name/1
         ]).
 
 -include("crossbar.hrl").
@@ -857,3 +859,13 @@ maybe_matching_vmbox(AccountDb, UserId, Username) ->
             lager:debug("error (~p) when getting listing_by_mailbox", [E]),
             'undefined'
     end.
+
+-spec normalize_alphanum_name(api_binary() | cb_context:context()) -> cb_context:context() | api_binary().
+normalize_alphanum_name('undefined') ->
+    'undefined';
+normalize_alphanum_name(Name) when is_binary(Name) ->
+    re:replace(kz_term:to_lower_binary(Name), <<"[^a-z0-9]">>, <<>>, [global, {return, binary}]);
+normalize_alphanum_name(Context) ->
+    Doc = cb_context:doc(Context),
+    Name = kz_json:get_ne_binary_value(<<"name">>, Doc),
+    cb_context:set_doc(Context, kz_json:set_value(<<"pvt_alphanum_name">>, normalize_alphanum_name(Name), Doc)).
