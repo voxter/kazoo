@@ -101,6 +101,7 @@ maybe_ringback_from_language(Node, UUID, JObj) ->
         <<"en-ca">> -> ringback_from_language(Node, UUID, <<"${ca-ring}">>);
         <<"en-gb">> -> ringback_from_language(Node, UUID, <<"${uk-ring}">>);
         <<"en-us">> -> ringback_from_language(Node, UUID, <<"${us-ring}">>);
+        <<"fr-ca">> -> ringback_from_language(Node, UUID, <<"${ca-ring}">>);
         <<Lang:2/binary, _/binary>> ->
             ringback_from_language(Node, UUID, <<"${", Lang/binary, "-ring}">>);
         Lang ->
