@@ -76,7 +76,8 @@ handle_specific_event(<<"DTMF">>, EventJObj, _) ->
               ],
                                                 % TODO: Also need to do this with begin/end reversed
 
-    amimulator_event_listener:publish_amqp_event({publish, Payload}, kz_json:get_value(<<"Account-ID">>, EventJObj));
+    AccountId = kz_call_event:account_id(EventJObj),
+    amimulator_event_listener:publish_amqp_event({publish, Payload}, AccountId);
 
 handle_specific_event(EventName, _EventJObj, _) ->
     lager:debug("unhandled call event ~p", [EventName]).
