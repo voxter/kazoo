@@ -40,7 +40,6 @@ Key | Description | Type | Default | Required
 `max_queue_size` | How many callers are allowed to wait on hold in the queue (0 for no limit) | `integer()` | `0` | `false`
 `moh` | Media ID (or appropriate media URI) of media to play while caller is on hold. | `string()` |   | `false`
 `name` | A friendly name for the queue | `string(1..128)` |   | `true`
-`preserve_metadata` | Keep metadata about call recording so it is retrievable by media API | `boolean()` | `false` | `false`
 `record_caller` | When enabled, a caller's audio will be recorded | `boolean()` | `false` | `false`
 `recording_url` | An optional HTTP URL to PUT the call recording after the call ends (and should respond to GET for retrieving the audio data) | `string()` |   | `false`
 `ring_simultaneously` | The number of agents to try in parallel when connecting a caller | `integer()` | `1` | `false`

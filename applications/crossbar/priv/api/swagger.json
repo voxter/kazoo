@@ -5939,9 +5939,6 @@
                 "Notifications": {
                     "type": "object"
                 },
-                "Preserve-Metadata": {
-                    "type": "string"
-                },
                 "Process-ID": {
                     "type": "string"
                 },
@@ -24204,11 +24201,6 @@
                     "maxLength": 128,
                     "minLength": 1,
                     "type": "string"
-                },
-                "preserve_metadata": {
-                    "default": false,
-                    "description": "Keep metadata about call recording so it is retrievable by media API",
-                    "type": "boolean"
                 },
                 "record_caller": {
                     "default": false,

@@ -287,7 +287,7 @@ member_connect_resp_v(JObj) ->
 -define(OPTIONAL_MEMBER_CONNECT_WIN_HEADERS, [<<"Ring-Timeout">>, <<"Caller-Exit-Key">>
                                              ,<<"Wrapup-Timeout">>, <<"CDR-Url">>
                                              ,<<"Process-ID">>
-                                             ,<<"Record-Caller">>, <<"Recording-URL">>, <<"Preserve-Metadata">>
+                                             ,<<"Record-Caller">>, <<"Recording-URL">>
                                              ,<<"Notifications">>, <<"Callback-Details">>
                                              ]).
 -define(MEMBER_CONNECT_WIN_VALUES, [{<<"Event-Category">>, <<"member">>}
