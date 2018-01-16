@@ -77,7 +77,6 @@
                ,account_id                :: api_ne_binary()
                ,event = 'undefined'       :: api_object()
                ,origin                    :: ne_binary()
-               ,preserve_metadata = 'false' :: boolean()
                ,extra_metadata            :: kz_proplist() | 'undefined'
                }).
 -type state() :: #state{}.
@@ -90,8 +89,6 @@
 -define(BINDINGS(CallId), [{'call', [{'callid', CallId}
                                     ,{'restrict_to', ['CHANNEL_ANSWER'
                                                      ,'CHANNEL_BRIDGE'
-                                                     ,'CHANNEL_DESTROY'
-                                                     ,'CHANNEL_EXECUTE_COMPLETE'
                                                      ,'CHANNEL_TRANSFEREE'
                                                      ,'RECORD_START'
                                                      ,'RECORD_STOP'
@@ -179,7 +176,6 @@ init([Call, Data]) ->
     SampleRate = kz_json:get_integer_value(<<"record_sample_rate">>, Data),
     DefaultRecordMinSec = kz_media_config:record_min_sec(),
     RecordMinSec = kz_json:get_integer_value(<<"record_min_sec">>, Data, DefaultRecordMinSec),
-    PreserveMetadata = kz_json:is_true(<<"preserve_metadata">>, Data, 'false'),
     ExtraMetadata = kz_json:get_list_value(<<"extra_metadata">>, Data, []),
     AccountId = kapps_call:account_id(Call),
     {Year, Month, _} = erlang:date(),
@@ -215,7 +211,6 @@ init([Call, Data]) ->
                  ,verb = Verb
                  ,account_id = AccountId
                  ,origin = Origin
-                 ,preserve_metadata = PreserveMetadata
                  ,extra_metadata = ExtraMetadata
                  }}.
 
