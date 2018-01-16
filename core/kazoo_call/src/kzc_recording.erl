@@ -620,7 +620,7 @@ handler_fields_for_protocol(<<"http", _/binary>>, Url, #state{account_id=Account
     ,<<"&account_id=">>
     ,AccountId
     ,<<"&recording_id=">>
-    ,{field, <<"_id">>}
+    ,{arg, <<"id">>}
     ].
 
 -spec check_url(ne_binary()) -> {binary(), ne_binary()}.
