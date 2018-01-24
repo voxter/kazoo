@@ -52,6 +52,9 @@ handle_status_update(JObj, _Props) ->
         <<"resume">> ->
             'true' = kapi_acdc_agent:resume_v(JObj),
             maybe_resume_agent(AccountId, AgentId, JObj);
+        <<"end_wrapup">> ->
+            'true' = kapi_acdc_agent:end_wrapup_v(JObj),
+            maybe_end_wrapup_agent(AccountId, AgentId, JObj);
         <<"restart">> ->
             'true' = kapi_acdc_agent:restart_v(JObj),
             _ = acdc_agents_sup:restart_agent(AccountId, AgentId),
@@ -187,6 +190,17 @@ maybe_resume_agent(AccountId, AgentId, JObj) ->
             FSM = acdc_agent_sup:fsm(Sup),
             acdc_agent_fsm:update_presence(FSM,  presence_id(JObj), presence_state(JObj, 'undefined')),
             acdc_agent_fsm:resume(FSM)
+    end.
+
+-spec maybe_end_wrapup_agent(ne_binary(), ne_binary(), kz_json:object()) -> 'ok'.
+maybe_end_wrapup_agent(AccountId, AgentId, JObj) ->
+    case acdc_agents_sup:find_agent_supervisor(AccountId, AgentId) of
+        'undefined' -> lager:debug("agent ~s (~s) not found, nothing to do", [AgentId, AccountId]);
+        Sup when is_pid(Sup) ->
+            lager:debug("agent ~s(~s) is ending wrapup: ~p", [AccountId, AgentId, Sup]),
+            FSM = acdc_agent_sup:fsm(Sup),
+            acdc_agent_fsm:update_presence(FSM,  presence_id(JObj), presence_state(JObj, 'undefined')),
+            acdc_agent_fsm:end_wrapup(FSM)
     end.
 
 -spec handle_sync_req(kz_json:object(), kz_proplist()) -> 'ok'.
