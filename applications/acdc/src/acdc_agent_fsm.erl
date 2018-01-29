@@ -25,6 +25,7 @@
         ,sync_req/2, sync_resp/2
         ,pause/3
         ,resume/1
+        ,end_wrapup/1
 
         ,add_acdc_queue/2, rm_acdc_queue/2
         ,update_presence/3
@@ -306,6 +307,14 @@ pause(FSM, Timeout, Alias) ->
 -spec resume(server_ref()) -> 'ok'.
 resume(FSM) ->
     gen_fsm:send_all_state_event(FSM, {'resume'}).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @end
+%%--------------------------------------------------------------------
+-spec end_wrapup(server_ref()) -> 'ok'.
+end_wrapup(FSM) ->
+    gen_fsm:send_all_state_event(FSM, {'end_wrapup'}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1868,6 +1877,11 @@ handle_event({'pause', _, _}=Event, StateName, #state{agent_state_updates=Queue}
     lager:debug("recv pause during ~p, delaying", [StateName]),
     NewQueue = [Event | Queue],
     {'next_state', StateName, State#state{agent_state_updates=NewQueue}};
+handle_event({'end_wrapup'}=Event, 'wrapup', #state{agent_state_updates=Queue}=State) ->
+    NewQueue = [Event | Queue],
+    apply_state_updates(State#state{agent_state_updates=NewQueue});
+handle_event({'end_wrapup'}, StateName, State) ->
+    {'next_state', StateName, State};
 handle_event({'add_acdc_queue', QueueId}, StateName, #state{agent_listener=AgentListener}=State) ->
     acdc_agent_listener:add_acdc_queue(AgentListener, QueueId, StateName),
     {'next_state', StateName, State};
@@ -2519,6 +2533,10 @@ apply_state_updates_fold({_, _, State}, [{'pause', Timeout, Alias}|Updates]) ->
     apply_state_updates_fold(handle_pause(Timeout, Alias, State), Updates);
 apply_state_updates_fold({_, _, State}, [{'resume'}|Updates]) ->
     apply_state_updates_fold(handle_resume(State), Updates);
+apply_state_updates_fold({_, 'wrapup', State}, [{'end_wrapup'}|Updates]) ->
+    apply_state_updates_fold(handle_end_wrapup('ready', State), Updates);
+apply_state_updates_fold({_, StateName, State}, [{'end_wrapup'}|Updates]) ->
+    apply_state_updates_fold(handle_end_wrapup(StateName, State), Updates);
 apply_state_updates_fold({_, _, State}, [{'agent_logout'}|_]) ->
     lager:debug("agent logging out"),
     %% Do not continue fold, stop FSM
@@ -2576,6 +2594,12 @@ handle_pause(Timeout, Alias, #state{agent_listener=AgentListener}=State) ->
                                 }
              end,
     {'next_state', 'paused', State1}.
+
+-spec handle_end_wrapup(atom(), state()) -> handle_fsm_ret(state()).
+handle_end_wrapup(NextState, #state{wrapup_ref=Ref}=State) ->
+    lager:debug("end_wrapup received, cancelling wrapup timers"),
+    maybe_stop_timer(Ref),
+    {'next_state', NextState, State#state{wrapup_ref='undefined'}}.
 
 -spec original_call_id(state()) -> ne_binary().
 original_call_id(#state{member_call_id=MemberCallId
