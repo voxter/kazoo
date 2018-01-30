@@ -2457,7 +2457,6 @@ notify_method(Url, 'get', Headers, Data) ->
 notify(Uri, Headers, Method, Body, Opts) ->
     Options = [{'connect_timeout', 1000}
               ,{'timeout', 1000}
-              ,{'ssl_options', [{'versions', ['tlsv1.2','tlsv1.1','tlsv1','sslv3']}]}
                | Opts
               ],
     URI = kz_term:to_list(Uri),
