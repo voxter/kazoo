@@ -1019,7 +1019,7 @@ play_messages([H|T]=Messages, PrevMessages, Count, Box, Call) ->
             Prompt2 = [{'prompt', <<"vm-message_number">>}
                       ,{'say', kz_term:to_binary(Count - length(Messages) + 1), <<"number">>}
                       ,{'prompt', <<"vm-received">>}
-                      ,{'say', get_unix_epoch(kz_json:get_value(<<"timestamp">>, H), Timezone), <<"current_date_time">>}
+                      ,{'say', get_unix_epoch(kz_json:get_value(<<"timestamp">>, H), Box#mailbox.timezone), <<"current_date_time">>}
                       ,{'tts', <<"from">>}
                       ,{'say', kz_json:get_value(<<"caller_id_number">>, H)}
                       ,{'prompt', <<"vm-message_menu">>}
