@@ -484,10 +484,7 @@ send(Call, Uri, Method, ReqHdrs, ReqBody, Debug) ->
 
     maybe_debug_req(Call, Uri, Method, ReqHdrs, ReqBody, Debug),
 
-    Opts = [{'stream_to', self()}
-           ,{'ssl_options', [{'versions', ['tlsv1.2','tlsv1.1',tlsv1,sslv3]}]}
-           ],
-    case kz_http:async_req(self(), Method, Uri, ReqHdrs, ReqBody, Opts) of
+    case kz_http:async_req(self(), Method, Uri, ReqHdrs, ReqBody) of
         {'http_req_id', ReqId} ->
             lager:debug("response coming in asynchronosly to ~p", [ReqId]),
             {'ok', ReqId, Call};
