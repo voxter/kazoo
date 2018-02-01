@@ -2445,15 +2445,15 @@ notify(Url, Method, Key, #state{account_id=AccountId
 
 -spec notify_method(ne_binary(), 'get' | 'post', kz_proplist(), kz_json:object()) -> 'ok'.
 notify_method(Url, 'post', Headers, Data) ->
-    notify(Url, Headers, 'post', kz_json:encode(Data)
-          ,[{'content_type', "application/json"}]
+    notify(Url, [{"Content-Type", "application/json"} | Headers]
+          ,'post', kz_json:encode(Data), []
           );
 notify_method(Url, 'get', Headers, Data) ->
     notify(uri(Url, kz_http_util:json_to_querystring(Data))
           ,Headers, 'get', <<>>, []
           ).
 
--spec notify(iolist(), [], 'get' | 'post', binary(), kz_proplist()) -> 'ok'.
+-spec notify(iolist(), kz_proplist(), 'get' | 'post', binary(), kz_proplist()) -> 'ok'.
 notify(Uri, Headers, Method, Body, Opts) ->
     Options = [{'connect_timeout', 1000}
               ,{'timeout', 1000}
