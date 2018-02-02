@@ -199,11 +199,11 @@ to_csv(Req, Context) ->
 -spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET].
+allowed_methods(?PATH_CSV) ->
+    [?HTTP_GET];
 allowed_methods(?PATH_INTERACTION) ->
     [?HTTP_GET];
 allowed_methods(?PATH_SUMMARY) ->
-    [?HTTP_GET];
-allowed_methods(?PATH_CSV) ->
     [?HTTP_GET];
 allowed_methods(_CDRId) ->
     [?HTTP_GET].
@@ -255,12 +255,12 @@ content_types_provided(Context) ->
 validate(Context) ->
     load_cdr_summary(Context, cb_context:req_nouns(Context)).
 
+validate(Context, ?PATH_CSV) ->
+    load_cdr_summary(Context, cb_context:req_nouns(Context));
 validate(Context, ?PATH_INTERACTION) ->
     load_interaction_cdr_summary(Context, cb_context:req_nouns(Context));
 validate(Context, ?PATH_SUMMARY) ->
     load_cdr_summary(Context);
-validate(Context, ?PATH_CSV) ->
-    load_cdr_summary(Context, cb_context:req_nouns(Context));
 validate(Context, CDRId) ->
     load_cdr(CDRId, Context).
 
