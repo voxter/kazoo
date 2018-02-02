@@ -106,6 +106,16 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/cdrs/{CDR_ID}
 ```
 
+#### Fetch CDR's and return CSV file
+
+> GET /v2/accounts/{ACCOUNT_ID}/cdrs/csv
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/cdrs/csv
+```
+
 #### Fetch interaction summary
 
 > GET /v2/accounts/{ACCOUNT_ID}/cdrs/interaction
