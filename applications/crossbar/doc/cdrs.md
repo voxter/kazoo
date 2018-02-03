@@ -116,6 +116,16 @@ curl -v -X GET \
     http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/cdrs/interaction
 ```
 
+#### Fetch CDR's and return CSV file
+
+> GET /v2/accounts/{ACCOUNT_ID}/cdrs/csv
+
+```shell
+curl -v -X GET \
+    -H "X-Auth-Token: {AUTH_TOKEN}" \
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/cdrs/csv
+```
+
 #### Fetch all legs related to an interaction
 
 Crossbar cdrs was extended to provide simplified interaction call detail records. It groups all CDRs that interacted with eachouther to form a list of calls.

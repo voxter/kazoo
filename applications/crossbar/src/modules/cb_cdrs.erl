@@ -42,6 +42,7 @@
 -define(CB_SUMMARY_VIEW, <<"cdrs/summarize_cdrs">>).
 -define(CB_SUMMARY_LIST, <<"format_summary">>).
 
+-define(PATH_CSV, <<"csv">>).
 -define(PATH_INTERACTION, <<"interaction">>).
 -define(PATH_LEGS, <<"legs">>).
 -define(PATH_SUMMARY, <<"summary">>).
@@ -111,6 +112,7 @@ to_json({Req, Context}) ->
     Nouns = cb_context:req_nouns(Context),
     case props:get_value(<<"cdrs">>, Nouns, []) of
         [] -> to_json(Req, Context);
+        [?PATH_CSV] -> to_csv(Req, Context);
         [?PATH_INTERACTION] -> to_json(Req, cb_context:store(Context, 'interaction', 'true'));
         [_|_] -> {Req, Context}
     end.
@@ -197,6 +199,8 @@ to_csv(Req, Context) ->
 -spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods() ->
     [?HTTP_GET].
+allowed_methods(?PATH_CSV) ->
+    [?HTTP_GET];
 allowed_methods(?PATH_INTERACTION) ->
     [?HTTP_GET];
 allowed_methods(?PATH_SUMMARY) ->
@@ -251,6 +255,8 @@ content_types_provided(Context) ->
 validate(Context) ->
     load_cdr_summary(Context, cb_context:req_nouns(Context)).
 
+validate(Context, ?PATH_CSV) ->
+    load_cdr_summary(Context, cb_context:req_nouns(Context));
 validate(Context, ?PATH_INTERACTION) ->
     load_interaction_cdr_summary(Context, cb_context:req_nouns(Context));
 validate(Context, ?PATH_SUMMARY) ->
