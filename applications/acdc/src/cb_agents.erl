@@ -402,10 +402,7 @@ fetch_current_status(Context, AgentId) ->
                                   );
         {'ok', Resp} ->
             Agents = kz_json:get_value(<<"Agents">>, Resp, kz_json:new()),
-            Results = kz_json:foldl(fun(K, V, Acc) ->
-                                            kz_json:set_value(K, kz_doc:public_fields(V), Acc)
-                                    end, kz_json:new(), Agents),
-            crossbar_util:response(Results, Context)
+            crossbar_util:response(Agents, Context)
     end.
 
 -spec fetch_all_current_statuses(cb_context:context(), api_binary(), api_binary()) ->
@@ -422,6 +419,7 @@ fetch_all_current_statuses(Context, AgentId, Status) ->
              ,{<<"Start-Range">>, Yday}
              ,{<<"End-Range">>, Now}
              ,{<<"Most-Recent">>, kz_term:is_false(Recent)}
+             ,{<<"Limit">>, cb_context:req_value(Context, <<"limit">>)}
              ]),
 
     {'ok', Resp} = acdc_agent_util:most_recent_statuses(cb_context:account_id(Context), Opts),

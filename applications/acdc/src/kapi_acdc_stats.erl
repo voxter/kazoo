@@ -512,7 +512,7 @@ agent_calls_resp_v(JObj) ->
 
 -define(STATUS_REQ_HEADERS, [<<"Account-ID">>]).
 -define(OPTIONAL_STATUS_REQ_HEADERS, [<<"Agent-ID">>, <<"Start-Range">>, <<"End-Range">>
-                                     ,<<"Status">>
+                                     ,<<"Status">>, <<"Limit">>
                                      ]).
 -define(STATUS_REQ_VALUES, [{<<"Event-Category">>, <<"acdc_stat">>}
                            ,{<<"Event-Name">>, <<"status_req">>}
