@@ -47,7 +47,7 @@
 -define(PATH_LEGS, <<"legs">>).
 -define(PATH_SUMMARY, <<"summary">>).
 
--define(KEY_CFN, <<"csv_file_name">>).
+-define(KEY_FN, <<"file_name">>).
 -define(KEY_CCV, <<"custom_channel_vars">>).
 
 -define(COLUMNS
@@ -176,7 +176,7 @@ to_csv({Req, Context}) ->
 
 -spec to_csv(cowboy_req:req(), cb_context:context()) -> payload().
 to_csv(Req, Context) ->
-    CsvFileName = cb_context:req_value(Context, ?KEY_CFN, <<"cdrs.csv">>),
+    CsvFileName = cb_context:req_value(Context, ?KEY_FN, <<"cdrs.csv">>),
     Headers = props:set_values([{<<"content-type">>, <<"application/octet-stream">>}
                                ,{<<"content-disposition">>, <<"attachment; filename=\"", CsvFileName/binary, "\"">>}
                                ]
