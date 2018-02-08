@@ -102,7 +102,7 @@ Get CDRs as CSV and specify the file name:
 curl -v -X GET \
     -H "Accept: text/csv" \
     -H "X-Auth-Token: {AUTH_TOKEN}" \
-    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/cdrs?csv_file_name={FILE_NAME}
+    http://{SERVER}:8000/v2/accounts/{ACCOUNT_ID}/cdrs?file_name={FILE_NAME}
 ```
 
 #### Fetch a CDR's details
