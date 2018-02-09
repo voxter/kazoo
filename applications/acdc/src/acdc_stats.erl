@@ -839,7 +839,7 @@ is_valid_call_status(S) ->
         'false' -> 'false'
     end.
 
--spec query_calls(ets:match_spec(), pos_integer()) -> kz_proplist().
+-spec query_calls(ets:match_spec(), pos_integer() | 'no_limit') -> kz_proplist().
 query_calls(Match, _Limit) ->
     case ets:select(call_table_id(), Match) of
         [] ->
@@ -864,7 +864,7 @@ query_calls(Match, _Limit) ->
             ]
     end.
 
--spec query_call_summary(ets:match_spec(), pos_integer()) -> kz_proplist().
+-spec query_call_summary(ets:match_spec(), pos_integer() | 'no_limit') -> kz_proplist().
 query_call_summary(Match, _Limit) ->
     case ets:select(call_summary_table_id(), Match) of
         [] ->
@@ -897,7 +897,7 @@ query_call_summary_fold(#call_summary_stat{queue_id=QueueId
                                         end,
     props:set_value(QueueId, {TotalCalls+1, AbandonedCalls1, TotalWaitTime1}, Props).
 
--spec query_agent_calls(ne_binary(), ne_binary(), ets:match_spec(), pos_integer()) -> 'ok'.
+-spec query_agent_calls(ne_binary(), ne_binary(), ets:match_spec(), pos_integer() | 'no_limit') -> 'ok'.
 query_agent_calls(RespQ, MsgId, Match, _Limit) ->
     case ets:select(agent_call_table_id(), Match) of
         [] ->
