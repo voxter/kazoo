@@ -31129,6 +31129,14 @@
                     "minimum": -128,
                     "type": "integer"
                 },
+                "acdc_skills": {
+                    "description": "Skills this agent has, to consider when distributing calls (requires a supporting queue strategy)",
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array",
+                    "uniqueItems": true
+                },
                 "call_forward": {
                     "description": "The device call forward parameters",
                     "properties": {
