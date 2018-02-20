@@ -58,6 +58,7 @@
         ,handle_call_summary_req/2
         ,handle_call_query/2
         ,handle_agent_calls_req/2
+        ,handle_average_wait_time_req/2
         ]).
 
 %% gen_listener functions
@@ -408,6 +409,9 @@ agent_call_table_opts() ->
                     ,{{?MODULE, 'handle_agent_calls_req'}
                      ,[{<<"acdc_stat">>, <<"agent_calls_req">>}]
                      }
+                    ,{{?MODULE, 'handle_average_wait_time_req'}
+                     ,[{<<"acdc_stat">>, <<"average_wait_time_req">>}]
+                     }
                     ,{{'acdc_agent_stats', 'handle_status_query'}
                      ,[{<<"acdc_stat">>, <<"status_req">>}]
                      }
@@ -489,6 +493,18 @@ handle_agent_calls_req(JObj, _Prop) ->
         {'ok', Match} -> query_agent_calls(RespQ, MsgId, Match, Limit);
         {'error', Errors} -> publish_agent_call_query_errors(RespQ, MsgId, Errors)
     end.
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Handle requests for the average wait time of a queue based on stats
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_average_wait_time_req(kz_json:object(), kz_proplist()) -> 'ok'.
+handle_average_wait_time_req(JObj, _Prop) ->
+    'true' = kapi_acdc_stats:average_wait_time_req_v(JObj),
+    query_average_wait_time(JObj).
 
 -spec find_call(ne_binary()) -> api_object().
 find_call(CallId) ->
@@ -936,6 +952,66 @@ increment_agent_calls(#agent_call_stat{queue_id=QueueId
 increment_agent_calls(QueueId, AgentJObj, Key) ->
     Count = kz_json:get_integer_value([QueueId, Key], AgentJObj, 0) + 1,
     kz_json:set_value([QueueId, Key], Count, AgentJObj).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Calculate and reply with the average wait time on a queue
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec query_average_wait_time(kz_json:object()) -> 'ok'.
+query_average_wait_time(JObj) ->
+    AccountId = kz_json:get_ne_binary_value(<<"Account-ID">>, JObj),
+    QueueId = kz_json:get_ne_binary_value(<<"Queue-ID">>, JObj),
+    Match = [{#call_stat{account_id=AccountId
+                        ,queue_id=QueueId
+                        ,entered_timestamp='$1'
+                        ,abandoned_timestamp='$2'
+                        ,handled_timestamp='$3'
+                        ,status='$4'
+                        ,_='_'
+                        }
+             ,[{'orelse'
+               ,{'=:=', '$4', {'const', <<"handled">>}}
+               ,{'=:=', '$4', {'const', <<"processed">>}}
+               }]
+             ,[['$1', '$2', '$3']]
+             }],
+
+    AverageWaitTime = average_wait_time_fold(ets:select(call_table_id(), Match)),
+
+    RespQ = kz_json:get_value(<<"Server-ID">>, JObj),
+    Resp = [{<<"Average-Wait-Time">>, AverageWaitTime}
+           ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
+            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+    kapi_acdc_stats:publish_average_wait_time_resp(RespQ, Resp).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Calculate the average wait time given a list of finished call stat
+%% timestamps
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec average_wait_time_fold(list()) -> non_neg_integer().
+average_wait_time_fold(Stats) ->
+    {CallCount, TotalWaitTime} = lists:foldl(fun average_wait_time_fold/2
+                                            ,{0, 0}
+                                            ,Stats
+                                            ),
+    case CallCount of
+        0 -> 0;
+        _ -> TotalWaitTime div CallCount
+    end.
+
+-spec average_wait_time_fold([non_neg_integer()], {non_neg_integer(), non_neg_integer()}) ->
+                                    {non_neg_integer(), non_neg_integer()}.
+average_wait_time_fold([EnteredT, AbandonedT, HandledT], {CallCount, TotalWaitTime}) ->
+    WaitTime = wait_time(EnteredT, AbandonedT, HandledT),
+    {CallCount + 1, TotalWaitTime + WaitTime}.
 
 -spec archive_data() -> 'ok'.
 archive_data() ->
