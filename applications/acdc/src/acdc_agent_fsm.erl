@@ -199,7 +199,16 @@ call_event(FSM, <<"call_event">>, <<"CHANNEL_DESTROY">>, JObj) ->
 call_event(FSM, <<"call_event">>, <<"CHANNEL_DISCONNECTED">>, JObj) ->
     gen_fsm:send_event(FSM, ?DESTROYED_CHANNEL(call_id(JObj), <<"MEDIA_SERVER_UNREACHABLE">>));
 call_event(FSM, <<"call_event">>, <<"LEG_CREATED">>, JObj) ->
-    gen_fsm:send_event(FSM, {'leg_created', call_id(JObj), kz_call_event:other_leg_call_id(JObj)});
+    %% Due to change in kapi_call to send events based on Origination-Call-ID,
+    %% we do not want to bind to any of the loopback legs
+    case kz_json:get_ne_binary_value(<<"Channel-Loopback-Leg">>, JObj) of
+        'undefined' ->
+            gen_fsm:send_event(FSM, {'leg_created'
+                                    ,call_id(JObj)
+                                    ,kz_call_event:other_leg_call_id(JObj)
+                                    });
+        _ -> 'ok'
+    end;
 call_event(FSM, <<"call_event">>, <<"LEG_DESTROYED">>, JObj) ->
     gen_fsm:send_event(FSM, {'leg_destroyed', call_id(JObj)});
 call_event(FSM, <<"call_event">>, <<"CHANNEL_ANSWER">>, JObj) ->
@@ -1332,10 +1341,11 @@ awaiting_callback(?DESTROYED_CHANNEL(OriginalMemberCallId, _Cause), #state{membe
                                                                           ,monitoring='true'
                                                                           }=State) ->
     {'next_state', 'awaiting_callback', State};
-awaiting_callback(?DESTROYED_CHANNEL(_ACallId, _Cause), #state{connect_failures=Fails
-                                                              ,max_connect_failures=MaxFails
-                                                              ,monitoring='true'
-                                                              }=State) ->
+awaiting_callback(?DESTROYED_CHANNEL(ACallId, _Cause), #state{agent_call_id=ACallId
+                                                             ,connect_failures=Fails
+                                                             ,max_connect_failures=MaxFails
+                                                             ,monitoring='true'
+                                                             }=State) ->
     NewFSMState = clear_call(State, 'failed'),
     NextState = return_to_state(Fails+1, MaxFails),
     case NextState of
@@ -1380,6 +1390,8 @@ awaiting_callback({'leg_created', CallId, OtherLegCallId}=Evt, #state{agent_list
             Candidates1 = props:set_value(OtherLegCallId, CtrlQ, []),
             {'next_state', 'awaiting_callback', State#state{member_callback_candidates=Candidates1}}
     end;
+awaiting_callback({'leg_destroyed', _}, State) ->
+    {'next_state', 'awaiting_callback', State};
 awaiting_callback({'playback_stop', _JObj}, State) ->
     {'next_state', 'awaiting_callback', State};
 awaiting_callback({'usurp_control', _}, State) ->
