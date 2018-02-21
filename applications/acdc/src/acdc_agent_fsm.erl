@@ -1341,10 +1341,11 @@ awaiting_callback(?DESTROYED_CHANNEL(OriginalMemberCallId, _Cause), #state{membe
                                                                           ,monitoring='true'
                                                                           }=State) ->
     {'next_state', 'awaiting_callback', State};
-awaiting_callback(?DESTROYED_CHANNEL(_ACallId, _Cause), #state{connect_failures=Fails
-                                                              ,max_connect_failures=MaxFails
-                                                              ,monitoring='true'
-                                                              }=State) ->
+awaiting_callback(?DESTROYED_CHANNEL(ACallId, _Cause), #state{agent_call_id=ACallId
+                                                             ,connect_failures=Fails
+                                                             ,max_connect_failures=MaxFails
+                                                             ,monitoring='true'
+                                                             }=State) ->
     NewFSMState = clear_call(State, 'failed'),
     NextState = return_to_state(Fails+1, MaxFails),
     case NextState of
