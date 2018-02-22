@@ -122,7 +122,6 @@
                ,member_call :: kapps_call:call()
                ,member_call_id :: api_binary()
                ,member_callback_candidates = [] :: kz_proplist()
-               ,member_callback_flag = 'false' :: boolean()
                ,member_original_call :: kapps_call:call()
                ,member_original_call_id :: api_binary()
                ,member_call_queue_id :: api_binary()
@@ -1251,20 +1250,13 @@ awaiting_callback({'originate_failed', JObj}, #state{account_id=AccountId
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
 
     {'next_state', 'awaiting_callback', State#state{wrapup_ref=hangup_call(State, 'member')}};
-awaiting_callback({'shared_failure', JObj}, #state{agent_listener=AgentListener
-                                                  ,agent_call_id=ACallId
-                                                  }=State) ->
-    Blame = kz_json:get_value(<<"Blame">>, JObj),
-    case Blame of
-        'undefined' ->
-            lager:debug("shared originate failure"),
-            acdc_agent_listener:channel_hungup(AgentListener, ACallId),
+awaiting_callback({'shared_failure', _}, #state{agent_listener=AgentListener
+                                               ,agent_call_id=ACallId
+                                               }=State) ->
+    lager:debug("shared originate failure"),
+    acdc_agent_listener:channel_hungup(AgentListener, ACallId),
 
-            {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'member')}};
-        <<"member">> ->
-            %% Synchronize member_callback_flag across nodes
-            {'next_state', 'awaiting_callback', State#state{member_callback_flag='true'}}
-    end;
+    {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'member')}};
 awaiting_callback({'shared_call_id', JObj}, #state{agent_listener=AgentListener
                                                   ,member_call=MemberCall
                                                   ,member_callback_candidates=Candidates
@@ -1278,7 +1270,6 @@ awaiting_callback({'shared_call_id', JObj}, #state{agent_listener=AgentListener
 
     {'next_state', 'answered', State#state{member_call=NewMemberCall
                                           ,member_call_id=NewMemberCallId
-                                          ,member_callback_flag='true'
                                           ,member_callback_candidates=props:set_value(NewMemberCallId, NewMemberCall, Candidates)
                                           ,connect_failures=0
                                           }};
@@ -1324,57 +1315,38 @@ awaiting_callback({'channel_answered', JObj}=Evt, #state{account_id=AccountId
 
             {'next_state', 'awaiting_callback', State#state{member_call=MemberCall
                                                            ,member_call_id=CallId
-                                                           ,member_callback_flag='true'
                                                            ,connect_failures=0
                                                            }}
     end;
-awaiting_callback(?DESTROYED_CHANNEL(ACallId, _Cause), #state{agent_listener=AgentListener
-                                                             ,member_callback_flag='true'
-                                                             ,agent_call_id=ACallId
-                                                             }=State) ->
-    lager:debug("agent hungup ~s while they were probably in a voicemail (or other non-endpoint destination)", [ACallId]),
-
-    acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
-
-    {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'agent')}};
 awaiting_callback(?DESTROYED_CHANNEL(OriginalMemberCallId, _Cause), #state{member_original_call_id=OriginalMemberCallId
                                                                           ,monitoring='true'
                                                                           }=State) ->
     {'next_state', 'awaiting_callback', State};
-awaiting_callback(?DESTROYED_CHANNEL(ACallId, _Cause), #state{agent_call_id=ACallId
-                                                             ,connect_failures=Fails
-                                                             ,max_connect_failures=MaxFails
+awaiting_callback(?DESTROYED_CHANNEL(ACallId, _Cause), #state{agent_listener=AgentListener
+                                                             ,agent_call_id=ACallId
                                                              ,monitoring='true'
                                                              }=State) ->
-    NewFSMState = clear_call(State, 'failed'),
-    NextState = return_to_state(Fails+1, MaxFails),
-    case NextState of
-        'paused' -> {'next_state', 'paused', NewFSMState};
-        'ready' -> apply_state_updates(NewFSMState)
-    end;
-awaiting_callback(?DESTROYED_CHANNEL(ACallId, Cause), #state{account_id=AccountId
-                                                            ,agent_id=AgentId
-                                                            ,agent_listener=AgentListener
-                                                            ,member_original_call_id=OriginalMemberCallId
-                                                            ,member_call_queue_id=QueueId
-                                                            ,agent_call_id=ACallId
-                                                            ,max_connect_failures=MaxFails
-                                                            ,connect_failures=Fails
-                                                            }=State) ->
-    lager:info("agent hungup ~s while they were supposed to wait for a callback", [ACallId]),
+    lager:debug("agent hungup ~s while waiting for a callback to connect", [ACallId]),
+    acdc_agent_listener:channel_hungup(AgentListener, ACallId),
 
-    acdc_agent_listener:member_connect_retry(AgentListener, OriginalMemberCallId),
+    {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'member')}};
+awaiting_callback(?DESTROYED_CHANNEL(ACallId, _Cause), #state{account_id=AccountId
+                                                             ,agent_id=AgentId
+                                                             ,agent_listener=AgentListener
+                                                             ,member_call=MemberCall
+                                                             ,member_original_call_id=OriginalMemberCallId
+                                                             ,member_call_queue_id=QueueId
+                                                             ,agent_call_id=ACallId
+                                                             }=State) ->
+    lager:info("agent hungup ~s while waiting for a callback to connect", [ACallId]),
 
-    acdc_stats:call_missed(AccountId, QueueId, AgentId, OriginalMemberCallId, Cause),
+    acdc_agent_listener:member_connect_accepted(AgentListener, ACallId, MemberCall),
+
+    acdc_stats:call_handled(AccountId, QueueId, OriginalMemberCallId, AgentId),
 
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
 
-    NewFSMState = clear_call(State, 'failed'),
-    NextState = return_to_state(Fails+1, MaxFails),
-    case NextState of
-        'paused' -> {'next_state', 'paused', NewFSMState};
-        'ready' -> apply_state_updates(NewFSMState)
-    end;
+    {'next_state', 'wrapup', State#state{wrapup_ref=hangup_call(State, 'member')}};
 awaiting_callback(?DESTROYED_CHANNEL(CallId, Cause), State) ->
     maybe_member_no_answer(CallId, Cause, State);
 awaiting_callback({'leg_created', CallId, OtherLegCallId}=Evt, #state{agent_listener=AgentListener
@@ -1430,22 +1402,16 @@ maybe_member_no_answer(CallId, Cause, #state{account_id=AccountId
                                             ,agent_call_id=ACallId
                                             }=State) ->
     case props:get_value(CallId, Candidates) of
-        'undefined' -> {'next_state', 'awaiting_callback', State};
+        'undefined' -> 'ok';
         _ ->
             ErrReason = missed_reason(Cause),
-            lager:debug("member did not answer callback ~s (~s), broadcasting", [CallId, ErrReason]),
-            kapi_acdc_agent:publish_shared_originate_failure([{<<"Account-ID">>, AccountId}
-                                                             ,{<<"Agent-ID">>, AgentId}
-                                                             ,{<<"Blame">>, <<"member">>}
-                                                              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-                                                             ]),
+            lager:debug("member did not answer callback ~s (~s)", [CallId, ErrReason]),
 
             acdc_agent_listener:member_connect_accepted(AgentListener, ACallId, MemberCall),
 
-            acdc_stats:call_handled(AccountId, QueueId, OriginalMemberCallId, AgentId),
-
-            {'next_state', 'awaiting_callback', State#state{member_callback_flag='true'}}
-    end.
+            acdc_stats:call_handled(AccountId, QueueId, OriginalMemberCallId, AgentId)
+    end,
+    {'next_state', 'awaiting_callback', State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -2149,7 +2115,6 @@ clear_call(#state{fsm_call_id=FSMemberCallId
                ,member_call = 'undefined'
                ,member_call_id = 'undefined'
                ,member_callback_candidates = []
-               ,member_callback_flag = 'false'
                ,member_original_call = 'undefined'
                ,member_original_call_id = 'undefined'
                ,member_call_start = 'undefined'
