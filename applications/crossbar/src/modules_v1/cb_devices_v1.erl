@@ -333,15 +333,41 @@ unique_mac_address(MacAddress, Context) ->
 -spec error_used_mac_address(cb_context:context()) -> cb_context:context().
 error_used_mac_address(Context) ->
     MacAddress = cb_context:req_value(Context, ?KEY_MAC_ADDRESS),
+    Message = used_mac_address_message(MacAddress, Context),
     cb_context:add_validation_error(
       ?KEY_MAC_ADDRESS
                                    ,<<"unique">>
                                    ,kz_json:from_list(
-                                      [{<<"message">>, <<"Mac address already in use">>}
+                                      [{<<"message">>, Message}
                                       ,{<<"cause">>, MacAddress}
                                       ])
                                    ,Context
      ).
+
+-spec used_mac_address_message(ne_binary(), cb_context:context()) -> ne_binary().
+used_mac_address_message(MacAddress, Context) ->
+    Prefix = <<"Mac address already in use">>,
+    case provisioner_util:mac_in_use_by(Context, MacAddress) of
+        {'error', 'unsupported'} -> Prefix;
+        %% Happens if provisioner doesn't know who owns the MAC, but it's in
+        %% use in the current account
+        'undefined' -> Prefix;
+        JObj -> used_mac_address_message(Prefix, JObj, Context)
+    end.
+
+-spec used_mac_address_message(ne_binary(), kz_json:object(), cb_context:context()) -> ne_binary().
+used_mac_address_message(Prefix, JObj, Context) ->
+    AccountId = kz_json:get_ne_binary_value(<<"account_id">>, JObj),
+    AuthAccountId = cb_context:auth_account_id(Context),
+    case kz_util:is_in_account_hierarchy(AuthAccountId, AccountId, 'true') of
+        'true' ->
+            {'ok', Account} = kz_account:fetch(AccountId),
+            AccountName = kz_json:get_ne_binary_value(<<"name">>, Account),
+            DeviceName = kz_json:get_ne_binary_value(<<"device_name">>, JObj),
+            <<Prefix/binary, " by device \"", DeviceName/binary, "\" in account \"", AccountName/binary, "\"">>;
+        'false' ->
+            Prefix
+    end.
 
 -spec get_mac_addresses(ne_binary()) -> ne_binaries().
 get_mac_addresses(DbName) ->

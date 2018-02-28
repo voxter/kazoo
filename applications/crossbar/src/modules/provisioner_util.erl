@@ -18,7 +18,7 @@
 -export([maybe_delete_account/1]).
 -export([maybe_send_contact_list/1]).
 -export([get_provision_defaults/1]).
--export([is_mac_address_in_use/2]).
+-export([is_mac_address_in_use/2, mac_in_use_by/2]).
 -export([maybe_sync_sip_data/2]).
 -export([cleanse_mac_address/1]).
 
@@ -311,12 +311,73 @@ is_mac_address_in_use(Context, MacAddress) ->
     case cb_context:is_context(Context)
         andalso get_provisioning_type()
     of
+        <<"super_awesome_provisioner">> ->
+            full_provisioner_is_mac_address_in_use(MacAddress);
         <<"provisioner_v5">> ->
             AuthToken = cb_context:auth_token(Context),
             %% Note: following call will take a "long" time
             'false' =/= provisioner_v5:check_MAC(MacAddress, AuthToken);
         _ -> 'false'
     end.
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec mac_in_use_by(cb_context:context(), ne_binary()) ->
+                           api_object() | {'error', 'unsupported'}.
+mac_in_use_by(Context, MacAddress) ->
+    case cb_context:is_context(Context)
+        andalso get_provisioning_type()
+    of
+        <<"super_awesome_provisioner">> ->
+            full_provisioner_mac_in_use_by(MacAddress);
+        _ ->
+            {'error', 'unsupported'}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec full_provisioner_is_mac_address_in_use(ne_binary()) -> boolean().
+full_provisioner_is_mac_address_in_use(MacAddress) ->
+    full_provisioner_mac_in_use_by(MacAddress) =/= 'undefined'.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec full_provisioner_mac_in_use_by(ne_binary()) -> api_object().
+full_provisioner_mac_in_use_by(MacAddress) ->
+    MacAddress1 = binary:replace(MacAddress, <<":">>, <<>>, ['global']),
+    case kapps_config:get_binary(?MOD_CONFIG_CAT, <<"provisioning_url">>) of
+        'undefined' -> 'undefined';
+        Url ->
+            {Scheme, Location, Path, _, _} = kz_http_util:urlsplit(Url),
+            BasePath = binary:replace(Path, <<"/accounts">>, <<"/macaddresses">>),
+            NewUrl = <<Scheme/binary, "://", Location/binary, BasePath/binary, "/", MacAddress1/binary>>,
+            lager:debug("getting in-use status for mac ~s", [MacAddress]),
+            Res = kz_http:get(NewUrl, [], [{'timeout', 10 * ?MILLISECONDS_IN_SECOND}]),
+            handle_full_provisioner_mac_in_use_by_resp(Res)
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec handle_full_provisioner_mac_in_use_by_resp(kz_http:ret()) -> api_object().
+handle_full_provisioner_mac_in_use_by_resp({'ok', 200, _, Body}) ->
+    kz_json:decode(Body);
+handle_full_provisioner_mac_in_use_by_resp(_) -> 'undefined'.
 
 %%--------------------------------------------------------------------
 %% @private
