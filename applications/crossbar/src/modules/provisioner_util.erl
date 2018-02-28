@@ -18,7 +18,7 @@
 -export([maybe_delete_account/1]).
 -export([maybe_send_contact_list/1]).
 -export([get_provision_defaults/1]).
--export([is_mac_address_in_use/2]).
+-export([is_mac_address_in_use/2, mac_in_use_by/2]).
 -export([maybe_sync_sip_data/2]).
 -export([cleanse_mac_address/1]).
 
@@ -321,6 +321,24 @@ is_mac_address_in_use(Context, MacAddress) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @public
+%% @doc
+%%
+%% @end
+%%--------------------------------------------------------------------
+-spec mac_in_use_by(cb_context:context(), ne_binary()) ->
+                           api_object() | {'error', 'unsupported'}.
+mac_in_use_by(Context, MacAddress) ->
+    case cb_context:is_context(Context)
+        andalso get_provisioning_type()
+    of
+        <<"super_awesome_provisioner">> ->
+            full_provisioner_mac_in_use_by(MacAddress);
+        _ ->
+            {'error', 'unsupported'}
+    end.
+
+%%--------------------------------------------------------------------
 %% @private
 %% @doc
 %%
@@ -336,11 +354,11 @@ full_provisioner_is_mac_address_in_use(MacAddress) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec full_provisioner_mac_in_use_by(ne_binary()) -> api_ne_binary().
+-spec full_provisioner_mac_in_use_by(ne_binary()) -> api_object().
 full_provisioner_mac_in_use_by(MacAddress) ->
     MacAddress1 = binary:replace(MacAddress, <<":">>, <<>>, ['global']),
     case kapps_config:get_binary(?MOD_CONFIG_CAT, <<"provisioning_url">>) of
-        'undefined' -> 'false';
+        'undefined' -> 'undefined';
         Url ->
             {Scheme, Location, Path, _, _} = kz_http_util:urlsplit(Url),
             BasePath = binary:replace(Path, <<"/accounts">>, <<"/macaddresses">>),
@@ -356,10 +374,9 @@ full_provisioner_mac_in_use_by(MacAddress) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec handle_full_provisioner_mac_in_use_by_resp(kz_http:ret()) -> api_ne_binary().
+-spec handle_full_provisioner_mac_in_use_by_resp(kz_http:ret()) -> api_object().
 handle_full_provisioner_mac_in_use_by_resp({'ok', 200, _, Body}) ->
-    JObj = kz_json:decode(Body),
-    kz_json:get_ne_binary_value(<<"account_id">>, JObj);
+    kz_json:decode(Body);
 handle_full_provisioner_mac_in_use_by_resp(_) -> 'undefined'.
 
 %%--------------------------------------------------------------------
