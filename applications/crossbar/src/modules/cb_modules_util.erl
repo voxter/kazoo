@@ -41,6 +41,8 @@
         ,should_update_voicemail_creds/1
 
         ,normalize_alphanum_name/1
+
+        ,used_mac_address_message/2
         ]).
 
 -include("crossbar.hrl").
@@ -869,3 +871,28 @@ normalize_alphanum_name(Context) ->
     Doc = cb_context:doc(Context),
     Name = kz_json:get_ne_binary_value(<<"name">>, Doc),
     cb_context:set_doc(Context, kz_json:set_value(<<"pvt_alphanum_name">>, normalize_alphanum_name(Name), Doc)).
+
+-spec used_mac_address_message(ne_binary(), cb_context:context()) -> ne_binary().
+used_mac_address_message(MacAddress, Context) ->
+    Prefix = <<"Mac address already in use">>,
+    case provisioner_util:mac_in_use_by(Context, MacAddress) of
+        {'error', 'unsupported'} -> Prefix;
+        %% Happens if provisioner doesn't know who owns the MAC, but it's in
+        %% use in the current account
+        'undefined' -> Prefix;
+        JObj -> used_mac_address_message(Prefix, JObj, Context)
+    end.
+
+-spec used_mac_address_message(ne_binary(), kz_json:object(), cb_context:context()) -> ne_binary().
+used_mac_address_message(Prefix, JObj, Context) ->
+    AccountId = kz_json:get_ne_binary_value(<<"account_id">>, JObj),
+    AuthAccountId = cb_context:auth_account_id(Context),
+    case kz_util:is_in_account_hierarchy(AuthAccountId, AccountId, 'true') of
+        'true' ->
+            {'ok', Account} = kz_account:fetch(AccountId),
+            AccountName = kz_json:get_ne_binary_value(<<"name">>, Account),
+            DeviceName = kz_json:get_ne_binary_value(<<"device_name">>, JObj),
+            <<Prefix/binary, " by device \"", DeviceName/binary, "\" in account \"", AccountName/binary, "\"">>;
+        'false' ->
+            Prefix
+    end.
