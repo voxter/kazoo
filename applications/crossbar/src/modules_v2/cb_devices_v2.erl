@@ -516,8 +516,9 @@ unique_mac_address(MacAddress, Context) ->
 -spec error_used_mac_address(cb_context:context()) -> cb_context:context().
 error_used_mac_address(Context) ->
     MacAddress = get_mac_address(Context),
+    Message = cb_modules_util:used_mac_address_message(MacAddress, Context),
     Msg = kz_json:from_list(
-            [{<<"message">>, <<"Mac address already in use">>}
+            [{<<"message">>, Message}
             ,{<<"cause">>, MacAddress}
             ]),
     cb_context:add_validation_error(?KEY_MAC_ADDRESS, <<"unique">>, Msg, Context).
