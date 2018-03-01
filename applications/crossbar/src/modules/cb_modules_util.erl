@@ -90,8 +90,8 @@ range_view_options(Context, MaxRange, Key, RangeFrom, RangeTo) ->
         N when N > MaxRange ->
             Msg = kz_json:from_list(
                     [{<<"message">>, <<Key/binary, "_to is more than "
-                                       ,(integer_to_binary(MaxRange))/binary
-                                       ," seconds from ", Path/binary>>}
+                                      ,(integer_to_binary(MaxRange))/binary
+                                      ," seconds from ", Path/binary>>}
                     ,{<<"cause">>, RangeTo}
                     ]),
             cb_context:add_validation_error(Path, <<"date_range">>, Msg, Context);
