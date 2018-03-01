@@ -8,16 +8,14 @@
 -define(STATS_QUERY_LIMITS_ENABLED, kapps_config:get_is_true(?CONFIG_CAT, <<"stats_query_limits_enabled">>, 'true')).
 -define(MAX_RESULT_SET, kapps_config:get_integer(?CONFIG_CAT, <<"max_result_set">>, 25)).
 
--record(agent_miss, {
-          agent_id :: api_binary()
+-record(agent_miss, {agent_id :: api_binary()
                     ,miss_reason :: api_binary()
                     ,miss_timestamp = kz_time:current_tstamp() :: pos_integer()
-         }).
+                    }).
 -type agent_miss() :: #agent_miss{}.
 -type agent_misses() :: [agent_miss()].
 
--record(call_stat, {
-          id :: api_binary() | '_' %% call_id::queue_id
+-record(call_stat, {id :: api_binary() | '_' %% call_id::queue_id
                    ,call_id :: api_binary() | '_'
                    ,account_id :: api_binary() | '$1' | '_'
                    ,queue_id :: api_binary() | '$2' | '_'
@@ -43,37 +41,34 @@
                    ,caller_id_number :: api_binary() | '_'
                    ,caller_priority :: api_integer() | '_'
                    ,is_archived = 'false' :: boolean() | '$2' | '$3' | '_'
-         }).
+                   }).
 -type call_stat() :: #call_stat{}.
 
--record(call_summary_stat, {
-          id :: api_binary() | '_'
+-record(call_summary_stat, {id :: api_binary() | '_'
                            ,account_id :: api_binary() | '$1'
                            ,queue_id :: api_binary() | '$2' | '_'
                            ,call_id :: api_binary() | '_'
                            ,status :: api_binary() | '$3' | '_'
                            ,wait_time :: api_integer() | '_'
                            ,timestamp :: api_integer() | '_'
-         }).
+                           }).
 -type call_summary_stat() :: #call_summary_stat{}.
 
--record(agent_call_stat, {
-          id :: api_binary() | '_'
+-record(agent_call_stat, {id :: api_binary() | '_'
                          ,account_id :: api_binary() | '$1'
                          ,queue_id :: api_binary() | '_'
                          ,agent_id :: api_binary() | '_'
                          ,call_id :: api_binary() | '_'
                          ,status :: api_binary() | '_'
                          ,timestamp :: api_integer() | '_'
-         }).
+                         }).
 -type agent_call_stat() :: #agent_call_stat{}.
 
 -define(STATUS_STATUSES, [<<"logged_in">>, <<"logged_out">>, <<"ready">>
                          ,<<"connecting">>, <<"connected">>
                          ,<<"wrapup">>, <<"paused">>, <<"outbound">>
                          ]).
--record(status_stat, {
-          id :: api_binary() | '_'
+-record(status_stat, {id :: api_binary() | '_'
                      ,agent_id :: api_binary() | '$2' | '_'
                      ,account_id :: api_binary() | '$1' | '_'
                      ,status :: api_binary() | '$4' | '_'
@@ -86,7 +81,7 @@
                      ,caller_id_name :: api_binary() | '_'
                      ,caller_id_number :: api_binary() | '_'
                      ,is_archived = 'false' :: boolean() | '$1' | '$2' | '_'
-         }).
+                     }).
 -type status_stat() :: #status_stat{}.
 
 

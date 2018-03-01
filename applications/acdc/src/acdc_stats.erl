@@ -147,7 +147,7 @@ call_marked_callback(AccountId, QueueId, CallId, CallerIdName) ->
              ]),
     kapps_util:amqp_pool_send(
       Prop
-                             ,fun kapi_acdc_stats:publish_call_marked_callback/1
+     ,fun kapi_acdc_stats:publish_call_marked_callback/1
      ).
 
 -spec call_handled(ne_binary(), ne_binary(), ne_binary(), ne_binary()) -> 'ok' | {'error', any()}.
