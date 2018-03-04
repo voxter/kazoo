@@ -1074,6 +1074,10 @@
         "callflows.acdc_member": {
             "description": "Validator for the acdc_member callflow's data object",
             "properties": {
+                "enter_as_callback": {
+                    "description": "Immediately register the call as a callback and hang up",
+                    "type": "boolean"
+                },
                 "id": {
                     "description": "ID of the ACDc Queue",
                     "type": "string"
@@ -5634,6 +5638,12 @@
                 },
                 "Call": {
                     "type": "object"
+                },
+                "Callback-Number": {
+                    "type": "string"
+                },
+                "Enter-As-Callback": {
+                    "type": "boolean"
                 },
                 "Event-Category": {
                     "enum": [

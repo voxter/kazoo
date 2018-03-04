@@ -3,7 +3,8 @@
 %%% @doc
 %%%
 %%% Data: {
-%%%   "id":"queue id"
+%%%   "id":"queue id",
+%%%   "enter_as_callback","Boolean, if true, enter the queue as a callback from the start"
 %%% }
 %%%
 %%% @end
@@ -25,12 +26,13 @@
 -define(MEMBER_TIMEOUT, <<"member_timeout">>).
 -define(MEMBER_HANGUP, <<"member_hangup">>).
 
--record(member_call, {call             :: kapps_call:call()
-                     ,queue_id         :: api_binary()
-                     ,config_data = [] :: kz_proplist()
-                     ,breakout_media   :: api_object()
+-record(member_call, {call              :: kapps_call:call()
+                     ,queue_id          :: api_binary()
+                     ,config_data = []  :: kz_proplist()
+                     ,breakout_media    :: api_object()
                      ,max_wait = 60 * ?MILLISECONDS_IN_SECOND :: max_wait()
-                     ,silence_noop     :: api_binary()
+                     ,silence_noop      :: api_binary()
+                     ,enter_as_callback :: boolean()
                      }).
 -type member_call() :: #member_call{}.
 
@@ -80,6 +82,7 @@ handle(Data, Call) ->
                                   ,breakout_media=kz_json:get_value([<<"breakout">>, <<"media">>], QueueJObj, kz_json:new())
                                   ,queue_id=QueueId
                                   ,max_wait=MaxWait
+                                  ,enter_as_callback=kz_json:is_true(<<"enter_as_callback">>, Data)
                                   }
                      ,is_queue_full(MaxQueueSize, CurrQueueSize)
                      ).
@@ -112,6 +115,16 @@ maybe_enter_queue(#member_call{call=Call}, 'true') ->
     lager:info("queue has reached max size"),
     cf_exe:continue(Call);
 maybe_enter_queue(#member_call{call=Call
+                              ,breakout_media=BreakoutMedia
+                              ,enter_as_callback='true'
+                              }=MC
+                 ,'false') ->
+    kapps_call_command:flush(Call),
+    kapps_call_command:hold(<<"silence_stream://0">>, Call),
+    kapps_call_command:answer(Call),
+    kapps_call_command:prompt(breakout_prompt(BreakoutMedia), kapps_call:language(Call), Call),
+    enter_as_callback_loop(MC, #breakout_state{});
+maybe_enter_queue(#member_call{call=Call
                               ,queue_id=QueueId
                               ,max_wait=MaxWait
                               }=MC
@@ -130,6 +143,47 @@ maybe_enter_queue(#member_call{call=Call
         {'error', E} ->
             lager:info("not entering queue; call was destroyed already (~s)", [E]),
             cf_exe:stop(Call)
+    end.
+
+-spec enter_as_callback_loop(member_call(), breakout_state()) -> 'ok'.
+enter_as_callback_loop(MC, BreakoutState) ->
+    enter_as_callback_loop(MC, BreakoutState, 15000).
+
+-spec enter_as_callback_loop(member_call(), breakout_state(), integer()) -> 'ok'.
+enter_as_callback_loop(#member_call{call=Call}
+                      ,#breakout_state{retries=0}
+                      ,_) ->
+    lager:info("maximum number of retries reached"),
+    kapps_call_command:flush_dtmf(Call),
+    cf_exe:continue(Call);
+enter_as_callback_loop(#member_call{call=Call}=MC
+                      ,BreakoutState
+                      ,Timeout) ->
+    Wait = os:timestamp(),
+    receive
+        {'amqp_msg', JObj} ->
+            case kz_util:get_event_type(JObj) of
+                {<<"call_event">>, <<"DTMF">>} ->
+                    DTMF = kz_json:get_value(<<"DTMF-Digit">>, JObj),
+                    enter_as_callback_handle_dtmf(DTMF, MC, BreakoutState);
+                {<<"call_event">>, <<"CHANNEL_DESTROY">>} ->
+                    lager:info("member hungup during enter as callback"),
+                    cf_exe:stop(Call);
+                _ ->
+                    enter_as_callback_loop(MC, BreakoutState, kz_time:decr_timeout(Timeout, Wait))
+            end
+    after Timeout ->
+            BreakoutState1 = breakout_invalid_selection(Call, BreakoutState, <<>>),
+            enter_as_callback_loop(MC, BreakoutState1)
+    end.
+
+-spec enter_as_callback_handle_dtmf(binary(), member_call(), breakout_state()) -> 'ok'.
+enter_as_callback_handle_dtmf(DTMF, #member_call{call=Call}=MC, BreakoutState) ->
+    kapps_call_command:flush(Call),
+    case process_breakout_message(DTMF, MC, BreakoutState) of
+        'callback_registered' -> 'ok';
+        'cancel' -> cf_exe:continue(Call);
+        BreakoutState1 -> enter_as_callback_loop(MC, BreakoutState1)
     end.
 
 -spec wait_for_bridge(member_call(), breakout_state(), max_wait()) -> 'ok'.
@@ -233,10 +287,12 @@ process_dtmf(DTMF, #member_call{call=Call}=MC, BreakoutState, Timeout, Start, Wa
             wait_for_bridge(MC, NextState, kz_time:decr_timeout(Timeout, Wait), Start);
         'callback_registered' ->
             lager:debug("member callback registered, stopping callflow"),
-            cf_exe:control_usurped(Call)
+            cf_exe:control_usurped(Call);
+        'cancel' ->
+            wait_for_bridge(MC, #breakout_state{}, kz_time:decr_timeout(Timeout, Wait), Start)
     end.
 
--spec breakout_loop(binary(), member_call(), breakout_state()) -> breakout_state() | 'callback_registered'.
+-spec breakout_loop(binary(), member_call(), breakout_state()) -> breakout_state() | 'callback_registered' | 'cancel'.
 breakout_loop(_, #member_call{call=Call}, #breakout_state{retries=0}) ->
     lager:info("maximum number of retries reached"),
     kapps_call_command:flush_dtmf(Call),
@@ -246,7 +302,7 @@ breakout_loop(DTMF, #member_call{call=Call}=MC, State) ->
     kapps_call_command:flush(Call),
     process_breakout_message(DTMF, MC, State).
 
--spec process_breakout_message(binary(), member_call(), breakout_state()) -> breakout_state() | 'callback_registered'.
+-spec process_breakout_message(binary(), member_call(), breakout_state()) -> breakout_state() | 'callback_registered' | 'cancel'.
 process_breakout_message(DTMF, #member_call{call=Call
                                            ,breakout_media=BreakoutMedia
                                            }
@@ -255,13 +311,13 @@ process_breakout_message(DTMF, #member_call{call=Call
         <<"1">> ->
             From = kapps_call:from_user(Call),
             breakout_number_correct(Call, BreakoutMedia, State#breakout_state{callback_number=From});
+        <<"2">> -> 'cancel';
         DTMF -> breakout_invalid_selection(Call, State, DTMF)
     end;
 process_breakout_message(DTMF
                         ,#member_call{call=Call
-                                     ,queue_id=QueueId
                                      ,breakout_media=BreakoutMedia
-                                     }
+                                     }=MC
                         ,#breakout_state{callback_number=Number
                                         ,callback_entering='false'
                                         }=State
@@ -269,13 +325,7 @@ process_breakout_message(DTMF
     case DTMF of
         <<"1">> ->
             lager:debug("accepted callback for number ~s", [Number]),
-            Payload = [{<<"Account-ID">>, kapps_call:account_id(Call)}
-                      ,{<<"Queue-ID">>, QueueId}
-                      ,{<<"Call-ID">>, kapps_call:call_id(Call)}
-                      ,{<<"Number">>, Number}
-                       | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-                      ],
-            kapi_acdc_queue:publish_member_callback_reg(Payload),
+            register_callback(MC, Number),
 
             PromptVars = kz_json:from_list([{<<"var1">>, <<"breakout-callback_registered">>}]),
             kapps_call_command:prompt(callback_registered(BreakoutMedia), kapps_call:language(Call), PromptVars, Call),
@@ -302,6 +352,26 @@ process_breakout_message(DTMF
         _ -> State#breakout_state{callback_number= <<Number/binary, DTMF/binary>>}
     end.
 
+-spec register_callback(member_call(), ne_binary()) -> 'ok'.
+register_callback(#member_call{call=Call
+                              ,queue_id=QueueId
+                              ,enter_as_callback='false'
+                              }, Number) ->
+    Payload = [{<<"Account-ID">>, kapps_call:account_id(Call)}
+              ,{<<"Queue-ID">>, QueueId}
+              ,{<<"Call-ID">>, kapps_call:call_id(Call)}
+              ,{<<"Number">>, Number}
+               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+              ],
+    kapi_acdc_queue:publish_member_callback_reg(Payload);
+register_callback(#member_call{call=Call
+                              ,config_data=MemberCall
+                              }, Number) ->
+    MemberCall1 = props:set_values([{<<"Callback-Number">>, Number}
+                                   ,{<<"Enter-As-Callback">>, 'true'}
+                                   ], MemberCall),
+    cf_exe:amqp_send(Call, MemberCall1, fun kapi_acdc_queue:publish_member_call/1).
+
 -spec breakout_number_correct(kapps_call:call(), ne_binary(), breakout_state()) -> breakout_state().
 breakout_number_correct(Call, BreakoutMedia, #breakout_state{callback_number=Number}=State) ->
     Prompt = [{'prompt', call_back_at(BreakoutMedia)}
@@ -311,7 +381,7 @@ breakout_number_correct(Call, BreakoutMedia, #breakout_state{callback_number=Num
     kapps_call_command:audio_macro(Prompt, Call),
     State.
 
--spec breakout_invalid_selection(kapps_call:call(), breakout_state(), ne_binary()) -> breakout_state().
+-spec breakout_invalid_selection(kapps_call:call(), breakout_state(), binary()) -> breakout_state().
 breakout_invalid_selection(Call, #breakout_state{retries=Retries}=State, DTMF) ->
     lager:debug("invalid selection ~s", [DTMF]),
     kapps_call_command:prompt(<<"menu-invalid_entry">>, Call),

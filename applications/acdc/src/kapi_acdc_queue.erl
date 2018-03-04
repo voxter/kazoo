@@ -75,12 +75,14 @@
 %% Member Call
 %%------------------------------------------------------------------------------
 -define(MEMBER_CALL_HEADERS, [<<"Account-ID">>, <<"Queue-ID">>, <<"Call">>]).
--define(OPTIONAL_MEMBER_CALL_HEADERS, [<<"Member-Priority">>]).
+-define(OPTIONAL_MEMBER_CALL_HEADERS, [<<"Callback-Number">>, <<"Enter-As-Callback">>, <<"Member-Priority">>]).
 -define(MEMBER_CALL_VALUES, [{<<"Event-Category">>, <<"member">>}
                             ,{<<"Event-Name">>, <<"call">>}
                             ]).
 -define(MEMBER_CALL_TYPES, [{<<"Queue-ID">>, fun erlang:is_binary/1}
                            ,{<<"Member-Priority">>, fun is_integer/1}
+                           ,{<<"Callback-Number">>, fun is_binary/1}
+                           ,{<<"Enter-As-Callback">>, fun is_boolean/1}
                            ]).
 
 -spec member_call(api_terms()) ->
