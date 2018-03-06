@@ -170,7 +170,7 @@ handle_member_call(JObj, Props) ->
                              ,{'reject_member_call', Call, JObj}
                              );
         'true' ->
-            start_queue_call(JObj, Props, Call)
+            start_queue_call(JObj, Props, Call, kz_json:is_true(<<"Enter-As-Callback">>, JObj))
     end.
 
 -spec are_agents_available(server_ref()) -> boolean().
@@ -181,7 +181,7 @@ are_agents_available(Srv, EnterWhenEmpty) ->
     agents_available(Srv) > 0
         orelse EnterWhenEmpty.
 
-start_queue_call(JObj, Props, Call) ->
+start_queue_call(JObj, Props, Call, 'false') ->
     _ = kapps_call:put_callid(Call),
     QueueId = kz_json:get_value(<<"Queue-ID">>, JObj),
 
@@ -209,6 +209,16 @@ start_queue_call(JObj, Props, Call) ->
                                                  ])
                               ,Call
                               ),
+
+    %% Add member to queue for tracking position
+    gen_listener:cast(props:get_value('server', Props), {'add_queue_member', JObj2});
+start_queue_call(JObj, Props, Call, 'true') ->
+    _ = kapps_call:put_callid(Call),
+    QueueId = kz_json:get_value(<<"Queue-ID">>, JObj),
+
+    lager:info("member callback for queue ~s recv", [QueueId]),
+
+    JObj2 = kz_json:set_value([<<"Call">>, <<"Custom-Channel-Vars">>, <<"Queue-ID">>], QueueId, JObj),
 
     %% Add member to queue for tracking position
     gen_listener:cast(props:get_value('server', Props), {'add_queue_member', JObj2}).
@@ -619,8 +629,6 @@ handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
 handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
                                               ,queue_id=QueueId
                                               ,current_member_calls=CurrentCalls
-                                              ,announcements_config=AnnouncementsConfig
-                                              ,announcements_pids=AnnouncementsPids
                                               }=State) ->
     Position = length(CurrentCalls)+1,
     Call = kapps_call:set_custom_channel_var(<<"Queue-Position">>
@@ -645,17 +653,13 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
 
     acdc_util:presence_update(AccountId, QueueId, ?PRESENCE_RED_FLASH),
 
-    %% Schedule position/wait time announcements
-    AnnouncementsPids1 = case acdc_announcements_sup:maybe_start_announcements(self(), Call, AnnouncementsConfig) of
-                             'false' -> AnnouncementsPids;
-                             {'ok', Pid} ->
-                                 CallId = kapps_call:call_id(Call),
-                                 AnnouncementsPids#{CallId => Pid}
-                         end,
-
-    {'noreply', State#state{current_member_calls=[Call | CurrentCalls]
-                           ,announcements_pids=AnnouncementsPids1
-                           }};
+    State1 = State#state{current_member_calls=[Call | CurrentCalls]},
+    State2 = lists:foldl(fun(Updater, StateAcc) -> Updater(JObj, Call, StateAcc) end
+                        ,State1
+                        ,[fun maybe_schedule_position_announcements/3
+                         ,fun maybe_add_queue_member_as_callback/3
+                         ]),
+    {'noreply', State2};
 
 handle_cast({'handle_queue_member_add', JObj}, #state{current_member_calls=CurrentCalls}=State) ->
     Call = kapps_call:from_json(kz_json:get_value(<<"Call">>, JObj)),
@@ -1076,14 +1080,28 @@ maybe_start_queue_workers(QueueSup, AgentCount) ->
 update_properties(QueueJObj, State) ->
     State#state{
       enter_when_empty=kz_json:is_true(<<"enter_when_empty">>, QueueJObj, 'true')
-               ,moh=kz_json:get_ne_value(<<"moh">>, QueueJObj)
-               ,announcements_config=announcements_config(QueueJObj)
+     ,moh=kz_json:get_ne_value(<<"moh">>, QueueJObj)
+     ,announcements_config=announcements_config(QueueJObj)
      }.
 
 -spec announcements_config(kz_json:object()) -> kz_proplist().
 announcements_config(Config) ->
     kz_json:recursive_to_proplist(
       kz_json:get_json_value(<<"announcements">>, Config, kz_json:new())).
+
+-spec maybe_schedule_position_announcements(kz_json:object(), kapps_call:call(), mgr_state()) -> mgr_state().
+maybe_schedule_position_announcements(JObj, Call, #state{announcements_config=AnnouncementsConfig
+                                                        ,announcements_pids=AnnouncementsPids
+                                                        }=State) ->
+    EnterAsCallback = kz_json:is_true(<<"Enter-As-Callback">>, JObj),
+    case not EnterAsCallback
+        andalso acdc_announcements_sup:maybe_start_announcements(self(), Call, AnnouncementsConfig)
+    of
+        'false' -> State;
+        {'ok', Pid} ->
+            CallId = kapps_call:call_id(Call),
+            State#state{announcements_pids=AnnouncementsPids#{CallId => Pid}}
+    end.
 
 -spec cancel_position_announcements(kapps_call:call() | 'false', map()) ->
                                            map().
@@ -1143,6 +1161,26 @@ try_publish_call_exited_position({CallId, Index}, #state{account_id=AccountId
     kapi_acdc_stats:publish_call_exited_position(Prop);
 try_publish_call_exited_position('false', _) ->
     lager:error("call id not found in list of calls").
+
+-spec maybe_add_queue_member_as_callback(kz_json:object(), kapps_call:call(), mgr_state()) -> mgr_state().
+maybe_add_queue_member_as_callback(JObj, Call, #state{account_id=AccountId
+                                                     ,queue_id=QueueId
+                                                     ,current_member_calls=CurrentCalls
+                                                     ,registered_callbacks=RegCallbacks
+                                                     }=State) ->
+    EnterAsCallback = kz_json:is_true(<<"Enter-As-Callback">>, JObj),
+    case EnterAsCallback of
+        'false' -> State;
+        'true' ->
+            CallId = kapps_call:call_id(Call),
+            lager:debug("call ~s marked as callback", [CallId]),
+            Number = kz_json:get_ne_binary_value(<<"Callback-Number">>, JObj),
+            Call1 = callback_flag(AccountId, QueueId, Call),
+            CIDPrepend = kapps_call:kvs_fetch('prepend_cid_name', Call1),
+            State#state{current_member_calls=lists:keyreplace(CallId, 2, CurrentCalls, Call1)
+                       ,registered_callbacks=[{CallId, {Number, CIDPrepend}} | RegCallbacks]
+                       }
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
