@@ -38,6 +38,9 @@
         },
         "Queue-ID": {
             "type": "string"
+        },
+        "Skills": {
+            "type": "string"
         }
     },
     "required": [

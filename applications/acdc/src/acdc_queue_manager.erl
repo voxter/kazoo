@@ -50,7 +50,7 @@
 
 -ifdef(TEST).
 -export([ss_size/2
-        ,update_strategy_with_agent/6
+        ,update_strategy_with_agent/7
         ]).
 -endif.
 
@@ -526,11 +526,11 @@ handle_cast({'start_worker', N}, #state{account_id=AccountId
     acdc_queue_workers_sup:new_workers(WorkersSup, AccountId, QueueId, N),
     {'noreply', State};
 
-handle_cast({'agent_available', AgentId, Priority}, #state{strategy=Strategy
-                                                          ,strategy_state=StrategyState
-                                                          ,supervisor=QueueSup
-                                                          }=State) when is_binary(AgentId) ->
-    StrategyState1 = update_strategy_with_agent(Strategy, StrategyState, AgentId, Priority, 'add', 'undefined'),
+handle_cast({'agent_available', AgentId, Priority, Skills}, #state{strategy=Strategy
+                                                                  ,strategy_state=StrategyState
+                                                                  ,supervisor=QueueSup
+                                                                  }=State) when is_binary(AgentId) ->
+    StrategyState1 = update_strategy_with_agent(Strategy, StrategyState, AgentId, Priority, Skills, 'add', 'undefined'),
     maybe_start_queue_workers(QueueSup, ss_size(StrategyState1, 'logged_in')),
     {'noreply', State#state{strategy_state=StrategyState1}
     ,'hibernate'};
@@ -538,6 +538,7 @@ handle_cast({'agent_available', JObj}, State) ->
     handle_cast({'agent_available'
                 ,kz_json:get_ne_binary_value(<<"Agent-ID">>, JObj)
                 ,kz_json:get_integer_value(<<"Priority">>, JObj, 0)
+                ,kz_json:get_list_value(<<"Skills">>, JObj, [])
                 }, State);
 
 handle_cast({'agent_ringing', AgentId, Priority}, #state{strategy=Strategy
@@ -545,7 +546,7 @@ handle_cast({'agent_ringing', AgentId, Priority}, #state{strategy=Strategy
                                                         }=State) when is_binary(AgentId) ->
     lager:info("agent ~s ringing, maybe updating strategy ~s", [AgentId, Strategy]),
 
-    StrategyState1 = update_strategy_with_agent(Strategy, StrategyState, AgentId, Priority, 'remove', 'ringing'),
+    StrategyState1 = update_strategy_with_agent(Strategy, StrategyState, AgentId, Priority, [], 'remove', 'ringing'),
     {'noreply', State#state{strategy_state=StrategyState1}
     ,'hibernate'};
 handle_cast({'agent_ringing', JObj}, State) ->
@@ -559,7 +560,7 @@ handle_cast({'agent_busy', AgentId, Priority}, #state{strategy=Strategy
                                                      }=State) when is_binary(AgentId) ->
     lager:info("agent ~s busy, maybe updating strategy ~s", [AgentId, Strategy]),
 
-    StrategyState1 = update_strategy_with_agent(Strategy, StrategyState, AgentId, Priority, 'remove', 'busy'),
+    StrategyState1 = update_strategy_with_agent(Strategy, StrategyState, AgentId, Priority, [], 'remove', 'busy'),
     {'noreply', State#state{strategy_state=StrategyState1}
     ,'hibernate'};
 handle_cast({'agent_busy', JObj}, State) ->
@@ -573,7 +574,7 @@ handle_cast({'agent_unavailable', AgentId, Priority}, #state{strategy=Strategy
                                                             }=State) when is_binary(AgentId) ->
     lager:info("agent ~s unavailable, maybe updating strategy ~s", [AgentId, Strategy]),
 
-    StrategyState1 = update_strategy_with_agent(Strategy, StrategyState, AgentId, Priority, 'remove', 'undefined'),
+    StrategyState1 = update_strategy_with_agent(Strategy, StrategyState, AgentId, Priority, [], 'remove', 'undefined'),
     {'noreply', State#state{strategy_state=StrategyState1}
     ,'hibernate'};
 handle_cast({'agent_unavailable', JObj}, State) ->
@@ -826,11 +827,11 @@ pick_winner(CRs, 'mi', _) ->
 
     {[MostIdle|Same], Other}.
 
--spec update_strategy_with_agent(queue_strategy(), strategy_state(), ne_binary(), agent_priority(), 'add' | 'remove', 'ringing' | 'busy' | 'undefined') ->
+-spec update_strategy_with_agent(queue_strategy(), strategy_state(), ne_binary(), agent_priority(), ne_binaries(), 'add' | 'remove', 'ringing' | 'busy' | 'undefined') ->
                                         strategy_state().
-update_strategy_with_agent('rr', SS, AgentId, Priority, Action, Flag) ->
+update_strategy_with_agent('rr', SS, AgentId, Priority, _, Action, Flag) ->
     update_rr_strategy_with_agent(SS, AgentId, Priority, Action, Flag);
-update_strategy_with_agent('mi', SS, AgentId, _, Action, Flag) ->
+update_strategy_with_agent('mi', SS, AgentId, _, _, Action, Flag) ->
     update_mi_strategy_with_agent(SS, AgentId, Action, Flag).
 
 -spec update_rr_strategy_with_agent(strategy_state(), ne_binary(), agent_priority(), 'add' | 'remove', 'ringing' | 'busy' | 'undefined') ->
