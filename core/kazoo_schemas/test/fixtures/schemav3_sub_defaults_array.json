@@ -1,7 +1,5 @@
 {
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "_id": "resources",
-    "description": "Schema for resources",
+    "$schema": "http://json-schema.org/draft-03/schema#",
     "properties": {
         "emergency": {
             "default": false,
@@ -21,8 +19,16 @@
             },
             "type": "array"
         },
+        "flat_rate_blacklist": {
+            "description": "Regex for determining if a number should not be eligible for flat-rate trunking",
+            "type": "string"
+        },
+        "flat_rate_whitelist": {
+            "description": "Regex for determining if the number is eligible for flat-rate trunking",
+            "type": "string"
+        },
         "format_from_uri": {
-            "description": "When set to true requests to this resource will have a re-formatted SIP From Header",
+            "description": "When set to true requests to this resource will have a reformatted SIP From Header",
             "type": "boolean"
         },
         "formatters": {
@@ -36,11 +42,17 @@
         "gateways": {
             "description": "A list of gateways avaliable for this resource",
             "items": {
-                "default": {},
                 "properties": {
                     "bypass_media": {
-                        "description": "The resource gateway bypass media mode",
-                        "type": "boolean"
+                        "default": "auto",
+                        "description": "The device bypass media mode",
+                        "enum": [
+                            "true",
+                            "false",
+                            "auto"
+                        ],
+                        "name": "Bypass Media (gateways)",
+                        "type": "string"
                     },
                     "caller_id_type": {
                         "description": "The type of caller id to use",
@@ -61,6 +73,10 @@
                         "type": "string"
                     },
                     "codecs": {
+                        "default": [
+                            "PCMU",
+                            "PCMA"
+                        ],
                         "description": "A list of single list codecs supported by this gateway (to support backward compatibilty)",
                         "items": {
                             "enum": [
@@ -102,6 +118,7 @@
                                 }
                             }
                         ],
+                        "default": {},
                         "description": "A property list of SIP headers",
                         "type": "object"
                     },
@@ -131,7 +148,7 @@
                         "type": "boolean"
                     },
                     "format_from_uri": {
-                        "description": "When set to true requests to this resource gateway will have a re-formated SIP From Header",
+                        "description": "When set to true requests to this resource gateway will have a reformatted SIP From Header",
                         "type": "boolean"
                     },
                     "from_uri_realm": {
@@ -150,12 +167,121 @@
                         ],
                         "type": "string"
                     },
+                    "invite_parameters": {
+                        "additionalProperties": false,
+                        "properties": {
+                            "dynamic": {
+                                "description": "A list of properties that, if found on the inbound call, should be added as an INVITE parameter",
+                                "items": {
+                                    "oneOf": [
+                                        {
+                                            "pattern": "custom_channel_vars\\..*",
+                                            "type": "string"
+                                        },
+                                        {
+                                            "pattern": "custom_sip_headers\\..*",
+                                            "type": "string"
+                                        },
+                                        {
+                                            "enum": [
+                                                "zone"
+                                            ],
+                                            "type": "string"
+                                        },
+                                        {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                                "key": {
+                                                    "oneOf": [
+                                                        {
+                                                            "pattern": "custom_channel_vars\\..*",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "pattern": "custom_sip_headers\\..*",
+                                                            "type": "string"
+                                                        },
+                                                        {
+                                                            "enum": [
+                                                                "zone"
+                                                            ],
+                                                            "type": "string"
+                                                        }
+                                                    ]
+                                                },
+                                                "seperator": {
+                                                    "type": "string"
+                                                },
+                                                "tag": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "required": [
+                                                "key",
+                                                "tag"
+                                            ],
+                                            "type": "object"
+                                        }
+                                    ]
+                                },
+                                "type": "array"
+                            },
+                            "static": {
+                                "description": "A list of static values that should be added as INVITE parameters",
+                                "items": {
+                                    "type": "string"
+                                },
+                                "type": "array"
+                            }
+                        },
+                        "type": "object"
+                    },
+                    "ignore_flags": {
+                        "description": "When set to true this resource is used if the rules/classifiers match regardless of flags",
+                        "type": "boolean"
+                    },
                     "media": {
                         "description": "The media parameters for the resource gateway",
                         "properties": {
+                            "codecs": {
+                                "default": [
+                                    "PCMU",
+                                    "PCMA"
+                                ],
+                                "description": "A list of audio codecs supported by this gateway",
+                                "items": {
+                                    "properties": {
+                                        "enum": [
+                                            "G729",
+                                            "PCMU",
+                                            "PCMA",
+                                            "G722_16",
+                                            "G722_32",
+                                            "CELT_48",
+                                            "CELT_64",
+                                            "Speex",
+                                            "GSM",
+                                            "OPUS",
+                                            "H261",
+                                            "H263",
+                                            "H264",
+                                            "VP8"
+                                        ],
+                                        "type": "string"
+                                    }
+                                },
+                                "name": "Codecs (gateways)",
+                                "type": "array"
+                            },
                             "fax_option": {
+                                "default": "auto",
                                 "description": "Is T.38 Supported?",
-                                "type": "boolean"
+                                "enum": [
+                                    "true",
+                                    "false",
+                                    "auto"
+                                ],
+                                "type": "string"
                             },
                             "rtcp_mux": {
                                 "description": "RTCP protocol messages mixed with RTP data",
@@ -175,6 +301,7 @@
                         "type": "integer"
                     },
                     "prefix": {
+                        "default": "+1",
                         "description": "A string to prepend to the dialed number or capture group of the matching rule",
                         "maxLength": 64,
                         "type": "string"
@@ -203,7 +330,6 @@
                         "type": "string"
                     },
                     "skype_rr": {
-                        "default": true,
                         "description": "Determines whether to round-robin calls amongst all interfaces (overrides \"skype_interface\" setting)",
                         "type": "boolean"
                     },
@@ -236,82 +362,48 @@
             "minimum": 1,
             "type": "integer"
         },
-        "ignore_flags": {
-            "description": "When set to true this resource is used if the rules/classifiers match regardless of flags",
-            "type": "boolean"
-        },
         "media": {
-            "default": {},
-            "description": "The default resouce media parameters applied if not present to all specified gateways",
+            "description": "The media parameters for the device",
             "properties": {
-                "audio": {
-                    "default": {},
-                    "description": "The default audio media parameters",
-                    "properties": {
-                        "codecs": {
-                            "default": [
-                                "PCMU"
+                "codecs": {
+                    "default": [
+                        "PCMU",
+                        "PCMA"
+                    ],
+                    "description": "A list of audio codecs supported by this gateway",
+                    "items": {
+                        "properties": {
+                            "enum": [
+                                "G729",
+                                "PCMU",
+                                "PCMA",
+                                "G722_16",
+                                "G722_32",
+                                "CELT_48",
+                                "CELT_64",
+                                "Speex",
+                                "GSM",
+                                "OPUS",
+                                "H261",
+                                "H263",
+                                "H264",
+                                "VP8"
                             ],
-                            "description": "A list of default codecs to use",
-                            "items": {
-                                "enum": [
-                                    "OPUS",
-                                    "CELT@32000h",
-                                    "G7221@32000h",
-                                    "G7221@16000h",
-                                    "G722",
-                                    "speex@32000h",
-                                    "speex@16000h",
-                                    "PCMU",
-                                    "PCMA",
-                                    "G729",
-                                    "GSM",
-                                    "CELT@48000h",
-                                    "CELT@64000h",
-                                    "G722_16",
-                                    "G722_32",
-                                    "CELT_48",
-                                    "CELT_64",
-                                    "Speex",
-                                    "speex"
-                                ],
-                                "type": "string"
-                            },
-                            "type": "array",
-                            "uniqueItems": true
+                            "type": "string"
                         }
                     },
-                    "type": "object"
-                },
-                "bypass_media": {
-                    "description": "Default bypass media mode",
-                    "type": "boolean"
+                    "name": "Codecs (gateways)",
+                    "type": "array"
                 },
                 "fax_option": {
-                    "description": "Is T.38 Supported?",
-                    "type": "boolean"
-                },
-                "video": {
-                    "default": {},
-                    "description": "The default video media parameters",
-                    "properties": {
-                        "codecs": {
-                            "default": [],
-                            "description": "A list of default codecs to use",
-                            "items": {
-                                "enum": [
-                                    "H261",
-                                    "H263",
-                                    "H264",
-                                    "VP8"
-                                ],
-                                "type": "string"
-                            },
-                            "type": "array",
-                            "uniqueItems": true
-                        }
-                    },
-                    "type": "object"
+                    "default": "auto",
+                    "description": "The fax mode to option",
+                    "enum": [
+                        "true",
+                        "false",
+                        "auto"
+                    ],
+                    "type": "string"
                 }
             },
             "type": "object"

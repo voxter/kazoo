@@ -22567,6 +22567,7 @@
                 }
             },
             "required": [
+                "media_source",
                 "name"
             ],
             "type": "object"
@@ -24797,6 +24798,10 @@
                     "minimum": 1,
                     "type": "integer"
                 },
+                "ignore_flags": {
+                    "description": "When set to true this resource is used if the rules/classifiers match regardless of flags",
+                    "type": "boolean"
+                },
                 "media": {
                     "default": {},
                     "description": "The default resouce media parameters applied if not present to all specified gateways",
@@ -26285,6 +26290,7 @@
                     "type": "integer"
                 },
                 "profiles": {
+                    "default": {},
                     "properties": {
                         "default": {
                             "default": {
@@ -26312,7 +26318,8 @@
                             "description": "conferences page",
                             "type": "object"
                         }
-                    }
+                    },
+                    "type": "object"
                 },
                 "reuse_pronounced_name": {
                     "default": false,
