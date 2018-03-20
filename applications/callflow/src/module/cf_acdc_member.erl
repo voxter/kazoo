@@ -33,6 +33,7 @@
                      ,max_wait = 60 * ?MILLISECONDS_IN_SECOND :: max_wait()
                      ,silence_noop      :: api_binary()
                      ,enter_as_callback :: boolean()
+                     ,queue_jobj        :: kz_json:object()
                      }).
 -type member_call() :: #member_call{}.
 
@@ -69,9 +70,12 @@ handle(Data, Call) ->
     MaxWait = max_wait(kz_json:get_integer_value(<<"connection_timeout">>, QueueJObj, 3600)),
     MaxQueueSize = max_queue_size(kz_json:get_integer_value(<<"max_queue_size">>, QueueJObj, 0)),
 
-    Call1 = kapps_call:kvs_store_proplist([{'caller_exit_key', kz_json:get_value(<<"caller_exit_key">>, QueueJObj)}
-                                          ,{'breakout_key', kz_json:get_value([<<"breakout">>, <<"dtmf">>], QueueJObj)}
-                                          ], Call),
+    Call1 = maybe_enable_callback(
+              kapps_call:kvs_store_proplist([{'caller_exit_key', kz_json:get_value(<<"caller_exit_key">>, QueueJObj)}]
+                                           ,Call
+                                           )
+             ,QueueJObj
+             ),
 
     CurrQueueSize = kapi_acdc_queue:queue_size(kapps_call:account_id(Call1), QueueId),
 
@@ -83,9 +87,24 @@ handle(Data, Call) ->
                                   ,queue_id=QueueId
                                   ,max_wait=MaxWait
                                   ,enter_as_callback=kz_json:is_true(<<"enter_as_callback">>, Data)
+                                  ,queue_jobj=QueueJObj
                                   }
                      ,is_queue_full(MaxQueueSize, CurrQueueSize)
                      ).
+
+-spec maybe_enable_callback(kapps_call:call(), kz_json:object()) -> kapps_call:call().
+maybe_enable_callback(Call, QueueJObj) ->
+    RestrictedClassifiers = kz_json:get_json_value([<<"breakout">>, <<"classifiers">>], QueueJObj, kz_json:new()),
+    CallerClassification = knm_converters:classify(kapps_call:from_user(Call)),
+    BreakoutKey = kz_json:get_ne_binary_value([<<"breakout">>, <<"dtmf">>], QueueJObj),
+    case BreakoutKey =/= 'undefined'
+        andalso not callback_restricted(RestrictedClassifiers, CallerClassification)
+    of
+        'true' ->
+            lager:debug("callbacks are enabled"),
+            kapps_call:kvs_store_proplist([{'breakout_key', BreakoutKey}], Call);
+        'false' -> Call
+    end.
 
 -spec maybe_use_variable(kz_json:object(), kapps_call:call()) -> api_binary().
 maybe_use_variable(Data, Call) ->
@@ -117,13 +136,22 @@ maybe_enter_queue(#member_call{call=Call}, 'true') ->
 maybe_enter_queue(#member_call{call=Call
                               ,breakout_media=BreakoutMedia
                               ,enter_as_callback='true'
+                              ,queue_jobj=QueueJObj
                               }=MC
                  ,'false') ->
-    kapps_call_command:flush(Call),
-    kapps_call_command:hold(<<"silence_stream://0">>, Call),
-    kapps_call_command:answer(Call),
-    kapps_call_command:prompt(breakout_prompt(BreakoutMedia), kapps_call:language(Call), Call),
-    enter_as_callback_loop(MC, #breakout_state{});
+    RestrictedClassifiers = kz_json:get_json_value([<<"breakout">>, <<"classifiers">>], QueueJObj, kz_json:new()),
+    CallerClassification = knm_converters:classify(kapps_call:from_user(Call)),
+    case callback_restricted(RestrictedClassifiers, CallerClassification) of
+        'false' ->
+            kapps_call_command:flush(Call),
+            kapps_call_command:hold(<<"silence_stream://0">>, Call),
+            kapps_call_command:answer(Call),
+            kapps_call_command:prompt(breakout_prompt(BreakoutMedia), kapps_call:language(Call), Call),
+            enter_as_callback_loop(MC, #breakout_state{});
+        'true' ->
+            lager:info("queue restricted callback from caller with classification \"~s\"", [CallerClassification]),
+            cf_exe:continue(Call)
+    end;
 maybe_enter_queue(#member_call{call=Call
                               ,queue_id=QueueId
                               ,max_wait=MaxWait
@@ -386,6 +414,10 @@ breakout_invalid_selection(Call, #breakout_state{retries=Retries}=State, DTMF) -
     lager:debug("invalid selection ~s", [DTMF]),
     kapps_call_command:prompt(<<"menu-invalid_entry">>, Call),
     State#breakout_state{retries=Retries-1}.
+
+-spec callback_restricted(kz_json:object(), api_binary()) -> boolean().
+callback_restricted(RestrictedClassifiers, CallerClassification) ->
+    kz_json:is_false(CallerClassification, RestrictedClassifiers).
 
 -spec breakout_prompt(kz_json:object()) -> ne_binary().
 breakout_prompt(JObj) ->
