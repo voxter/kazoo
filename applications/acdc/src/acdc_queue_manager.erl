@@ -644,7 +644,10 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
                            ,kz_json:get_integer_value(<<"Member-Priority">>, JObj)
                            ),
 
-    publish_queue_member_add(AccountId, QueueId, Call),
+    publish_queue_member_add(AccountId, QueueId, Call
+                            ,kz_json:is_true(<<"Enter-As-Callback">>, JObj)
+                            ,kz_json:get_binary_value(<<"Callback-Number">>, JObj)
+                            ),
 
     %% Add call to shared queue
     kapi_acdc_queue:publish_shared_member_call(AccountId, QueueId, JObj),
@@ -667,7 +670,9 @@ handle_cast({'handle_queue_member_add', JObj}, #state{current_member_calls=Curre
     CallId = kapps_call:call_id(Call),
     lager:debug("received notification of new queue member ~s", [CallId]),
 
-    {'noreply', State#state{current_member_calls = [Call | lists:keydelete(CallId, 2, CurrentCalls)]}};
+    State1 = State#state{current_member_calls=[Call | lists:keydelete(CallId, 2, CurrentCalls)]},
+    State2 = maybe_add_queue_member_as_callback(JObj, Call, State1),
+    {'noreply', State2};
 
 handle_cast({'handle_queue_member_remove', CallId}, State) ->
     State1 = remove_queue_member(CallId, State),
@@ -774,13 +779,16 @@ lookup_priority_levels(AccountDB, QueueId) ->
 make_ignore_key(AccountId, QueueId, CallId) ->
     {AccountId, QueueId, CallId}.
 
--spec publish_queue_member_add(ne_binary(), ne_binary(), kapps_call:call()) -> 'ok'.
-publish_queue_member_add(AccountId, QueueId, Call) ->
-    Prop = [{<<"Account-ID">>, AccountId}
-           ,{<<"Queue-ID">>, QueueId}
-           ,{<<"Call">>, kapps_call:to_json(Call)}
-            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-           ],
+-spec publish_queue_member_add(ne_binary(), ne_binary(), kapps_call:call(), boolean(), api_binary()) -> 'ok'.
+publish_queue_member_add(AccountId, QueueId, Call, EnterAsCallback, CallbackNumber) ->
+    Prop = props:filter_undefined(
+             [{<<"Account-ID">>, AccountId}
+             ,{<<"Queue-ID">>, QueueId}
+             ,{<<"Call">>, kapps_call:to_json(Call)}
+             ,{<<"Enter-As-Callback">>, EnterAsCallback}
+             ,{<<"Callback-Number">>, CallbackNumber}
+              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+             ]),
     kapi_acdc_queue:publish_queue_member_add(Prop).
 
 -spec publish_queue_member_remove(ne_binary(), ne_binary(), ne_binary()) -> 'ok'.
@@ -1179,7 +1187,7 @@ maybe_add_queue_member_as_callback(JObj, Call, #state{account_id=AccountId
             Call1 = callback_flag(AccountId, QueueId, Call),
             CIDPrepend = kapps_call:kvs_fetch('prepend_cid_name', Call1),
             State#state{current_member_calls=lists:keyreplace(CallId, 2, CurrentCalls, Call1)
-                       ,registered_callbacks=[{CallId, {Number, CIDPrepend}} | RegCallbacks]
+                       ,registered_callbacks=props:set_value(CallId, {Number, CIDPrepend}, RegCallbacks)
                        }
     end.
 
