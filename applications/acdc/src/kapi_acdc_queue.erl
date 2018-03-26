@@ -670,12 +670,14 @@ queue_member_routing_key(JObj) ->
 queue_member_routing_key(AcctId, QID) ->
     <<"acdc.queue.position.", AcctId/binary, ".", QID/binary>>.
 
--define(QUEUE_MEMBER_ADD_HEADERS, [<<"Account-ID">>, <<"Queue-ID">>, <<"Call">>]).
--define(OPTIONAL_QUEUE_MEMBER_ADD_HEADERS, []).
+-define(QUEUE_MEMBER_ADD_HEADERS, [<<"Account-ID">>, <<"Queue-ID">>, <<"Call">>, <<"Enter-As-Callback">>]).
+-define(OPTIONAL_QUEUE_MEMBER_ADD_HEADERS, [<<"Callback-Number">>]).
 -define(QUEUE_MEMBER_ADD_VALUES, [{<<"Event-Category">>, <<"queue">>}
                                  ,{<<"Event-Name">>, <<"member_add">>}
                                  ]).
--define(QUEUE_MEMBER_ADD_TYPES, []).
+-define(QUEUE_MEMBER_ADD_TYPES, [{<<"Callback-Number">>, fun is_binary/1}
+                                ,{<<"Enter-As-Callback">>, fun is_boolean/1}
+                                ]).
 
 -spec queue_member_add(api_terms()) ->
                               {'ok', iolist()} |
