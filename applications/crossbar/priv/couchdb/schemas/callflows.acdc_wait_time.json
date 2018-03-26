@@ -10,6 +10,10 @@
         "var": {
             "description": "Custom KV whose value to use instead of \"id\"",
             "type": "string"
+        },
+        "window": {
+            "description": "Window over which average wait time is calculated (in seconds)",
+            "type": "integer"
         }
     },
     "type": "object"
