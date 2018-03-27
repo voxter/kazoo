@@ -129,7 +129,7 @@
 -define(BINDINGS(AcctId, AgentId), [{'self', []}
                                    ,{'acdc_agent', [{'account_id', AcctId}
                                                    ,{'agent_id', AgentId}
-                                                   ,{'restrict_to', ['member_connect_win', 'member_connect_reset', 'sync', 'fsm_shared']}
+                                                   ,{'restrict_to', ['member_connect_win', 'sync', 'fsm_shared']}
                                                    ]}
                                    ,{'conf', [{'action', <<"*">>}
                                              ,{'db', kz_util:format_account_id(AcctId, 'encoded')}
@@ -158,9 +158,6 @@
                      }
                     ,{{'acdc_agent_handler', 'handle_member_connect_win'}
                      ,[{<<"member">>, <<"connect_win">>}]
-                     }
-                    ,{{'acdc_agent_handler', 'handle_member_connect_reset'}
-                     ,[{<<"member">>, <<"connect_reset">>}]
                      }
                     ,{{'acdc_agent_handler', 'handle_member_message'}
                      ,[{<<"member">>, <<"*">>}]
