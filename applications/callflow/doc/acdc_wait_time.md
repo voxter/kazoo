@@ -12,6 +12,7 @@ Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
 `id` | Queue ID | `string()` |   | `false`
 `var` | Custom KV whose value to use instead of "id" | `string()` |   | `false`
+`window` | Window over which average wait time is calculated (in seconds) | `integer()` |   | `false`
 
 
 

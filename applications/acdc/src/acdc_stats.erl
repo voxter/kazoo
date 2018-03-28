@@ -504,7 +504,8 @@ handle_agent_calls_req(JObj, _Prop) ->
 -spec handle_average_wait_time_req(kz_json:object(), kz_proplist()) -> 'ok'.
 handle_average_wait_time_req(JObj, _Prop) ->
     'true' = kapi_acdc_stats:average_wait_time_req_v(JObj),
-    query_average_wait_time(JObj).
+    Match = average_wait_time_build_match_spec(JObj),
+    query_average_wait_time(Match, JObj).
 
 -spec find_call(ne_binary()) -> api_object().
 find_call(CallId) ->
@@ -848,6 +849,38 @@ agent_call_build_match_spec(JObj, AccountMatch) ->
 agent_call_match_builder_fold(_, _, {'error', _Err}=E) -> E;
 agent_call_match_builder_fold(_, _, Acc) -> Acc.
 
+-spec average_wait_time_build_match_spec(kz_json:object()) -> ets:match_spec().
+average_wait_time_build_match_spec(JObj) ->
+    AccountId = kz_json:get_ne_binary_value(<<"Account-ID">>, JObj),
+    QueueId = kz_json:get_ne_binary_value(<<"Queue-ID">>, JObj),
+
+    Match = [{#call_stat{account_id=AccountId
+                        ,queue_id=QueueId
+                        ,entered_timestamp='$1'
+                        ,abandoned_timestamp='$2'
+                        ,handled_timestamp='$3'
+                        ,status='$4'
+                        ,_='_'
+                        }
+             ,[{'orelse'
+               ,{'=:=', '$4', {'const', <<"handled">>}}
+               ,{'=:=', '$4', {'const', <<"processed">>}}
+               }]
+             ,[['$1', '$2', '$3']]
+             }],
+
+    Window = kz_json:get_integer_value(<<"Window">>, JObj),
+
+    average_wait_time_build_match_spec(Match, Window).
+
+-spec average_wait_time_build_match_spec(ets:match_spec(), api_integer()) ->
+                                                ets:match_spec().
+average_wait_time_build_match_spec(Match, 'undefined') ->
+    Match;
+average_wait_time_build_match_spec([{CallStat, Conditions, Results}], Window) ->
+    Start = kz_time:current_tstamp() - Window,
+    [{CallStat, [{'>=', '$1', {'const', Start}} | Conditions], Results}].
+
 is_valid_call_status(S) ->
     Status = kz_term:to_lower_binary(S),
     case lists:member(Status, ?VALID_STATUSES) of
@@ -960,25 +993,8 @@ increment_agent_calls(QueueId, AgentJObj, Key) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec query_average_wait_time(kz_json:object()) -> 'ok'.
-query_average_wait_time(JObj) ->
-    AccountId = kz_json:get_ne_binary_value(<<"Account-ID">>, JObj),
-    QueueId = kz_json:get_ne_binary_value(<<"Queue-ID">>, JObj),
-    Match = [{#call_stat{account_id=AccountId
-                        ,queue_id=QueueId
-                        ,entered_timestamp='$1'
-                        ,abandoned_timestamp='$2'
-                        ,handled_timestamp='$3'
-                        ,status='$4'
-                        ,_='_'
-                        }
-             ,[{'orelse'
-               ,{'=:=', '$4', {'const', <<"handled">>}}
-               ,{'=:=', '$4', {'const', <<"processed">>}}
-               }]
-             ,[['$1', '$2', '$3']]
-             }],
-
+-spec query_average_wait_time(ets:match_spec(), kz_json:object()) -> 'ok'.
+query_average_wait_time(Match, JObj) ->
     AverageWaitTime = average_wait_time_fold(ets:select(call_table_id(), Match)),
 
     RespQ = kz_json:get_value(<<"Server-ID">>, JObj),
