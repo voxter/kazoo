@@ -53,13 +53,13 @@ send_response(JObj, ControllerQ, Reconcilable, <<"known_number">> = Type) ->
     send_response(JObj, ControllerQ, Reconcilable, Code, Message).
 
 -spec send_response(kz_json:object(), ne_binary(), boolean(), ne_binary(), api_binary()) -> 'ok'.
-send_response(JObj, ControllerQ, Reconcilable, Code, Message) ->
+send_response(JObj, ControllerQ, _Reconcilable, Code, Message) ->
     lager:debug("sending response: ~s ~s", [Code, Message]),
     Resp = [{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
            ,{<<"Method">>, <<"error">>}
            ,{<<"Route-Error-Code">>, Code}
            ,{<<"Route-Error-Message">>, Message}
-           ,{<<"Defer-Response">>, (not Reconcilable)}
+           ,{<<"Defer-Response">>, <<"true">>}
             | kz_api:default_headers(ControllerQ, ?APP_NAME, ?APP_VERSION)
            ],
     kapi_route:publish_resp(kz_json:get_value(<<"Server-ID">>, JObj), Resp).
