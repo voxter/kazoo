@@ -39,13 +39,20 @@ handle_webhook(Data, Call) ->
 
 -spec format_call_data(kapps_call:call()) -> kz_json:object().
 format_call_data(Call) ->
-    JObj = kapps_call:to_json(Call),
+    JObj = extract_acdc_required_skills(kapps_call:to_json(Call)),
     RemoveKeys = [<<"Key-Value-Store">>
                  ,<<"Control-Queue">>
                  ,<<"Controller-Queue">>
                  ,<<"Custom-Channel-Vars">>
                  ],
     kz_json:normalize_jobj(JObj, RemoveKeys, []).
+
+-spec extract_acdc_required_skills(kz_json:object()) -> kz_json:object().
+extract_acdc_required_skills(JObj) ->
+    case kz_json:get_list_value([<<"Key-Value-Store">>, <<"acdc_required_skills">>], JObj) of
+        'undefined' -> JObj;
+        Skills -> kz_json:set_value(<<"ACDc-Required-Skills">>, Skills, JObj)
+    end.
 
 -spec set_hook(kz_json:object(), kz_json:object()) -> kz_json:object().
 set_hook(Data, CallJObj) ->
