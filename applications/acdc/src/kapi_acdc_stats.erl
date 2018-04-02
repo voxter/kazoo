@@ -119,9 +119,10 @@
 
 -define(WAITING_HEADERS, [<<"Caller-ID-Name">>, <<"Caller-ID-Number">>
                          ,<<"Entered-Timestamp">>, <<"Entered-Position">>, <<"Caller-Priority">>
+                         ,<<"Required-Skills">>
                          ]).
 -define(WAITING_VALUES, ?CALL_REQ_VALUES(<<"waiting">>)).
--define(WAITING_TYPES, []).
+-define(WAITING_TYPES, [{<<"Required-Skills">>, fun kz_term:is_ne_binaries/1}]).
 
 -define(MISS_HEADERS, [<<"Agent-ID">>, <<"Miss-Reason">>, <<"Miss-Timestamp">>]).
 -define(MISS_VALUES, ?CALL_REQ_VALUES(<<"missed">>)).
