@@ -19,6 +19,14 @@ if [[ ! -z "$($CHANGED)" ]]; then
   TO_FMT="$(echo $($CHANGED))" make fmt
 fi
 
+echo "--- Make clean"
+make clean
+
+echo "--- Remove deps and .erlang.mk"
+# Can't do this with `make clean-deps` because of Buildkite's `git clean -fxdq`
+rm -rf deps
+rm -rf .erlang.mk
+
 echo "--- Make deps"
 make deps
 
