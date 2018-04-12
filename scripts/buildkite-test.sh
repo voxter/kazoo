@@ -22,8 +22,10 @@ fi
 echo "--- Make clean"
 make clean
 
-echo "--- Make clean-deps"
-make clean-deps
+echo "--- Remove deps and .erlang.mk"
+# Can't do this with `make clean-deps` because of Buildkite's `git clean -fxdq`
+rm -rf deps
+rm -rf .erlang.mk
 
 echo "--- Make deps"
 make deps
