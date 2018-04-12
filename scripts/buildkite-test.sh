@@ -19,6 +19,12 @@ if [[ ! -z "$($CHANGED)" ]]; then
   TO_FMT="$(echo $($CHANGED))" make fmt
 fi
 
+echo "--- Make clean"
+make clean
+
+echo "--- Make clean-deps"
+make clean-deps
+
 echo "--- Make deps"
 make deps
 
