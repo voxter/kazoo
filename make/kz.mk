@@ -50,6 +50,8 @@ TEST_EBINS += $(EBINS) $(ROOT)/deps/proper/ebin
 PA      = -pa ebin/ $(foreach EBIN,$(EBINS),-pa $(EBIN))
 TEST_PA = -pa ebin/ $(foreach EBIN,$(TEST_EBINS),-pa $(EBIN))
 
+KZ_VERSION ?= $(shell $(ROOT)/scripts/next_version)
+
 ## SOURCES provides a way to specify compilation order (left to right)
 SOURCES     ?= src/*.erl $(if $(wildcard src/*/*.erl), src/*/*.erl)
 TEST_SOURCES = $(SOURCES) $(if $(wildcard test/*.erl), test/*.erl)
@@ -60,8 +62,8 @@ compile: $(COMPILE_MOAR) ebin/$(PROJECT).app json
 ebin/$(PROJECT).app: $(SOURCES)
 	@mkdir -p ebin/
 	ERL_LIBS=$(ELIBS) erlc -v $(ERLC_OPTS) $(PA) -o ebin/ $?
-	@sed "s/{modules, \[\]}/{modules, \[`echo ebin/*.beam | sed 's%\.beam ebin/%, %g;s%ebin/%%;s/\.beam//'`\]}/" src/$(PROJECT).app.src > $@
-
+	@sed "s/{modules, \[\]}/{modules, \[`echo ebin/*.beam | sed 's%\.beam ebin/%, %g;s%ebin/%%;s/\.beam//'`\]}/" src/$(PROJECT).app.src \
+        | sed -e "s/{vsn,\([^}]*\)}/\{vsn,\"$(KZ_VERSION)\"}/g" > $@
 
 json: JSON = $(if $(wildcard priv/), $(shell find priv/ -name '*.json'))
 json:
@@ -143,3 +145,4 @@ perf: ERLC_OPTS += -pa $(ROOT)/deps/horse/ebin -DPERF +'{parse_transform, horse_
 perf: compile-test
 	$(gen_verbose) @ERL_LIBS=$(ELIBS) erl -noshell  -pa $(ROOT)/deps/horse/ebin -pa $(TEST_PA) \
 		-eval 'horse:app_perf($(PROJECT)), init:stop().'
+

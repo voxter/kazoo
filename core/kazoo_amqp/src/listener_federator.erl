@@ -114,6 +114,9 @@ handle_call(_Request, _From, State) ->
 -spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
 handle_cast({'gen_listener', {'created_queue', _}}, State) ->
     {'noreply', State};
+handle_cast({'gen_listener', {'is_consuming', 'true'}}, #state{parent=Parent, broker=Broker}=State) ->
+    gen_server:cast(Parent, {'federator_is_consuming', Broker, 'true'}),
+    {'noreply', State};
 handle_cast(_Msg, State) ->
     {'noreply', State}.
 
@@ -153,8 +156,8 @@ handle_event(JObj, BasicDeliver, #state{parent=Parent
                 [kz_api:event_category(JObj), kz_api:msg_id(JObj), kz_api:event_name(JObj), Zone, Parent, Self]
                ),
     RemoteServerId = <<"consumer://"
-                       ,(Self)/binary, "/"
-                       ,(kz_json:get_value(<<"Server-ID">>, JObj, <<>>))/binary
+                      ,(Self)/binary, "/"
+                      ,(kz_json:get_value(<<"Server-ID">>, JObj, <<>>))/binary
                      >>,
     gen_listener:federated_event(Parent
                                 ,kz_json:set_values([{<<"Server-ID">>, RemoteServerId}

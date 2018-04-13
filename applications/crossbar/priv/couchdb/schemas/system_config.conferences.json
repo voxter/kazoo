@@ -42,6 +42,7 @@
             "type": "integer"
         },
         "profiles": {
+            "default": {},
             "properties": {
                 "default": {
                     "default": {
@@ -69,7 +70,8 @@
                     "description": "conferences page",
                     "type": "object"
                 }
-            }
+            },
+            "type": "object"
         },
         "reuse_pronounced_name": {
             "default": false,

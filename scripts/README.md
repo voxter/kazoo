@@ -87,6 +87,10 @@ Done
 If there are any calls to non-existant modules, or non-exported functions, you will get errors listed here.
 
 
+## check-whitespace.sh
+
+Removes trailing whitespaces from files
+
 ## circleci-build-erlang.sh
 
 Fetches kerl and installs configured Erlang version (used in CircleCI)
@@ -650,6 +654,14 @@ Part of the great rename, converts Whistle-related names to Kazoo-specific names
 ## `make-swag.sh`
 
 Generate API clients in multiple languages from the Swagger file.
+
+## `next_version`
+
+returns next release based on branch & tags.
+
+## `increment_version.bash`
+
+routine to increment a version
 
 # Buildkite Scripts
 - buildkite-build-rpm.sh
