@@ -1116,7 +1116,6 @@ remove_agent_from_skill_map(AgentId, SkillMap) ->
 %% Compute all combinations of the list defined by Skills.
 %% @end
 %%--------------------------------------------------------------------
-%% TODO make tail recursive
 -spec skill_combinations(ne_binaries()) -> [ne_binaries(), ...].
 skill_combinations(Skills) ->
     %% reverse sort skills, so they end up in order after fold
@@ -1125,13 +1124,12 @@ skill_combinations(Skills) ->
 -spec skill_combinations(ne_binaries(), [ne_binaries(), ...]) -> [ne_binaries(), ...].
 skill_combinations([], Combos) -> Combos;
 skill_combinations([Skill|Skills], Combos) ->
-    skill_combinations(Skills
-                      ,lists:map(fun(Combo) ->
-                                         [Skill | Combo]
-                                 end
-                                ,Combos)
-                      )
-        ++ skill_combinations(Skills, Combos).
+    CombosWithSkillPrefix = lists:map(fun(Combo) ->
+                                              [Skill | Combo]
+                                      end
+                                     ,Combos),
+    Combos1 = Combos ++ CombosWithSkillPrefix,
+    skill_combinations(Skills, Combos1).
 
 %%--------------------------------------------------------------------
 %% @private
