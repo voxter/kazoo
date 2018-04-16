@@ -818,18 +818,18 @@ clear_member_call(#state{connection_timer_ref=ConnRef
 update_properties(QueueJObj, State) ->
     State#state{
       name = kz_json:get_value(<<"name">>, QueueJObj)
-               ,connection_timeout = connection_timeout(kz_json:get_integer_value(<<"connection_timeout">>, QueueJObj))
-               ,agent_ring_timeout = agent_ring_timeout(kz_json:get_integer_value(<<"agent_ring_timeout">>, QueueJObj))
-               ,max_queue_size = kz_json:get_integer_value(<<"max_queue_size">>, QueueJObj)
-               ,ring_simultaneously = kz_json:get_value(<<"ring_simultaneously">>, QueueJObj)
-               ,enter_when_empty = kz_json:is_true(<<"enter_when_empty">>, QueueJObj, 'true')
-               ,agent_wrapup_time = kz_json:get_integer_value(<<"agent_wrapup_time">>, QueueJObj)
-               ,announce = kz_json:get_value(<<"announce">>, QueueJObj)
-               ,caller_exit_key = kz_json:get_value(<<"caller_exit_key">>, QueueJObj, <<"#">>)
-               ,record_caller = kz_json:is_true(<<"record_caller">>, QueueJObj, 'false')
-               ,recording_url = kz_json:get_ne_value(<<"call_recording_url">>, QueueJObj)
-               ,cdr_url = kz_json:get_ne_value(<<"cdr_url">>, QueueJObj)
-               ,notifications = kz_json:get_value(<<"notifications">>, QueueJObj)
+     ,connection_timeout = connection_timeout(kz_json:get_integer_value(<<"connection_timeout">>, QueueJObj))
+     ,agent_ring_timeout = agent_ring_timeout(kz_json:get_integer_value(<<"agent_ring_timeout">>, QueueJObj))
+     ,max_queue_size = kz_json:get_integer_value(<<"max_queue_size">>, QueueJObj)
+     ,ring_simultaneously = kz_json:get_value(<<"ring_simultaneously">>, QueueJObj)
+     ,enter_when_empty = kz_json:is_true(<<"enter_when_empty">>, QueueJObj, 'true')
+     ,agent_wrapup_time = kz_json:get_integer_value(<<"agent_wrapup_time">>, QueueJObj)
+     ,announce = kz_json:get_value(<<"announce">>, QueueJObj)
+     ,caller_exit_key = kz_json:get_value(<<"caller_exit_key">>, QueueJObj, <<"#">>)
+     ,record_caller = kz_json:is_true(<<"record_caller">>, QueueJObj, 'false')
+     ,recording_url = kz_json:get_ne_value(<<"call_recording_url">>, QueueJObj)
+     ,cdr_url = kz_json:get_ne_value(<<"cdr_url">>, QueueJObj)
+     ,notifications = kz_json:get_value(<<"notifications">>, QueueJObj)
 
       %% Changing queue strategy currently isn't feasible; definitely a TODO
       %%,strategy = get_strategy(kz_json:get_value(<<"strategy">>, QueueJObj))
@@ -974,6 +974,7 @@ handle_agent_responses(#state{collect_ref=Ref
 maybe_pick_winner(#state{connect_resps=CRs
                         ,queue_proc=Srv
                         ,manager_proc=Mgr
+                        ,member_call=Call
                         ,agent_ring_timeout=RingTimeout
                         ,agent_wrapup_time=AgentWrapup
                         ,caller_exit_key=CallerExitKey
@@ -982,7 +983,7 @@ maybe_pick_winner(#state{connect_resps=CRs
                         ,recording_url=RecordUrl
                         ,notifications=Notifications
                         }=State) ->
-    case acdc_queue_manager:pick_winner(Mgr, CRs) of
+    case acdc_queue_manager:pick_winner(Mgr, Call, CRs) of
         {[Winner|_], _} ->
             QueueOpts = [{<<"Ring-Timeout">>, RingTimeout}
                         ,{<<"Wrapup-Timeout">>, AgentWrapup}

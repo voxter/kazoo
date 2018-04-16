@@ -43,7 +43,7 @@ Key | Description | Type | Default | Required
 `record_caller` | When enabled, a caller's audio will be recorded | `boolean()` | `false` | `false`
 `recording_url` | An optional HTTP URL to PUT the call recording after the call ends (and should respond to GET for retrieving the audio data) | `string()` |   | `false`
 `ring_simultaneously` | The number of agents to try in parallel when connecting a caller | `integer()` | `1` | `false`
-`strategy` | The queue strategy for connecting agents to callers | `string('round_robin' | 'most_idle')` | `round_robin` | `false`
+`strategy` | The queue strategy for connecting agents to callers | `string('round_robin' | 'most_idle' | 'skills_based_round_robin')` | `round_robin` | `false`
 
 
 

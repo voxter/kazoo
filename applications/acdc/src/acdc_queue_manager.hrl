@@ -2,9 +2,17 @@
 
 %% rr :: Round Robin
 %% mi :: Most Idle
--type queue_strategy() :: 'rr' | 'mi'.
+-type queue_strategy() :: 'rr' | 'mi' | 'sbrr'.
 
--type queue_strategy_state() :: pqueue4:queue() | ne_binaries().
+-type sbrr_skill_map() :: #{ne_binaries() := sets:set()}. % skill keys must be alphabetically sorted
+-type sbrr_id_map() :: #{ne_binary() := ne_binary()}.
+-type sbrr_strategy_state() :: #{agent_id_map := sbrr_id_map() % maps agent IDs to assigned call IDs
+                                ,call_id_map := sbrr_id_map() % maps assigned call IDs to agent IDs
+                                ,rr_queue := pqueue4:queue()
+                                ,skill_map := sbrr_skill_map()
+                                }.
+
+-type queue_strategy_state() :: pqueue4:queue() | ne_binaries() | sbrr_strategy_state().
 -type ss_details() :: {non_neg_integer(), 'ringing' | 'busy' | 'undefined'}.
 -record(strategy_state, {agents :: queue_strategy_state()
                                    %% details include # of agent processes and availability
@@ -28,6 +36,8 @@
                ,registered_callbacks = [] :: list()
                }).
 -type mgr_state() :: #state{}.
+
+-define(ACDC_REQUIRED_SKILLS_KEY, 'acdc_required_skills').
 
 -define(ACDC_QUEUE_MANAGER_HRL, 'true').
 -endif.
