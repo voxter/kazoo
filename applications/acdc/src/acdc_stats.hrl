@@ -40,6 +40,7 @@
                    ,caller_id_name :: api_binary() | '_'
                    ,caller_id_number :: api_binary() | '_'
                    ,caller_priority :: api_integer() | '_'
+                   ,required_skills = [] :: ne_binaries() | '_'
                    ,is_archived = 'false' :: boolean() | '$2' | '$3' | '_'
                    }).
 -type call_stat() :: #call_stat{}.

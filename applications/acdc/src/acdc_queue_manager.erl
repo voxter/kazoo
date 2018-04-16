@@ -642,6 +642,7 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
                            ,CIDName
                            ,CIDNumber
                            ,kz_json:get_integer_value(<<"Member-Priority">>, JObj)
+                           ,kapps_call:kvs_fetch('acdc_required_skills', [], Call)
                            ),
 
     publish_queue_member_add(AccountId, QueueId, Call

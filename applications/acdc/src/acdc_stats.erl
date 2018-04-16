@@ -13,7 +13,7 @@
 
 %% Public API
 -export([call_waiting/6
-        ,call_waiting/7
+        ,call_waiting/8
         ,call_abandoned/4
         ,call_marked_callback/4
         ,call_handled/4
@@ -92,6 +92,7 @@
                   ,api_binary()
                   ,api_binary()
                   ,api_binary()
+                  ,ne_binaries()
                   ) -> 'ok' | {'error', any()}.
 call_waiting(AccountId, QueueId, CallId, CallerIdName, CallerIdNumber, CallerPriority) ->
     Prop = props:filter_undefined(
@@ -106,7 +107,7 @@ call_waiting(AccountId, QueueId, CallId, CallerIdName, CallerIdNumber, CallerPri
              ]),
     kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_waiting/1).
 
-call_waiting(AccountId, QueueId, Position, CallId, CallerIdName, CallerIdNumber, CallerPriority) ->
+call_waiting(AccountId, QueueId, Position, CallId, CallerIdName, CallerIdNumber, CallerPriority, RequiredSkills) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AccountId}
              ,{<<"Queue-ID">>, QueueId}
@@ -116,6 +117,7 @@ call_waiting(AccountId, QueueId, Position, CallId, CallerIdName, CallerIdNumber,
              ,{<<"Entered-Timestamp">>, kz_time:current_tstamp()}
              ,{<<"Entered-Position">>, Position}
              ,{<<"Caller-Priority">>, CallerPriority}
+             ,{<<"Required-Skills">>, RequiredSkills}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     kapps_util:amqp_pool_send(Prop, fun kapi_acdc_stats:publish_call_waiting/1).
@@ -563,6 +565,7 @@ handle_cast({'create_call', JObj}, State) ->
                      ,status = kz_json:get_value(<<"Event-Name">>, JObj)
                      ,caller_id_name = kz_json:get_value(<<"Caller-ID-Name">>, JObj)
                      ,caller_id_number = kz_json:get_value(<<"Caller-ID-Number">>, JObj)
+                     ,required_skills = kz_json:get_list_value(<<"Required-Skills">>, JObj, [])
                      },
     ets:insert_new(call_table_id(), Stat),
     {'noreply', State};
@@ -1158,6 +1161,7 @@ call_stat_to_doc(#call_stat{id=Id
                            ,caller_id_name=CallerIdName
                            ,caller_id_number=CallerIdNumber
                            ,caller_priority=CallerPriority
+                           ,required_skills=RequiredSkills
                            }) ->
     kz_doc:update_pvt_parameters(kz_json:from_list(
                                    [{<<"_id">>, Id}
@@ -1178,6 +1182,7 @@ call_stat_to_doc(#call_stat{id=Id
                                    ,{<<"caller_id_name">>, CallerIdName}
                                    ,{<<"caller_id_number">>, CallerIdNumber}
                                    ,{<<"caller_priority">>, CallerPriority}
+                                   ,{<<"required_skills">>, RequiredSkills}
                                    ,{<<"wait_time">>, wait_time(EnteredT, AbandonedT, HandledT)}
                                    ,{<<"talk_time">>, talk_time(HandledT, ProcessedT)}
                                    ])
@@ -1321,6 +1326,7 @@ handle_waiting_stat(JObj, Props) ->
                         ,{#call_stat.caller_id_number, kz_json:get_value(<<"Caller-ID-Number">>, JObj)}
                         ,{#call_stat.entered_timestamp, kz_json:get_value(<<"Entered-Timestamp">>, JObj)}
                         ,{#call_stat.entered_position, kz_json:get_value(<<"Entered-Position">>, JObj)}
+                        ,{#call_stat.required_skills, kz_json:get_list_value(<<"Required-Skills">>, JObj, [])}
                         ]),
             update_call_stat(Id, Updates, Props)
     end.

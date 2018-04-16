@@ -1111,6 +1111,22 @@
             },
             "type": "object"
         },
+        "callflows.acdc_required_skills": {
+            "description": "Validator for the acdc_required_skills callflow's data object",
+            "properties": {
+                "add": {
+                    "default": [],
+                    "description": "Skills to add to the required skills on the call",
+                    "type": "array"
+                },
+                "remove": {
+                    "default": [],
+                    "description": "Skills to remove from the required skills on the call",
+                    "type": "array"
+                }
+            },
+            "type": "object"
+        },
         "callflows.acdc_wait_time": {
             "description": "Validator for the acdc_wait_time callflow's data object",
             "properties": {
@@ -6861,6 +6877,12 @@
                 },
                 "Queue-ID": {
                     "type": "string"
+                },
+                "Required-Skills": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
                 }
             },
             "required": [

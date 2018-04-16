@@ -38,6 +38,12 @@
         },
         "Queue-ID": {
             "type": "string"
+        },
+        "Required-Skills": {
+            "items": {
+                "type": "string"
+            },
+            "type": "array"
         }
     },
     "required": [

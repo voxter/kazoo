@@ -98,4 +98,5 @@ req_params(Call) ->
         ,{<<"Transcription-Url">>, kzt_util:get_transcription_url(Call)}
         ,{<<"Language">>, kapps_call:language(Call)}
         ,{<<"Callflow-ID">>, kapps_call:kvs_fetch('cf_flow_id', Call)}
+        ,{<<"ACDc-Required-Skills">>, kapps_call:kvs_fetch('acdc_required_skills', [], Call)}
         ], Call)).
