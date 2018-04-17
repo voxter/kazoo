@@ -601,17 +601,20 @@ handle_cast({'agent_unavailable', JObj}, State) ->
 
 handle_cast({'agents_available_req', JObj}, #state{account_id=AccountId
                                                   ,queue_id=QueueId
+                                                  ,strategy='sbrr'
+                                                  ,strategy_state=#strategy_state{agents=#{skill_map := SkillMap}}
+                                                  }=State) ->
+    Skills = lists:sort(kz_json:get_list_value(<<"Skills">>, JObj, [])),
+    AgentCount = sets:size(maps:get(Skills, SkillMap, sets:new())),
+    publish_agents_available_resp(AccountId, QueueId, AgentCount, JObj),
+    {'noreply', State};
+handle_cast({'agents_available_req', JObj}, #state{account_id=AccountId
+                                                  ,queue_id=QueueId
                                                   ,strategy=Strategy
                                                   ,strategy_state=StrategyState
                                                   }=State) ->
-    Resp = [{<<"Account-ID">>, AccountId}
-           ,{<<"Queue-ID">>, QueueId}
-           ,{<<"Agent-Count">>, ss_size(Strategy, StrategyState, 'logged_in')}
-           ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
-            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
-           ],
-    Q = kz_json:get_value(<<"Server-ID">>, JObj),
-    kapi_acdc_queue:publish_agents_available_resp(Q, Resp),
+    AgentCount = ss_size(Strategy, StrategyState, 'logged_in'),
+    publish_agents_available_resp(AccountId, QueueId, AgentCount, JObj),
     {'noreply', State};
 
 handle_cast({'reject_member_call', Call, JObj}, #state{account_id=AccountId
@@ -824,6 +827,17 @@ lookup_priority_levels(AccountDB, QueueId) ->
 
 make_ignore_key(AccountId, QueueId, CallId) ->
     {AccountId, QueueId, CallId}.
+
+-spec publish_agents_available_resp(ne_binary(), ne_binary(), non_neg_integer(), kz_json:object()) -> 'ok'.
+publish_agents_available_resp(AccountId, QueueId, AgentCount, JObj) ->
+    Resp = [{<<"Account-ID">>, AccountId}
+           ,{<<"Queue-ID">>, QueueId}
+           ,{<<"Agent-Count">>, AgentCount}
+           ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
+            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+    Q = kz_json:get_value(<<"Server-ID">>, JObj),
+    kapi_acdc_queue:publish_agents_available_resp(Q, Resp).
 
 -spec publish_queue_member_add(ne_binary(), ne_binary(), kapps_call:call(), boolean(), api_binary()) -> 'ok'.
 publish_queue_member_add(AccountId, QueueId, Call, EnterAsCallback, CallbackNumber) ->
