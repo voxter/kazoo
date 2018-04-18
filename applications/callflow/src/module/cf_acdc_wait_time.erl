@@ -29,7 +29,13 @@
 handle(Data, Call) ->
     AccountId = kapps_call:account_id(Call),
     QueueId = maybe_use_variable(Data, Call),
+    Skills = maybe_include_skills(QueueId, Call),
     Window = kz_json:get_integer_value(<<"window">>, Data),
+
+    case Skills of
+        'undefined' -> 'ok';
+        _ -> lager:info("evaluating average wait time for skill set ~p", [Skills])
+    end,
 
     case Window of
         'undefined' -> 'ok';
@@ -39,6 +45,7 @@ handle(Data, Call) ->
     Req = props:filter_undefined(
             [{<<"Account-ID">>, AccountId}
             ,{<<"Queue-ID">>, QueueId}
+            ,{<<"Skills">>, Skills}
             ,{<<"Window">>, Window}
              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
             ]),
@@ -76,6 +83,23 @@ maybe_use_variable(Data, Call) ->
                 {'ok', _} -> Value;
                 _ -> kz_doc:id(Data)
             end
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% If the selected strategy on the requested queue is skills-based
+%% round robin, skills should be considered in the wait time eval.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_include_skills(ne_binary(), kapps_call:call()) -> api_ne_binaries().
+maybe_include_skills(QueueId, Call) ->
+    AccountDb = kapps_call:account_db(Call),
+    {'ok', JObj} = kz_datamgr:open_cache_doc(AccountDb, QueueId),
+    case kz_json:get_ne_binary_value(<<"strategy">>, JObj) of
+        <<"skills_based_round_robin">> ->
+            kapps_call:kvs_fetch('acdc_required_skills', [], Call);
+        _ -> 'undefined'
     end.
 
 %%--------------------------------------------------------------------
