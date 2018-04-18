@@ -1157,7 +1157,8 @@ maybe_reseed_sbrrss_maps(#state{strategy='sbrr'
                                ,current_member_calls=Calls
                                }=State) ->
     SBRRSS1 = reseed_sbrrss_maps(SBRRSS, ss_size('sbrr', SS, 'free'), Calls),
-    State#state{strategy_state=SS#strategy_state{agents=SBRRSS1}}.
+    State#state{strategy_state=SS#strategy_state{agents=SBRRSS1}};
+maybe_reseed_sbrrss_maps(State) -> State.
 
 %%--------------------------------------------------------------------
 %% @private
