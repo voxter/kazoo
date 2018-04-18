@@ -20,6 +20,12 @@
         },
         "Queue-ID": {
             "type": "string"
+        },
+        "Skills": {
+            "items": {
+                "type": "string"
+            },
+            "type": "array"
         }
     },
     "required": [

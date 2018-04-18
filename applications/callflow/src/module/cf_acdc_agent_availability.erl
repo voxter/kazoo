@@ -29,6 +29,7 @@ handle(Data, Call) ->
     QueueId = maybe_use_variable(Data, Call),
     Req = props:filter_undefined([{<<"Account-ID">>, kapps_call:account_id(Call)}
                                  ,{<<"Queue-ID">>, QueueId}
+                                 ,{<<"Skills">>, kapps_call:kvs_fetch('acdc_required_skills', Call)}
                                   | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                                  ]),
     case kapps_util:amqp_pool_request(Req

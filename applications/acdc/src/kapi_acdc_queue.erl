@@ -610,11 +610,11 @@ agents_availability_routing_key(AccountId, QueueId) ->
     <<"acdc.queue.agents_availability.", AccountId/binary, ".", QueueId/binary>>.
 
 -define(AGENTS_AVAILABLE_REQ_HEADERS, [<<"Account-ID">>, <<"Queue-ID">>]).
--define(OPTIONAL_AGENTS_AVAILABLE_REQ_HEADERS, []).
+-define(OPTIONAL_AGENTS_AVAILABLE_REQ_HEADERS, [<<"Skills">>]).
 -define(AGENTS_AVAILABLE_REQ_VALUES, [{<<"Event-Category">>, <<"queue">>}
                                      ,{<<"Event-Name">>, <<"agents_available_req">>}
                                      ]).
--define(AGENTS_AVAILABLE_REQ_TYPES, []).
+-define(AGENTS_AVAILABLE_REQ_TYPES, [{<<"Skills">>, fun kz_term:is_ne_binaries/1}]).
 
 -spec agents_available_req(api_terms()) ->
                                   {'ok', iolist()} |
