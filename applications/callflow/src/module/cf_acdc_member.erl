@@ -209,7 +209,7 @@ enter_as_callback_loop(#member_call{call=Call}=MC
 enter_as_callback_handle_dtmf(DTMF, #member_call{call=Call}=MC, BreakoutState) ->
     kapps_call_command:flush(Call),
     case process_breakout_message(DTMF, MC, BreakoutState) of
-        'callback_registered' -> 'ok';
+        'callback_registered' -> cf_exe:control_usurped(Call);
         'cancel' -> cf_exe:continue(Call);
         BreakoutState1 -> enter_as_callback_loop(MC, BreakoutState1)
     end.
