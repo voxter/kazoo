@@ -665,12 +665,19 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
     JObj1 = kz_json:set_value(<<"Call">>, kapps_call:to_json(Call), JObj),
 
     {CIDNumber, CIDName} = acdc_util:caller_id(Call1),
+    %% Only going to submit skills to stats if the sbrr strategy is enabled
+    StatSkills = case Strategy of
+                     'sbrr' -> Skills;
+                     _ ->
+                         lager:warning("skills ~p required, but queue ~s is not set to skills_based_round_robin", [Skills, QueueId]),
+                         'undefined'
+                 end,
     acdc_stats:call_waiting(AccountId, QueueId, Position
                            ,kapps_call:call_id(Call1)
                            ,CIDName
                            ,CIDNumber
                            ,kz_json:get_integer_value(<<"Member-Priority">>, JObj1)
-                           ,Skills
+                           ,StatSkills
                            ),
 
     publish_queue_member_add(AccountId, QueueId, Call1

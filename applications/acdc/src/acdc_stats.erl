@@ -92,7 +92,7 @@
                   ,api_binary()
                   ,api_binary()
                   ,api_binary()
-                  ,ne_binaries()
+                  ,api_binaries()
                   ) -> 'ok' | {'error', any()}.
 call_waiting(AccountId, QueueId, CallId, CallerIdName, CallerIdNumber, CallerPriority) ->
     Prop = props:filter_undefined(
@@ -856,6 +856,7 @@ agent_call_match_builder_fold(_, _, Acc) -> Acc.
 average_wait_time_build_match_spec(JObj) ->
     AccountId = kz_json:get_ne_binary_value(<<"Account-ID">>, JObj),
     QueueId = kz_json:get_ne_binary_value(<<"Queue-ID">>, JObj),
+    Skills = lists:sort(kz_json:get_list_value(<<"Skills">>, JObj, [])),
 
     Match = [{#call_stat{account_id=AccountId
                         ,queue_id=QueueId
@@ -863,6 +864,7 @@ average_wait_time_build_match_spec(JObj) ->
                         ,abandoned_timestamp='$2'
                         ,handled_timestamp='$3'
                         ,status='$4'
+                        ,required_skills=Skills
                         ,_='_'
                         }
              ,[{'orelse'
