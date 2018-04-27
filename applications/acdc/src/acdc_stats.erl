@@ -565,6 +565,7 @@ handle_cast({'create_call', JObj}, State) ->
                      ,status = kz_json:get_value(<<"Event-Name">>, JObj)
                      ,caller_id_name = kz_json:get_value(<<"Caller-ID-Name">>, JObj)
                      ,caller_id_number = kz_json:get_value(<<"Caller-ID-Number">>, JObj)
+                     ,caller_priority = kz_json:get_integer_value(<<"Caller-Priority">>, JObj)
                      ,required_skills = kz_json:get_list_value(<<"Required-Skills">>, JObj, [])
                      },
     ets:insert_new(call_table_id(), Stat),
@@ -1213,6 +1214,7 @@ call_stat_to_json(#call_stat{id=Id
                             ,status=Status
                             ,caller_id_name=CallerIdName
                             ,caller_id_number=CallerIdNumber
+                            ,caller_priority=CallerPriority
                             }) ->
     kz_json:from_list(
       [{<<"Id">>, Id}
@@ -1235,6 +1237,7 @@ call_stat_to_json(#call_stat{id=Id
       ,{<<"Caller-ID-Number">>, CallerIdNumber}
       ,{<<"Wait-Time">>, wait_time(EnteredT, AbandonedT, HandledT)}
       ,{<<"Talk-Time">>, talk_time(HandledT, ProcessedT)}
+      ,{<<"Caller-Priority">>, CallerPriority}
       ]).
 
 wait_time(E, _, H) when is_integer(E), is_integer(H) -> H - E;
@@ -1328,6 +1331,7 @@ handle_waiting_stat(JObj, Props) ->
                         ,{#call_stat.caller_id_number, kz_json:get_value(<<"Caller-ID-Number">>, JObj)}
                         ,{#call_stat.entered_timestamp, kz_json:get_value(<<"Entered-Timestamp">>, JObj)}
                         ,{#call_stat.entered_position, kz_json:get_value(<<"Entered-Position">>, JObj)}
+                        ,{#call_stat.caller_priority, kz_json:get_integer_value(<<"Caller-Priority">>, JObj)}
                         ,{#call_stat.required_skills, kz_json:get_list_value(<<"Required-Skills">>, JObj, [])}
                         ]),
             update_call_stat(Id, Updates, Props)
