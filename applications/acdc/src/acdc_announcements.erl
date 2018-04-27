@@ -118,7 +118,7 @@ maybe_announce_position(#{manager := Manager
                          ,config := Config
                          }=State) ->
     Language = kapps_call:language(Call),
-    Position = gen_listener:call(Manager, {'queue_position', kapps_call:call_id(Call)}),
+    Position = gen_listener:call(Manager, {'queue_member_position', kapps_call:call_id(Call)}),
 
     Prompts = [{'prompt', announcements_media_file(<<"you_are_at_position">>, Config), Language, <<"A">>}
               ,{'say', kz_term:to_binary(Position), <<"number">>}

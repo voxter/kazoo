@@ -270,8 +270,8 @@ start_shared_queue(#state{account_id=AccountId
 
     {'noreply', State#state{
                   fsm_pid = FSMPid
-                           ,shared_pid = SharedPid
-                           ,my_id = acdc_util:proc_id(FSMPid)
+                 ,shared_pid = SharedPid
+                 ,my_id = acdc_util:proc_id(FSMPid)
                  }}.
 
 -spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).

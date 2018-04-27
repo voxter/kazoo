@@ -27,6 +27,9 @@
             ],
             "type": "string"
         },
+        "Member-Priority": {
+            "type": "integer"
+        },
         "Queue-ID": {
             "type": "string"
         }

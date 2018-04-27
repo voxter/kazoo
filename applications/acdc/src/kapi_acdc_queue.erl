@@ -671,12 +671,13 @@ queue_member_routing_key(AcctId, QID) ->
     <<"acdc.queue.position.", AcctId/binary, ".", QID/binary>>.
 
 -define(QUEUE_MEMBER_ADD_HEADERS, [<<"Account-ID">>, <<"Queue-ID">>, <<"Call">>, <<"Enter-As-Callback">>]).
--define(OPTIONAL_QUEUE_MEMBER_ADD_HEADERS, [<<"Callback-Number">>]).
+-define(OPTIONAL_QUEUE_MEMBER_ADD_HEADERS, [<<"Callback-Number">>, <<"Member-Priority">>]).
 -define(QUEUE_MEMBER_ADD_VALUES, [{<<"Event-Category">>, <<"queue">>}
                                  ,{<<"Event-Name">>, <<"member_add">>}
                                  ]).
 -define(QUEUE_MEMBER_ADD_TYPES, [{<<"Callback-Number">>, fun is_binary/1}
                                 ,{<<"Enter-As-Callback">>, fun is_boolean/1}
+                                ,{<<"Member-Priority">>, fun is_integer/1}
                                 ]).
 
 -spec queue_member_add(api_terms()) ->

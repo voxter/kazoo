@@ -398,10 +398,10 @@ handle_call({'up_next', CallId}, _, #state{strategy='sbrr'
     {'reply', maps:is_key(CallId, CallIdMap), State};
 handle_call({'up_next', CallId}, _, #state{strategy=Strategy
                                           ,strategy_state=SS
-                                          ,current_member_calls=CurrentCalls
+                                          ,current_member_calls=Calls
                                           }=State) ->
     FreeAgents = ss_size(Strategy, SS, 'free'),
-    Position = call_position(CallId, lists:reverse(CurrentCalls)),
+    Position = queue_member_position(CallId, Calls),
     {'reply', FreeAgents >= Position, State};
 
 handle_call('config', _, #state{account_id=AccountId
@@ -460,8 +460,8 @@ handle_call('current_agents', _, #state{strategy='sbrr'
                                        }=State) ->
     {'reply', pqueue4:to_list(RRQueue) ++ RingingAgents ++ BusyAgents, State};
 
-handle_call({'queue_position', CallId}, _, #state{current_member_calls=CurrentCalls}=State) ->
-    Position = call_position(CallId, lists:reverse(CurrentCalls)),
+handle_call({'queue_member_position', CallId}, _, #state{current_member_calls=Calls}=State) ->
+    Position = queue_member_position(CallId, Calls),
     {'reply', Position, State};
 
 handle_call({'callback_details', CallId}, _, #state{registered_callbacks=Callbacks}=State) ->
@@ -651,11 +651,12 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
                                               ,queue_id=QueueId
                                               ,supervisor=QueueSup
                                               ,strategy=Strategy
-                                              ,current_member_calls=CurrentCalls
+                                              ,current_member_calls=Calls
                                               }=State) ->
     Call = kapps_call:from_json(kz_json:get_value(<<"Call">>, JObj)),
-
-    Position = length(CurrentCalls) + 1,
+    CallId = kapps_call:call_id(Call),
+    Priority = kz_json:get_integer_value(<<"Member-Priority">>, JObj),
+    Position = queue_member_insert_position(CallId, Priority, Calls),
     %% Skills-based engine is optimized if required skills are sorted
     Skills = lists:sort(kapps_call:kvs_fetch(?ACDC_REQUIRED_SKILLS_KEY, [], Call)),
 
@@ -676,11 +677,11 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
                            ,kapps_call:call_id(Call1)
                            ,CIDName
                            ,CIDNumber
-                           ,kz_json:get_integer_value(<<"Member-Priority">>, JObj1)
+                           ,Priority
                            ,StatSkills
                            ),
 
-    publish_queue_member_add(AccountId, QueueId, Call1
+    publish_queue_member_add(AccountId, QueueId, Call1, Priority
                             ,kz_json:is_true(<<"Enter-As-Callback">>, JObj1)
                             ,kz_json:get_binary_value(<<"Callback-Number">>, JObj1)
                             ),
@@ -693,56 +694,64 @@ handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
 
     acdc_util:presence_update(AccountId, QueueId, ?PRESENCE_RED_FLASH),
 
-    %% SBRR needs extra workers
-    maybe_start_queue_workers(QueueSup, Position, Strategy),
+    %% SBRR needs extra workers, priority feature needs extra workers
+    maybe_start_queue_workers(QueueSup, length(Calls) + 1),
 
-    State1 = State#state{current_member_calls=[Call1 | CurrentCalls]},
-    State2 = lists:foldl(fun(Updater, StateAcc) -> Updater(JObj1, Call1, StateAcc) end
-                        ,State1
-                        ,[fun maybe_schedule_position_announcements/3
-                         ,fun maybe_add_queue_member_as_callback/3
+    State1 = lists:foldl(fun({Updater, Args}, StateAcc) -> apply(Updater, Args ++ [StateAcc]) end
+                        ,State
+                        ,[{fun add_queue_member/4, [Call1, Priority, Position]}
+                         ,{fun maybe_schedule_position_announcements/3, [JObj1, Call1]}
+                         ,{fun maybe_add_queue_member_as_callback/3, [JObj1, Call1]}
                          ]),
-    {'noreply', State2};
+    {'noreply', State1};
 
 handle_cast({'handle_queue_member_add', JObj}, #state{supervisor=QueueSup
-                                                     ,strategy=Strategy
-                                                     ,current_member_calls=CurrentCalls
+                                                     ,current_member_calls=Calls
                                                      }=State) ->
     Call = kapps_call:from_json(kz_json:get_value(<<"Call">>, JObj)),
     CallId = kapps_call:call_id(Call),
-    lager:debug("received notification of new queue member ~s", [CallId]),
+    Priority = kz_json:get_integer_value(<<"Member-Priority">>, JObj),
+    Position = kapps_call:custom_channel_var(<<"Queue-Position">>, Call),
+    lager:debug("received notification of new queue member ~s with priority ~p", [CallId, Priority]),
 
-    Calls1 = [Call | lists:keydelete(CallId, 2, CurrentCalls)],
+    %% SBRR needs extra workers, priority feature needs extra workers
+    maybe_start_queue_workers(QueueSup, length(Calls) + 1),
 
-    %% SBRR needs extra workers
-    maybe_start_queue_workers(QueueSup, length(Calls1), Strategy),
-
-    State1 = State#state{current_member_calls=Calls1},
-    State2 = lists:foldl(fun({Updater, Args}, StateAcc) -> apply(Updater, Args ++ [StateAcc]) end
-                        ,State1
-                        ,[{fun maybe_add_queue_member_as_callback/3, [JObj, Call]}
-                         ,{fun maybe_reseed_sbrrss_maps/1, []}
-                         ]),
-    {'noreply', State2};
-
-handle_cast({'handle_queue_member_remove', CallId}, State) ->
     State1 = lists:foldl(fun({Updater, Args}, StateAcc) -> apply(Updater, Args ++ [StateAcc]) end
                         ,State
+                        ,[{fun add_queue_member/4, [Call, Priority, Position]}
+                         ,{fun maybe_add_queue_member_as_callback/3, [JObj, Call]}
+                         ,{fun maybe_reseed_sbrrss_maps/1, []}
+                         ]),
+    {'noreply', State1};
+
+handle_cast({'handle_queue_member_remove', CallId}, #state{current_member_calls=Calls
+                                                          ,announcements_pids=Pids
+                                                          }=State) ->
+    Call = queue_member(CallId, Calls),
+    Position = queue_member_position(CallId, Calls),
+    lager:debug("removing call id ~s", [CallId]),
+
+    publish_call_exited_position(CallId, Position, State),
+
+    State1 = State#state{announcements_pids=cancel_position_announcements(Call, Pids)},
+    State2 = lists:foldl(fun({Updater, Args}, StateAcc) -> apply(Updater, Args ++ [StateAcc]) end
+                        ,State1
                         ,[{fun remove_queue_member/2, [CallId]}
                          ,{fun maybe_remove_callback_reg/2, [CallId]}
                          ,{fun maybe_reseed_sbrrss_maps/1, []}
                          ]
                         ),
-    {'noreply', State1};
+    {'noreply', State2};
 
 handle_cast({'handle_member_callback_reg', JObj}, #state{account_id=AccountId
                                                         ,queue_id=QueueId
-                                                        ,current_member_calls=CurrentCalls
+                                                        ,current_member_calls=Calls
                                                         ,announcements_pids=Pids
                                                         ,registered_callbacks=RegCallbacks}=State) ->
     CallId = kz_json:get_value(<<"Call-ID">>, JObj),
-    case lists:keyfind(CallId, 2, CurrentCalls) of
-        'false' ->
+    case queue_member(CallId, Calls) of
+        'undefined' ->
             lager:debug("not accepting callback reg for ~s (call not in my list of calls)", [CallId]),
             {'noreply', State};
         Call ->
@@ -750,10 +759,14 @@ handle_cast({'handle_member_callback_reg', JObj}, #state{account_id=AccountId
             Number = kz_json:get_value(<<"Number">>, JObj),
             Call1 = callback_flag(AccountId, QueueId, Call),
             CIDPrepend = kapps_call:kvs_fetch('prepend_cid_name', Call1),
-            {'noreply', State#state{current_member_calls=lists:keyreplace(CallId, 2, CurrentCalls, Call1)
-                                   ,announcements_pids=cancel_position_announcements(Call, Pids)
-                                   ,registered_callbacks=[{CallId, {Number, CIDPrepend}} | RegCallbacks]
-                                   }}
+            Priority = queue_member_priority(CallId, Calls),
+            Position = queue_member_position(CallId, Calls),
+
+            State1 = State#state{announcements_pids=cancel_position_announcements(Call, Pids)
+                                ,registered_callbacks=[{CallId, {Number, CIDPrepend}} | RegCallbacks]
+                                },
+            State2 = add_queue_member(Call, Priority, Position, State1),
+            {'noreply', State2}
     end;
 
 handle_cast(_Msg, State) ->
@@ -828,6 +841,77 @@ start_secondary_queue(AccountId, QueueId) ->
 make_ignore_key(AccountId, QueueId, CallId) ->
     {AccountId, QueueId, CallId}.
 
+-spec queue_member(ne_binary(), list()) -> kapps_call:call() | 'undefined'.
+queue_member(CallId, Calls) ->
+    case queue_member_lookup(CallId, Calls) of
+        'undefined' -> 'undefined';
+        {Call, _, _} -> Call
+    end.
+
+-spec queue_member_priority(ne_binary(), list()) -> api_non_neg_integer().
+queue_member_priority(CallId, Calls) ->
+    case queue_member_lookup(CallId, Calls) of
+        'undefined' -> 'undefined';
+        {_, Priority, _} -> Priority
+    end.
+
+-spec queue_member_position(ne_binary(), list()) -> api_pos_integer().
+queue_member_position(CallId, Calls) ->
+    case queue_member_lookup(CallId, Calls) of
+        'undefined' -> 'undefined';
+        {_, _, Position} -> Position
+    end.
+
+-spec queue_member_lookup(ne_binary(), list()) ->
+                                 {kapps_call:call(), non_neg_integer(), pos_integer()} | 'undefined'.
+queue_member_lookup(CallId, Calls) ->
+    queue_member_lookup(CallId, Calls, 1).
+
+-spec queue_member_lookup(ne_binary(), list(), pos_integer()) ->
+                                 {kapps_call:call(), non_neg_integer(), pos_integer()} | 'undefined'.
+queue_member_lookup(_, [], _) -> 'undefined';
+queue_member_lookup(CallId, [{Priority, Call}|Calls], Position) ->
+    case kapps_call:call_id(Call) of
+        CallId -> {Call, Priority, Position};
+        _ -> queue_member_lookup(CallId, Calls, Position + 1)
+    end.
+
+-spec queue_member_insert_position(ne_binary(), api_integer(), list()) -> pos_integer().
+queue_member_insert_position(CallId, 'undefined', Calls) ->
+    queue_member_insert_position(CallId, 0, Calls);
+queue_member_insert_position(CallId, Priority, Calls) ->
+    queue_member_insert_position(CallId, Priority, Calls, 1).
+
+-spec queue_member_insert_position(ne_binary(), api_integer(), list(), pos_integer()) -> pos_integer().
+queue_member_insert_position(_, _, [], Position) ->
+    Position;
+queue_member_insert_position(CallId, Priority, [{OtherPriority, OtherCall}|Calls], Position) ->
+    OtherCallId = kapps_call:call_id(OtherCall),
+    case CallId =:= OtherCallId
+        orelse Priority > OtherPriority
+    of
+        'true' -> Position;
+        'false' -> queue_member_insert_position(CallId, Priority, Calls, Position + 1)
+    end.
+
+-spec add_queue_member(kapps_call:call(), api_non_neg_integer(), pos_integer(), mgr_state()) -> mgr_state().
+add_queue_member(Call, 'undefined', Position, State) ->
+    add_queue_member(Call, 0, Position, State);
+add_queue_member(Call, Priority, Position, State) ->
+    #state{current_member_calls=Calls}=State1 = remove_queue_member(Call, State),
+    {Before, After} = lists:split(Position - 1, Calls),
+    Calls1 = Before ++ [{Priority, Call}|After],
+    State1#state{current_member_calls=Calls1}.
+
+-spec remove_queue_member(ne_binary() | kapps_call:call(), mgr_state()) -> mgr_state().
+remove_queue_member(CallId, #state{current_member_calls=Calls}=State) when is_binary(CallId) ->
+    Calls1 = lists:filter(fun({_, Call1}) ->
+                                  kapps_call:call_id(Call1) =/= CallId
+                          end, Calls),
+    State#state{current_member_calls=Calls1};
+remove_queue_member(Call, State) ->
+    remove_queue_member(kapps_call:call_id(Call), State).
+
 -spec publish_agents_available_resp(ne_binary(), ne_binary(), non_neg_integer(), kz_json:object()) -> 'ok'.
 publish_agents_available_resp(AccountId, QueueId, AgentCount, JObj) ->
     Resp = [{<<"Account-ID">>, AccountId}
@@ -839,12 +923,13 @@ publish_agents_available_resp(AccountId, QueueId, AgentCount, JObj) ->
     Q = kz_json:get_value(<<"Server-ID">>, JObj),
     kapi_acdc_queue:publish_agents_available_resp(Q, Resp).
 
--spec publish_queue_member_add(ne_binary(), ne_binary(), kapps_call:call(), boolean(), api_binary()) -> 'ok'.
-publish_queue_member_add(AccountId, QueueId, Call, EnterAsCallback, CallbackNumber) ->
+-spec publish_queue_member_add(ne_binary(), ne_binary(), kapps_call:call(), api_non_neg_integer(), boolean(), api_binary()) -> 'ok'.
+publish_queue_member_add(AccountId, QueueId, Call, Priority, EnterAsCallback, CallbackNumber) ->
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AccountId}
              ,{<<"Queue-ID">>, QueueId}
              ,{<<"Call">>, kapps_call:to_json(Call)}
+             ,{<<"Member-Priority">>, Priority}
              ,{<<"Enter-As-Callback">>, EnterAsCallback}
              ,{<<"Callback-Number">>, CallbackNumber}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
@@ -1002,9 +1087,8 @@ update_sbrrss_with_agent(AgentId, Priority, Skills, 'add', Flag, #strategy_state
                                    }
           end,
     SS2 = set_flag(AgentId, Flag, SS1),
-    %% Reverse calls so highest priority call is first.
     %% Reseed the map assigning calls to agents since agents changed.
-    SBRRSS1 = reseed_sbrrss_maps(SS2#strategy_state.agents, ss_size('sbrr', SS2, 'free'), lists:reverse(Calls)),
+    SBRRSS1 = reseed_sbrrss_maps(SS2#strategy_state.agents, ss_size('sbrr', SS2, 'free'), Calls),
     SS2#strategy_state{agents=SBRRSS1};
 update_sbrrss_with_agent(AgentId, _Priority, _Skills, 'remove', Flag, SS, Calls) ->
     %% In sbrr, the set_flag needs to happen first, as the ss_size controls the
@@ -1066,9 +1150,8 @@ remove_agent('sbrr', AgentId, #strategy_state{agents=#{rr_queue := RRQueue
                                                   }
                                    ,details=decr_agent(AgentId, Details)
                                    },
-            %% Reverse calls so highest priority call is first.
             %% Reseed the map assigning calls to agents since agents changed.
-            SBRRSS1 = reseed_sbrrss_maps(SS1#strategy_state.agents, ss_size('sbrr', SS1, 'free'), lists:reverse(Calls)),
+            SBRRSS1 = reseed_sbrrss_maps(SS1#strategy_state.agents, ss_size('sbrr', SS1, 'free'), Calls),
             SS1#strategy_state{agents=SBRRSS1}
     end.
 
@@ -1182,7 +1265,7 @@ do_reseed_sbrrss_maps(SBRRSS, _, 0, _) ->
 do_reseed_sbrrss_maps(SBRRSS, _, _, []) ->
     %% No more calls to assign, quit early
     SBRRSS;
-do_reseed_sbrrss_maps(#{skill_map := SkillMap}=SBRRSS, AssignedAgentIds, MaxAssignments, [Call|OtherCalls]) ->
+do_reseed_sbrrss_maps(#{skill_map := SkillMap}=SBRRSS, AssignedAgentIds, MaxAssignments, [{_, Call}|OtherCalls]) ->
     %% Assumption: the call's required skills are sorted, as done in add_queue_member
     Skills = kapps_call:kvs_fetch(?ACDC_REQUIRED_SKILLS_KEY, [], Call),
     case maps:is_key(Skills, SkillMap) of
@@ -1221,7 +1304,7 @@ sbrrss_maybe_assign_agent(#{agent_id_map := AgentIdMap
 %% @end
 %%--------------------------------------------------------------------
 -spec sbrrss_assign_agent(sbrr_strategy_state(), sets:set(), kapps_call:call(), list()) -> api_ne_binary().
-sbrrss_assign_agent(#{skill_map := SkillMap}=SBRRSS, Candidates, Call, [OtherCall|OtherCalls]) ->
+sbrrss_assign_agent(#{skill_map := SkillMap}=SBRRSS, Candidates, Call, [{_, OtherCall}|OtherCalls]) ->
     case sets:size(Candidates) of
         0 ->
             %% There is no agent remaining with skills for this call
@@ -1379,19 +1462,6 @@ update_strategy_state(Srv, 'sbrr', #strategy_state{agents=#{rr_queue := RRQueue}
 update_strategy_state(Srv, L) ->
     [gen_listener:cast(Srv, {'sync_with_agent', A}) || A <- L].
 
--spec call_position(ne_binary(), [kapps_call:call()]) -> api_integer().
--spec call_position(ne_binary(), [kapps_call:call()], pos_integer()) -> pos_integer().
-call_position(CallId, Calls) ->
-    call_position(CallId, Calls, 1).
-
-call_position(_, [], _) ->
-    'undefined';
-call_position(CallId, [Call|Calls], Position) ->
-    case kapps_call:call_id(Call) of
-        CallId -> Position;
-        _ -> call_position(CallId, Calls, Position + 1)
-    end.
-
 -spec ss_size(queue_strategy(), strategy_state(), 'free' | 'logged_in') -> integer().
 ss_size(Strategy, #strategy_state{agents=Agents
                                  ,ringing_agents=RingingAgents
@@ -1417,26 +1487,12 @@ ss_size('mi', #strategy_state{agents=Agents
 ss_size('sbrr', #strategy_state{agents=#{rr_queue := RRQueue}}=SS, 'free') ->
     ss_size('mi', SS#strategy_state{agents=pqueue4:to_list(RRQueue)}, 'free').
 
-maybe_start_queue_workers(QueueSup, AgentCount) ->
+maybe_start_queue_workers(QueueSup, Count) ->
     WSup = acdc_queue_sup:workers_sup(QueueSup),
     case acdc_queue_workers_sup:worker_count(WSup) of
-        N when N >= AgentCount -> 'ok';
-        N when N < AgentCount -> gen_listener:cast(self(), {'start_worker', AgentCount-N})
+        N when N >= Count -> 'ok';
+        N when N < Count -> gen_listener:cast(self(), {'start_worker', Count - N})
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% In SBRR, we don't always distribute top n calls (where n is the
-%% number of agents) since some calls may not have their skill
-%% requirements met. So we need enough queue FSMs for all the waiting
-%% calls
-%% @end
-%%--------------------------------------------------------------------
--spec maybe_start_queue_workers(api_pid(), pos_integer(), queue_strategy()) -> 'ok'.
-maybe_start_queue_workers(QueueSup, Count, 'sbrr') ->
-    maybe_start_queue_workers(QueueSup, Count);
-maybe_start_queue_workers(_, _, _) -> 'ok'.
 
 -spec update_properties(kz_json:object(), mgr_state()) -> mgr_state().
 update_properties(QueueJObj, State) ->
@@ -1490,44 +1546,22 @@ cancel_position_announcements(Call, Pids) ->
             Pids1
     end.
 
--spec remove_queue_member(api_binary(), mgr_state()) -> mgr_state().
-remove_queue_member(CallId, #state{current_member_calls=CurrentCalls
-                                  ,announcements_pids=AnnouncementsPids
-                                  }=State) ->
-    lager:debug("removing call id ~s", [CallId]),
-
-    publish_call_exited_position(CallId, State),
-    AnnouncementsPids1 = cancel_position_announcements(lists:keyfind(CallId, 2, CurrentCalls), AnnouncementsPids),
-
-    State#state{current_member_calls=lists:keydelete(CallId, 2, CurrentCalls)
-               ,announcements_pids=AnnouncementsPids1
-               }.
-
--spec publish_call_exited_position(api_binary(), mgr_state()) -> 'ok'.
-publish_call_exited_position(CallId, #state{current_member_calls=CurrentCalls}=State) ->
-    {Map, _} = lists:mapfoldr(fun(Call, Index) ->
-                                      {{kapps_call:call_id(Call), Index}, Index+1}
-                              end, 1, CurrentCalls),
-    try_publish_call_exited_position(lists:keyfind(CallId, 1, Map), State).
-
--spec try_publish_call_exited_position({ne_binary(), pos_integer()} | 'false', mgr_state()) -> 'ok'.
-try_publish_call_exited_position({CallId, Index}, #state{account_id=AccountId
-                                                        ,queue_id=QueueId
-                                                        }) ->
+-spec publish_call_exited_position(ne_binary(), pos_integer(), mgr_state()) -> 'ok'.
+publish_call_exited_position(CallId, Position, #state{account_id=AccountId
+                                                     ,queue_id=QueueId
+                                                     }) ->
     Prop = [{<<"Account-ID">>, AccountId}
            ,{<<"Queue-ID">>, QueueId}
            ,{<<"Call-ID">>, CallId}
-           ,{<<"Exited-Position">>, Index}
+           ,{<<"Exited-Position">>, Position}
             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
-    kapi_acdc_stats:publish_call_exited_position(Prop);
-try_publish_call_exited_position('false', _) ->
-    lager:error("call id not found in list of calls").
+    kapi_acdc_stats:publish_call_exited_position(Prop).
 
 -spec maybe_add_queue_member_as_callback(kz_json:object(), kapps_call:call(), mgr_state()) -> mgr_state().
 maybe_add_queue_member_as_callback(JObj, Call, #state{account_id=AccountId
                                                      ,queue_id=QueueId
-                                                     ,current_member_calls=CurrentCalls
+                                                     ,current_member_calls=Calls
                                                      ,registered_callbacks=RegCallbacks
                                                      }=State) ->
     EnterAsCallback = kz_json:is_true(<<"Enter-As-Callback">>, JObj),
@@ -1537,11 +1571,13 @@ maybe_add_queue_member_as_callback(JObj, Call, #state{account_id=AccountId
             CallId = kapps_call:call_id(Call),
             lager:debug("call ~s marked as callback", [CallId]),
             Number = kz_json:get_ne_binary_value(<<"Callback-Number">>, JObj),
+            Priority = kz_json:get_integer_value(<<"Member-Priority">>, JObj),
+            Position = queue_member_position(CallId, Calls),
             Call1 = callback_flag(AccountId, QueueId, Call),
             CIDPrepend = kapps_call:kvs_fetch('prepend_cid_name', Call1),
-            State#state{current_member_calls=lists:keyreplace(CallId, 2, CurrentCalls, Call1)
-                       ,registered_callbacks=props:set_value(CallId, {Number, CIDPrepend}, RegCallbacks)
-                       }
+
+            State1 = State#state{registered_callbacks=props:set_value(CallId, {Number, CIDPrepend}, RegCallbacks)},
+            add_queue_member(Call, Priority, Position, State1)
     end.
 
 %%--------------------------------------------------------------------
