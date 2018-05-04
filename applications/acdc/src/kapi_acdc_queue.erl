@@ -671,12 +671,13 @@ queue_member_routing_key(AcctId, QID) ->
     <<"acdc.queue.position.", AcctId/binary, ".", QID/binary>>.
 
 -define(QUEUE_MEMBER_ADD_HEADERS, [<<"Account-ID">>, <<"Queue-ID">>, <<"Call">>, <<"Enter-As-Callback">>]).
--define(OPTIONAL_QUEUE_MEMBER_ADD_HEADERS, [<<"Callback-Number">>]).
+-define(OPTIONAL_QUEUE_MEMBER_ADD_HEADERS, [<<"Callback-Number">>, <<"Member-Priority">>]).
 -define(QUEUE_MEMBER_ADD_VALUES, [{<<"Event-Category">>, <<"queue">>}
                                  ,{<<"Event-Name">>, <<"member_add">>}
                                  ]).
 -define(QUEUE_MEMBER_ADD_TYPES, [{<<"Callback-Number">>, fun is_binary/1}
                                 ,{<<"Enter-As-Callback">>, fun is_boolean/1}
+                                ,{<<"Member-Priority">>, fun is_integer/1}
                                 ]).
 
 -spec queue_member_add(api_terms()) ->
@@ -770,10 +771,12 @@ shared_queue_name(AcctId, QueueId) ->
 -spec queue_size(ne_binary(), ne_binary()) -> integer() | 'undefined'.
 queue_size(AcctId, QueueId) ->
     Q = shared_queue_name(AcctId, QueueId),
+    Priority = acdc_util:max_priority(kz_util:format_account_id(AcctId, 'encoded'), QueueId),
     try amqp_util:new_queue(Q, [{'return_field', 'all'}
                                ,{'exclusive', 'false'}
                                ,{'arguments', [{<<"x-message-ttl">>, ?MILLISECONDS_IN_DAY}
                                               ,{<<"x-max-length">>, 1000}
+                                              ,{<<"x-max-priority">>, Priority}
                                               ]
                                 }
                                ])

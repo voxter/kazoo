@@ -270,15 +270,17 @@ start_shared_queue(#state{account_id=AccountId
 
     {'noreply', State#state{
                   fsm_pid = FSMPid
-                           ,shared_pid = SharedPid
-                           ,my_id = acdc_util:proc_id(FSMPid)
+                 ,shared_pid = SharedPid
+                 ,my_id = acdc_util:proc_id(FSMPid)
                  }}.
 
 -spec handle_cast(any(), state()) -> handle_cast_ret_state(state()).
-handle_cast({'start_friends', QueueJObj}, #state{worker_sup=WorkerSup
+handle_cast({'start_friends', QueueJObj}, #state{queue_id=QueueId
+                                                ,account_id=AccountId
+                                                ,worker_sup=WorkerSup
                                                 ,mgr_pid=MgrPid
                                                 }=State) ->
-    Priority = kz_json:get_integer_value(<<"max_priority">>, QueueJObj),
+    Priority = acdc_util:max_priority(kz_util:format_account_id(AccountId, 'encoded'), QueueId),
     case find_pid_from_supervisor(acdc_queue_worker_sup:start_fsm(WorkerSup, MgrPid, QueueJObj)) of
         {'ok', FSMPid} ->
             lager:debug("started queue FSM: ~p", [FSMPid]),

@@ -410,10 +410,9 @@ add_call({CallId, Skills}, #state{current_member_calls=Calls}=State) ->
     %% sort for us
     Skills1 = lists:sort(Skills),
     Call = kapps_call:set_call_id(CallId, kapps_call:kvs_store(?ACDC_REQUIRED_SKILLS_KEY, Skills1, kapps_call:new())),
-    Calls1 = [Call | Calls],
+    Calls1 = Calls ++ [{0, Call}],
     State1 = #state{strategy_state=#strategy_state{agents=SBRRSS}=SS} = State#state{current_member_calls=Calls1},
-    %% Calls are reversed because that's what happens in add_queue_member
-    SBRRSS1 = acdc_queue_manager:reseed_sbrrss_maps(SBRRSS, acdc_queue_manager:ss_size('sbrr', SS, 'free'), lists:reverse(Calls1)),
+    SBRRSS1 = acdc_queue_manager:reseed_sbrrss_maps(SBRRSS, acdc_queue_manager:ss_size('sbrr', SS, 'free'), Calls1),
     State1#state{strategy_state=SS#strategy_state{agents=SBRRSS1}}.
 
 %%--------------------------------------------------------------------
@@ -423,8 +422,9 @@ add_call({CallId, Skills}, #state{current_member_calls=Calls}=State) ->
 %% @end
 %%--------------------------------------------------------------------
 remove_call(CallId, #state{current_member_calls=Calls}=State) ->
-    Calls1 = lists:keydelete(CallId, 2, Calls),
+    Calls1 = lists:filter(fun({_, Call1}) ->
+                                  kapps_call:call_id(Call1) =/= CallId
+                          end, Calls),
     State1 = #state{strategy_state=#strategy_state{agents=SBRRSS}=SS} = State#state{current_member_calls=Calls1},
-    %% Calls are reversed because that's what happens in add_queue_member
-    SBRRSS1 = acdc_queue_manager:reseed_sbrrss_maps(SBRRSS, acdc_queue_manager:ss_size('sbrr', SS, 'free'), lists:reverse(Calls1)),
+    SBRRSS1 = acdc_queue_manager:reseed_sbrrss_maps(SBRRSS, acdc_queue_manager:ss_size('sbrr', SS, 'free'), Calls1),
     State1#state{strategy_state=SS#strategy_state{agents=SBRRSS1}}.

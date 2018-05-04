@@ -6119,6 +6119,9 @@
                     ],
                     "type": "string"
                 },
+                "Member-Priority": {
+                    "type": "integer"
+                },
                 "Queue-ID": {
                     "type": "string"
                 }
@@ -25633,6 +25636,10 @@
                 "default_agent_pause_timeout": {
                     "default": 600,
                     "description": "acdc default agent pause timeout",
+                    "type": "integer"
+                },
+                "default_queue_max_priority": {
+                    "description": "Maximum Call-Priority level supported by queues unless overridden on a per-queue basis",
                     "type": "integer"
                 },
                 "max_connect_failures": {

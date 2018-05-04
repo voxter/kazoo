@@ -22,6 +22,7 @@
         ,send_cdr/2
         ,caller_id/1
         ,hangup_cause/1
+        ,max_priority/2
         ]).
 
 -include("acdc.hrl").
@@ -161,4 +162,18 @@ hangup_cause(JObj) ->
     case kz_json:get_value(<<"Hangup-Cause">>, JObj) of
         'undefined' -> <<"unknown">>;
         Cause -> Cause
+    end.
+
+-spec max_priority(ne_binary(), ne_binary()) -> api_integer().
+max_priority(AccountDb, QueueId) ->
+    case kz_datamgr:open_cache_doc(AccountDb, QueueId) of
+        {'ok', QueueJObj} -> max_priority(QueueJObj);
+        _ -> kapps_config:get_integer(?CONFIG_CAT, <<"default_queue_max_priority">>)
+    end.
+
+-spec max_priority(kz_json:object()) -> api_integer().
+max_priority(QueueJObj) ->
+    case kz_json:get_integer_value(<<"max_priority">>, QueueJObj) of
+        'undefined' -> kapps_config:get_integer(?CONFIG_CAT, <<"default_queue_max_priority">>);
+        Priority -> Priority
     end.
