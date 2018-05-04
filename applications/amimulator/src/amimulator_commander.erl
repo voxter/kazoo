@@ -1,6 +1,6 @@
 -module(amimulator_commander).
 
--export([handle/3]).
+-export([handle/4]).
 -export([handle_event/2]).
 
 -include("amimulator.hrl").
@@ -8,29 +8,31 @@
 -define(AMI_DB, <<"ami">>).
 
 %% Handle a payload sent as an AMI command
--spec handle(binary(), ne_binary(), pos_integer()) ->
+-spec handle(binary(), ne_binary(), pos_integer(), api_ne_binary()) ->
                     {'ok', {kz_proplist(), 'n'}}
                         | {'logoff', 'ok'} | kz_proplist()
                         | {'error', 'no_action'}.
-handle(Payload, AccountId, 'undefined') ->
+handle(Payload, AccountId, 'undefined', ServerId) ->
     Props = amimulator_util:parse_payload(Payload),
-    handle_event(update_props(Props, AccountId));
+    handle_event(update_props(Props, AccountId, ServerId));
 %% When authenticating via md5 challenge, pass the challenge along
-handle(Payload, AccountId, Challenge) ->
+handle(Payload, AccountId, Challenge, ServerId) ->
     Props = amimulator_util:parse_payload(Payload),
-    handle_event("login", props:set_value(<<"Challenge">>, Challenge, update_props(Props, AccountId))).
+    handle_event("login", props:set_value(<<"Challenge">>, Challenge, update_props(Props, AccountId, ServerId))).
 
-update_props(Props, AccountId) ->
-    Routines = [
-                fun(Props2) -> [{<<"AccountId">>, AccountId}] ++ Props2 end,
-                fun(Props2) -> case AccountId of
-                                   <<>> ->
-                                       Props2;
-                                   _ ->
-                                       [{<<"AccountDb">>, kz_util:format_account_id(AccountId, encoded)}] ++ Props2
-                               end end
-               ],
-    lists:foldl(fun(F, Props2) -> F(Props2) end, Props, Routines).
+%%--------------------------------------------------------------------
+%% @private
+%% @doc Set some default props used for all commands
+%%--------------------------------------------------------------------
+-spec update_props(kz_proplist(), ne_binary(), api_ne_binary()) -> kz_proplist().
+update_props(Props, AccountId, ServerId) ->
+    AccountDb = kz_util:format_account_id(AccountId, 'encoded'),
+    props:set_values(props:filter_undefined(
+                       [{<<"AccountId">>, AccountId}
+                       ,{<<"AccountDb">>, AccountDb}
+                       ,{<<"Server-ID">>, ServerId}
+                       ])
+                    ,Props).
 
 handle_event(Props) ->
     Action = string:to_lower(kz_term:to_list(proplists:get_value(<<"Action">>, Props))),
@@ -202,17 +204,11 @@ handle_event("originate", Props) ->
         undefined ->
             {error, channel_not_specified};
         _ ->
-            case proplists:get_value(<<"Application">>, Props) of
-                <<"ChanSpy">> ->
-                    gen_listener:cast(amimulator_originator, {"eavesdrop", Props});
-                <<"PickupChan">> ->
-                                                % Props2 = props:set_value(<<"Channel">>, props:get_value(<<"Data">>,
-                                                %       props:set_value(<<"SourceExten">>, hd(binary:split(props:get_value(<<"Channel">>, Props), <<"/">>)),
-                                                %       Props)), Props),
-                    gen_listener:cast(amimulator_originator, {"pickupchan", Props});
-                _ ->
-                    gen_listener:cast(amimulator_originator, {"originate", Props})
-            end
+            Application = props:get_ne_binary_value(<<"Application">>, Props),
+            kz_util:spawn(fun() ->
+                                  Props1 = amimulator_util:update_originate_props(Props),
+                                  originate(Application, Props1)
+                          end)
     end;
 handle_event("redirect", Props) ->
     EndpointName = props:get_value(<<"Channel">>, Props),
@@ -907,6 +903,84 @@ mailbox_count_error(ActionId, Mailbox) ->
      {<<"NewMessages">>, 0},
      {<<"OldMessages">>, 0}
     ].
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Perform origination commands, such as eavesdrop, pickup, or dial
+%%--------------------------------------------------------------------
+-spec originate(api_ne_binary(), kz_proplist()) -> 'ok'.
+originate(<<"ChanSpy">>, _Props) ->
+    'ok';
+originate(<<"PickupChan">>, _Props) ->
+    'ok';
+originate(_, Props) ->
+    Call = amimulator_util:kapps_call_from_ami_originate_props(Props),
+    DestExten = props:get_binary_value(<<"Exten">>, Props),
+    ServerId = props:get_ne_binary_value(<<"Server-ID">>, Props),
+
+    CCVs = [{<<"Account-ID">>, props:get_value(<<"AccountId">>, Props)}
+           ,{<<"Authorizing-ID">>, kapps_call:authorizing_id(Call)}
+           ,{<<"Authorizing-Type">>, kapps_call:authorizing_type(Call)}
+           ,{<<"Flip-Direction-On-Bridge">>, 'true'}
+           ,{<<"Inherit-Codec">>, 'false'}
+           ,{<<"Retain-CID">>, 'true'}
+           ,{<<"Web-Dial">>, 'true'}
+           ],
+
+    Req = [{<<"Application-Name">>, <<"transfer">>}
+          ,{<<"Application-Data">>, kz_json:from_list([{<<"Route">>, DestExten}])}
+          ,{<<"Caller-ID-Name">>, <<"Web Dial ", DestExten/binary>>}
+          ,{<<"Caller-ID-Number">>, DestExten}
+          ,{<<"Continue-On-Fail">>, 'false'}
+          ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
+          ,{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
+          ,{<<"Endpoints">>, build_originate_endpoints(Call)}
+          ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>
+                                              ,<<"Authorizing-ID">>
+                                              ,<<"Authorizing-Type">>
+                                              ,<<"Flip-Direction-On-Bridge">>
+                                              ,<<"Retain-CID">>
+                                              ,<<"Web-Dial">>
+                                              ]}
+          ,{<<"Ignore-Early-Media">>, 'true'}
+          ,{<<"Media">>, <<"process">>}
+          ,{<<"Msg-ID">>, props:get_value(<<"ActionID">>, Props)}
+          ,{<<"Outbound-Callee-ID-Name">>, <<"Outbound Call">>}
+          ,{<<"Outbound-Callee-ID-Number">>, <<"context_2">>}
+          ,{<<"Outbound-Caller-ID-Name">>, <<"Web Dial ", DestExten/binary>>}
+          ,{<<"Outbound-Caller-ID-Number">>, DestExten}
+          ,{<<"Timeout">>, 30}
+           | kz_api:default_headers(ServerId, ?APP_NAME, ?APP_VERSION)
+          ],
+    kapi_resource:publish_originate_req(props:filter_undefined(Req)).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc Build a list of endpoints used for originate commands
+%%--------------------------------------------------------------------
+-spec build_originate_endpoints(kapps_call:call()) -> kz_json:endpoints().
+build_originate_endpoints(Call) ->
+    UserId = kapps_call:authorizing_id(Call),
+    Properties = kz_json:from_list([{<<"can_call_self">>, 'true'}]),
+    lists:foldr(fun(EndpointId, Acc) ->
+                        case kz_endpoint:build(EndpointId, Properties, aleg_cid(<<"000">>, Call)) of
+                            {'ok', Endpoint} -> Endpoint ++ Acc;
+                            {'error', _E} -> Acc
+                        end
+                end, [], kz_attributes:owned_by(UserId, <<"device">>, Call)).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc Fake CID properties for a call generated by originate command
+%%--------------------------------------------------------------------
+-spec aleg_cid(ne_binary(), kapps_call:call()) -> kapps_call:call().
+aleg_cid(CID, Call) ->
+    Routines = [{fun kapps_call:set_custom_channel_var/3, <<"Retain-CID">>, 'true'}
+               ,{fun kapps_call:set_caller_id_name/2, CID}
+               ,{fun kapps_call:set_caller_id_number/2, CID}
+               ],
+    kapps_call:exec(Routines, Call).
 
 queue_add(Props) ->
     Interface = proplists:get_value(<<"Interface">>, Props),
