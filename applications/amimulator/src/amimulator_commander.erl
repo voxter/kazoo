@@ -208,7 +208,13 @@ handle_event("originate", Props) ->
             kz_util:spawn(fun() ->
                                   Props1 = amimulator_util:update_originate_props(Props),
                                   originate(Application, Props1)
-                          end)
+                          end),
+            ActionId = props:get_value(<<"ActionID">>, Props),
+            Payload = props:filter_undefined([{<<"Response">>, <<"Success">>}
+                                             ,{<<"ActionID">>, ActionId}
+                                             ,{<<"Message">>, <<"Originate successfully queued">>}
+                                             ]),
+            {'ok', {Payload, 'n'}}
     end;
 handle_event("redirect", Props) ->
     EndpointName = props:get_value(<<"Channel">>, Props),
