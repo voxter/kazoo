@@ -899,7 +899,9 @@ add_queue_member(Call, 'undefined', Position, State) ->
     add_queue_member(Call, 0, Position, State);
 add_queue_member(Call, Priority, Position, State) ->
     #state{current_member_calls=Calls}=State1 = remove_queue_member(Call, State),
-    {Before, After} = lists:split(Position - 1, Calls),
+    %% Handles the case where calls were removed since the Position was assigned
+    SplitIndex = min(Position - 1, length(Calls)),
+    {Before, After} = lists:split(SplitIndex, Calls),
     Calls1 = Before ++ [{Priority, Call}|After],
     State1#state{current_member_calls=Calls1}.
 
