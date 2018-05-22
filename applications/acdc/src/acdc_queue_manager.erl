@@ -1523,9 +1523,9 @@ maybe_schedule_position_announcements(JObj, Call, #state{announcements_config=An
             State#state{announcements_pids=AnnouncementsPids#{CallId => Pid}}
     end.
 
--spec cancel_position_announcements(kapps_call:call() | 'false', map()) ->
+-spec cancel_position_announcements(kapps_call:call() | 'undefined', map()) ->
                                            map().
-cancel_position_announcements('false', Pids) -> Pids;
+cancel_position_announcements('undefined', Pids) -> Pids;
 cancel_position_announcements(Call, Pids) ->
     CallId = kapps_call:call_id(Call),
     case catch maps:get(CallId, Pids) of
