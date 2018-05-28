@@ -569,8 +569,8 @@ status_payload(<<"Status">>, Channel, BridgedChannel, CallerIDNum, CallerIDName,
 status_payload(<<"concise">>, Channel, BridgedChannel, _, CallerIDName, _, ConnectedLineName
               ,_, ChannelStateDesc, Application, Context, Extension, Seconds, _, _) ->
     <<Channel/binary, "!", Context/binary, "!", Extension/binary, "!1!", ChannelStateDesc/binary, "!", Application/binary
-      ,"!", ConnectedLineName/binary, "!", CallerIDName/binary, "!!!3!", (kz_term:to_binary(Seconds))/binary
-      ,"!", BridgedChannel/binary, "\n">>;
+     ,"!", ConnectedLineName/binary, "!", CallerIDName/binary, "!!!3!", (kz_term:to_binary(Seconds))/binary
+     ,"!", BridgedChannel/binary, "\n">>;
 status_payload(<<"verbose">>, Channel, BridgedChannel, _, CallerIDName, _, ConnectedLineName
               ,_, ChannelStateDesc, Application, Context, Extension, Seconds, _, _) ->
     {H, M, S} = {Seconds div 3600, Seconds rem 3600 div 60, Seconds rem 60},
@@ -581,9 +581,9 @@ status_payload(<<"verbose">>, Channel, BridgedChannel, _, CallerIDName, _, Conne
                                    end),
 
     <<(fit_list(Channel, 20))/binary, " ", (fit_list(Context, 20))/binary, " ", (fit_list(Extension, 16))/binary, " "
-      ,"   1 ", (fit_list(ChannelStateDesc, 7))/binary, " ", (fit_list(Application, 12))/binary, " ", (fit_list(CallerIDName, 25))/binary
-      ," ", (fit_list(ConnectedLineName, 15))/binary, " ", (fit_list(TimeString, 8))/binary, "                      "
-      ,(fit_list(BridgedChannel, 20))/binary, "\n">>.
+     ,"   1 ", (fit_list(ChannelStateDesc, 7))/binary, " ", (fit_list(Application, 12))/binary, " ", (fit_list(CallerIDName, 25))/binary
+     ," ", (fit_list(ConnectedLineName, 15))/binary, " ", (fit_list(TimeString, 8))/binary, "                      "
+     ,(fit_list(BridgedChannel, 20))/binary, "\n">>.
 
 fit_list(Binary, Size) when is_binary(Binary) ->
     kz_term:to_binary(fit_list(kz_term:to_list(Binary), Size));
@@ -916,10 +916,100 @@ mailbox_count_error(ActionId, Mailbox) ->
 %% Perform origination commands, such as eavesdrop, pickup, or dial
 %%--------------------------------------------------------------------
 -spec originate(api_ne_binary(), kz_proplist()) -> 'ok'.
-originate(<<"ChanSpy">>, _Props) ->
-    'ok';
-originate(<<"PickupChan">>, _Props) ->
-    'ok';
+originate(<<"ChanSpy">>, Props) ->
+    AccountId = proplists:get_value(<<"AccountId">>, Props),
+    Call = amimulator_util:kapps_call_from_ami_originate_props(Props),
+
+    Channel = hd(binary:split(props:get_value(<<"Data">>, Props), <<",">>)),
+    DestExten = lists:nth(2, binary:split(Channel, <<"/">>)),
+    EavesdropCallId = amimulator_call:call_id(ami_sm:call_by_channel(Channel)),
+    EavesdropMode = case lists:nth(2, binary:split(props:get_value(<<"Data">>, Props), <<",">>)) of
+                        <<"w">> ->
+                            <<"whisper">>;
+                        <<"bq">> ->
+                            <<"listen">>;
+                        Other ->
+                            lager:debug("Unsupported eavesdrop mode ~p, defaulting to listen", [Other])
+                    end,
+
+    CCVs = props:filter_undefined([{<<"Account-ID">>, AccountId}]),
+
+    SourceEndpoints = build_originate_endpoints(Call),
+
+    Prop = kz_json:set_values(props:filter_undefined([{<<"Msg-ID">>, kz_binary:rand_hex(16)}
+                                                     ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
+                                                     ,{<<"Timeout">>, <<"30">>}
+                                                     ,{<<"Endpoints">>, SourceEndpoints}
+                                                     ,{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
+                                                     ,{<<"Ignore-Early-Media">>, <<"true">>}
+                                                     ,{<<"Outbound-Caller-ID-Name">>, <<"Eavesdrop ", DestExten/binary>>}
+                                                     ,{<<"Outbound-Caller-ID-Number">>, DestExten}
+                                                     ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>
+                                                                                         ,<<"Retain-CID">>
+                                                                                         ,<<"Authorizing-ID">>
+                                                                                         ,<<"Authorizing-Type">>
+                                                                                         ]}
+                                                     ,{<<"Account-ID">>, AccountId}
+                                                     ,{<<"Resource-Type">>, <<"originate">>}
+                                                     ,{<<"Application-Name">>, <<"eavesdrop">>}
+                                                     ,{<<"Eavesdrop-Call-ID">>, EavesdropCallId}
+                                                     ,{<<"Eavesdrop-Group-ID">>, 'undefined'}
+                                                     ,{<<"Eavesdrop-Mode">>, EavesdropMode}
+                                                      | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+                                                     ]), kz_json:new()),
+
+    lager:debug("Eavesdropping on call id ~p", [EavesdropCallId]),
+    case kapps_util:amqp_pool_collect(Prop
+                                     ,fun kapi_resource:publish_originate_req/1
+                                     ,fun until_callback/1
+                                     ,5000
+                                     ) of
+        {'ok', [JObj|_]} ->
+            lager:debug("Successful originate, executing eavesdrop"),
+            ServerId = kz_json:get_value(<<"Server-ID">>, JObj),
+            Prop = [{<<"Call-ID">>, kz_json:get_value(<<"Call-ID">>, JObj)}
+                   ,{<<"Msg-ID">>, kz_json:get_value(<<"Msg-ID">>, JObj)}
+                    | kz_api:default_headers(ServerId, ?APP_NAME, ?APP_VERSION)
+                   ],
+            kapi_dialplan:publish_originate_execute(ServerId, Prop);
+        {'error', E} ->
+            lager:debug("error originating: ~p", [E]);
+        {'timeout', _} ->
+            lager:debug("error originating: timeout")
+    end;
+originate(<<"PickupChan">>, Props) ->
+    NewCall = amimulator_util:kapps_call_from_ami_originate_props(Props),
+    Call = ami_sm:call_by_channel(props:get_value(<<"Data">>, Props)),
+    DestExten = amimulator_call:id_number(Call),
+
+    CCVs = [{<<"Account-ID">>, proplists:get_value(<<"AccountId">>, Props)}
+           ,{<<"Retain-CID">>, <<"true">>}
+           ,{<<"Inherit-Codec">>, <<"false">>}
+           ,{<<"Authorizing-Type">>, amimulator_call:authorizing_type(Call)}
+           ,{<<"Authorizing-ID">>, amimulator_call:authorizing_id(Call)}
+           ],
+
+    Request = [{<<"Application-Name">>, <<"bridge">>}
+              ,{<<"Existing-Call-ID">>, amimulator_call:other_leg_call_id(Call)}
+              ,{<<"Msg-ID">>, kz_binary:rand_hex(16)}
+              ,{<<"Endpoints">>, build_originate_endpoints(NewCall)}
+              ,{<<"Timeout">>, <<"30">>}
+              ,{<<"Ignore-Early-Media">>, <<"true">>}
+              ,{<<"Media">>, <<"process">>}
+              ,{<<"Outbound-Caller-ID-Name">>, <<"Web Pickup ", DestExten/binary>>}
+              ,{<<"Outbound-Caller-ID-Number">>, DestExten}
+              ,{<<"Dial-Endpoint-Method">>, <<"simultaneous">>}
+              ,{<<"Continue-On-Fail">>, 'false'}
+              ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
+              ,{<<"Export-Custom-Channel-Vars">>, [<<"Account-ID">>
+                                                  ,<<"Retain-CID">>
+                                                  ,<<"Authorizing-ID">>
+                                                  ,<<"Authorizing-Type">>
+                                                  ]}
+               | kz_api:default_headers(<<"resource">>, <<"originate_req">>, ?APP_NAME, ?APP_VERSION)
+              ],
+
+    kapi_resource:publish_originate_req(props:filter_undefined(Request));
 originate(_, Props) ->
     Call = amimulator_util:kapps_call_from_ami_originate_props(Props),
     DestExten = props:get_binary_value(<<"Exten">>, Props),
@@ -960,6 +1050,10 @@ originate(_, Props) ->
            | kz_api:default_headers(ServerId, ?APP_NAME, ?APP_VERSION)
           ],
     kapi_resource:publish_originate_req(props:filter_undefined(Req)).
+
+-spec until_callback(kz_json:objects()) -> boolean().
+until_callback([JObj | _]) ->
+    kapi_dialplan:originate_ready_v(JObj).
 
 %%--------------------------------------------------------------------
 %% @private
