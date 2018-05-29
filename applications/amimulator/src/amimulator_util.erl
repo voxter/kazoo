@@ -6,6 +6,9 @@
         ,format_prop/1
         ,format_binary/1
         ,format_json_events/1
+
+        ,parse_variable/1
+
         ,index_of/2
         ,create_call/1
         ,clear_call/1
@@ -73,6 +76,19 @@ format_json_events([{_K, _V}|_Other]=KVs, _Acc) ->
     [{KVs}];
 format_json_events([Event|Events], Acc) ->
     format_json_events(Events, Acc ++ [{Event}]).
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Parse AMI variable assignments of the format Key=Value into a pair.
+%% @end
+%%--------------------------------------------------------------------
+-spec parse_variable(ne_binary()) -> {binary(), binary()}.
+parse_variable(VarString) ->
+    case binary:split(VarString, <<"=">>) of
+        [K, V] -> {K, V};
+        [K] -> {K, <<>>}
+    end.
 
 %% Find the index of an element in a list
 -spec index_of(any(), list()) -> pos_integer() | 'not_found'.
