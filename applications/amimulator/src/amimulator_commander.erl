@@ -1014,6 +1014,10 @@ originate(_, Props) ->
     Call = amimulator_util:kapps_call_from_ami_originate_props(Props),
     DestExten = props:get_binary_value(<<"Exten">>, Props),
     ServerId = props:get_ne_binary_value(<<"Server-ID">>, Props),
+    Variables1 = lists:foldl(fun({<<"Variable">>, V}, Variables) ->
+                                     [amimulator_util:parse_variable(V) | Variables];
+                                (_, Variables) -> Variables
+                             end, [], Props),
 
     CCVs = [{<<"Account-ID">>, props:get_value(<<"AccountId">>, Props)}
            ,{<<"Authorizing-ID">>, kapps_call:authorizing_id(Call)}
@@ -1022,6 +1026,7 @@ originate(_, Props) ->
            ,{<<"Inherit-Codec">>, 'false'}
            ,{<<"Retain-CID">>, 'true'}
            ,{<<"Web-Dial">>, 'true'}
+            | Variables1
            ],
 
     Req = [{<<"Application-Name">>, <<"transfer">>}
@@ -1240,8 +1245,31 @@ getvar(<<"EPOCH">>=Variable, _Props) ->
       <<"Variable: ", Variable/binary, "\r\nValue: ", Timestamp/binary, "\r\n\r\n">>
      ], raw};
 getvar(Variable, Props) ->
-    lager:debug("Unhandled getvar ~p with props ~p", [Variable, Props]),
-    undefined.
+    ActionID = props:get_value(<<"ActionID">>, Props),
+    Channel = props:get_value(<<"Channel">>, Props),
+    case ami_sm:call_by_channel(Channel) of
+        'undefined' -> 'undefined';
+        Call ->
+            maybe_getvar(ActionID, Variable, Call)
+    end.
+
+%%--------------------------------------------------------------------
+%% @public
+%% @doc
+%% Get an AMI variable from a channel.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_getvar(ne_binary(), ne_binary(), amimulator_call:call()) -> kz_proplist().
+maybe_getvar(ActionID, Variable, Call) ->
+    case amimulator_call:ccv(Variable, Call) of
+        'undefined' -> 'undefined';
+        Value ->
+            [{<<"Response">>, <<"Success">>}
+            ,{<<"Variable">>, Variable}
+            ,{<<"Value">>, Value}
+            ,{<<"ActionID">>, ActionID}
+            ]
+    end.
 
 command(<<"meetme list ", MeetMeSpec/binary>>, Props) ->
     [Number, _Mode] = binary:split(MeetMeSpec, <<" ">>),
