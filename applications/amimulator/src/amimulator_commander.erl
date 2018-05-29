@@ -1024,7 +1024,6 @@ originate(_, Props) ->
            ,{<<"Authorizing-Type">>, kapps_call:authorizing_type(Call)}
            ,{<<"Flip-Direction-On-Bridge">>, 'true'}
            ,{<<"Inherit-Codec">>, 'false'}
-           ,{<<"Retain-CID">>, 'true'}
            ,{<<"Web-Dial">>, 'true'}
             | Variables1
            ],
